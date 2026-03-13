@@ -107,11 +107,12 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
             full_name="UI Admin",
             role=UserRole.UI_ADMIN.value,
             can_access_ceph_admin=True,
+            can_access_storage_ops=True,
         )
     )
     assert created.role == UserRole.UI_ADMIN.value
     assert created.can_access_ceph_admin is True
-    assert created.can_access_storage_ops is False
+    assert created.can_access_storage_ops is True
 
     assert service.authenticate("ui-admin@example.com", "wrong-password") is None
     authenticated = service.authenticate("ui-admin@example.com", "verylongpass123")

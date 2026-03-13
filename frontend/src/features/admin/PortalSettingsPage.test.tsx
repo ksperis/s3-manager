@@ -125,10 +125,10 @@ describe("PortalSettingsPage", () => {
     updateAppSettingsMock.mockImplementation(async (payload: AppSettings) => payload);
   });
 
-  it("renders allow portal manager workspace toggle with Deprecated badge", async () => {
+  it("renders allow portal manager workspace toggle with Experimental badge", async () => {
     render(<PortalSettingsPage />);
 
     await screen.findByLabelText("Allow portal manager workspace");
-    expect(screen.getByText("Deprecated")).toBeInTheDocument();
+    expect(screen.getByText("Experimental")).toBeInTheDocument();
   });
 });

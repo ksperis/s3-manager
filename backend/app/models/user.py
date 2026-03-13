@@ -67,6 +67,7 @@ class UserCreate(BaseModel):
     role: Optional[str] = None
     is_root: bool = False
     can_access_ceph_admin: bool = False
+    can_access_storage_ops: bool = False
 
 
 class UserUpdate(BaseModel):

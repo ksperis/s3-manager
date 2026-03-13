@@ -140,4 +140,124 @@ describe("UsersPage modal tabs", () => {
     expect((await screen.findAllByText("Email and password are required.")).length).toBeGreaterThan(0);
     expect(screen.getByPlaceholderText("jane.doe@example.com")).toBeInTheDocument();
   });
+
+  it("shows Access tab and keeps access toggles out of General in create modal", async () => {
+    render(<UsersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+    expect(screen.getByRole("button", { name: "General" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Associations" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Access" })).toBeInTheDocument();
+    expect(screen.queryByText("Ceph Admin access")).not.toBeInTheDocument();
+    expect(screen.queryByText("Storage Ops access")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Access" }));
+    expect(screen.getByText("Ceph Admin access")).toBeInTheDocument();
+    expect(screen.getByText("Storage Ops access")).toBeInTheDocument();
+  });
+
+  it("shows Access tab and keeps access toggles out of General in edit modal", async () => {
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 9,
+          email: "edit.access@example.com",
+          role: "ui_admin",
+          accounts: [],
+          account_links: [],
+          s3_users: [],
+          s3_connections: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+
+    expect(screen.getByRole("button", { name: "General" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Associations" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Access" })).toBeInTheDocument();
+    expect(screen.queryByText("Ceph Admin access")).not.toBeInTheDocument();
+    expect(screen.queryByText("Storage Ops access")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Access" }));
+    expect(screen.getByText("Ceph Admin access")).toBeInTheDocument();
+    expect(screen.getByText("Storage Ops access")).toBeInTheDocument();
+  });
+
+  it("keeps role access note hidden by default in create modal and shows it on info icon click", async () => {
+    render(<UsersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+
+    expect(screen.queryByText("Role access summary")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Explain role access levels" }));
+    expect(screen.getByText("Role access summary")).toBeInTheDocument();
+    expect(screen.getByText("Workspace access")).toBeInTheDocument();
+    expect(screen.getByText("No workspace access (profile only)")).toBeInTheDocument();
+    expect(screen.getByText("Non-admin workspaces only")).toBeInTheDocument();
+    expect(screen.getByText("User access + /admin")).toBeInTheDocument();
+    expect(screen.getByText("Admin access + /admin settings")).toBeInTheDocument();
+    expect(screen.getByText("Ceph Admin and Storage Ops also require dedicated access flags.")).toBeInTheDocument();
+  });
+
+  it("keeps role access note hidden by default in edit modal and shows it on info icon click", async () => {
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          email: "edit.user@example.com",
+          role: "ui_user",
+          accounts: [],
+          account_links: [],
+          s3_users: [],
+          s3_connections: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+
+    expect(screen.queryByText("Role access summary")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Explain role access levels" }));
+    expect(screen.getByText("Role access summary")).toBeInTheDocument();
+    expect(screen.getByText("Workspace access")).toBeInTheDocument();
+    expect(screen.getByText("No workspace access (profile only)")).toBeInTheDocument();
+    expect(screen.getByText("Non-admin workspaces only")).toBeInTheDocument();
+    expect(screen.getByText("User access + /admin")).toBeInTheDocument();
+    expect(screen.getByText("Admin access + /admin settings")).toBeInTheDocument();
+    expect(screen.getByText("Ceph Admin and Storage Ops also require dedicated access flags.")).toBeInTheDocument();
+  });
+
+  it("shows Storage Ops access in create modal and sends it in create payload", async () => {
+    render(<UsersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+
+    fireEvent.change(screen.getByPlaceholderText("jane.doe@example.com"), { target: { value: "ops@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("•••••••"), { target: { value: "secret-123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Access" }));
+    expect(screen.getByText("Storage Ops access")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow access to /storage-ops" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createUserMock).toHaveBeenCalled();
+    });
+    expect(createUserMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        can_access_storage_ops: true,
+      })
+    );
+  });
 });

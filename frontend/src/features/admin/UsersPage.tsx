@@ -31,7 +31,7 @@ import { extractApiError } from "../../utils/apiError";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
-type UserModalTab = "general" | "associations";
+type UserModalTab = "general" | "associations" | "access";
 
 type AccountSelection = {
   id: number;
@@ -43,6 +43,117 @@ type Option = {
   id: number;
   label: string;
 };
+
+const userModalTabsContainerClass =
+  "flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60";
+const userModalTabButtonClass = (active: boolean) =>
+  `rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+    active
+      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+  }`;
+const userModalLabelClass = "ui-body font-medium text-slate-700 dark:text-slate-200";
+const userModalFieldClass =
+  "rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
+const userModalToggleLabelClass = "inline-flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200";
+const userModalCancelButtonClass =
+  "rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800";
+const roleAccessHelpItems = [
+  { role: "No Access", access: "No workspace access (profile only)" },
+  { role: "User", access: "Non-admin workspaces only" },
+  { role: "Admin", access: "User access + /admin" },
+  { role: "Superadmin", access: "Admin access + /admin settings" },
+];
+
+function UserModalPrimaryTabs({
+  activeTab,
+  onTabChange,
+}: {
+  activeTab: UserModalTab;
+  onTabChange: (tab: UserModalTab) => void;
+}) {
+  return (
+    <div className={userModalTabsContainerClass}>
+      <button
+        type="button"
+        onClick={() => onTabChange("general")}
+        className={userModalTabButtonClass(activeTab === "general")}
+      >
+        General
+      </button>
+      <button
+        type="button"
+        onClick={() => onTabChange("associations")}
+        className={userModalTabButtonClass(activeTab === "associations")}
+      >
+        Associations
+      </button>
+      <button
+        type="button"
+        onClick={() => onTabChange("access")}
+        className={userModalTabButtonClass(activeTab === "access")}
+      >
+        Access
+      </button>
+    </div>
+  );
+}
+
+function RoleAccessHelp({
+  open,
+  onToggle,
+  helpId,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  helpId: string;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <label className={userModalLabelClass}>Role</label>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label="Explain role access levels"
+          aria-expanded={open}
+          aria-controls={helpId}
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 transition hover:border-primary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-slate-600 dark:text-slate-200 dark:hover:border-primary-400 dark:hover:text-primary-100"
+        >
+          i
+        </button>
+      </div>
+      {open && (
+        <div id={helpId} className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+          <p className="mb-2 ui-badge font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Role access summary</p>
+          <div className="overflow-hidden rounded-md border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/70">
+            <table className="w-full table-fixed border-collapse">
+              <thead className="bg-slate-100 dark:bg-slate-900">
+                <tr>
+                  <th className="w-1/3 px-2.5 py-1.5 text-left ui-badge font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Role
+                  </th>
+                  <th className="px-2.5 py-1.5 text-left ui-badge font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Workspace access
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {roleAccessHelpItems.map((item, index) => (
+                  <tr key={item.role} className={index % 2 === 0 ? "bg-white dark:bg-slate-950/70" : "bg-slate-50/70 dark:bg-slate-900/60"}>
+                    <td className="px-2.5 py-1.5 ui-caption font-semibold text-slate-800 dark:text-slate-100">{item.role}</td>
+                    <td className="px-2.5 py-1.5 ui-caption text-slate-600 dark:text-slate-300">{item.access}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">Ceph Admin and Storage Ops also require dedicated access flags.</p>
+        </div>
+      )}
+    </>
+  );
+}
 
 type AssociationsTabsProps = {
   activeTab: AssociationTab;
@@ -116,7 +227,7 @@ const AssociationsTabs = ({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <label className="ui-body font-medium text-slate-700">Associations</label>
+          <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Associations</label>
           <span className="ui-caption text-slate-500">{totalSelected} total</span>
         </div>
       </div>
@@ -129,7 +240,7 @@ const AssociationsTabs = ({
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="ui-body font-medium text-slate-700">Linked accounts</span>
+                    <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked accounts</span>
                     <span className="ui-caption text-slate-500">{accounts.selected.length} linked</span>
                   </div>
                   <button
@@ -236,7 +347,7 @@ const AssociationsTabs = ({
                   <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="ui-body font-medium text-slate-700">Add accounts</span>
+                        <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add accounts</span>
                         <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
                       </div>
                       <input
@@ -376,7 +487,7 @@ const AssociationsTabs = ({
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="ui-body font-medium text-slate-700">Linked users</span>
+                    <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked users</span>
                     <span className="ui-caption text-slate-500">{s3Users.selected.length} linked</span>
                   </div>
                   <button
@@ -431,7 +542,7 @@ const AssociationsTabs = ({
                   <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="ui-body font-medium text-slate-700">Add users</span>
+                        <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add users</span>
                         <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
                       </div>
                       <input
@@ -521,7 +632,7 @@ const AssociationsTabs = ({
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="ui-body font-medium text-slate-700">Linked connections</span>
+                    <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked connections</span>
                     <span className="ui-caption text-slate-500">{connections.selected.length} linked</span>
                     <span className="ui-caption text-slate-400">(shared only)</span>
                   </div>
@@ -579,7 +690,7 @@ const AssociationsTabs = ({
                   <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="ui-body font-medium text-slate-700">Add connections</span>
+                        <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add connections</span>
                         <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
                       </div>
                       <input
@@ -703,6 +814,7 @@ export default function UsersPage() {
     password: "",
     role: "ui_user",
     can_access_ceph_admin: false,
+    can_access_storage_ops: false,
   });
   const [form, setForm] = useState<CreateUserPayload>(() => createFormTemplate());
   const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<{ id: number; role: string; account_admin?: boolean }[]>([]);
@@ -742,6 +854,8 @@ export default function UsersPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [createRoleHelpOpen, setCreateRoleHelpOpen] = useState(false);
+  const [editRoleHelpOpen, setEditRoleHelpOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>({
     field: "email",
@@ -925,10 +1039,13 @@ export default function UsersPage() {
   const editRoleValue = normalizeUiRoleValue(editForm.role ?? editingUser?.role ?? "ui_user");
   const createRoleValue = normalizeUiRoleValue(form.role);
   const createTargetSupportsCephAdmin = createRoleValue === "ui_admin" || createRoleValue === "ui_superadmin";
+  const createTargetSupportsStorageOps =
+    createRoleValue === "ui_user" || createRoleValue === "ui_admin" || createRoleValue === "ui_superadmin";
   const editTargetSupportsCephAdmin = editRoleValue === "ui_admin" || editRoleValue === "ui_superadmin";
   const editTargetSupportsStorageOps =
     editRoleValue === "ui_user" || editRoleValue === "ui_admin" || editRoleValue === "ui_superadmin";
   const createCanGrantCephAdmin = currentIsSuperAdmin && createTargetSupportsCephAdmin;
+  const createCanGrantStorageOps = currentIsAdminLike && createTargetSupportsStorageOps;
   const editCanGrantCephAdmin = currentIsSuperAdmin && editTargetSupportsCephAdmin;
   const editCanGrantStorageOps = currentIsAdminLike && editTargetSupportsStorageOps;
 
@@ -1231,6 +1348,10 @@ export default function UsersPage() {
         currentIsSuperAdmin && (normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin")
           ? Boolean(form.can_access_ceph_admin)
           : false,
+      can_access_storage_ops:
+        currentIsAdminLike && (normalizedRole === "ui_user" || normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin")
+          ? Boolean(form.can_access_storage_ops)
+          : false,
     };
     try {
       const created = await createUser(payload);
@@ -1276,6 +1397,7 @@ export default function UsersPage() {
       setShowCreateConnectionPanel(false);
       setCreateModalTab("general");
       setCreateAssociationsTab("accounts");
+      setCreateRoleHelpOpen(false);
       await fetchUsers();
       if (s3AccountsLoaded) {
         await fetchS3Accounts();
@@ -1339,6 +1461,7 @@ export default function UsersPage() {
     setEditS3UserSelections([]);
     setEditConnectionSelections([]);
     setEditModalTab("general");
+    setEditRoleHelpOpen(false);
     setActionError(null);
     setActionMessage(null);
     setShowEditModal(true);
@@ -1442,6 +1565,7 @@ export default function UsersPage() {
       setEditAccountSelections([]);
       setEditS3UserSelections([]);
       setEditConnectionSelections([]);
+      setEditRoleHelpOpen(false);
       setShowEditModal(false);
       await fetchUsers();
       if (s3AccountsLoaded) {
@@ -1497,6 +1621,7 @@ export default function UsersPage() {
             onClick: () => {
               setCreateModalTab("general");
               setCreateAssociationsTab("accounts");
+              setCreateRoleHelpOpen(false);
               setShowCreateModal(true);
             },
           },
@@ -1527,6 +1652,7 @@ export default function UsersPage() {
             setCreateAccountSelections([]);
             setCreateS3UserSelections([]);
             setCreateConnectionSelections([]);
+            setCreateRoleHelpOpen(false);
           }}
         >
           {actionError && (
@@ -1540,38 +1666,15 @@ export default function UsersPage() {
             </PageBanner>
           )}
           <form onSubmit={handleCreate} className="space-y-4">
-            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
-              <button
-                type="button"
-                onClick={() => setCreateModalTab("general")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  createModalTab === "general"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                General
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreateModalTab("associations")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  createModalTab === "associations"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                Associations
-              </button>
-            </div>
+            <UserModalPrimaryTabs activeTab={createModalTab} onTabChange={setCreateModalTab} />
 
             {createModalTab === "general" && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700">Email *</label>
+                  <label className={userModalLabelClass}>Email *</label>
                   <input
                     type="email"
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className={userModalFieldClass}
                     value={form.email}
                     onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                     placeholder="jane.doe@example.com"
@@ -1579,10 +1682,10 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700">Password *</label>
+                  <label className={userModalLabelClass}>Password *</label>
                   <input
                     type="password"
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className={userModalFieldClass}
                     value={form.password}
                     onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                     placeholder="•••••••"
@@ -1590,18 +1693,25 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700">Role</label>
+                  <RoleAccessHelp
+                    open={createRoleHelpOpen}
+                    onToggle={() => setCreateRoleHelpOpen((prev) => !prev)}
+                    helpId="create-user-role-access-help"
+                  />
                   <select
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className={userModalFieldClass}
                     value={createRoleValue}
                     onChange={(e) => {
                       const value = normalizeUiRoleValue(e.target.value);
                       const supportsCephAdmin = value === "ui_admin" || value === "ui_superadmin";
+                      const supportsStorageOps = value === "ui_user" || supportsCephAdmin;
                       setForm((f) => ({
                         ...f,
                         role: value,
                         can_access_ceph_admin:
                           currentIsSuperAdmin && supportsCephAdmin ? Boolean(f.can_access_ceph_admin) : false,
+                        can_access_storage_ops:
+                          currentIsAdminLike && supportsStorageOps ? Boolean(f.can_access_storage_ops) : false,
                       }));
                     }}
                   >
@@ -1613,9 +1723,14 @@ export default function UsersPage() {
                     </option>
                   </select>
                 </div>
+              </div>
+            )}
+
+            {createModalTab === "access" && (
+              <div className="grid grid-cols-1 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700">Ceph Admin access</label>
-                  <label className="inline-flex items-center gap-2 ui-body text-slate-700">
+                  <label className={userModalLabelClass}>Ceph Admin access</label>
+                  <label className={userModalToggleLabelClass}>
                     <input
                       type="checkbox"
                       checked={createCanGrantCephAdmin && Boolean(form.can_access_ceph_admin)}
@@ -1626,12 +1741,33 @@ export default function UsersPage() {
                           can_access_ceph_admin: e.target.checked,
                         }))
                       }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60 dark:border-slate-600"
                     />
                     <span>Allow access to /ceph-admin</span>
                   </label>
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Grantable only by Superadmin for roles "Admin" and "Superadmin".
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className={userModalLabelClass}>Storage Ops access</label>
+                  <label className={userModalToggleLabelClass}>
+                    <input
+                      type="checkbox"
+                      checked={createCanGrantStorageOps && Boolean(form.can_access_storage_ops)}
+                      disabled={!createCanGrantStorageOps}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          can_access_storage_ops: e.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60 dark:border-slate-600"
+                    />
+                    <span>Allow access to /storage-ops</span>
+                  </label>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.
                   </p>
                 </div>
               </div>
@@ -1722,8 +1858,9 @@ export default function UsersPage() {
                   setCreateAccountSelections([]);
                   setCreateS3UserSelections([]);
                   setCreateConnectionSelections([]);
+                  setCreateRoleHelpOpen(false);
                 }}
-                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50"
+                className={userModalCancelButtonClass}
               >
                 Cancel
               </button>
@@ -1872,9 +2009,10 @@ export default function UsersPage() {
             setEditS3UserSelections([]);
             setEditConnectionSelections([]);
             setEditForm({});
+            setEditRoleHelpOpen(false);
           }}
         >
-          <p className="ui-body text-slate-500 mb-3">{editingUser.email}</p>
+          <p className="mb-3 ui-body text-slate-500 dark:text-slate-300">{editingUser.email}</p>
           {actionError && (
             <PageBanner tone="error" className="mb-3">
               {actionError}
@@ -1886,56 +2024,37 @@ export default function UsersPage() {
             </PageBanner>
           )}
           <form onSubmit={submitEdit} className="space-y-4">
-            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
-              <button
-                type="button"
-                onClick={() => setEditModalTab("general")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  editModalTab === "general"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                General
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditModalTab("associations")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  editModalTab === "associations"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                Associations
-              </button>
-            </div>
+            <UserModalPrimaryTabs activeTab={editModalTab} onTabChange={setEditModalTab} />
 
             {editModalTab === "general" && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700">Email</label>
+                  <label className={userModalLabelClass}>Email</label>
                   <input
                     type="email"
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className={userModalFieldClass}
                     value={editForm.email ?? ""}
                     onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700">New password</label>
+                  <label className={userModalLabelClass}>New password</label>
                   <input
                     type="password"
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className={userModalFieldClass}
                     value={editForm.password ?? ""}
                     onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
                     placeholder="Leave blank to keep current"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700">Role</label>
+                  <RoleAccessHelp
+                    open={editRoleHelpOpen}
+                    onToggle={() => setEditRoleHelpOpen((prev) => !prev)}
+                    helpId="edit-user-role-access-help"
+                  />
                   <select
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className={userModalFieldClass}
                     value={editRoleValue}
                     onChange={(e) => {
                       const value = normalizeUiRoleValue(e.target.value);
@@ -1959,9 +2078,14 @@ export default function UsersPage() {
                     </option>
                   </select>
                 </div>
+              </div>
+            )}
+
+            {editModalTab === "access" && (
+              <div className="grid grid-cols-1 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700">Ceph Admin access</label>
-                  <label className="inline-flex items-center gap-2 ui-body text-slate-700">
+                  <label className={userModalLabelClass}>Ceph Admin access</label>
+                  <label className={userModalToggleLabelClass}>
                     <input
                       type="checkbox"
                       checked={editCanGrantCephAdmin && Boolean(editForm.can_access_ceph_admin)}
@@ -1972,7 +2096,7 @@ export default function UsersPage() {
                           can_access_ceph_admin: e.target.checked,
                         }))
                       }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60 dark:border-slate-600"
                     />
                     <span>Allow access to /ceph-admin</span>
                   </label>
@@ -1980,9 +2104,9 @@ export default function UsersPage() {
                     Grantable only by Superadmin for roles "Admin" and "Superadmin".
                   </p>
                 </div>
-                <div className="flex flex-col gap-1 md:col-span-2">
-                  <label className="ui-body font-medium text-slate-700">Storage Ops access</label>
-                  <label className="inline-flex items-center gap-2 ui-body text-slate-700">
+                <div className="flex flex-col gap-1">
+                  <label className={userModalLabelClass}>Storage Ops access</label>
+                  <label className={userModalToggleLabelClass}>
                     <input
                       type="checkbox"
                       checked={editCanGrantStorageOps && Boolean(editForm.can_access_storage_ops)}
@@ -1993,12 +2117,12 @@ export default function UsersPage() {
                           can_access_storage_ops: e.target.checked,
                         }))
                       }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60 dark:border-slate-600"
                     />
                     <span>Allow access to /storage-ops</span>
                   </label>
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Grantable by Admin or Superadmin for roles "User", "Admin" and "Superadmin".
+                    Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.
                   </p>
                 </div>
               </div>
@@ -2088,8 +2212,9 @@ export default function UsersPage() {
                   setEditS3UserSelections([]);
                   setEditConnectionSelections([]);
                   setEditForm({});
+                  setEditRoleHelpOpen(false);
                 }}
-                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50"
+                className={userModalCancelButtonClass}
               >
                 Cancel
               </button>

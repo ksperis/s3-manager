@@ -80,6 +80,11 @@ class UsersService:
             raise ValueError("Invalid role")
         is_root = bool(payload.is_root)
         can_access_ceph_admin = bool(payload.can_access_ceph_admin) if is_admin_ui_role(role) else False
+        can_access_storage_ops = (
+            bool(payload.can_access_storage_ops)
+            if role in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}
+            else False
+        )
         user = User(
             email=payload.email,
             full_name=payload.full_name,
@@ -89,7 +94,7 @@ class UsersService:
             role=role,
             is_root=is_root,
             can_access_ceph_admin=can_access_ceph_admin,
-            can_access_storage_ops=False,
+            can_access_storage_ops=can_access_storage_ops,
         )
         self.db.add(user)
         self.db.commit()

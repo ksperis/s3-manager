@@ -424,7 +424,7 @@ export default function AdminDashboard() {
         {enabledCoreFeatures.length === 0 ? (
           <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">No core feature is enabled.</p>
         ) : (
-          <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
             {enabledCoreFeatures.map((feature) => {
               const baseClasses = feature.critical
                 ? "border-orange-200 bg-orange-50 dark:border-orange-500/50 dark:bg-orange-950/30"
@@ -434,9 +434,9 @@ export default function AdminDashboard() {
                 : "text-emerald-900 dark:text-emerald-100";
 
               return (
-                <div key={feature.id} className={`rounded-lg border px-2.5 py-2 ${baseClasses}`}>
+                <div key={feature.id} className={`rounded-lg border px-2 py-1.5 ${baseClasses}`}>
                   <div className="flex items-center justify-between gap-2">
-                    <p className={`ui-caption font-semibold ${labelClasses}`}>{feature.label}</p>
+                    <p className={`text-[11px] font-semibold leading-4 ${labelClasses}`}>{feature.label}</p>
                     <UiBadge tone={feature.critical ? "warning" : "success"} className="px-1.5 py-0.5">
                       ON
                     </UiBadge>

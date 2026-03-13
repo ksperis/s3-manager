@@ -1119,54 +1119,57 @@ export default function StorageEndpointsPage() {
 
             {cephMode && (
               <div className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                    Admin Ops
-                    <div className="grid gap-3">
-                      <input
-                        type="text"
-                        value={form.admin_access_key}
-                        onChange={(e) => setForm((prev) => ({ ...prev, admin_access_key: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                        placeholder="Access key admin"
-                        required={form.features.admin.enabled}
-                      />
-                      <input
-                        type="password"
-                        value={form.admin_secret_key}
-                        onChange={(e) => setForm((prev) => ({ ...prev, admin_secret_key: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                        placeholder={editingId ? "Secret key admin (leave blank to keep)" : "Secret key admin"}
-                        required={!editingId && form.features.admin.enabled}
-                      />
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Management</p>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                      Admin Ops
+                      <div className="grid gap-3">
+                        <input
+                          type="text"
+                          value={form.admin_access_key}
+                          onChange={(e) => setForm((prev) => ({ ...prev, admin_access_key: e.target.value }))}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          placeholder="Access key admin"
+                          required={form.features.admin.enabled}
+                        />
+                        <input
+                          type="password"
+                          value={form.admin_secret_key}
+                          onChange={(e) => setForm((prev) => ({ ...prev, admin_secret_key: e.target.value }))}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          placeholder={editingId ? "Secret key admin (leave blank to keep)" : "Secret key admin"}
+                          required={!editingId && form.features.admin.enabled}
+                        />
+                      </div>
+                      <p className="ui-caption font-normal text-slate-500 dark:text-slate-400">
+                        {editingId ? "Leave the secret key empty to keep the current one." : "Required when admin is enabled."}
+                      </p>
                     </div>
-                    <p className="ui-caption font-normal text-slate-500 dark:text-slate-400">
-                      {editingId ? "Leave the secret key empty to keep the current one." : "Required when admin is enabled."}
-                    </p>
-                  </div>
-                  <div className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                    Supervision Ops
-                    <div className="grid gap-3">
-                      <input
-                        type="text"
-                        value={form.supervision_access_key}
-                        onChange={(e) => setForm((prev) => ({ ...prev, supervision_access_key: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                        placeholder="Access key supervision"
-                        required={form.features.usage.enabled || form.features.metrics.enabled}
-                      />
-                      <input
-                        type="password"
-                        value={form.supervision_secret_key}
-                        onChange={(e) => setForm((prev) => ({ ...prev, supervision_secret_key: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                        placeholder="Secret key supervision"
-                        required={!editingId && (form.features.usage.enabled || form.features.metrics.enabled)}
-                      />
+                    <div className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                      Supervision Ops
+                      <div className="grid gap-3">
+                        <input
+                          type="text"
+                          value={form.supervision_access_key}
+                          onChange={(e) => setForm((prev) => ({ ...prev, supervision_access_key: e.target.value }))}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          placeholder="Access key supervision"
+                          required={form.features.usage.enabled || form.features.metrics.enabled}
+                        />
+                        <input
+                          type="password"
+                          value={form.supervision_secret_key}
+                          onChange={(e) => setForm((prev) => ({ ...prev, supervision_secret_key: e.target.value }))}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          placeholder="Secret key supervision"
+                          required={!editingId && (form.features.usage.enabled || form.features.metrics.enabled)}
+                        />
+                      </div>
+                      <p className="ui-caption font-normal text-slate-500 dark:text-slate-400">
+                        Use these keys for read-only monitoring actions.
+                      </p>
                     </div>
-                    <p className="ui-caption font-normal text-slate-500 dark:text-slate-400">
-                      Use these keys for read-only monitoring actions.
-                    </p>
                   </div>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-caption text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">

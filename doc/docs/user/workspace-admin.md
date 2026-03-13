@@ -27,6 +27,18 @@ Platform and tenant-entry resources are configured and auditable.
 !!! note
     Billing, Endpoint Status, Portal settings, and some browser settings are visible only when corresponding features are enabled.
 
+!!! note
+    UI User role and entitlement rules:
+
+    - `ui_none`: no workspace access (profile remains accessible).
+    - `ui_user`: non-admin workspaces only.
+    - `ui_admin`: user-level workspace access plus `/admin`.
+    - `ui_superadmin`: admin access plus `/admin/*-settings`.
+    - `ui_superadmin` role assignment/promotion is restricted to superadmin users.
+    - `can_access_ceph_admin` can be granted only by superadmin users, and only for `ui_admin` or `ui_superadmin`.
+    - `can_access_storage_ops` can be granted by `ui_admin` or `ui_superadmin` for `ui_user`, `ui_admin`, or `ui_superadmin`.
+    - Entitlements are automatically disabled when the target role does not support them.
+
 ## Related pages
 
 - [Workspace: Manager](workspace-manager.md)

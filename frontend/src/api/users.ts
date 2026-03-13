@@ -50,6 +50,7 @@ export type CreateUserPayload = {
   password: string;
   role?: string;
   can_access_ceph_admin?: boolean;
+  can_access_storage_ops?: boolean;
 };
 
 export type UpdateUserPayload = {

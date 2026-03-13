@@ -353,7 +353,7 @@ export default function PortalSettingsPage() {
                   onChange={(value) => handleToggleAllowPortalManagerWorkspace(value)}
                   disabled={!settings}
                   ariaLabel="Allow portal manager workspace"
-                  badge={{ visible: true, label: "Deprecated", tone: "warning" }}
+                  badge={{ visible: true, label: "Experimental", tone: "info" }}
                 />
               }
             />
