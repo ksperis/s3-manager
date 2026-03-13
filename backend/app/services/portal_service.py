@@ -49,6 +49,10 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+class PortalAccessKeyLimitExceeded(RuntimeError):
+    """Raised when a portal user reaches the configured IAM user key limit."""
+
+
 class PortalService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -1550,6 +1554,11 @@ class PortalService:
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
+        existing_user_keys = self._list_access_keys(link, iam_service, include_portal=False)
+        if len(existing_user_keys) >= portal_settings.max_portal_user_access_keys:
+            raise PortalAccessKeyLimitExceeded(
+                f"Maximum IAM user keys reached ({portal_settings.max_portal_user_access_keys}). Delete a key before creating a new one."
+            )
         new_key = iam_service.create_access_key(link.iam_username)
         return PortalAccessKey(
             access_key_id=new_key.access_key_id,

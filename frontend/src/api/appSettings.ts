@@ -8,6 +8,7 @@ export type PortalSettings = {
   allow_portal_key: boolean;
   allow_portal_user_bucket_create: boolean;
   allow_portal_user_access_key_create: boolean;
+  max_portal_user_access_keys: number;
   iam_group_manager_policy: PortalIAMPolicySettings;
   iam_group_user_policy: PortalIAMPolicySettings;
   bucket_access_policy: PortalIAMPolicySettings;

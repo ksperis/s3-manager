@@ -59,6 +59,7 @@ const portalSettingsFixture = {
   effective: {
     allow_portal_user_bucket_create: false,
     allow_portal_user_access_key_create: false,
+    max_portal_user_access_keys: 2,
     bucket_defaults: {
       versioning: false,
       enable_lifecycle: false,

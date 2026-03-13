@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppSettings } from "../../api/appSettings";
@@ -48,6 +48,7 @@ function buildSettings(): AppSettings {
       allow_portal_key: false,
       allow_portal_user_bucket_create: true,
       allow_portal_user_access_key_create: true,
+      max_portal_user_access_keys: 2,
       iam_group_manager_policy: {
         actions: ["iam:*", "s3:*", "sts:*"],
         advanced_policy: null,
@@ -130,5 +131,20 @@ describe("PortalSettingsPage", () => {
 
     await screen.findByLabelText("Allow portal manager workspace");
     expect(screen.getByText("Experimental")).toBeInTheDocument();
+  });
+
+  it("sends max portal user keys in save payload", async () => {
+    render(<PortalSettingsPage />);
+
+    const input = (await screen.findByLabelText("Max IAM user keys per portal user")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "5" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
+    expect(payload.portal.max_portal_user_access_keys).toBe(5);
   });
 });

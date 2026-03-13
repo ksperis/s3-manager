@@ -49,6 +49,7 @@ function buildSettings(): AppSettings {
       allow_portal_key: false,
       allow_portal_user_bucket_create: true,
       allow_portal_user_access_key_create: true,
+      max_portal_user_access_keys: 2,
       iam_group_manager_policy: {
         actions: ["iam:*", "s3:*", "sts:*"],
         advanced_policy: null,

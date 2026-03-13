@@ -9,8 +9,8 @@ from app.models.portal import PortalAccessKey, PortalIAMUser, PortalState
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import s3_client
-from app.services.portal_service import PortalService
-from app.models.iam import IAMUser
+from app.services.portal_service import PortalAccessKeyLimitExceeded, PortalService
+from app.models.iam import AccessKey as IAMAccessKey, IAMUser
 
 
 def test_portal_bucket_creation_updates_user_policy(monkeypatch, db_session):
@@ -399,6 +399,119 @@ def test_get_state_hides_portal_key_for_portal_user_even_when_setting_enabled(mo
     assert all(not key.is_portal for key in state.access_keys)
 
 
+def test_create_access_key_rejects_when_limit_reached(monkeypatch, db_session):
+    account = S3Account(name="portal-account-key-limit", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-key-limit@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    service = PortalService(db_session)
+    link = AccountIAMUser(user_id=user.id, account_id=account.id, iam_user_id="iam-uid", iam_username="portal-iam")
+    fake_iam_user = IAMUser(name="portal-iam", arn="arn:aws:iam:::user/portal-iam")
+
+    class _FakeIAMService:
+        def __init__(self):
+            self.create_calls = 0
+
+        def create_access_key(self, iam_username):  # noqa: ARG002
+            self.create_calls += 1
+            return IAMAccessKey(
+                access_key_id="AK-NEW",
+                status="Active",
+                created_at="2026-01-03T00:00:00Z",
+                secret_access_key="SK-NEW",
+            )
+
+    iam_service = _FakeIAMService()
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: iam_service)
+    monkeypatch.setattr(service, "_ensure_portal_user", lambda *args, **kwargs: (link, fake_iam_user, False))
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(max_portal_user_access_keys=2))
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "_list_access_keys",
+        lambda link_obj, iam_obj, include_portal=False: [
+            PortalAccessKey(access_key_id="AK-1", is_portal=False),
+            PortalAccessKey(access_key_id="AK-2", is_portal=False),
+        ],
+    )
+
+    with pytest.raises(PortalAccessKeyLimitExceeded) as exc:
+        service.create_access_key(user, access)
+
+    assert "Maximum IAM user keys reached" in str(exc.value)
+    assert iam_service.create_calls == 0
+
+
+def test_create_access_key_allows_when_below_limit(monkeypatch, db_session):
+    account = S3Account(name="portal-account-key-limit-ok", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-key-limit-ok@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    service = PortalService(db_session)
+    link = AccountIAMUser(user_id=user.id, account_id=account.id, iam_user_id="iam-uid", iam_username="portal-iam")
+    fake_iam_user = IAMUser(name="portal-iam", arn="arn:aws:iam:::user/portal-iam")
+
+    class _FakeIAMService:
+        def __init__(self):
+            self.create_calls = 0
+
+        def create_access_key(self, iam_username):  # noqa: ARG002
+            self.create_calls += 1
+            return IAMAccessKey(
+                access_key_id="AK-NEW",
+                status="Active",
+                created_at="2026-01-03T00:00:00Z",
+                secret_access_key="SK-NEW",
+            )
+
+    iam_service = _FakeIAMService()
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: iam_service)
+    monkeypatch.setattr(service, "_ensure_portal_user", lambda *args, **kwargs: (link, fake_iam_user, False))
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(max_portal_user_access_keys=2))
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "_list_access_keys",
+        lambda link_obj, iam_obj, include_portal=False: [PortalAccessKey(access_key_id="AK-1", is_portal=False)],
+    )
+
+    created = service.create_access_key(user, access)
+
+    assert created.access_key_id == "AK-NEW"
+    assert created.secret_access_key == "SK-NEW"
+    assert iam_service.create_calls == 1
+
+
 def test_create_portal_access_key_allows_portal_user_when_option_enabled(db_session):
     account = S3Account(name="portal-account-user-create-key", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-create-key@example.com", hashed_password="x", role="ui_user")
@@ -455,6 +568,47 @@ def test_create_portal_access_key_allows_portal_user_when_option_enabled(db_sess
     assert len(audit_service.actions) == 1
     assert audit_service.actions[0]["action"] == "create_access_key"
     assert audit_service.actions[0]["metadata"]["access_key_id"] == "AK-NEW"
+
+
+def test_create_portal_access_key_returns_409_when_limit_reached(db_session):
+    account = S3Account(name="portal-account-user-create-key-limit", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-create-key-limit@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    class _FakeService:
+        def get_effective_portal_settings(self, account):  # noqa: ARG002
+            return PortalSettings(allow_portal_user_access_key_create=True)
+
+        def create_access_key(self, user_obj, access_obj):  # noqa: ARG002
+            raise PortalAccessKeyLimitExceeded("Maximum IAM user keys reached (2). Delete a key before creating a new one.")
+
+    class _FakeAuditService:
+        def record_action(self, **kwargs):  # noqa: ARG002
+            raise AssertionError("Audit should not be called when key creation is rejected")
+
+    service = _FakeService()
+    audit_service = _FakeAuditService()
+
+    with pytest.raises(HTTPException) as exc:
+        portal_router.create_portal_access_key(access=access, audit_service=audit_service, service=service)
+
+    assert exc.value.status_code == 409
+    assert "Maximum IAM user keys reached" in str(exc.value.detail)
 
 
 def test_delete_portal_access_key_allows_portal_user_when_option_enabled(db_session):

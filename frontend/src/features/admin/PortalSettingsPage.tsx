@@ -35,6 +35,12 @@ export default function PortalSettingsPage() {
       .map((entry) => entry.trim())
       .filter(Boolean);
 
+  const normalizePositiveInt = (value: string, fallback: number): number => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(1, Math.trunc(parsed));
+  };
+
   useEffect(() => {
     fetchAppSettings()
       .then((data) => setSettings(data))
@@ -54,6 +60,20 @@ export default function PortalSettingsPage() {
   const handleToggleAllowPortalAccessKeyCreate = (value: boolean) => {
     setSettings((prev) =>
       prev ? { ...prev, portal: { ...prev.portal, allow_portal_user_access_key_create: value } } : prev
+    );
+  };
+
+  const handleMaxPortalUserAccessKeysChange = (value: string) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            portal: {
+              ...prev.portal,
+              max_portal_user_access_keys: normalizePositiveInt(value, prev.portal.max_portal_user_access_keys),
+            },
+          }
+        : prev
     );
   };
 
@@ -184,6 +204,10 @@ export default function PortalSettingsPage() {
   const handleSave = async (event?: React.FormEvent | React.MouseEvent) => {
     event?.preventDefault();
     if (!settings) return;
+    if (!Number.isInteger(settings.portal.max_portal_user_access_keys) || settings.portal.max_portal_user_access_keys < 1) {
+      setError("Max IAM user keys per portal user must be a positive integer.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -257,6 +281,7 @@ export default function PortalSettingsPage() {
 
   const portalBucketCreateEnabled = Boolean(settings?.portal.allow_portal_user_bucket_create);
   const portalAccessKeyCreateEnabled = Boolean(settings?.portal.allow_portal_user_access_key_create);
+  const portalMaxAccessKeys = settings?.portal.max_portal_user_access_keys ?? 2;
   const bucketVersioningEnabled = Boolean(settings?.portal.bucket_defaults.versioning);
   const bucketLifecycleEnabled = Boolean(settings?.portal.bucket_defaults.enable_lifecycle);
   const bucketCorsEnabled = Boolean(settings?.portal.bucket_defaults.enable_cors);
@@ -342,6 +367,22 @@ export default function PortalSettingsPage() {
                     />
                   </label>
                 </div>
+              }
+            />
+            <PortalSettingsItem
+              title="Max IAM user keys per portal user"
+              description="Global limit for IAM user access keys created from the portal."
+              action={
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={portalMaxAccessKeys}
+                  onChange={(e) => handleMaxPortalUserAccessKeysChange(e.target.value)}
+                  disabled={!settings}
+                  aria-label="Max IAM user keys per portal user"
+                  className="w-28 rounded-md border border-slate-300 bg-white px-2 py-1 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                />
               }
             />
             <PortalSettingsItem

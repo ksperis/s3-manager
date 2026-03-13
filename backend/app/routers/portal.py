@@ -34,7 +34,7 @@ from app.routers.dependencies import (
 )
 from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.services.audit_service import AuditService
-from app.services.portal_service import PortalService, get_portal_service
+from app.services.portal_service import PortalAccessKeyLimitExceeded, PortalService, get_portal_service
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_client import BucketNotEmptyError
 from app.services.healthcheck_service import HealthCheckService
@@ -445,6 +445,8 @@ def create_portal_access_key(
             metadata={"access_key_id": key.access_key_id},
         )
         return key
+    except PortalAccessKeyLimitExceeded as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
