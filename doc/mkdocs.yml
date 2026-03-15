@@ -62,7 +62,6 @@ nav:
       - "Workspace: Admin": user/workspace-admin.md
       - "Workspace: Manager": user/workspace-manager.md
       - "Workspace: Browser": user/workspace-browser.md
-      - "Workspace: Portal": user/workspace-portal.md
       - "Workspace: Ceph Admin": user/workspace-ceph-admin.md
       - "Workspace: Storage Ops": user/workspace-storage-ops.md
       - "Feature: Buckets": user/feature-buckets.md

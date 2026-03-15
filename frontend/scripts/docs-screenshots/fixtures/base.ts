@@ -8,9 +8,7 @@ const GENERAL_SETTINGS = {
   browser_enabled: true,
   browser_root_enabled: true,
   browser_manager_enabled: true,
-  browser_portal_enabled: true,
   browser_ceph_admin_enabled: true,
-  portal_enabled: true,
   billing_enabled: false,
   endpoint_status_enabled: true,
   bucket_migration_enabled: true,
@@ -237,86 +235,6 @@ const MANAGER_MIGRATIONS = [
   },
 ];
 
-const PORTAL_ACCOUNTS = [
-  {
-    id: "acc-helios",
-    name: "Helios Retail",
-    quota_max_size_gb: 10,
-    quota_max_objects: 100_000,
-    rgw_account_id: "RGW-HELIOS",
-    storage_endpoint_id: 11,
-    storage_endpoint_name: "Default",
-    storage_endpoint_url: "https://s3-default.docs.example.com",
-    storage_endpoint_capabilities: {
-      iam: true,
-      sns: true,
-      usage: true,
-      metrics: true,
-      static_website: true,
-      sts: false,
-    },
-  },
-];
-
-const PORTAL_STATE = {
-  account_id: 101,
-  iam_user: {
-    iam_user_id: "AIDAEXAMPLEPORTAL",
-    iam_username: "portal-user-helios",
-    arn: "arn:aws:iam::111111111111:user/portal-user-helios",
-    created_at: NOW,
-  },
-  access_keys: [
-    {
-      access_key_id: "AKIAHELIOSPORTAL001",
-      status: "Active",
-      created_at: NOW,
-      is_active: true,
-      is_portal: true,
-      deletable: false,
-    },
-  ],
-  buckets: MANAGER_BUCKETS,
-  total_buckets: MANAGER_BUCKETS.length,
-  s3_endpoint: "https://s3-default.docs.example.com",
-  used_bytes: 1_128_876_445,
-  used_objects: 1_722,
-  quota_max_size_bytes: 10 * 1024 * 1024 * 1024,
-  quota_max_objects: 100_000,
-  account_role: "portal_manager",
-  can_manage_buckets: true,
-  can_manage_portal_users: true,
-};
-
-const PORTAL_SETTINGS = {
-  allow_portal_key: true,
-  allow_portal_user_bucket_create: true,
-  allow_portal_user_access_key_create: true,
-  iam_group_manager_policy: { actions: ["s3:*"] },
-  iam_group_user_policy: { actions: ["s3:GetObject", "s3:ListBucket"] },
-  bucket_access_policy: { actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"] },
-  bucket_defaults: {
-    versioning: true,
-    enable_cors: true,
-    enable_lifecycle: true,
-    cors_allowed_origins: ["https://app.example.com"],
-  },
-  override_policy: {
-    allow_portal_key: true,
-    allow_portal_user_bucket_create: true,
-    allow_portal_user_access_key_create: true,
-    iam_group_manager_policy: { actions: true, advanced_policy: true },
-    iam_group_user_policy: { actions: true, advanced_policy: true },
-    bucket_access_policy: { actions: true, advanced_policy: true },
-    bucket_defaults: {
-      versioning: true,
-      enable_cors: true,
-      enable_lifecycle: true,
-      cors_allowed_origins: true,
-    },
-  },
-};
-
 const WORKSPACE_HEALTH = {
   generated_at: NOW,
   incident_highlight_minutes: 720,
@@ -505,29 +423,6 @@ const CEPH_BUCKETS = {
   has_next: false,
 };
 
-const PORTAL_TRAFFIC = {
-  window: "week",
-  start: "2026-03-01T00:00:00Z",
-  end: NOW,
-  resolution: "day",
-  bucket_filter: null,
-  data_points: 7,
-  series: [
-    { timestamp: "2026-03-02T00:00:00Z", bytes_in: 1200, bytes_out: 800, ops: 25, success_ops: 25 },
-    { timestamp: "2026-03-03T00:00:00Z", bytes_in: 1800, bytes_out: 1200, ops: 41, success_ops: 40 },
-    { timestamp: "2026-03-04T00:00:00Z", bytes_in: 2100, bytes_out: 1400, ops: 52, success_ops: 51 },
-  ],
-  totals: { bytes_in: 5100, bytes_out: 3400, ops: 118, success_ops: 116, success_rate: 0.983 },
-  bucket_rankings: [
-    { bucket: "helios-retail-logs", bytes_total: 6500, bytes_in: 3900, bytes_out: 2600, ops: 95, success_ops: 94, success_ratio: 0.989 },
-  ],
-  user_rankings: [
-    { user: "portal-user-helios", bytes_total: 6500, bytes_in: 3900, bytes_out: 2600, ops: 95, success_ops: 94, success_ratio: 0.989 },
-  ],
-  request_breakdown: [{ group: "GetObject", bytes_in: 0, bytes_out: 2600, ops: 70 }],
-  category_breakdown: [{ category: "read", bytes_in: 0, bytes_out: 2600, ops: 70 }],
-};
-
 function parseBucketName(pathname: string): string {
   const match = pathname.match(/\/buckets\/(.+?)(?:\/|$)/);
   return decodeURIComponent(match?.[1] ?? "helios-retail-logs");
@@ -583,7 +478,6 @@ export function buildBaseRules(): MockRule[] {
         total_users: 7,
         total_admins: 2,
         total_none_users: 1,
-        total_portal_users: 3,
         total_s3_users: 9,
         assigned_accounts: 4,
         unassigned_accounts: 1,
@@ -706,72 +600,6 @@ export function buildBaseRules(): MockRule[] {
       path: /^\/manager\/migrations$/,
       body: {
         items: MANAGER_MIGRATIONS,
-      },
-    },
-    {
-      id: "portal-accounts",
-      path: /^\/portal\/accounts$/,
-      body: PORTAL_ACCOUNTS,
-    },
-    {
-      id: "portal-state",
-      path: /^\/portal\/state$/,
-      body: PORTAL_STATE,
-    },
-    {
-      id: "portal-usage",
-      path: /^\/portal\/usage$/,
-      body: {
-        used_bytes: PORTAL_STATE.used_bytes,
-        used_objects: PORTAL_STATE.used_objects,
-      },
-    },
-    {
-      id: "portal-traffic",
-      path: /^\/portal\/traffic$/,
-      body: PORTAL_TRAFFIC,
-    },
-    {
-      id: "portal-users",
-      path: /^\/portal\/users$/,
-      body: [
-        { id: 8, email: "storage.user@example.com", role: "ui_user", iam_username: "portal-user-helios", iam_only: false },
-        { id: 9, email: "ops.admin@example.com", role: "ui_admin", iam_username: "portal-manager-helios", iam_only: false },
-      ],
-    },
-    {
-      id: "portal-key",
-      path: /^\/portal\/access-keys\/portal$/,
-      body: {
-        access_key_id: "AKIAHELIOSPORTAL001",
-        status: "Active",
-        created_at: NOW,
-        is_active: true,
-        is_portal: true,
-        deletable: false,
-      },
-    },
-    {
-      id: "portal-settings",
-      path: /^\/portal\/settings$/,
-      body: PORTAL_SETTINGS,
-    },
-    {
-      id: "portal-endpoint-health",
-      path: /^\/portal\/endpoint-health$/,
-      body: WORKSPACE_HEALTH,
-    },
-    {
-      id: "portal-bucket-stats",
-      path: /^\/portal\/buckets\/[^/]+\/stats$/,
-      body: ({ url }) => {
-        const bucketName = parseBucketName(url.pathname);
-        const bucket = MANAGER_BUCKETS.find((item) => item.name === bucketName);
-        return {
-          name: bucketName,
-          used_bytes: bucket?.used_bytes ?? 0,
-          object_count: bucket?.object_count ?? 0,
-        };
       },
     },
     {

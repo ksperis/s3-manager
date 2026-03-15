@@ -33,7 +33,7 @@ You can map each operational task to the right workspace and avoid cross-scope m
 ## Limits / feature flags
 
 !!! note
-    Some areas are optional or restricted by endpoint capabilities: IAM support, migration tool, bucket compare, portal, and endpoint status.
+    Some areas are optional or restricted by endpoint capabilities: IAM support, migration tool, bucket compare, and endpoint status.
 
 ## Related pages
 

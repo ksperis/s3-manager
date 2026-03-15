@@ -13,9 +13,8 @@ export type AnnotationTarget = {
 export type LocalStorageSeed = {
   token: string;
   user: Record<string, unknown>;
-  selectedWorkspace?: "admin" | "manager" | "browser" | "portal" | "ceph-admin" | "storage-ops";
+  selectedWorkspace?: "admin" | "manager" | "browser" | "ceph-admin" | "storage-ops";
   selectedExecutionContextId?: string;
-  selectedPortalAccountId?: string;
   selectedCephAdminEndpointId?: string;
   theme?: "light" | "dark";
 };

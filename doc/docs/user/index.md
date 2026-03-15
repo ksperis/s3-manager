@@ -12,7 +12,7 @@ Use this section for task-oriented instructions. Each page focuses on actionable
 1. [Start here](start-here.md)
 2. [Use cases for storage administrators](use-cases-storage-admin.md)
 3. [Use cases for storage users](use-cases-storage-user.md)
-4. Workspace pages (`Admin`, `Manager`, `Browser`, then optional `Portal`, `Ceph Admin`, and `Storage Ops`)
+4. Workspace pages (`Admin`, `Manager`, `Browser`, then optional `Ceph Admin` and `Storage Ops`)
 
 ## Visual example
 

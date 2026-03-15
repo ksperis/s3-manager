@@ -24,7 +24,7 @@ Before any non-trivial change:
   - RGW administration,
   - IAM (users, roles, policies),
   - quotas, usage, metrics,
-  - portal workflows.
+  - account workflows.
 
 - **S3 Connection**  
   A **credential-first entity** (endpoint + access_key / secret_key) used for:
@@ -35,7 +35,7 @@ Before any non-trivial change:
 
 The two **must not be merged** in the domain model or the UX.
 
-### Execution Context vs Portal Context
+### Execution Context
 
 - **Execution Context**  
   A transversal selector for `/manager` and `/browser`. It defines the **executor identity**
@@ -45,10 +45,6 @@ The two **must not be merged** in the domain model or the UX.
   - legacy S3 user (`s3u-<id>`),
   - Ceph Admin endpoint (`ceph-admin-<endpoint_id>`, browser-only for admin users).
 
-- **Portal Context**  
-  A **target scope** for `/portal` workflows. It is always **account-based**.
-  The executor is a dedicated portal IAM technical identity linked to the actor/account.
-
 ---
 
 ## Non-negotiable Principles
@@ -57,18 +53,18 @@ The two **must not be merged** in the domain model or the UX.
 
 - No S3/IAM action must bypass an IAM/S3 decision.
 - The application must **never “fix” IAM** or invent privileges.
-- UI rights (manager / browser / portal / ceph-admin) **never replace IAM/S3**:
+- UI rights (manager / browser / ceph-admin / storage-ops) **never replace IAM/S3**:
   they only gate access to surfaces and context selection.
 
 ---
 
-### B. Portal = controlled orchestration
+### B. Controlled orchestration
 
-Portal workflows may use dedicated technical IAM identities, with these constraints:
+Managed workflows may use dedicated technical IAM identities, with these constraints:
 
 1) Actor/account scope is explicit.
-2) Executor identity is traceable and tied to the portal workflow.
-3) Permissions stay least-privilege via portal groups/policies.
+2) Executor identity is traceable and tied to the workflow.
+3) Permissions stay least-privilege via IAM groups/policies.
 4) Mutating actions are audited with non-sensitive metadata.
 5) Errors are explicit; rollback/compensation is best-effort and must be handled deliberately when needed.
 
@@ -76,7 +72,7 @@ Portal workflows may use dedicated technical IAM identities, with these constrai
 
 ### C. Application Surfaces (strict contract)
 
-The application exposes **5 user-facing surfaces** plus internal APIs:
+The application exposes **4 user-facing surfaces** plus internal APIs:
 
 #### 1) `/admin` — Platform
 
@@ -96,15 +92,7 @@ The application exposes **5 user-facing surfaces** plus internal APIs:
 - No semantic simplification.
 - S3/IAM errors must be exposed without rewriting authorization semantics.
 
-#### 3) `/portal` — Managed Workflows (IAM-capable accounts only)
-
-- Available only for IAM-capable RGW accounts.
-- Opinionated workflows translated into standard resources:
-  users, policies, groups, buckets, tags, quotas.
-- May restrict user choices.
-- Uses dedicated portal IAM identities; no parallel authorization model.
-
-#### 4) `/browser` — Object Exploration
+#### 3) `/browser` — Object Exploration
 
 - Bucket and object navigation (list, upload, download, delete, multipart, versions).
 - Works with:
@@ -114,10 +102,10 @@ The application exposes **5 user-facing surfaces** plus internal APIs:
   - Ceph Admin endpoint context (when explicitly selected and authorized).
 - Must never introduce a parallel IAM management model.
 
-#### 5) `/ceph-admin` — Ceph Cluster Administration
+#### 4) `/ceph-admin` — Ceph Cluster Administration
 
 - Admin-only Ceph RGW cluster workflows (accounts/users/buckets/metrics).
-- Separate from `/manager` and `/portal`.
+- Separate from `/manager` and `/browser`.
 
 Internal APIs under `/internal` are non-UI operational endpoints.
 
@@ -140,7 +128,7 @@ Internal APIs under `/internal` are non-UI operational endpoints.
 Mutating operations must run with a clearly identified execution identity, such as:
 
 - account root credentials (manager account context, root-only path),
-- portal workflow IAM credentials (technical identity for portal workflows),
+- workflow IAM credentials (technical identity for managed workflows),
 - S3 Connection credentials,
 - legacy S3 User credentials,
 - session credentials (S3 session / STS when available),

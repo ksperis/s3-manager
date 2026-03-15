@@ -9,7 +9,7 @@ const superAdminUser = {
   can_access_ceph_admin: true,
   authType: "password",
   account_links: [
-    { account_id: 101, account_role: "portal_manager", account_admin: true },
+    { account_id: 101, account_admin: true },
   ],
   s3_user_details: [{ id: 901, name: "helios-admin" }],
   s3_connection_details: [{ id: 701, name: "BlueHarbor Shared Connection", access_manager: true, access_browser: true }],
@@ -24,7 +24,7 @@ const adminUser = {
   can_access_ceph_admin: true,
   authType: "password",
   account_links: [
-    { account_id: 101, account_role: "portal_manager", account_admin: true },
+    { account_id: 101, account_admin: true },
   ],
   s3_user_details: [{ id: 903, name: "platform-admin" }],
   s3_connection_details: [{ id: 701, name: "BlueHarbor Shared Connection", access_manager: true, access_browser: true }],
@@ -39,7 +39,7 @@ const storageUser = {
   can_access_ceph_admin: false,
   authType: "password",
   account_links: [
-    { account_id: 101, account_role: "portal_user", account_admin: false },
+    { account_id: 101, account_admin: false },
   ],
   s3_user_details: [{ id: 904, name: "storage-user-helios" }],
   s3_connection_details: [{ id: 701, name: "BlueHarbor Shared Connection", access_manager: true, access_browser: true }],
@@ -52,7 +52,6 @@ function baseStorage(user: Record<string, unknown>) {
     user,
     selectedWorkspace: "admin" as const,
     selectedExecutionContextId: "acc-helios",
-    selectedPortalAccountId: "acc-helios",
     selectedCephAdminEndpointId: "11",
     theme: "dark" as const,
   };
@@ -239,20 +238,6 @@ export const scenarios: DocScreenshotScenario[] = [
       { selector: "button[aria-label='Select bucket']", label: "Current bucket context", side: "top" },
       { selector: "button[aria-label='Upload files']", label: "Object actions toolbar", side: "top", offsetX: 90 },
       { selector: "button:has-text('Operations')", label: "Track running operations", side: "right" },
-    ],
-    mockRules: withBaseRules(),
-  },
-  {
-    id: "workspace-portal",
-    docPage: "user/workspace-portal.md",
-    route: "/portal",
-    outputFile: "workspace-portal.png",
-    waitFor: "text=BUCKETS",
-    storage: { ...baseStorage(storageUser), selectedWorkspace: "portal" },
-    annotations: [
-      { selector: "text=BUCKETS", label: "Guided self-service area", side: "top" },
-      { selector: "input[placeholder='Search...']", label: "Search within portal buckets", side: "top", offsetX: 120 },
-      { selector: "button:has-text('Create bucket')", label: "Controlled bucket creation", side: "right" },
     ],
     mockRules: withBaseRules(),
   },

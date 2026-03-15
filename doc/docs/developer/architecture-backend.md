@@ -12,7 +12,6 @@
 - Admin
 - Manager
 - Browser
-- Portal
 - Ceph Admin
 - Internal cron endpoints
 

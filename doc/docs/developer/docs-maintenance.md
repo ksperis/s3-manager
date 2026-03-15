@@ -30,7 +30,6 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/manager/bucket-compare` | `user/feature-bucket-compare.md` | Covered |
 | `/manager/migrations*` | `user/feature-bucket-migration.md` | Covered |
 | `/browser` | `user/workspace-browser.md` + `user/feature-objects-browser.md` | Covered |
-| `/portal` and children | `user/workspace-portal.md` | Covered |
 | Feature flags in app settings | `ops/configuration.md` + user pages limits blocks | Covered |
 
 ## Maintenance rule

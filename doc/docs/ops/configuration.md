@@ -11,7 +11,7 @@ Key areas:
 - Security and auth: JWT keys, credential keys, refresh cookie settings.
 - Database: `DATABASE_URL`.
 - CORS: `CORS_ORIGINS`.
-- Feature force-locks: `FEATURE_MANAGER_ENABLED`, `FEATURE_BROWSER_ENABLED`, `FEATURE_PORTAL_ENABLED`, `FEATURE_CEPH_ADMIN_ENABLED`, `FEATURE_STORAGE_OPS_ENABLED`, `FEATURE_BILLING_ENABLED`, `FEATURE_ENDPOINT_STATUS_ENABLED`.
+- Feature force-locks: `FEATURE_MANAGER_ENABLED`, `FEATURE_BROWSER_ENABLED`, `FEATURE_CEPH_ADMIN_ENABLED`, `FEATURE_STORAGE_OPS_ENABLED`, `FEATURE_BILLING_ENABLED`, `FEATURE_ENDPOINT_STATUS_ENABLED`.
 - Internal scheduler auth: `INTERNAL_CRON_TOKEN`.
 - Billing, quota monitoring, and healthcheck behavior.
 - Shared history retention: `BILLING_DAILY_RETENTION_DAYS`, `QUOTA_HISTORY_HOURLY_RETENTION_DAYS`, `QUOTA_HISTORY_DAILY_RETENTION_DAYS`.
@@ -23,10 +23,10 @@ Primary model: `backend/app/models/app_settings.py`.
 
 Managed from Admin UI:
 
-- General feature toggles (`manager_enabled`, `browser_enabled`, `portal_enabled`, `ceph_admin_enabled`, `storage_ops_enabled`, `billing_enabled`, `endpoint_status_enabled`).
+- General feature toggles (`manager_enabled`, `browser_enabled`, `ceph_admin_enabled`, `storage_ops_enabled`, `billing_enabled`, `endpoint_status_enabled`).
 - Quota supervision toggles (`quota_alerts_enabled`, `usage_history_enabled`).
-- Browser sub-flags (`browser_root_enabled`, `browser_manager_enabled`, `browser_portal_enabled`, `browser_ceph_admin_enabled`).
-- Migration/compare flags and portal behavior.
+- Browser sub-flags (`browser_root_enabled`, `browser_manager_enabled`, `browser_ceph_admin_enabled`).
+- Migration/compare flags and manager behavior.
 - Quota notification policy (`quota_notifications`: threshold, SMTP non-secret fields, contact-email option).
 
 ## Frontend runtime settings

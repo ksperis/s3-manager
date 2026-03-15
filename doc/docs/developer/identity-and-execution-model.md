@@ -9,7 +9,6 @@
 
 - `/manager` and `/browser` rely on execution context selection.
 - Backend resolves executor from selected context and policy constraints.
-- `/portal` uses account scope for workflow targeting, not direct context-as-executor semantics.
 
 ## Practical impact
 

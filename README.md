@@ -9,7 +9,7 @@
 - **Admin**: platform governance, endpoints, users, and settings.
 - **Manager**: bucket and IAM administration in account context.
 - **Browser**: direct object operations.
-- **Portal**: guided self-service workflows.
+- **Portal**: guided self-service workflows (**temporarily removed**).
 - **Ceph-admin**: Ceph RGW cluster-wide administration.
 
 ## Screenshots
@@ -31,6 +31,8 @@
 ![Ceph Admin](doc/docs/assets/screenshots/user/workspace-ceph-admin.png)
 
 ### Portal
+
+> Note: the Portal feature is temporarily removed; this screenshot is kept as historical documentation.
 
 ![Portal](doc/docs/assets/screenshots/user/workspace-portal.png)
 

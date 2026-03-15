@@ -27,7 +27,6 @@ async function seedLocalStorage(page: Page, storage: {
   user: Record<string, unknown>;
   selectedWorkspace?: string;
   selectedExecutionContextId?: string;
-  selectedPortalAccountId?: string;
   selectedCephAdminEndpointId?: string;
   theme?: "light" | "dark";
 }) {
@@ -40,9 +39,6 @@ async function seedLocalStorage(page: Page, storage: {
     }
     if (value.selectedExecutionContextId) {
       localStorage.setItem("selectedExecutionContextId", value.selectedExecutionContextId);
-    }
-    if (value.selectedPortalAccountId) {
-      localStorage.setItem("selectedPortalAccountId", value.selectedPortalAccountId);
     }
     if (value.selectedCephAdminEndpointId) {
       localStorage.setItem("selectedCephAdminEndpointId", value.selectedCephAdminEndpointId);

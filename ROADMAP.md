@@ -61,10 +61,10 @@ Make authentication and first-login behaviour explicit, secure, and understandab
 
 ---
 
-## Phase 2 — Portal UX Consistency
+## Phase 2 — Workspace UX Consistency
 
 **Objective**  
-Make the Portal usable and coherent for `portal_manager` users without adding new features.
+Make workspace navigation and day-to-day flows coherent without adding new features.
 
 **Topics**
 - Clarify the distinction between:
@@ -75,7 +75,7 @@ Make the Portal usable and coherent for `portal_manager` users without adding ne
 
 **Expected outcomes**
 - Clear and stable navigation
-- Reduced cognitive load for portal users
+- Reduced cognitive load for users
 - Improved day-to-day usability
 
 ---
@@ -104,7 +104,7 @@ Make documentation a first-class part of the project.
 
 **Topics**
 - Public documentation published from the repository
-- Clear separation by surface (`/admin`, `/manager`, `/portal`, `/browser`)
+- Clear separation by surface (`/admin`, `/manager`, `/browser`, `/ceph-admin`, `/storage-ops`)
 - Architecture and invariants explicitly documented
 - Documentation usable as a reference for both humans and AI tools
 

@@ -79,5 +79,4 @@ Post-refactor measurements (2026-02-28):
 ## Default login redirect
 - `ui_admin` -> `/admin`
 - `ui_user` -> `/manager` by default
-- `ui_user` with only portal rights (portal_user/portal_manager and no `account_admin` on any account) -> `/portal`
 - `ui_none` or missing role -> `/unauthorized`

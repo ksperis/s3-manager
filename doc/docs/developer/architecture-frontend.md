@@ -7,7 +7,7 @@
 
 ## App structure
 
-- Workspace layouts (`Admin`, `Manager`, `Browser`, `Portal`, `Ceph Admin`).
+- Workspace layouts (`Admin`, `Manager`, `Browser`, `Ceph Admin`, `Storage Ops`).
 - Shared components for layout, topbar controls, and tables.
 - Feature pages under `frontend/src/features/`.
 
