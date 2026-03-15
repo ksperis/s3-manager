@@ -553,7 +553,7 @@ export default function BrowserPage({
   const accountIdForApi = accountIdOverride ?? browserContext.selectorForApi;
   const hasS3AccountContext = hasContextOverride ?? browserContext.hasContext;
   const location = useLocation();
-  // /browser is credential-first: no root/portal switching in step 2.
+  // /browser is credential-first.
   const accessMode = null;
   const [bucketName, setBucketName] = useState("");
   const [showBucketMenu, setShowBucketMenu] = useState(false);
@@ -585,7 +585,7 @@ export default function BrowserPage({
   });
   const [inspectorTab, setInspectorTab] = useState<"context" | "bucket" | "selection" | "details">("context");
   const [compactMode, setCompactMode] = useState(
-    () => !location.pathname.replace(/\/+$/, "").endsWith("/portal/browser")
+    () => location.pathname.replace(/\/+$/, "").endsWith("/browser")
   );
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
   const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
@@ -839,7 +839,6 @@ export default function BrowserPage({
   const normalizedPath = location.pathname.replace(/\/+$/, "");
   const isEmbeddedBrowserPath =
     normalizedPath.endsWith("/manager/browser") ||
-    normalizedPath.endsWith("/portal/browser") ||
     normalizedPath.endsWith("/ceph-admin/browser");
   const isMainBrowserPath = normalizedPath === "/browser";
   const bucketManagementEnabled = normalizedPath.endsWith("/browser") && !isEmbeddedBrowserPath;
@@ -847,10 +846,6 @@ export default function BrowserPage({
   const bucketConfigContextScope = "browser";
 
   useEffect(() => {
-    if (normalizedPath.endsWith("/portal/browser")) {
-      setCompactMode(false);
-      return;
-    }
     if (
       normalizedPath === "/browser" ||
       normalizedPath.endsWith("/manager/browser") ||

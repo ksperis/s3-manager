@@ -209,10 +209,6 @@ class Settings(BaseSettings):
         None,
         description="Force Browser feature on/off (FEATURE_BROWSER_ENABLED)",
     )
-    feature_portal_enabled: Optional[bool] = Field(
-        None,
-        description="Force Portal feature on/off (FEATURE_PORTAL_ENABLED)",
-    )
     feature_ceph_admin_enabled: Optional[bool] = Field(
         None,
         description="Force Ceph Admin feature on/off (FEATURE_CEPH_ADMIN_ENABLED)",

@@ -164,7 +164,6 @@ def assign_account(
             user_id,
             payload.account_id,
             account_root=payload.account_root or False,
-            account_role=payload.account_role,
             account_admin=payload.account_admin,
         )
         audit_service.record_action(

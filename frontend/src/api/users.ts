@@ -7,7 +7,6 @@ import { PaginatedResponse } from "./types";
 
 export type AccountMembership = {
   account_id: number;
-  account_role?: string | null;
   account_admin?: boolean | null;
 };
 
@@ -120,12 +119,10 @@ export async function updateCurrentUser(payload: UpdateCurrentUserPayload): Prom
 export async function assignUserToS3Account(
   userId: number,
   accountId: number,
-  accountRole?: string | null,
   accountAdmin?: boolean | null,
 ): Promise<User> {
   const { data } = await client.post<User>(`/admin/users/${userId}/assign-account`, {
     account_id: accountId,
-    account_role: accountRole,
     account_admin: accountAdmin,
   });
   return data;

@@ -262,13 +262,6 @@ export default function AdminDashboard() {
         critical: false,
       },
       {
-        id: "portal",
-        label: "Portal",
-        description: "End-user self-service workspace",
-        enabled: generalSettings.portal_enabled,
-        critical: false,
-      },
-      {
         id: "ceph_admin",
         label: "Ceph admin",
         description: "Cluster-wide advanced operations",
@@ -287,7 +280,6 @@ export default function AdminDashboard() {
       generalSettings.browser_enabled,
       generalSettings.ceph_admin_enabled,
       generalSettings.manager_enabled,
-      generalSettings.portal_enabled,
       generalSettings.storage_ops_enabled,
     ]
   );
@@ -374,8 +366,7 @@ export default function AdminDashboard() {
           <div className={cx(uiCardClass, "mt-5 rounded-xl border-dashed px-4 py-4")}>
             <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Next steps</p>
             <p className="mt-2 ui-caption text-slate-600 dark:text-slate-300">
-              Add a UI user, create an account, and link that account to the UI user. If you plan to use the portal, enable the
-              Portal feature in Settings first so you can assign portal roles.
+              Add a UI user, create an account, and link that account to the UI user.
             </p>
             <div className="mt-3 flex flex-wrap gap-3">
               <Link

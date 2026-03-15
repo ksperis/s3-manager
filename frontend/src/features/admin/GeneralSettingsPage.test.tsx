@@ -51,9 +51,7 @@ function buildSettings(): AppSettings {
       browser_enabled: true,
       browser_root_enabled: true,
       browser_manager_enabled: false,
-      browser_portal_enabled: true,
       browser_ceph_admin_enabled: true,
-      portal_enabled: false,
       billing_enabled: false,
       endpoint_status_enabled: false,
       quota_alerts_enabled: false,
@@ -66,44 +64,6 @@ function buildSettings(): AppSettings {
       allow_login_endpoint_list: false,
       allow_login_custom_endpoint: false,
       allow_user_private_connections: false,
-    },
-    portal: {
-      allow_portal_key: false,
-      allow_portal_user_bucket_create: true,
-      allow_portal_user_access_key_create: true,
-      max_portal_user_access_keys: 2,
-      iam_group_manager_policy: {
-        actions: ["iam:*", "s3:*", "sts:*"],
-        advanced_policy: null,
-      },
-      iam_group_user_policy: {
-        actions: ["s3:ListAllMyBuckets", "sts:GetSessionToken"],
-        advanced_policy: null,
-      },
-      bucket_access_policy: {
-        actions: ["s3:GetBucketLocation"],
-        advanced_policy: null,
-      },
-      bucket_defaults: {
-        versioning: true,
-        enable_cors: true,
-        enable_lifecycle: true,
-        cors_allowed_origins: [],
-      },
-      override_policy: {
-        allow_portal_key: false,
-        allow_portal_user_bucket_create: false,
-        allow_portal_user_access_key_create: false,
-        iam_group_manager_policy: { actions: false, advanced_policy: false },
-        iam_group_user_policy: { actions: false, advanced_policy: false },
-        bucket_access_policy: { actions: false, advanced_policy: false },
-        bucket_defaults: {
-          versioning: false,
-          enable_cors: false,
-          enable_lifecycle: false,
-          cors_allowed_origins: false,
-        },
-      },
     },
     manager: {
       allow_manager_user_usage_stats: true,
@@ -147,7 +107,6 @@ function unlockedFeatureLocks(): GeneralFeatureLocks {
     ceph_admin_enabled: { forced: false, value: null, source: null },
     storage_ops_enabled: { forced: false, value: null, source: null },
     browser_enabled: { forced: false, value: null, source: null },
-    portal_enabled: { forced: false, value: null, source: null },
     billing_enabled: { forced: false, value: null, source: null },
     endpoint_status_enabled: { forced: false, value: null, source: null },
   };
@@ -207,13 +166,6 @@ describe("GeneralSettingsPage branding", () => {
     await screen.findByLabelText("Primary color picker");
     expect(screen.queryByLabelText("Bucket migration tool")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Bucket compare tool")).not.toBeInTheDocument();
-  });
-
-  it("shows Experimental badge on Portal feature toggle", async () => {
-    render(<GeneralSettingsPage />);
-
-    await screen.findByLabelText("Portal feature");
-    expect(screen.getByText("Experimental")).toBeInTheDocument();
   });
 
   it("sends a quota SMTP test email with current quota notification settings", async () => {

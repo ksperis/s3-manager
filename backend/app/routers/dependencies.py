@@ -16,7 +16,6 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import decode_token
 from app.db import (
-    AccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -54,7 +53,6 @@ ManagerActor = Union[User, ManagerSessionPrincipal]
 @dataclass
 class AccountCapabilities:
     can_manage_buckets: bool = False
-    can_manage_portal_users: bool = False
     can_manage_iam: bool = False
     can_view_root_key: bool = False
     using_root_key: bool = False
@@ -65,7 +63,6 @@ class AccountAccess:
     account: S3Account
     actor: ManagerActor
     membership: Optional[UserS3Account]
-    role: str
     capabilities: AccountCapabilities
 
 
@@ -303,7 +300,6 @@ def _resolve_s3_user_context(db: Session, user: User, s3_user_id: int) -> S3Acco
     account.set_session_credentials(s3_user.rgw_access_key, s3_user.rgw_secret_key)
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
         can_manage_buckets=True,
-        can_manage_portal_users=False,
         can_manage_iam=False,
         can_view_root_key=False,
         using_root_key=False,
@@ -327,7 +323,6 @@ def _build_ceph_admin_browser_account(endpoint: StorageEndpoint) -> S3Account:
     account.set_session_credentials(endpoint.ceph_admin_access_key, endpoint.ceph_admin_secret_key)
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
         can_manage_buckets=True,
-        can_manage_portal_users=False,
         can_manage_iam=False,
         can_view_root_key=False,
         using_root_key=False,
@@ -387,7 +382,6 @@ def _resolve_connection_context(
     can_manage_iam = _connection_iam_capable(conn)
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
         can_manage_buckets=True,
-        can_manage_portal_users=False,
         can_manage_iam=can_manage_iam,
         can_view_root_key=False,
         using_root_key=False,
@@ -484,7 +478,6 @@ def _manager_membership_capabilities(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
     return AccountCapabilities(
         can_manage_buckets=True,
-        can_manage_portal_users=False,
         can_manage_iam=True,
         can_view_root_key=True,
         using_root_key=True,
@@ -605,7 +598,6 @@ def get_account_context(
     account = _resolve_session_account(db, actor, account_id, requested_endpoint=requested_endpoint)
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
         can_manage_buckets=actor.capabilities.can_manage_buckets,
-        can_manage_portal_users=False,
         can_manage_iam=actor.capabilities.can_manage_iam,
         can_view_root_key=False,
         using_root_key=False,
@@ -613,74 +605,25 @@ def get_account_context(
     return account
 
 
-def get_portal_account_access(
-    account_ref: Optional[str] = Query(default=None, alias="account_id"),
-    user: User = Depends(get_current_account_user),
-    db: Session = Depends(get_db),
-) -> AccountAccess:
-    account_id, s3_user_id, connection_id, ceph_admin_endpoint_id = _parse_account_selector(account_ref)
-    if s3_user_id is not None or connection_id is not None or ceph_admin_endpoint_id is not None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
-    account, link = _resolve_user_account_link(db, user, account_id, allow_default=False)
-    # Portal is restricted to RGW accounts with IAM support.
-    endpoint = getattr(account, "storage_endpoint", None)
-    if endpoint is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires a storage endpoint")
-    if not account.rgw_account_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires an RGW account")
-    if not resolve_feature_flags(endpoint).iam_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal is disabled for this endpoint")
-    role, capabilities = _portal_membership_capabilities(link)
-    if role == AccountRole.PORTAL_NONE.value:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
-    return AccountAccess(account=account, actor=user, membership=link, role=role, capabilities=capabilities)
-
-
-def _membership_capabilities(link: Optional[UserS3Account], actor: ManagerActor) -> tuple[str, AccountCapabilities]:
+def _membership_capabilities(link: Optional[UserS3Account], actor: ManagerActor) -> AccountCapabilities:
     if link:
-        role = link.account_role or AccountRole.PORTAL_USER.value
-        if role == AccountRole.PORTAL_NONE.value:
-            return role, AccountCapabilities()
-        # Base defaults per role / flag
         is_account_admin = bool(link.account_admin or link.is_root)
-        can_manage_portal_users = role == AccountRole.PORTAL_MANAGER.value
-        can_manage_buckets = role == AccountRole.PORTAL_MANAGER.value
-        can_manage_iam = bool(can_manage_portal_users or is_account_admin)
-        can_view_root_key = is_account_admin
-        return role, AccountCapabilities(
-            can_manage_buckets=can_manage_buckets,
-            can_manage_portal_users=can_manage_portal_users,
-            can_manage_iam=can_manage_iam,
-            can_view_root_key=can_view_root_key,
+        if not is_account_admin:
+            return AccountCapabilities()
+        return AccountCapabilities(
+            can_manage_buckets=True,
+            can_manage_iam=True,
+            can_view_root_key=True,
             using_root_key=is_account_admin,
         )
-    # Session principal or unlinked user (should be guarded earlier)
     if isinstance(actor, ManagerSessionPrincipal):
-        return AccountRole.PORTAL_MANAGER.value if actor.capabilities.can_manage_buckets else AccountRole.PORTAL_USER.value, AccountCapabilities(
+        return AccountCapabilities(
             can_manage_buckets=actor.capabilities.can_manage_buckets,
-            can_manage_portal_users=False,
             can_manage_iam=actor.capabilities.can_manage_iam,
             can_view_root_key=False,
             using_root_key=False,
         )
-    return AccountRole.PORTAL_NONE.value, AccountCapabilities()
-
-
-def _portal_membership_capabilities(link: Optional[UserS3Account]) -> tuple[str, AccountCapabilities]:
-    if link:
-        role = link.account_role or AccountRole.PORTAL_USER.value
-        if role == AccountRole.PORTAL_NONE.value:
-            return role, AccountCapabilities()
-        can_manage_portal_users = role == AccountRole.PORTAL_MANAGER.value
-        can_manage_buckets = role == AccountRole.PORTAL_MANAGER.value
-        return role, AccountCapabilities(
-            can_manage_buckets=can_manage_buckets,
-            can_manage_portal_users=can_manage_portal_users,
-            can_manage_iam=False,
-            can_view_root_key=False,
-            using_root_key=False,
-        )
-    return AccountRole.PORTAL_NONE.value, AccountCapabilities()
+    return AccountCapabilities()
 
 
 def get_account_access(
@@ -695,27 +638,15 @@ def get_account_access(
     # Resolve target account
     if isinstance(actor, User):
         account, link = _resolve_user_account_link(db, actor, account_id, allow_default=True)
-        role, capabilities = _membership_capabilities(link, actor)
-        if role == AccountRole.PORTAL_NONE.value:
+        capabilities = _membership_capabilities(link, actor)
+        if not capabilities.can_manage_buckets:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
-        return AccountAccess(account=account, actor=actor, membership=link, role=role, capabilities=capabilities)
+        return AccountAccess(account=account, actor=actor, membership=link, capabilities=capabilities)
 
     # Session principal
     account = _resolve_session_account(db, actor, account_id)
-    role, capabilities = _membership_capabilities(None, actor)
-    return AccountAccess(account=account, actor=actor, membership=None, role=role, capabilities=capabilities)
-
-
-def require_portal_manager(access: AccountAccess = Depends(get_portal_account_access)) -> AccountAccess:
-    if not access.capabilities.can_manage_portal_users:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager rights required for this account")
-    return access
-
-
-def require_portal_buckets(access: AccountAccess = Depends(get_portal_account_access)) -> AccountAccess:
-    if not access.capabilities.can_manage_buckets:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management not allowed for this account")
-    return access
+    capabilities = _membership_capabilities(None, actor)
+    return AccountAccess(account=account, actor=actor, membership=None, capabilities=capabilities)
 
 
 def _ensure_manager_capabilities(account: S3Account, require_iam: bool = False, require_usage: bool = False) -> None:
@@ -977,13 +908,6 @@ def require_browser_enabled() -> None:
     settings = load_app_settings()
     if not settings.general.browser_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser feature is disabled")
-
-
-def require_portal_enabled() -> None:
-    settings = load_app_settings()
-    if not settings.general.portal_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal feature is disabled")
-
 
 def require_manager_context_enabled() -> None:
     settings = load_app_settings()

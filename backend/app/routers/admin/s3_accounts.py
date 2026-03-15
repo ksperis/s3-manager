@@ -7,9 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account as S3AccountDb, User
-from app.models.app_settings import PortalSettingsOverride
-from app.models.portal import PortalAccountSettings
+from app.db import User
 from app.models.s3_account import (
     PaginatedS3AccountsResponse,
     S3Account,
@@ -24,7 +22,6 @@ from app.routers.dependencies import (
     get_optional_super_admin_rgw_client,
 )
 from app.services.s3_accounts_service import S3AccountsService, get_s3_accounts_service
-from app.services.portal_service import get_portal_service
 from app.services.audit_service import AuditService
 from app.services.rgw_admin import RGWAdminError
 
@@ -137,32 +134,6 @@ def get_account(
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
-
-@router.get("/{account_id}/portal-settings", response_model=PortalAccountSettings, response_model_exclude_unset=True)
-def get_account_portal_settings(
-    account_id: int,
-    db: Session = Depends(get_db),
-    _: dict = Depends(get_current_super_admin),
-) -> PortalAccountSettings:
-    account = db.query(S3AccountDb).filter(S3AccountDb.id == account_id).first()
-    if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
-    service = get_portal_service(db)
-    return service.get_portal_account_settings(account)
-
-
-@router.put("/{account_id}/portal-settings", response_model=PortalAccountSettings, response_model_exclude_unset=True)
-def update_account_portal_settings(
-    account_id: int,
-    payload: PortalSettingsOverride,
-    db: Session = Depends(get_db),
-    _: dict = Depends(get_current_super_admin),
-) -> PortalAccountSettings:
-    account = db.query(S3AccountDb).filter(S3AccountDb.id == account_id).first()
-    if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
-    service = get_portal_service(db)
-    return service.update_admin_portal_settings_override(account, payload)
 
 @router.post("", response_model=S3Account, status_code=status.HTTP_201_CREATED)
 def create_account(

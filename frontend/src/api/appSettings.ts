@@ -4,18 +4,6 @@
  */
 import client from "./client";
 
-export type PortalSettings = {
-  allow_portal_key: boolean;
-  allow_portal_user_bucket_create: boolean;
-  allow_portal_user_access_key_create: boolean;
-  max_portal_user_access_keys: number;
-  iam_group_manager_policy: PortalIAMPolicySettings;
-  iam_group_user_policy: PortalIAMPolicySettings;
-  bucket_access_policy: PortalIAMPolicySettings;
-  bucket_defaults: PortalBucketDefaults;
-  override_policy: PortalSettingsOverridePolicy;
-};
-
 export type GeneralSettings = {
   manager_enabled: boolean;
   ceph_admin_enabled: boolean;
@@ -23,9 +11,7 @@ export type GeneralSettings = {
   browser_enabled: boolean;
   browser_root_enabled: boolean;
   browser_manager_enabled: boolean;
-  browser_portal_enabled: boolean;
   browser_ceph_admin_enabled: boolean;
-  portal_enabled: boolean;
   billing_enabled: boolean;
   endpoint_status_enabled: boolean;
   quota_alerts_enabled: boolean;
@@ -51,7 +37,6 @@ export type GeneralFeatureLocks = {
   ceph_admin_enabled: GeneralFeatureLock;
   storage_ops_enabled: GeneralFeatureLock;
   browser_enabled: GeneralFeatureLock;
-  portal_enabled: GeneralFeatureLock;
   billing_enabled: GeneralFeatureLock;
   endpoint_status_enabled: GeneralFeatureLock;
 };
@@ -59,62 +44,6 @@ export type GeneralFeatureLocks = {
 export type BrandingSettings = {
   primary_color: string;
   login_logo_url: string | null;
-};
-
-export type PortalIAMPolicySettings = {
-  actions: string[];
-  advanced_policy?: Record<string, unknown> | null;
-};
-
-export type PortalIAMPolicyOverridePolicy = {
-  actions: boolean;
-  advanced_policy: boolean;
-};
-
-export type PortalBucketDefaultsOverridePolicy = {
-  versioning: boolean;
-  enable_cors: boolean;
-  enable_lifecycle: boolean;
-  cors_allowed_origins: boolean;
-};
-
-export type PortalSettingsOverridePolicy = {
-  allow_portal_key: boolean;
-  allow_portal_user_bucket_create: boolean;
-  allow_portal_user_access_key_create: boolean;
-  iam_group_manager_policy: PortalIAMPolicyOverridePolicy;
-  iam_group_user_policy: PortalIAMPolicyOverridePolicy;
-  bucket_access_policy: PortalIAMPolicyOverridePolicy;
-  bucket_defaults: PortalBucketDefaultsOverridePolicy;
-};
-
-export type PortalBucketDefaults = {
-  versioning: boolean;
-  enable_cors: boolean;
-  enable_lifecycle: boolean;
-  cors_allowed_origins: string[];
-};
-
-export type PortalIAMPolicyOverride = {
-  actions?: string[] | null;
-  advanced_policy?: Record<string, unknown> | null;
-};
-
-export type PortalBucketDefaultsOverride = {
-  versioning?: boolean | null;
-  enable_cors?: boolean | null;
-  enable_lifecycle?: boolean | null;
-  cors_allowed_origins?: string[] | null;
-};
-
-export type PortalSettingsOverride = {
-  allow_portal_key?: boolean | null;
-  allow_portal_user_bucket_create?: boolean | null;
-  allow_portal_user_access_key_create?: boolean | null;
-  iam_group_manager_policy?: PortalIAMPolicyOverride | null;
-  iam_group_user_policy?: PortalIAMPolicyOverride | null;
-  bucket_access_policy?: PortalIAMPolicyOverride | null;
-  bucket_defaults?: PortalBucketDefaultsOverride | null;
 };
 
 export type ManagerSettings = {
@@ -152,7 +81,6 @@ export type OnboardingSettings = {
 
 export type AppSettings = {
   general: GeneralSettings;
-  portal: PortalSettings;
   manager: ManagerSettings;
   quota_notifications: QuotaNotificationSettings;
   browser: BrowserSettings;

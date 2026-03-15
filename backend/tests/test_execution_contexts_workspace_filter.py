@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 from app.db import (
-    AccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -132,14 +131,12 @@ def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_sessio
             UserS3Account(
                 user_id=user.id,
                 account_id=admin_account.id,
-                account_role=AccountRole.PORTAL_NONE.value,
                 account_admin=True,
                 is_root=False,
             ),
             UserS3Account(
                 user_id=user.id,
                 account_id=portal_manager_account.id,
-                account_role=AccountRole.PORTAL_MANAGER.value,
                 account_admin=False,
                 is_root=False,
             ),
@@ -171,7 +168,6 @@ def test_browser_workspace_returns_connections_and_s3_users(db_session):
             UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_MANAGER.value,
                 account_admin=True,
                 is_root=False,
             ),

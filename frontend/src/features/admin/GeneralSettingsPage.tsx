@@ -27,7 +27,6 @@ import { confirmAction } from "../../utils/confirm";
 const CEPH_ADMIN_WARNING_MESSAGE =
   "Ceph Admin is an advanced Ceph cluster mass-management feature (accounts, users, buckets). " +
   "It is not recommended to enable it on the same s3-manager instance exposed to end users.";
-const PORTAL_EXPERIMENTAL_WARNING_MESSAGE = "Portal is an experimental feature.";
 const BILLING_CRON_REMINDER_MESSAGE =
   "Billing feature enabled. Think about enabling the billing collection cron job.";
 const CUSTOM_LOGIN_ENDPOINT_WARNING_MESSAGE =
@@ -47,7 +46,6 @@ const FEATURE_FIELDS = [
   "ceph_admin_enabled",
   "storage_ops_enabled",
   "browser_enabled",
-  "portal_enabled",
   "billing_enabled",
   "endpoint_status_enabled",
 ] as const;
@@ -340,28 +338,6 @@ export default function GeneralSettingsPage() {
                   )}
                 </PortalSettingsItem>
                 <PortalSettingsItem
-                  title="Portal feature"
-                  description="End-user self-service workspace."
-                  action={
-                    <PortalSettingsToggleAction
-                      checked={Boolean(settings.general.portal_enabled)}
-                      disabled={isFeatureLocked("portal_enabled")}
-                      onChange={(value) => handleToggle("portal_enabled", value)}
-                      ariaLabel="Portal feature"
-                      badge={{ visible: true, label: "Experimental", tone: "warning" }}
-                    />
-                  }
-                >
-                  {settings.general.portal_enabled && (
-                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{PORTAL_EXPERIMENTAL_WARNING_MESSAGE}</p>
-                  )}
-                  {getFeatureLockHint("portal_enabled") && (
-                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
-                      {getFeatureLockHint("portal_enabled")}
-                    </p>
-                  )}
-                </PortalSettingsItem>
-                <PortalSettingsItem
                   title="Ceph Admin feature"
                   description="Cluster-wide advanced operations."
                   action={
@@ -411,7 +387,7 @@ export default function GeneralSettingsPage() {
               >
                 <PortalSettingsItem
                   title="Billing feature"
-                  description="Enables the billing dashboards for admin and portal."
+                  description="Enables the billing dashboards."
                   action={
                     <PortalSettingsToggleAction
                       checked={Boolean(settings.general.billing_enabled)}

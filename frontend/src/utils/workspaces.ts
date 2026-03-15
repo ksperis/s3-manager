@@ -10,7 +10,7 @@ const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
 
-export type WorkspaceId = "admin" | "ceph-admin" | "storage-ops" | "manager" | "browser" | "portal";
+export type WorkspaceId = "admin" | "ceph-admin" | "storage-ops" | "manager" | "browser";
 
 export type WorkspaceOption = {
   id: WorkspaceId;
@@ -26,7 +26,7 @@ export type SessionUser = {
   can_access_ceph_admin?: boolean | null;
   can_access_storage_ops?: boolean | null;
   authType?: "password" | "s3_session" | "oidc" | null;
-  account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
+  account_links?: { account_id: number; account_admin?: boolean | null }[] | null;
   s3_users?: number[] | null;
   s3_user_details?: { id: number; name?: string | null }[] | null;
   s3_connections?: number[] | null;
@@ -49,7 +49,6 @@ const ALL_WORKSPACES: WorkspaceOption[] = [
   { id: "storage-ops", label: "Storage Ops", path: "/storage-ops" },
   { id: "manager", label: "Manager (admin tenant)", path: "/manager" },
   { id: "browser", label: "Browser (objets)", path: "/browser" },
-  { id: "portal", label: "Portail (self-service)", path: "/portal" },
 ];
 
 export function isSuperAdminRole(role?: string | null): boolean {
@@ -81,8 +80,7 @@ export function readStoredWorkspaceId(): WorkspaceId | null {
     stored === "ceph-admin" ||
     stored === "storage-ops" ||
     stored === "manager" ||
-    stored === "browser" ||
-    stored === "portal"
+    stored === "browser"
   ) {
     return stored;
   }
@@ -117,9 +115,6 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
     connection.access_manager === true;
   const canUseBrowserConnection = (connection: { access_browser?: boolean | null }) =>
     connection.access_browser !== false;
-  const hasPortalAccess = links.some(
-    (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
-  );
   const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
   const hasS3UserAccess = s3UserDetails.length > 0 || s3UserIds.length > 0;
   const hasBrowserConnectionAccess =
@@ -135,7 +130,6 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
 
   return ALL_WORKSPACES.filter((workspace) => {
     if (workspace.id === "storage-ops") return Boolean(user.can_access_storage_ops);
-    if (workspace.id === "portal") return hasPortalAccess;
     if (workspace.id === "manager") return hasManagerAccess;
     if (workspace.id === "browser") return hasBrowserAccess;
     return false;
@@ -163,7 +157,6 @@ export function resolveAvailableWorkspacesWithFlags(
       return false;
     }
     if (workspace.id === "browser") return generalSettings.browser_enabled && generalSettings.browser_root_enabled;
-    if (workspace.id === "portal") return generalSettings.portal_enabled;
     return true;
   });
   return filtered;
@@ -197,9 +190,6 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
     connection.access_manager === true;
   const canUseBrowserConnection = (connection: { access_browser?: boolean | null }) =>
     connection.access_browser !== false;
-  const hasPortalAccess = links.some(
-    (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
-  );
   const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
   const hasS3UserAccess = s3UserDetails.length > 0 || s3UserIds.length > 0;
   const hasBrowserConnectionAccess =
@@ -218,7 +208,6 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
 
   if (generalSettings.manager_enabled && hasManagerAccess) return "/manager";
   if (generalSettings.storage_ops_enabled && Boolean(user.can_access_storage_ops)) return "/storage-ops";
-  if (hasPortalAccess && generalSettings.portal_enabled) return "/portal";
   if (generalSettings.browser_enabled && generalSettings.browser_root_enabled && hasBrowserAccess) return "/browser";
   return "/unauthorized";
 }

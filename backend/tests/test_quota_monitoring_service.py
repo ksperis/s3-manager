@@ -7,9 +7,7 @@ from datetime import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.db import (
-    AccountRole,
-    QuotaAlertState,
+from app.db import (    QuotaAlertState,
     QuotaUsageDaily,
     QuotaUsageHourly,
     S3Account,
@@ -197,7 +195,6 @@ def test_alert_crossing_first_run_no_duplicate_and_reset(db_session, monkeypatch
             user_id=recipient.id,
             account_id=account.id,
             account_admin=True,
-            account_role=AccountRole.PORTAL_MANAGER.value,
         )
     )
     db_session.commit()
@@ -255,7 +252,6 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
 
     account_admin = _seed_user(db_session, email="account-admin@example.test")
     account_root = _seed_user(db_session, email="account-root@example.test")
-    portal_manager = _seed_user(db_session, email="portal-manager@example.test")
     account_member = _seed_user(db_session, email="account-member@example.test")
     account_disabled = _seed_user(db_session, email="account-disabled@example.test", quota_alerts_enabled=False)
     s3_user_member = _seed_user(db_session, email="s3-user-member@example.test")
@@ -286,29 +282,20 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
                 user_id=account_admin.id,
                 account_id=account.id,
                 account_admin=True,
-                account_role=AccountRole.PORTAL_USER.value,
             ),
             UserS3Account(
                 user_id=account_root.id,
                 account_id=account.id,
                 is_root=True,
-                account_role=AccountRole.PORTAL_USER.value,
-            ),
-            UserS3Account(
-                user_id=portal_manager.id,
-                account_id=account.id,
-                account_role=AccountRole.PORTAL_MANAGER.value,
             ),
             UserS3Account(
                 user_id=account_member.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_USER.value,
             ),
             UserS3Account(
                 user_id=account_disabled.id,
                 account_id=account.id,
                 account_admin=True,
-                account_role=AccountRole.PORTAL_MANAGER.value,
             ),
             UserS3User(
                 user_id=s3_user_member.id,
@@ -347,7 +334,6 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
     assert set(account_resolved) == {
         "account-admin@example.test",
         "account-root@example.test",
-        "portal-manager@example.test",
         "global-admin@example.test",
         "account-contact@example.test",
     }
@@ -387,7 +373,6 @@ def test_smtp_incomplete_is_non_blocking(db_session, monkeypatch):
             user_id=recipient.id,
             account_id=account.id,
             account_admin=True,
-            account_role=AccountRole.PORTAL_MANAGER.value,
         )
     )
     db_session.commit()

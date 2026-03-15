@@ -20,14 +20,6 @@ export function prefetchWorkspaceBranch(pathname: string): void {
     ]);
     return;
   }
-  if (pathname.startsWith("/portal")) {
-    void Promise.allSettled([
-      import("../features/portal/PortalLayout"),
-      import("../features/portal/PortalDashboard"),
-      import("../features/portal/PortalManagePage"),
-    ]);
-    return;
-  }
   if (pathname.startsWith("/ceph-admin")) {
     void Promise.allSettled([
       import("../features/cephAdmin/CephAdminLayout"),

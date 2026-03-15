@@ -282,15 +282,6 @@ export async function fetchManagerWorkspaceHealthOverview(
   return data;
 }
 
-export async function fetchPortalWorkspaceHealthOverview(
-  accountId: S3AccountSelector
-): Promise<WorkspaceEndpointHealthOverviewResponse> {
-  const { data } = await client.get<WorkspaceEndpointHealthOverviewResponse>("/portal/endpoint-health", {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
 export async function runHealthchecks(): Promise<Record<string, unknown>> {
   const { data } = await client.post<Record<string, unknown>>("/admin/health/run");
   return data;

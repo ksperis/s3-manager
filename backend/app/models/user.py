@@ -31,7 +31,6 @@ class LinkedS3Connection(BaseModel):
 
 class AccountMembership(BaseModel):
     account_id: int
-    account_role: Optional[str] = None
     account_admin: Optional[bool] = None
 
 
@@ -94,7 +93,6 @@ class UserSelfUpdate(BaseModel):
 class UserAssignS3Account(BaseModel):
     account_id: int
     account_root: Optional[bool] = None
-    account_role: Optional[str] = None
     account_admin: Optional[bool] = None
 
 

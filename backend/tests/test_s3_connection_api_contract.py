@@ -7,7 +7,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db import AccountRole, S3Account, S3Connection, User, UserRole, UserS3Account
+from app.db import S3Account, S3Connection, User, UserRole, UserS3Account
 from app.main import app
 from app.routers import dependencies
 
@@ -138,7 +138,6 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            account_role=AccountRole.PORTAL_MANAGER.value,
             account_admin=True,
             is_root=False,
         )

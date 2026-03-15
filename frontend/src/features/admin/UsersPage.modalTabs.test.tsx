@@ -20,9 +20,7 @@ const generalSettingsState = {
   browser_enabled: true,
   browser_root_enabled: true,
   browser_manager_enabled: false,
-  browser_portal_enabled: true,
   browser_ceph_admin_enabled: true,
-  portal_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: false,
   quota_alerts_enabled: false,
@@ -50,8 +48,8 @@ vi.mock("../../api/users", () => ({
   listUsers: (params?: unknown) => listUsersMock(params),
   createUser: (payload: unknown) => createUserMock(payload),
   updateUser: (userId: number, payload: unknown) => updateUserMock(userId, payload),
-  assignUserToS3Account: (userId: number, accountId: number, role?: string, accountAdmin?: boolean) =>
-    assignUserToS3AccountMock(userId, accountId, role, accountAdmin),
+  assignUserToS3Account: (userId: number, accountId: number, accountAdmin?: boolean) =>
+    assignUserToS3AccountMock(userId, accountId, accountAdmin),
   deleteUser: (userId: number) => deleteUserMock(userId),
 }));
 
@@ -71,7 +69,6 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
 describe("UsersPage modal tabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    generalSettingsState.portal_enabled = false;
 
     localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
 
@@ -153,7 +150,7 @@ describe("UsersPage modal tabs", () => {
       expect(createUserMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, undefined, true);
+    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, false);
     expect(updateUserMock).toHaveBeenCalledWith(
       100,
       expect.objectContaining({
@@ -294,8 +291,7 @@ describe("UsersPage modal tabs", () => {
     );
   });
 
-  it("does not auto-enable account admin when portal role is portal_manager", async () => {
-    generalSettingsState.portal_enabled = true;
+  it("allows enabling account admin when linking an account", async () => {
     render(<UsersPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
@@ -310,7 +306,7 @@ describe("UsersPage modal tabs", () => {
     if (!accountRow) {
       throw new Error("Account row not found");
     }
-    fireEvent.change(within(accountRow).getByRole("combobox"), { target: { value: "portal_manager" } });
+    fireEvent.click(within(accountRow).getByRole("checkbox", { name: "Admin" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
@@ -318,6 +314,6 @@ describe("UsersPage modal tabs", () => {
     await waitFor(() => {
       expect(assignUserToS3AccountMock).toHaveBeenCalled();
     });
-    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, "portal_manager", false);
+    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, true);
   });
 });

@@ -6,7 +6,6 @@ import pytest
 
 from app.core.security import get_password_hash
 from app.db import (
-    AccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -220,15 +219,10 @@ def test_paginate_users_and_detached_user_to_out(db_session, monkeypatch):
     shared_conn = _seed_connection(db_session, owner_user_id=None, name="paged-shared-conn", is_shared=True)
     owned_conn = _seed_connection(db_session, owner_user_id=user.id, name="paged-owned-conn", is_shared=False)
 
-    monkeypatch.setattr(
-        "app.services.users_service.load_app_settings",
-        lambda: type("S", (), {"general": type("G", (), {"portal_enabled": True})()})(),
-    )
     service.assign_user_to_account(
         user.id,
         account.id,
         account_root=False,
-        account_role=AccountRole.PORTAL_MANAGER.value,
         account_admin=True,
     )
     service._set_s3_user_links(user, [s3_user.id])
@@ -254,7 +248,7 @@ def test_paginate_users_and_detached_user_to_out(db_session, monkeypatch):
     assert owned_conn.id in out.s3_connections or shared_conn.id in out.s3_connections
 
 
-def test_assign_user_to_account_paths_and_list_users_minimal(db_session, monkeypatch):
+def test_assign_user_to_account_paths_and_list_users_minimal(db_session):
     service = UsersService(db_session)
     account = _seed_account(db_session, "acc-b", "RGW-ACC-B")
     user = _seed_user(db_session, "assign@example.com", role=UserRole.UI_NONE.value)
@@ -264,15 +258,10 @@ def test_assign_user_to_account_paths_and_list_users_minimal(db_session, monkeyp
     with pytest.raises(ValueError, match="S3Account not found"):
         service.assign_user_to_account(user.id, 99999)
 
-    monkeypatch.setattr("app.services.users_service.load_app_settings", lambda: type("S", (), {"general": type("G", (), {"portal_enabled": False})()})())
-    with pytest.raises(ValueError, match="Portal feature is disabled"):
-        service.assign_user_to_account(user.id, account.id, account_role=AccountRole.PORTAL_MANAGER.value)
-
     updated = service.assign_user_to_account(
         user.id,
         account.id,
         account_root=True,
-        account_role=AccountRole.PORTAL_NONE.value,
         account_admin=True,
     )
     assert updated.role == UserRole.UI_USER.value

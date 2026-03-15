@@ -1,9 +1,9 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from .base import Base
-from .enums import AccountRole, HealthCheckStatus, StorageProvider, UserRole, is_admin_ui_role, is_superadmin_ui_role
+from .enums import HealthCheckStatus, StorageProvider, UserRole, is_admin_ui_role, is_superadmin_ui_role
 from .storage_endpoint import StorageEndpoint
-from .s3_account import AccountIAMUser, S3Account, UserS3Account
+from .s3_account import S3Account, UserS3Account
 from .user import User
 from .audit import AuditLog
 from .session import S3Session
@@ -24,14 +24,12 @@ from .bucket_migration import BucketMigration, BucketMigrationEvent, BucketMigra
 
 __all__ = [
     "Base",
-    "AccountRole",
     "StorageProvider",
     "HealthCheckStatus",
     "UserRole",
     "is_admin_ui_role",
     "is_superadmin_ui_role",
     "StorageEndpoint",
-    "AccountIAMUser",
     "S3Account",
     "UserS3Account",
     "User",

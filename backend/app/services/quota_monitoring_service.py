@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db import (
-    AccountRole,
     QuotaAlertState,
     QuotaUsageDaily,
     QuotaUsageHourly,
@@ -625,7 +624,6 @@ class QuotaMonitoringService:
                 or_(
                     UserS3Account.account_admin.is_(True),
                     UserS3Account.is_root.is_(True),
-                    UserS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
                 )
             )
             .all()

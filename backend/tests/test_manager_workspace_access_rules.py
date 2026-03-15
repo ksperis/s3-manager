@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
+from app.db import S3Account, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
 from app.models.app_settings import AppSettings
 from app.routers import dependencies
 from app.routers.manager import context as manager_context_router
@@ -104,11 +104,10 @@ def _build_linked_s3_user_context(
     return user, account
 
 
-def test_manager_membership_portal_manager_without_admin_is_forbidden():
+def test_manager_membership_without_admin_is_forbidden():
     link = UserS3Account(
         user_id=1,
         account_id=1,
-        account_role=AccountRole.PORTAL_MANAGER.value,
         account_admin=False,
         is_root=False,
     )
@@ -121,7 +120,6 @@ def test_manager_membership_account_admin_uses_root_key_capabilities():
     link = UserS3Account(
         user_id=1,
         account_id=1,
-        account_role=AccountRole.PORTAL_MANAGER.value,
         account_admin=True,
         is_root=False,
     )
@@ -154,7 +152,6 @@ def test_manager_context_ignores_legacy_access_mode_header(db_session):
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            account_role=AccountRole.PORTAL_MANAGER.value,
             account_admin=True,
             is_root=False,
         )

@@ -123,7 +123,6 @@ class AdminMetricsService:
             "total_users": total_managers,
             "total_admins": total_admins,
             "total_none_users": total_none_users,
-            "total_portal_users": total_managers,
             "total_s3_users": total_s3_users,
             "assigned_accounts": assigned_accounts,
             "unassigned_accounts": unassigned_accounts,

@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
-import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 
 export type BillingCoverage = {
   days_collected: number;
@@ -135,13 +134,5 @@ export async function downloadBillingCsv(month: string, endpointId: number): Pro
 export async function collectBillingDaily(day: string): Promise<Record<string, unknown>> {
   const params: Record<string, string> = { day };
   const { data } = await client.post<Record<string, unknown>>("/admin/billing/collect/daily", null, { params });
-  return data;
-}
-
-export async function getPortalBillingMe(month: string, accountId?: S3AccountSelector): Promise<BillingSubjectDetail> {
-  const params: Record<string, string> = { month };
-  const { data } = await client.get<BillingSubjectDetail>("/portal/billing/me", {
-    params: withS3AccountParam(params, accountId),
-  });
   return data;
 }

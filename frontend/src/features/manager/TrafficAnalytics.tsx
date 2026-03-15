@@ -12,7 +12,6 @@ import {
   TrafficWindow,
   fetchManagerTraffic,
 } from "../../api/stats";
-import { fetchPortalTraffic } from "../../api/portal";
 import { fetchCephAdminClusterTraffic } from "../../api/cephAdmin";
 import TrafficBytesChart from "../../components/TrafficBytesChart";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
@@ -50,7 +49,7 @@ type TrafficAnalyticsProps = {
   accountId?: S3AccountSelector;
   endpointId?: number | null;
   bucketName?: string;
-  scope?: "manager" | "portal" | "ceph-admin";
+  scope?: "manager" | "ceph-admin";
   enabled?: boolean;
 };
 
@@ -81,8 +80,6 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
             return;
           }
           data = await fetchCephAdminClusterTraffic(endpointId, window, bucketName);
-        } else if (scope === "portal") {
-          data = await fetchPortalTraffic(accountId ?? null, window, bucketName);
         } else {
           data = await fetchManagerTraffic(accountId ?? null, window, bucketName);
         }

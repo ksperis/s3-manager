@@ -27,7 +27,6 @@ type TopbarProps = {
 
 type StoredAccountLink = {
   account_id: number;
-  account_role?: string | null;
   account_admin?: boolean | null;
 };
 

@@ -10,8 +10,6 @@ from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core.security import get_password_hash, verify_password
 from app.db import (
-    AccountIAMUser,
-    AccountRole,
     ApiToken,
     RefreshSession,
     S3Account,
@@ -34,8 +32,6 @@ from app.models.user import (
     UserUpdate,
     validate_password_policy,
 )
-from app.services.app_settings_service import load_app_settings
-
 logger = logging.getLogger(__name__)
 
 
@@ -199,11 +195,6 @@ class UsersService:
             for row in self.db.query(S3Connection.id).filter(S3Connection.owner_user_id == user.id).all()
         ]
         # Remove dependent links/tokens first to satisfy FK constraints on PostgreSQL.
-        (
-            self.db.query(AccountIAMUser)
-            .filter(AccountIAMUser.user_id == user.id)
-            .delete(synchronize_session=False)
-        )
         (
             self.db.query(UserS3Account)
             .filter(UserS3Account.user_id == user.id)
@@ -382,7 +373,6 @@ class UsersService:
         account_id: int,
         account_root: bool = False,
         *,
-        account_role: Optional[str] = None,
         role: Optional[str] = None,
         account_admin: Optional[bool] = None,
     ) -> User:
@@ -397,23 +387,6 @@ class UsersService:
             .filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id)
             .first()
         )
-        settings = load_app_settings()
-        portal_enabled = bool(settings.general.portal_enabled)
-        if not portal_enabled:
-            if account_role and account_role != AccountRole.PORTAL_NONE.value:
-                raise ValueError("Portal feature is disabled")
-            if account_role is None and link:
-                desired_account_role = link.account_role or AccountRole.PORTAL_NONE.value
-            else:
-                desired_account_role = AccountRole.PORTAL_NONE.value
-        else:
-            desired_account_role = account_role or (
-                AccountRole.PORTAL_MANAGER.value
-                if is_admin_ui_role(user.role)
-                else AccountRole.PORTAL_USER.value
-            )
-        if desired_account_role not in {role.value for role in AccountRole}:
-            raise ValueError("Invalid account role")
         # Keep platform role untouched unless explicitly overridden
         if role and not is_admin_ui_role(user.role):
             user.role = role
@@ -424,9 +397,7 @@ class UsersService:
                 user_id=user.id,
                 account_id=account.id,
                 is_root=bool(account_root),
-                account_role=desired_account_role,
             )
-        link.account_role = desired_account_role
         link.is_root = bool(account_root)
         link.account_admin = bool(account_admin if account_admin is not None else link.account_admin or account_root)
         link.updated_at = utcnow()
@@ -463,7 +434,6 @@ class UsersService:
                 account_links = [
                     AccountMembership(
                         account_id=link.account_id,
-                        account_role=link.account_role,
                         account_admin=link.account_admin,
                     )
                     for link in user.account_links
@@ -471,12 +441,12 @@ class UsersService:
                 account_ids = [link.account_id for link in user.account_links]
         except DetachedInstanceError:
             account_rows = (
-                self.db.query(UserS3Account.account_id, UserS3Account.account_role, UserS3Account.account_admin)
+                self.db.query(UserS3Account.account_id, UserS3Account.account_admin)
                 .filter(UserS3Account.user_id == user.id)
                 .all()
             )
             account_links = [
-                AccountMembership(account_id=row[0], account_role=row[1], account_admin=row[2]) for row in account_rows
+                AccountMembership(account_id=row[0], account_admin=row[1]) for row in account_rows
             ]
             account_ids = [row[0] for row in account_rows]
         try:

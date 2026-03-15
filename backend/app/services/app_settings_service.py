@@ -18,7 +18,6 @@ _GENERAL_FEATURE_FIELDS = (
     "ceph_admin_enabled",
     "storage_ops_enabled",
     "browser_enabled",
-    "portal_enabled",
     "billing_enabled",
     "endpoint_status_enabled",
 )
@@ -87,7 +86,6 @@ def get_general_feature_locks() -> GeneralFeatureLocks:
         "ceph_admin_enabled": ("feature_ceph_admin_enabled", "FEATURE_CEPH_ADMIN_ENABLED"),
         "storage_ops_enabled": ("feature_storage_ops_enabled", "FEATURE_STORAGE_OPS_ENABLED"),
         "browser_enabled": ("feature_browser_enabled", "FEATURE_BROWSER_ENABLED"),
-        "portal_enabled": ("feature_portal_enabled", "FEATURE_PORTAL_ENABLED"),
         "billing_enabled": ("feature_billing_enabled", "FEATURE_BILLING_ENABLED"),
         "endpoint_status_enabled": ("feature_endpoint_status_enabled", "FEATURE_ENDPOINT_STATUS_ENABLED"),
     }

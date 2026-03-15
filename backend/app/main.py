@@ -12,7 +12,7 @@ from botocore.exceptions import ClientError
 from app.core.config import collect_secret_warnings, get_settings, has_non_local_cors_origins
 from app.core.database import engine, SessionLocal
 from app.core.db_init import init_db
-from app.routers import auth, users, portal, settings as public_settings, browser as user_browser
+from app.routers import auth, users, settings as public_settings, browser as user_browser
 from app.routers import execution_contexts
 from app.routers import connections as user_connections
 from app.routers.admin import s3_accounts as admin_s3_accounts
@@ -56,7 +56,6 @@ from app.routers.dependencies import (
     require_manager_context_enabled,
     require_manager_enabled,
     require_storage_ops_enabled,
-    require_portal_enabled,
 )
 
 settings = get_settings()
@@ -117,7 +116,6 @@ app.include_router(auth.router, prefix=settings.api_v1_prefix)
 app.include_router(users.router, prefix=settings.api_v1_prefix)
 app.include_router(execution_contexts.router, prefix=settings.api_v1_prefix)
 app.include_router(user_connections.router, prefix=settings.api_v1_prefix)
-app.include_router(portal.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_portal_enabled)])
 app.include_router(public_settings.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_s3_accounts.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_s3_users.router, prefix=settings.api_v1_prefix)

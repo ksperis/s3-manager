@@ -5,7 +5,6 @@ from datetime import date
 
 from app.db import (
     ApiToken,
-    AccountIAMUser,
     AuditLog,
     BillingAssignment,
     BillingRateCard,
@@ -148,7 +147,6 @@ def test_unlink_account_cleans_links_and_nulls_references(db_session):
     db_session.flush()
 
     db_session.add(UserS3Account(user_id=user.id, account_id=account.id))
-    db_session.add(AccountIAMUser(user_id=user.id, account_id=account.id, iam_user_id="iam-1"))
     db_session.add(AuditLog(user_email=user.email, user_role=user.role, scope="admin", action="x", account_id=account.id))
     rate_card = BillingRateCard(
         name="rc-1",
@@ -189,7 +187,6 @@ def test_unlink_account_cleans_links_and_nulls_references(db_session):
 
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
     assert db_session.query(UserS3Account).filter(UserS3Account.account_id == account.id).first() is None
-    assert db_session.query(AccountIAMUser).filter(AccountIAMUser.account_id == account.id).first() is None
     audit = db_session.query(AuditLog).first()
     usage = db_session.query(BillingUsageDaily).first()
     storage = db_session.query(BillingStorageDaily).first()

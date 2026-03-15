@@ -5,8 +5,6 @@ from sqlalchemy.orm import Session
 import logging
 
 from app.db import (
-    AccountIAMUser,
-    AccountRole,
     AuditLog,
     BillingAssignment,
     BillingStorageDaily,
@@ -28,7 +26,6 @@ from app.models.s3_account import (
 )
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
-from app.services.app_settings_service import load_app_settings
 from app.utils.storage_endpoint_features import (
     features_to_capabilities,
     normalize_features_config,
@@ -445,7 +442,6 @@ class S3AccountsService:
             self.db.query(
                 UserS3Account.account_id,
                 UserS3Account.user_id,
-                UserS3Account.account_role,
                 UserS3Account.account_admin,
                 User.email,
             )
@@ -459,14 +455,13 @@ class S3AccountsService:
         )
         user_ids_by_account: dict[int, list[int]] = {}
         user_links_by_account: dict[int, list[AccountUserLink]] = {}
-        for account_id, user_id, account_role, account_admin, user_email in rows:
+        for account_id, user_id, account_admin, user_email in rows:
             normalized_account_id = int(account_id)
             normalized_user_id = int(user_id)
             user_ids_by_account.setdefault(normalized_account_id, []).append(normalized_user_id)
             user_links_by_account.setdefault(normalized_account_id, []).append(
                 AccountUserLink(
                     user_id=normalized_user_id,
-                    account_role=account_role,
                     account_admin=account_admin,
                     user_email=user_email,
                 )
@@ -837,13 +832,11 @@ class S3AccountsService:
 
         # Update UI user associations (non-root links only)
         if payload.user_links is not None or payload.user_ids is not None:
-            portal_enabled = bool(load_app_settings().general.portal_enabled)
             desired_links: list[AccountUserLink] = []
             if payload.user_links is not None:
                 desired_links = payload.user_links
             elif payload.user_ids is not None:
-                default_role = AccountRole.PORTAL_MANAGER.value if portal_enabled else AccountRole.PORTAL_NONE.value
-                desired_links = [AccountUserLink(user_id=uid, account_role=default_role) for uid in payload.user_ids]
+                desired_links = [AccountUserLink(user_id=uid) for uid in payload.user_ids]
 
             existing_links = (
                 self.db.query(UserS3Account)
@@ -872,17 +865,6 @@ class S3AccountsService:
                     account_admin = db_link.account_admin if db_link else False
                 else:
                     account_admin = bool(link.account_admin)
-                if not portal_enabled:
-                    if link.account_role and link.account_role != AccountRole.PORTAL_NONE.value:
-                        raise ValueError("Portal feature is disabled")
-                    if link.account_role is None and db_link:
-                        account_role = db_link.account_role or AccountRole.PORTAL_NONE.value
-                    else:
-                        account_role = AccountRole.PORTAL_NONE.value
-                else:
-                    account_role = link.account_role or AccountRole.PORTAL_MANAGER.value
-                if account_role not in {role.value for role in AccountRole}:
-                    raise ValueError(f"Invalid account role for user {user_id}")
                 if not db_link:
                     user = self.db.query(User).filter(User.id == user_id).first()
                     if not user:
@@ -895,7 +877,6 @@ class S3AccountsService:
                         account_id=account.id,
                         is_root=False,
                     )
-                db_link.account_role = account_role
                 db_link.account_admin = account_admin
                 db_link.updated_at = utcnow()
                 self.db.add(db_link)
@@ -991,11 +972,6 @@ class S3AccountsService:
             )
 
     def _remove_account_entry(self, account: S3Account) -> None:
-        (
-            self.db.query(AccountIAMUser)
-            .filter(AccountIAMUser.account_id == account.id)
-            .delete(synchronize_session=False)
-        )
         self.db.query(UserS3Account).filter(UserS3Account.account_id == account.id).delete()
         (
             self.db.query(BillingAssignment)

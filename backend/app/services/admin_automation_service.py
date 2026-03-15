@@ -8,7 +8,6 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from app.db import (
-    AccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -19,7 +18,6 @@ from app.db import (
     UserS3Account,
     UserS3Connection,
     UserS3User,
-    is_admin_ui_role,
     is_superadmin_ui_role,
 )
 from app.models.admin_automation import (
@@ -43,7 +41,6 @@ from app.services.s3_accounts_service import S3AccountsService
 from app.services.s3_users_service import S3UsersService
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.users_service import UsersService
-from app.services.app_settings_service import load_app_settings
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.utils.normalize import normalize_storage_provider
 from app.utils.quota_stats import bytes_to_gb
@@ -632,31 +629,18 @@ class AdminAutomationService:
                 )
                 return self._deleted("account_link", key, link.id, dry_run=dry_run)
 
-            desired_role = item.account_role
             desired_admin = item.account_admin
-            portal_enabled = bool(load_app_settings().general.portal_enabled)
             if link:
-                if link.is_root and (desired_role is not None or desired_admin is not None):
+                if link.is_root and desired_admin is not None:
                     raise ValueError("Cannot modify the root account link")
-                if desired_role is None:
-                    desired_role = link.account_role
                 if desired_admin is None:
                     desired_admin = link.account_admin
             else:
-                if desired_role is None:
-                    desired_role = self._default_account_role(user, portal_enabled)
                 if desired_admin is None:
                     desired_admin = False
 
-            if not portal_enabled and item.account_role is not None and desired_role != AccountRole.PORTAL_NONE.value:
-                raise ValueError("Portal feature is disabled")
-            if desired_role not in {role.value for role in AccountRole}:
-                raise ValueError("Invalid account role")
-
             if link:
                 diff: dict[str, dict[str, Any]] = {}
-                if desired_role != link.account_role:
-                    diff["account_role"] = {"from": link.account_role, "to": desired_role}
                 if bool(desired_admin) != bool(link.account_admin):
                     diff["account_admin"] = {"from": bool(link.account_admin), "to": bool(desired_admin)}
                 if not diff:
@@ -667,7 +651,6 @@ class AdminAutomationService:
                     user.id,
                     account.id,
                     account_root=link.is_root,
-                    account_role=desired_role,
                     account_admin=desired_admin,
                 )
                 audit_service.record_action(
@@ -690,7 +673,6 @@ class AdminAutomationService:
                 user.id,
                 account.id,
                 account_root=False,
-                account_role=desired_role,
                 account_admin=desired_admin,
             )
             audit_service.record_action(
@@ -1475,15 +1457,6 @@ class AdminAutomationService:
         if not account:
             raise ValueError("S3Account not found")
         return account
-
-    def _default_account_role(self, user: User, portal_enabled: bool) -> str:
-        if not portal_enabled:
-            return AccountRole.PORTAL_NONE.value
-        if is_admin_ui_role(user.role):
-            return AccountRole.PORTAL_MANAGER.value
-        if user.role == UserRole.UI_NONE.value:
-            return AccountRole.PORTAL_USER.value
-        return AccountRole.PORTAL_USER.value
 
     @staticmethod
     def _normalize_ui_role(value: Optional[str]) -> Optional[str]:

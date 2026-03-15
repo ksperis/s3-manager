@@ -15,7 +15,7 @@ from app.core.security import (
     encrypt_secret,
     set_credential_keys_override,
 )
-from app.db.s3_account import AccountIAMUser, S3Account
+from app.db.s3_account import S3Account
 from app.db.s3_connection import S3Connection
 from app.db.s3_user import S3User
 from app.db.session import S3Session
@@ -68,7 +68,6 @@ def rotate_credentials(*, new_key: str) -> int:
             ["admin_secret_key", "supervision_secret_key", "ceph_admin_secret_key"],
         )
         updated += _rotate_encrypted_fields(session, S3Account, ["rgw_secret_key"])
-        updated += _rotate_encrypted_fields(session, AccountIAMUser, ["active_secret_key"])
         updated += _rotate_encrypted_fields(session, S3User, ["rgw_secret_key"])
         updated += _rotate_encrypted_fields(session, S3Connection, ["secret_access_key", "session_token"])
         updated += _rotate_session_fields(session)

@@ -2,11 +2,9 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
-from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.db import S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.models.s3_account import AccountUserLink, S3AccountUpdate
 from app.services.rgw_admin import RGWAdminError
 from app.services.s3_accounts_service import S3AccountsService
@@ -147,7 +145,7 @@ def test_account_rgw_users_paths(db_session):
     assert service._account_rgw_users("RGW1", None, admin) == (2, ["alice", "bob"])
 
 
-def test_update_account_user_links_portal_disabled_invalid_role_and_missing_user(db_session, monkeypatch):
+def test_update_account_user_links_missing_user(db_session, monkeypatch):
     endpoint = _seed_endpoint(db_session, name="ceph-update", is_default=True)
     account = _seed_account(db_session, endpoint.id, name="update-acc", rgw_account_id="RGW-U-1")
     user_existing = User(email="existing@example.test", hashed_password="x", role=UserRole.UI_ADMIN.value)
@@ -157,7 +155,6 @@ def test_update_account_user_links_portal_disabled_invalid_role_and_missing_user
         UserS3Account(
             user_id=user_existing.id,
             account_id=account.id,
-            account_role=AccountRole.PORTAL_MANAGER.value,
             account_admin=True,
             is_root=False,
         )
@@ -165,22 +162,13 @@ def test_update_account_user_links_portal_disabled_invalid_role_and_missing_user
     db_session.commit()
 
     service, _ = _service(db_session)
-    monkeypatch.setattr("app.services.s3_accounts_service.load_app_settings", lambda: SimpleNamespace(general=SimpleNamespace(portal_enabled=False)))
     monkeypatch.setattr(service, "_account_quota", lambda *args, **kwargs: (None, None))
-
-    with pytest.raises(ValueError, match="Portal feature is disabled"):
-        service.update_account(
-            account.id,
-            S3AccountUpdate(
-                user_links=[AccountUserLink(user_id=user_existing.id, account_role=AccountRole.PORTAL_MANAGER.value)],
-            ),
-        )
 
     with pytest.raises(ValueError, match="User not found"):
         service.update_account(
             account.id,
             S3AccountUpdate(
-                user_links=[AccountUserLink(user_id=99999, account_role=AccountRole.PORTAL_NONE.value)],
+                user_links=[AccountUserLink(user_id=99999)],
             ),
         )
 
@@ -198,14 +186,12 @@ def test_update_account_adds_and_removes_links_with_quota_request(db_session, mo
             UserS3Account(
                 user_id=keep_user.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_MANAGER.value,
                 account_admin=True,
                 is_root=False,
             ),
             UserS3Account(
                 user_id=remove_user.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_MANAGER.value,
                 account_admin=False,
                 is_root=False,
             ),
@@ -214,7 +200,6 @@ def test_update_account_adds_and_removes_links_with_quota_request(db_session, mo
     db_session.commit()
 
     service, _ = _service(db_session)
-    monkeypatch.setattr("app.services.s3_accounts_service.load_app_settings", lambda: SimpleNamespace(general=SimpleNamespace(portal_enabled=True)))
 
     quota_calls: list[tuple] = []
     monkeypatch.setattr(service, "_apply_account_quota", lambda *args, **kwargs: quota_calls.append(args))
@@ -226,8 +211,8 @@ def test_update_account_adds_and_removes_links_with_quota_request(db_session, mo
             quota_max_size_gb=1.0,
             quota_max_objects=100,
             user_links=[
-                AccountUserLink(user_id=keep_user.id, account_role=AccountRole.PORTAL_MANAGER.value, account_admin=True),
-                AccountUserLink(user_id=add_user.id, account_role=AccountRole.PORTAL_USER.value, account_admin=False),
+                AccountUserLink(user_id=keep_user.id, account_admin=True),
+                AccountUserLink(user_id=add_user.id, account_admin=False),
             ],
         ),
     )

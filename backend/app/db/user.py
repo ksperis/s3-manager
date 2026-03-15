@@ -58,12 +58,6 @@ class User(Base):
         back_populates="user",
         overlaps="s3_users",
     )
-    portal_iam_links = relationship(
-        "AccountIAMUser",
-        back_populates="user",
-        overlaps="accounts,account_links",
-    )
-
     # User-scoped S3 connections (credential-first).
     s3_connections = relationship(
         "S3Connection",

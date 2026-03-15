@@ -23,13 +23,6 @@ def is_admin_ui_role(role: str | None) -> bool:
 def is_superadmin_ui_role(role: str | None) -> bool:
     return role == UserRole.UI_SUPERADMIN.value
 
-
-class AccountRole(str, Enum):
-    PORTAL_MANAGER = "portal_manager"
-    PORTAL_USER = "portal_user"
-    PORTAL_NONE = "portal_none"
-
-
 class StorageProvider(str, Enum):
     CEPH = "ceph"
     OTHER = "other"

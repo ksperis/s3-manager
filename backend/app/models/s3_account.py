@@ -9,7 +9,6 @@ from app.models.pagination import PaginatedResponse
 
 class AccountUserLink(BaseModel):
     user_id: int
-    account_role: Optional[str] = None
     account_admin: Optional[bool] = None
     user_email: Optional[str] = None
 

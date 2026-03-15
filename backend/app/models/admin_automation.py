@@ -207,7 +207,6 @@ class AccountLinkApply(BaseModel):
     state: ApplyState = "present"
     user: AccountLinkUserRef
     account: AccountLinkAccountRef
-    account_role: Optional[str] = None
     account_admin: Optional[bool] = None
 
 

@@ -157,7 +157,7 @@ def test_complete_login_invalid_and_expired_state(db_session):
             provider="google",
             code_verifier="verifier",
             nonce="nonce",
-            redirect_path="/portal",
+            redirect_path="/manager",
             created_at=utcnow() - timedelta(hours=2),
         )
     )

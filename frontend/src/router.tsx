@@ -30,7 +30,6 @@ const loadS3UserKeysPage = () => import("./features/admin/S3UserKeysPage");
 const loadS3ConnectionsPage = () => import("./features/admin/S3ConnectionsPage");
 const loadGeneralSettingsPage = () => import("./features/admin/GeneralSettingsPage");
 const loadManagerSettingsPage = () => import("./features/admin/ManagerSettingsPage");
-const loadAdminPortalSettingsPage = () => import("./features/admin/PortalSettingsPage");
 const loadBrowserSettingsPage = () => import("./features/admin/BrowserSettingsPage");
 const loadKeyRotationPage = () => import("./features/admin/KeyRotationPage");
 const loadApiTokensPage = () => import("./features/admin/ApiTokensPage");
@@ -60,13 +59,6 @@ const loadManagerMigrationDetailPage = () => import("./features/manager/ManagerM
 const loadManagerMigrationWizardPage = () => import("./features/manager/ManagerMigrationWizardPage");
 const loadManagerBucketComparePage = () => import("./features/manager/ManagerBucketComparePage");
 const loadManagerCephKeysPage = () => import("./features/manager/ManagerCephKeysPage");
-const loadPortalLayout = () => import("./features/portal/PortalLayout");
-const loadPortalDashboard = () => import("./features/portal/PortalDashboard");
-const loadPortalBucketsPage = () => import("./features/portal/PortalBucketsPage");
-const loadPortalBrowserPage = () => import("./features/portal/PortalBrowserPage");
-const loadPortalManagePage = () => import("./features/portal/PortalManagePage");
-const loadPortalSettingsPage = () => import("./features/portal/PortalSettingsPage");
-const loadPortalBillingPage = () => import("./features/portal/BillingPage");
 const loadBrowserLayout = () => import("./features/browser/BrowserLayout");
 const loadCephAdminLayout = () => import("./features/cephAdmin/CephAdminLayout");
 const loadCephAdminDashboard = () => import("./features/cephAdmin/CephAdminDashboard");
@@ -95,7 +87,6 @@ const S3UserKeysPage = lazy(loadS3UserKeysPage);
 const S3ConnectionsPage = lazy(loadS3ConnectionsPage);
 const GeneralSettingsPage = lazy(loadGeneralSettingsPage);
 const ManagerSettingsPage = lazy(loadManagerSettingsPage);
-const AdminPortalSettingsPage = lazy(loadAdminPortalSettingsPage);
 const BrowserSettingsPage = lazy(loadBrowserSettingsPage);
 const KeyRotationPage = lazy(loadKeyRotationPage);
 const ApiTokensPage = lazy(loadApiTokensPage);
@@ -125,13 +116,6 @@ const ManagerMigrationDetailPage = lazy(loadManagerMigrationDetailPage);
 const ManagerMigrationWizardPage = lazy(loadManagerMigrationWizardPage);
 const ManagerBucketComparePage = lazy(loadManagerBucketComparePage);
 const ManagerCephKeysPage = lazy(loadManagerCephKeysPage);
-const PortalLayout = lazy(loadPortalLayout);
-const PortalDashboard = lazy(loadPortalDashboard);
-const PortalBucketsPage = lazy(loadPortalBucketsPage);
-const PortalBrowserPage = lazy(loadPortalBrowserPage);
-const PortalManagePage = lazy(loadPortalManagePage);
-const PortalSettingsPage = lazy(loadPortalSettingsPage);
-const PortalBillingPage = lazy(loadPortalBillingPage);
 const BrowserLayout = lazy(loadBrowserLayout);
 const CephAdminLayout = lazy(loadCephAdminLayout);
 const CephAdminDashboard = lazy(loadCephAdminDashboard);
@@ -161,7 +145,6 @@ function RouteFallback() {
 }
 
 export const buildAdminNav = (
-  portalEnabled: boolean,
   browserEnabled: boolean,
   billingEnabled: boolean,
   endpointStatusEnabled: boolean,
@@ -175,12 +158,6 @@ export const buildAdminNav = (
       label: "Browser",
       disabled: !browserEnabled,
       disabledHint: !browserEnabled ? "Browser feature is disabled in General settings." : undefined,
-    },
-    {
-      to: "/admin/portal-settings",
-      label: "Portal",
-      disabled: !portalEnabled,
-      disabledHint: !portalEnabled ? "Portal feature is disabled in General settings." : undefined,
     },
     { to: "/admin/key-rotation", label: "Key Rotation" },
     { to: "/admin/api-tokens", label: "API Tokens" },
@@ -249,7 +226,6 @@ function AdminLayoutShell() {
   const currentUser = getStoredUser();
   const canConfigureApp = isSuperAdminRole(currentUser?.role);
   const adminNav = buildAdminNav(
-    generalSettings.portal_enabled,
     generalSettings.browser_enabled,
     generalSettings.billing_enabled,
     generalSettings.endpoint_status_enabled,
@@ -265,19 +241,9 @@ function AdminLayoutShell() {
   );
 }
 
-function AdminPortalSettingsRoute() {
-  const { generalSettings } = useGeneralSettings();
-  return generalSettings.portal_enabled ? <AdminPortalSettingsPage /> : <FeatureDisabledPage feature="Portal" />;
-}
-
 function AdminBillingRoute() {
   const { generalSettings } = useGeneralSettings();
   return generalSettings.billing_enabled ? <BillingPage /> : <FeatureDisabledPage feature="Billing" />;
-}
-
-function PortalBillingRoute() {
-  const { generalSettings } = useGeneralSettings();
-  return generalSettings.billing_enabled ? <PortalBillingPage /> : <FeatureDisabledPage feature="Billing" />;
 }
 
 function AdminEndpointStatusRoute() {
@@ -311,16 +277,11 @@ function RoleRedirect() {
   return <Navigate to={destination} replace />;
 }
 
-function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal" }) {
+function RequireFeature({ feature }: { feature: "manager" | "browser" }) {
   const { generalSettings } = useGeneralSettings();
-  const enabled =
-    feature === "manager"
-      ? generalSettings.manager_enabled
-      : feature === "browser"
-        ? generalSettings.browser_enabled
-        : generalSettings.portal_enabled;
+  const enabled = feature === "manager" ? generalSettings.manager_enabled : generalSettings.browser_enabled;
   if (!enabled) {
-    const label = feature === "manager" ? "Manager" : feature === "browser" ? "Browser" : "Portal";
+    const label = feature === "manager" ? "Manager" : "Browser";
     return <FeatureDisabledPage feature={label} />;
   }
   return <Outlet />;
@@ -353,16 +314,15 @@ function RequireStorageOpsFeature() {
 
 function isBrowserSurfaceEnabled(
   generalSettings: ReturnType<typeof useGeneralSettings>["generalSettings"],
-  surface: "root" | "manager" | "portal" | "ceph_admin"
+  surface: "root" | "manager" | "ceph_admin"
 ) {
   if (!generalSettings.browser_enabled) return false;
   if (surface === "root") return generalSettings.browser_root_enabled;
   if (surface === "manager") return generalSettings.browser_manager_enabled;
-  if (surface === "portal") return generalSettings.browser_portal_enabled;
   return generalSettings.browser_ceph_admin_enabled;
 }
 
-function RequireBrowserSurface({ surface }: { surface: "root" | "manager" | "portal" | "ceph_admin" }) {
+function RequireBrowserSurface({ surface }: { surface: "root" | "manager" | "ceph_admin" }) {
   const { generalSettings } = useGeneralSettings();
   if (!isBrowserSurfaceEnabled(generalSettings, surface)) {
     return <FeatureDisabledPage feature="Browser" />;
@@ -458,7 +418,6 @@ export default function AppRouter() {
               <Route element={<RequireRole roles={[SUPERADMIN_ROLE]} />}>
                 <Route path="general-settings" element={<GeneralSettingsPage />} />
                 <Route path="manager-settings" element={<ManagerSettingsPage />} />
-                <Route path="portal-settings" element={<AdminPortalSettingsRoute />} />
                 <Route path="browser-settings" element={<BrowserSettingsPage />} />
                 <Route path="key-rotation" element={<KeyRotationPage />} />
               </Route>
@@ -532,18 +491,6 @@ export default function AppRouter() {
           </Route>
 
           <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
-            <Route element={<RequireFeature feature="portal" />}>
-              <Route path="/portal" element={<PortalLayout />}>
-                <Route index element={<PortalDashboard />} />
-                <Route path="buckets" element={<PortalBucketsPage />} />
-                <Route element={<RequireBrowserSurface surface="portal" />}>
-                  <Route path="browser" element={<PortalBrowserPage />} />
-                </Route>
-                <Route path="manage" element={<PortalManagePage />} />
-                <Route path="billing" element={<PortalBillingRoute />} />
-                <Route path="settings" element={<PortalSettingsPage />} />
-              </Route>
-            </Route>
           </Route>
         </Route>
 

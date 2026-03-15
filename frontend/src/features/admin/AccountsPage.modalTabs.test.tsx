@@ -8,24 +8,11 @@ const updateS3AccountMock = vi.fn();
 const createS3AccountMock = vi.fn();
 const deleteS3AccountMock = vi.fn();
 const importS3AccountsMock = vi.fn();
-const fetchAccountPortalSettingsMock = vi.fn();
-const updateAccountPortalSettingsMock = vi.fn();
 
 const listStorageEndpointsMock = vi.fn();
 const getStorageEndpointMock = vi.fn();
 
 const listMinimalUsersMock = vi.fn();
-
-vi.mock("../../components/GeneralSettingsContext", () => ({
-  useGeneralSettings: () => ({
-    generalSettings: {
-      portal_enabled: true,
-    },
-    loading: false,
-    refresh: async () => {},
-    setGeneralSettings: () => {},
-  }),
-}));
 
 vi.mock("./useAdminAccountStats", () => ({
   useAdminAccountStats: () => ({
@@ -42,8 +29,6 @@ vi.mock("../../api/accounts", () => ({
   createS3Account: (payload: unknown) => createS3AccountMock(payload),
   deleteS3Account: (accountId: number, options?: unknown) => deleteS3AccountMock(accountId, options),
   importS3Accounts: (payload: unknown) => importS3AccountsMock(payload),
-  fetchAccountPortalSettings: (accountId: number) => fetchAccountPortalSettingsMock(accountId),
-  updateAccountPortalSettings: (accountId: number, payload: unknown) => updateAccountPortalSettingsMock(accountId, payload),
 }));
 
 vi.mock("../../api/storageEndpoints", () => ({
@@ -54,25 +39,6 @@ vi.mock("../../api/storageEndpoints", () => ({
 vi.mock("../../api/users", () => ({
   listMinimalUsers: () => listMinimalUsersMock(),
 }));
-
-const portalSettingsFixture = {
-  effective: {
-    allow_portal_user_bucket_create: false,
-    allow_portal_user_access_key_create: false,
-    max_portal_user_access_keys: 2,
-    bucket_defaults: {
-      versioning: false,
-      enable_lifecycle: false,
-      enable_cors: false,
-      cors_allowed_origins: [],
-    },
-    iam_group_manager_policy: { actions: [] },
-    iam_group_user_policy: { actions: [] },
-    bucket_access_policy: { actions: [] },
-  },
-  admin_override: {},
-  portal_manager_override: null,
-};
 
 describe("AccountsPage modal tabs", () => {
   beforeEach(() => {
@@ -153,15 +119,13 @@ describe("AccountsPage modal tabs", () => {
       user_links: [],
     });
 
-    fetchAccountPortalSettingsMock.mockResolvedValue(portalSettingsFixture);
-    updateAccountPortalSettingsMock.mockResolvedValue(portalSettingsFixture);
     updateS3AccountMock.mockResolvedValue(undefined);
     createS3AccountMock.mockResolvedValue(undefined);
     deleteS3AccountMock.mockResolvedValue(undefined);
     importS3AccountsMock.mockResolvedValue([]);
   });
 
-  it("shows General/Linked UI users/Portal tabs and submits updated user_links", async () => {
+  it("shows General/Linked UI users tabs and submits updated user_links", async () => {
     render(<AccountsPage />);
 
     await screen.findByText("acc-1");
@@ -169,13 +133,11 @@ describe("AccountsPage modal tabs", () => {
 
     const generalTab = await screen.findByRole("button", { name: "General" });
     const usersTab = screen.getByRole("button", { name: "Linked UI users" });
-    const portalTab = screen.getByRole("button", { name: "Portal" });
 
     const tabLabels = Array.from(generalTab.parentElement?.querySelectorAll("button") ?? []).map((button) =>
       button.textContent?.trim()
     );
-    expect(tabLabels.slice(0, 3)).toEqual(["General", "Linked UI users", "Portal"]);
-    expect(portalTab).toBeInTheDocument();
+    expect(tabLabels.slice(0, 2)).toEqual(["General", "Linked UI users"]);
 
     fireEvent.click(usersTab);
 
@@ -202,7 +164,7 @@ describe("AccountsPage modal tabs", () => {
     );
   });
 
-  it("does not auto-enable admin when adding a portal_manager link", async () => {
+  it("does not auto-enable admin when adding a linked user", async () => {
     render(<AccountsPage />);
 
     await screen.findByText("acc-1");
@@ -216,7 +178,7 @@ describe("AccountsPage modal tabs", () => {
     if (!userRow) {
       throw new Error("User row not found");
     }
-    fireEvent.change(within(userRow).getByRole("combobox"), { target: { value: "portal_manager" } });
+    expect(within(userRow).getByRole("checkbox", { name: "Admin" })).not.toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -231,7 +193,6 @@ describe("AccountsPage modal tabs", () => {
         user_links: expect.arrayContaining([
           expect.objectContaining({
             user_id: 7,
-            account_role: "portal_manager",
             account_admin: false,
           }),
         ]),

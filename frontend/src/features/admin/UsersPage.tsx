@@ -35,7 +35,6 @@ type UserModalTab = "general" | "associations" | "access";
 
 type AccountSelection = {
   id: number;
-  role: string;
   account_admin?: boolean;
 };
 
@@ -158,7 +157,6 @@ function RoleAccessHelp({
 type AssociationsTabsProps = {
   activeTab: AssociationTab;
   onTabChange: (tab: AssociationTab) => void;
-  portalEnabled: boolean;
   maxVisibleOptions: number;
   accounts: {
     selected: AccountSelection[];
@@ -173,8 +171,6 @@ type AssociationsTabsProps = {
     setShowPanel: Dispatch<SetStateAction<boolean>>;
     selections: number[];
     setSelections: Dispatch<SetStateAction<number[]>>;
-    roleChoice: Record<number, string>;
-    setRoleChoice: Dispatch<SetStateAction<Record<number, string>>>;
     adminChoice: Record<number, boolean>;
     setAdminChoice: Dispatch<SetStateAction<Record<number, boolean>>>;
     toggleSelection: (id: number) => void;
@@ -214,7 +210,6 @@ type AssociationsTabsProps = {
 const AssociationsTabs = ({
   activeTab,
   onTabChange,
-  portalEnabled,
   maxVisibleOptions,
   accounts,
   s3Users,
@@ -259,9 +254,6 @@ const AssociationsTabs = ({
                           Account
                         </th>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          {portalEnabled ? "Portal role" : "Portal access"}
-                        </th>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Admin
                         </th>
                         <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -272,7 +264,7 @@ const AssociationsTabs = ({
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                       {accounts.selected.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
                             No account linked yet.
                           </td>
                         </tr>
@@ -284,46 +276,21 @@ const AssociationsTabs = ({
                             <tr key={entry.id}>
                               <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{label}</td>
                               <td className="px-3 py-2">
-                                {portalEnabled ? (
-                                  <select
-                                    className="w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                                    value={entry.role}
+                                <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(entry.account_admin)}
                                     onChange={(e) =>
                                       accounts.setSelected((prev) =>
                                         prev.map((item) =>
-                                          item.id === entry.id ? { ...item, role: e.target.value } : item
+                                          item.id === entry.id ? { ...item, account_admin: e.target.checked } : item
                                         )
                                       )
                                     }
-                                  >
-                                    <option value="portal_user">Portal user</option>
-                                    <option value="portal_manager">Portal manager</option>
-                                    <option value="portal_none">Portal none</option>
-                                  </select>
-                                ) : null}
-                              </td>
-                              <td className="px-3 py-2">
-                                {portalEnabled ? (
-                                  <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                                    <input
-                                      type="checkbox"
-                                      checked={Boolean(entry.account_admin)}
-                                      onChange={(e) =>
-                                        accounts.setSelected((prev) =>
-                                          prev.map((item) =>
-                                            item.id === entry.id ? { ...item, account_admin: e.target.checked } : item
-                                          )
-                                        )
-                                      }
-                                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                    />
-                                    Admin
-                                  </label>
-                                ) : (
-                                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                                    Admin
-                                  </span>
-                                )}
+                                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                  />
+                                  Admin
+                                </label>
                               </td>
                               <td className="px-3 py-2 text-right">
                                 <button
@@ -367,10 +334,7 @@ const AssociationsTabs = ({
                       {accounts.visible.map((opt) => {
                         const accountId = Number(opt.id);
                         const isSelected = accounts.selections.includes(accountId);
-                        const role = accounts.roleChoice[accountId] ?? "portal_none";
-                        const adminChecked = portalEnabled
-                          ? accounts.adminChoice[accountId] ?? false
-                          : true;
+                        const adminChecked = accounts.adminChoice[accountId] ?? false;
                         return (
                           <div
                             key={opt.id}
@@ -390,42 +354,20 @@ const AssociationsTabs = ({
                               <span>{opt.label}</span>
                             </label>
                             <div className="flex items-center gap-2">
-                              {portalEnabled ? (
-                                <select
-                                  className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                                  value={role}
+                              <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(adminChecked)}
                                   onChange={(e) =>
-                                    accounts.setRoleChoice((prev) => ({
+                                    accounts.setAdminChoice((prev) => ({
                                       ...prev,
-                                      [accountId]: e.target.value,
+                                      [accountId]: e.target.checked,
                                     }))
                                   }
-                                >
-                                  <option value="portal_user">Portal user</option>
-                                  <option value="portal_manager">Portal manager</option>
-                                  <option value="portal_none">Portal none</option>
-                                </select>
-                              ) : null}
-                              {portalEnabled ? (
-                                <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(adminChecked)}
-                                    onChange={(e) =>
-                                      accounts.setAdminChoice((prev) => ({
-                                        ...prev,
-                                        [accountId]: e.target.checked,
-                                      }))
-                                    }
-                                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                  />
-                                  Admin
-                                </label>
-                              ) : (
-                                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                                  Admin
-                                </span>
-                              )}
+                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                />
+                                Admin
+                              </label>
                             </div>
                           </div>
                         );
@@ -458,11 +400,8 @@ const AssociationsTabs = ({
                           onClick={() => {
                             if (accounts.selections.length === 0) return;
                             const next = accounts.selections.map((accountId) => {
-                              const role = accounts.roleChoice[accountId] ?? "portal_none";
-                              const account_admin = portalEnabled
-                                ? accounts.adminChoice[accountId] ?? false
-                                : true;
-                              return { id: accountId, role, account_admin };
+                              const account_admin = accounts.adminChoice[accountId] ?? false;
+                              return { id: accountId, account_admin };
                             });
                             accounts.setSelected((prev) => [...prev, ...next]);
                             accounts.setSelections([]);
@@ -793,7 +732,6 @@ export default function UsersPage() {
   const currentUserId = currentUser?.id != null ? Number(currentUser.id) : null;
   const currentIsAdminLike = isAdminLikeRole(currentUser?.role);
   const currentIsSuperAdmin = isSuperAdminRole(currentUser?.role);
-  const portalEnabled = generalSettings.portal_enabled;
   const cephAdminFeatureEnabled = generalSettings.ceph_admin_enabled;
   const [users, setUsers] = useState<User[]>([]);
   const [accounts, setS3Accounts] = useState<S3AccountSummary[]>([]);
@@ -817,10 +755,9 @@ export default function UsersPage() {
     can_access_storage_ops: false,
   });
   const [form, setForm] = useState<CreateUserPayload>(() => createFormTemplate());
-  const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<{ id: number; role: string; account_admin?: boolean }[]>([]);
+  const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<{ id: number; account_admin?: boolean }[]>([]);
   const [createSelectedS3Users, setCreateSelectedS3Users] = useState<number[]>([]);
   const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
-  const [createAccountRoleChoice, setCreateAccountRoleChoice] = useState<Record<number, string>>({});
   const [createAccountAdminChoice, setCreateAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [createS3AccountSearch, setCreateS3AccountSearch] = useState("");
   const [createS3Search, setCreateS3Search] = useState("");
@@ -835,10 +772,9 @@ export default function UsersPage() {
   const [createConnectionSelections, setCreateConnectionSelections] = useState<number[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState<UpdateUserPayload>({});
-  const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<{ id: number; role: string; account_admin?: boolean }[]>([]);
+  const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<{ id: number; account_admin?: boolean }[]>([]);
   const [editSelectedS3Users, setEditSelectedS3Users] = useState<number[]>([]);
   const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
-  const [editAccountRoleChoice, setEditAccountRoleChoice] = useState<Record<number, string>>({});
   const [editAccountAdminChoice, setEditAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [editS3AccountSearch, setEditS3AccountSearch] = useState("");
   const [editS3Search, setEditS3Search] = useState("");
@@ -1060,9 +996,6 @@ export default function UsersPage() {
 
   const renderAccountChips = (user: User) => {
     if (!user.accounts || user.accounts.length === 0) return null;
-    const roleByAccountId = new Map<number, string | null>(
-      (user.account_links ?? []).map((link) => [Number(link.account_id), link.account_role ?? null])
-    );
     const adminByAccountId = new Map<number, boolean>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
     );
@@ -1070,27 +1003,13 @@ export default function UsersPage() {
       <div className="flex flex-wrap gap-2">
         {user.accounts.map((id) => {
           const label = accountOptionsById.get(Number(id))?.name ?? `Account #${id}`;
-          const role = roleByAccountId.get(Number(id)) ?? "portal_none";
           const isAccountAdmin = adminByAccountId.get(Number(id)) === true;
-          const showPortalBadge = portalEnabled && role !== "portal_none";
-          const tone =
-            role === "portal_manager"
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100"
-              : role === "portal_user"
-              ? "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100"
-              : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200";
-          const displayRole = role === "portal_manager" ? "Portal manager" : role === "portal_user" ? "Portal user" : role;
           return (
             <span
-              key={`${id}-${role}`}
+              key={`${id}-${isAccountAdmin ? "admin" : "user"}`}
               className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
             >
               <span>{label}</span>
-              {showPortalBadge && (
-                <span className={`rounded-full px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide ${tone}`}>
-                  {displayRole}
-                </span>
-              )}
               {isAccountAdmin && (
                 <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                   Admin
@@ -1361,8 +1280,7 @@ export default function UsersPage() {
             assignUserToS3Account(
               created.id,
               Number(entry.id),
-              portalEnabled ? (entry.role as string | undefined) : undefined,
-              portalEnabled ? entry.account_admin ?? false : true
+              entry.account_admin ?? false
             )
           )
         );
@@ -1384,7 +1302,6 @@ export default function UsersPage() {
       setCreateSelectedS3Accounts([]);
       setCreateSelectedS3Users([]);
       setCreateSelectedS3Connections([]);
-      setCreateAccountRoleChoice({});
       setCreateAccountAdminChoice({});
       setCreateS3AccountSearch("");
       setCreateS3Search("");
@@ -1424,17 +1341,13 @@ export default function UsersPage() {
           ? Boolean(user.can_access_storage_ops)
           : false,
     });
-    const accountRoles = new Map<number, string | null>(
-      (user.account_links ?? []).map((link) => [Number(link.account_id), link.account_role ?? null])
-    );
     const accountAdmins = new Map<number, boolean>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
     );
     const selectedAccounts =
       user.accounts?.map((id) => ({
         id: Number(id),
-        role: accountRoles.get(Number(id)) ?? "portal_none",
-        account_admin: portalEnabled ? accountAdmins.get(Number(id)) ?? false : true,
+        account_admin: accountAdmins.get(Number(id)) ?? false,
       })) ?? [];
     setEditSelectedS3Accounts(selectedAccounts);
     setEditSelectedS3Users(user.s3_users ? user.s3_users.map((id) => Number(id)) : []);
@@ -1497,19 +1410,15 @@ export default function UsersPage() {
       payload.s3_connection_ids = editSelectedS3Connections;
       await updateUser(editingUser.id, payload);
       const existing = editingUser.accounts ? editingUser.accounts.map((id) => Number(id)) : [];
-      const existingRoleById = new Map<number, string | null>(
-        (editingUser.account_links ?? []).map((link) => [Number(link.account_id), link.account_role ?? null])
-      );
       const existingAdminById = new Map<number, boolean>(
         (editingUser.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
       );
       const selectedIds = editSelectedS3Accounts.map((entry) => Number(entry.id));
       const toAdd = editSelectedS3Accounts.filter((entry) => !existing.includes(Number(entry.id)));
       const toRemove = existing.filter((id) => !selectedIds.includes(id));
-      const toUpdateRole = editSelectedS3Accounts.filter((entry) => {
-        const currentRole = existingRoleById.get(Number(entry.id)) ?? "portal_none";
+      const toUpdateLinks = editSelectedS3Accounts.filter((entry) => {
         const currentAdmin = existingAdminById.get(Number(entry.id)) ?? false;
-        return existing.includes(Number(entry.id)) && (currentRole !== entry.role || currentAdmin !== Boolean(entry.account_admin));
+        return existing.includes(Number(entry.id)) && currentAdmin !== Boolean(entry.account_admin);
       });
 
       if (toAdd.length > 0) {
@@ -1518,20 +1427,18 @@ export default function UsersPage() {
             assignUserToS3Account(
               editingUser.id,
               Number(entry.id),
-              portalEnabled ? entry.role : undefined,
-              portalEnabled ? entry.account_admin ?? false : true
+              entry.account_admin ?? false
             )
           )
         );
       }
-      if (toUpdateRole.length > 0) {
+      if (toUpdateLinks.length > 0) {
         await Promise.all(
-          toUpdateRole.map((entry) =>
+          toUpdateLinks.map((entry) =>
             assignUserToS3Account(
               editingUser.id,
               Number(entry.id),
-              portalEnabled ? entry.role : undefined,
-              portalEnabled ? entry.account_admin ?? false : true
+              entry.account_admin ?? false
             )
           )
         );
@@ -1540,12 +1447,9 @@ export default function UsersPage() {
         const account = accountOptionsById.get(Number(accountId));
         if (!account) continue;
         const remainingLinks =
-          (account.user_links ?? account.user_ids?.map((id) => ({ user_id: id, account_role: null, account_admin: false })) ?? [])
+          (account.user_links ?? account.user_ids?.map((id) => ({ user_id: id, account_admin: false })) ?? [])
             .filter((link) => link.user_id !== editingUser.id);
-        const normalizedLinks = portalEnabled
-          ? remainingLinks
-          : remainingLinks.map((link) => ({ ...link, account_role: null }));
-        await updateS3Account(Number(accountId), { user_links: normalizedLinks });
+        await updateS3Account(Number(accountId), { user_links: remainingLinks });
       }
 
       setActionMessage("User updated");
@@ -1639,7 +1543,6 @@ export default function UsersPage() {
             setCreateSelectedS3Accounts([]);
             setCreateSelectedS3Users([]);
             setCreateSelectedS3Connections([]);
-            setCreateAccountRoleChoice({});
             setCreateAccountAdminChoice({});
             setCreateS3AccountSearch("");
             setCreateS3Search("");
@@ -1782,7 +1685,6 @@ export default function UsersPage() {
                   setShowCreateS3UserPanel(false);
                   setShowCreateConnectionPanel(false);
                 }}
-                portalEnabled={portalEnabled}
                 maxVisibleOptions={MAX_VISIBLE_OPTIONS}
                 accounts={{
                   selected: createSelectedS3Accounts,
@@ -1797,8 +1699,6 @@ export default function UsersPage() {
                   setShowPanel: setShowCreateAccountPanel,
                   selections: createAccountSelections,
                   setSelections: setCreateAccountSelections,
-                  roleChoice: createAccountRoleChoice,
-                  setRoleChoice: setCreateAccountRoleChoice,
                   adminChoice: createAccountAdminChoice,
                   setAdminChoice: setCreateAccountAdminChoice,
                   toggleSelection: toggleCreateAccountSelection,
@@ -1848,7 +1748,6 @@ export default function UsersPage() {
                   setCreateS3Search("");
                   setCreateSelectedS3Connections([]);
                   setCreateConnectionSearch("");
-                  setCreateAccountRoleChoice({});
                   setCreateAccountAdminChoice({});
                   setCreateModalTab("general");
                   setCreateAssociationsTab("accounts");
@@ -2137,7 +2036,6 @@ export default function UsersPage() {
                   setShowEditS3UserPanel(false);
                   setShowEditConnectionPanel(false);
                 }}
-                portalEnabled={portalEnabled}
                 maxVisibleOptions={MAX_VISIBLE_OPTIONS}
                 accounts={{
                   selected: editSelectedS3Accounts,
@@ -2152,8 +2050,6 @@ export default function UsersPage() {
                   setShowPanel: setShowEditAccountPanel,
                   selections: editAccountSelections,
                   setSelections: setEditAccountSelections,
-                  roleChoice: editAccountRoleChoice,
-                  setRoleChoice: setEditAccountRoleChoice,
                   adminChoice: editAccountAdminChoice,
                   setAdminChoice: setEditAccountAdminChoice,
                   toggleSelection: toggleEditAccountSelection,

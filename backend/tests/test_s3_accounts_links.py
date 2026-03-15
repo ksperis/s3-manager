@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.db import S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.services.s3_accounts_service import S3AccountsService
 
 
@@ -37,7 +37,6 @@ def test_list_accounts_exposes_user_email_in_user_links(db_session):
             user_id=user.id,
             account_id=account.id,
             is_root=False,
-            account_role=AccountRole.PORTAL_MANAGER.value,
             account_admin=True,
         )
     )

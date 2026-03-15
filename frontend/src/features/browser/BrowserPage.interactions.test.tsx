@@ -225,11 +225,10 @@ describe("BrowserPage interactions", () => {
     expect(screen.queryByText("Compact view")).not.toBeInTheDocument();
   });
 
-  it("uses list mode by default on /portal/browser", async () => {
-    renderPage({ initialEntry: "/portal/browser" });
+  it("uses compact mode by default on /manager/browser", async () => {
+    renderPage({ initialEntry: "/manager/browser" });
     const rowA = await findRowByLabel("a.txt");
-    expect(rowA).toHaveClass("h-16");
-    expect(within(rowA).getByText("Object")).toBeInTheDocument();
+    expect(rowA).toHaveClass("h-9");
   });
 
   it("uses minimal visible columns by default", async () => {

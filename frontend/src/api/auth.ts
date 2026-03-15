@@ -20,7 +20,7 @@ export type LoginResponse = {
     can_access_storage_ops?: boolean;
     ui_language?: "en" | "fr" | "de" | null;
     accounts?: number[];
-    account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
+    account_links?: { account_id: number; account_admin?: boolean | null }[] | null;
     s3_users?: number[] | null;
     s3_user_details?: { id: number; name: string }[] | null;
     s3_connections?: number[] | null;
