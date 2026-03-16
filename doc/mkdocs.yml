@@ -98,6 +98,7 @@ nav:
       - "Architecture: frontend": developer/architecture-frontend.md
       - "Architecture: database": developer/architecture-database.md
       - Principles: developer/principles.md
+      - AI assistant guidelines: developer/ai-assistant-guidelines.md
       - Identity and execution model: developer/identity-and-execution-model.md
       - Repository layout: developer/repo-layout.md
       - Contributing: developer/contributing.md

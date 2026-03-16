@@ -64,6 +64,7 @@ See `doc/` (MkDocs) for:
 - user workflows
 - ops/sysadmin deployment and runbooks
 - developer architecture and principles
+- AI assistant and contribution guardrails in the developer guide
 
 ## License
 
