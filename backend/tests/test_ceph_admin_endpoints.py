@@ -166,3 +166,28 @@ def test_get_ceph_admin_endpoint_access_disables_accounts_when_account_api_unava
     assert payload.can_admin is True
     assert payload.can_accounts is False
     assert payload.can_metrics is True
+
+
+def test_get_ceph_admin_endpoint_access_allows_admin_when_admin_feature_disabled(monkeypatch):
+    endpoint = _build_endpoint(14, admin_enabled=False, usage_enabled=True, metrics_enabled=True, has_supervision_credentials=True)
+    monkeypatch.setattr(endpoints_router, "validate_ceph_admin_service_identity", lambda _endpoint: None)
+
+    captured: list[str] = []
+
+    class _Client:
+        def get_account(self, account_id, allow_not_found=True):
+            return None
+
+    def fake_get_rgw_admin_client(**kwargs):
+        captured.append(kwargs["endpoint"])
+        return _Client()
+
+    monkeypatch.setattr(endpoints_router, "get_rgw_admin_client", fake_get_rgw_admin_client)
+
+    payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint)
+
+    assert payload.can_admin is True
+    assert payload.can_accounts is True
+    assert payload.can_metrics is True
+    assert payload.admin_warning is None
+    assert captured == ["https://s3.example.test"]

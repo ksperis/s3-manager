@@ -22,7 +22,7 @@ from app.routers.ceph_admin.dependencies import (
 )
 from app.routers.dependencies import get_current_ceph_admin
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
-from app.utils.storage_endpoint_features import resolve_admin_endpoint
+from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 from app.utils.storage_endpoint_ordering import endpoint_name_order_by
 
 router = APIRouter(prefix="/ceph-admin/endpoints", tags=["ceph-admin-endpoints"])
@@ -186,7 +186,7 @@ def get_ceph_admin_endpoint_access(
     admin_warning = validate_ceph_admin_service_identity(endpoint)
     can_accounts = False
     if admin_warning is None:
-        admin_endpoint = resolve_admin_endpoint(endpoint)
+        admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
         if admin_endpoint and endpoint.ceph_admin_access_key and endpoint.ceph_admin_secret_key:
             try:
                 admin_client = get_rgw_admin_client(

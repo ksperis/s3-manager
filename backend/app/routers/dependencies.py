@@ -406,8 +406,6 @@ def _resolve_ceph_admin_browser_context(db: Session, actor: User, endpoint_id: i
     provider = StorageProvider(str(endpoint.provider))
     if provider != StorageProvider.CEPH:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage endpoint is not a Ceph provider")
-    if not resolve_feature_flags(endpoint).admin_enabled:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Admin operations are disabled for this endpoint")
 
     access_key = endpoint.ceph_admin_access_key
     secret_key = endpoint.ceph_admin_secret_key
@@ -421,6 +419,11 @@ def _resolve_ceph_admin_browser_context(db: Session, actor: User, endpoint_id: i
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="S3 endpoint URL is not configured for this storage endpoint",
         )
+    from app.routers.ceph_admin.dependencies import validate_ceph_admin_service_identity
+
+    identity_validation_error = validate_ceph_admin_service_identity(endpoint)
+    if identity_validation_error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=identity_validation_error)
     return _build_ceph_admin_browser_account(endpoint)
 
 

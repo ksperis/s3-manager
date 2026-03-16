@@ -13,7 +13,11 @@ from app.db import StorageEndpoint, StorageProvider, User
 from app.routers.dependencies import get_current_ceph_admin
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.utils.s3_endpoint import normalize_s3_endpoint
-from app.utils.storage_endpoint_features import resolve_admin_endpoint, features_to_capabilities, normalize_features_config
+from app.utils.storage_endpoint_features import (
+    features_to_capabilities,
+    normalize_features_config,
+    resolve_rgw_admin_api_endpoint,
+)
 
 
 @dataclass(frozen=True)
@@ -49,9 +53,9 @@ def _extract_ceph_admin_flags(user_payload: dict) -> tuple[bool, bool]:
 
 def validate_ceph_admin_service_identity(endpoint: StorageEndpoint) -> Optional[str]:
     endpoint_label = endpoint.name or f"#{endpoint.id}"
-    admin_endpoint = resolve_admin_endpoint(endpoint)
+    admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
     if not admin_endpoint:
-        return f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': admin endpoint is not configured."
+        return f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': RGW admin endpoint is not configured."
     access_key = endpoint.ceph_admin_access_key
     secret_key = endpoint.ceph_admin_secret_key
     if not access_key or not secret_key:
@@ -90,11 +94,11 @@ def _resolve_storage_endpoint(db: Session, endpoint_id: int) -> StorageEndpoint:
     provider = StorageProvider(str(endpoint.provider))
     if provider != StorageProvider.CEPH:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage endpoint is not a Ceph provider")
-    admin_endpoint = resolve_admin_endpoint(endpoint)
+    admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
     if not admin_endpoint:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Admin endpoint is not configured for this storage endpoint",
+            detail="RGW admin endpoint is not configured for this storage endpoint",
         )
     access_key = endpoint.ceph_admin_access_key
     secret_key = endpoint.ceph_admin_secret_key
@@ -134,7 +138,7 @@ def get_ceph_admin_context(
     _: User = Depends(get_current_ceph_admin),
 ) -> CephAdminContext:
     endpoint = _resolve_storage_endpoint(db, endpoint_id)
-    admin_endpoint = resolve_admin_endpoint(endpoint)
+    admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
     access_key = endpoint.ceph_admin_access_key
     secret_key = endpoint.ceph_admin_secret_key
     region = getattr(endpoint, "region", None)
@@ -170,7 +174,7 @@ def build_ceph_admin_endpoint_payload(endpoint: StorageEndpoint) -> dict:
         "id": endpoint.id,
         "name": endpoint.name,
         "endpoint_url": endpoint.endpoint_url,
-        "admin_endpoint": resolve_admin_endpoint(endpoint),
+        "admin_endpoint": resolve_rgw_admin_api_endpoint(endpoint),
         "region": endpoint.region,
         "is_default": bool(endpoint.is_default),
         "capabilities": features_to_capabilities(features),

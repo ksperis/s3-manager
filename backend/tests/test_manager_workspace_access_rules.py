@@ -10,6 +10,7 @@ from fastapi import HTTPException
 
 from app.db import S3Account, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
 from app.models.app_settings import AppSettings
+from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.routers import dependencies
 from app.routers.manager import context as manager_context_router
 from app.services.connection_identity_service import ConnectionIdentityResolution
@@ -658,12 +659,14 @@ def test_browser_workspace_accepts_ceph_admin_selector_for_authorized_user(db_se
         provider="ceph",
         ceph_admin_access_key="AK-CEPH-ADMIN",
         ceph_admin_secret_key="SK-CEPH-ADMIN",
-        features_config="features:\n  admin:\n    enabled: true\n",
+        features_config="features:\n  admin:\n    enabled: false\n",
     )
     db_session.add_all([user, endpoint])
     db_session.commit()
     db_session.refresh(user)
     db_session.refresh(endpoint)
+
+    monkeypatch.setattr(ceph_admin_dependencies, "validate_ceph_admin_service_identity", lambda _endpoint: None)
 
     account = dependencies.get_account_context(
         request=_request("/api/browser/buckets"),
@@ -674,6 +677,50 @@ def test_browser_workspace_accepts_ceph_admin_selector_for_authorized_user(db_se
 
     assert account.storage_endpoint_id == endpoint.id
     assert account.effective_rgw_credentials() == ("AK-CEPH-ADMIN", "SK-CEPH-ADMIN")
+
+
+def test_browser_workspace_rejects_ceph_admin_selector_for_invalid_ceph_admin_identity(db_session, monkeypatch):
+    settings = AppSettings()
+    settings.general.ceph_admin_enabled = True
+    settings.general.browser_ceph_admin_enabled = True
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+
+    user = User(
+        email="ceph-admin-browser-invalid@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+        can_access_ceph_admin=True,
+    )
+    endpoint = StorageEndpoint(
+        name="ceph-endpoint-invalid",
+        endpoint_url="https://rgw-invalid.example.com",
+        provider="ceph",
+        ceph_admin_access_key="AK-CEPH-INVALID",
+        ceph_admin_secret_key="SK-CEPH-INVALID",
+        features_config="features:\n  admin:\n    enabled: false\n",
+    )
+    db_session.add_all([user, endpoint])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(endpoint)
+
+    monkeypatch.setattr(
+        ceph_admin_dependencies,
+        "validate_ceph_admin_service_identity",
+        lambda _endpoint: "Ceph Admin workspace is unavailable for endpoint 'ceph-endpoint-invalid': access key does not map to an RGW user.",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies.get_account_context(
+            request=_request("/api/browser/buckets"),
+            account_ref=f"ceph-admin-{endpoint.id}",
+            actor=user,
+            db=db_session,
+        )
+
+    assert exc.value.status_code == 403
+    assert "access key does not map to an RGW user" in str(exc.value.detail)
 
 
 def test_browser_workspace_rejects_ceph_admin_selector_for_non_admin_user(db_session, monkeypatch):
