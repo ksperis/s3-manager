@@ -46,16 +46,10 @@ wget https://raw.githubusercontent.com/ksperis/s3-manager/refs/heads/main/docker
 S3_MANAGER_TAG=latest docker compose up
 ```
 
-Build from source:
-
-```bash
-docker compose -f docker-compose.build.yml up --build
-```
-
 Default endpoints:
 
 - Frontend: `http://localhost:8080`
-- API: `http://localhost:8000/api`
+
 
 ## Full Documentation
 

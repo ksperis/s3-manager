@@ -42,6 +42,8 @@ const EXECUTION_CONTEXTS = [
     display_name: "Helios Retail",
     manager_account_is_admin: true,
     rgw_account_id: "RGW-HELIOS",
+    quota_max_size_gb: 3,
+    quota_max_objects: 4000,
     endpoint_id: 11,
     endpoint_name: "Default",
     endpoint_provider: "ceph",
@@ -496,7 +498,7 @@ export function buildBaseRules(): MockRule[] {
       id: "onboarding",
       path: /^\/admin\/onboarding$/,
       body: {
-        dismissed: false,
+        dismissed: true,
         can_dismiss: true,
         seed_user_configured: true,
         endpoint_configured: true,
@@ -705,6 +707,22 @@ export function buildBaseRules(): MockRule[] {
         tags: [
           { key: "env", value: "prod" },
           { key: "source", value: "docs" },
+        ],
+      },
+    },
+    {
+      id: "browser-bucket-cors",
+      path: /^\/browser\/buckets\/[^/]+\/cors$/,
+      body: {
+        enabled: true,
+        rules: [
+          {
+            allowed_origins: ["https://app.example.com"],
+            allowed_methods: ["GET", "PUT", "POST"],
+            allowed_headers: ["*"],
+            expose_headers: [],
+            max_age_seconds: 600,
+          },
         ],
       },
     },

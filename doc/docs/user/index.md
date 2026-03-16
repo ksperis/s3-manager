@@ -16,4 +16,4 @@ Use this section for task-oriented instructions. Each page focuses on actionable
 
 ## Visual example
 
-![Admin overview with workspace and onboarding checklist](../assets/screenshots/user/user-overview.png)
+![Admin overview with workspace and platform navigation](../assets/screenshots/user/user-overview.png)
