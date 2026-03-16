@@ -18,7 +18,7 @@ class GeneralSettings(BaseModel):
     browser_enabled: bool = True
     browser_root_enabled: bool = True
     browser_manager_enabled: bool = False
-    browser_ceph_admin_enabled: bool = True
+    browser_ceph_admin_enabled: bool = False
     billing_enabled: bool = False
     endpoint_status_enabled: bool = False
     quota_alerts_enabled: bool = False

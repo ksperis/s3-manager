@@ -12,7 +12,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   browser_enabled: true,
   browser_root_enabled: true,
   browser_manager_enabled: false,
-  browser_ceph_admin_enabled: true,
+  browser_ceph_admin_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: false,
   quota_alerts_enabled: false,
