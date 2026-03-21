@@ -103,4 +103,5 @@ nav:
       - Repository layout: developer/repo-layout.md
       - Contributing: developer/contributing.md
       - API reference: developer/api-reference.md
+      - Listings feature matrix: developer/listings-feature-matrix.md
       - Docs maintenance: developer/docs-maintenance.md
