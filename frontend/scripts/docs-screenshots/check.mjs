@@ -5,9 +5,11 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const userDocsDir = path.join(repoRoot, "doc", "docs", "user");
 const screenshotsDir = path.join(repoRoot, "doc", "docs", "assets", "screenshots", "user");
+const ALLOWED_EXTRA_SCREENSHOTS = new Set(["workspace-portal.png"]);
 
 const markdownFiles = (await fs.readdir(userDocsDir)).filter((name) => name.endsWith(".md")).sort();
 const errors = [];
+const referencedScreenshots = new Set();
 
 const pngSize = async (filePath) => {
   const buffer = await fs.readFile(filePath);
@@ -32,6 +34,7 @@ for (const fileName of markdownFiles) {
   }
 
   const imageName = matches[0][1];
+  referencedScreenshots.add(imageName);
   const imagePath = path.join(screenshotsDir, imageName);
 
   try {
@@ -51,11 +54,12 @@ for (const fileName of markdownFiles) {
   }
 }
 
-const screenshotFiles = (await fs.readdir(screenshotsDir)).filter((name) => name.endsWith(".png"));
-if (screenshotFiles.length !== markdownFiles.length) {
-  errors.push(
-    `screenshot count mismatch: ${screenshotFiles.length} PNG file(s) in assets, ${markdownFiles.length} user markdown page(s)`
-  );
+const screenshotFiles = new Set((await fs.readdir(screenshotsDir)).filter((name) => name.endsWith(".png")));
+const unexpectedScreenshots = [...screenshotFiles]
+  .filter((name) => !referencedScreenshots.has(name) && !ALLOWED_EXTRA_SCREENSHOTS.has(name))
+  .sort();
+if (unexpectedScreenshots.length > 0) {
+  errors.push(`unexpected screenshot file(s): ${unexpectedScreenshots.join(", ")}`);
 }
 
 if (errors.length > 0) {

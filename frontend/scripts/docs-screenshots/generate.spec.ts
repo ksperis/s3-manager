@@ -3,7 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, type Page } from "@playwright/test";
 
-import { applyAnnotations, clearAnnotations } from "./annotate";
 import { registerApiMocks } from "./mockApi";
 import { scenarios } from "./scenarios";
 import type { ScenarioAction } from "./types";
@@ -106,13 +105,10 @@ for (const scenario of scenarios) {
       }
 
       await page.waitForTimeout(250);
-      await applyAnnotations(page, scenario.annotations);
-      await page.waitForTimeout(100);
 
       const outputPath = path.join(SCREENSHOT_DIR, scenario.outputFile);
       await page.screenshot({ path: outputPath, fullPage: false });
 
-      await clearAnnotations(page);
       mockRegistry.assertNoUnmatched();
     } catch (error) {
       await writeDebugArtifacts(page, scenario.id, runtimeErrors);

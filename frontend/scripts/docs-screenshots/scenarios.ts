@@ -31,6 +31,11 @@ const adminUser = {
   capabilities: { can_manage_buckets: true, can_manage_iam: true, access_browser: true },
 };
 
+const storageOpsAdminUser = {
+  ...adminUser,
+  can_access_storage_ops: true,
+};
+
 const storageUser = {
   id: 3,
   email: "storage.user@example.com",
@@ -141,6 +146,89 @@ const bucketCompareWithDifferencesRule: MockRule = {
   },
 };
 
+const storageOpsEnabledGeneralSettingsRule: MockRule = {
+  id: "settings-general-storage-ops-enabled",
+  path: /^\/settings\/general$/,
+  body: {
+    manager_enabled: true,
+    ceph_admin_enabled: true,
+    browser_enabled: true,
+    browser_root_enabled: true,
+    browser_manager_enabled: true,
+    browser_ceph_admin_enabled: true,
+    billing_enabled: false,
+    endpoint_status_enabled: true,
+    bucket_migration_enabled: true,
+    bucket_compare_enabled: true,
+    storage_ops_enabled: true,
+    allow_ui_user_bucket_migration: true,
+    allow_login_access_keys: false,
+    allow_login_endpoint_list: true,
+    allow_login_custom_endpoint: false,
+    allow_user_private_connections: true,
+  },
+};
+
+const storageOpsBucketsPayload = {
+  items: [
+    {
+      name: "acc-helios::helios-retail-logs",
+      bucket_name: "helios-retail-logs",
+      context_id: "acc-helios",
+      context_name: "Helios Retail",
+      context_kind: "account",
+      endpoint_name: "Default",
+      owner: "RGW58084876167649330",
+      owner_name: "Helios Platform",
+      used_bytes: 182_554_321,
+      object_count: 1284,
+      tags: [
+        { key: "env", value: "prod" },
+        { key: "team", value: "platform" },
+      ],
+      features: {
+        versioning: { state: "enabled", tone: "active" },
+        lifecycle: { state: "configured", tone: "active" },
+      },
+    },
+    {
+      name: "conn-blueharbor::northwind-iot-events",
+      bucket_name: "northwind-iot-events",
+      context_id: "conn-blueharbor",
+      context_name: "BlueHarbor Shared Connection",
+      context_kind: "connection",
+      endpoint_name: "Archive",
+      owner: "RGW93423330686004300",
+      owner_name: "Northwind Ops",
+      used_bytes: 88_000_000,
+      object_count: 4292,
+      tags: [{ key: "env", value: "prod" }],
+      features: {
+        versioning: { state: "disabled", tone: "inactive" },
+        lifecycle: { state: "configured", tone: "active" },
+      },
+    },
+  ],
+  total: 2,
+  page: 1,
+  page_size: 25,
+  has_next: false,
+};
+
+const storageOpsBucketsRule: MockRule = {
+  id: "storage-ops-buckets",
+  path: /^\/storage-ops\/buckets$/,
+  body: storageOpsBucketsPayload,
+};
+
+const storageOpsBucketsStreamRule: MockRule = {
+  id: "storage-ops-buckets-stream",
+  path: /^\/storage-ops\/buckets\/stream$/,
+  body: {
+    result: storageOpsBucketsPayload,
+  },
+};
+
 export const scenarios: DocScreenshotScenario[] = [
   {
     id: "user-overview",
@@ -149,11 +237,6 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "user-overview.png",
     waitFor: "h1:has-text('Admin overview')",
     storage: { ...baseStorage(superAdminUser), selectedWorkspace: "admin" },
-    annotations: [
-      { selector: "button[aria-label='Changer de workspace']", label: "Workspace selector", side: "top" },
-      { selector: "a[href='/admin/users']", label: "Platform administration section", side: "right" },
-      { selector: "h1:has-text('Admin overview')", label: "Workspace landing dashboard", side: "bottom" },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -164,11 +247,6 @@ export const scenarios: DocScreenshotScenario[] = [
     waitFor: "h1:has-text('Admin overview')",
     storage: { ...baseStorage(superAdminUser), selectedWorkspace: "admin" },
     actions: [{ type: "click", selector: "button[aria-label='Changer de workspace']" }],
-    annotations: [
-      { selector: "button[aria-label='Changer de workspace']", label: "Open available workspaces", side: "top" },
-      { selector: "[role='listbox'][aria-label='Changer de workspace']", label: "Choose the workspace for the task", side: "right" },
-      { selector: "[role='listbox'][aria-label='Changer de workspace'] [role='option']", label: "Pick the destination workspace", side: "bottom" },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -178,11 +256,6 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "use-cases-storage-admin.png",
     waitFor: "h1:has-text('Manager dashboard')",
     storage: { ...baseStorage(adminUser), selectedWorkspace: "manager" },
-    annotations: [
-      { selector: "a[href='/manager/buckets']", label: "Buckets and browser operations", side: "right" },
-      { selector: "a[href='/manager/users']", label: "Identity and access administration", side: "right", offsetY: 24 },
-      { selector: "a[href='/manager/bucket-compare']", label: "Compare and migration tooling", side: "right", offsetY: 48 },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -193,11 +266,6 @@ export const scenarios: DocScreenshotScenario[] = [
     waitFor: "button[aria-label='Upload files']",
     storage: { ...baseStorage(storageUser), selectedWorkspace: "browser" },
     actions: [{ type: "wait", selector: "text=daily/report-2026-03-08.json" }],
-    annotations: [
-      { selector: "button[aria-label='Select bucket']", label: "Pick the target bucket", side: "top" },
-      { selector: "button[aria-label='Upload files']", label: "Upload objects", side: "top", offsetX: 80 },
-      { selector: "input[placeholder='Search objects']", label: "Search and filter object keys", side: "right" },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -207,11 +275,6 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "workspace-admin.png",
     waitFor: "h1:has-text('Admin overview')",
     storage: { ...baseStorage(superAdminUser), selectedWorkspace: "admin" },
-    annotations: [
-      { selector: "a[href='/admin/users']", label: "UI users and platform controls", side: "right" },
-      { selector: "a[href='/admin/s3-accounts']", label: "RGW accounts and users", side: "right", offsetY: 26 },
-      { selector: "a[href='/admin/audit']", label: "Audit and governance data", side: "right", offsetY: 52 },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -221,11 +284,6 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "workspace-manager.png",
     waitFor: "h1:has-text('Manager dashboard')",
     storage: { ...baseStorage(adminUser), selectedWorkspace: "manager" },
-    annotations: [
-      { selector: "a[href='/manager/buckets']", label: "Bucket administration", side: "right" },
-      { selector: "a[href='/manager/topics']", label: "SNS topic management", side: "right", offsetY: 22 },
-      { selector: "a[href='/manager/migrations']", label: "Compare and migration", side: "right", offsetY: 46 },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -236,11 +294,6 @@ export const scenarios: DocScreenshotScenario[] = [
     waitFor: "button[aria-label='Upload files']",
     storage: { ...baseStorage(storageUser), selectedWorkspace: "browser" },
     actions: [{ type: "wait", selector: "text=daily/report-2026-03-08.json" }],
-    annotations: [
-      { selector: "button[aria-label='Select bucket']", label: "Current bucket context", side: "top" },
-      { selector: "button[aria-label='Upload files']", label: "Object actions toolbar", side: "top", offsetX: 90 },
-      { selector: "button:has-text('Operations')", label: "Track running operations", side: "right" },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -250,12 +303,16 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "workspace-ceph-admin.png",
     waitFor: "h1:has-text('Buckets')",
     storage: { ...baseStorage(adminUser), selectedWorkspace: "ceph-admin" },
-    annotations: [
-      { selector: "text=Endpoint: Default", label: "Cluster endpoint selector", side: "top" },
-      { selector: "a[href='/ceph-admin/accounts']", label: "RGW admin navigation", side: "right" },
-      { selector: "h1:has-text('Buckets')", label: "Cluster bucket inventory", side: "bottom" },
-    ],
     mockRules: withBaseRules(),
+  },
+  {
+    id: "workspace-storage-ops",
+    docPage: "user/workspace-storage-ops.md",
+    route: "/storage-ops/buckets",
+    outputFile: "workspace-storage-ops.png",
+    waitFor: "h1:has-text('Buckets')",
+    storage: { ...baseStorage(storageOpsAdminUser), selectedWorkspace: "storage-ops" },
+    mockRules: withBaseRules(storageOpsEnabledGeneralSettingsRule, storageOpsBucketsRule, storageOpsBucketsStreamRule),
   },
   {
     id: "feature-buckets",
@@ -264,11 +321,6 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "feature-buckets.png",
     waitFor: "h1:has-text('Buckets')",
     storage: { ...baseStorage(adminUser), selectedWorkspace: "manager" },
-    annotations: [
-      { selector: "button:has-text('Create bucket')", label: "Create a bucket", side: "top" },
-      { selector: "button:has-text('Columns')", label: "Adapt visible columns", side: "top", offsetX: 120 },
-      { selector: "table", label: "Inspect and edit bucket configuration", side: "bottom" },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -278,11 +330,6 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "manager-bucket-configuration.png",
     waitFor: "h1:has-text('Buckets')",
     storage: { ...baseStorage(adminUser), selectedWorkspace: "manager" },
-    annotations: [
-      { selector: "h1:has-text('Buckets')", label: "Start from the Manager bucket inventory", side: "bottom" },
-      { selector: "table tbody tr:first-child a:has-text('Configure')", label: "Open bucket configuration for the selected bucket", side: "right" },
-      { selector: "button:has-text('Create bucket')", label: "Create new buckets when needed", side: "top" },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -292,11 +339,6 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "feature-iam.png",
     waitFor: "h1:has-text('Users')",
     storage: { ...baseStorage(adminUser), selectedWorkspace: "manager" },
-    annotations: [
-      { selector: "button:has-text('Create user')", label: "Create IAM users", side: "top" },
-      { selector: "table", label: "Review principals and attachments", side: "bottom" },
-      { selector: "a[href='/manager/groups']", label: "Navigate to groups/roles/policies", side: "right" },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -307,11 +349,6 @@ export const scenarios: DocScreenshotScenario[] = [
     waitFor: "button[aria-label='Upload files']",
     storage: { ...baseStorage(storageUser), selectedWorkspace: "browser" },
     actions: [{ type: "wait", selector: "text=daily/report-2026-03-08.json" }],
-    annotations: [
-      { selector: "button[aria-label='Upload files']", label: "Upload and manage files", side: "top" },
-      { selector: "button:has-text('Operations')", label: "Monitor transfers and actions", side: "right" },
-      { selector: "input[placeholder='Search objects']", label: "Filter objects by key name", side: "top", offsetX: 200 },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -321,11 +358,6 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "feature-topics.png",
     waitFor: "h1:has-text('SNS Topics')",
     storage: { ...baseStorage(adminUser), selectedWorkspace: "manager" },
-    annotations: [
-      { selector: "button:has-text('Create topic')", label: "Create a topic", side: "top" },
-      { selector: "table", label: "View topics and subscriptions", side: "bottom" },
-      { selector: "button:has-text('Policy')", label: "Policy and configuration actions", side: "right" },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -338,11 +370,6 @@ export const scenarios: DocScreenshotScenario[] = [
     actions: [
       { type: "click", selector: "button:has-text('Advanced filter')" },
       { type: "wait", selector: "p:has-text('Advanced filter')" },
-    ],
-    annotations: [
-      { selector: "button:has-text('Advanced filter')", label: "Open the advanced filtering drawer", side: "top" },
-      { selector: "p:has-text('Advanced filter')", label: "Compose filter rules by scope and cost", side: "left" },
-      { selector: "button:has-text('Apply filters')", label: "Apply the draft filters to the bucket table", side: "left" },
     ],
     mockRules: withBaseRules(),
   },
@@ -358,12 +385,21 @@ export const scenarios: DocScreenshotScenario[] = [
       { type: "click", selector: "summary:has-text('Tag selection')" },
       { type: "wait", selector: "input[placeholder='new-tag']" },
     ],
-    annotations: [
-      { selector: "text=bucket selected", label: "Select one or more buckets to enable bulk tagging", side: "top" },
-      { selector: "summary:has-text('Tag selection')", label: "Use tag actions for the current selection", side: "top", offsetX: 120 },
-      { selector: "input[placeholder='new-tag']", label: "Add a custom UI tag and apply it", side: "right" },
-    ],
     mockRules: withBaseRules(),
+  },
+  {
+    id: "howto-storage-ops-ui-tags",
+    docPage: "user/howto-storage-ops-ui-tags.md",
+    route: "/storage-ops/buckets",
+    outputFile: "storage-ops-ui-tags.png",
+    waitFor: "h1:has-text('Buckets')",
+    storage: { ...baseStorage(storageOpsAdminUser), selectedWorkspace: "storage-ops" },
+    actions: [
+      { type: "click", selector: "table tbody tr:first-child input[type='checkbox']" },
+      { type: "click", selector: "summary:has-text('Tag selection')" },
+      { type: "wait", selector: "input[placeholder='new-tag']" },
+    ],
+    mockRules: withBaseRules(storageOpsEnabledGeneralSettingsRule, storageOpsBucketsRule, storageOpsBucketsStreamRule),
   },
   {
     id: "feature-bucket-compare",
@@ -383,11 +419,6 @@ export const scenarios: DocScreenshotScenario[] = [
       { type: "click", selector: "summary:has-text('Content diff')" },
       { type: "wait", selector: "text=Different objects (4)" },
     ],
-    annotations: [
-      { selector: "button:has-text('Run comparison')", label: "Run the comparison on selected bucket mappings", side: "top" },
-      { selector: "text=With differences: 1", label: "Comparison summary confirms detected differences", side: "bottom" },
-      { selector: "text=Different objects (4)", label: "Inspect object-level differences in the result details", side: "right" },
-    ],
     mockRules: withBaseRules(bucketCompareWithDifferencesRule),
   },
   {
@@ -397,11 +428,6 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "feature-bucket-migration.png",
     waitFor: "h1:has-text('Bucket Migration')",
     storage: { ...baseStorage(adminUser), selectedWorkspace: "manager" },
-    annotations: [
-      { selector: "button:has-text('New migration')", label: "Start a migration workflow", side: "top" },
-      { selector: "button:has-text('Active')", label: "Track active migrations", side: "top", offsetX: -80 },
-      { selector: "text=Migration #31", label: "Inspect run status and progress", side: "right" },
-    ],
     mockRules: withBaseRules(),
   },
   {
@@ -411,11 +437,6 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "troubleshooting.png",
     waitFor: "h1:has-text('Users')",
     storage: { ...baseStorage(adminUser), selectedWorkspace: "manager", selectedExecutionContextId: undefined },
-    annotations: [
-      { selector: "text=No account selected", label: "Verify current context first", side: "top" },
-      { selector: "text=Select an account before creating or listing users.", label: "Missing context explains unavailable actions", side: "bottom" },
-      { selector: "text=No users.", label: "Capture exact user-facing state", side: "bottom", offsetX: 180 },
-    ],
     mockRules: withBaseRules(noManagerContextsRule),
   },
 ];

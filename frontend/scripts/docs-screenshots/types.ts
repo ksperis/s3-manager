@@ -1,15 +1,5 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-export type AnnotationSide = "top" | "right" | "bottom" | "left";
-
-export type AnnotationTarget = {
-  selector: string;
-  label: string;
-  side?: AnnotationSide;
-  offsetX?: number;
-  offsetY?: number;
-};
-
 export type LocalStorageSeed = {
   token: string;
   user: Record<string, unknown>;
@@ -47,6 +37,5 @@ export type DocScreenshotScenario = {
   waitFor: string;
   storage: LocalStorageSeed;
   actions?: ScenarioAction[];
-  annotations: AnnotationTarget[];
   mockRules: MockRule[];
 };
