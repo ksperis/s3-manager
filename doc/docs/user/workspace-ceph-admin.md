@@ -20,6 +20,7 @@ Use **Ceph Admin** for Ceph RGW cluster-level operations.
    - **Buckets**: cluster-level bucket inventory and configuration.
    - **Metrics**: endpoint metrics.
    - **Browser**: object navigation when enabled.
+4. In **Buckets**, long-running bulk actions show progress bars with completion and failure counters.
 
 ## Expected result
 

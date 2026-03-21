@@ -2,6 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
 
 type SelectionTagAction = "add" | "remove";
 type SelectionExportFormat = "text" | "csv" | "json";
@@ -19,6 +20,7 @@ type BucketSelectionActionsBarProps = {
   applyUiTagToSelection: (tag: string, action: SelectionTagAction) => Promise<void> | void;
   selectionExportLoading: SelectionExportFormat | null;
   exportSelectedBuckets: (format: SelectionExportFormat) => Promise<void> | void;
+  selectionActionProgress?: ActionProgressState | null;
   isStorageOps: boolean;
   onShowCompareModal: () => void;
   openBulkUpdateModal: () => void;
@@ -37,11 +39,13 @@ export default function BucketSelectionActionsBar({
   applyUiTagToSelection,
   selectionExportLoading,
   exportSelectedBuckets,
+  selectionActionProgress,
   isStorageOps,
   onShowCompareModal,
   openBulkUpdateModal,
 }: BucketSelectionActionsBarProps) {
   if (selectedCount <= 0) return null;
+  const selectionActionProgressPercent = calculateActionProgressPercent(selectionActionProgress);
 
   return (
     <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
@@ -216,6 +220,27 @@ export default function BucketSelectionActionsBar({
           </button>
         </div>
       </div>
+      {selectionActionProgress && (
+        <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="flex flex-wrap items-center justify-between gap-2 ui-caption text-slate-600 dark:text-slate-300">
+            <span>
+              {selectionActionProgress.label} · {selectionActionProgress.completed} / {selectionActionProgress.total}
+            </span>
+            <span>{selectionActionProgressPercent}%</span>
+          </div>
+          <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+            <div
+              className="h-full bg-primary-500 transition-[width] duration-200"
+              style={{ width: `${selectionActionProgressPercent}%` }}
+            />
+          </div>
+          {selectionActionProgress.failed > 0 && (
+            <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
+              Failures so far: {selectionActionProgress.failed}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

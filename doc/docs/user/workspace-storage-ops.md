@@ -20,7 +20,8 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
    - dynamic columns,
    - bulk preview/apply,
    - export.
-4. Use **Context** and **Kind** columns to distinguish identical bucket names across contexts.
+4. During long bulk actions (copy, preview, apply, and large exports), follow the in-page progress bars to track completion and failures.
+5. Use **Context** and **Kind** columns to distinguish identical bucket names across contexts.
 
 ## Expected result
 

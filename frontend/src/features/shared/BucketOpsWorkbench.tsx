@@ -83,6 +83,7 @@ import BucketOpsBulkUpdateModal from "./BucketOpsBulkUpdateModal";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
 import { useBucketOpsListing } from "./useBucketOpsListing";
+import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
 import {
   buildFeatureDetailRules,
   clearFeatureDetailField,
@@ -191,11 +192,6 @@ type BulkPreviewItem = {
   after: BulkPreviewLine[];
   changed: boolean;
   error?: string;
-};
-type BulkApplyProgress = {
-  completed: number;
-  total: number;
-  failed: number;
 };
 
 type BulkCopyFeatureKey =
@@ -451,26 +447,6 @@ const DEFAULT_BULK_COPY_FEATURE_SELECTION: BulkCopyFeatureSelection = {
   cors: false,
   policy: false,
   access_logging: false,
-};
-
-const runWithConcurrency = async <T, R>(
-  items: T[],
-  limit: number,
-  handler: (item: T, index: number) => Promise<R>
-): Promise<R[]> => {
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  const workerCount = Math.min(limit, items.length);
-  const workers = Array.from({ length: workerCount }, async () => {
-    while (true) {
-      const index = cursor;
-      if (index >= items.length) return;
-      cursor += 1;
-      results[index] = await handler(items[index], index);
-    }
-  });
-  await Promise.all(workers);
-  return results;
 };
 
 const runWithConcurrencySettled = async <T, R>(
@@ -1993,6 +1969,7 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
   );
   const [bulkCopyFeatures, setBulkCopyFeatures] = useState<BulkCopyFeatureSelection>(DEFAULT_BULK_COPY_FEATURE_SELECTION);
   const [bulkCopyLoading, setBulkCopyLoading] = useState(false);
+  const [bulkCopyProgress, setBulkCopyProgress] = useState<ActionProgressState | null>(null);
   const [bulkCopyError, setBulkCopyError] = useState<string | null>(null);
   const [bulkCopySummary, setBulkCopySummary] = useState<string | null>(null);
   const [bulkPasteMapping, setBulkPasteMapping] = useState<Record<string, string>>({});
@@ -2039,15 +2016,17 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
   });
   const [bulkPreview, setBulkPreview] = useState<BulkPreviewItem[]>([]);
   const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
+  const [bulkPreviewProgress, setBulkPreviewProgress] = useState<ActionProgressState | null>(null);
   const [bulkPreviewError, setBulkPreviewError] = useState<string | null>(null);
   const [bulkPreviewReady, setBulkPreviewReady] = useState(false);
   const [bulkApplyLoading, setBulkApplyLoading] = useState(false);
   const [bulkApplyError, setBulkApplyError] = useState<string | null>(null);
   const [bulkApplySummary, setBulkApplySummary] = useState<string | null>(null);
-  const [bulkApplyProgress, setBulkApplyProgress] = useState<BulkApplyProgress | null>(null);
+  const [bulkApplyProgress, setBulkApplyProgress] = useState<ActionProgressState | null>(null);
   const [selectionTagActionLoading, setSelectionTagActionLoading] = useState<"add" | "remove" | null>(null);
   const [selectionTagAddInput, setSelectionTagAddInput] = useState("");
   const [selectionExportLoading, setSelectionExportLoading] = useState<"text" | "csv" | "json" | null>(null);
+  const [selectionActionProgress, setSelectionActionProgress] = useState<ActionProgressState | null>(null);
   const [tagSuggestionBucket, setTagSuggestionBucket] = useState<string | null>(null);
   const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
   const [activeOwnerTooltipKey, setActiveOwnerTooltipKey] = useState<string | null>(null);
@@ -2065,6 +2044,9 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
   const bucketPropertiesCacheRef = useRef<Record<string, BucketProperties>>({});
   const bucketPropertiesInflightRef = useRef<Record<string, Promise<BucketProperties>>>({});
   const selectionHeaderRef = useRef<HTMLInputElement | null>(null);
+  const bulkCopyRunTokenRef = useRef(0);
+  const bulkPreviewRunTokenRef = useRef(0);
+  const selectionActionRunTokenRef = useRef(0);
   const restoreFilterRef = useRef<string | null>(null);
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(DEFAULT_SORT);
   const taggedBucketTargets = useMemo(() => {
@@ -2715,7 +2697,12 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
     selectionHeaderRef.current.indeterminate = headerIndeterminate;
   }, [headerIndeterminate]);
 
-  const resolveBucketTargetsByNames = async (bucketNames: string[]) => {
+  const resolveBucketTargetsByNames = async (
+    bucketNames: string[],
+    options?: {
+      onProgress?: (event: { completed: number; total: number; failed: number }) => void;
+    }
+  ) => {
     if (!selectedEndpointId || bucketNames.length === 0) {
       return { targets: [] as BucketTagTarget[], missingNames: bucketNames };
     }
@@ -2724,34 +2711,56 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
     for (let start = 0; start < bucketNames.length; start += chunkSize) {
       chunks.push(bucketNames.slice(start, start + chunkSize));
     }
-    const chunkResults = await runWithConcurrency(chunks, 4, async (chunk) => {
-      const resolved: BucketTagTarget[] = [];
-      let nextPage = 1;
-      const advancedFilter = JSON.stringify({
-        match: "any",
-        rules: [{ field: "name", op: "in", value: chunk }],
-      });
-      while (true) {
-        const response = await listBuckets(selectedEndpointId, {
-          page: nextPage,
-          page_size: 200,
-          advanced_filter: advancedFilter,
-          with_stats: false,
+    let completed = 0;
+    let failed = 0;
+    const total = bucketNames.length;
+    const chunkResults = await runWithConcurrencySettled(
+      chunks,
+      4,
+      async (chunk) => {
+        const resolved: BucketTagTarget[] = [];
+        let nextPage = 1;
+        const advancedFilter = JSON.stringify({
+          match: "any",
+          rules: [{ field: "name", op: "in", value: chunk }],
         });
-        (response.items ?? []).forEach((bucket) => {
-          resolved.push(toBucketTagTarget(bucket.name, bucket.tenant));
-        });
-        if (!response.has_next) break;
-        nextPage += 1;
+        while (true) {
+          const response = await listBuckets(selectedEndpointId, {
+            page: nextPage,
+            page_size: 200,
+            advanced_filter: advancedFilter,
+            with_stats: false,
+          });
+          (response.items ?? []).forEach((bucket) => {
+            resolved.push(toBucketTagTarget(bucket.name, bucket.tenant));
+          });
+          if (!response.has_next) break;
+          nextPage += 1;
+        }
+        return resolved;
+      },
+      (result, index) => {
+        const chunkLength = chunks[index]?.length ?? 0;
+        completed += chunkLength;
+        if (result.status === "rejected") {
+          failed += chunkLength;
+        }
+        options?.onProgress?.({ completed: Math.min(total, completed), total, failed });
       }
-      return resolved;
-    });
+    );
+    const rejectedChunk = chunkResults.find((result) => result.status === "rejected");
+    if (rejectedChunk?.status === "rejected") {
+      throw rejectedChunk.reason;
+    }
     const targetByKey = new Map<string, BucketTagTarget>();
     const existingNames = new Set<string>();
-    chunkResults.flat().forEach((target) => {
-      targetByKey.set(target.key, target);
-      existingNames.add(target.name);
-    });
+    chunkResults
+      .filter((result): result is PromiseFulfilledResult<BucketTagTarget[]> => result.status === "fulfilled")
+      .flatMap((result) => result.value)
+      .forEach((target) => {
+        targetByKey.set(target.key, target);
+        existingNames.add(target.name);
+      });
     const missingNames = bucketNames.filter((name) => !existingNames.has(name));
     const targets = Array.from(targetByKey.values()).sort((a, b) => {
       if (a.name !== b.name) return a.name.localeCompare(b.name);
@@ -2809,9 +2818,32 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
     if (!selectedEndpointId || selectedBucketList.length === 0 || selectionTagActionLoading) return;
     const parsedTagValues = parseUiTags(rawTag);
     if (parsedTagValues.length === 0) return;
+    const runToken = selectionActionRunTokenRef.current + 1;
+    selectionActionRunTokenRef.current = runToken;
+    const progressLabel = action === "add" ? "Applying UI tags" : "Removing UI tags";
+    setSelectionActionProgress({
+      label: progressLabel,
+      completed: 0,
+      total: selectedBucketList.length,
+      failed: 0,
+    });
     setSelectionTagActionLoading(action);
     try {
-      const { targets, missingNames } = await resolveBucketTargetsByNames(selectedBucketList);
+      const { targets, missingNames } = await resolveBucketTargetsByNames(selectedBucketList, {
+        onProgress: (progress) => {
+          if (selectionActionRunTokenRef.current !== runToken) return;
+          setSelectionActionProgress((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  completed: progress.completed,
+                  total: progress.total,
+                  failed: progress.failed,
+                }
+              : prev
+          );
+        },
+      });
       if (targets.length === 0) {
         setError("Unable to resolve selected buckets for UI tag update.");
         return;
@@ -2828,6 +2860,9 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
       setError(extractError(err));
     } finally {
       setSelectionTagActionLoading(null);
+      if (selectionActionRunTokenRef.current === runToken) {
+        setSelectionActionProgress(null);
+      }
     }
   };
 
@@ -3015,7 +3050,7 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
     });
   }, [bulkConfigClipboard, bulkClipboardSameEndpoint, bulkOperation, selectedBucketList, showBulkUpdateModal]);
 
-  const loadSelectedBucketsForExport = async () => {
+  const loadSelectedBucketsForExport = async (options?: { onProgress?: (completed: number, total: number) => void }) => {
     const bucketsByName = new Map<string, CephAdminBucket>();
     items.forEach((bucket) => {
       if (selectedBuckets.has(bucket.name)) {
@@ -3027,6 +3062,8 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
     }
 
     const chunkSize = 50;
+    const total = selectedBucketList.length;
+    let completed = 0;
     for (let start = 0; start < selectedBucketList.length; start += chunkSize) {
       const chunk = selectedBucketList.slice(start, start + chunkSize);
       const advancedFilter = JSON.stringify({
@@ -3050,6 +3087,8 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
         if (!response.has_next) break;
         nextPage += 1;
       }
+      completed += chunk.length;
+      options?.onProgress?.(Math.min(total, completed), total);
     }
 
     return bucketsByName;
@@ -3231,6 +3270,17 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
 
   const exportSelectedBuckets = async (format: "text" | "csv" | "json") => {
     if (selectedBucketList.length === 0 || selectionExportLoading) return;
+    const withProgress = format === "csv" || format === "json";
+    const runToken = withProgress ? selectionActionRunTokenRef.current + 1 : null;
+    if (withProgress) {
+      selectionActionRunTokenRef.current = runToken ?? selectionActionRunTokenRef.current;
+      setSelectionActionProgress({
+        label: format === "csv" ? "Preparing CSV export" : "Preparing JSON export",
+        completed: 0,
+        total: selectedBucketList.length,
+        failed: 0,
+      });
+    }
     setSelectionExportLoading(format);
     try {
       const exportedAt = new Date().toISOString();
@@ -3249,7 +3299,20 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
         return;
       }
 
-      const bucketsByName = await loadSelectedBucketsForExport();
+      const bucketsByName = await loadSelectedBucketsForExport({
+        onProgress: (completed, total) => {
+          if (!withProgress || runToken === null || selectionActionRunTokenRef.current !== runToken) return;
+          setSelectionActionProgress((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  completed,
+                  total,
+                }
+              : prev
+          );
+        },
+      });
       const exportColumns = buildExportColumns(visibleColumns);
       if (format === "csv") {
         const lines = [
@@ -3292,18 +3355,27 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
       setError(extractError(err));
     } finally {
       setSelectionExportLoading(null);
+      if (withProgress && runToken !== null && selectionActionRunTokenRef.current === runToken) {
+        setSelectionActionProgress(null);
+      }
     }
   };
 
   const resetBulkPreview = () => {
+    bulkPreviewRunTokenRef.current += 1;
+    setBulkPreviewLoading(false);
     setBulkPreview([]);
     setBulkPreviewError(null);
     setBulkPreviewReady(false);
+    setBulkPreviewProgress(null);
   };
 
   useEffect(() => {
     if (!showBulkUpdateModal) return;
     resetBulkPreview();
+    bulkCopyRunTokenRef.current += 1;
+    setBulkCopyLoading(false);
+    setBulkCopyProgress(null);
     setBulkApplyError(null);
     setBulkApplySummary(null);
     setBulkApplyProgress(null);
@@ -3342,11 +3414,14 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
   }, [bulkOperation, usageFeatureEnabled]);
 
   const openBulkUpdateModal = () => {
+    bulkCopyRunTokenRef.current += 1;
     setShowBulkUpdateModal(true);
     setBulkOperation("");
     setBulkCopyFeatures(DEFAULT_BULK_COPY_FEATURE_SELECTION);
     setBulkCopyError(null);
     setBulkCopySummary(null);
+    setBulkCopyLoading(false);
+    setBulkCopyProgress(null);
     setBulkPasteMapping({});
     setBulkQuotaSizeValue("");
     setBulkQuotaSizeUnit("GiB");
@@ -3394,10 +3469,13 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
   };
 
   const closeBulkUpdateModal = () => {
+    bulkCopyRunTokenRef.current += 1;
     setShowBulkUpdateModal(false);
     resetBulkPreview();
     setBulkCopyError(null);
     setBulkCopySummary(null);
+    setBulkCopyLoading(false);
+    setBulkCopyProgress(null);
     setBulkApplyError(null);
     setBulkApplySummary(null);
     setBulkApplyProgress(null);
@@ -3792,9 +3870,17 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
       setBulkCopyError("Select at least one configuration to copy.");
       return;
     }
+    const runToken = bulkCopyRunTokenRef.current + 1;
+    bulkCopyRunTokenRef.current = runToken;
     setBulkCopyLoading(true);
     setBulkCopyError(null);
     setBulkCopySummary(null);
+    setBulkCopyProgress({
+      label: "Copying selected configs",
+      completed: 0,
+      total: selectedBucketList.length,
+      failed: 0,
+    });
     try {
       const results = await runWithConcurrencySettled(
         selectedBucketList,
@@ -3846,8 +3932,20 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
             policy,
             accessLogging,
           };
+        },
+        (result) => {
+          if (bulkCopyRunTokenRef.current !== runToken) return;
+          setBulkCopyProgress((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              completed: Math.min(prev.total, prev.completed + 1),
+              failed: prev.failed + (result.status === "rejected" ? 1 : 0),
+            };
+          });
         }
       );
+      if (bulkCopyRunTokenRef.current !== runToken) return;
       const failed = results.filter((result) => result.status === "rejected");
       if (failed.length > 0) {
         setBulkCopyError(`${failed.length} source bucket(s) failed while copying configs.`);
@@ -3905,9 +4003,13 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
       const featureLabelText = selectedFeatures.map((feature) => BULK_COPY_FEATURE_LABELS[feature]).join(", ");
       setBulkCopySummary(`Copied ${featureLabelText} from ${copiedBuckets.length} bucket(s).`);
     } catch (err) {
+      if (bulkCopyRunTokenRef.current !== runToken) return;
       setBulkCopyError(extractError(err));
     } finally {
-      setBulkCopyLoading(false);
+      if (bulkCopyRunTokenRef.current === runToken) {
+        setBulkCopyLoading(false);
+        setBulkCopyProgress(null);
+      }
     }
   };
 
@@ -4089,33 +4191,57 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
         setBulkPreviewError(bulkPastePlan.error);
         return;
       }
+      const runToken = bulkPreviewRunTokenRef.current + 1;
+      bulkPreviewRunTokenRef.current = runToken;
       setBulkPreviewLoading(true);
       setBulkPreviewError(null);
       setBulkPreview([]);
       setBulkPreviewReady(false);
+      setBulkPreviewProgress({
+        label: "Previewing changes",
+        completed: 0,
+        total: bulkPastePlan.mappings.length,
+        failed: 0,
+      });
       setBulkApplyError(null);
       setBulkApplySummary(null);
-
-      const previewItems = await runWithConcurrency(
-        bulkPastePlan.mappings,
-        BULK_CONCURRENCY_LIMIT,
-        async (mapping) => {
-          try {
-            return await buildPasteConfigPreview(mapping);
-          } catch (err) {
-            return {
-              bucket: mapping.destinationBucket,
-              before: [{ text: `Source bucket: ${mapping.sourceBucket}` }, { text: "Preview failed." }],
-              after: [{ text: `Source bucket: ${mapping.sourceBucket}` }, { text: "Preview failed." }],
-              changed: false,
-              error: extractError(err),
-            };
+      try {
+        const previewResults = await runWithConcurrencySettled(
+          bulkPastePlan.mappings,
+          BULK_CONCURRENCY_LIMIT,
+          async (mapping) => buildPasteConfigPreview(mapping),
+          (result) => {
+            if (bulkPreviewRunTokenRef.current !== runToken) return;
+            setBulkPreviewProgress((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                completed: Math.min(prev.total, prev.completed + 1),
+                failed: prev.failed + (result.status === "rejected" ? 1 : 0),
+              };
+            });
           }
+        );
+        if (bulkPreviewRunTokenRef.current !== runToken) return;
+        const previewItems = previewResults.map((result, index) => {
+          const mapping = bulkPastePlan.mappings[index];
+          if (result.status === "fulfilled") return result.value;
+          return {
+            bucket: mapping.destinationBucket,
+            before: [{ text: `Source bucket: ${mapping.sourceBucket}` }, { text: "Preview failed." }],
+            after: [{ text: `Source bucket: ${mapping.sourceBucket}` }, { text: "Preview failed." }],
+            changed: false,
+            error: extractError(result.reason),
+          };
+        });
+        setBulkPreview(previewItems);
+        setBulkPreviewReady(true);
+      } finally {
+        if (bulkPreviewRunTokenRef.current === runToken) {
+          setBulkPreviewLoading(false);
+          setBulkPreviewProgress(null);
         }
-      );
-      setBulkPreview(previewItems);
-      setBulkPreviewReady(true);
-      setBulkPreviewLoading(false);
+      }
       return;
     }
     let parsedQuota: ParsedQuotaInput | null = null;
@@ -4225,20 +4351,27 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
       publicAccessBlockTargets = parsedTargets;
     }
 
+    const runToken = bulkPreviewRunTokenRef.current + 1;
+    bulkPreviewRunTokenRef.current = runToken;
     setBulkPreviewLoading(true);
     setBulkPreviewError(null);
     setBulkPreview([]);
     setBulkPreviewReady(false);
+    setBulkPreviewProgress({
+      label: "Previewing changes",
+      completed: 0,
+      total: selectedBucketList.length,
+      failed: 0,
+    });
     setBulkApplyError(null);
     setBulkApplySummary(null);
-
-    const desiredEnabled = bulkOperation === "enable_versioning";
-    const desiredPublicAccessBlockEnabled = bulkOperation === "add_public_access_block";
-    const previewItems = await runWithConcurrency(
-      selectedBucketList,
-      BULK_CONCURRENCY_LIMIT,
-      async (bucketName) => {
-        try {
+    try {
+      const desiredEnabled = bulkOperation === "enable_versioning";
+      const desiredPublicAccessBlockEnabled = bulkOperation === "add_public_access_block";
+      const previewResults = await runWithConcurrencySettled(
+        selectedBucketList,
+        BULK_CONCURRENCY_LIMIT,
+        async (bucketName) => {
           if (bulkOperation === "set_quota" && parsedQuota) {
             return await buildQuotaPreview(bucketName, parsedQuota, bulkQuotaSkipConfigured);
           }
@@ -4275,21 +4408,39 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
             after: [{ text: "-" }],
             changed: false,
           };
-        } catch (err) {
-          return {
-            bucket: bucketName,
-            before: [{ text: "Preview failed." }],
-            after: [{ text: "Preview failed." }],
-            changed: false,
-            error: extractError(err),
-          };
+        },
+        (result) => {
+          if (bulkPreviewRunTokenRef.current !== runToken) return;
+          setBulkPreviewProgress((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              completed: Math.min(prev.total, prev.completed + 1),
+              failed: prev.failed + (result.status === "rejected" ? 1 : 0),
+            };
+          });
         }
+      );
+      if (bulkPreviewRunTokenRef.current !== runToken) return;
+      const previewItems = previewResults.map((result, index) => {
+        const bucketName = selectedBucketList[index];
+        if (result.status === "fulfilled") return result.value;
+        return {
+          bucket: bucketName,
+          before: [{ text: "Preview failed." }],
+          after: [{ text: "Preview failed." }],
+          changed: false,
+          error: extractError(result.reason),
+        };
+      });
+      setBulkPreview(previewItems);
+      setBulkPreviewReady(true);
+    } finally {
+      if (bulkPreviewRunTokenRef.current === runToken) {
+        setBulkPreviewLoading(false);
+        setBulkPreviewProgress(null);
       }
-    );
-
-    setBulkPreview(previewItems);
-    setBulkPreviewReady(true);
-    setBulkPreviewLoading(false);
+    }
   };
 
   const applyBulkUpdate = async () => {
@@ -4310,7 +4461,12 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
       setBulkApplyLoading(true);
       setBulkApplyError(null);
       setBulkApplySummary(null);
-      setBulkApplyProgress({ completed: 0, total: bulkPastePlan.mappings.length, failed: 0 });
+      setBulkApplyProgress({
+        label: "Applying changes",
+        completed: 0,
+        total: bulkPastePlan.mappings.length,
+        failed: 0,
+      });
 
       const results = await runWithConcurrencySettled(
         bulkPastePlan.mappings,
@@ -4595,7 +4751,12 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
     setBulkApplyLoading(true);
     setBulkApplyError(null);
     setBulkApplySummary(null);
-    setBulkApplyProgress({ completed: 0, total: selectedBucketList.length, failed: 0 });
+    setBulkApplyProgress({
+      label: "Applying changes",
+      completed: 0,
+      total: selectedBucketList.length,
+      failed: 0,
+    });
 
     const desiredEnabled = bulkOperation === "enable_versioning";
     const desiredPublicAccessBlockEnabled = bulkOperation === "add_public_access_block";
@@ -5521,10 +5682,9 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
     const unchanged = bulkPreview.length - changed - errors;
     return { changed, unchanged, errors };
   }, [bulkPreview]);
-  const bulkApplyProgressPercent = useMemo(() => {
-    if (!bulkApplyProgress || bulkApplyProgress.total <= 0) return 0;
-    return Math.min(100, Math.round((bulkApplyProgress.completed / bulkApplyProgress.total) * 100));
-  }, [bulkApplyProgress]);
+  const bulkCopyProgressPercent = calculateActionProgressPercent(bulkCopyProgress);
+  const bulkPreviewProgressPercent = calculateActionProgressPercent(bulkPreviewProgress);
+  const bulkApplyProgressPercent = calculateActionProgressPercent(bulkApplyProgress);
   const hasDeleteCriteria =
     bulkLifecycleDeleteIds.trim().length > 0 || Object.values(bulkLifecycleDeleteTypes).some(Boolean);
   const hasCorsDeleteCriteria =
@@ -7965,6 +8125,7 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
             applyUiTagToSelection={applyUiTagToSelection}
             selectionExportLoading={selectionExportLoading}
             exportSelectedBuckets={exportSelectedBuckets}
+            selectionActionProgress={selectionActionProgress}
             isStorageOps={isStorageOps}
             onShowCompareModal={() => setShowCompareModal(true)}
             openBulkUpdateModal={openBulkUpdateModal}
@@ -8623,11 +8784,50 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
             {bulkPreviewError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkPreviewError}</p>}
             {bulkApplyError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkApplyError}</p>}
             {bulkApplySummary && <p className="ui-caption font-semibold text-emerald-600 dark:text-emerald-200">{bulkApplySummary}</p>}
+            {bulkCopyLoading && bulkCopyProgress && (
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                <div className="flex flex-wrap items-center justify-between gap-2 ui-caption text-slate-600 dark:text-slate-300">
+                  <span>
+                    {bulkCopyProgress.label} · {bulkCopyProgress.completed} / {bulkCopyProgress.total} buckets
+                  </span>
+                  <span>{bulkCopyProgressPercent}%</span>
+                </div>
+                <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                  <div className="h-full bg-primary-500 transition-[width] duration-200" style={{ width: `${bulkCopyProgressPercent}%` }} />
+                </div>
+                {bulkCopyProgress.failed > 0 && (
+                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
+                    Failures so far: {bulkCopyProgress.failed}
+                  </p>
+                )}
+              </div>
+            )}
+            {bulkPreviewLoading && bulkPreviewProgress && (
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                <div className="flex flex-wrap items-center justify-between gap-2 ui-caption text-slate-600 dark:text-slate-300">
+                  <span>
+                    {bulkPreviewProgress.label} · {bulkPreviewProgress.completed} / {bulkPreviewProgress.total} buckets
+                  </span>
+                  <span>{bulkPreviewProgressPercent}%</span>
+                </div>
+                <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                  <div
+                    className="h-full bg-primary-500 transition-[width] duration-200"
+                    style={{ width: `${bulkPreviewProgressPercent}%` }}
+                  />
+                </div>
+                {bulkPreviewProgress.failed > 0 && (
+                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
+                    Failures so far: {bulkPreviewProgress.failed}
+                  </p>
+                )}
+              </div>
+            )}
             {bulkApplyLoading && bulkApplyProgress && (
               <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
                 <div className="flex flex-wrap items-center justify-between gap-2 ui-caption text-slate-600 dark:text-slate-300">
                   <span>
-                    Processing {bulkApplyProgress.completed} / {bulkApplyProgress.total} buckets
+                    {bulkApplyProgress.label} · {bulkApplyProgress.completed} / {bulkApplyProgress.total} buckets
                   </span>
                   <span>{bulkApplyProgressPercent}%</span>
                 </div>
