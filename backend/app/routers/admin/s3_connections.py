@@ -13,15 +13,15 @@ from sqlalchemy.orm import Session, aliased
 from app.core.database import get_db
 from app.db import S3Connection, StorageEndpoint, User, UserS3Connection
 from app.models.s3_connection import (
-    S3ConnectionCreate,
     S3ConnectionCredentialsUpdate,
     S3ConnectionCredentialsValidationRequest,
     S3ConnectionCredentialsValidationResult,
-    S3ConnectionUpdate,
 )
 from app.models.s3_connection_admin import (
     PaginatedS3ConnectionsResponse,
+    S3ConnectionAdminCreate,
     S3ConnectionAdminItem,
+    S3ConnectionAdminUpdate,
     S3ConnectionUserLink,
     S3ConnectionUserLinkUpsert,
     S3ConnectionSummary,
@@ -40,7 +40,6 @@ from app.utils.s3_connection_endpoint import (
     resolve_connection_details,
 )
 from app.utils.s3_connection_ordering import s3_connection_name_order_by
-from app.utils.s3_connection_visibility import normalize_visibility, visibility_from_flags
 
 
 router = APIRouter(prefix="/admin/s3-connections", tags=["admin-s3-connections"])
@@ -57,12 +56,9 @@ def _mask_access_key(value: str) -> str:
 
 
 def _ensure_editable(conn: S3Connection, current_user: User) -> None:
-    if conn.is_temporary:
+    _ = current_user
+    if conn.is_temporary or not conn.is_shared or conn.is_public:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
-    if conn.is_public or conn.is_shared:
-        return
-    if conn.owner_user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this connection")
 
 
 def _linked_user_ids(db: Session, connection_id: int) -> list[int]:
@@ -112,10 +108,10 @@ def _to_admin_item(
         name=conn.name,
         storage_endpoint_id=conn.storage_endpoint_id,
         endpoint_url=details.endpoint_url or "",
-        is_public=bool(conn.is_public),
-        is_shared=bool(conn.is_shared),
+        is_public=False,
+        is_shared=True,
         is_active=bool(conn.is_active),
-        visibility=visibility_from_flags(is_public=bool(conn.is_public), is_shared=bool(conn.is_shared)),
+        visibility="shared",
         access_manager=bool(conn.access_manager),
         access_browser=bool(conn.access_browser),
         credential_owner_type=conn.credential_owner_type,
@@ -145,7 +141,7 @@ def list_s3_connections(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
 ) -> PaginatedS3ConnectionsResponse:
-    access_link = aliased(UserS3Connection)
+    _ = current_user
     linked_user = aliased(User)
     q = (
         db.query(
@@ -155,16 +151,14 @@ def list_s3_connections(
         )
         .outerjoin(User, User.id == S3Connection.owner_user_id)
         .outerjoin(StorageEndpoint, StorageEndpoint.id == S3Connection.storage_endpoint_id)
-        .outerjoin(access_link, access_link.s3_connection_id == S3Connection.id)
         .outerjoin(UserS3Connection, UserS3Connection.s3_connection_id == S3Connection.id)
         .outerjoin(linked_user, linked_user.id == UserS3Connection.user_id)
         .group_by(S3Connection.id)
     )
     q = q.filter(
         S3Connection.is_temporary.is_(False),
-        (S3Connection.is_public.is_(True))
-        | (S3Connection.owner_user_id == current_user.id)
-        | ((S3Connection.is_shared.is_(True)) & (access_link.user_id == current_user.id))
+        S3Connection.is_shared.is_(True),
+        S3Connection.is_public.is_(False),
     )
     if search:
         term = f"%{search.strip()}%"
@@ -233,7 +227,7 @@ def list_s3_connections_minimal(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
 ) -> list[S3ConnectionSummary]:
-    access_link = aliased(UserS3Connection)
+    _ = current_user
     rows = (
         db.query(
             S3Connection.id,
@@ -243,15 +237,12 @@ def list_s3_connections_minimal(
             S3Connection.is_shared,
             S3Connection.is_active,
         )
-        .outerjoin(access_link, access_link.s3_connection_id == S3Connection.id)
         .filter(
             S3Connection.is_temporary.is_(False),
-            (S3Connection.is_public.is_(True))
-            | (S3Connection.owner_user_id == current_user.id)
-            | ((S3Connection.is_shared.is_(True)) & (access_link.user_id == current_user.id))
+            S3Connection.is_shared.is_(True),
+            S3Connection.is_public.is_(False),
         )
         .order_by(*s3_connection_name_order_by(S3Connection))
-        .distinct()
         .all()
     )
     return [
@@ -259,10 +250,10 @@ def list_s3_connections_minimal(
             id=row[0],
             name=row[1],
             owner_user_id=row[2],
-            is_public=bool(row[3]),
-            is_shared=bool(row[4]),
+            is_public=False,
+            is_shared=True,
             is_active=bool(row[5]),
-            visibility=visibility_from_flags(is_public=bool(row[3]), is_shared=bool(row[4])),
+            visibility="shared",
         )
         for row in rows
     ]
@@ -286,7 +277,7 @@ def validate_s3_connection_credentials(
 
 @router.post("", response_model=S3ConnectionAdminItem, status_code=status.HTTP_201_CREATED)
 def create_s3_connection(
-    payload: S3ConnectionCreate,
+    payload: S3ConnectionAdminCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_logger),
@@ -312,26 +303,17 @@ def create_s3_connection(
             verify_tls,
             payload.provider_hint,
         )
-    visibility = normalize_visibility(
-        visibility=payload.visibility,
-        is_public=payload.is_public,
-        is_shared=payload.is_shared,
-        default="private",
-    )
-    is_public = visibility == "public"
-    is_shared = visibility == "shared"
     access_manager, access_browser = _resolve_access_flags(
         access_manager=payload.access_manager,
         access_browser=payload.access_browser,
     )
-    owner_user_id = None if is_public else current_user.id
     conn = S3Connection(
-        owner_user_id=owner_user_id,
+        owner_user_id=current_user.id,
         name=payload.name,
         storage_endpoint_id=storage_endpoint_id,
         custom_endpoint_config=custom_endpoint_config,
-        is_public=is_public,
-        is_shared=is_shared,
+        is_public=False,
+        is_shared=True,
         is_active=True,
         access_manager=access_manager,
         access_browser=access_browser,
@@ -363,7 +345,7 @@ def create_s3_connection(
                 "name": conn.name,
                 "endpoint_url": details.endpoint_url,
                 "provider_hint": details.provider,
-                "visibility": visibility,
+                "visibility": "shared",
                 "access_manager": bool(conn.access_manager),
                 "access_browser": bool(conn.access_browser),
                 "can_manage_iam": _connection_iam_capable(conn),
@@ -372,7 +354,7 @@ def create_s3_connection(
         )
     return _to_admin_item(
         conn,
-        owner_email=None if conn.is_public else current_user.email,
+        owner_email=current_user.email,
         user_count=0,
         user_ids=[],
     )
@@ -381,7 +363,7 @@ def create_s3_connection(
 @router.put("/{connection_id}", response_model=S3ConnectionAdminItem)
 def update_s3_connection(
     connection_id: int,
-    payload: S3ConnectionUpdate,
+    payload: S3ConnectionAdminUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_logger),
@@ -394,25 +376,6 @@ def update_s3_connection(
         conn.name = payload.name
     payload_data = payload.model_dump(exclude_unset=True)
     should_probe_iam = False
-    if {"visibility", "is_public", "is_shared"} & set(payload_data.keys()):
-        visibility = normalize_visibility(
-            visibility=payload.visibility if "visibility" in payload_data else None,
-            is_public=payload.is_public if "is_public" in payload_data else None,
-            is_shared=payload.is_shared if "is_shared" in payload_data else None,
-            default=visibility_from_flags(is_public=bool(conn.is_public), is_shared=bool(conn.is_shared)),
-        )
-        conn.is_public = visibility == "public"
-        conn.is_shared = visibility == "shared"
-        if conn.is_public:
-            conn.owner_user_id = None
-        elif conn.owner_user_id is None:
-            conn.owner_user_id = current_user.id
-        if visibility != "shared":
-            (
-                db.query(UserS3Connection)
-                .filter(UserS3Connection.s3_connection_id == conn.id)
-                .delete(synchronize_session=False)
-            )
     if "is_active" in payload_data:
         conn.is_active = bool(payload.is_active)
     if payload.storage_endpoint_id is not None:
@@ -553,8 +516,6 @@ def list_connection_users(
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
     _ensure_editable(conn, current_user)
-    if not conn.is_shared:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User links are only available for shared connections")
     links = (
         db.query(UserS3Connection, User)
         .join(User, User.id == UserS3Connection.user_id)
@@ -586,8 +547,6 @@ def add_connection_user(
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
     _ensure_editable(conn, current_user)
-    if not conn.is_shared:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User links are only available for shared connections")
     user = db.query(User).filter(User.id == payload.user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -646,8 +605,6 @@ def update_connection_user(
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
     _ensure_editable(conn, current_user)
-    if not conn.is_shared:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User links are only available for shared connections")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -689,8 +646,6 @@ def remove_connection_user(
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
     _ensure_editable(conn, current_user)
-    if not conn.is_shared:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User links are only available for shared connections")
     link = (
         db.query(UserS3Connection)
         .filter(UserS3Connection.user_id == user_id, UserS3Connection.s3_connection_id == connection_id)

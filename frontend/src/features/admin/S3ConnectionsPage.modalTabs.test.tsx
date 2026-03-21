@@ -123,22 +123,20 @@ describe("S3ConnectionsPage modal tabs", () => {
     expect(removeS3ConnectionUserMock).toHaveBeenCalledWith(1, 12);
   });
 
-  it("keeps users tab visible but disables link actions when visibility is not shared", async () => {
+  it("keeps users tab actions enabled for shared-only admin connections", async () => {
+    listS3ConnectionUsersMock.mockResolvedValue([{ user_id: 11, email: "u11@example.com" }]);
     render(<S3ConnectionsPage />);
 
     await screen.findByText("connection-1");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "General" }));
-    fireEvent.click(screen.getByLabelText("Private (owner only)"));
-
     fireEvent.click(screen.getByRole("button", { name: "Linked UI users" }));
-
-    expect(screen.getByText("Linked UI users are available only for shared visibility.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add UI users" })).toBeDisabled();
-
+    expect(screen.getByRole("button", { name: "Add UI users" })).toBeEnabled();
     const removeButtons = screen.getAllByRole("button", { name: "Remove" });
-    removeButtons.forEach((button) => expect(button).toBeDisabled());
+    removeButtons.forEach((button) => expect(button).toBeEnabled());
+    expect(screen.queryByText("Linked UI users are available only for shared visibility.")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Private (owner only)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Public (visible to all)")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -146,7 +144,7 @@ describe("S3ConnectionsPage modal tabs", () => {
       expect(updateAdminS3ConnectionMock).toHaveBeenCalled();
     });
 
-    expect(listS3ConnectionUsersMock).not.toHaveBeenCalled();
+    expect(listS3ConnectionUsersMock).toHaveBeenCalledWith(1);
     expect(upsertS3ConnectionUserMock).not.toHaveBeenCalled();
     expect(removeS3ConnectionUserMock).not.toHaveBeenCalled();
   });

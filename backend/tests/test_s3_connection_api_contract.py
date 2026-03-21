@@ -83,7 +83,6 @@ def test_admin_connections_api_does_not_expose_iam_capable(monkeypatch, contract
             "secret_access_key": "SECRETADMINCONTRACT",
             "access_manager": True,
             "access_browser": True,
-            "visibility": "public",
         },
     )
 
@@ -92,6 +91,9 @@ def test_admin_connections_api_does_not_expose_iam_capable(monkeypatch, contract
     assert "iam_capable" not in payload
     assert payload["is_active"] is True
     assert payload["capabilities"]["can_manage_iam"] is True
+    assert payload["visibility"] == "shared"
+    assert payload["is_shared"] is True
+    assert payload["is_public"] is False
 
 
 def test_admin_connections_api_supports_is_active_update(monkeypatch, contract_client):
@@ -110,7 +112,6 @@ def test_admin_connections_api_supports_is_active_update(monkeypatch, contract_c
             "secret_access_key": "SECRETADMINACTIVECONTRACT",
             "access_manager": True,
             "access_browser": True,
-            "visibility": "public",
         },
     )
     assert create_response.status_code == 201
@@ -122,6 +123,84 @@ def test_admin_connections_api_supports_is_active_update(monkeypatch, contract_c
     )
     assert update_response.status_code == 200
     assert update_response.json()["is_active"] is False
+
+
+def test_admin_connections_api_rejects_visibility_fields(contract_client):
+    client, _, _ = contract_client
+
+    create_with_visibility = client.post(
+        "/api/admin/s3-connections",
+        json={
+            "name": "contract-admin-connection-invalid-create",
+            "endpoint_url": "https://contract-admin-invalid-create.example.test",
+            "access_key_id": "AKIAADMININVALIDCREATE",
+            "secret_access_key": "SECRETADMININVALIDCREATE",
+            "access_manager": True,
+            "access_browser": True,
+            "visibility": "shared",
+        },
+    )
+    assert create_with_visibility.status_code == 422
+
+    create_response = client.post(
+        "/api/admin/s3-connections",
+        json={
+            "name": "contract-admin-connection-valid",
+            "endpoint_url": "https://contract-admin-valid.example.test",
+            "access_key_id": "AKIAADMINVALID",
+            "secret_access_key": "SECRETADMINVALID",
+            "access_manager": True,
+            "access_browser": True,
+        },
+    )
+    assert create_response.status_code == 201
+    connection_id = create_response.json()["id"]
+
+    update_with_visibility = client.put(
+        f"/api/admin/s3-connections/{connection_id}",
+        json={"visibility": "private"},
+    )
+    assert update_with_visibility.status_code == 422
+
+
+def test_admin_connections_api_returns_404_for_non_shared_targets(contract_client):
+    client, db_session, user = contract_client
+    private_conn = S3Connection(
+        owner_user_id=user.id,
+        name="contract-admin-private-hidden",
+        is_public=False,
+        is_shared=False,
+        access_manager=True,
+        access_browser=True,
+        access_key_id="AKIAADMINPRIVATEHIDDEN",
+        secret_access_key="SECRETADMINPRIVATEHIDDEN",
+    )
+    public_conn = S3Connection(
+        owner_user_id=None,
+        name="contract-admin-public-hidden",
+        is_public=True,
+        is_shared=False,
+        access_manager=True,
+        access_browser=True,
+        access_key_id="AKIAADMINPUBLICHIDDEN",
+        secret_access_key="SECRETADMINPUBLICHIDDEN",
+    )
+    db_session.add(private_conn)
+    db_session.add(public_conn)
+    db_session.commit()
+    db_session.refresh(private_conn)
+    db_session.refresh(public_conn)
+
+    private_update = client.put(
+        f"/api/admin/s3-connections/{private_conn.id}",
+        json={"is_active": False},
+    )
+    public_delete = client.delete(f"/api/admin/s3-connections/{public_conn.id}")
+    private_users = client.get(f"/api/admin/s3-connections/{private_conn.id}/users")
+
+    assert private_update.status_code == 404
+    assert public_delete.status_code == 404
+    assert private_users.status_code == 404
 
 
 def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):

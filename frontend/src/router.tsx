@@ -185,7 +185,7 @@ export const buildAdminNav = (
     },
     {
       label: "Connections",
-      links: [{ to: "/admin/s3-connections", label: "S3 Connections" }],
+      links: [{ to: "/admin/s3-connections", label: "Shared S3 Connections" }],
     },
     {
       label: "Storage Backends",

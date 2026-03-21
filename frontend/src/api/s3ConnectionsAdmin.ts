@@ -13,7 +13,7 @@ export type S3ConnectionAdminItem = {
   is_public?: boolean | null;
   is_shared?: boolean | null;
   is_active?: boolean | null;
-  visibility?: "private" | "shared" | "public" | null;
+  visibility?: "shared" | null;
   access_manager?: boolean | null;
   access_browser?: boolean | null;
   capabilities?: Record<string, unknown> | null;
@@ -41,7 +41,7 @@ export type S3ConnectionSummary = {
   is_public?: boolean | null;
   is_shared?: boolean | null;
   is_active?: boolean | null;
-  visibility?: "private" | "shared" | "public" | null;
+  visibility?: "shared" | null;
 };
 
 export type ListS3ConnectionsParams = {
@@ -54,11 +54,8 @@ export type ListS3ConnectionsParams = {
 
 export type CreateS3ConnectionPayload = {
   name: string;
-  visibility?: "private" | "shared" | "public" | null;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
-  is_public?: boolean | null;
-  is_shared?: boolean | null;
   is_active?: boolean | null;
   access_manager?: boolean | null;
   access_browser?: boolean | null;
@@ -74,11 +71,8 @@ export type CreateS3ConnectionPayload = {
 
 export type UpdateS3ConnectionPayload = {
   name?: string | null;
-  visibility?: "private" | "shared" | "public" | null;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
-  is_public?: boolean | null;
-  is_shared?: boolean | null;
   is_active?: boolean | null;
   access_manager?: boolean | null;
   access_browser?: boolean | null;

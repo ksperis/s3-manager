@@ -54,16 +54,6 @@ export default function S3ConnectionsPage() {
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState("");
-  const currentUser = useMemo(() => {
-    const raw = localStorage.getItem("user");
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as { id?: number | null };
-    } catch {
-      return null;
-    }
-  }, []);
-  const currentUserId = currentUser?.id ?? null;
 
   const [storageEndpoints, setStorageEndpoints] = useState<StorageEndpoint[]>([]);
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
@@ -77,7 +67,6 @@ export default function S3ConnectionsPage() {
   const [createForm, setCreateForm] = useState({
     name: "",
     provider_hint: "",
-    visibility: "private" as "private" | "shared" | "public",
     access_manager: false,
     access_browser: true,
     endpoint_url: "",
@@ -95,7 +84,6 @@ export default function S3ConnectionsPage() {
   const [editForm, setEditForm] = useState({
     name: "",
     provider_hint: "",
-    visibility: "private" as "private" | "shared" | "public",
     access_manager: false,
     access_browser: true,
     credential_owner_type: "",
@@ -133,12 +121,6 @@ export default function S3ConnectionsPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const extractError = (err: unknown) => extractApiError(err, "Unexpected error");
-  const resolveVisibility = (conn: S3ConnectionAdminItem): "private" | "shared" | "public" =>
-    (conn.visibility as "private" | "shared" | "public") || (conn.is_public ? "public" : conn.is_shared ? "shared" : "private");
-  const canManageConnection = useCallback((conn: S3ConnectionAdminItem): boolean => {
-    const visibility = resolveVisibility(conn);
-    return visibility === "public" || visibility === "shared" || (currentUserId != null && conn.owner_user_id === currentUserId);
-  }, [currentUserId]);
   const normalizeLinkedUserIds = useCallback((ids: number[] | undefined, ownerUserId?: number | null): number[] => {
     const ownerId = ownerUserId ?? null;
     return Array.from(new Set((ids ?? []).map((id) => Number(id))))
@@ -166,7 +148,6 @@ export default function S3ConnectionsPage() {
     setCreateForm({
       name: "",
       provider_hint: "",
-      visibility: "private",
       access_manager: false,
       access_browser: true,
       endpoint_url: "",
@@ -299,7 +280,6 @@ export default function S3ConnectionsPage() {
     return map;
   }, [portalUsers]);
   const editOwnerUserId = editing?.owner_user_id ?? null;
-  const editLinksEnabled = editForm.visibility === "shared";
   const linkedEditUsers = useMemo(
     () =>
       editLinkedUserIds.map((id) => ({
@@ -333,13 +313,12 @@ export default function S3ConnectionsPage() {
     () =>
       JSON.stringify({
         filter: filter.trim() || null,
-        currentUserId: currentUserId ?? null,
       }),
-    [currentUserId, filter]
+    [filter]
   );
   const selectableOnPageIds = useMemo(
-    () => items.filter((item) => canManageConnection(item)).map((item) => item.id),
-    [canManageConnection, items]
+    () => items.map((item) => item.id),
+    [items]
   );
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedOnPageIds = useMemo(
@@ -390,13 +369,6 @@ export default function S3ConnectionsPage() {
     }));
   }, [createEndpointPresetId, createForm.endpoint_url, createPresetTouched, defaultEndpoint, showCreateModal]);
 
-  useEffect(() => {
-    if (editForm.visibility === "shared") return;
-    setShowEditUserPanel(false);
-    setEditUserSelections([]);
-    setEditUserSearch("");
-  }, [editForm.visibility]);
-
   const handleFilterChange = (value: string) => {
     setFilter(value);
     setSelectedIds([]);
@@ -429,9 +401,7 @@ export default function S3ConnectionsPage() {
         search: filter.trim() || undefined,
       });
       response.items.forEach((item) => {
-        if (canManageConnection(item)) {
-          ids.add(item.id);
-        }
+        ids.add(item.id);
       });
       if (!response.has_next) {
         break;
@@ -442,7 +412,7 @@ export default function S3ConnectionsPage() {
     setAllFilteredSelectableIds(resolved);
     setAllFilteredSelectableIdsKey(selectionQueryKey);
     return resolved;
-  }, [allFilteredSelectableIds, allFilteredSelectableIdsKey, canManageConnection, filter, selectionQueryKey]);
+  }, [allFilteredSelectableIds, allFilteredSelectableIdsKey, filter, selectionQueryKey]);
 
   const setSelectionForFilteredResults = useCallback(
     async (checked: boolean) => {
@@ -474,7 +444,6 @@ export default function S3ConnectionsPage() {
     setEditForm({
       name: conn.name,
       provider_hint: conn.provider_hint || "",
-      visibility: (conn.visibility as "private" | "shared" | "public") || (conn.is_public ? "public" : conn.is_shared ? "shared" : "private"),
       access_manager: conn.access_manager === true,
       access_browser: conn.access_browser !== false,
       credential_owner_type: conn.credential_owner_type || "",
@@ -534,7 +503,6 @@ export default function S3ConnectionsPage() {
           };
       await createAdminS3Connection({
         name: createForm.name,
-        visibility: createForm.visibility,
         access_manager: createForm.access_manager,
         access_browser: createForm.access_browser,
         access_key_id: createForm.access_key_id,
@@ -589,35 +557,32 @@ export default function S3ConnectionsPage() {
           };
       await updateAdminS3Connection(connectionId, {
         name: editForm.name || undefined,
-        visibility: editForm.visibility,
         access_manager: editForm.access_manager,
         access_browser: editForm.access_browser,
         credential_owner_type: editForm.credential_owner_type || null,
         credential_owner_identifier: editForm.credential_owner_identifier || null,
         ...endpointPayload,
       });
-      if (editForm.visibility === "shared") {
-        const targetIds = normalizeLinkedUserIds(editLinkedUserIds, editing.owner_user_id);
-        try {
-          const currentLinks = await listS3ConnectionUsers(connectionId);
-          const currentIds = normalizeLinkedUserIds(
-            currentLinks.map((link) => link.user_id),
-            editing.owner_user_id
-          );
-          const currentIdSet = new Set(currentIds);
-          const targetIdSet = new Set(targetIds);
-          const addIds = targetIds.filter((id) => !currentIdSet.has(id));
-          const removeIds = currentIds.filter((id) => !targetIdSet.has(id));
-          if (addIds.length > 0) {
-            await Promise.all(addIds.map((userId) => upsertS3ConnectionUser(connectionId, { user_id: userId })));
-          }
-          if (removeIds.length > 0) {
-            await Promise.all(removeIds.map((userId) => removeS3ConnectionUser(connectionId, userId)));
-          }
-        } catch (err) {
-          setEditError(`Connection updated, but linked UI users could not be synced: ${extractError(err)}`);
-          return;
+      const targetIds = normalizeLinkedUserIds(editLinkedUserIds, editing.owner_user_id);
+      try {
+        const currentLinks = await listS3ConnectionUsers(connectionId);
+        const currentIds = normalizeLinkedUserIds(
+          currentLinks.map((link) => link.user_id),
+          editing.owner_user_id
+        );
+        const currentIdSet = new Set(currentIds);
+        const targetIdSet = new Set(targetIds);
+        const addIds = targetIds.filter((id) => !currentIdSet.has(id));
+        const removeIds = currentIds.filter((id) => !targetIdSet.has(id));
+        if (addIds.length > 0) {
+          await Promise.all(addIds.map((userId) => upsertS3ConnectionUser(connectionId, { user_id: userId })));
         }
+        if (removeIds.length > 0) {
+          await Promise.all(removeIds.map((userId) => removeS3ConnectionUser(connectionId, userId)));
+        }
+      } catch (err) {
+        setEditError(`Connection updated, but linked UI users could not be synced: ${extractError(err)}`);
+        return;
       }
       setEditCredentials({ access_key_id: "", secret_access_key: "" });
       setActionMessage("Connection updated.");
@@ -648,8 +613,6 @@ export default function S3ConnectionsPage() {
   };
 
   const submitToggleConnectionStatus = async (conn: S3ConnectionAdminItem) => {
-    const canManage = canManageConnection(conn);
-    if (!canManage) return;
     const nextIsActive = conn.is_active !== false ? false : true;
     setStatusBusyId(conn.id);
     setError(null);
@@ -744,9 +707,9 @@ export default function S3ConnectionsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="S3 Connections"
-        description="Private connections are owner-only. Shared connections are owner + linked users. Public connections are visible to everyone."
-        breadcrumbs={[{ label: "Admin" }, { label: "Connections" }]}
+        title="Shared S3 Connections"
+        description="Admin-managed S3 connections shared with linked UI users."
+        breadcrumbs={[{ label: "Admin" }, { label: "Shared S3 Connections" }]}
         actions={[{ label: "Add connection", onClick: openCreateModal }]}
       />
 
@@ -754,7 +717,7 @@ export default function S3ConnectionsPage() {
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
       <ListSectionCard
-        title="Connections"
+        title="Shared S3 Connections"
         subtitle={`${total} entr${total === 1 ? "y" : "ies"} · search matches all records`}
         rightContent={(
           <div className="flex items-center gap-2">
@@ -822,7 +785,7 @@ export default function S3ConnectionsPage() {
                     className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                   />
                 </th>
-                {["Name", "Endpoint", "Visibility", "Status", "Owner", "UI Users", "Actions"].map((label) => (
+                {["Name", "Endpoint", "Status", "Owner", "UI Users", "Actions"].map((label) => (
                   <th key={label} className="px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     {label}
                   </th>
@@ -830,14 +793,12 @@ export default function S3ConnectionsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={8} message="Loading connections..." />}
-              {tableStatus === "error" && <TableEmptyState colSpan={8} message="Unable to load connections." tone="error" />}
+              {tableStatus === "loading" && <TableEmptyState colSpan={7} message="Loading connections..." />}
+              {tableStatus === "error" && <TableEmptyState colSpan={7} message="Unable to load connections." tone="error" />}
               {tableStatus === "empty" && (
-                <TableEmptyState colSpan={8} title="No connections" description="Create a private, shared, or public connection." />
+                <TableEmptyState colSpan={7} title="No connections" description="Create a shared connection." />
               )}
               {items.map((c) => {
-                const visibility = resolveVisibility(c);
-                const canManage = canManageConnection(c);
                 const isActive = c.is_active !== false;
                 return (
                   <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -847,8 +808,7 @@ export default function S3ConnectionsPage() {
                         aria-label={`Select connection ${c.name}`}
                         checked={selectedIdSet.has(c.id)}
                         onChange={() => toggleRowSelection(c.id)}
-                        disabled={!canManage || bulkActivateBusy || bulkDisableBusy || bulkDeleteBusy || selectAllFilteredBusy}
-                        title={canManage ? undefined : "Only the owner can manage private connections."}
+                        disabled={bulkActivateBusy || bulkDisableBusy || bulkDeleteBusy || selectAllFilteredBusy}
                         className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                       />
                     </td>
@@ -859,9 +819,6 @@ export default function S3ConnectionsPage() {
                       ) : (
                         <span className="ui-mono">{c.endpoint_url || "-"}</span>
                       )}
-                    </td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {visibility === "public" ? "Public" : visibility === "shared" ? "Shared" : "Private"}
                     </td>
                     <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       <span
@@ -875,13 +832,9 @@ export default function S3ConnectionsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {visibility === "public" ? (
-                        "—"
-                      ) : (
-                        <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                          {c.owner_email || c.owner_user_id}
-                        </span>
-                      )}
+                      <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        {c.owner_email || c.owner_user_id}
+                      </span>
                     </td>
                     <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       {c.user_ids && c.user_ids.length > 0 ? (
@@ -906,30 +859,24 @@ export default function S3ConnectionsPage() {
                           className={tableActionButtonClasses}
                           onClick={() => void submitToggleConnectionStatus(c)}
                           disabled={
-                            !canManage ||
                             statusBusyId === c.id ||
                             bulkActivateBusy ||
                             bulkDisableBusy ||
                             bulkDeleteBusy ||
                             selectAllFilteredBusy
                           }
-                          title={canManage ? undefined : "Only the owner can manage private connections."}
                         >
                           {statusBusyId === c.id ? "Saving..." : isActive ? "Deactivate" : "Activate"}
                         </button>
                         <button
                           className={tableActionButtonClasses}
                           onClick={() => openEdit(c)}
-                          disabled={!canManage}
-                          title={canManage ? undefined : "Only the owner can manage private connections."}
                         >
                           Edit
                         </button>
                         <button
                           className={tableDeleteActionClasses}
                           onClick={() => setDeleteTarget(c)}
-                          disabled={!canManage}
-                          title={canManage ? undefined : "Only the owner can manage private connections."}
                         >
                           Delete
                         </button>
@@ -986,45 +933,12 @@ export default function S3ConnectionsPage() {
                   </select>
                 </div>
               )}
-              <div className="flex flex-col gap-1 sm:col-span-2">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Visibility</label>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                    <input
-                      type="radio"
-                      name="create-visibility"
-                      value="private"
-                      checked={createForm.visibility === "private"}
-                      onChange={() => setCreateForm((p) => ({ ...p, visibility: "private" }))}
-                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                    />
-                    Private (owner only)
-                  </label>
-                  <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                    <input
-                      type="radio"
-                      name="create-visibility"
-                      value="shared"
-                      checked={createForm.visibility === "shared"}
-                      onChange={() => setCreateForm((p) => ({ ...p, visibility: "shared" }))}
-                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                    />
-                    Shared (owner + linked users)
-                  </label>
-                  <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                    <input
-                      type="radio"
-                      name="create-visibility"
-                      value="public"
-                      checked={createForm.visibility === "public"}
-                      onChange={() => setCreateForm((p) => ({ ...p, visibility: "public" }))}
-                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                    />
-                    Public (visible to all)
-                  </label>
+              <div className="rounded-lg border border-slate-200 px-3 py-2 sm:col-span-2 dark:border-slate-700 dark:bg-slate-900/50">
+                <div className="ui-body text-slate-700 dark:text-slate-200">
+                  Visibility: <span className="font-semibold">Shared</span>
                 </div>
                 <p className="ui-caption text-slate-500 dark:text-slate-300">
-                  Shared connections are configurable by UI admins only. Public connections are visible to everyone.
+                  Admin connections are always shared with linked UI users.
                 </p>
               </div>
               <div className="space-y-2 sm:col-span-2">
@@ -1217,17 +1131,10 @@ export default function S3ConnectionsPage() {
               <>
                 <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
                   <div className="ui-body text-slate-700 dark:text-slate-200">
-                    Visibility:{" "}
-                    <span className="font-semibold">
-                      {editForm.visibility === "public" ? "Public" : editForm.visibility === "shared" ? "Shared" : "Private"}
-                    </span>
+                    Visibility: <span className="font-semibold">Shared</span>
                   </div>
                   <div className="ui-caption text-slate-500 dark:text-slate-300">
-                    {editForm.visibility === "public"
-                      ? "Visible to all UI users. Public connections have no owner."
-                      : editForm.visibility === "shared"
-                        ? `Owner: ${editing.owner_email || editing.owner_user_id} (owner + linked users)`
-                        : `Owner: ${editing.owner_email || editing.owner_user_id}`}
+                    {`Owner: ${editing.owner_email || editing.owner_user_id} (owner + linked users)`}
                   </div>
                 </div>
 
@@ -1355,48 +1262,6 @@ export default function S3ConnectionsPage() {
                   </div>
                 </div>
 
-                <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
-                  <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Visibility</div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                      <input
-                        type="radio"
-                        name="visibility"
-                        value="private"
-                        checked={editForm.visibility === "private"}
-                        onChange={() => setEditForm((p) => ({ ...p, visibility: "private" }))}
-                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                      />
-                      Private (owner only)
-                    </label>
-                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                      <input
-                        type="radio"
-                        name="visibility"
-                        value="shared"
-                        checked={editForm.visibility === "shared"}
-                        onChange={() => setEditForm((p) => ({ ...p, visibility: "shared" }))}
-                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                      />
-                      Shared (owner + linked users)
-                    </label>
-                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                      <input
-                        type="radio"
-                        name="visibility"
-                        value="public"
-                        checked={editForm.visibility === "public"}
-                        onChange={() => setEditForm((p) => ({ ...p, visibility: "public" }))}
-                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                      />
-                      Public (visible to all)
-                    </label>
-                  </div>
-                  <div className="ui-caption text-slate-500 dark:text-slate-300">
-                    Private is strictly owner-only. Shared can be linked to multiple UI users.
-                  </div>
-                </div>
-
                 <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
                   <div>
                     <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Access and credential metadata</div>
@@ -1467,16 +1332,10 @@ export default function S3ConnectionsPage() {
                     type="button"
                     onClick={() => setShowEditUserPanel((prev) => !prev)}
                     className={tableActionButtonClasses}
-                    disabled={!editLinksEnabled}
                   >
                     {showEditUserPanel ? "Close" : "Add UI users"}
                   </button>
                 </div>
-                {!editLinksEnabled && (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
-                    Linked UI users are available only for shared visibility.
-                  </div>
-                )}
                 <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
                   <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -1505,7 +1364,6 @@ export default function S3ConnectionsPage() {
                                 type="button"
                                 onClick={() => setEditLinkedUserIds((prev) => prev.filter((id) => id !== user.id))}
                                 className={tableDeleteActionClasses}
-                                disabled={!editLinksEnabled}
                               >
                                 Remove
                               </button>
@@ -1529,7 +1387,6 @@ export default function S3ConnectionsPage() {
                         onChange={(e) => setEditUserSearch(e.target.value)}
                         placeholder="Search..."
                         className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        disabled={!editLinksEnabled}
                       />
                     </div>
                     <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
@@ -1553,7 +1410,6 @@ export default function S3ConnectionsPage() {
                                 checked={isSelected}
                                 onChange={() => toggleEditUserSelection(option.id)}
                                 className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                disabled={!editLinksEnabled}
                               />
                               <span>{option.label}</span>
                             </label>
@@ -1582,7 +1438,7 @@ export default function S3ConnectionsPage() {
                         </button>
                         <button
                           type="button"
-                          disabled={editUserSelections.length === 0 || !editLinksEnabled}
+                          disabled={editUserSelections.length === 0}
                           onClick={() => {
                             if (editUserSelections.length === 0) return;
                             setEditLinkedUserIds((prev) =>

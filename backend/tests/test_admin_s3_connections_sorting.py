@@ -11,7 +11,8 @@ def _seed_connection(
     db_session,
     *,
     name: str,
-    is_public: bool = True,
+    is_shared: bool = True,
+    is_public: bool = False,
     owner_user_id: int | None = None,
     created_at: datetime | None = None,
 ) -> S3Connection:
@@ -19,7 +20,7 @@ def _seed_connection(
         name=name,
         owner_user_id=owner_user_id,
         is_public=is_public,
-        is_shared=False,
+        is_shared=is_shared,
         is_temporary=False,
         access_manager=True,
         access_browser=True,
@@ -88,3 +89,17 @@ def test_admin_s3_connections_minimal_is_sorted_case_insensitive(client, db_sess
     payload = response.json()
 
     assert [item["name"] for item in payload] == ["alpha", "Beta", "Zulu"]
+
+
+def test_admin_s3_connections_lists_shared_only(client, db_session):
+    _seed_connection(db_session, name="shared-visible", is_shared=True, is_public=False)
+    _seed_connection(db_session, name="private-hidden", is_shared=False, is_public=False)
+    _seed_connection(db_session, name="public-hidden", is_shared=False, is_public=True)
+
+    response = client.get("/api/admin/s3-connections")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    names = [item["name"] for item in payload["items"]]
+    assert names == ["shared-visible"]
+    assert payload["items"][0]["visibility"] == "shared"

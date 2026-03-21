@@ -235,9 +235,9 @@ export default function AdminDashboard() {
               to: "/admin/s3-users",
             },
             {
-              label: "Connections",
-              value: summary.total_connections ?? 0,
-              hint: `Private: ${summary.total_private_connections ?? 0} | Shared: ${summary.total_shared_connections ?? 0} | Public: ${summary.total_public_connections ?? 0}`,
+              label: "Shared S3 Connections",
+              value: summary.total_shared_connections ?? 0,
+              hint: "Admin-managed shared S3 connections",
               to: "/admin/s3-connections",
             },
           ]

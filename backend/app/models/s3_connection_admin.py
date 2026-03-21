@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class S3ConnectionAdminItem(BaseModel):
@@ -19,7 +19,7 @@ class S3ConnectionAdminItem(BaseModel):
     is_public: bool = False
     is_shared: bool = False
     is_active: bool = True
-    visibility: Literal["private", "shared", "public"] = "private"
+    visibility: Literal["shared"] = "shared"
     access_manager: bool = False
     access_browser: bool = True
     credential_owner_type: Optional[str] = None
@@ -45,7 +45,42 @@ class S3ConnectionSummary(BaseModel):
     is_public: bool = False
     is_shared: bool = False
     is_active: bool = True
-    visibility: Literal["private", "shared", "public"] = "private"
+    visibility: Literal["shared"] = "shared"
+
+
+class S3ConnectionAdminCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    provider_hint: Optional[str] = None
+    storage_endpoint_id: Optional[int] = None
+    access_manager: bool = False
+    access_browser: bool = True
+    credential_owner_type: Optional[str] = None
+    credential_owner_identifier: Optional[str] = None
+    endpoint_url: Optional[str] = None
+    region: Optional[str] = None
+    access_key_id: str
+    secret_access_key: str
+    force_path_style: bool = False
+    verify_tls: bool = True
+
+
+class S3ConnectionAdminUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = None
+    provider_hint: Optional[str] = None
+    storage_endpoint_id: Optional[int] = None
+    is_active: Optional[bool] = None
+    access_manager: Optional[bool] = None
+    access_browser: Optional[bool] = None
+    credential_owner_type: Optional[str] = None
+    credential_owner_identifier: Optional[str] = None
+    endpoint_url: Optional[str] = None
+    region: Optional[str] = None
+    force_path_style: Optional[bool] = None
+    verify_tls: Optional[bool] = None
 
 
 class PaginatedS3ConnectionsResponse(BaseModel):
