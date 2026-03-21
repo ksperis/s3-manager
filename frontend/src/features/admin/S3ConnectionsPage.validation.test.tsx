@@ -128,7 +128,8 @@ describe("S3ConnectionsPage live validation", () => {
     render(<S3ConnectionsPage />);
     await screen.findByText("connection-1");
 
-    fireEvent.click(screen.getByLabelText("Select all connections on page"));
+    fireEvent.click(screen.getByLabelText("Select connection connection-1"));
+    fireEvent.click(screen.getByLabelText("Select connection connection-2"));
     fireEvent.click(screen.getByRole("button", { name: "Disable selected" }));
 
     await waitFor(() => {
@@ -136,6 +137,105 @@ describe("S3ConnectionsPage live validation", () => {
     });
     expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(1, { is_active: false });
     expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(2, { is_active: false });
+  });
+
+  it("activates selected connections in bulk", async () => {
+    listAdminS3ConnectionsMock.mockResolvedValue({
+      items: [makeConnection(1, { is_active: false }), makeConnection(2, { is_active: false })],
+      total: 2,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<S3ConnectionsPage />);
+    await screen.findByText("connection-1");
+
+    fireEvent.click(screen.getByLabelText("Select connection connection-1"));
+    fireEvent.click(screen.getByLabelText("Select connection connection-2"));
+    fireEvent.click(screen.getByRole("button", { name: "Activate selected" }));
+
+    await waitFor(() => {
+      expect(updateAdminS3ConnectionMock).toHaveBeenCalledTimes(2);
+    });
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(1, { is_active: true });
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(2, { is_active: true });
+  });
+
+  it("selects all filtered connections across paginated hidden items", async () => {
+    listAdminS3ConnectionsMock.mockImplementation((params?: { page?: number; page_size?: number }) => {
+      if (params?.page_size === 200 && params?.page === 2) {
+        return Promise.resolve({
+          items: [makeConnection(3)],
+          total: 3,
+          page: 2,
+          page_size: 200,
+          has_next: false,
+        });
+      }
+      if (params?.page_size === 200) {
+        return Promise.resolve({
+          items: [makeConnection(1), makeConnection(2)],
+          total: 3,
+          page: 1,
+          page_size: 200,
+          has_next: true,
+        });
+      }
+      return Promise.resolve({
+        items: [makeConnection(1), makeConnection(2)],
+        total: 3,
+        page: params?.page ?? 1,
+        page_size: params?.page_size ?? 25,
+        has_next: true,
+      });
+    });
+
+    render(<S3ConnectionsPage />);
+    await screen.findByText("connection-1");
+
+    fireEvent.click(screen.getByLabelText("Select all filtered connections"));
+    await screen.findByRole("button", { name: "Disable selected" });
+    fireEvent.click(screen.getByRole("button", { name: "Disable selected" }));
+
+    await waitFor(() => {
+      expect(updateAdminS3ConnectionMock).toHaveBeenCalledTimes(3);
+    });
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(1, { is_active: false });
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(2, { is_active: false });
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(3, { is_active: false });
+  });
+
+  it("clears selection when changing page", async () => {
+    listAdminS3ConnectionsMock.mockImplementation((params?: { page?: number; page_size?: number }) => {
+      if (params?.page === 2) {
+        return Promise.resolve({
+          items: [makeConnection(26)],
+          total: 26,
+          page: 2,
+          page_size: 25,
+          has_next: false,
+        });
+      }
+      return Promise.resolve({
+        items: Array.from({ length: 25 }, (_, index) => makeConnection(index + 1)),
+        total: 26,
+        page: 1,
+        page_size: 25,
+        has_next: true,
+      });
+    });
+
+    render(<S3ConnectionsPage />);
+    await screen.findByText("connection-1");
+
+    fireEvent.click(screen.getByLabelText("Select connection connection-1"));
+    expect(screen.getByRole("button", { name: "Disable selected" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText("connection-26");
+
+    expect(screen.queryByRole("button", { name: "Disable selected" })).not.toBeInTheDocument();
   });
 
   it("deletes selected connections in bulk with confirmation modal", async () => {
@@ -150,7 +250,8 @@ describe("S3ConnectionsPage live validation", () => {
     render(<S3ConnectionsPage />);
     await screen.findByText("connection-1");
 
-    fireEvent.click(screen.getByLabelText("Select all connections on page"));
+    fireEvent.click(screen.getByLabelText("Select connection connection-1"));
+    fireEvent.click(screen.getByLabelText("Select connection connection-2"));
     fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
     await screen.findByText("Delete selected (2)");
     fireEvent.click(screen.getByRole("button", { name: "Delete selected connections" }));

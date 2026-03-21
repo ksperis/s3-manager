@@ -168,6 +168,7 @@ export default function ProfilePage({
   const [deletingConnectionBusyId, setDeletingConnectionBusyId] = useState<number | null>(null);
   const [togglingConnectionBusyId, setTogglingConnectionBusyId] = useState<number | null>(null);
   const [selectedConnectionIds, setSelectedConnectionIds] = useState<number[]>([]);
+  const [bulkActivatingConnections, setBulkActivatingConnections] = useState(false);
   const [bulkDisablingConnections, setBulkDisablingConnections] = useState(false);
   const [bulkDeletingConnections, setBulkDeletingConnections] = useState(false);
   const [editingConnectionId, setEditingConnectionId] = useState<number | null>(null);
@@ -271,12 +272,24 @@ export default function ProfilePage({
     const start = (connectionsPage - 1) * connectionsPageSize;
     return filteredConnections.slice(start, start + connectionsPageSize);
   }, [connectionsPage, connectionsPageSize, filteredConnections]);
+  const filteredConnectionIds = useMemo(() => filteredConnections.map((connection) => connection.id), [filteredConnections]);
+  const filteredConnectionIdSet = useMemo(() => new Set(filteredConnectionIds), [filteredConnectionIds]);
   const pagedConnectionIds = useMemo(() => pagedConnections.map((connection) => connection.id), [pagedConnections]);
-  const selectedPagedConnectionIds = useMemo(
-    () => pagedConnectionIds.filter((connectionId) => selectedConnectionIds.includes(connectionId)),
-    [pagedConnectionIds, selectedConnectionIds]
+  const selectedFilteredConnectionIds = useMemo(
+    () => selectedConnectionIds.filter((connectionId) => filteredConnectionIdSet.has(connectionId)),
+    [filteredConnectionIdSet, selectedConnectionIds]
   );
-  const allPagedConnectionsSelected = pagedConnectionIds.length > 0 && selectedPagedConnectionIds.length === pagedConnectionIds.length;
+  const selectedFilteredConnectionIdSet = useMemo(
+    () => new Set(selectedFilteredConnectionIds),
+    [selectedFilteredConnectionIds]
+  );
+  const selectedPagedConnectionIds = useMemo(
+    () => pagedConnectionIds.filter((connectionId) => selectedFilteredConnectionIdSet.has(connectionId)),
+    [pagedConnectionIds, selectedFilteredConnectionIdSet]
+  );
+  const allFilteredConnectionsSelected =
+    filteredConnectionIds.length > 0 && selectedFilteredConnectionIds.length === filteredConnectionIds.length;
+  const hiddenSelectedConnectionCount = Math.max(selectedFilteredConnectionIds.length - selectedPagedConnectionIds.length, 0);
   const storageEndpointLabelById = useMemo(() => {
     const labels = new Map<number, string>();
     availableStorageEndpoints.forEach((endpoint) => {
@@ -333,7 +346,7 @@ export default function ProfilePage({
       .finally(() => {
         setProfileLoading(false);
       });
-  }, [isS3Session, showSettingsCards]);
+  }, [isS3Session, setLanguagePreference, showSettingsCards]);
 
   useEffect(() => {
     if (!showConnectionsSection || !canManagePrivateConnections) {
@@ -433,9 +446,16 @@ export default function ProfilePage({
 
   useEffect(() => {
     if (!showConnectionsSection) return;
-    const pageIds = new Set(pagedConnectionIds);
-    setSelectedConnectionIds((prev) => prev.filter((connectionId) => pageIds.has(connectionId)));
-  }, [pagedConnectionIds, showConnectionsSection]);
+    setSelectedConnectionIds((prev) => {
+      const next = prev.filter((connectionId) => filteredConnectionIdSet.has(connectionId));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [filteredConnectionIdSet, showConnectionsSection]);
+
+  useEffect(() => {
+    if (!showConnectionsSection) return;
+    setSelectedConnectionIds([]);
+  }, [connectionsPage, connectionsPageSize, showConnectionsSection]);
 
   useEffect(() => {
     if (!showCreateConnectionModal) return;
@@ -851,12 +871,37 @@ export default function ProfilePage({
     );
   };
 
-  const toggleSelectAllPagedConnections = () => {
-    if (allPagedConnectionsSelected) {
+  const toggleSelectAllFilteredConnections = () => {
+    if (allFilteredConnectionsSelected) {
       setSelectedConnectionIds([]);
       return;
     }
-    setSelectedConnectionIds(pagedConnectionIds);
+    setSelectedConnectionIds(filteredConnectionIds);
+  };
+
+  const handleBulkActivatePrivateConnections = async () => {
+    if (!canManagePrivateConnections || selectedFilteredConnectionIds.length === 0) return;
+    setConnectionsError(null);
+    setConnectionsMessage(null);
+    setBulkActivatingConnections(true);
+    const results = await Promise.allSettled(
+      selectedFilteredConnectionIds.map((connectionId) => updateConnection(connectionId, { is_active: true }))
+    );
+    const failedIds = selectedFilteredConnectionIds.filter((_, index) => results[index].status === "rejected");
+    const successCount = selectedFilteredConnectionIds.length - failedIds.length;
+    setSelectedConnectionIds(failedIds);
+    if (successCount > 0) {
+      await refreshConnections();
+      notifyExecutionContextsRefresh();
+    }
+    if (failedIds.length > 0) {
+      setConnectionsError(`${failedIds.length} private connection${failedIds.length > 1 ? "s" : ""} failed to activate.`);
+    }
+    setConnectionsMessage(
+      `${successCount} private connection${successCount > 1 ? "s" : ""} activated.` +
+        (failedIds.length > 0 ? ` ${failedIds.length} failed.` : "")
+    );
+    setBulkActivatingConnections(false);
   };
 
   const handleTogglePrivateConnectionStatus = async (connection: S3Connection) => {
@@ -879,15 +924,15 @@ export default function ProfilePage({
   };
 
   const handleBulkDisablePrivateConnections = async () => {
-    if (!canManagePrivateConnections || selectedPagedConnectionIds.length === 0) return;
+    if (!canManagePrivateConnections || selectedFilteredConnectionIds.length === 0) return;
     setConnectionsError(null);
     setConnectionsMessage(null);
     setBulkDisablingConnections(true);
     const results = await Promise.allSettled(
-      selectedPagedConnectionIds.map((connectionId) => updateConnection(connectionId, { is_active: false }))
+      selectedFilteredConnectionIds.map((connectionId) => updateConnection(connectionId, { is_active: false }))
     );
-    const failedIds = selectedPagedConnectionIds.filter((_, index) => results[index].status === "rejected");
-    const successCount = selectedPagedConnectionIds.length - failedIds.length;
+    const failedIds = selectedFilteredConnectionIds.filter((_, index) => results[index].status === "rejected");
+    const successCount = selectedFilteredConnectionIds.length - failedIds.length;
     setSelectedConnectionIds(failedIds);
     if (successCount > 0) {
       await refreshConnections();
@@ -904,17 +949,17 @@ export default function ProfilePage({
   };
 
   const handleBulkDeletePrivateConnections = async () => {
-    if (!canManagePrivateConnections || selectedPagedConnectionIds.length === 0) return;
-    const count = selectedPagedConnectionIds.length;
+    if (!canManagePrivateConnections || selectedFilteredConnectionIds.length === 0) return;
+    const count = selectedFilteredConnectionIds.length;
     if (!window.confirm(`Delete ${count} selected private S3 connection${count > 1 ? "s" : ""}?`)) return;
     setConnectionsError(null);
     setConnectionsMessage(null);
     setBulkDeletingConnections(true);
     const results = await Promise.allSettled(
-      selectedPagedConnectionIds.map((connectionId) => deleteConnection(connectionId))
+      selectedFilteredConnectionIds.map((connectionId) => deleteConnection(connectionId))
     );
-    const failedIds = selectedPagedConnectionIds.filter((_, index) => results[index].status === "rejected");
-    const successCount = selectedPagedConnectionIds.length - failedIds.length;
+    const failedIds = selectedFilteredConnectionIds.filter((_, index) => results[index].status === "rejected");
+    const successCount = selectedFilteredConnectionIds.length - failedIds.length;
     setSelectedConnectionIds(failedIds);
     if (successCount > 0) {
       await refreshConnections();
@@ -932,6 +977,7 @@ export default function ProfilePage({
 
   const handleConnectionsFilterChange = (value: string) => {
     setConnectionsFilter(value);
+    setSelectedConnectionIds([]);
     setConnectionsPage(1);
   };
 
@@ -1202,17 +1248,26 @@ export default function ProfilePage({
                     />
                   </div>
                 </div>
-                {selectedPagedConnectionIds.length > 0 && (
+                {selectedFilteredConnectionIds.length > 0 && (
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 dark:border-slate-800 dark:bg-slate-900/50">
                     <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
-                      {selectedPagedConnectionIds.length} selected on this page
+                      {selectedFilteredConnectionIds.length} selected
+                      {hiddenSelectedConnectionCount > 0 ? ` (${hiddenSelectedConnectionCount} not visible)` : ""}
                     </span>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         className={tableActionButtonClasses}
+                        onClick={() => void handleBulkActivatePrivateConnections()}
+                        disabled={bulkActivatingConnections || bulkDisablingConnections || bulkDeletingConnections}
+                      >
+                        {bulkActivatingConnections ? "Activating..." : "Activate selected"}
+                      </button>
+                      <button
+                        type="button"
+                        className={tableActionButtonClasses}
                         onClick={() => void handleBulkDisablePrivateConnections()}
-                        disabled={bulkDisablingConnections || bulkDeletingConnections}
+                        disabled={bulkActivatingConnections || bulkDisablingConnections || bulkDeletingConnections}
                       >
                         {bulkDisablingConnections ? "Disabling..." : "Disable selected"}
                       </button>
@@ -1220,7 +1275,7 @@ export default function ProfilePage({
                         type="button"
                         className={tableDeleteActionClasses}
                         onClick={() => void handleBulkDeletePrivateConnections()}
-                        disabled={bulkDisablingConnections || bulkDeletingConnections}
+                        disabled={bulkActivatingConnections || bulkDisablingConnections || bulkDeletingConnections}
                       >
                         {bulkDeletingConnections ? "Deleting..." : "Delete selected"}
                       </button>
@@ -1234,10 +1289,15 @@ export default function ProfilePage({
                         <th className="px-4 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           <input
                             type="checkbox"
-                            aria-label="Select all private connections on page"
-                            checked={allPagedConnectionsSelected}
-                            onChange={toggleSelectAllPagedConnections}
-                            disabled={pagedConnectionIds.length === 0 || bulkDisablingConnections || bulkDeletingConnections}
+                            aria-label="Select all filtered private connections"
+                            checked={allFilteredConnectionsSelected}
+                            onChange={toggleSelectAllFilteredConnections}
+                            disabled={
+                              filteredConnectionIds.length === 0 ||
+                              bulkActivatingConnections ||
+                              bulkDisablingConnections ||
+                              bulkDeletingConnections
+                            }
                             className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                           />
                         </th>
@@ -1281,9 +1341,9 @@ export default function ProfilePage({
                                 <input
                                   type="checkbox"
                                   aria-label={`Select private connection ${connection.name || connection.id}`}
-                                  checked={selectedConnectionIds.includes(connection.id)}
+                                  checked={selectedFilteredConnectionIdSet.has(connection.id)}
                                   onChange={() => togglePrivateConnectionSelection(connection.id)}
-                                  disabled={bulkDisablingConnections || bulkDeletingConnections}
+                                  disabled={bulkActivatingConnections || bulkDisablingConnections || bulkDeletingConnections}
                                   className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                                 />
                               </td>
@@ -1329,6 +1389,7 @@ export default function ProfilePage({
                                     className={tableActionButtonClasses}
                                     disabled={
                                       togglingConnectionBusyId === connection.id ||
+                                      bulkActivatingConnections ||
                                       bulkDisablingConnections ||
                                       bulkDeletingConnections
                                     }
@@ -1340,7 +1401,7 @@ export default function ProfilePage({
                                     type="button"
                                     className={tableActionButtonClasses}
                                     onClick={() => openEditConnectionModal(connection)}
-                                    disabled={bulkDisablingConnections || bulkDeletingConnections}
+                                    disabled={bulkActivatingConnections || bulkDisablingConnections || bulkDeletingConnections}
                                   >
                                     Edit
                                   </button>
@@ -1349,6 +1410,7 @@ export default function ProfilePage({
                                     className={tableDeleteActionClasses}
                                     disabled={
                                       deletingConnectionBusyId === connection.id ||
+                                      bulkActivatingConnections ||
                                       bulkDisablingConnections ||
                                       bulkDeletingConnections
                                     }
@@ -1369,9 +1431,13 @@ export default function ProfilePage({
                     page={connectionsPage}
                     pageSize={connectionsPageSize}
                     total={filteredConnections.length}
-                    onPageChange={(page) => setConnectionsPage(Math.max(1, page))}
+                    onPageChange={(page) => {
+                      setConnectionsPage(Math.max(1, page));
+                      setSelectedConnectionIds([]);
+                    }}
                     onPageSizeChange={(size) => {
                       setConnectionsPageSize(size);
+                      setSelectedConnectionIds([]);
                       setConnectionsPage(1);
                     }}
                     pageSizeOptions={[5, 10, 25, 50]}

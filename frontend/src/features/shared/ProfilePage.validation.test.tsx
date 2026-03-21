@@ -244,7 +244,7 @@ describe("ProfilePage live validation", () => {
     render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
     await screen.findByText("connection-a");
 
-    fireEvent.click(screen.getByLabelText("Select all private connections on page"));
+    fireEvent.click(screen.getByLabelText("Select all filtered private connections"));
     fireEvent.click(screen.getByRole("button", { name: "Disable selected" }));
 
     await waitFor(() => {
@@ -252,6 +252,71 @@ describe("ProfilePage live validation", () => {
     });
     expect(updateConnectionMock).toHaveBeenCalledWith(41, { is_active: false });
     expect(updateConnectionMock).toHaveBeenCalledWith(42, { is_active: false });
+  });
+
+  it("bulk activates selected private connections", async () => {
+    listConnectionsMock.mockResolvedValue([
+      makeConnection({ id: 41, name: "connection-a", is_active: false }),
+      makeConnection({ id: 42, name: "connection-b", is_active: false }),
+    ]);
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+    await screen.findByText("connection-a");
+
+    fireEvent.click(screen.getByLabelText("Select all filtered private connections"));
+    fireEvent.click(screen.getByRole("button", { name: "Activate selected" }));
+
+    await waitFor(() => {
+      expect(updateConnectionMock).toHaveBeenCalledTimes(2);
+    });
+    expect(updateConnectionMock).toHaveBeenCalledWith(41, { is_active: true });
+    expect(updateConnectionMock).toHaveBeenCalledWith(42, { is_active: true });
+  });
+
+  it("selects filtered connections across hidden paginated items", async () => {
+    listConnectionsMock.mockResolvedValue(
+      Array.from({ length: 12 }, (_, index) =>
+        makeConnection({
+          id: 100 + index,
+          name: `connection-${index + 1}`,
+        })
+      )
+    );
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+    await screen.findByText("connection-12");
+
+    fireEvent.click(screen.getByLabelText("Select all filtered private connections"));
+    fireEvent.click(screen.getByRole("button", { name: "Disable selected" }));
+
+    await waitFor(() => {
+      expect(updateConnectionMock).toHaveBeenCalledTimes(12);
+    });
+    expect(updateConnectionMock).toHaveBeenCalledWith(100, { is_active: false });
+    expect(updateConnectionMock).toHaveBeenCalledWith(111, { is_active: false });
+  });
+
+  it("clears private connection selection when changing page", async () => {
+    listConnectionsMock.mockResolvedValue(
+      Array.from({ length: 12 }, (_, index) =>
+        makeConnection({
+          id: 200 + index,
+          name: `page-connection-${index + 1}`,
+        })
+      )
+    );
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+    await screen.findByText("page-connection-12");
+
+    fireEvent.click(screen.getByLabelText("Select private connection page-connection-12"));
+    expect(screen.getByRole("button", { name: "Disable selected" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Disable selected" })).not.toBeInTheDocument();
+    });
   });
 
   it("bulk deletes selected private connections after confirmation", async () => {
@@ -265,7 +330,7 @@ describe("ProfilePage live validation", () => {
       render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
       await screen.findByText("connection-a");
 
-      fireEvent.click(screen.getByLabelText("Select all private connections on page"));
+      fireEvent.click(screen.getByLabelText("Select all filtered private connections"));
       fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
 
       await waitFor(() => {
