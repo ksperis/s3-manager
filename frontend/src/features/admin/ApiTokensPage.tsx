@@ -77,7 +77,11 @@ function StatusBadge({ status }: { status: TokenStatus }) {
   );
 }
 
-export default function ApiTokensPage() {
+type ApiTokensPageProps = {
+  showPageHeader?: boolean;
+};
+
+export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPageProps) {
   const [tokens, setTokens] = useState<ApiTokenInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -232,41 +236,69 @@ export default function ApiTokensPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="API tokens"
-        description="Manage long-lived admin tokens for automation and integrations."
-        breadcrumbs={[
-          { label: "Admin" },
-          { label: "API tokens" },
-        ]}
-        rightContent={
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={includeRevoked}
-                onChange={(event) => setIncludeRevoked(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-              />
-              Show revoked/expired
-            </label>
-            <button
-              type="button"
-              onClick={loadTokens}
-              className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-            >
-              Refresh
-            </button>
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
-            >
-              Create token
-            </button>
-          </div>
-        }
-      />
+      {showPageHeader ? (
+        <PageHeader
+          title="API tokens"
+          description="Manage long-lived admin tokens for automation and integrations."
+          breadcrumbs={[
+            { label: "Admin" },
+            { label: "API tokens" },
+          ]}
+          rightContent={
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={includeRevoked}
+                  onChange={(event) => setIncludeRevoked(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                />
+                Show revoked/expired
+              </label>
+              <button
+                type="button"
+                onClick={loadTokens}
+                className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+              >
+                Refresh
+              </button>
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
+              >
+                Create token
+              </button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={includeRevoked}
+              onChange={(event) => setIncludeRevoked(event.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+            />
+            Show revoked/expired
+          </label>
+          <button
+            type="button"
+            onClick={loadTokens}
+            className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+          >
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
+          >
+            Create token
+          </button>
+        </div>
+      )}
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}

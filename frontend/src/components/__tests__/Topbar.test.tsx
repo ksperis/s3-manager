@@ -20,6 +20,12 @@ vi.mock("../GeneralSettingsContext", () => ({
   }),
 }));
 
+vi.mock("../../features/admin/ApiTokensPage", () => ({
+  default: ({ showPageHeader = true }: { showPageHeader?: boolean }) => (
+    <div>{showPageHeader ? "API Tokens Page (header)" : "API Tokens Page (embedded)"}</div>
+  ),
+}));
+
 const resolveAccountTrigger = (): HTMLButtonElement => {
   const trigger = screen
     .getAllByRole("button")
@@ -83,5 +89,45 @@ describe("Topbar account menu", () => {
     await waitFor(() => {
       expect(screen.queryByRole("menu", { name: "Account actions" })).not.toBeInTheDocument();
     });
+  });
+
+  it("shows API tokens menu action only for superadmin role", async () => {
+    const user = userEvent.setup();
+
+    const adminRender = render(<Topbar userEmail="admin@example.com" />);
+    await user.click(resolveAccountTrigger());
+    expect(await screen.findByRole("menu", { name: "Account actions" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /api tokens/i })).not.toBeInTheDocument();
+    adminRender.unmount();
+
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_superadmin",
+        authType: "password",
+      })
+    );
+
+    render(<Topbar userEmail="superadmin@example.com" />);
+    await user.click(resolveAccountTrigger());
+    expect(await screen.findByRole("menuitem", { name: /api tokens/i })).toBeInTheDocument();
+  });
+
+  it("opens API tokens modal from account menu", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_superadmin",
+        authType: "password",
+      })
+    );
+
+    render(<Topbar userEmail="superadmin@example.com" />);
+    await user.click(resolveAccountTrigger());
+    await user.click(await screen.findByRole("menuitem", { name: /api tokens/i }));
+
+    expect(await screen.findByRole("dialog", { name: "API tokens" })).toBeInTheDocument();
+    expect(await screen.findByText("API Tokens Page (embedded)")).toBeInTheDocument();
   });
 });

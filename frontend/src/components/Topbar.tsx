@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { type KeyboardEvent as ReactKeyboardEvent, ReactNode, Suspense, lazy, useEffect, useId, useMemo, useRef, useState } from "react";
-import { isAdminLikeRole, readStoredUser } from "../utils/workspaces";
+import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../utils/workspaces";
 import { useWorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import { useGeneralSettings } from "./GeneralSettingsContext";
 import Modal from "./Modal";
@@ -37,6 +37,7 @@ type StoredTopbarUser = {
 };
 
 const ProfilePage = lazy(() => import("../features/shared/ProfilePage"));
+const ApiTokensPage = lazy(() => import("../features/admin/ApiTokensPage"));
 
 function buildAccountInitial(value?: string | null): string {
   if (!value) return "U";
@@ -77,6 +78,7 @@ export default function Topbar({
     !isS3Session &&
     (isAdminLikeRole(storedUser?.role) ||
       (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
+  const canManageApiTokens = !isS3Session && isSuperAdminRole(storedUser?.role);
   const uiRoleLabel = useMemo(() => resolveUiRoleLabel(storedUser), [storedUser]);
 
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
@@ -87,6 +89,7 @@ export default function Topbar({
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
+  const [showApiTokensModal, setShowApiTokensModal] = useState(false);
   const accountMenuRootRef = useRef<HTMLDivElement | null>(null);
   const accountMenuSurfaceRef = useRef<HTMLDivElement | null>(null);
   const accountMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -304,6 +307,11 @@ export default function Topbar({
   const openConnectionsModal = () => {
     setAccountMenuOpen(false);
     setShowConnectionsModal(true);
+  };
+
+  const openApiTokensModal = () => {
+    setAccountMenuOpen(false);
+    setShowApiTokensModal(true);
   };
 
   const triggerLogout = () => {
@@ -602,6 +610,26 @@ export default function Topbar({
                       </button>
                     )}
 
+                    {canManageApiTokens && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        data-account-menu-item="true"
+                        onClick={openApiTokensModal}
+                        className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                      >
+                        <ApiKeyIcon className="mt-0.5 h-4 w-4 text-slate-500 dark:text-slate-300" />
+                        <span>
+                          <span className="block ui-caption font-semibold text-slate-800 dark:text-slate-100">
+                            API tokens
+                          </span>
+                          <span className="block ui-caption text-slate-500 dark:text-slate-400">
+                            Manage admin automation tokens
+                          </span>
+                        </span>
+                      </button>
+                    )}
+
                     <div className="my-1 border-t border-slate-200 dark:border-slate-700" />
                     <button
                       type="button"
@@ -645,6 +673,20 @@ export default function Topbar({
         >
           <Suspense fallback={<div className="ui-caption text-slate-500 dark:text-slate-400">Loading profile...</div>}>
             <ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />
+          </Suspense>
+        </Modal>
+      )}
+
+      {showApiTokensModal && (
+        <Modal
+          title="API tokens"
+          onClose={() => setShowApiTokensModal(false)}
+          maxWidthClass="max-w-7xl"
+          maxBodyHeightClass="max-h-[85vh]"
+          zIndexClass="z-[46]"
+        >
+          <Suspense fallback={<div className="ui-caption text-slate-500 dark:text-slate-400">Loading API tokens...</div>}>
+            <ApiTokensPage showPageHeader={false} />
           </Suspense>
         </Modal>
       )}
@@ -699,6 +741,17 @@ function LinkIcon(props: React.SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 14a4 4 0 0 1 0-5.66L12.34 6a4 4 0 0 1 5.66 5.66L16.5 13.2" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14 10a4 4 0 0 1 0 5.66L11.66 18a4 4 0 0 1-5.66-5.66L7.5 10.8" />
+    </svg>
+  );
+}
+
+function ApiKeyIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <circle cx="8.5" cy="12" r="3" strokeWidth={1.5} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.5 12h9" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 12v-2.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.25 12v-2" />
     </svg>
   );
 }

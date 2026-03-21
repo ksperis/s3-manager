@@ -21,4 +21,11 @@ describe("buildAdminNav", () => {
     expect(browserLink?.disabled).toBe(false);
     expect(browserLink?.disabledHint).toBeUndefined();
   });
+
+  it("does not expose API Tokens in settings navigation", () => {
+    const settingsSection = buildAdminNav(true, true, true, true).find((section) => section.label === "Settings");
+    const apiTokensLink = settingsSection?.links.find((link) => link.label === "API Tokens");
+
+    expect(apiTokensLink).toBeUndefined();
+  });
 });

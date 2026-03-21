@@ -14,7 +14,7 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/admin/endpoint-status` | `user/workspace-admin.md` + `ops/operations-healthchecks.md` | Covered |
 | `/admin/audit` | `user/workspace-admin.md` + `ops/operations-observability.md` | Covered |
 | `/admin/billing` | `user/workspace-admin.md` + `ops/operations-billing.md` | Covered |
-| `/admin/api-tokens` | `ops/operations-api-tokens.md` | Covered |
+| API tokens (account menu modal) | `ops/operations-api-tokens.md` | Covered |
 | `/admin/*-settings` | `ops/configuration.md` | Covered |
 | `/ceph-admin` and children | `user/workspace-ceph-admin.md` | Covered |
 | `/ceph-admin/buckets` advanced drawer | `user/howto-ceph-advanced-filter.md` | Covered |

@@ -32,7 +32,6 @@ const loadGeneralSettingsPage = () => import("./features/admin/GeneralSettingsPa
 const loadManagerSettingsPage = () => import("./features/admin/ManagerSettingsPage");
 const loadBrowserSettingsPage = () => import("./features/admin/BrowserSettingsPage");
 const loadKeyRotationPage = () => import("./features/admin/KeyRotationPage");
-const loadApiTokensPage = () => import("./features/admin/ApiTokensPage");
 const loadFeatureDisabledPage = () => import("./features/shared/FeatureDisabledPage");
 const loadBucketsPage = () => import("./features/manager/BucketsPage");
 const loadManagerDashboard = () => import("./features/manager/ManagerDashboard");
@@ -89,7 +88,6 @@ const GeneralSettingsPage = lazy(loadGeneralSettingsPage);
 const ManagerSettingsPage = lazy(loadManagerSettingsPage);
 const BrowserSettingsPage = lazy(loadBrowserSettingsPage);
 const KeyRotationPage = lazy(loadKeyRotationPage);
-const ApiTokensPage = lazy(loadApiTokensPage);
 const FeatureDisabledPage = lazy(loadFeatureDisabledPage);
 const BucketsPage = lazy(loadBucketsPage);
 const ManagerDashboard = lazy(loadManagerDashboard);
@@ -160,7 +158,6 @@ export const buildAdminNav = (
       disabledHint: !browserEnabled ? "Browser feature is disabled in General settings." : undefined,
     },
     { to: "/admin/key-rotation", label: "Key Rotation" },
-    { to: "/admin/api-tokens", label: "API Tokens" },
   ];
 
   return [
@@ -414,7 +411,6 @@ export default function AppRouter() {
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="metrics" element={<AdminMetricsPage />} />
               <Route path="billing" element={<AdminBillingRoute />} />
-              <Route path="api-tokens" element={<ApiTokensPage />} />
               <Route element={<RequireRole roles={[SUPERADMIN_ROLE]} />}>
                 <Route path="general-settings" element={<GeneralSettingsPage />} />
                 <Route path="manager-settings" element={<ManagerSettingsPage />} />
