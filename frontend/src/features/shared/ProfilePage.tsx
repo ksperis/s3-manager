@@ -691,7 +691,6 @@ export default function ProfilePage({
         access_browser: createConnectionForm.access_browser,
         force_path_style: storageEndpointId ? undefined : createConnectionForm.force_path_style,
         verify_tls: storageEndpointId ? undefined : createConnectionForm.verify_tls,
-        visibility: "private",
       });
       setCreateConnectionForm(defaultCreateConnectionForm);
       setCreateConnectionEndpointMode(availableStorageEndpoints.length > 0 ? "preset" : "custom");

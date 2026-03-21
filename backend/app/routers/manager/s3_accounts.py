@@ -99,8 +99,7 @@ def list_manager_accounts(
     connections = (
         db.query(S3Connection)
         .filter(
-            (S3Connection.is_public.is_(True))
-            | (S3Connection.owner_user_id == user.id)
+            ((S3Connection.is_shared.is_(False)) & (S3Connection.created_by_user_id == user.id))
             | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(user_connection_ids)))
         )
         .filter(S3Connection.is_active.is_(True))

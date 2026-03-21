@@ -57,11 +57,10 @@ def _seed_s3_user(db_session, name: str) -> S3User:
     return entry
 
 
-def _seed_connection(db_session, *, owner_user_id: int | None, name: str, is_shared: bool) -> S3Connection:
+def _seed_connection(db_session, *, created_by_user_id: int, name: str, is_shared: bool) -> S3Connection:
     entry = S3Connection(
-        owner_user_id=owner_user_id,
+        created_by_user_id=created_by_user_id,
         name=name,
-        is_public=False,
         is_shared=is_shared,
         access_key_id=f"AK-{name}",
         secret_access_key=f"SK-{name}",
@@ -127,8 +126,8 @@ def test_update_user_and_link_validations(db_session):
     db_session.commit()
     _seed_user(db_session, "already-used@example.com", role=UserRole.UI_USER.value)
     s3_user = _seed_s3_user(db_session, "linked-user")
-    shared_conn = _seed_connection(db_session, owner_user_id=None, name="shared-conn", is_shared=True)
-    private_conn = _seed_connection(db_session, owner_user_id=None, name="private-conn", is_shared=False)
+    shared_conn = _seed_connection(db_session, created_by_user_id=user.id, name="shared-conn", is_shared=True)
+    private_conn = _seed_connection(db_session, created_by_user_id=user.id, name="private-conn", is_shared=False)
 
     with pytest.raises(ValueError, match="Email already in use"):
         service.update_user(user.id, UserUpdate(email="already-used@example.com"))
@@ -216,8 +215,8 @@ def test_paginate_users_and_detached_user_to_out(db_session, monkeypatch):
     account = _seed_account(db_session, "acc-a", "RGW-ACC-A")
     user = _seed_user(db_session, "paged@example.com", role=UserRole.UI_USER.value)
     s3_user = _seed_s3_user(db_session, "paged-s3-user")
-    shared_conn = _seed_connection(db_session, owner_user_id=None, name="paged-shared-conn", is_shared=True)
-    owned_conn = _seed_connection(db_session, owner_user_id=user.id, name="paged-owned-conn", is_shared=False)
+    shared_conn = _seed_connection(db_session, created_by_user_id=user.id, name="paged-shared-conn", is_shared=True)
+    owned_conn = _seed_connection(db_session, created_by_user_id=user.id, name="paged-owned-conn", is_shared=False)
 
     service.assign_user_to_account(
         user.id,

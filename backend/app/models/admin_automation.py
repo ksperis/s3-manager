@@ -156,14 +156,12 @@ class S3ConnectionMatch(BaseModel):
 
 class S3ConnectionSpec(BaseModel):
     name: Optional[str] = None
-    visibility: Optional[Literal["private", "shared", "public"]] = None
     storage_endpoint_id: Optional[int] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None
     provider_hint: Optional[str] = None
     force_path_style: Optional[bool] = None
     verify_tls: Optional[bool] = None
-    is_public: Optional[bool] = None
     is_shared: Optional[bool] = None
     access_manager: Optional[bool] = None
     access_browser: Optional[bool] = None

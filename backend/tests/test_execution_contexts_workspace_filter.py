@@ -46,7 +46,7 @@ def _create_account(db_session, *, name: str, rgw_account_id: str) -> S3Account:
 def _create_connection(
     db_session,
     *,
-    owner_user_id: int,
+    created_by_user_id: int,
     name: str,
     can_manage_iam: bool,
     access_manager: bool = False,
@@ -55,7 +55,7 @@ def _create_connection(
     storage_endpoint: StorageEndpoint | None = None,
 ) -> S3Connection:
     connection = S3Connection(
-        owner_user_id=owner_user_id,
+        created_by_user_id=created_by_user_id,
         name=name,
         is_active=is_active,
         access_manager=access_manager,
@@ -113,14 +113,14 @@ def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_sessio
     legacy_user = _create_legacy_user(db_session, name="legacy-user", uid="legacy-uid-1")
     manager_connection = _create_connection(
         db_session,
-        owner_user_id=user.id,
+        created_by_user_id=user.id,
         name="mgr-conn",
         can_manage_iam=True,
         access_manager=True,
     )
     browser_only_connection = _create_connection(
         db_session,
-        owner_user_id=user.id,
+        created_by_user_id=user.id,
         name="browser-conn",
         can_manage_iam=False,
         access_manager=False,
@@ -160,8 +160,8 @@ def test_browser_workspace_returns_connections_and_s3_users(db_session):
     user = _create_user(db_session)
     account = _create_account(db_session, name="browser-account", rgw_account_id="RGWBROWSER0001")
     legacy_user = _create_legacy_user(db_session, name="browser-legacy", uid="legacy-uid-2")
-    connection_a = _create_connection(db_session, owner_user_id=user.id, name="browser-conn-a", can_manage_iam=False)
-    connection_b = _create_connection(db_session, owner_user_id=user.id, name="browser-conn-b", can_manage_iam=True)
+    connection_a = _create_connection(db_session, created_by_user_id=user.id, name="browser-conn-a", can_manage_iam=False)
+    connection_b = _create_connection(db_session, created_by_user_id=user.id, name="browser-conn-b", can_manage_iam=True)
 
     db_session.add_all(
         [
@@ -188,7 +188,7 @@ def test_connection_context_includes_endpoint_capabilities_when_bound_to_endpoin
     endpoint = _create_endpoint(db_session, name="ceph-conn-caps")
     connection = _create_connection(
         db_session,
-        owner_user_id=user.id,
+        created_by_user_id=user.id,
         name="endpoint-backed-conn",
         can_manage_iam=True,
         access_manager=True,
@@ -210,7 +210,7 @@ def test_execution_contexts_exclude_inactive_connections(db_session):
     user = _create_user(db_session)
     active_connection = _create_connection(
         db_session,
-        owner_user_id=user.id,
+        created_by_user_id=user.id,
         name="active-conn",
         can_manage_iam=False,
         access_manager=True,
@@ -219,7 +219,7 @@ def test_execution_contexts_exclude_inactive_connections(db_session):
     )
     inactive_connection = _create_connection(
         db_session,
-        owner_user_id=user.id,
+        created_by_user_id=user.id,
         name="inactive-conn",
         can_manage_iam=False,
         access_manager=True,

@@ -190,9 +190,21 @@ class UsersService:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
             raise ValueError("User not found")
-        owned_connection_ids = [
+        created_connection_rows = (
+            self.db.query(S3Connection.id, S3Connection.is_shared)
+            .filter(S3Connection.created_by_user_id == user.id)
+            .all()
+        )
+        created_shared_ids = sorted([row[0] for row in created_connection_rows if bool(row[1])])
+        if created_shared_ids:
+            created_shared_str = ", ".join(str(conn_id) for conn_id in created_shared_ids)
+            raise ValueError(
+                f"Cannot delete user with shared S3 connections created by this user: {created_shared_str}"
+            )
+        created_private_ids = [
             row[0]
-            for row in self.db.query(S3Connection.id).filter(S3Connection.owner_user_id == user.id).all()
+            for row in created_connection_rows
+            if not bool(row[1])
         ]
         # Remove dependent links/tokens first to satisfy FK constraints on PostgreSQL.
         (
@@ -210,15 +222,15 @@ class UsersService:
             .filter(UserS3Connection.user_id == user.id)
             .delete(synchronize_session=False)
         )
-        if owned_connection_ids:
+        if created_private_ids:
             (
                 self.db.query(UserS3Connection)
-                .filter(UserS3Connection.s3_connection_id.in_(owned_connection_ids))
+                .filter(UserS3Connection.s3_connection_id.in_(created_private_ids))
                 .delete(synchronize_session=False)
             )
             (
                 self.db.query(S3Connection)
-                .filter(S3Connection.id.in_(owned_connection_ids))
+                .filter(S3Connection.id.in_(created_private_ids))
                 .delete(synchronize_session=False)
             )
         (
@@ -301,7 +313,7 @@ class UsersService:
                 .outerjoin(S3User, UserS3User.s3_user_id == S3User.id)
                 .outerjoin(UserS3Connection, User.id == UserS3Connection.user_id)
                 .outerjoin(linked_connection, UserS3Connection.s3_connection_id == linked_connection.id)
-                .outerjoin(owned_connection, owned_connection.owner_user_id == User.id)
+                .outerjoin(owned_connection, owned_connection.created_by_user_id == User.id)
             )
             query = query.filter(
                 or_(
@@ -589,8 +601,6 @@ class UsersService:
             if non_shared_ids:
                 non_shared_str = ", ".join(str(cid) for cid in non_shared_ids)
                 raise ValueError(f"Only shared S3 connections can be linked: {non_shared_str}")
-            owned_ids = {conn.id for conn in connections if conn.owner_user_id == user.id}
-            desired_ids -= owned_ids
         to_remove = existing_ids - desired_ids
         to_add = desired_ids - existing_ids
         if to_remove:

@@ -121,11 +121,10 @@ export default function S3ConnectionsPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const extractError = (err: unknown) => extractApiError(err, "Unexpected error");
-  const normalizeLinkedUserIds = useCallback((ids: number[] | undefined, ownerUserId?: number | null): number[] => {
-    const ownerId = ownerUserId ?? null;
+  const normalizeLinkedUserIds = useCallback((ids: number[] | undefined): number[] => {
     return Array.from(new Set((ids ?? []).map((id) => Number(id))))
       .filter((id) => Number.isFinite(id) && id > 0)
-      .filter((id) => ownerId == null || id !== ownerId);
+      .sort((a, b) => a - b);
   }, []);
   const resetEditUsersState = useCallback(() => {
     setEditTab("general");
@@ -279,7 +278,6 @@ export default function S3ConnectionsPage() {
     portalUsers.forEach((user) => map.set(user.id, user.email));
     return map;
   }, [portalUsers]);
-  const editOwnerUserId = editing?.owner_user_id ?? null;
   const linkedEditUsers = useMemo(
     () =>
       editLinkedUserIds.map((id) => ({
@@ -293,10 +291,9 @@ export default function S3ConnectionsPage() {
     const selectedIds = new Set(editLinkedUserIds);
     return portalUsers
       .filter((user) => !selectedIds.has(user.id))
-      .filter((user) => (editOwnerUserId == null ? true : user.id !== editOwnerUserId))
       .filter((user) => !query || user.email.toLowerCase().includes(query))
       .map((user) => ({ id: user.id, label: user.email }));
-  }, [editLinkedUserIds, editOwnerUserId, editUserSearch, portalUsers]);
+  }, [editLinkedUserIds, editUserSearch, portalUsers]);
   const visibleAvailableEditUsers = useMemo(() => availableEditUsers.slice(0, maxLinkOptions), [availableEditUsers, maxLinkOptions]);
   const editCredentialOwnerTypeOptions = useMemo(() => {
     const currentValue = editForm.credential_owner_type.trim();
@@ -454,7 +451,7 @@ export default function S3ConnectionsPage() {
       verify_tls: conn.verify_tls !== false,
     });
     setEditTab("general");
-    setEditLinkedUserIds(normalizeLinkedUserIds(conn.user_ids, conn.owner_user_id));
+    setEditLinkedUserIds(normalizeLinkedUserIds(conn.user_ids));
     setEditUserSearch("");
     setShowEditUserPanel(false);
     setEditUserSelections([]);
@@ -563,13 +560,10 @@ export default function S3ConnectionsPage() {
         credential_owner_identifier: editForm.credential_owner_identifier || null,
         ...endpointPayload,
       });
-      const targetIds = normalizeLinkedUserIds(editLinkedUserIds, editing.owner_user_id);
+      const targetIds = normalizeLinkedUserIds(editLinkedUserIds);
       try {
         const currentLinks = await listS3ConnectionUsers(connectionId);
-        const currentIds = normalizeLinkedUserIds(
-          currentLinks.map((link) => link.user_id),
-          editing.owner_user_id
-        );
+        const currentIds = normalizeLinkedUserIds(currentLinks.map((link) => link.user_id));
         const currentIdSet = new Set(currentIds);
         const targetIdSet = new Set(targetIds);
         const addIds = targetIds.filter((id) => !currentIdSet.has(id));
@@ -728,7 +722,7 @@ export default function S3ConnectionsPage() {
               type="text"
               value={filter}
               onChange={(e) => handleFilterChange(e.target.value)}
-              placeholder="Search name, endpoint, owner..."
+              placeholder="Search name, endpoint, created by..."
               className={`${toolbarCompactInputClasses} w-full sm:w-64`}
             />
           </div>
@@ -785,7 +779,7 @@ export default function S3ConnectionsPage() {
                     className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                   />
                 </th>
-                {["Name", "Endpoint", "Status", "Owner", "UI Users", "Actions"].map((label) => (
+                {["Name", "Endpoint", "Status", "Created by", "UI Users", "Actions"].map((label) => (
                   <th key={label} className="px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     {label}
                   </th>
@@ -833,7 +827,7 @@ export default function S3ConnectionsPage() {
                     </td>
                     <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                        {c.owner_email || c.owner_user_id}
+                        {c.created_by_email || c.created_by_user_id}
                       </span>
                     </td>
                     <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
@@ -1134,7 +1128,7 @@ export default function S3ConnectionsPage() {
                     Visibility: <span className="font-semibold">Shared</span>
                   </div>
                   <div className="ui-caption text-slate-500 dark:text-slate-300">
-                    {`Owner: ${editing.owner_email || editing.owner_user_id} (owner + linked users)`}
+                    {`Created by: ${editing.created_by_email || editing.created_by_user_id}`}
                   </div>
                 </div>
 
@@ -1441,9 +1435,7 @@ export default function S3ConnectionsPage() {
                           disabled={editUserSelections.length === 0}
                           onClick={() => {
                             if (editUserSelections.length === 0) return;
-                            setEditLinkedUserIds((prev) =>
-                              normalizeLinkedUserIds([...prev, ...editUserSelections], editOwnerUserId)
-                            );
+                            setEditLinkedUserIds((prev) => normalizeLinkedUserIds([...prev, ...editUserSelections]));
                             setEditUserSelections([]);
                             setEditUserSearch("");
                             setShowEditUserPanel(false);

@@ -341,9 +341,8 @@ def _resolve_connection_context(
     """Resolve an S3Connection context.
 
     Access is granted if:
-    - user is the owner, or
-    - the connection is public, or
-    - the user is explicitly linked.
+    - user is the creator for private connections, or
+    - the user is explicitly linked for shared connections.
     """
     conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
     if not conn:
@@ -356,7 +355,9 @@ def _resolve_connection_context(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This S3Connection cannot be used in manager workspace")
     if surface == "browser" and not bool(conn.access_browser):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This S3Connection cannot be used in browser workspace")
-    if not conn.is_public and conn.owner_user_id != user.id:
+    if not conn.is_shared and conn.created_by_user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this connection")
+    if conn.is_shared:
         link = (
             db.query(UserS3Connection)
             .filter(
@@ -365,7 +366,7 @@ def _resolve_connection_context(
             )
             .first()
         )
-        if not conn.is_shared or not link:
+        if not link:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this connection")
 
     # Keep a minimal usage signal for UX (recently used sorting / hints).
@@ -796,8 +797,7 @@ def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[
     connections = (
         db.query(S3Connection)
         .filter(
-            (S3Connection.is_public.is_(True))
-            | (S3Connection.owner_user_id == user.id)
+            ((S3Connection.is_shared.is_(False)) & (S3Connection.created_by_user_id == user.id))
             | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(user_connection_ids)))
         )
         .filter(S3Connection.is_active.is_(True))

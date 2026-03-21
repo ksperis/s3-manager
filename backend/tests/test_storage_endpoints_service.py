@@ -11,6 +11,8 @@ from app.db import (
     S3Connection,
     StorageEndpoint,
     StorageProvider,
+    User,
+    UserRole,
 )
 from app.models.storage_endpoint import StorageEndpointFeatureDetectionRequest, StorageEndpointUpdate
 from app.services.rgw_admin import RGWAdminError
@@ -312,13 +314,21 @@ def test_detect_features_warns_when_usage_log_endpoint_is_unavailable(db_session
 
 def test_delete_endpoint_blocks_when_references_exist(db_session):
     endpoint = _create_ceph_endpoint(db_session, name="ceph-delete-blocked")
+    creator = User(
+        email="endpoint-block-creator@example.com",
+        hashed_password="x",
+        role=UserRole.UI_USER.value,
+        is_active=True,
+    )
+    db_session.add(creator)
+    db_session.flush()
     db_session.add(
         S3Connection(
             name="linked-conn",
+            created_by_user_id=creator.id,
             storage_endpoint_id=endpoint.id,
             access_key_id="AKIA-LINKED",
             secret_access_key="SECRET-LINKED",
-            is_public=True,
         )
     )
     db_session.commit()

@@ -50,16 +50,14 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
     db_session.flush()
 
     owned_connection = S3Connection(
-        owner_user_id=owner.id,
+        created_by_user_id=owner.id,
         name="owned-private",
-        is_public=False,
         access_key_id="AKIA-OWNED",
         secret_access_key="SECRET-OWNED",
     )
     shared_connection = S3Connection(
-        owner_user_id=other.id,
+        created_by_user_id=other.id,
         name="other-private",
-        is_public=False,
         access_key_id="AKIA-OTHER",
         secret_access_key="SECRET-OTHER",
     )

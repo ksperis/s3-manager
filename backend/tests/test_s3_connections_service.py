@@ -37,9 +37,8 @@ def _endpoint(db_session) -> StorageEndpoint:
 
 def _create_row(db_session, **kwargs) -> S3Connection:
     row = S3Connection(
-        owner_user_id=kwargs.get("owner_user_id"),
+        created_by_user_id=kwargs["created_by_user_id"],
         name=kwargs.get("name", "conn"),
-        is_public=kwargs.get("is_public", False),
         is_shared=kwargs.get("is_shared", False),
         is_active=kwargs.get("is_active", True),
         access_manager=kwargs.get("access_manager", False),
@@ -57,29 +56,28 @@ def _create_row(db_session, **kwargs) -> S3Connection:
     return row
 
 
-def test_list_for_user_and_list_owned_private_filters_visibility(db_session):
+def test_list_for_user_and_list_owned_private_filters_scopes(db_session):
     owner = _user(db_session, "owner@example.test")
     shared_user = _user(db_session, "shared@example.test")
     other = _user(db_session, "other@example.test")
 
-    public_row = _create_row(db_session, owner_user_id=None, name="public", is_public=True)
-    owned_private = _create_row(db_session, owner_user_id=owner.id, name="owned-private")
-    shared_row = _create_row(db_session, owner_user_id=other.id, name="shared", is_shared=True)
-    _create_row(db_session, owner_user_id=other.id, name="hidden-private")
-    _create_row(db_session, owner_user_id=owner.id, name="temporary-owned", is_temporary=True)
+    owned_private = _create_row(db_session, created_by_user_id=owner.id, name="owned-private")
+    shared_row = _create_row(db_session, created_by_user_id=other.id, name="shared", is_shared=True)
+    _create_row(db_session, created_by_user_id=other.id, name="hidden-private")
+    _create_row(db_session, created_by_user_id=owner.id, name="temporary-owned", is_temporary=True)
     db_session.add(UserS3Connection(user_id=shared_user.id, s3_connection_id=shared_row.id))
     db_session.commit()
 
     service = S3ConnectionsService(db_session)
     owner_visible = [item.name for item in service.list_for_user(owner.id)]
-    assert owner_visible == ["owned-private", "public"]
+    assert owner_visible == ["owned-private"]
 
     shared_visible = [item.name for item in service.list_for_user(shared_user.id)]
-    assert shared_visible == ["public", "shared"]
+    assert shared_visible == ["shared"]
 
     owned_private_list = [item.name for item in service.list_owned_private(owner.id)]
     assert owned_private_list == ["owned-private"]
-    assert public_row.name in owner_visible
+    assert owned_private.id > 0
 
 
 def test_list_for_user_and_owned_private_are_sorted_case_insensitive(db_session):
@@ -87,26 +85,21 @@ def test_list_for_user_and_owned_private_are_sorted_case_insensitive(db_session)
     shared_user = _user(db_session, "shared-sort@example.test")
     other = _user(db_session, "other-sort@example.test")
 
-    lower = _create_row(db_session, owner_user_id=owner.id, name="alpha")
-    mixed = _create_row(db_session, owner_user_id=owner.id, name="Beta")
-    public_1 = _create_row(db_session, owner_user_id=None, name="same", is_public=True)
-    public_2 = _create_row(db_session, owner_user_id=None, name="same", is_public=True)
-    shared = _create_row(db_session, owner_user_id=other.id, name="Zulu", is_shared=True)
+    lower = _create_row(db_session, created_by_user_id=owner.id, name="alpha")
+    mixed = _create_row(db_session, created_by_user_id=owner.id, name="Beta")
+    shared = _create_row(db_session, created_by_user_id=other.id, name="Zulu", is_shared=True)
     db_session.add(UserS3Connection(user_id=shared_user.id, s3_connection_id=shared.id))
     db_session.commit()
 
     service = S3ConnectionsService(db_session)
 
-    owner_visible = service.list_for_user(owner.id)
-    owner_visible_names = [item.name for item in owner_visible]
-    owner_visible_same_ids = [item.id for item in owner_visible if item.name == "same"]
+    owner_visible_names = [item.name for item in service.list_for_user(owner.id)]
     owned_private_names = [item.name for item in service.list_owned_private(owner.id)]
     shared_visible_names = [item.name for item in service.list_for_user(shared_user.id)]
 
-    assert owner_visible_names == ["alpha", "Beta", "same", "same"]
-    assert owner_visible_same_ids == sorted([public_1.id, public_2.id])
+    assert owner_visible_names == ["alpha", "Beta"]
     assert owned_private_names == ["alpha", "Beta"]
-    assert shared_visible_names == ["same", "same", "Zulu"]
+    assert shared_visible_names == ["Zulu"]
     assert lower.id < mixed.id
 
 
@@ -114,9 +107,9 @@ def test_get_owned_and_get_visible_with_access_control(db_session):
     owner = _user(db_session, "owner2@example.test")
     reader = _user(db_session, "reader@example.test")
     other = _user(db_session, "other2@example.test")
-    private_row = _create_row(db_session, owner_user_id=owner.id, name="private")
-    shared_row = _create_row(db_session, owner_user_id=owner.id, name="shared", is_shared=True)
-    temporary_row = _create_row(db_session, owner_user_id=owner.id, name="tmp", is_temporary=True)
+    private_row = _create_row(db_session, created_by_user_id=owner.id, name="private")
+    shared_row = _create_row(db_session, created_by_user_id=owner.id, name="shared", is_shared=True)
+    temporary_row = _create_row(db_session, created_by_user_id=owner.id, name="tmp", is_temporary=True)
     db_session.add(UserS3Connection(user_id=reader.id, s3_connection_id=shared_row.id))
     db_session.commit()
 
@@ -128,6 +121,8 @@ def test_get_owned_and_get_visible_with_access_control(db_session):
         service.get_owned(other.id, private_row.id)
     with pytest.raises(KeyError):
         service.get_visible(other.id, private_row.id)
+    with pytest.raises(KeyError):
+        service.get_visible(owner.id, shared_row.id)
     with pytest.raises(KeyError):
         service.get_visible(owner.id, temporary_row.id)
 
@@ -147,7 +142,6 @@ def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session
         user.id,
         S3ConnectionCreate(
             name="custom-conn",
-            visibility="private",
             endpoint_url="https://custom.example.test/",
             region="us-east-1",
             force_path_style=True,
@@ -159,46 +153,41 @@ def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session
             provider_hint="other",
         ),
     )
-    assert custom.visibility == "private"
+    assert custom.is_shared is False
     assert custom.endpoint_url == "https://custom.example.test"
     assert custom.force_path_style is True
     assert custom.verify_tls is False
     assert custom.capabilities["can_manage_iam"] is True
     assert custom.access_key_id.startswith("AKIA***")
 
-    public_conn = service.create(
+    preset_conn = service.create(
         user.id,
         S3ConnectionCreate(
-            name="public-conn",
-            visibility="public",
+            name="preset-conn",
             storage_endpoint_id=endpoint.id,
-            access_key_id="AKIA-PUBLIC-9876",
-            secret_access_key="SECRET-PUBLIC",
+            access_key_id="AKIA-PRESET-9876",
+            secret_access_key="SECRET-PRESET",
             access_manager=False,
             access_browser=True,
         ),
     )
-    assert public_conn.visibility == "public"
-    assert public_conn.storage_endpoint_id == endpoint.id
-    assert public_conn.endpoint_url == endpoint.endpoint_url
-    assert public_conn.force_path_style is False
-    assert public_conn.verify_tls is True
+    assert preset_conn.is_shared is False
+    assert preset_conn.storage_endpoint_id == endpoint.id
+    assert preset_conn.endpoint_url == endpoint.endpoint_url
+    assert preset_conn.force_path_style is False
+    assert preset_conn.verify_tls is True
 
 
-def test_update_connection_visibility_transitions_and_link_cleanup(db_session, monkeypatch):
+def test_update_connection_updates_private_connection(db_session, monkeypatch):
     owner = _user(db_session, "owner3@example.test")
-    consumer = _user(db_session, "consumer@example.test")
     row = _create_row(
         db_session,
-        owner_user_id=owner.id,
-        name="shared-conn",
-        is_shared=True,
+        created_by_user_id=owner.id,
+        name="private-conn",
         custom_endpoint_config='{"endpoint_url":"https://old.example.test","region":"eu-west-3","force_path_style":false,"verify_tls":true}',
         access_manager=False,
         access_browser=True,
     )
-    db_session.add(UserS3Connection(user_id=consumer.id, s3_connection_id=row.id))
-    db_session.commit()
     service = S3ConnectionsService(db_session)
 
     refreshed: list[int] = []
@@ -208,7 +197,6 @@ def test_update_connection_visibility_transitions_and_link_cleanup(db_session, m
         owner.id,
         row.id,
         S3ConnectionUpdate(
-            visibility="private",
             endpoint_url="https://new.example.test/",
             region="us-east-2",
             verify_tls=False,
@@ -221,7 +209,6 @@ def test_update_connection_visibility_transitions_and_link_cleanup(db_session, m
             credential_owner_identifier="user-42",
         ),
     )
-    assert updated.visibility == "private"
     assert updated.endpoint_url == "https://new.example.test"
     assert updated.region == "us-east-2"
     assert updated.verify_tls is False
@@ -230,17 +217,10 @@ def test_update_connection_visibility_transitions_and_link_cleanup(db_session, m
     assert updated.credential_owner_type == "iam_user"
     assert refreshed == [row.id]
 
-    link_count = (
-        db_session.query(UserS3Connection)
-        .filter(UserS3Connection.s3_connection_id == row.id)
-        .count()
-    )
-    assert link_count == 0
-
 
 def test_update_connection_rejects_invalid_access_flags(db_session):
     owner = _user(db_session, "owner4@example.test")
-    row = _create_row(db_session, owner_user_id=owner.id, name="invalid-flags")
+    row = _create_row(db_session, created_by_user_id=owner.id, name="invalid-flags")
     service = S3ConnectionsService(db_session)
 
     with pytest.raises(ValueError, match="At least one access flag"):
@@ -249,7 +229,7 @@ def test_update_connection_rejects_invalid_access_flags(db_session):
 
 def test_update_connection_supports_active_flag_and_keeps_inactive_visible_in_management_lists(db_session):
     owner = _user(db_session, "owner-active-flag@example.test")
-    row = _create_row(db_session, owner_user_id=owner.id, name="active-flag-conn", is_active=True)
+    row = _create_row(db_session, created_by_user_id=owner.id, name="active-flag-conn", is_active=True)
     service = S3ConnectionsService(db_session)
 
     updated = service.update(owner.id, row.id, S3ConnectionUpdate(is_active=False))
@@ -266,7 +246,7 @@ def test_touch_last_used_set_get_capabilities_and_delete(db_session):
     owner = _user(db_session, "owner5@example.test")
     row = _create_row(
         db_session,
-        owner_user_id=owner.id,
+        created_by_user_id=owner.id,
         name="caps-conn",
         capabilities_json='{"can_manage_iam": false, "x": 1}',
     )
@@ -297,7 +277,7 @@ def test_create_temporary_and_mask_access_key(db_session):
     service = S3ConnectionsService(db_session)
 
     row = service.create_temporary(
-        owner_user_id=owner.id,
+        created_by_user_id=owner.id,
         name="temp-conn",
         storage_endpoint_id=endpoint.id,
         access_key_id="AKIA-TEMP-KEY-9999",

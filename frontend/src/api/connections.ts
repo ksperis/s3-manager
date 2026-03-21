@@ -8,10 +8,9 @@ export type S3Connection = {
   id: number;
   name: string;
   storage_endpoint_id?: number | null;
-  is_public?: boolean | null;
+  created_by_user_id: number;
   is_shared?: boolean | null;
   is_active?: boolean | null;
-  visibility?: "private" | "shared" | "public" | null;
   access_manager?: boolean | null;
   access_browser?: boolean | null;
   credential_owner_type?: string | null;
@@ -30,11 +29,8 @@ export type S3Connection = {
 
 export type CreateConnectionPayload = {
   name: string;
-  visibility?: "private" | "shared" | "public" | null;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
-  is_public?: boolean | null;
-  is_shared?: boolean | null;
   is_active?: boolean | null;
   access_manager?: boolean | null;
   access_browser?: boolean | null;
@@ -50,11 +46,8 @@ export type CreateConnectionPayload = {
 
 export type UpdateConnectionPayload = {
   name?: string | null;
-  visibility?: "private" | "shared" | "public" | null;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
-  is_public?: boolean | null;
-  is_shared?: boolean | null;
   is_active?: boolean | null;
   access_manager?: boolean | null;
   access_browser?: boolean | null;

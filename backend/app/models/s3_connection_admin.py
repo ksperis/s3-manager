@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,10 +16,8 @@ class S3ConnectionAdminItem(BaseModel):
     name: str
     storage_endpoint_id: Optional[int] = None
     endpoint_url: str
-    is_public: bool = False
     is_shared: bool = False
     is_active: bool = True
-    visibility: Literal["shared"] = "shared"
     access_manager: bool = False
     access_browser: bool = True
     credential_owner_type: Optional[str] = None
@@ -29,8 +27,8 @@ class S3ConnectionAdminItem(BaseModel):
     force_path_style: bool = False
     verify_tls: bool = True
     capabilities: dict[str, Any] = Field(default_factory=dict)
-    owner_user_id: Optional[int] = None
-    owner_email: Optional[str] = None
+    created_by_user_id: int
+    created_by_email: Optional[str] = None
     user_count: int = 0
     user_ids: list[int] = Field(default_factory=list)
     last_used_at: Optional[datetime] = None
@@ -41,11 +39,9 @@ class S3ConnectionAdminItem(BaseModel):
 class S3ConnectionSummary(BaseModel):
     id: int
     name: str
-    owner_user_id: Optional[int] = None
-    is_public: bool = False
+    created_by_user_id: int
     is_shared: bool = False
     is_active: bool = True
-    visibility: Literal["shared"] = "shared"
 
 
 class S3ConnectionAdminCreate(BaseModel):

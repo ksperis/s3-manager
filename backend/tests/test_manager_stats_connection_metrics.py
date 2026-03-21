@@ -47,8 +47,7 @@ def test_manager_stats_overview_allows_connection_with_resolved_identity(db_sess
     )
     endpoint = _ceph_endpoint("ceph-stats-overview")
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         name="metrics-connection",
         access_manager=True,
         access_browser=True,
@@ -93,8 +92,7 @@ def test_manager_stats_traffic_allows_connection_with_resolved_identity(db_sessi
     )
     endpoint = _ceph_endpoint("ceph-stats-traffic")
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         name="traffic-connection",
         access_manager=True,
         access_browser=True,
@@ -162,8 +160,7 @@ def test_manager_stats_dependency_rejects_connection_without_resolved_identity(d
     )
     endpoint = _ceph_endpoint("ceph-stats-identity-ko")
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         name="identity-ko-connection",
         access_manager=True,
         access_browser=True,

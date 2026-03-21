@@ -10,10 +10,8 @@ export type S3ConnectionAdminItem = {
   name: string;
   storage_endpoint_id?: number | null;
   endpoint_url: string;
-  is_public?: boolean | null;
   is_shared?: boolean | null;
   is_active?: boolean | null;
-  visibility?: "shared" | null;
   access_manager?: boolean | null;
   access_browser?: boolean | null;
   capabilities?: Record<string, unknown> | null;
@@ -23,8 +21,8 @@ export type S3ConnectionAdminItem = {
   region?: string | null;
   force_path_style?: boolean | null;
   verify_tls?: boolean | null;
-  owner_user_id?: number | null;
-  owner_email?: string | null;
+  created_by_user_id: number;
+  created_by_email?: string | null;
   user_count: number;
   user_ids?: number[];
   last_used_at?: string | null;
@@ -37,11 +35,9 @@ export type PaginatedS3ConnectionsResponse = PaginatedResponse<S3ConnectionAdmin
 export type S3ConnectionSummary = {
   id: number;
   name: string;
-  owner_user_id?: number | null;
-  is_public?: boolean | null;
+  created_by_user_id: number;
   is_shared?: boolean | null;
   is_active?: boolean | null;
-  visibility?: "shared" | null;
 };
 
 export type ListS3ConnectionsParams = {

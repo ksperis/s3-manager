@@ -57,7 +57,7 @@ def _mask_access_key(value: str) -> str:
 
 def _ensure_editable(conn: S3Connection, current_user: User) -> None:
     _ = current_user
-    if conn.is_temporary or not conn.is_shared or conn.is_public:
+    if conn.is_temporary or not conn.is_shared:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
 
 
@@ -96,7 +96,7 @@ def _connection_iam_capable(conn: S3Connection) -> bool:
 def _to_admin_item(
     conn: S3Connection,
     *,
-    owner_email: Optional[str],
+    created_by_email: Optional[str],
     user_count: int,
     user_ids: list[int],
 ) -> S3ConnectionAdminItem:
@@ -108,10 +108,8 @@ def _to_admin_item(
         name=conn.name,
         storage_endpoint_id=conn.storage_endpoint_id,
         endpoint_url=details.endpoint_url or "",
-        is_public=False,
         is_shared=True,
         is_active=bool(conn.is_active),
-        visibility="shared",
         access_manager=bool(conn.access_manager),
         access_browser=bool(conn.access_browser),
         credential_owner_type=conn.credential_owner_type,
@@ -120,8 +118,8 @@ def _to_admin_item(
         region=details.region,
         force_path_style=details.force_path_style,
         verify_tls=details.verify_tls,
-        owner_user_id=conn.owner_user_id,
-        owner_email=owner_email,
+        created_by_user_id=conn.created_by_user_id,
+        created_by_email=created_by_email,
         user_count=int(user_count),
         user_ids=sorted(user_ids),
         last_used_at=conn.last_used_at,
@@ -147,9 +145,9 @@ def list_s3_connections(
         db.query(
             S3Connection,
             func.count(UserS3Connection.id).label("user_count"),
-            func.max(User.email).label("owner_email"),
+            func.max(User.email).label("created_by_email"),
         )
-        .outerjoin(User, User.id == S3Connection.owner_user_id)
+        .outerjoin(User, User.id == S3Connection.created_by_user_id)
         .outerjoin(StorageEndpoint, StorageEndpoint.id == S3Connection.storage_endpoint_id)
         .outerjoin(UserS3Connection, UserS3Connection.s3_connection_id == S3Connection.id)
         .outerjoin(linked_user, linked_user.id == UserS3Connection.user_id)
@@ -158,7 +156,6 @@ def list_s3_connections(
     q = q.filter(
         S3Connection.is_temporary.is_(False),
         S3Connection.is_shared.is_(True),
-        S3Connection.is_public.is_(False),
     )
     if search:
         term = f"%{search.strip()}%"
@@ -209,11 +206,11 @@ def list_s3_connections(
         for conn_id, user_id in link_rows:
             user_ids_by_connection.setdefault(conn_id, []).append(user_id)
     items: list[S3ConnectionAdminItem] = []
-    for conn, user_count, owner_email in rows:
+    for conn, user_count, created_by_email in rows:
         items.append(
             _to_admin_item(
                 conn,
-                owner_email=owner_email,
+                created_by_email=created_by_email,
                 user_count=int(user_count or 0),
                 user_ids=user_ids_by_connection.get(conn.id, []),
             )
@@ -232,15 +229,13 @@ def list_s3_connections_minimal(
         db.query(
             S3Connection.id,
             S3Connection.name,
-            S3Connection.owner_user_id,
-            S3Connection.is_public,
+            S3Connection.created_by_user_id,
             S3Connection.is_shared,
             S3Connection.is_active,
         )
         .filter(
             S3Connection.is_temporary.is_(False),
             S3Connection.is_shared.is_(True),
-            S3Connection.is_public.is_(False),
         )
         .order_by(*s3_connection_name_order_by(S3Connection))
         .all()
@@ -249,11 +244,9 @@ def list_s3_connections_minimal(
         S3ConnectionSummary(
             id=row[0],
             name=row[1],
-            owner_user_id=row[2],
-            is_public=False,
+            created_by_user_id=row[2],
             is_shared=True,
-            is_active=bool(row[5]),
-            visibility="shared",
+            is_active=bool(row[4]),
         )
         for row in rows
     ]
@@ -308,11 +301,10 @@ def create_s3_connection(
         access_browser=payload.access_browser,
     )
     conn = S3Connection(
-        owner_user_id=current_user.id,
+        created_by_user_id=current_user.id,
         name=payload.name,
         storage_endpoint_id=storage_endpoint_id,
         custom_endpoint_config=custom_endpoint_config,
-        is_public=False,
         is_shared=True,
         is_active=True,
         access_manager=access_manager,
@@ -345,7 +337,8 @@ def create_s3_connection(
                 "name": conn.name,
                 "endpoint_url": details.endpoint_url,
                 "provider_hint": details.provider,
-                "visibility": "shared",
+                "is_shared": True,
+                "created_by_user_id": conn.created_by_user_id,
                 "access_manager": bool(conn.access_manager),
                 "access_browser": bool(conn.access_browser),
                 "can_manage_iam": _connection_iam_capable(conn),
@@ -354,7 +347,7 @@ def create_s3_connection(
         )
     return _to_admin_item(
         conn,
-        owner_email=current_user.email,
+        created_by_email=current_user.email,
         user_count=0,
         user_ids=[],
     )
@@ -441,10 +434,10 @@ def update_s3_connection(
         entity_id=str(conn.id),
         metadata=payload.model_dump(exclude_none=True),
     )
-    owner_email = db.query(User.email).filter(User.id == conn.owner_user_id).scalar()
+    created_by_email = db.query(User.email).filter(User.id == conn.created_by_user_id).scalar()
     user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
     user_ids = _linked_user_ids(db, conn.id)
-    return _to_admin_item(conn, owner_email=owner_email, user_count=int(user_count), user_ids=user_ids)
+    return _to_admin_item(conn, created_by_email=created_by_email, user_count=int(user_count), user_ids=user_ids)
 
 
 @router.put("/{connection_id}/credentials", response_model=S3ConnectionAdminItem)
@@ -473,10 +466,10 @@ def rotate_s3_connection_credentials(
         entity_id=str(conn.id),
         metadata={"access_key_id": _mask_access_key(payload.access_key_id)},
     )
-    owner_email = db.query(User.email).filter(User.id == conn.owner_user_id).scalar()
+    created_by_email = db.query(User.email).filter(User.id == conn.created_by_user_id).scalar()
     user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
     user_ids = _linked_user_ids(db, conn.id)
-    return _to_admin_item(conn, owner_email=owner_email, user_count=int(user_count), user_ids=user_ids)
+    return _to_admin_item(conn, created_by_email=created_by_email, user_count=int(user_count), user_ids=user_ids)
 
 
 @router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -550,8 +543,6 @@ def add_connection_user(
     user = db.query(User).filter(User.id == payload.user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if user.id == conn.owner_user_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Owner already has access")
     existing = (
         db.query(UserS3Connection)
         .filter(UserS3Connection.user_id == payload.user_id, UserS3Connection.s3_connection_id == connection_id)

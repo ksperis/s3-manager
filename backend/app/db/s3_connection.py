@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
@@ -16,19 +16,32 @@ from .base import Base
 class S3Connection(Base):
     __tablename__ = "s3_connections"
     __table_args__ = (
-        UniqueConstraint("owner_user_id", "name", name="uq_s3_connections_owner_name"),
+        Index(
+            "uq_s3_connections_private_creator_name",
+            "created_by_user_id",
+            "name",
+            unique=True,
+            sqlite_where=text("is_shared = 0"),
+            postgresql_where=text("is_shared = false"),
+        ),
+        Index(
+            "uq_s3_connections_shared_name",
+            "name",
+            unique=True,
+            sqlite_where=text("is_shared = 1"),
+            postgresql_where=text("is_shared = true"),
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # Owner (creator). Public connections have no owner.
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    # Immutable creator identity used for traceability.
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     # Friendly name (e.g. "AWS-prod-admin")
     name = Column(String, nullable=False)
 
     # Visibility
-    is_public = Column(Boolean, nullable=False, default=False, server_default="0")
     is_shared = Column(Boolean, nullable=False, default=False, server_default="0")
     is_active = Column(Boolean, nullable=False, default=True, server_default="1")
     access_manager = Column(Boolean, nullable=False, default=False, server_default="0")
@@ -56,19 +69,19 @@ class S3Connection(Base):
     updated_at = Column(DateTime, default=utcnow, nullable=False)
     last_used_at = Column(DateTime, nullable=True)
 
-    owner = relationship("User", back_populates="s3_connections", overlaps="s3_connections")
+    created_by = relationship("User", back_populates="s3_connections", overlaps="s3_connections")
     storage_endpoint = relationship("StorageEndpoint")
 
     users = relationship(
         "User",
         secondary="user_s3_connections",
         back_populates="shared_s3_connections",
-        overlaps="user_links,connection_links,owner,s3_connection_links",
+        overlaps="user_links,connection_links,created_by,s3_connection_links",
     )
     user_links = relationship(
         "UserS3Connection",
         back_populates="connection",
-        overlaps="users,shared_s3_connections,connection_links,owner",
+        overlaps="users,shared_s3_connections,connection_links,created_by",
         cascade="all, delete-orphan",
     )
 
@@ -94,5 +107,5 @@ class UserS3Connection(Base):
     connection = relationship(
         "S3Connection",
         back_populates="user_links",
-        overlaps="users,shared_s3_connections,owner",
+        overlaps="users,shared_s3_connections,created_by",
     )

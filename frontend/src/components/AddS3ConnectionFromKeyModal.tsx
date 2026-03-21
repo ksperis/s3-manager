@@ -240,7 +240,6 @@ export default function AddS3ConnectionFromKeyModal({
     try {
       await createConnection({
         name,
-        visibility: "private",
         storage_endpoint_id: resolvedStorageEndpointId,
         endpoint_url: resolvedStorageEndpointId ? undefined : resolvedEndpointUrl,
         region: !resolvedStorageEndpointId ? form.region.trim() || null : undefined,

@@ -15,7 +15,6 @@ from app.utils.s3_connection_capabilities import (
     parse_s3_connection_capabilities,
     s3_connection_can_manage_iam,
 )
-from app.utils.s3_connection_visibility import normalize_visibility, visibility_from_flags
 from app.utils.s3_connection_endpoint import (
     build_custom_endpoint_config,
     parse_custom_endpoint_config,
@@ -37,9 +36,8 @@ class S3ConnectionsService:
             .outerjoin(UserS3Connection, UserS3Connection.s3_connection_id == DBS3Connection.id)
             .filter(
                 DBS3Connection.is_temporary.is_(False),
-                (DBS3Connection.is_public.is_(True))
-                | (DBS3Connection.owner_user_id == user_id)
-                | ((DBS3Connection.is_shared.is_(True)) & (UserS3Connection.user_id == user_id))
+                ((DBS3Connection.is_shared.is_(False)) & (DBS3Connection.created_by_user_id == user_id))
+                | ((DBS3Connection.is_shared.is_(True)) & (UserS3Connection.user_id == user_id)),
             )
             .distinct()
             .order_by(*s3_connection_name_order_by(DBS3Connection))
@@ -48,12 +46,11 @@ class S3ConnectionsService:
         return [self._to_model(r) for r in rows]
 
     def list_owned_private(self, user_id: int) -> list[S3Connection]:
-        """List private connections managed by the authenticated owner."""
+        """List private connections managed by the authenticated creator."""
         rows = (
             self.db.query(DBS3Connection)
             .filter(
-                DBS3Connection.owner_user_id == user_id,
-                DBS3Connection.is_public.is_(False),
+                DBS3Connection.created_by_user_id == user_id,
                 DBS3Connection.is_shared.is_(False),
                 DBS3Connection.is_temporary.is_(False),
             )
@@ -63,11 +60,7 @@ class S3ConnectionsService:
         return [self._to_model(r) for r in rows]
 
     def touch_last_used(self, user_id: int, connection_id: int) -> None:
-        """Update last_used_at for UX/audit purposes.
-
-        This is intentionally lightweight and does not record an audit event
-        by itself (audit is handled at router/service call sites).
-        """
+        """Update last_used_at for UX/audit purposes."""
         try:
             row = self.get_visible(user_id, connection_id)
         except KeyError:
@@ -90,10 +83,12 @@ class S3ConnectionsService:
     def get_owned(self, user_id: int, connection_id: int) -> DBS3Connection:
         row = (
             self.db.query(DBS3Connection)
-            .filter(DBS3Connection.owner_user_id == user_id, DBS3Connection.id == connection_id)
+            .filter(DBS3Connection.created_by_user_id == user_id, DBS3Connection.id == connection_id)
             .first()
         )
         if not row or row.is_temporary:
+            raise KeyError("S3Connection not found")
+        if row.is_shared:
             raise KeyError("S3Connection not found")
         return row
 
@@ -101,7 +96,7 @@ class S3ConnectionsService:
         row = self.db.query(DBS3Connection).filter(DBS3Connection.id == connection_id).first()
         if not row or row.is_temporary:
             raise KeyError("S3Connection not found")
-        if not row.is_public and row.owner_user_id != user_id:
+        if row.is_shared:
             link = (
                 self.db.query(UserS3Connection)
                 .filter(
@@ -110,14 +105,17 @@ class S3ConnectionsService:
                 )
                 .first()
             )
-            if not row.is_shared or not link:
+            if not link:
                 raise KeyError("S3Connection not found")
+            return row
+        if row.created_by_user_id != user_id:
+            raise KeyError("S3Connection not found")
         return row
 
     def create_temporary(
         self,
         *,
-        owner_user_id: int,
+        created_by_user_id: int,
         name: str,
         storage_endpoint_id: int,
         access_key_id: str,
@@ -129,11 +127,11 @@ class S3ConnectionsService:
     ) -> DBS3Connection:
         now = utcnow()
         row = DBS3Connection(
-            owner_user_id=owner_user_id,
+            created_by_user_id=created_by_user_id,
             name=name,
             storage_endpoint_id=storage_endpoint_id,
             custom_endpoint_config=None,
-            is_public=False,
+            is_shared=False,
             access_manager=False,
             access_browser=True,
             is_temporary=True,
@@ -154,14 +152,6 @@ class S3ConnectionsService:
         return row
 
     def create(self, user_id: int, payload: S3ConnectionCreate) -> S3Connection:
-        visibility = normalize_visibility(
-            visibility=payload.visibility,
-            is_public=payload.is_public,
-            is_shared=payload.is_shared,
-            default="private",
-        )
-        is_public = visibility == "public"
-        is_shared = visibility == "shared"
         endpoint_url = (payload.endpoint_url or "").strip()
         region = payload.region
         force_path_style = bool(payload.force_path_style)
@@ -186,12 +176,11 @@ class S3ConnectionsService:
             access_browser=payload.access_browser,
         )
         row = DBS3Connection(
-            owner_user_id=None if is_public else user_id,
+            created_by_user_id=user_id,
             name=payload.name,
             storage_endpoint_id=payload.storage_endpoint_id,
             custom_endpoint_config=custom_endpoint_config,
-            is_public=is_public,
-            is_shared=is_shared,
+            is_shared=False,
             is_active=True,
             access_manager=access_manager,
             access_browser=access_browser,
@@ -216,25 +205,6 @@ class S3ConnectionsService:
         should_probe_iam = False
         if payload.name is not None:
             row.name = payload.name
-        if {"visibility", "is_public", "is_shared"} & set(payload_data.keys()):
-            visibility = normalize_visibility(
-                visibility=payload.visibility,
-                is_public=payload.is_public if "is_public" in payload_data else None,
-                is_shared=payload.is_shared if "is_shared" in payload_data else None,
-                default=visibility_from_flags(is_public=bool(row.is_public), is_shared=bool(row.is_shared)),
-            )
-            row.is_public = visibility == "public"
-            row.is_shared = visibility == "shared"
-            if row.is_public:
-                row.owner_user_id = None
-            elif row.owner_user_id is None:
-                row.owner_user_id = user_id
-            if visibility != "shared":
-                (
-                    self.db.query(UserS3Connection)
-                    .filter(UserS3Connection.s3_connection_id == row.id)
-                    .delete(synchronize_session=False)
-                )
         if "is_active" in payload_data:
             row.is_active = bool(payload.is_active)
         if "storage_endpoint_id" in payload_data:
@@ -337,10 +307,9 @@ class S3ConnectionsService:
             name=row.name,
             provider_hint=details.provider,
             storage_endpoint_id=row.storage_endpoint_id,
-            is_public=bool(row.is_public),
+            created_by_user_id=row.created_by_user_id,
             is_shared=bool(row.is_shared),
             is_active=bool(row.is_active),
-            visibility=visibility_from_flags(is_public=bool(row.is_public), is_shared=bool(row.is_shared)),
             access_manager=bool(row.access_manager),
             access_browser=bool(row.access_browser),
             credential_owner_type=row.credential_owner_type,

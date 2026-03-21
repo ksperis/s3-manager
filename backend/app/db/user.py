@@ -61,9 +61,9 @@ class User(Base):
     # User-scoped S3 connections (credential-first).
     s3_connections = relationship(
         "S3Connection",
-        back_populates="owner",
+        back_populates="created_by",
         cascade="all, delete-orphan",
-        overlaps="owner",
+        overlaps="created_by",
     )
 
     # Connections explicitly shared with the user (UI access control).
@@ -71,7 +71,7 @@ class User(Base):
         "S3Connection",
         secondary="user_s3_connections",
         back_populates="users",
-        overlaps="s3_connections,owner,user_links,connection_links",
+        overlaps="s3_connections,created_by,user_links,connection_links",
     )
     s3_connection_links = relationship(
         "UserS3Connection",

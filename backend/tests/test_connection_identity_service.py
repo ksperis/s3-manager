@@ -44,6 +44,7 @@ def _connection(
 ) -> S3Connection:
     return S3Connection(
         id=42,
+        created_by_user_id=1,
         name="conn",
         storage_endpoint_id=endpoint.id,
         storage_endpoint=endpoint,

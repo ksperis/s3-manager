@@ -825,19 +825,10 @@ export default function UsersPage() {
     return map;
   }, [s3Users]);
   const s3ConnectionOptions = useMemo(
-    () =>
-      s3Connections.map((conn) => ({
-        id: conn.id,
-        label: conn.name,
-        owner_user_id: conn.owner_user_id ?? null,
-        visibility: conn.visibility ?? (conn.is_shared ? "shared" : conn.is_public ? "public" : "private"),
-      })),
+    () => s3Connections.filter((conn) => conn.is_shared !== false).map((conn) => ({ id: conn.id, label: conn.name })),
     [s3Connections]
   );
-  const s3SharedConnectionOptions = useMemo(
-    () => s3ConnectionOptions.filter((conn) => conn.visibility === "shared"),
-    [s3ConnectionOptions]
-  );
+  const s3SharedConnectionOptions = s3ConnectionOptions;
   const s3ConnectionLabelById = useMemo(() => {
     const map = new Map<number, string>();
     s3Connections.forEach((conn) => map.set(conn.id, conn.name));
@@ -881,10 +872,9 @@ export default function UsersPage() {
     return s3SharedConnectionOptions.filter(
       (opt) =>
         !editSelectedS3Connections.includes(opt.id) &&
-        (!editingUser || opt.owner_user_id !== editingUser.id) &&
         (!query || opt.label.toLowerCase().includes(query))
     );
-  }, [s3SharedConnectionOptions, editSelectedS3Connections, editConnectionSearch, editingUser]);
+  }, [s3SharedConnectionOptions, editSelectedS3Connections, editConnectionSearch]);
   const limitedOptions = <T,>(options: T[]) => options.slice(0, MAX_VISIBLE_OPTIONS);
   const visibleCreateS3Accounts = limitedOptions(availableCreateS3Accounts);
   const visibleEditS3Accounts = limitedOptions(availableEditS3Accounts);
@@ -942,23 +932,9 @@ export default function UsersPage() {
               id,
               label: s3ConnectionLabelById.get(Number(id)) ?? `Connection #${id}`,
             }));
-      const linkedIdSet = new Set(linkedIds);
-      const ownedConnections = s3Connections.filter((conn) => conn.owner_user_id === user.id);
-      const ownedLabels = ownedConnections
-        .filter((conn) => !linkedIdSet.has(conn.id))
-        .map((conn) => ({ id: conn.id, label: conn.name || `Connection #${conn.id}` }));
-      if (linkedLabels.length === 0 && ownedLabels.length === 0) return null;
+      if (linkedLabels.length === 0) return null;
       return (
         <div className="flex flex-wrap gap-2">
-          {ownedLabels.map((entry) => (
-            <span
-              key={`owned-${entry.id}`}
-              className="inline-flex items-center gap-2 rounded-full bg-sky-100 px-2 py-0.5 ui-caption font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-100"
-              title="Owner"
-            >
-              {entry.label}
-            </span>
-          ))}
           {linkedLabels.map((entry) => (
             <span
               key={`linked-${entry.id}`}
@@ -970,7 +946,7 @@ export default function UsersPage() {
         </div>
       );
     },
-    [s3ConnectionLabelById, s3Connections]
+    [s3ConnectionLabelById]
   );
   const editRoleValue = normalizeUiRoleValue(editForm.role ?? editingUser?.role ?? "ui_user");
   const createRoleValue = normalizeUiRoleValue(form.role);
@@ -1025,8 +1001,7 @@ export default function UsersPage() {
   const renderAssociationSummary = (user: User) => {
     const hasAccounts = Boolean(user.accounts && user.accounts.length > 0);
     const hasS3Users = Boolean(user.s3_users && user.s3_users.length > 0);
-    const hasOwnedConnections = s3Connections.some((conn) => conn.owner_user_id === user.id);
-    const hasConnections = Boolean(user.s3_connections && user.s3_connections.length > 0) || hasOwnedConnections;
+    const hasConnections = Boolean(user.s3_connections && user.s3_connections.length > 0);
     if (!hasAccounts && !hasS3Users && !hasConnections) {
       return <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>;
     }

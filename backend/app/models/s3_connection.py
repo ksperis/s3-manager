@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.pagination import PaginatedResponse
 
@@ -14,10 +14,9 @@ class S3Connection(BaseModel):
     name: str
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
-    is_public: bool = False
+    created_by_user_id: int
     is_shared: bool = False
     is_active: bool = True
-    visibility: Literal["private", "shared", "public"] = "private"
     access_manager: bool = False
     access_browser: bool = True
     credential_owner_type: Optional[str] = None
@@ -34,12 +33,11 @@ class S3Connection(BaseModel):
 
 
 class S3ConnectionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str
-    visibility: Optional[Literal["private", "shared", "public"]] = None
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
-    is_public: Optional[bool] = False
-    is_shared: Optional[bool] = False
     access_manager: bool = False
     access_browser: bool = True
     credential_owner_type: Optional[str] = None
@@ -53,12 +51,11 @@ class S3ConnectionCreate(BaseModel):
 
 
 class S3ConnectionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: Optional[str] = None
-    visibility: Optional[Literal["private", "shared", "public"]] = None
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
-    is_public: Optional[bool] = None
-    is_shared: Optional[bool] = None
     is_active: Optional[bool] = None
     access_manager: Optional[bool] = None
     access_browser: Optional[bool] = None

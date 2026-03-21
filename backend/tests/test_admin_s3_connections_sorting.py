@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.db import S3Connection
+from app.db import S3Connection, User, UserRole
 
 
 def _seed_connection(
@@ -12,19 +12,28 @@ def _seed_connection(
     *,
     name: str,
     is_shared: bool = True,
-    is_public: bool = False,
-    owner_user_id: int | None = None,
+    created_by_user_id: int | None = None,
     created_at: datetime | None = None,
 ) -> S3Connection:
+    creator_id = created_by_user_id
+    if creator_id is None:
+        creator = User(
+            email=f"conn-{name}-{int(datetime.now().timestamp() * 1000000)}@example.test",
+            hashed_password="x",
+            role=UserRole.UI_USER.value,
+            is_active=True,
+        )
+        db_session.add(creator)
+        db_session.flush()
+        creator_id = creator.id
     row = S3Connection(
         name=name,
-        owner_user_id=owner_user_id,
-        is_public=is_public,
+        created_by_user_id=creator_id,
         is_shared=is_shared,
         is_temporary=False,
         access_manager=True,
         access_browser=True,
-        access_key_id=f"AK-{name}-{owner_user_id or 0}",
+        access_key_id=f"AK-{name}-{creator_id}",
         secret_access_key="SECRET",
         created_at=created_at,
         updated_at=created_at,
@@ -47,9 +56,9 @@ def test_admin_s3_connections_default_sort_is_name_case_insensitive(client, db_s
     assert [item["name"] for item in payload["items"]] == ["alpha", "Beta", "Zulu"]
 
 
-def test_admin_s3_connections_sort_by_name_desc_is_stable_by_id(client, db_session):
-    first_same = _seed_connection(db_session, name="same")
-    second_same = _seed_connection(db_session, name="same")
+def test_admin_s3_connections_sort_by_name_desc(client, db_session):
+    _seed_connection(db_session, name="same-a")
+    _seed_connection(db_session, name="same-b")
     _seed_connection(db_session, name="alpha")
 
     response = client.get("/api/admin/s3-connections?sort_by=name&sort_dir=desc")
@@ -57,9 +66,7 @@ def test_admin_s3_connections_sort_by_name_desc_is_stable_by_id(client, db_sessi
     payload = response.json()
 
     names = [item["name"] for item in payload["items"]]
-    same_ids = [item["id"] for item in payload["items"] if item["name"] == "same"]
-    assert names == ["same", "same", "alpha"]
-    assert same_ids == sorted([first_same.id, second_same.id], reverse=True)
+    assert names == ["same-b", "same-a", "alpha"]
 
 
 def test_admin_s3_connections_non_name_sort_still_applies(client, db_session):
@@ -92,9 +99,8 @@ def test_admin_s3_connections_minimal_is_sorted_case_insensitive(client, db_sess
 
 
 def test_admin_s3_connections_lists_shared_only(client, db_session):
-    _seed_connection(db_session, name="shared-visible", is_shared=True, is_public=False)
-    _seed_connection(db_session, name="private-hidden", is_shared=False, is_public=False)
-    _seed_connection(db_session, name="public-hidden", is_shared=False, is_public=True)
+    _seed_connection(db_session, name="shared-visible", is_shared=True)
+    _seed_connection(db_session, name="private-hidden", is_shared=False)
 
     response = client.get("/api/admin/s3-connections")
     assert response.status_code == 200, response.text
@@ -102,4 +108,4 @@ def test_admin_s3_connections_lists_shared_only(client, db_session):
 
     names = [item["name"] for item in payload["items"]]
     assert names == ["shared-visible"]
-    assert payload["items"][0]["visibility"] == "shared"
+    assert payload["items"][0]["is_shared"] is True

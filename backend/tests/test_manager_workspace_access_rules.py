@@ -178,8 +178,7 @@ def test_manager_workspace_accepts_non_iam_connection_when_access_manager_enable
         role=UserRole.UI_USER.value,
     )
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         name="non-iam-connection",
         access_manager=True,
         access_browser=True,
@@ -211,8 +210,7 @@ def test_manager_workspace_touch_connection_last_used_timestamp(db_session):
         role=UserRole.UI_USER.value,
     )
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         name="touch-connection",
         access_manager=True,
         access_browser=True,
@@ -244,8 +242,7 @@ def test_storage_ops_workspace_does_not_touch_connection_last_used_timestamp(db_
         role=UserRole.UI_USER.value,
     )
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         name="no-touch-connection",
         access_manager=True,
         access_browser=True,
@@ -277,8 +274,7 @@ def test_manager_workspace_rejects_connection_without_manager_access(db_session)
         role=UserRole.UI_USER.value,
     )
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         name="manager-disabled-connection",
         access_manager=False,
         access_browser=True,
@@ -311,8 +307,7 @@ def test_manager_and_browser_workspace_reject_inactive_connection(db_session, pa
         role=UserRole.UI_USER.value,
     )
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         is_active=False,
         name="inactive-connection",
         access_manager=True,
@@ -369,8 +364,7 @@ def test_manager_context_exposes_browser_access_flag_for_connection(db_session):
         role=UserRole.UI_USER.value,
     )
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         name="manager-connection-browser-disabled",
         access_manager=True,
         access_browser=False,
@@ -404,8 +398,7 @@ def test_manager_context_connection_exposes_detected_identity_and_stats_enabled(
     )
     endpoint = _ceph_metrics_endpoint(name="ceph-conn-identity")
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         name="manager-connection-identity",
         access_manager=True,
         access_browser=True,
@@ -444,8 +437,7 @@ def test_manager_context_connection_reports_reason_when_identity_cannot_be_resol
     )
     endpoint = _ceph_metrics_endpoint(name="ceph-conn-identity-ko")
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         name="manager-connection-identity-ko",
         access_manager=True,
         access_browser=True,
@@ -494,8 +486,7 @@ def test_manager_context_connection_reports_reason_for_non_ceph_endpoint(db_sess
     )
     endpoint = _ceph_metrics_endpoint(name="other-conn-endpoint", provider="other")
     connection = S3Connection(
-        owner_user_id=None,
-        is_public=True,
+        created_by=user,
         name="manager-connection-non-ceph",
         access_manager=True,
         access_browser=True,

@@ -56,7 +56,6 @@ def test_private_connections_api_does_not_expose_iam_capable(monkeypatch, contra
             "secret_access_key": "SECRETPRIVATECONTRACT",
             "access_manager": False,
             "access_browser": True,
-            "visibility": "private",
         },
     )
 
@@ -91,9 +90,7 @@ def test_admin_connections_api_does_not_expose_iam_capable(monkeypatch, contract
     assert "iam_capable" not in payload
     assert payload["is_active"] is True
     assert payload["capabilities"]["can_manage_iam"] is True
-    assert payload["visibility"] == "shared"
     assert payload["is_shared"] is True
-    assert payload["is_public"] is False
 
 
 def test_admin_connections_api_supports_is_active_update(monkeypatch, contract_client):
@@ -166,36 +163,34 @@ def test_admin_connections_api_rejects_visibility_fields(contract_client):
 def test_admin_connections_api_returns_404_for_non_shared_targets(contract_client):
     client, db_session, user = contract_client
     private_conn = S3Connection(
-        owner_user_id=user.id,
+        created_by_user_id=user.id,
         name="contract-admin-private-hidden",
-        is_public=False,
         is_shared=False,
         access_manager=True,
         access_browser=True,
         access_key_id="AKIAADMINPRIVATEHIDDEN",
         secret_access_key="SECRETADMINPRIVATEHIDDEN",
     )
-    public_conn = S3Connection(
-        owner_user_id=None,
-        name="contract-admin-public-hidden",
-        is_public=True,
+    another_private_conn = S3Connection(
+        created_by_user_id=user.id,
+        name="contract-admin-another-private-hidden",
         is_shared=False,
         access_manager=True,
         access_browser=True,
-        access_key_id="AKIAADMINPUBLICHIDDEN",
-        secret_access_key="SECRETADMINPUBLICHIDDEN",
+        access_key_id="AKIAADMINANOTHERPRIVATEHIDDEN",
+        secret_access_key="SECRETADMINANOTHERPRIVATEHIDDEN",
     )
     db_session.add(private_conn)
-    db_session.add(public_conn)
+    db_session.add(another_private_conn)
     db_session.commit()
     db_session.refresh(private_conn)
-    db_session.refresh(public_conn)
+    db_session.refresh(another_private_conn)
 
     private_update = client.put(
         f"/api/admin/s3-connections/{private_conn.id}",
         json={"is_active": False},
     )
-    public_delete = client.delete(f"/api/admin/s3-connections/{public_conn.id}")
+    public_delete = client.delete(f"/api/admin/s3-connections/{another_private_conn.id}")
     private_users = client.get(f"/api/admin/s3-connections/{private_conn.id}/users")
 
     assert private_update.status_code == 404
@@ -223,7 +218,7 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
     )
     db_session.add(
         S3Connection(
-            owner_user_id=user.id,
+            created_by_user_id=user.id,
             name="contract-execution-context-connection",
             access_manager=False,
             access_browser=True,

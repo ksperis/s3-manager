@@ -101,10 +101,8 @@ describe("UsersPage modal tabs", () => {
       {
         id: 21,
         name: "conn-1",
-        owner_user_id: null,
-        visibility: "shared",
+        created_by_user_id: 1,
         is_shared: true,
-        is_public: false,
       },
     ]);
 
