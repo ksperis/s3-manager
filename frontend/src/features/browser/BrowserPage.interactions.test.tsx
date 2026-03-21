@@ -9,6 +9,7 @@ const fetchBrowserSettingsMock = vi.fn();
 const listBrowserObjectsMock = vi.fn();
 const getBucketVersioningMock = vi.fn();
 const getBucketCorsStatusMock = vi.fn();
+const ensureBucketCorsMock = vi.fn();
 const fetchObjectMetadataMock = vi.fn();
 const getObjectTagsMock = vi.fn();
 
@@ -49,6 +50,7 @@ vi.mock("../../api/browser", async () => {
     listBrowserObjects: (...args: unknown[]) => listBrowserObjectsMock(...args),
     getBucketVersioning: (...args: unknown[]) => getBucketVersioningMock(...args),
     getBucketCorsStatus: (...args: unknown[]) => getBucketCorsStatusMock(...args),
+    ensureBucketCors: (...args: unknown[]) => ensureBucketCorsMock(...args),
     fetchObjectMetadata: (...args: unknown[]) => fetchObjectMetadataMock(...args),
     getObjectTags: (...args: unknown[]) => getObjectTagsMock(...args),
   };
@@ -165,6 +167,7 @@ describe("BrowserPage interactions", () => {
 
     getBucketVersioningMock.mockResolvedValue({ enabled: false, status: "Disabled" });
     getBucketCorsStatusMock.mockResolvedValue({ enabled: true, rules: [] });
+    ensureBucketCorsMock.mockResolvedValue({ enabled: true, rules: [] });
     fetchObjectMetadataMock.mockResolvedValue({
       key: "a.txt",
       size: 10,
@@ -543,5 +546,62 @@ describe("BrowserPage interactions", () => {
         expect.objectContaining({ prefix: "docs/" })
       );
     });
+  });
+
+  it("renders CORS warning with inline info action and moves CORS button into popover", async () => {
+    const user = userEvent.setup();
+    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    renderPage();
+
+    const warningText = "Direct download/upload is not allowed on this bucket.";
+    expect(await screen.findByText(warningText)).toBeInTheDocument();
+
+    const warningLine = screen.getByText(warningText).closest("p");
+    expect(warningLine).not.toBeNull();
+    const infoButton = within(warningLine as HTMLElement).getByRole("button", { name: "CORS actions" });
+    expect(infoButton).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: `Add ${window.location.origin} to CORS` })).not.toBeInTheDocument();
+
+    await user.click(infoButton);
+
+    expect(
+      await screen.findByText(`Allow direct access from ${window.location.origin} by adding CORS rules to this bucket.`)
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Add ${window.location.origin} to CORS` })).toBeInTheDocument();
+  });
+
+  it("applies CORS from popover and closes popover on Escape/outside click", async () => {
+    const user = userEvent.setup();
+    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    ensureBucketCorsMock.mockResolvedValue({ enabled: true, rules: [] });
+    renderPage();
+
+    const warningLine = (await screen.findByText("Direct download/upload is not allowed on this bucket.")).closest("p");
+    if (!warningLine) {
+      throw new Error("CORS warning line not found");
+    }
+    await user.click(within(warningLine).getByRole("button", { name: "CORS actions" }));
+    expect(screen.getByRole("button", { name: `Add ${window.location.origin} to CORS` })).toBeInTheDocument();
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: `Add ${window.location.origin} to CORS` })).not.toBeInTheDocument();
+    });
+
+    await user.click(within(warningLine).getByRole("button", { name: "CORS actions" }));
+    expect(screen.getByRole("button", { name: `Add ${window.location.origin} to CORS` })).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: `Add ${window.location.origin} to CORS` })).not.toBeInTheDocument();
+    });
+
+    await user.click(within(warningLine).getByRole("button", { name: "CORS actions" }));
+    await user.click(screen.getByRole("button", { name: `Add ${window.location.origin} to CORS` }));
+
+    await waitFor(() => {
+      expect(ensureBucketCorsMock).toHaveBeenCalledWith("acc-1", "bucket-1", window.location.origin);
+    });
+    expect(await screen.findByText("CORS rules updated for this bucket.")).toBeInTheDocument();
   });
 });

@@ -9,6 +9,7 @@ import { ZipWriter } from "@zip.js/zip.js";
 import axios from "axios";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
+import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
@@ -99,6 +100,7 @@ import {
   FolderIcon,
   FolderPlusIcon,
   HistoryIcon,
+  InfoIcon,
   ListIcon,
   LinkIcon,
   MoreIcon,
@@ -295,6 +297,7 @@ const PANELS_DISABLE_MEDIA_QUERY = `(max-width: ${PANELS_DISABLE_MAX_WIDTH_PX}px
 const CONTEXT_MENU_PADDING_PX = 8;
 const CONTEXT_MENU_FALLBACK_WIDTH_PX = 240;
 const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 320;
+const CORS_DIRECT_TRANSFER_WARNING = "Direct download/upload is not allowed on this bucket.";
 const TREE_PREFIXES_PAGE_BUDGET = 50;
 const PATH_SUGGESTION_SOURCE_WEIGHT: Record<PathSuggestionSource, number> = {
   history: 300,
@@ -640,6 +643,7 @@ export default function BrowserPage({
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [corsFixing, setCorsFixing] = useState(false);
   const [corsFixError, setCorsFixError] = useState<string | null>(null);
+  const [showCorsActionPopover, setShowCorsActionPopover] = useState(false);
   const [filter, setFilter] = useState("");
   const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<BrowserColumnId[]>(DEFAULT_VISIBLE_COLUMN_IDS);
@@ -779,6 +783,8 @@ export default function BrowserPage({
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const bucketMenuRef = useRef<HTMLDivElement | null>(null);
   const searchOptionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const corsActionTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const corsActionPopoverRef = useRef<HTMLDivElement | null>(null);
   const objectsListViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketFilterRef = useRef<HTMLInputElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1154,7 +1160,7 @@ export default function BrowserPage({
     }
     const corsDisabled = Boolean(corsStatus && !corsStatus.enabled);
     if (corsDisabled) {
-      items.push("Direct download/upload is not allowed on this bucket.");
+      items.push(CORS_DIRECT_TRANSFER_WARNING);
       if (!proxyAllowed) {
         items.push("Proxy transfers are disabled in settings.");
       }
@@ -1170,6 +1176,7 @@ export default function BrowserPage({
     useProxyTransfers,
     warningMessage,
   ]);
+  const hasCorsAction = Boolean(corsStatus && !corsStatus.enabled && uiOrigin);
   const stsExpirationLabel = useMemo(() => {
     if (!stsCredentials?.expiration) return "";
     const formatted = formatDateTime(stsCredentials.expiration);
@@ -1366,6 +1373,10 @@ export default function BrowserPage({
   }, [bucketName, prefix]);
 
   useEffect(() => {
+    setShowCorsActionPopover(false);
+  }, [accountIdForApi, bucketName]);
+
+  useEffect(() => {
     bucketInspectorRequestIdRef.current += 1;
     setBucketInspectorLoading(false);
     setBucketInspectorError(null);
@@ -1431,6 +1442,33 @@ export default function BrowserPage({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [showSearchOptionsMenu]);
+
+  useEffect(() => {
+    if (!showCorsActionPopover) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (corsActionTriggerRef.current?.contains(target)) return;
+      if (corsActionPopoverRef.current?.contains(target)) return;
+      setShowCorsActionPopover(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowCorsActionPopover(false);
+      }
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showCorsActionPopover]);
+
+  useEffect(() => {
+    if (!hasCorsAction) {
+      setShowCorsActionPopover(false);
+    }
+  }, [hasCorsAction]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -4507,6 +4545,7 @@ export default function BrowserPage({
       setCorsStatus(status);
       if (status.enabled) {
         setStatusMessage("CORS rules updated for this bucket.");
+        setShowCorsActionPopover(false);
       } else {
         setCorsFixError(status.error ?? "CORS is still not enabled for this origin.");
       }
@@ -8259,23 +8298,51 @@ export default function BrowserPage({
             {statusMessage && <p className="text-slate-500 dark:text-slate-400">{statusMessage}</p>}
             {warnings.map((warning, index) => (
               <p key={`${warning}-${index}`} className="font-semibold text-amber-600 dark:text-amber-200">
-                {warning}
+                {warning === CORS_DIRECT_TRANSFER_WARNING && hasCorsAction ? (
+                  <span className="inline-flex items-center gap-1">
+                    <span>{warning}</span>
+                    <button
+                      ref={corsActionTriggerRef}
+                      type="button"
+                      className="inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-700 transition hover:text-amber-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700 dark:text-amber-200 dark:hover:text-amber-100 dark:focus-visible:outline-amber-200"
+                      onClick={() => setShowCorsActionPopover((prev) => !prev)}
+                      aria-label="CORS actions"
+                      title="CORS actions"
+                      aria-haspopup="dialog"
+                      aria-expanded={showCorsActionPopover}
+                    >
+                      <InfoIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <AnchoredPortalMenu
+                      open={showCorsActionPopover}
+                      anchorRef={corsActionTriggerRef}
+                      placement="bottom-start"
+                      offset={6}
+                      minWidth={288}
+                      className="w-80 rounded-xl border border-amber-200/70 bg-white p-3 shadow-xl dark:border-amber-400/40 dark:bg-slate-900"
+                    >
+                      <div ref={corsActionPopoverRef}>
+                        <p className="ui-caption text-slate-600 dark:text-slate-300">
+                          {`Allow direct access from ${uiOrigin} by adding CORS rules to this bucket.`}
+                        </p>
+                        <button
+                          type="button"
+                          className={`mt-2 ${filterChipClasses} border-emerald-200 bg-emerald-100 text-emerald-800 hover:border-emerald-300 hover:text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-100 dark:hover:border-emerald-400`}
+                          onClick={handleEnsureCors}
+                          disabled={corsFixing}
+                          title={`Add ${uiOrigin} to bucket CORS rules.`}
+                          aria-label={`Add ${uiOrigin} to CORS`}
+                        >
+                          {corsFixing ? "Adding..." : `Add ${uiOrigin} to CORS`}
+                        </button>
+                      </div>
+                    </AnchoredPortalMenu>
+                  </span>
+                ) : (
+                  warning
+                )}
               </p>
             ))}
-            {corsStatus && !corsStatus.enabled && uiOrigin && (
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className={`${filterChipClasses} border-emerald-200 bg-emerald-100 text-emerald-800 hover:border-emerald-300 hover:text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-100 dark:hover:border-emerald-400`}
-                  onClick={handleEnsureCors}
-                  disabled={corsFixing}
-                  title={`Allow direct access from ${uiOrigin} by adding CORS rules to this bucket.`}
-                  aria-label={`Allow direct access from ${uiOrigin} by adding CORS rules to this bucket.`}
-                >
-                  {corsFixing ? "Enabling..." : "Allow"}
-                </button>
-              </div>
-            )}
           </div>
         )}
 
