@@ -171,4 +171,20 @@ describe("BucketDetailPage replication state", () => {
     const objectLockCallOrder = updateCephAdminBucketObjectLockMock.mock.invocationCallOrder[0];
     expect(versioningCallOrder).toBeLessThan(objectLockCallOrder);
   });
+
+  it("does not render replication info card in Ceph Admin tab", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getCephAdminBucketReplicationMock).toHaveBeenCalled();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Ceph Admin" }));
+    expect(screen.queryByText("Replication / multisite")).not.toBeInTheDocument();
+  });
 });
