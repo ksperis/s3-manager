@@ -4113,7 +4113,7 @@ export default function BucketDetailPage({
                 {isCephEndpoint && (
                   <BucketFeatureCard
                     title="Replication / multisite"
-                    description="Configure cross-zonegroup replication rules supported by Ceph RGW."
+                    description="Configure Ceph RGW multisite bucket replication across zones within this bucket's zonegroup."
                     mode="hybrid"
                     visualState={replicationCardState}
                     testId="bucket-feature-replication"

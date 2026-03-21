@@ -120,6 +120,10 @@ describe("BucketDetailPage replication state", () => {
     await user.click(screen.getByRole("button", { name: "Advanced" }));
     const replicationCard = await screen.findByTestId("bucket-feature-replication");
     expect(replicationCard).toHaveAttribute("data-feature-state", "neutral");
+    expect(
+      screen.getByText("Configure Ceph RGW multisite bucket replication across zones within this bucket's zonegroup.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/cross-zonegroup/i)).not.toBeInTheDocument();
   });
 
   it("keeps notifications card neutral for TopicConfigurations empty draft-equivalent payload", async () => {
