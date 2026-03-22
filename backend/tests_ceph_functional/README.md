@@ -57,7 +57,7 @@ Ceph-admin entity creation tests are executed only when RGW admin cleanup creden
 ## Current scenarios
 
 - **S3Account/Bucket/Object flow**: creates a tenant, manager, bucket, uploads/downloads objects, manages policies/tags, then exercises admin teardown.
-- **Bucket configuration**: validates lifecycle, CORS and per-bucket quotas (Super Admin safeguarded route included).
+- **Bucket configuration**: validates Manager bucket round-trips for versioning, lifecycle, CORS, tags, policy and public access block, plus dedicated logging/website/quota/notifications/replication scenarios when the cluster supports them.
 - **IAM & policies**: provisions IAM users/keys, creates managed policies, attaches them to users, and exercises key/user deletion.
 - **Stats & traffic**: hits `/manager/stats/overview` and `/manager/stats/traffic` after generating activity, skipping gracefully when RGW usage logs are unavailable.
 - **Ceph-admin endpoints & metrics**: validates endpoint discovery, access probes, info, cluster storage and traffic metrics routes.

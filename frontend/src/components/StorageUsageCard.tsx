@@ -5,6 +5,7 @@
 import { BucketOverview } from "../api/stats";
 import { formatBytes, formatCompactNumber } from "../utils/format";
 import PageBanner from "./PageBanner";
+import { cx, uiCardClass, uiCardMutedClass } from "./ui/styles";
 import UsageTile from "./UsageTile";
 
 type QuotaProps = {
@@ -39,7 +40,7 @@ export default function StorageUsageCard({
   const hasBucketStats = Boolean(bucketOverview && bucketOverview.bucket_count > 0);
 
   return (
-    <section className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className={cx(uiCardClass, "space-y-4 p-4")}>
       <header className="space-y-1">
         <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage Usage</p>
         <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">
@@ -104,7 +105,7 @@ type BucketStatProps = {
 
 function BucketStatCard({ label, value, hint }: BucketStatProps) {
   return (
-    <div className="rounded-lg border border-slate-200/80 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+    <div className={cx(uiCardMutedClass, "p-3")}>
       <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
       <p className="mt-1.5 ui-title font-semibold text-slate-900 dark:text-white">{value}</p>
       {hint && <p className="ui-caption text-slate-500 dark:text-slate-400">{hint}</p>}

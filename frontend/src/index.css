@@ -135,11 +135,11 @@ body {
   }
 
   .ui-surface-card {
-    @apply rounded-xl border border-slate-300/90 bg-white shadow-sm dark:border-slate-600/70 dark:bg-slate-800/80;
+    @apply rounded-xl border border-slate-300/90 bg-white/95 shadow-sm shadow-slate-200/50 dark:border-slate-600/70 dark:bg-slate-800/85 dark:shadow-black/20;
   }
 
   .ui-surface-muted {
-    @apply rounded-xl border border-slate-300/80 bg-slate-100/80 shadow-sm dark:border-slate-600/60 dark:bg-slate-800/55;
+    @apply rounded-xl border border-slate-300/80 bg-slate-100/80 shadow-sm shadow-slate-200/40 dark:border-slate-600/60 dark:bg-slate-800/55 dark:shadow-black/10;
   }
 
   .ui-control {

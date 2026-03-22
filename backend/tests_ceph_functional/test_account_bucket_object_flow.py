@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import time
 import uuid
 
 import pytest
@@ -14,6 +15,27 @@ from .resources import ResourceTracker
 
 def _bucket_name(prefix: str, label: str = "bucket") -> str:
     return f"{prefix}-{uuid.uuid4().hex[:6]}-{label}"
+
+
+def _wait_for_object_absence(
+    manager_session: BackendSession,
+    *,
+    account_id: int,
+    bucket_name: str,
+    object_key: str,
+    timeout: float = 12.0,
+    interval: float = 0.5,
+) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        listed_objects = manager_session.get(
+            f"/manager/buckets/{bucket_name}/objects",
+            params={"account_id": account_id, "prefix": "tests/"},
+        )
+        if not any(obj["key"] == object_key for obj in listed_objects["objects"]):
+            return
+        time.sleep(interval)
+    raise AssertionError(f"Object '{object_key}' still listed in bucket '{bucket_name}' after deletion")
 
 
 @pytest.mark.ceph_functional
@@ -51,12 +73,6 @@ def test_account_bucket_object_flow(
         params={"account_id": account_id},
     )
     assert "versioning_status" in properties
-
-    manager_session.put(
-        f"/manager/buckets/{bucket_name}/versioning",
-        params={"account_id": account_id},
-        json={"enabled": True},
-    )
 
     tags_response = manager_session.put(
         f"/manager/buckets/{bucket_name}/tags",
@@ -98,7 +114,11 @@ def test_account_bucket_object_flow(
         assert ceph_verifier.bucket_exists(tenant, bucket_name)
         stats = ceph_verifier.account_stats(tenant)
         if stats:
-            assert stats.get("account_id") == tenant or stats.get("account") == tenant
+            assert (
+                stats.get("account_id") == tenant
+                or stats.get("account") == tenant
+                or stats.get("id") == tenant
+            )
 
     object_key = f"tests/{uuid.uuid4().hex[:12]}.txt"
     object_body = b"Ceph RGW functional test payload"
@@ -132,6 +152,22 @@ def test_account_bucket_object_flow(
         json={"keys": [object_key]},
         expected_status=200,
     )
+    _wait_for_object_absence(
+        manager_session,
+        account_id=account_id,
+        bucket_name=bucket_name,
+        object_key=object_key,
+    )
+    manager_session.put(
+        f"/manager/buckets/{bucket_name}/versioning",
+        params={"account_id": account_id},
+        json={"enabled": True},
+    )
+    properties = manager_session.get(
+        f"/manager/buckets/{bucket_name}/properties",
+        params={"account_id": account_id},
+    )
+    assert properties.get("versioning_status") == "Enabled"
 
     delete_response = manager_session.delete(
         f"/manager/buckets/{bucket_name}",

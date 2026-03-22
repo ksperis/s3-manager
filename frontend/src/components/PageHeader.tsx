@@ -25,15 +25,21 @@ type PageHeaderProps = {
 
 export default function PageHeader({
   title,
+  description,
   breadcrumbs = [],
   actions = [],
   inlineContent,
   rightContent,
 }: PageHeaderProps) {
   return (
-    <div className={cx(uiCardClass, "flex flex-col gap-3 px-4 py-3")}>
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div className="space-y-1">
+    <header
+      className={cx(
+        uiCardClass,
+        "overflow-hidden bg-gradient-to-r from-white via-white to-slate-50/80 px-4 py-4 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70"
+      )}
+    >
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0 space-y-3">
           {breadcrumbs.length > 0 && (
             <nav className="flex flex-wrap items-center gap-2 ui-caption font-medium text-slate-500 dark:text-slate-400">
               {breadcrumbs.map((bc, idx) => (
@@ -50,15 +56,20 @@ export default function PageHeader({
               ))}
             </nav>
           )}
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="ui-title font-semibold text-slate-900 dark:text-white">{title}</h1>
-            {inlineContent}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="ui-title font-semibold text-slate-900 dark:text-white">{title}</h1>
+              {inlineContent ? <div className="flex flex-wrap items-center gap-2">{inlineContent}</div> : null}
+            </div>
+            {description ? (
+              <p className="max-w-3xl ui-body text-slate-600 dark:text-slate-300">{description}</p>
+            ) : null}
           </div>
         </div>
         {rightContent ? (
-          <div className="flex flex-wrap items-center gap-2">{rightContent}</div>
+          <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto xl:justify-end">{rightContent}</div>
         ) : actions.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-wrap gap-2 xl:w-auto xl:justify-end">
             {actions.map((action) => {
               const classes =
                 action.variant === "danger"
@@ -83,6 +94,6 @@ export default function PageHeader({
           </div>
         ) : null}
       </div>
-    </div>
+    </header>
   );
 }

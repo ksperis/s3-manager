@@ -14,6 +14,7 @@ import {
 } from "../../api/stats";
 import { fetchCephAdminClusterTraffic } from "../../api/cephAdmin";
 import TrafficBytesChart from "../../components/TrafficBytesChart";
+import { cx, uiCardClass, uiCardMutedClass } from "../../components/ui/styles";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
 import {
@@ -111,7 +112,7 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
   const requestPieData = useMemo(() => prepareRequestPie(traffic?.request_breakdown ?? []), [traffic]);
 
   return (
-    <section className="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className={cx(uiCardClass, "space-y-4 p-4")}>
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Traffic</p>
@@ -206,7 +207,7 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
               </ResponsiveContainer>
               <ul className="flex-1 space-y-2 ui-body">
                 {(traffic?.request_breakdown ?? []).map((entry) => (
-                  <li key={entry.group} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-900/50">
+                  <li key={entry.group} className={cx(uiCardMutedClass, "flex items-center justify-between px-3 py-2")}>
                     <span className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
                       <span
                         className="h-2.5 w-2.5 rounded-full"
@@ -302,7 +303,6 @@ type BucketRankingProps = {
 };
 
 function BucketRanking({ rankings, loading }: BucketRankingProps) {
-  const maxValue = Math.max(...rankings.map((entry) => entry.bytes_total), 0);
   const maxComponent = Math.max(
     ...rankings.map((entry) => Math.max(entry.bytes_in ?? 0, entry.bytes_out ?? 0)),
     0

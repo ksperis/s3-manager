@@ -67,6 +67,8 @@ def _seed_super_admin_if_needed(db: Session) -> bool:
         hashed_password=get_password_hash(settings.seed_super_admin_password),
         is_active=True,
         role=UserRole.UI_SUPERADMIN.value,
+        can_access_ceph_admin=True,
+        can_access_storage_ops=True,
     )
     db.add(admin_user)
     db.commit()
