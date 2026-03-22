@@ -5,16 +5,18 @@
 import { useMemo } from "react";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
+import PageEmptyState from "../../components/PageEmptyState";
 import UsageBreakdown from "../../components/UsageBreakdown";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import TrafficAnalytics from "./TrafficAnalytics";
 import { useS3AccountContext } from "./S3AccountContext";
+import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 import { useManagerStats } from "./useManagerStats";
 
 export default function ManagerMetricsPage() {
   const {
     accounts,
     selectedS3AccountId,
-    requiresS3AccountSelection,
     hasS3AccountContext,
     accountIdForApi,
     accessMode,
@@ -33,10 +35,16 @@ export default function ManagerMetricsPage() {
   const showUsageBreakdowns = usageFeatureEnabled && hasContext;
   const showTrafficAnalytics = metricsFeatureEnabled && hasContext;
   const showMetricsDisabledBanner = hasContext && !usageFeatureEnabled && !metricsFeatureEnabled;
+  const showUsageDisabledBanner = hasContext && managerStatsEnabled && !usageFeatureEnabled && metricsFeatureEnabled;
+  const showTrafficDisabledBanner = hasContext && managerStatsEnabled && usageFeatureEnabled && !metricsFeatureEnabled;
   const managerMetricsMessage =
     hasContext && !managerStatsEnabled
       ? managerStatsMessage || "Metrics are unavailable for this context."
       : null;
+  const contextStrip = useManagerWorkspaceContextStrip({
+    description: "Storage and traffic analytics use the selected execution context and the active endpoint capabilities.",
+    extraAlerts: managerMetricsMessage ? [{ tone: "warning", message: managerMetricsMessage }] : [],
+  });
 
   const { stats, loading, error } = useManagerStats(
     accountIdForApi,
@@ -48,27 +56,38 @@ export default function ManagerMetricsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Metrics"
+        description="Storage and traffic analytics for the active execution context."
         breadcrumbs={[{ label: "Manager" }, { label: "Overview" }, { label: "Metrics" }]}
       />
+      <WorkspaceContextStrip {...contextStrip} />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
-      {requiresS3AccountSelection && !selected && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-          Select an account to view metrics.
-        </div>
-      )}
-
-      {managerMetricsMessage && <PageBanner tone="warning">{managerMetricsMessage}</PageBanner>}
-
-      {showMetricsDisabledBanner && !managerMetricsMessage && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-          Usage and traffic metrics are disabled for this storage endpoint.
-        </div>
-      )}
-
-      {hasContext && (
+      {!hasContext ? (
+        <PageEmptyState
+          title="Select an account to view metrics"
+          description="Manager metrics depend on an execution context. Choose an account to load bucket storage and traffic analytics."
+          primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
+          tone="warning"
+        />
+      ) : managerMetricsMessage && !showUsageBreakdowns && !showTrafficAnalytics ? (
+        <PageEmptyState
+          title="Metrics are unavailable for this context"
+          description={managerMetricsMessage}
+          primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
+          tone="warning"
+        />
+      ) : showMetricsDisabledBanner ? (
+        <PageEmptyState
+          title="Metrics are disabled for this endpoint"
+          description="Neither storage analytics nor traffic analytics are enabled on the selected endpoint."
+          primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
+          tone="warning"
+        />
+      ) : (
         <>
+          {showUsageDisabledBanner && <PageBanner tone="info">Storage analytics are disabled for this endpoint.</PageBanner>}
+          {showTrafficDisabledBanner && <PageBanner tone="info">Traffic analytics are disabled for this endpoint.</PageBanner>}
           {showUsageBreakdowns && (
             <div className="grid gap-6 lg:grid-cols-2">
               <UsageBreakdown

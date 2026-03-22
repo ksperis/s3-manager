@@ -145,6 +145,7 @@ import {
   storageClassChipClasses,
   storageClassOptions,
   toolbarButtonClasses,
+  toolbarPrimaryClasses,
   treeItemActiveClasses,
   treeItemBaseClasses,
   treeItemInactiveClasses,
@@ -7824,6 +7825,19 @@ export default function BrowserPage({
   const operationsCountBadgeClasses = `${countBadgeClasses} ui-caption ${
     hasFailedOperations ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100" : ""
   }`;
+  const panelToggleClasses = (active: boolean, tone: "amber" | "sky") =>
+    `${filterChipClasses} ${
+      active
+        ? tone === "amber"
+          ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-500/50 dark:bg-amber-900/30 dark:text-amber-100"
+          : "border-sky-300 bg-sky-100 text-sky-800 dark:border-sky-500/50 dark:bg-sky-900/30 dark:text-sky-100"
+        : ""
+    }`;
+  const browserViewLabel = compactMode ? "Compact view" : "List view";
+  const selectionSummary =
+    selectedCount > 0
+      ? `${selectedCount} selected · ${selectionFiles.length} files · ${selectionFolders.length} folders`
+      : "No selection";
   const renderLazyCellValue = (status: LazyFieldStatus, value: string | number | null) => {
     if (status === "idle") {
       return "—";
@@ -7908,42 +7922,11 @@ export default function BrowserPage({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      {showFolderToggle && (
-        <button
-          type="button"
-          onClick={toggleFoldersPanel}
-          aria-label={showFolders ? "Hide folders panel" : "Show folders panel"}
-          aria-pressed={showFolders}
-          title={showFolders ? "Hide folders" : "Show folders"}
-          className={`fixed left-0 top-1/2 z-30 -translate-y-1/2 rounded-r-xl border px-2 py-3 shadow-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-            showFolders
-              ? "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/40 dark:text-amber-100"
-              : "border-slate-200 bg-white/90 text-slate-600 hover:text-primary dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200"
-          }`}
-        >
-          <FolderIcon className="h-4 w-4" />
-        </button>
-      )}
-      {showInspectorToggle && (
-        <button
-          type="button"
-          onClick={toggleInspectorPanel}
-          aria-label={showInspector ? "Hide inspector panel" : "Show inspector panel"}
-          aria-pressed={showInspector}
-          title={showInspector ? "Hide inspector" : "Show inspector"}
-          className={`fixed right-0 top-1/2 z-30 -translate-y-1/2 rounded-l-xl border px-2 py-3 shadow-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-            showInspector
-              ? "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/40 dark:text-sky-100"
-              : "border-slate-200 bg-white/90 text-slate-600 hover:text-primary dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200"
-          }`}
-        >
-          <MoreIcon className="h-4 w-4" />
-        </button>
-      )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
-          <div className="flex w-full min-w-0 items-center gap-2 xl:w-auto xl:flex-1">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+        <div className="border-b border-slate-200 px-2 py-2 dark:border-slate-800">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
               <div ref={bucketMenuRef} className="relative flex shrink-0 items-center gap-1">
                 <button
                   type="button"
@@ -8211,69 +8194,200 @@ export default function BrowserPage({
                   </>
                 )}
               </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {showFolderToggle && (
+                  <button
+                    type="button"
+                    onClick={toggleFoldersPanel}
+                    aria-label={showFolders ? "Hide folders panel" : "Show folders panel"}
+                    aria-pressed={showFolders}
+                    title={showFolders ? "Hide folders" : "Show folders"}
+                    className={panelToggleClasses(showFolders, "amber")}
+                  >
+                    <FolderIcon className="h-3.5 w-3.5" />
+                    {showFolders ? "Folders on" : "Folders off"}
+                  </button>
+                )}
+                {showInspectorToggle && (
+                  <button
+                    type="button"
+                    onClick={toggleInspectorPanel}
+                    aria-label={showInspector ? "Hide inspector panel" : "Show inspector panel"}
+                    aria-pressed={showInspector}
+                    title={showInspector ? "Hide inspector" : "Show inspector"}
+                    className={panelToggleClasses(showInspector, "sky")}
+                  >
+                    <MoreIcon className="h-3.5 w-3.5" />
+                    {showInspector ? "Inspector on" : "Inspector off"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={toolbarButtonClasses}
+                  onClick={handleRefresh}
+                  disabled={!bucketName || objectsLoading}
+                  aria-label="Refresh"
+                  title="Refresh"
+                >
+                  <RefreshIcon className="h-3.5 w-3.5" />
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={openOperationsModal}
+                  className={`${filterChipClasses} ${operationsButtonToneClasses}`}
+                >
+                  Operations
+                  <span className={operationsCountBadgeClasses}>{formatBadgeCount(totalOperationsCount)}</span>
+                </button>
+                {isMainBrowserPath ? <span className={filterChipClasses}>{browserViewLabel}</span> : null}
+                {accessBadge && (
+                  <span
+                    className={`${filterChipClasses} border-current/10`}
+                    title={`${accessBadge.label} — ${accessBadge.title}`}
+                    aria-label={`${accessBadge.label} — ${accessBadge.title}`}
+                  >
+                    <span className={`inline-flex h-2.5 w-2.5 rounded-full border ${accessBadge.className}`} />
+                    {accessBadge.label}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:ml-auto xl:w-auto xl:flex-nowrap">
-            <button
-              type="button"
-              className={iconButtonClasses}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!bucketName}
-              aria-label="Upload files"
-              title="Upload files"
-            >
-              <UploadIcon className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              className={iconButtonClasses}
-              onClick={handleNewFolder}
-              disabled={!bucketName || !hasS3AccountContext}
-              aria-label="New folder"
-              title="New folder"
-            >
-              <FolderPlusIcon className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              className={iconButtonClasses}
-              onClick={handleRefresh}
-              disabled={!bucketName || objectsLoading}
-              aria-label="Refresh"
-              title="Refresh"
-            >
-              <RefreshIcon className="h-3.5 w-3.5" />
-            </button>
-            {showSseControls && (
-              <button
-                type="button"
-                onClick={openSseCustomerModal}
-                className={`${filterChipClasses} ${
-                  sseActive
-                    ? "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-100"
-                    : ""
-                }`}
-                disabled={!bucketName || !hasS3AccountContext || !sseFeatureEnabled}
-                title={sseActive ? "SSE-C enabled for this bucket." : "Configure SSE-C key for this bucket."}
-              >
-                {sseActive ? "SSE-C On" : "SSE-C"}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={openOperationsModal}
-              className={`${filterChipClasses} ${operationsButtonToneClasses}`}
-            >
-              Operations
-              <span className={operationsCountBadgeClasses}>{formatBadgeCount(totalOperationsCount)}</span>
-            </button>
-            {accessBadge && (
-              <span
-                className={`inline-flex h-3 w-3 shrink-0 rounded-full border shadow-sm ${accessBadge.className}`}
-                title={`${accessBadge.label} — ${accessBadge.title}`}
-                aria-label={`${accessBadge.label} — ${accessBadge.title}`}
-              />
-            )}
+            <div className="flex flex-col gap-2 rounded-lg border border-slate-200/70 bg-slate-50/70 px-3 py-2 dark:border-slate-700/70 dark:bg-slate-900/40">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    {selectedCount > 0 ? "Selection" : "Primary actions"}
+                  </p>
+                  <p className="truncate ui-body font-semibold text-slate-800 dark:text-slate-100">{selectionSummary}</p>
+                  {selectedCount > 0 ? (
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      {selectionIsSingle && selectionPrimary ? `Target: ${selectionPrimary.name} · ` : ""}
+                      {selectionHasDeleted
+                        ? "Contains delete markers. Review before bulk actions."
+                        : `Total size: ${formatBytes(selectedBytes)}`}
+                    </p>
+                  ) : (
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Choose objects to reveal selection actions. Upload and folder creation stay visible otherwise.
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  {selectedCount > 0 ? (
+                    <>
+                      {canSelectionDownloadFolder && selectionPrimary && (
+                        <button
+                          type="button"
+                          className={toolbarPrimaryClasses}
+                          onClick={() => handleDownloadFolder(selectionPrimary)}
+                          disabled={!bucketName || !hasS3AccountContext}
+                        >
+                          <DownloadIcon className="h-3.5 w-3.5" />
+                          Download folder
+                        </button>
+                      )}
+                      {!canSelectionDownloadFolder && canSelectionDownloadFiles && (
+                        <button
+                          type="button"
+                          className={toolbarPrimaryClasses}
+                          onClick={() => handleDownloadItems(selectionFiles)}
+                          disabled={!bucketName || !hasS3AccountContext}
+                        >
+                          <DownloadIcon className="h-3.5 w-3.5" />
+                          Download
+                        </button>
+                      )}
+                      {canSelectionOpen && selectionPrimary && (
+                        <button type="button" className={toolbarButtonClasses} onClick={() => handleOpenItem(selectionPrimary)}>
+                          <OpenIcon className="h-3.5 w-3.5" />
+                          Open
+                        </button>
+                      )}
+                      {canSelectionCopyUrl && selectionPrimary && (
+                        <button
+                          type="button"
+                          className={toolbarButtonClasses}
+                          onClick={() => handleCopyUrl(selectionPrimary)}
+                          disabled={!hasS3AccountContext}
+                        >
+                          <LinkIcon className="h-3.5 w-3.5" />
+                          Copy URL
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className={toolbarButtonClasses}
+                        onClick={() => handleCopyItems(selectionItems)}
+                        disabled={!canSelectionCopyItems}
+                      >
+                        <CopyIcon className="h-3.5 w-3.5" />
+                        Copy
+                      </button>
+                      <button
+                        type="button"
+                        className={toolbarButtonClasses}
+                        onClick={() => handleCutItems(selectionItems)}
+                        disabled={!canSelectionCutItems}
+                      >
+                        <CutIcon className="h-3.5 w-3.5" />
+                        Cut
+                      </button>
+                      <button
+                        type="button"
+                        className={bulkDangerClasses}
+                        onClick={() => handleDeleteItems(selectionItems)}
+                        disabled={!hasS3AccountContext || !canSelectionDelete}
+                      >
+                        <TrashIcon className="h-3.5 w-3.5" />
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className={toolbarPrimaryClasses}
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={!bucketName}
+                        aria-label="Upload files"
+                        title="Upload files"
+                      >
+                        <UploadIcon className="h-3.5 w-3.5" />
+                        Upload files
+                      </button>
+                      <button
+                        type="button"
+                        className={toolbarButtonClasses}
+                        onClick={handleNewFolder}
+                        disabled={!bucketName || !hasS3AccountContext}
+                        aria-label="New folder"
+                        title="New folder"
+                      >
+                        <FolderPlusIcon className="h-3.5 w-3.5" />
+                        New folder
+                      </button>
+                      {showSseControls && (
+                        <button
+                          type="button"
+                          onClick={openSseCustomerModal}
+                          className={`${filterChipClasses} ${
+                            sseActive
+                              ? "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-100"
+                              : ""
+                          }`}
+                          disabled={!bucketName || !hasS3AccountContext || !sseFeatureEnabled}
+                          title={sseActive ? "SSE-C enabled for this bucket." : "Configure SSE-C key for this bucket."}
+                        >
+                          {sseActive ? "SSE-C On" : "SSE-C"}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
             <input
               ref={fileInputRef}
               type="file"
@@ -8350,7 +8464,15 @@ export default function BrowserPage({
           <div className={`grid min-h-0 flex-1 grid-rows-1 gap-3 ${layoutClass}`}>
             {isFoldersPanelVisible && (
               <div className="flex min-h-0 h-full min-w-0 flex-col rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Folders</p>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Folders</p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      {bucketName ? `Scope: ${normalizedPrefix || "root"}` : "Select a bucket to load prefixes."}
+                    </p>
+                  </div>
+                  <span className={filterChipClasses}>{showFolders ? "Visible" : "Hidden"}</span>
+                </div>
                 <div className="mt-3 min-h-0 flex-1 overflow-hidden overflow-y-auto pr-1">
                   {!bucketName ? (
                     <p className="ui-caption text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>

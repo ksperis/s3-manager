@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
 import ManagerMetricsPage from "./ManagerMetricsPage";
 
@@ -50,7 +51,11 @@ describe("ManagerMetricsPage", () => {
       reload: vi.fn(),
     });
 
-    render(<ManagerMetricsPage />);
+    render(
+      <MemoryRouter>
+        <ManagerMetricsPage />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText("Bucket breakdown (storage)")).toBeInTheDocument();
     expect(screen.getByText("Bucket breakdown (objects)")).toBeInTheDocument();
@@ -84,11 +89,16 @@ describe("ManagerMetricsPage", () => {
       reload: vi.fn(),
     });
 
-    render(<ManagerMetricsPage />);
+    render(
+      <MemoryRouter>
+        <ManagerMetricsPage />
+      </MemoryRouter>
+    );
 
     expect(
-      screen.getByText("Metrics are unavailable: unable to resolve RGW identity for this connection.")
-    ).toBeInTheDocument();
+      screen.getAllByText("Metrics are unavailable: unable to resolve RGW identity for this connection.")
+    ).toHaveLength(2);
+    expect(screen.getByText("Metrics are unavailable for this context")).toBeInTheDocument();
     expect(screen.queryByText("Bucket breakdown (storage)")).not.toBeInTheDocument();
     expect(screen.queryByTestId("traffic-analytics")).not.toBeInTheDocument();
   });

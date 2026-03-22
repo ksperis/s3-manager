@@ -4,10 +4,11 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuditLogEntry, listAuditLogs } from "../../api/audit";
+import ListToolbar from "../../components/ListToolbar";
+import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
-import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
 import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
@@ -259,7 +260,6 @@ export default function AuditLogsPage() {
         title="Audit trail"
         description="Last administrative actions performed through the UI."
         breadcrumbs={[{ label: "Admin" }, { label: "Governance" }, { label: "Audit trail" }]}
-        inlineContent={filters}
         actions={[
           {
             label: loading ? "Refreshing…" : "Refresh",
@@ -268,17 +268,27 @@ export default function AuditLogsPage() {
           },
         ]}
       />
+      <PageControlStrip
+        label="Audit scope"
+        title={hasActiveFilters ? "Filtered audit trail" : "Full audit trail"}
+        description="Refine the UI audit trail by actor, workspace, status, action, and free-text search."
+        controls={filters}
+        items={[
+          { label: "Loaded entries", value: logs.length.toLocaleString() },
+          { label: "Visible entries", value: filteredLogs.length.toLocaleString() },
+          { label: "Actor scope", value: roleLabels[roleFilter] },
+          { label: "Workspace scope", value: scopeLabels[scopeFilter] },
+        ]}
+      />
 
-      <ListSectionCard
-        title="Audit trail"
-        subtitle="Administrative actions performed through the UI."
-        className="bg-white/95 dark:bg-slate-900/60"
-      >
-        {error && (
-          <PageBanner tone="error" className="rounded-none border-x-0 border-t-0 px-4 py-3">
-            {error}
-          </PageBanner>
-        )}
+      {error && <PageBanner tone="error">{error}</PageBanner>}
+
+      <div className="ui-surface-card bg-white/95 dark:bg-slate-900/60">
+        <ListToolbar
+          title="Audit trail"
+          description="Administrative actions performed through the UI."
+          countLabel={`${filteredLogs.length} entr${filteredLogs.length === 1 ? "y" : "ies"}${isFiltered ? ` of ${logs.length}` : ""}`}
+        />
 
         <div className="overflow-x-auto">
           <table className="compact-table min-w-full divide-y divide-slate-200 text-left ui-body text-slate-700 dark:divide-slate-800 dark:text-slate-200">
@@ -367,7 +377,7 @@ export default function AuditLogsPage() {
             </button>
           </div>
         </div>
-      </ListSectionCard>
+      </div>
     </div>
   );
 }

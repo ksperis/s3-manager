@@ -12,6 +12,7 @@ type Action = {
   onClick?: () => void;
   to?: string;
   variant?: "primary" | "ghost" | "danger";
+  disabled?: boolean;
 };
 
 type PageHeaderProps = {
@@ -77,16 +78,28 @@ export default function PageHeader({
                   : action.variant === "ghost"
                     ? uiButtonVariants.ghost
                     : uiButtonVariants.primary;
-              const base = cx(uiButtonBaseClass, "py-1.5");
+              const base = cx(uiButtonBaseClass, "py-1.5", action.disabled && "pointer-events-none opacity-60");
               if (action.to) {
                 return (
-                  <Link key={action.label} to={action.to} className={cx(base, classes)}>
+                  <Link
+                    key={action.label}
+                    to={action.to}
+                    aria-disabled={action.disabled ? true : undefined}
+                    tabIndex={action.disabled ? -1 : undefined}
+                    className={cx(base, classes)}
+                  >
                     {action.label}
                   </Link>
                 );
               }
               return (
-                <button key={action.label} onClick={action.onClick} className={cx(base, classes)} type="button">
+                <button
+                  key={action.label}
+                  onClick={action.onClick}
+                  className={cx(base, classes)}
+                  type="button"
+                  disabled={action.disabled}
+                >
                   {action.label}
                 </button>
               );

@@ -7,12 +7,16 @@ import { useEffect, useMemo, useState } from "react";
 
 import { type Bucket, listBuckets } from "../../api/buckets";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
+import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
 import { useS3AccountContext } from "./S3AccountContext";
+import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 function extractError(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -24,6 +28,9 @@ function extractError(error: unknown): string {
 export default function ManagerBucketComparePage() {
   const { selectedS3AccountId, requiresS3AccountSelection } = useS3AccountContext();
   const sourceContextId = selectedS3AccountId ?? "";
+  const contextStrip = useManagerWorkspaceContextStrip({
+    description: "Bucket compare uses the active execution context as the source inventory and lets you compare it with other manager contexts.",
+  });
   const [contexts, setContexts] = useState<ExecutionContext[]>([]);
   const [contextsLoading, setContextsLoading] = useState(true);
   const [contextsError, setContextsError] = useState<string | null>(null);
@@ -149,96 +156,105 @@ export default function ManagerBucketComparePage() {
         description="Compare selected buckets across manager contexts."
         breadcrumbs={[{ label: "Manager" }, { label: "Tools" }, { label: "Compare" }]}
       />
+      <WorkspaceContextStrip {...contextStrip} />
 
-      {!requiresS3AccountSelection && (
-        <PageBanner tone="info">Bucket compare is not available in session mode.</PageBanner>
-      )}
       {contextsError && <PageBanner tone="error">{contextsError}</PageBanner>}
       {bucketsError && <PageBanner tone="error">{bucketsError}</PageBanner>}
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Source context</p>
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
-              {sourceContext ? sourceContext.display_name : "No source selected"}
-            </p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">Buckets loaded: {sourceBuckets.length}</p>
-          </div>
-          <button
-            type="button"
-            onClick={openCompareModal}
-            disabled={selectedBuckets.size === 0 || bucketsLoading || contextsLoading}
-            className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Compare selected ({selectedBuckets.size})
-          </button>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input
-            type="text"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            placeholder="Filter source buckets"
-            className="w-full rounded-md border border-slate-300 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-80 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+      {!requiresS3AccountSelection ? (
+        <PageEmptyState
+          title="Bucket compare is unavailable in session mode"
+          description="This tool needs a persistent execution context so it can load a source inventory and compare it against other manager contexts."
+          primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
+          tone="warning"
+        />
+      ) : !sourceContextId ? (
+        <PageEmptyState
+          title="Select a source context before comparing buckets"
+          description="Choose a manager execution context to load its buckets, filter the source inventory, and compare selected buckets against other targets."
+          primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
+          tone="warning"
+        />
+      ) : (
+        <div className="ui-surface-card">
+          <ListToolbar
+            title="Buckets"
+            description={`${sourceContext ? sourceContext.display_name : "Source context"} · Select source buckets to compare across manager contexts.`}
+            countLabel={`${filteredBuckets.length} result(s)`}
+            search={
+              <input
+                type="text"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                placeholder="Filter source buckets"
+                className="w-full rounded-md border border-slate-300 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-80 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            }
+            filters={
+              <>
+                <button
+                  type="button"
+                  onClick={selectAllFiltered}
+                  disabled={filteredBuckets.length === 0}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500"
+                >
+                  Select filtered
+                </button>
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  disabled={selectedBuckets.size === 0}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500"
+                >
+                  Clear
+                </button>
+              </>
+            }
+            actions={
+              <button
+                type="button"
+                onClick={openCompareModal}
+                disabled={selectedBuckets.size === 0 || bucketsLoading || contextsLoading}
+                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Compare selected ({selectedBuckets.size})
+              </button>
+            }
           />
-          <button
-            type="button"
-            onClick={selectAllFiltered}
-            disabled={filteredBuckets.length === 0}
-            className="rounded-md border border-slate-300 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500"
-          >
-            Select filtered
-          </button>
-          <button
-            type="button"
-            onClick={clearSelection}
-            disabled={selectedBuckets.size === 0}
-            className="rounded-md border border-slate-300 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500"
-          >
-            Clear
-          </button>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Buckets</p>
-          <p className="ui-caption text-slate-500 dark:text-slate-400">Select source buckets to compare.</p>
-        </div>
-        <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead className="bg-slate-50 dark:bg-slate-900/70">
-            <tr>
-              <th className="w-12 px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Select
-              </th>
-              <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Bucket
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {tableStatus === "loading" && <TableEmptyState colSpan={2} message="Loading source buckets..." />}
-            {tableStatus === "error" && <TableEmptyState colSpan={2} message="Unable to load buckets." tone="error" />}
-            {tableStatus === "empty" && <TableEmptyState colSpan={2} message="No buckets found." />}
-            {filteredBuckets.map((bucket) => (
-                <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedBuckets.has(bucket.name)}
-                      onChange={() => toggleBucket(bucket.name)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 dark:border-slate-600"
-                    />
-                  </td>
-                  <td className="px-4 py-2 ui-body font-semibold text-slate-800 dark:text-slate-100">{bucket.name}</td>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <thead className="bg-slate-50 dark:bg-slate-900/70">
+                <tr>
+                  <th className="w-12 px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Select
+                  </th>
+                  <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Bucket
+                  </th>
                 </tr>
-              ))}
-          </tbody>
-        </table>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                {tableStatus === "loading" && <TableEmptyState colSpan={2} message="Loading source buckets..." />}
+                {tableStatus === "error" && <TableEmptyState colSpan={2} message="Unable to load buckets." tone="error" />}
+                {tableStatus === "empty" && <TableEmptyState colSpan={2} message="No buckets found." />}
+                {filteredBuckets.map((bucket) => (
+                    <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedBuckets.has(bucket.name)}
+                          onChange={() => toggleBucket(bucket.name)}
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 dark:border-slate-600"
+                        />
+                      </td>
+                      <td className="px-4 py-2 ui-body font-semibold text-slate-800 dark:text-slate-100">{bucket.name}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {showCompareModal && sourceContextId && selectedBucketList.length > 0 && (
         <ManagerBucketCompareModal

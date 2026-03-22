@@ -14,10 +14,11 @@ import {
   runHealthchecks,
   type HealthCheckStatus,
 } from "../../api/healthchecks";
+import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
+import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
-import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
 import {
@@ -192,6 +193,11 @@ export default function EndpointStatusPage() {
     error: incidentsError,
     rowCount: globalIncidents.length,
   });
+  const statusFilterTitle =
+    statusFilter === "all" ? "All endpoints" : `${statusFilter.charAt(0).toUpperCase()}${statusFilter.slice(1)} endpoints`;
+  const timelineWindowHelper = TIMELINE_WINDOW_OPTIONS.find((option) => option.value === timelineWindow)?.helper ?? "Last 7 days";
+  const incidentsWindowHelper =
+    INCIDENT_WINDOW_OPTIONS.find((option) => option.value === incidentWindow)?.helper ?? "Last 6 months";
 
   return (
     <div className="space-y-4">
@@ -203,11 +209,44 @@ export default function EndpointStatusPage() {
           { label: runLoading ? "Running..." : "Check now", onClick: handleRunNow },
           { label: "Refresh", onClick: loadAll, variant: "ghost" },
         ]}
-        inlineContent={
-          latencyUpdatedAt ? (
-            <span className="ui-caption font-medium text-slate-500 dark:text-slate-400">Updated {formatTimestamp(latencyUpdatedAt)}</span>
-          ) : null
+      />
+      <PageControlStrip
+        label="Global filter"
+        title={statusFilterTitle}
+        description="Filter the latency overview, timelines, and incidents by endpoint status."
+        controls={
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { key: "up" as const, label: "Up", value: stats.up },
+              { key: "degraded" as const, label: "Degraded", value: stats.degraded },
+              { key: "down" as const, label: "Down", value: stats.down },
+              { key: "unknown" as const, label: "Unknown", value: stats.unknown },
+            ].map((item) => {
+              const isActive = statusFilter === item.key;
+              const isDimmed = statusFilter !== "all" && !isActive;
+
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setStatusFilter((current) => (current === item.key ? "all" : item.key))}
+                  className={`rounded-xl border px-3 py-3 text-left shadow-sm transition ${
+                    isActive ? "ring-2 ring-primary/40" : ""
+                  } ${isDimmed ? "opacity-65" : ""} ${statusStatCardClasses(item.key, item.value)}`}
+                >
+                  <p className="ui-caption font-medium opacity-80">{item.label}</p>
+                  <p className="mt-1.5 ui-title font-semibold">{item.value}</p>
+                </button>
+              );
+            })}
+          </div>
         }
+        items={[
+          { label: "Updated", value: latencyUpdatedAt ? formatTimestamp(latencyUpdatedAt) : "Unavailable" },
+          { label: "Latency coverage", value: "Last 24 hours" },
+          { label: "Timeline window", value: timelineWindowHelper },
+          { label: "Incidents window", value: incidentsWindowHelper },
+        ]}
       />
 
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
@@ -215,34 +254,6 @@ export default function EndpointStatusPage() {
       {latencyError && <PageBanner tone="error">{latencyError}</PageBanner>}
       {timelineError && <PageBanner tone="error">{timelineError}</PageBanner>}
       {incidentsError && <PageBanner tone="error">{incidentsError}</PageBanner>}
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { key: "up" as const, label: "Up", value: stats.up },
-          { key: "degraded" as const, label: "Degraded", value: stats.degraded },
-          { key: "down" as const, label: "Down", value: stats.down },
-          { key: "unknown" as const, label: "Unknown", value: stats.unknown },
-        ].map((item) => (
-          (() => {
-            const isActive = statusFilter === item.key;
-            const isDimmed = statusFilter !== "all" && !isActive;
-
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setStatusFilter((current) => (current === item.key ? "all" : item.key))}
-                className={`rounded-xl border px-3 py-3 text-left shadow-sm transition ${
-                  isActive ? "ring-2 ring-primary/40" : ""
-                } ${isDimmed ? "opacity-65" : ""} ${statusStatCardClasses(item.key, item.value)}`}
-              >
-                <p className="ui-caption font-medium opacity-80">{item.label}</p>
-                <p className="mt-1.5 ui-title font-semibold">{item.value}</p>
-              </button>
-            );
-          })()
-        ))}
-      </div>
 
       <div className="ui-surface-card">
         <div className="border-b border-slate-100 px-6 py-4 dark:border-slate-800">
@@ -370,17 +381,12 @@ export default function EndpointStatusPage() {
         </div>
       </div>
 
-      <ListSectionCard
-        title="Incidents"
-        subtitle="All incidents across endpoints. Default view is 6 months."
-        rightContent={(
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              {globalIncidentsTotal} incidents
-            </span>
-            {globalIncidentsTotal > globalIncidents.length && (
-              <span className="ui-caption text-slate-500 dark:text-slate-400">showing first {globalIncidents.length}</span>
-            )}
+      <div className="ui-surface-card">
+        <ListToolbar
+          title="Incidents"
+          description="All incidents across endpoints. Default view is 6 months."
+          countLabel={`${globalIncidentsTotal} incident${globalIncidentsTotal === 1 ? "" : "s"}${globalIncidentsTotal > globalIncidents.length ? ` · showing first ${globalIncidents.length}` : ""}`}
+          filters={
             <div className="flex flex-wrap gap-2">
               {INCIDENT_WINDOW_OPTIONS.map((option) => (
                 <button
@@ -398,9 +404,8 @@ export default function EndpointStatusPage() {
                 </button>
               ))}
             </div>
-          </div>
-        )}
-      >
+          }
+        />
         <div className="overflow-x-auto">
           <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -459,7 +464,7 @@ export default function EndpointStatusPage() {
             </tbody>
           </table>
         </div>
-      </ListSectionCard>
+      </div>
     </div>
   );
 }

@@ -9,33 +9,26 @@ import { useS3AccountContext } from "./S3AccountContext";
 import { S3AccountSelector } from "../../api/accountParams";
 import { IAMGroup, attachGroupPolicy, createIamGroup, deleteIamGroup, listIamGroups } from "../../api/managerIamGroups";
 import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPolicies";
+import ListToolbar from "../../components/ListToolbar";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { uiCheckboxClass } from "../../components/ui/styles";
+import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 export default function ManagerGroupsPage() {
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, selectedS3AccountId, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
-  if (isS3User) {
-    return (
-      <div className="space-y-4">
-        <PageHeader
-          title="IAM Groups"
-          description="Manage IAM groups for account administrators."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Groups" }]}
-        />
-        <PageBanner tone="info">IAM groups are not available for standalone S3 users. Select an S3 Account to continue.</PageBanner>
-      </div>
-    );
-  }
   const [groups, setGroups] = useState<IAMGroup[]>([]);
+  const [groupFilter, setGroupFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [advancedName, setAdvancedName] = useState("");
@@ -49,6 +42,9 @@ export default function ManagerGroupsPage() {
   const [showPolicyOptions, setShowPolicyOptions] = useState(false);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const contextStrip = useManagerWorkspaceContextStrip({
+    description: "IAM groups are managed in the active execution context and bundle reusable permissions for account users.",
+  });
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -214,10 +210,15 @@ export default function ManagerGroupsPage() {
     }
   };
 
-  const tableStatus = resolveListTableStatus({
+  const filteredGroups = groups.filter((group) => {
+    const needle = groupFilter.trim().toLowerCase();
+    if (!needle) return true;
+    return group.name.toLowerCase().includes(needle) || (group.arn ?? "").toLowerCase().includes(needle);
+  });
+  const filteredTableStatus = resolveListTableStatus({
     loading,
     error,
-    rowCount: groups.length,
+    rowCount: filteredGroups.length,
   });
 
   return (
@@ -226,89 +227,117 @@ export default function ManagerGroupsPage() {
         title="IAM Groups"
         description="Manage groups using the account root keys."
         breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Groups" }]}
-        actions={[
-          {
-            label: "Create group",
-            onClick: openAdvancedModal,
-          },
-        ]}
+        actions={
+          !needsS3AccountSelection && !isS3User
+            ? [
+                {
+                  label: "Create group",
+                  onClick: openAdvancedModal,
+                },
+              ]
+            : []
+        }
       />
+      <WorkspaceContextStrip {...contextStrip} />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
-      {needsS3AccountSelection && <PageBanner tone="warning">Select an account before managing groups.</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
-      <div className="ui-surface-card">
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <div>
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Groups</p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">List, members, and policies.</p>
-          </div>
-        </div>
-        <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead className="bg-slate-50 dark:bg-slate-900/50">
-            <tr>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Policies</th>
-              <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading groups..." />}
-            {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load groups." tone="error" />}
-            {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No groups." />}
-            {groups.map((g) => (
-                <tr key={g.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
-                    <span>{g.name}</span>
-                  </td>
-                  <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{g.arn ?? "-"}</td>
-                  <td className="manager-table-cell-wide px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                    {g.policies && g.policies.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {g.policies.map((p) => (
-                          <span
-                            key={p}
-                            className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                            title={p}
-                          >
-                            {p.split("/").pop()}
-                          </span>
-                        ))}
+      {needsS3AccountSelection ? (
+        <PageEmptyState
+          title="Select an account before managing IAM groups"
+          description="Groups are scoped to an execution context. Choose an account to list membership containers and attach shared policies."
+          primaryAction={{ label: "Open users", to: "/manager/users" }}
+          tone="warning"
+        />
+      ) : isS3User ? (
+        <PageEmptyState
+          title="IAM groups are unavailable for managed S3 user contexts"
+          description="Switch to an RGW account or S3 connection context to manage account-level IAM groups."
+          primaryAction={{ label: "Open users", to: "/manager/users" }}
+          tone="warning"
+        />
+      ) : (
+        <div className="ui-surface-card">
+          <ListToolbar
+            title="Groups"
+            description="Group inventory, membership shortcuts, and attached policies."
+            countLabel={`${filteredGroups.length} result(s)`}
+            search={
+              <input
+                type="text"
+                value={groupFilter}
+                onChange={(e) => setGroupFilter(e.target.value)}
+                placeholder="Search by name or ARN"
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            }
+          />
+          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <thead className="bg-slate-50 dark:bg-slate-900/50">
+              <tr>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Policies</th>
+                <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              {filteredTableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading groups..." />}
+              {filteredTableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load groups." tone="error" />}
+              {filteredTableStatus === "empty" && <TableEmptyState colSpan={4} message="No groups." />}
+              {filteredGroups.map((g) => (
+                  <tr key={g.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
+                      <span>{g.name}</span>
+                    </td>
+                    <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{g.arn ?? "-"}</td>
+                    <td className="manager-table-cell-wide px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                      {g.policies && g.policies.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {g.policies.map((p) => (
+                            <span
+                              key={p}
+                              className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                              title={p}
+                            >
+                              {p.split("/").pop()}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Link
+                          to={`/manager/groups/${encodeURIComponent(g.name)}/users`}
+                          className={tableActionButtonClasses}
+                        >
+                          Members
+                        </Link>
+                        <Link
+                          to={`/manager/groups/${encodeURIComponent(g.name)}/policies`}
+                          className={tableActionButtonClasses}
+                        >
+                          Policies
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(g.name)}
+                          className={tableDeleteActionClasses}
+                          disabled={busy === g.name}
+                        >
+                          {busy === g.name ? "Deleting..." : "Delete"}
+                        </button>
                       </div>
-                    ) : (
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Link
-                        to={`/manager/groups/${encodeURIComponent(g.name)}/users`}
-                        className={tableActionButtonClasses}
-                      >
-                        Members
-                      </Link>
-                      <Link
-                        to={`/manager/groups/${encodeURIComponent(g.name)}/policies`}
-                        className={tableActionButtonClasses}
-                      >
-                        Policies
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(g.name)}
-                        className={tableDeleteActionClasses}
-                        disabled={busy === g.name}
-                      >
-                        {busy === g.name ? "Deleting..." : "Delete"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {showAdvancedModal && (
         <Modal title="Create IAM group" onClose={closeAdvancedModal}>

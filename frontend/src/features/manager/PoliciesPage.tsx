@@ -7,11 +7,15 @@ import axios from "axios";
 import { useS3AccountContext } from "./S3AccountContext";
 import { S3AccountSelector } from "../../api/accountParams";
 import { IamPolicy, createIamPolicy, listIamPolicies } from "../../api/managerIamPolicies";
+import ListToolbar from "../../components/ListToolbar";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
+import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 const DEFAULT_POLICY_DOCUMENT = JSON.stringify(
   {
@@ -26,19 +30,8 @@ export default function PoliciesPage() {
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
-  if (isS3User) {
-    return (
-      <div className="space-y-4">
-        <PageHeader
-          title="IAM Policies"
-          description="Manage IAM policies for account administrators."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Policies" }]}
-        />
-        <PageBanner tone="info">IAM policies are not available for standalone S3 users. Select an S3 Account to continue.</PageBanner>
-      </div>
-    );
-  }
   const [policies, setPolicies] = useState<IamPolicy[]>([]);
+  const [policyFilter, setPolicyFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [advancedName, setAdvancedName] = useState("");
@@ -46,6 +39,9 @@ export default function PoliciesPage() {
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const contextStrip = useManagerWorkspaceContextStrip({
+    description: "Managed IAM policies are scoped to the active execution context and reused across users, groups, and roles.",
+  });
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -115,10 +111,15 @@ export default function PoliciesPage() {
     setShowAdvancedModal(false);
   };
 
-  const tableStatus = resolveListTableStatus({
+  const filteredPolicies = policies.filter((policy) => {
+    const needle = policyFilter.trim().toLowerCase();
+    if (!needle) return true;
+    return policy.name.toLowerCase().includes(needle) || policy.arn.toLowerCase().includes(needle);
+  });
+  const filteredTableStatus = resolveListTableStatus({
     loading,
     error,
-    rowCount: policies.length,
+    rowCount: filteredPolicies.length,
   });
 
   return (
@@ -127,51 +128,77 @@ export default function PoliciesPage() {
         title="IAM Policies"
         description="List and create Ceph IAM policies for the selected account."
         breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Policies" }]}
-        actions={[
-          {
-            label: "Create policy",
-            onClick: openAdvancedModal,
-          },
-        ]}
+        actions={
+          !needsS3AccountSelection && !isS3User
+            ? [
+                {
+                  label: "Create policy",
+                  onClick: openAdvancedModal,
+                },
+              ]
+            : []
+        }
       />
-
-      {needsS3AccountSelection && <PageBanner tone="warning">Select an account before managing policies.</PageBanner>}
+      <WorkspaceContextStrip {...contextStrip} />
 
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
-
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
-      <div className="ui-surface-card">
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <div>
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Policies</p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">List of IAM policies for the selected account.</p>
-          </div>
+      {needsS3AccountSelection ? (
+        <PageEmptyState
+          title="Select an account before managing IAM policies"
+          description="Policies are created inside an execution context. Choose an account to list, create, and attach managed IAM policies."
+          primaryAction={{ label: "Open users", to: "/manager/users" }}
+          tone="warning"
+        />
+      ) : isS3User ? (
+        <PageEmptyState
+          title="IAM policies are unavailable for managed S3 user contexts"
+          description="Switch to an RGW account or S3 connection context to manage reusable IAM policies."
+          primaryAction={{ label: "Open users", to: "/manager/users" }}
+          tone="warning"
+        />
+      ) : (
+        <div className="ui-surface-card">
+          <ListToolbar
+            title="Policies"
+            description="Managed IAM policies available in the selected execution context."
+            countLabel={`${filteredPolicies.length} result(s)`}
+            search={
+              <input
+                type="text"
+                value={policyFilter}
+                onChange={(e) => setPolicyFilter(e.target.value)}
+                placeholder="Search by name or ARN"
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            }
+          />
+          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <thead className="bg-slate-50 dark:bg-slate-900/50">
+              <tr>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Version</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              {filteredTableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading policies..." />}
+              {filteredTableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load policies." tone="error" />}
+              {filteredTableStatus === "empty" && <TableEmptyState colSpan={3} message="No policies." />}
+              {filteredPolicies.map((p) => (
+                  <tr key={p.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
+                      <span>{p.name}</span>
+                    </td>
+                    <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">{p.arn}</td>
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{p.default_version_id ?? "-"}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         </div>
-        <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead className="bg-slate-50 dark:bg-slate-900/50">
-            <tr>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Version</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {tableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading policies..." />}
-            {tableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load policies." tone="error" />}
-            {tableStatus === "empty" && <TableEmptyState colSpan={3} message="No policies." />}
-            {policies.map((p) => (
-                <tr key={p.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
-                    <span>{p.name}</span>
-                  </td>
-                  <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">{p.arn}</td>
-                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{p.default_version_id ?? "-"}</td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
+      )}
 
       {showAdvancedModal && (
         <Modal title="Create policy" onClose={closeAdvancedModal}>

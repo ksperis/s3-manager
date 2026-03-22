@@ -12,11 +12,14 @@ import {
 import { TrafficWindow } from "../../api/stats";
 import MetricsTrafficOverview, { MetricsSnapshotCard } from "../../components/MetricsTrafficOverview";
 import PageBanner from "../../components/PageBanner";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import UsageBreakdown from "../../components/UsageBreakdown";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+import useCephAdminWorkspaceContextStrip from "./useCephAdminWorkspaceContextStrip";
 
 function extractError(err: unknown, fallback: string): string {
   return extractApiError(err, fallback);
@@ -141,13 +144,11 @@ export default function CephAdminMetricsPage() {
     [storage?.bucket_usage]
   );
 
-  const endpointRequiredError =
-    !endpointLoading && selectedEndpointId == null ? "No Ceph endpoint selected for metrics." : null;
+  const endpointRequired = !endpointLoading && selectedEndpointId == null;
   const metricsUnavailableError =
     !endpointLoading && !selectedEndpointAccessLoading && selectedEndpointId != null && !metricsCredentialsReady
       ? "Supervision credentials are not configured for this endpoint."
       : null;
-  const pageError = endpointRequiredError || metricsUnavailableError || storageError;
   const storageDisabledMessage =
     selectedEndpointId != null && metricsCredentialsReady && !storageFeatureEnabled
       ? "Storage metrics are disabled for this endpoint."
@@ -156,135 +157,154 @@ export default function CephAdminMetricsPage() {
     selectedEndpointId != null && metricsCredentialsReady && !usageLogFeatureEnabled
       ? "Usage logs are disabled for this endpoint."
       : null;
+  const noMetricsSurfaceAvailable =
+    selectedEndpointId != null && metricsCredentialsReady && !storageFeatureEnabled && !usageLogFeatureEnabled;
   const missingTraffic = canLoadTraffic && !traffic && !trafficLoading && !trafficError;
+  const contextStrip = useCephAdminWorkspaceContextStrip({
+    description: "Cluster-wide RGW storage and traffic metrics depend on the selected endpoint and its supervision capabilities.",
+    extraAlerts: metricsUnavailableError ? [{ tone: "warning", message: metricsUnavailableError }] : [],
+  });
 
   return (
     <div className="space-y-4 ui-caption leading-relaxed">
       <PageHeader
         title="Metrics"
-        description={pageError || "Cluster-wide Ceph RGW storage and traffic metrics."}
+        description="Cluster-wide Ceph RGW storage and traffic metrics."
         breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Metrics" }]}
       />
+      <WorkspaceContextStrip {...contextStrip} />
+      {storageError && <PageBanner tone="error">{storageError}</PageBanner>}
 
-      <div className="ui-surface-card p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Ceph endpoint</p>
-            <p className="ui-body text-slate-500 dark:text-slate-400">
-              Cluster-wide metrics for the selected endpoint.
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">
-              {selectedEndpoint?.name ?? (endpointLoading ? "Loading..." : "No endpoint selected")}
-            </p>
-            {selectedEndpoint?.endpoint_url && (
-              <p className="ui-caption text-slate-500 dark:text-slate-400">{selectedEndpoint.endpoint_url}</p>
-            )}
-          </div>
-        </div>
-      </div>
+      {endpointRequired ? (
+        <PageEmptyState
+          title="Select a Ceph endpoint before opening metrics"
+          description="Cluster metrics are endpoint-scoped. Choose an endpoint to load storage snapshots, traffic analytics, and owner breakdowns."
+          primaryAction={{ label: "Return to Ceph Admin", to: "/ceph-admin" }}
+          tone="warning"
+        />
+      ) : metricsUnavailableError ? (
+        <PageEmptyState
+          title="Metrics credentials are not configured for this endpoint"
+          description="This endpoint does not currently expose Ceph admin metrics. Configure supervision credentials before opening storage and traffic analytics."
+          primaryAction={{ label: "Return to Ceph Admin", to: "/ceph-admin" }}
+          tone="warning"
+        />
+      ) : noMetricsSurfaceAvailable ? (
+        <PageEmptyState
+          title="Metrics are disabled for this endpoint"
+          description="Both storage metrics and usage logs are disabled for the selected endpoint. Enable at least one capability to restore analytics on this page."
+          primaryAction={{ label: "Return to Ceph Admin", to: "/ceph-admin" }}
+          tone="warning"
+        />
+      ) : (
+        <>
+          {storageDisabledMessage && <PageBanner tone="info">{storageDisabledMessage}</PageBanner>}
+          {trafficDisabledMessage && <PageBanner tone="info">{trafficDisabledMessage}</PageBanner>}
 
-      {pageError && <PageBanner tone="warning">{pageError}</PageBanner>}
-      {!pageError && storageDisabledMessage && <PageBanner tone="info">{storageDisabledMessage}</PageBanner>}
-      {!pageError && trafficDisabledMessage && <PageBanner tone="info">{trafficDisabledMessage}</PageBanner>}
+          {storageFeatureEnabled && (
+            <>
+              <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
+                <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
+                  <div>
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage snapshot</p>
+                    <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Stored volume & objects</h3>
+                    <p className="ui-body text-slate-500 dark:text-slate-400">Aggregated stats across the entire RGW cluster.</p>
+                  </div>
+                  {storage?.generated_at && (
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Updated:&nbsp;{new Date(storage.generated_at).toLocaleString()}
+                    </p>
+                  )}
+                </header>
 
-      <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
-        <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
-          <div>
-            <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage snapshot</p>
-            <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Stored volume & objects</h3>
-            <p className="ui-body text-slate-500 dark:text-slate-400">Aggregated stats across the entire RGW cluster.</p>
-          </div>
-          {storage?.generated_at && (
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Updated:&nbsp;{new Date(storage.generated_at).toLocaleString()}
-            </p>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <MetricsSnapshotCard
+                    label="Stored volume"
+                    value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
+                    hint="Sum of all visible buckets"
+                    loading={storageLoading}
+                  />
+                  <MetricsSnapshotCard
+                    label="Objects"
+                    value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
+                    hint="Instant cluster count"
+                    loading={storageLoading}
+                  />
+                  <MetricsSnapshotCard
+                    label="Buckets"
+                    value={formatCompactNumber(storageTotals?.bucket_count ?? storage?.total_buckets ?? 0)}
+                    hint="Across all owners"
+                    loading={storageLoading}
+                  />
+                  <MetricsSnapshotCard
+                    label="Owners"
+                    value={formatCompactNumber(storageTotals?.owners_with_usage ?? 0)}
+                    hint="Distinct bucket owners"
+                    loading={storageLoading}
+                  />
+                </div>
+              </section>
+
+              <section className="space-y-4 ui-surface-card p-5">
+                <header className="space-y-1">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage breakdown</p>
+                  <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Owners & buckets</h3>
+                  <p className="ui-body text-slate-500 dark:text-slate-400">Top consumers by owner and bucket.</p>
+                </header>
+                <div className="grid gap-6 xl:grid-cols-2">
+                  <UsageBreakdown
+                    title="Owners (volume)"
+                    subtitle="Volume used per owner (top 8)."
+                    loading={storageLoading}
+                    metric="bytes"
+                    items={ownerUsageItems}
+                    emptyMessage="No owner volume data available."
+                  />
+                  <UsageBreakdown
+                    title="Owners (objects)"
+                    subtitle="Object count per owner (top 8)."
+                    loading={storageLoading}
+                    metric="objects"
+                    items={ownerUsageItems}
+                    emptyMessage="No owner object data available."
+                  />
+                </div>
+                <div className="grid gap-6 xl:grid-cols-2">
+                  <UsageBreakdown
+                    title="Buckets (volume)"
+                    subtitle="Volume used per bucket (top 8)."
+                    loading={storageLoading}
+                    metric="bytes"
+                    items={bucketUsageItems}
+                    emptyMessage="No bucket volume data available."
+                  />
+                  <UsageBreakdown
+                    title="Buckets (objects)"
+                    subtitle="Object count per bucket (top 8)."
+                    loading={storageLoading}
+                    metric="objects"
+                    items={bucketUsageItems}
+                    emptyMessage="No bucket object data available."
+                  />
+                </div>
+              </section>
+            </>
           )}
-        </header>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricsSnapshotCard
-            label="Stored volume"
-            value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
-            hint="Sum of all visible buckets"
-            loading={storageLoading}
-          />
-          <MetricsSnapshotCard
-            label="Objects"
-            value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
-            hint="Instant cluster count"
-            loading={storageLoading}
-          />
-          <MetricsSnapshotCard
-            label="Buckets"
-            value={formatCompactNumber(storageTotals?.bucket_count ?? storage?.total_buckets ?? 0)}
-            hint="Across all owners"
-            loading={storageLoading}
-          />
-          <MetricsSnapshotCard
-            label="Owners"
-            value={formatCompactNumber(storageTotals?.owners_with_usage ?? 0)}
-            hint="Distinct bucket owners"
-            loading={storageLoading}
-          />
-        </div>
-      </section>
-
-      <MetricsTrafficOverview
-        traffic={traffic}
-        window={window}
-        onWindowChange={setWindow}
-        loading={trafficLoading}
-        error={trafficError}
-        showEmpty={missingTraffic}
-        description="Reading cluster-wide RGW logs for the selected window."
-        userRankingTitle="Most active owners"
-      />
-
-      <section className="space-y-4 ui-surface-card p-5">
-        <header className="space-y-1">
-          <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage breakdown</p>
-          <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Owners & buckets</h3>
-          <p className="ui-body text-slate-500 dark:text-slate-400">Top consumers by owner and bucket.</p>
-        </header>
-        <div className="grid gap-6 xl:grid-cols-2">
-          <UsageBreakdown
-            title="Owners (volume)"
-            subtitle="Volume used per owner (top 8)."
-            loading={storageLoading}
-            metric="bytes"
-            items={ownerUsageItems}
-            emptyMessage="No owner volume data available."
-          />
-          <UsageBreakdown
-            title="Owners (objects)"
-            subtitle="Object count per owner (top 8)."
-            loading={storageLoading}
-            metric="objects"
-            items={ownerUsageItems}
-            emptyMessage="No owner object data available."
-          />
-        </div>
-        <div className="grid gap-6 xl:grid-cols-2">
-          <UsageBreakdown
-            title="Buckets (volume)"
-            subtitle="Volume used per bucket (top 8)."
-            loading={storageLoading}
-            metric="bytes"
-            items={bucketUsageItems}
-            emptyMessage="No bucket volume data available."
-          />
-          <UsageBreakdown
-            title="Buckets (objects)"
-            subtitle="Object count per bucket (top 8)."
-            loading={storageLoading}
-            metric="objects"
-            items={bucketUsageItems}
-            emptyMessage="No bucket object data available."
-          />
-        </div>
-      </section>
+          {usageLogFeatureEnabled && (
+            <MetricsTrafficOverview
+              traffic={traffic}
+              window={window}
+              onWindowChange={setWindow}
+              loading={trafficLoading}
+              error={trafficError}
+              showEmpty={missingTraffic}
+              description="Reading cluster-wide RGW logs for the selected window."
+              userRankingTitle="Most active owners"
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }

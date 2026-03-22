@@ -15,14 +15,18 @@ import {
   updateTopicPolicy,
   Topic,
 } from "../../api/topics";
+import ListToolbar from "../../components/ListToolbar";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { useS3AccountContext } from "./S3AccountContext";
+import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 const defaultPolicyTemplate = `{
   "Version": "2012-10-17",
@@ -93,6 +97,7 @@ export default function TopicsPage() {
   const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
   const accountLabel = selectedS3Account?.display_name ?? sessionS3AccountName ?? "Current account";
   const [topics, setTopics] = useState<Topic[]>([]);
+  const [topicFilter, setTopicFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -119,21 +124,9 @@ export default function TopicsPage() {
   const [attributesSaving, setAttributesSaving] = useState(false);
   const [attributesError, setAttributesError] = useState<string | null>(null);
   const [attributesStatus, setAttributesStatus] = useState<string | null>(null);
-
-  if (!snsFeatureEnabled) {
-    return (
-      <div className="space-y-4">
-        <PageHeader
-          title="SNS Topics"
-          description="Manage SNS topics for bucket notifications."
-          breadcrumbs={[{ label: "Manager" }, { label: "Events" }, { label: "SNS Topics" }]}
-        />
-        <PageBanner tone="info">
-          SNS topics are disabled for this endpoint. Enable the SNS feature on the storage endpoint to manage topics.
-        </PageBanner>
-      </div>
-    );
-  }
+  const contextStrip = useManagerWorkspaceContextStrip({
+    description: "SNS topics belong to the active execution context and depend on the selected endpoint notification capabilities.",
+  });
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -251,7 +244,7 @@ export default function TopicsPage() {
     setPolicyStatus(null);
     try {
       parsed = policyText.trim() ? JSON.parse(policyText) : {};
-    } catch (err) {
+    } catch {
       setPolicyError("Policy must be valid JSON.");
       return;
     }
@@ -405,10 +398,15 @@ export default function TopicsPage() {
     setAttributeItems((prev) => prev.filter((_, idx) => idx !== index));
   };
 
-  const tableStatus = resolveListTableStatus({
+  const filteredTopics = useMemo(() => {
+    const needle = topicFilter.trim().toLowerCase();
+    if (!needle) return topics;
+    return topics.filter((topic) => topic.name.toLowerCase().includes(needle) || topic.arn.toLowerCase().includes(needle));
+  }, [topicFilter, topics]);
+  const filteredTableStatus = resolveListTableStatus({
     loading,
     error,
-    rowCount: topics.length,
+    rowCount: filteredTopics.length,
   });
 
   return (
@@ -418,7 +416,7 @@ export default function TopicsPage() {
         description="List, create, and secure account-owned SNS topics."
         breadcrumbs={[{ label: "Manager" }, { label: "Events" }, { label: "SNS Topics" }]}
         actions={
-          !needsS3AccountSelection
+          !needsS3AccountSelection && snsFeatureEnabled
             ? [
                 {
                   label: "Create topic",
@@ -428,10 +426,7 @@ export default function TopicsPage() {
             : []
         }
       />
-
-      {needsS3AccountSelection && (
-        <PageBanner tone="warning">Select an account to manage its topics.</PageBanner>
-      )}
+      <WorkspaceContextStrip {...contextStrip} />
 
       {actionMessage && (
         <PageBanner tone="success" className="flex items-center justify-between">
@@ -448,14 +443,36 @@ export default function TopicsPage() {
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
-      {!needsS3AccountSelection && (
+      {needsS3AccountSelection ? (
+        <PageEmptyState
+          title="Select an account before managing SNS topics"
+          description="SNS topics are created within an execution context. Choose an account to list topics, review subscriptions, and update notification settings."
+          primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
+          tone="warning"
+        />
+      ) : !snsFeatureEnabled ? (
+        <PageEmptyState
+          title="SNS topics are disabled for this endpoint"
+          description="Enable the SNS capability on the selected storage endpoint before creating or managing topic-based bucket notifications."
+          primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
+          tone="warning"
+        />
+      ) : (
         <div className="ui-surface-card">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-            <div>
-              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Topics</p>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">{accountLabel} · List + subscriptions.</p>
-            </div>
-          </div>
+          <ListToolbar
+            title="Topics"
+            description={`${accountLabel} · Topic inventory, subscriptions, attributes, and policies.`}
+            countLabel={`${filteredTopics.length} result(s)`}
+            search={
+              <input
+                type="text"
+                value={topicFilter}
+                onChange={(e) => setTopicFilter(e.target.value)}
+                placeholder="Search by topic name or ARN"
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            }
+          />
           <div className="overflow-x-auto">
             <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
               <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -466,10 +483,10 @@ export default function TopicsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {tableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading topics..." />}
-                {tableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load topics." tone="error" />}
-                {tableStatus === "empty" && <TableEmptyState colSpan={3} message="No topics." />}
-                {topics.map((topic) => (
+                {filteredTableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading topics..." />}
+                {filteredTableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load topics." tone="error" />}
+                {filteredTableStatus === "empty" && <TableEmptyState colSpan={3} message="No topics." />}
+                {filteredTopics.map((topic) => (
                     <tr key={topic.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="manager-table-cell-wide px-6 py-4">
                         <div className="flex flex-col">

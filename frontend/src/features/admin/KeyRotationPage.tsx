@@ -5,10 +5,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { KeyRotationResponse, KeyRotationType, rotateS3Keys } from "../../api/keyRotation";
 import { StorageEndpoint, listStorageEndpoints } from "../../api/storageEndpoints";
+import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
-import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
 
@@ -177,16 +177,13 @@ export default function KeyRotationPage() {
           { label: "Settings" },
           { label: "Key rotation" },
         ]}
-        rightContent={
-          <button
-            type="button"
-            onClick={runRotation}
-            disabled={runDisabled}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:pointer-events-none disabled:opacity-60"
-          >
-            {running ? "Rotating..." : "Run rotation"}
-          </button>
-        }
+        actions={[
+          {
+            label: running ? "Rotating..." : "Run rotation",
+            onClick: runRotation,
+            disabled: runDisabled,
+          },
+        ]}
       />
 
       {loading && <PageBanner tone="info">Loading endpoints...</PageBanner>}
@@ -321,10 +318,12 @@ export default function KeyRotationPage() {
       </div>
 
       {result && (
-        <ListSectionCard
-          title="Execution summary"
-          subtitle={`Mode: ${result.mode === "deactivate_old_keys" ? "Deactivate old keys" : "Delete old keys"}`}
-        >
+        <div className="ui-surface-card">
+          <ListToolbar
+            title="Execution summary"
+            description={`Mode: ${result.mode === "deactivate_old_keys" ? "Deactivate old keys" : "Delete old keys"}`}
+            countLabel={`${result.results.length} detailed result${result.results.length === 1 ? "" : "s"}`}
+          />
           <div className="space-y-3 px-5 pb-5 pt-3">
           <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-lg bg-slate-50 px-3 py-2 ui-caption dark:bg-slate-800/60">Total: {result.summary.total}</div>
@@ -400,7 +399,7 @@ export default function KeyRotationPage() {
             </table>
           </div>
           </div>
-        </ListSectionCard>
+        </div>
       )}
     </div>
   );

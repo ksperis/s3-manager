@@ -5,7 +5,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchManagerWorkspaceHealthOverview, WorkspaceEndpointHealthOverviewResponse } from "../../api/healthchecks";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import PageEmptyState from "../../components/PageEmptyState";
 import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
+import WorkspaceNavCards from "../../components/WorkspaceNavCards";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { useS3AccountContext } from "./S3AccountContext";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
@@ -13,30 +16,14 @@ import UsageOverview from "./UsageOverview";
 import { useManagerStats } from "./useManagerStats";
 import { useIamOverview } from "./useIamOverview";
 import { extractApiError } from "../../utils/apiError";
-
-type SessionCapabilities = {
-  can_manage_iam?: boolean;
-  can_view_traffic?: boolean;
-};
-
-function getCapabilities(): SessionCapabilities | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as { capabilities?: SessionCapabilities };
-    return parsed.capabilities ?? null;
-  } catch {
-    return null;
-  }
-}
+import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 export default function ManagerDashboard() {
   const { generalSettings } = useGeneralSettings();
   const {
     accounts,
     selectedS3AccountId,
-    requiresS3AccountSelection,
     sessionS3AccountName,
     selectedS3AccountType,
     hasS3AccountContext,
@@ -44,8 +31,9 @@ export default function ManagerDashboard() {
     accessMode,
     managerStatsEnabled,
     managerStatsMessage,
+    managerBrowserEnabled,
   } = useS3AccountContext();
-  const capabilities = getCapabilities();
+  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const isS3User = selectedS3AccountType === "s3_user";
   const isConnection = selectedS3AccountType === "connection";
   const selected = useMemo(
@@ -69,7 +57,9 @@ export default function ManagerDashboard() {
     hasContext,
     accessMode ?? "default"
   );
-  const accountLabel = selected?.display_name ?? sessionS3AccountName ?? "S3 session";
+  const accountLabel = selected
+    ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
+    : sessionS3AccountName ?? "S3 session";
   const iamDisabled = isS3User || isConnection || !iamFeatureEnabled;
   const metricsStatusMessage =
     hasContext && !managerStatsEnabled
@@ -78,6 +68,10 @@ export default function ManagerDashboard() {
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
+  const contextStrip = useManagerWorkspaceContextStrip({
+    description: "Actions in Manager use the selected execution context and storage endpoint capabilities.",
+    extraAlerts: metricsStatusMessage ? [{ tone: "warning", message: metricsStatusMessage }] : [],
+  });
 
   useEffect(() => {
     if (!generalSettings.endpoint_status_enabled || !hasContext) {
@@ -107,25 +101,61 @@ export default function ManagerDashboard() {
     };
   }, [accountIdForApi, generalSettings.endpoint_status_enabled, hasContext]);
 
+  const nextStepCards = useMemo(() => {
+    if (!hasContext) return [];
+    return [
+      {
+        title: "Buckets",
+        description: "Review bucket inventory, quotas, and feature configuration for this context.",
+        to: "/manager/buckets",
+        eyebrow: "Next step",
+      },
+      ...(canManageIam
+        ? [
+            {
+              title: "IAM Users",
+              description: "Create or audit IAM users, access keys, and direct permissions.",
+              to: "/manager/users",
+              eyebrow: "Next step",
+            },
+          ]
+        : []),
+      ...(managerBrowserEnabled
+        ? [
+            {
+              title: "Browser",
+              description: "Open the object browser with the same execution identity.",
+              to: "/manager/browser",
+              eyebrow: "Next step",
+            },
+          ]
+        : []),
+    ];
+  }, [canManageIam, hasContext, managerBrowserEnabled]);
+
   return (
     <div className="space-y-4">
       <PageHeader
         title="Manager dashboard"
-        description={
-          usageFeatureEnabled
-            ? error || "S3Account-scoped S3 + IAM controls (real-time stats)."
-            : "Usage insights disabled for this storage endpoint."
-        }
+        description="Operational overview for the active manager context."
         breadcrumbs={[{ label: "Manager" }, { label: "Dashboard" }]}
       />
 
-      {requiresS3AccountSelection && !selected && (
-        <PageBanner tone="warning">Select an account to view metrics.</PageBanner>
-      )}
-      {metricsStatusMessage && <PageBanner tone="warning">{metricsStatusMessage}</PageBanner>}
+      <WorkspaceContextStrip {...contextStrip} />
+
+      {!hasContext ? (
+        <PageEmptyState
+          title="Select an account to start"
+          description="Manager surfaces stay available, but metrics, IAM data, and bucket actions remain disabled until an execution context is selected."
+          primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
+          secondaryAction={{ label: "Open profile", to: "/manager/profile" }}
+          tone="warning"
+        />
+      ) : null}
 
       {hasContext && (
         <>
+          {nextStepCards.length > 0 ? <WorkspaceNavCards items={nextStepCards} columns={3} /> : null}
           <UsageOverview
             accountName={accountLabel}
             storage={{
@@ -159,6 +189,8 @@ export default function ManagerDashboard() {
           )}
         </>
       )}
+
+      {error && <PageBanner tone="error">{error}</PageBanner>}
     </div>
   );
 }

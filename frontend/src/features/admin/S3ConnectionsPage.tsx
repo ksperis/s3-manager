@@ -3,11 +3,11 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
-import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import UiButton from "../../components/ui/UiButton";
@@ -710,24 +710,26 @@ export default function S3ConnectionsPage() {
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
-      <ListSectionCard
-        title="Shared S3 Connections"
-        subtitle={`${total} entr${total === 1 ? "y" : "ies"} · search matches all records`}
-        rightContent={(
-          <div className="flex items-center gap-2">
-            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Filter
-            </span>
-            <input
-              type="text"
-              value={filter}
-              onChange={(e) => handleFilterChange(e.target.value)}
-              placeholder="Search name, endpoint, created by..."
-              className={`${toolbarCompactInputClasses} w-full sm:w-64`}
-            />
-          </div>
-        )}
-      >
+      <div className="ui-surface-card">
+        <ListToolbar
+          title="Shared S3 Connections"
+          description="Search matches all records."
+          countLabel={`${total} entr${total === 1 ? "y" : "ies"}`}
+          search={
+            <div className="flex items-center gap-2">
+              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Filter
+              </span>
+              <input
+                type="text"
+                value={filter}
+                onChange={(e) => handleFilterChange(e.target.value)}
+                placeholder="Search name, endpoint, created by..."
+                className={`${toolbarCompactInputClasses} w-full sm:w-64`}
+              />
+            </div>
+          }
+        />
         {selectedIds.length > 0 && (
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
             <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
@@ -890,7 +892,7 @@ export default function S3ConnectionsPage() {
           onPageSizeChange={handlePageSizeChange}
           disabled={loading}
         />
-      </ListSectionCard>
+      </div>
 
       {/* Create modal */}
       {showCreateModal && (

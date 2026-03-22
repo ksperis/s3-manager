@@ -4,11 +4,13 @@
  */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Modal from "../../components/Modal";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import UiButton from "../../components/ui/UiButton";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import BrowserEmbed from "../browser/BrowserEmbed";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+import useCephAdminWorkspaceContextStrip from "./useCephAdminWorkspaceContextStrip";
 
 export default function CephAdminBrowserPage() {
   const navigate = useNavigate();
@@ -16,6 +18,16 @@ export default function CephAdminBrowserPage() {
   const [acceptedRisk, setAcceptedRisk] = useState(false);
   const [showRiskModal, setShowRiskModal] = useState(true);
   const browserSelector = acceptedRisk && selectedEndpointId ? `ceph-admin-${selectedEndpointId}` : null;
+  const contextStrip = useCephAdminWorkspaceContextStrip({
+    description: "This browser uses endpoint-wide Ceph admin credentials. Prefer tenant-owned credentials for regular object work.",
+    extraAlerts: [
+      {
+        tone: "warning",
+        message:
+          "Use this view only for endpoint-wide investigation or recovery. Owner attribution may differ from the tenant that normally owns the bucket.",
+      },
+    ],
+  });
 
   const handleCloseModal = () => {
     setShowRiskModal(false);
@@ -28,36 +40,46 @@ export default function CephAdminBrowserPage() {
   };
 
   return (
-    <>
-      <PageHeader title="Browser" />
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
+      <PageHeader title="Browser" description="Endpoint-wide object browser for Ceph admin workflows." />
+      <WorkspaceContextStrip {...contextStrip} />
       <div className="min-h-0 flex-1">
-        <BrowserEmbed
-          accountIdForApi={browserSelector}
-          hasContext={Boolean(browserSelector)}
-          storageEndpointCapabilities={selectedEndpoint?.capabilities ?? null}
-          endpointProvider="ceph"
-        />
+        {!selectedEndpointId ? (
+          <PageEmptyState
+            title="Select a Ceph endpoint"
+            description="Choose an endpoint before opening the Ceph Admin browser."
+            primaryAction={{ label: "Return to Ceph Admin", to: "/ceph-admin" }}
+            tone="warning"
+            className="h-full"
+          />
+        ) : (
+          <BrowserEmbed
+            accountIdForApi={browserSelector}
+            hasContext={Boolean(browserSelector)}
+            storageEndpointCapabilities={selectedEndpoint?.capabilities ?? null}
+            endpointProvider="ceph"
+          />
+        )}
       </div>
-      {showRiskModal && (
-        <Modal title="Ceph Admin browser warning" onClose={handleCloseModal} maxWidthClass="max-w-2xl">
-          <div className="space-y-3 ui-body text-slate-700 dark:text-slate-200">
-            <p>
-              This browser uses the endpoint-wide <strong>ceph-admin</strong> credentials. Bucket and object operations may be
-              executed with an owner identity different from the expected tenant owner.
-            </p>
-            <p>
-              For regular bucket/object operations, prefer creating an <strong>S3 Connection</strong> with the correct owner
-              credentials, then use that connection in the Browser.
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <UiButton variant="secondary" onClick={handleCloseModal}>
-                Cancel
-              </UiButton>
-              <UiButton onClick={handleAcceptRisk}>I understand the risks</UiButton>
-            </div>
-          </div>
-        </Modal>
+      {showRiskModal && selectedEndpointId != null && (
+        <ConfirmActionDialog
+          title="Ceph Admin browser warning"
+          description="This browser uses endpoint-wide ceph-admin credentials. Bucket and object operations may execute with an owner identity different from the expected tenant owner."
+          confirmLabel="I understand the risks"
+          tone="primary"
+          details={[
+            { label: "Endpoint", value: selectedEndpoint?.name ?? "Unavailable" },
+            { label: "Execution", value: "Endpoint-wide ceph-admin credentials" },
+          ]}
+          impacts={[
+            "Bucket and object actions may not match the tenant owner you expect.",
+            "Prefer an S3 Connection with the correct owner credentials for regular object work.",
+          ]}
+          onCancel={handleCloseModal}
+          onConfirm={handleAcceptRisk}
+          maxWidthClass="max-w-2xl"
+        />
       )}
-    </>
+    </div>
   );
 }

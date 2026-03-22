@@ -18,14 +18,18 @@ import {
   updateIamRole,
 } from "../../api/managerIamRoles";
 import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPolicies";
+import ListToolbar from "../../components/ListToolbar";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
+import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 const DEFAULT_ASSUME_ROLE_DOCUMENT = JSON.stringify(
   {
@@ -47,19 +51,8 @@ export default function ManagerRolesPage() {
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
-  if (isS3User) {
-    return (
-      <div className="space-y-4">
-        <PageHeader
-          title="IAM Roles"
-          description="Manage IAM roles for account administrators."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Roles" }]}
-        />
-        <PageBanner tone="info">IAM roles are not available for standalone S3 users. Select an S3 Account to continue.</PageBanner>
-      </div>
-    );
-  }
   const [roles, setRoles] = useState<IAMRole[]>([]);
+  const [roleFilter, setRoleFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [advancedName, setAdvancedName] = useState("");
@@ -82,6 +75,9 @@ export default function ManagerRolesPage() {
   const [loadingRoleDetails, setLoadingRoleDetails] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const contextStrip = useManagerWorkspaceContextStrip({
+    description: "IAM roles are scoped to the active execution context and expose trust plus attached policy management.",
+  });
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -340,10 +336,19 @@ export default function ManagerRolesPage() {
     }
   };
 
-  const tableStatus = resolveListTableStatus({
+  const filteredRoles = roles.filter((role) => {
+    const needle = roleFilter.trim().toLowerCase();
+    if (!needle) return true;
+    return (
+      role.name.toLowerCase().includes(needle) ||
+      (role.path ?? "").toLowerCase().includes(needle) ||
+      (role.arn ?? "").toLowerCase().includes(needle)
+    );
+  });
+  const filteredTableStatus = resolveListTableStatus({
     loading,
     error,
-    rowCount: roles.length,
+    rowCount: filteredRoles.length,
   });
 
   return (
@@ -352,92 +357,120 @@ export default function ManagerRolesPage() {
         title="IAM Roles"
         description="Manage roles using the account root keys."
         breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Roles" }]}
-        actions={[
-          {
-            label: "Create role",
-            onClick: openAdvancedModal,
-          },
-        ]}
+        actions={
+          !needsS3AccountSelection && !isS3User
+            ? [
+                {
+                  label: "Create role",
+                  onClick: openAdvancedModal,
+                },
+              ]
+            : []
+        }
       />
+      <WorkspaceContextStrip {...contextStrip} />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
-      {needsS3AccountSelection && <PageBanner tone="warning">Select an account before managing roles.</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
-      <div className="ui-surface-card">
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <div>
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Roles</p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">List + attached policies.</p>
-          </div>
-        </div>
-        <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead className="bg-slate-50 dark:bg-slate-900/50">
-            <tr>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Path</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Policies</th>
-              <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {tableStatus === "loading" && <TableEmptyState colSpan={5} message="Loading roles..." />}
-            {tableStatus === "error" && <TableEmptyState colSpan={5} message="Unable to load roles." tone="error" />}
-            {tableStatus === "empty" && <TableEmptyState colSpan={5} message="No roles." />}
-            {roles.map((r) => (
-                <tr key={r.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
-                    <span>{r.name}</span>
-                  </td>
-                  <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{r.path ?? "-"}</td>
-                  <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{r.arn ?? "-"}</td>
-                  <td className="manager-table-cell-wide px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                    {r.policies && r.policies.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {r.policies.map((p) => (
-                          <span
-                            key={p}
-                            className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                            title={p}
-                          >
-                            {p.split("/").pop()}
-                          </span>
-                        ))}
+      {needsS3AccountSelection ? (
+        <PageEmptyState
+          title="Select an account before managing IAM roles"
+          description="Roles are defined per execution context. Choose an account to list trust relationships and attached policies."
+          primaryAction={{ label: "Open users", to: "/manager/users" }}
+          tone="warning"
+        />
+      ) : isS3User ? (
+        <PageEmptyState
+          title="IAM roles are unavailable for managed S3 user contexts"
+          description="Switch to an RGW account or S3 connection context to manage role trust policies and attached permissions."
+          primaryAction={{ label: "Open users", to: "/manager/users" }}
+          tone="warning"
+        />
+      ) : (
+        <div className="ui-surface-card">
+          <ListToolbar
+            title="Roles"
+            description="Role inventory, trust policy editing, and attached policy shortcuts."
+            countLabel={`${filteredRoles.length} result(s)`}
+            search={
+              <input
+                type="text"
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                placeholder="Search by name, path, or ARN"
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            }
+          />
+          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <thead className="bg-slate-50 dark:bg-slate-900/50">
+              <tr>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Path</th>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Policies</th>
+                <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              {filteredTableStatus === "loading" && <TableEmptyState colSpan={5} message="Loading roles..." />}
+              {filteredTableStatus === "error" && <TableEmptyState colSpan={5} message="Unable to load roles." tone="error" />}
+              {filteredTableStatus === "empty" && <TableEmptyState colSpan={5} message="No roles." />}
+              {filteredRoles.map((r) => (
+                  <tr key={r.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
+                      <span>{r.name}</span>
+                    </td>
+                    <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{r.path ?? "-"}</td>
+                    <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{r.arn ?? "-"}</td>
+                    <td className="manager-table-cell-wide px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                      {r.policies && r.policies.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {r.policies.map((p) => (
+                            <span
+                              key={p}
+                              className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                              title={p}
+                            >
+                              {p.split("/").pop()}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <button
+                          onClick={() => openEditModal(r.name)}
+                          className={tableActionButtonClasses}
+                          disabled={loadingRoleDetails && editingRole?.name === r.name}
+                        >
+                          Edit
+                        </button>
+                        <Link
+                          to={`/manager/roles/${encodeURIComponent(r.name)}/policies`}
+                          className={tableActionButtonClasses}
+                        >
+                          Policies
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(r.name)}
+                          className={tableDeleteActionClasses}
+                          disabled={deletingRole === r.name}
+                        >
+                          {deletingRole === r.name ? "Deleting..." : "Delete"}
+                        </button>
                       </div>
-                    ) : (
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <button
-                        onClick={() => openEditModal(r.name)}
-                        className={tableActionButtonClasses}
-                        disabled={loadingRoleDetails && editingRole?.name === r.name}
-                      >
-                        Edit
-                      </button>
-                      <Link
-                        to={`/manager/roles/${encodeURIComponent(r.name)}/policies`}
-                        className={tableActionButtonClasses}
-                      >
-                        Policies
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(r.name)}
-                        className={tableDeleteActionClasses}
-                        disabled={deletingRole === r.name}
-                      >
-                        {deletingRole === r.name ? "Deleting..." : "Delete"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {showAdvancedModal && (
         <Modal title="Create IAM role" onClose={closeAdvancedModal}>

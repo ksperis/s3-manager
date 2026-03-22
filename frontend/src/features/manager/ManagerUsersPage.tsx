@@ -17,10 +17,13 @@ import {
 import { IAMGroup, listIamGroups } from "../../api/managerIamGroups";
 import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPolicies";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
+import ListToolbar from "../../components/ListToolbar";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -29,6 +32,7 @@ import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
+import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 export default function ManagerUsersPage() {
   type SortField = keyof IAMUser;
@@ -36,18 +40,6 @@ export default function ManagerUsersPage() {
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode, accounts } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
-  if (isS3User) {
-    return (
-      <div className="space-y-4">
-        <PageHeader
-          title="Users"
-          description="Manage IAM identities for your account."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Users" }]}
-        />
-        <PageBanner tone="info">IAM is not available for standalone S3 users. Select an S3 Account (tenant) to continue.</PageBanner>
-      </div>
-    );
-  }
   const [users, setUsers] = useState<IAMUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +62,9 @@ export default function ManagerUsersPage() {
   const [showGroupOptions, setShowGroupOptions] = useState(false);
   const [showPolicyOptions, setShowPolicyOptions] = useState(false);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
+  const contextStrip = useManagerWorkspaceContextStrip({
+    description: "IAM users are created in the active execution context and can inherit groups, policies, and access keys.",
+  });
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>({
     field: "name",
     direction: "asc",
@@ -325,16 +320,20 @@ export default function ManagerUsersPage() {
         title="Users"
         description="Create/delete via the account root credentials. Optionally generate an access key on creation."
         breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Users" }]}
-        actions={[
-          {
-            label: "Create user",
-            onClick: openAdvancedModal,
-          },
-        ]}
+        actions={
+          !needsS3AccountSelection && !isS3User
+            ? [
+                {
+                  label: "Create user",
+                  onClick: openAdvancedModal,
+                },
+              ]
+            : []
+        }
       />
+      <WorkspaceContextStrip {...contextStrip} />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
-      {needsS3AccountSelection && <PageBanner tone="warning">Select an account before creating or listing users.</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
       {createdKey && createdForUser && (
@@ -380,161 +379,170 @@ export default function ManagerUsersPage() {
         </div>
       )}
 
-      <div className="ui-surface-card">
-        <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Users</p>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">List plus key/policy actions.</p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <span className="ui-caption text-slate-500 dark:text-slate-400">{filteredUsers.length} user(s)</span>
-              <div className="flex items-center gap-2 sm:justify-end">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
-                <input
-                  type="text"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                  placeholder="Search by name or ARN"
-                  className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-        <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead className="bg-slate-50 dark:bg-slate-900/50">
-            <tr>
-              {userTableColumns.map((col) => (
-                <SortableHeader
-                  key={col.label}
-                  label={col.label}
-                  field={col.field}
-                  activeField={sort.field}
-                  direction={sort.direction}
-                  align={col.align ?? (col.label === "Actions" ? "right" : "left")}
-                  onSort={col.field ? (field) => toggleSort(field as SortField) : undefined}
-                />
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {tableStatus === "loading" && <TableEmptyState colSpan={userTableColumns.length} message="Loading users..." />}
-            {tableStatus === "error" && (
-              <TableEmptyState colSpan={userTableColumns.length} message="Unable to load users." tone="error" />
-            )}
-            {tableStatus === "empty" && <TableEmptyState colSpan={userTableColumns.length} message="No users." />}
-            {filteredUsers.map((u) => {
-                const hasGroups = (u.groups?.length ?? 0) > 0;
-                const hasPolicies = (u.policies?.length ?? 0) > 0;
-                const hasInlinePolicies = (u.inline_policies?.length ?? 0) > 0;
-                const lacksGroupOrPolicy = !hasGroups && !hasPolicies && !hasInlinePolicies;
-                const lacksKeys = u.has_keys === false;
-                const showWarning = lacksGroupOrPolicy || lacksKeys;
-                const warningTitle = (() => {
-                  if (lacksGroupOrPolicy && lacksKeys) {
-                    return "No groups/policies or access keys assigned";
-                  }
-                  if (lacksGroupOrPolicy) {
-                    return "No groups or policies assigned";
-                  }
-                  return "No access keys registered";
-                })();
+      {needsS3AccountSelection ? (
+        <PageEmptyState
+          title="Select an account before managing IAM users"
+          description="Users are created within an execution context. Choose an account to list identities, generate keys, and attach policies."
+          primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
+          tone="warning"
+        />
+      ) : isS3User ? (
+        <PageEmptyState
+          title="IAM users are unavailable for managed S3 user contexts"
+          description="Switch to an RGW account or S3 connection context to manage account-level IAM identities."
+          primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
+          tone="warning"
+        />
+      ) : (
+        <div className="ui-surface-card">
+          <ListToolbar
+            title="Users"
+            description="User inventory with group, key, and policy shortcuts."
+            countLabel={`${filteredUsers.length} result(s)`}
+            search={
+              <input
+                type="text"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Search by name or ARN"
+                className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
+              />
+            }
+          />
+          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <thead className="bg-slate-50 dark:bg-slate-900/50">
+              <tr>
+                {userTableColumns.map((col) => (
+                  <SortableHeader
+                    key={col.label}
+                    label={col.label}
+                    field={col.field}
+                    activeField={sort.field}
+                    direction={sort.direction}
+                    align={col.align ?? (col.label === "Actions" ? "right" : "left")}
+                    onSort={col.field ? (field) => toggleSort(field as SortField) : undefined}
+                  />
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              {tableStatus === "loading" && <TableEmptyState colSpan={userTableColumns.length} message="Loading users..." />}
+              {tableStatus === "error" && (
+                <TableEmptyState colSpan={userTableColumns.length} message="Unable to load users." tone="error" />
+              )}
+              {tableStatus === "empty" && <TableEmptyState colSpan={userTableColumns.length} message="No users." />}
+              {filteredUsers.map((u) => {
+                  const hasGroups = (u.groups?.length ?? 0) > 0;
+                  const hasPolicies = (u.policies?.length ?? 0) > 0;
+                  const hasInlinePolicies = (u.inline_policies?.length ?? 0) > 0;
+                  const lacksGroupOrPolicy = !hasGroups && !hasPolicies && !hasInlinePolicies;
+                  const lacksKeys = u.has_keys === false;
+                  const showWarning = lacksGroupOrPolicy || lacksKeys;
+                  const warningTitle = (() => {
+                    if (lacksGroupOrPolicy && lacksKeys) {
+                      return "No groups/policies or access keys assigned";
+                    }
+                    if (lacksGroupOrPolicy) {
+                      return "No groups or policies assigned";
+                    }
+                    return "No access keys registered";
+                  })();
 
-                return (
-                  <tr key={u.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
-                      <div className="flex items-center gap-2">
-                        <span>{u.name}</span>
-                        {showWarning && (
-                          <span
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-100"
-                            title={warningTitle}
-                            role="img"
-                            aria-label="Warning: user might lack necessary permissions"
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              className="h-3.5 w-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={1.6}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
-                              focusable="false"
+                  return (
+                    <tr key={u.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span>{u.name}</span>
+                          {showWarning && (
+                            <span
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-100"
+                              title={warningTitle}
+                              role="img"
+                              aria-label="Warning: user might lack necessary permissions"
                             >
-                              <path d="M12 4 3 20h18L12 4z" />
-                              <path d="M12 9v5" />
-                              <path d="M12 17h.01" strokeWidth={2.4} />
-                            </svg>
-                          </span>
+                              <svg
+                                viewBox="0 0 24 24"
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={1.6}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                                focusable="false"
+                              >
+                                <path d="M12 4 3 20h18L12 4z" />
+                                <path d="M12 9v5" />
+                                <path d="M12 17h.01" strokeWidth={2.4} />
+                              </svg>
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{u.arn ?? "-"}</td>
+                      <td className="manager-table-cell-wide px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                        {hasGroups ? (
+                          <div className="flex flex-wrap gap-2">
+                            {u.groups?.map((g) => (
+                              <span
+                                key={g}
+                                className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                              >
+                                {g}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
                         )}
-                      </div>
-                    </td>
-                    <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{u.arn ?? "-"}</td>
-                    <td className="manager-table-cell-wide px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {hasGroups ? (
-                        <div className="flex flex-wrap gap-2">
-                          {u.groups?.map((g) => (
-                            <span
-                              key={g}
-                              className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                            >
-                              {g}
-                            </span>
-                          ))}
+                      </td>
+                      <td className="manager-table-cell-wide px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                        {hasPolicies ? (
+                          <div className="flex flex-wrap gap-2">
+                            {u.policies?.map((p) => (
+                              <span
+                                key={p}
+                                className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                title={p}
+                              >
+                                {p.split("/").pop()}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Link
+                            to={`/manager/users/${encodeURIComponent(u.name)}/keys`}
+                            className={tableActionButtonClasses}
+                          >
+                            Keys
+                          </Link>
+                          <Link
+                            to={`/manager/users/${encodeURIComponent(u.name)}/policies`}
+                            className={tableActionButtonClasses}
+                          >
+                            Policies
+                          </Link>
+                          <button
+                            onClick={() => handleDelete(u.name)}
+                            className={tableDeleteActionClasses}
+                            disabled={busy === u.name}
+                          >
+                            {busy === u.name ? "Deleting..." : "Delete"}
+                          </button>
                         </div>
-                      ) : (
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="manager-table-cell-wide px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {hasPolicies ? (
-                        <div className="flex flex-wrap gap-2">
-                          {u.policies?.map((p) => (
-                            <span
-                              key={p}
-                              className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                              title={p}
-                            >
-                              {p.split("/").pop()}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <Link
-                          to={`/manager/users/${encodeURIComponent(u.name)}/keys`}
-                          className={tableActionButtonClasses}
-                        >
-                          Keys
-                        </Link>
-                        <Link
-                          to={`/manager/users/${encodeURIComponent(u.name)}/policies`}
-                          className={tableActionButtonClasses}
-                        >
-                          Policies
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(u.name)}
-                          className={tableDeleteActionClasses}
-                          disabled={busy === u.name}
-                        >
-                          {busy === u.name ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-          </tbody>
-        </table>
-      </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {showAdvancedModal && (
         <Modal title="Create IAM user" onClose={closeAdvancedModal}>

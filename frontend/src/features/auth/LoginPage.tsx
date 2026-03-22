@@ -230,7 +230,7 @@ export default function LoginPage() {
                 Console
               </h1>
               <p className="mt-3 max-w-md ui-body text-slate-300">
-                Sign in to continue.
+                Sign in to reach the workspace that matches your role and execution context.
               </p>
             </div>
             {shouldShowLeftLogo ? (
@@ -247,9 +247,15 @@ export default function LoginPage() {
             ) : (
               <div className="grid gap-3">
                 <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">After sign-in</p>
+                  <p className="mt-1 ui-body text-slate-200">
+                    Password sign-in opens your assigned UI workspaces. Access keys create an S3 session when that mode is enabled.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3">
                   <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Need help?</p>
                   <p className="mt-1 ui-body text-slate-200">
-                    Contact your platform admin if you can&apos;t sign in.
+                    Contact your platform admin if you don&apos;t know which sign-in method or endpoint to use.
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3">

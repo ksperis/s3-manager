@@ -10,11 +10,11 @@ import {
   listApiTokens,
   revokeApiToken,
 } from "../../api/apiTokens";
+import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
-import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { extractApiError } from "../../utils/apiError";
@@ -233,6 +233,17 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
         '  Content-Type: "application/json"',
       ].join("\n")
     : "";
+  const headerActions = [
+    {
+      label: "Refresh",
+      onClick: loadTokens,
+      variant: "ghost" as const,
+    },
+    {
+      label: "Create token",
+      onClick: openCreateModal,
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -244,61 +255,9 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
             { label: "Admin" },
             { label: "API tokens" },
           ]}
-          rightContent={
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={includeRevoked}
-                  onChange={(event) => setIncludeRevoked(event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                />
-                Show revoked/expired
-              </label>
-              <button
-                type="button"
-                onClick={loadTokens}
-                className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-              >
-                Refresh
-              </button>
-              <button
-                type="button"
-                onClick={openCreateModal}
-                className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
-              >
-                Create token
-              </button>
-            </div>
-          }
+          actions={headerActions}
         />
-      ) : (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300">
-            <input
-              type="checkbox"
-              checked={includeRevoked}
-              onChange={(event) => setIncludeRevoked(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-            />
-            Show revoked/expired
-          </label>
-          <button
-            type="button"
-            onClick={loadTokens}
-            className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-          >
-            Refresh
-          </button>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
-          >
-            Create token
-          </button>
-        </div>
-      )}
+      ) : null}
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
@@ -353,10 +312,41 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
         </div>
       )}
 
-      <ListSectionCard
-        title="API tokens"
-        subtitle={`${sortedTokens.length} token${sortedTokens.length === 1 ? "" : "s"}${includeRevoked ? " (including revoked/expired)" : ""}`}
-      >
+      <div className="ui-surface-card">
+        <ListToolbar
+          title="API tokens"
+          description="Manage long-lived admin tokens for automation and integrations."
+          countLabel={`${sortedTokens.length} token${sortedTokens.length === 1 ? "" : "s"}${includeRevoked ? " (including revoked/expired)" : ""}`}
+          filters={
+            <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={includeRevoked}
+                onChange={(event) => setIncludeRevoked(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+              />
+              Show revoked/expired
+            </label>
+          }
+          actions={
+            showPageHeader
+              ? undefined
+              : headerActions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    onClick={action.onClick}
+                    className={
+                      action.variant === "ghost"
+                        ? "inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                        : "inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
+                    }
+                  >
+                    {action.label}
+                  </button>
+                ))
+          }
+        />
         <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
@@ -403,7 +393,7 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
             })}
           </tbody>
         </table>
-      </ListSectionCard>
+      </div>
 
       {showCreateModal && (
         <Modal title="Create API token" onClose={closeCreateModal} maxWidthClass="max-w-xl">

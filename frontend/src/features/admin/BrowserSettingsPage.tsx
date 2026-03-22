@@ -158,26 +158,19 @@ export default function BrowserSettingsPage() {
           { label: "Browser" },
           { label: "Settings" },
         ]}
-        rightContent={
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleResetDefaults}
-              disabled={!settings || saving || resetting}
-              className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:pointer-events-none disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-            >
-              {resetting ? "Resetting..." : "Reset to defaults"}
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={!settings || saving || resetting}
-              className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:pointer-events-none disabled:opacity-60"
-            >
-              {saving ? "Saving..." : "Save changes"}
-            </button>
-          </div>
-        }
+        actions={[
+          {
+            label: resetting ? "Resetting..." : "Reset to defaults",
+            onClick: handleResetDefaults,
+            variant: "ghost",
+            disabled: !settings || saving || resetting,
+          },
+          {
+            label: saving ? "Saving..." : "Save changes",
+            onClick: handleSave,
+            disabled: !settings || saving || resetting,
+          },
+        ]}
       />
       <form className="space-y-4" onSubmit={handleSave}>
         {error && <PageBanner tone="error">{error}</PageBanner>}

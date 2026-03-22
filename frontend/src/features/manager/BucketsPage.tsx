@@ -6,6 +6,9 @@ import axios from "axios";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
+import ListToolbar from "../../components/ListToolbar";
+import PageEmptyState from "../../components/PageEmptyState";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   Bucket,
@@ -22,10 +25,10 @@ import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactButtonClasses, toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
-import { confirmDeletion } from "../../utils/confirm";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import {
   S3_BUCKET_NAME_MAX_LENGTH,
@@ -33,6 +36,8 @@ import {
   normalizeS3BucketName,
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
+import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 type BucketForm = {
   name: string;
@@ -170,12 +175,20 @@ const persistVisibleColumns = (value: ColumnId[]) => {
 };
 
 export default function BucketsPage() {
-  const { accounts, selectedS3AccountId, requiresS3AccountSelection, sessionS3AccountName, accountIdForApi, accessMode } = useS3AccountContext();
+  const {
+    accounts,
+    selectedS3AccountId,
+    requiresS3AccountSelection,
+    sessionS3AccountName,
+    accountIdForApi,
+  } = useS3AccountContext();
+  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const [buckets, setBuckets] = useState<BucketListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deletingBucket, setDeletingBucket] = useState<string | null>(null);
+  const [pendingDeleteBucketName, setPendingDeleteBucketName] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
@@ -233,11 +246,14 @@ export default function BucketsPage() {
     [staticWebsiteFeatureEnabled]
   );
   const accountLabel = selectedS3Account
-    ? selectedS3Account.display_name
+    ? formatAccountLabel(selectedS3Account, defaultEndpointId, defaultEndpointName)
     : requiresS3AccountSelection
       ? "Not selected"
       : sessionS3AccountName || "S3 session";
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
+  const contextStrip = useManagerWorkspaceContextStrip({
+    description: "Bucket operations use the selected manager execution context and its storage endpoint capabilities.",
+  });
 
   const includeParams = useMemo(() => {
     const include: string[] = [];
@@ -369,7 +385,7 @@ export default function BucketsPage() {
       return;
     }
     fetchBuckets(accountIdForApi ?? null);
-  }, [accountIdForApi, needsS3AccountSelection, includeParams.join(","), requiresStats, accessMode]);
+  }, [accountIdForApi, needsS3AccountSelection, includeParams.join(","), requiresStats]);
 
   useEffect(() => {
     persistVisibleColumns(visibleColumns);
@@ -493,7 +509,7 @@ export default function BucketsPage() {
     }
   };
 
-  const handleDelete = async (name: string) => {
+  const requestDelete = (name: string) => {
     if (needsS3AccountSelection) return;
     const targetBucket = buckets.find((b) => b.name === name);
     if ((targetBucket?.object_count ?? 0) > 0) {
@@ -501,8 +517,12 @@ export default function BucketsPage() {
       setActionError(`Bucket '${name}' is not empty (${formatObjectCountLabel(targetBucket?.object_count ?? 0)}). Empty it before deleting.`);
       return;
     }
-    if (!confirmDeletion("bucket", name)) return;
+    setPendingDeleteBucketName(name);
+  };
 
+  const handleConfirmDelete = async () => {
+    if (!pendingDeleteBucketName) return;
+    const name = pendingDeleteBucketName;
     setDeletingBucket(name);
     setActionError(null);
     setActionMessage(null);
@@ -522,6 +542,7 @@ export default function BucketsPage() {
       setActionError(msg);
     } finally {
       setDeletingBucket(null);
+      setPendingDeleteBucketName(null);
     }
   };
 
@@ -628,7 +649,7 @@ export default function BucketsPage() {
           : null;
         const deleteButton = (
           <button
-            onClick={() => handleDelete(bucket.name)}
+            onClick={() => requestDelete(bucket.name)}
             className={tableDeleteActionClasses}
             disabled={deletingBucket === bucket.name || containsObjects}
           >
@@ -668,7 +689,7 @@ export default function BucketsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Buckets"
-        description="Inventory of buckets for the selected account. Actions via root keys."
+        description="Bucket inventory and configuration for the active manager context."
         breadcrumbs={[{ label: "Manager" }, { label: "Buckets" }]}
         actions={[
           {
@@ -678,29 +699,31 @@ export default function BucketsPage() {
         ]}
       />
 
+      <WorkspaceContextStrip {...contextStrip} />
+
       {error && <PageBanner tone="error">{error}</PageBanner>}
-
-      {requiresS3AccountSelection && !selectedS3Account && (
-        <PageBanner tone="warning">Select an account before taking action.</PageBanner>
-      )}
-
       {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
-      <div className="ui-surface-card">
-        <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Buckets</p>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">Paginated list of buckets.</p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <span className="ui-caption text-slate-500 dark:text-slate-400">{filteredBuckets.length} bucket(s)</span>
-              {enrichingColumns && (
-                <span className="ui-caption text-slate-500 dark:text-slate-400">Updating selected columns...</span>
-              )}
+      {needsS3AccountSelection ? (
+        <PageEmptyState
+          title="Select an account before managing buckets"
+          description="The bucket list, quota details, and destructive actions stay disabled until a manager execution context is selected."
+          primaryAction={{ label: "Open dashboard", to: "/manager" }}
+          secondaryAction={{ label: "Open browser", to: "/manager/browser" }}
+          tone="warning"
+        />
+      ) : (
+        <div className="ui-surface-card">
+          <ListToolbar
+            title="Buckets"
+            description="Paginated list of buckets for the active context."
+            countLabel={`${filteredBuckets.length} bucket(s)`}
+            search={
               <div className="flex items-center gap-2 sm:justify-end">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
+                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Search
+                </span>
                 <input
                   type="text"
                   value={filter}
@@ -709,111 +732,137 @@ export default function BucketsPage() {
                   className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
                 />
               </div>
-              <div className="relative" ref={columnPickerRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowColumnPicker((prev) => !prev)}
-                  className={toolbarCompactButtonClasses}
-                >
-                  Columns
-                </button>
-                {showColumnPicker && (
-                  <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Visible columns</p>
-                      <button
-                        type="button"
-                        onClick={resetColumns}
-                        className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                      >
-                        Reset
-                      </button>
-                    </div>
-
-                    <div className="mt-3 space-y-3">
-                      <div className="space-y-2">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Metrics</p>
-                        {metricColumnOptions.map((opt) => (
-                          <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
-                            <span>{opt.label}</span>
-                            <input
-                              type="checkbox"
-                              checked={visibleColumns.includes(opt.id)}
-                              onChange={() => toggleColumn(opt.id)}
-                              className={uiCheckboxClass}
-                            />
-                          </label>
-                        ))}
+            }
+            columns={
+              <>
+                {enrichingColumns ? (
+                  <span className="ui-caption text-slate-500 dark:text-slate-400">Updating selected columns...</span>
+                ) : null}
+                <div className="relative" ref={columnPickerRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowColumnPicker((prev) => !prev)}
+                    className={toolbarCompactButtonClasses}
+                  >
+                    Columns
+                  </button>
+                  {showColumnPicker && (
+                    <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Visible columns</p>
+                        <button
+                          type="button"
+                          onClick={resetColumns}
+                          className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        >
+                          Reset
+                        </button>
                       </div>
 
-                      <div className="space-y-2">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
-                        {featureColumnOptions.map((opt) => (
-                          <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
-                            <span>{opt.label}</span>
-                            <input
-                              type="checkbox"
-                              checked={visibleColumns.includes(opt.id)}
-                              onChange={() => toggleColumn(opt.id)}
-                              className={uiCheckboxClass}
-                            />
-                          </label>
-                        ))}
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          Feature checks run only when their column is enabled.
-                        </p>
+                      <div className="mt-3 space-y-3">
+                        <div className="space-y-2">
+                          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Metrics</p>
+                          {metricColumnOptions.map((opt) => (
+                            <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
+                              <span>{opt.label}</span>
+                              <input
+                                type="checkbox"
+                                checked={visibleColumns.includes(opt.id)}
+                                onChange={() => toggleColumn(opt.id)}
+                                className={uiCheckboxClass}
+                              />
+                            </label>
+                          ))}
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
+                          {featureColumnOptions.map((opt) => (
+                            <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
+                              <span>{opt.label}</span>
+                              <input
+                                type="checkbox"
+                                checked={visibleColumns.includes(opt.id)}
+                                onChange={() => toggleColumn(opt.id)}
+                                className={uiCheckboxClass}
+                              />
+                            </label>
+                          ))}
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">
+                            Feature checks run only when their column is enabled.
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
+                </div>
+              </>
+            }
+          />
+          <div className="overflow-x-auto">
+            <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <tr>
+                  {bucketTableColumns.map((col) => (
+                    <SortableHeader
+                      key={col.id}
+                      label={col.label}
+                      field={col.field}
+                      activeField={sort.field}
+                      direction={sort.direction}
+                      align={col.align ?? (col.label === "Actions" ? "right" : "left")}
+                      onSort={col.field ? (field) => toggleSort(field as keyof Bucket) : undefined}
+                    />
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                {tableStatus === "loading" && <TableEmptyState colSpan={bucketTableColumns.length} message="Loading buckets..." />}
+                {tableStatus === "error" && (
+                  <TableEmptyState colSpan={bucketTableColumns.length} message="Unable to load buckets." tone="error" />
                 )}
-              </div>
-            </div>
+                {tableStatus === "empty" && <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets found." />}
+                {filteredBuckets.map((bucket) => (
+                    <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                      {bucketTableColumns.map((col) => {
+                        const align = col.align ?? (col.id === "actions" ? "right" : "left");
+                        const cellBase = align === "right" ? "px-6 py-4 text-right" : "px-6 py-4";
+                        const textClass =
+                          col.id === "name"
+                            ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
+                            : "ui-body text-slate-600 dark:text-slate-300";
+                        return (
+                          <td key={`${bucket.name}:${col.id}`} className={`${cellBase} ${textClass}`}>
+                            {col.render(bucket)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                {bucketTableColumns.map((col) => (
-                  <SortableHeader
-                    key={col.id}
-                    label={col.label}
-                    field={col.field}
-                    activeField={sort.field}
-                    direction={sort.direction}
-                    align={col.align ?? (col.label === "Actions" ? "right" : "left")}
-                    onSort={col.field ? (field) => toggleSort(field as keyof Bucket) : undefined}
-                  />
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={bucketTableColumns.length} message="Loading buckets..." />}
-              {tableStatus === "error" && (
-                <TableEmptyState colSpan={bucketTableColumns.length} message="Unable to load buckets." tone="error" />
-              )}
-              {tableStatus === "empty" && <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets found." />}
-              {filteredBuckets.map((bucket) => (
-                  <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    {bucketTableColumns.map((col) => {
-                      const align = col.align ?? (col.id === "actions" ? "right" : "left");
-                      const cellBase = align === "right" ? "px-6 py-4 text-right" : "px-6 py-4";
-                      const textClass =
-                        col.id === "name"
-                          ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
-                          : "ui-body text-slate-600 dark:text-slate-300";
-                      return (
-                        <td key={`${bucket.name}:${col.id}`} className={`${cellBase} ${textClass}`}>
-                          {col.render(bucket)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
+
+      {pendingDeleteBucketName && (
+        <ConfirmActionDialog
+          title="Delete bucket"
+          description="This permanently removes the bucket after server-side checks confirm it is empty."
+          confirmLabel="Delete bucket"
+          details={[
+            { label: "Bucket", value: pendingDeleteBucketName, mono: true },
+            { label: "Context", value: accountLabel },
+          ]}
+          impacts={[
+            "Deletion is irreversible once the bucket is removed.",
+            "The bucket must remain empty until the operation completes.",
+          ]}
+          loading={deletingBucket === pendingDeleteBucketName}
+          onCancel={() => setPendingDeleteBucketName(null)}
+          onConfirm={() => void handleConfirmDelete()}
+        />
+      )}
 
       {showWizard && (
         <Modal title="Create bucket" onClose={() => setShowWizard(false)}>

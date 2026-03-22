@@ -5,9 +5,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
@@ -17,6 +20,7 @@ import { tableActionMenuItemClasses } from "../../components/tableActionClasses"
 import CephAdminAccountCreateModal from "./CephAdminAccountCreateModal";
 import CephAdminAccountEditModal from "./CephAdminAccountEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+import useCephAdminWorkspaceContextStrip from "./useCephAdminWorkspaceContextStrip";
 import {
   FILTER_COST_LABEL,
   buildTextFieldRules,
@@ -262,6 +266,9 @@ export default function CephAdminAccountsPage() {
   const navigate = useNavigate();
   const { selectedEndpointId, selectedEndpoint, selectedEndpointAccess } = useCephAdminEndpoint();
   const canViewMetrics = Boolean(selectedEndpointAccess?.can_metrics) && (selectedEndpoint?.capabilities?.metrics !== false);
+  const contextStrip = useCephAdminWorkspaceContextStrip({
+    description: "Endpoint-scoped RGW account administration. Actions use the selected Ceph admin endpoint capabilities.",
+  });
   const [items, setItems] = useState<CephAdminRgwAccount[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -868,372 +875,378 @@ export default function CephAdminAccountsPage() {
             : []
         }
       />
-
-      {!selectedEndpointId && <PageBanner tone="warning">Select a Ceph endpoint first.</PageBanner>}
-      {selectedEndpoint && (
-        <PageBanner tone="info">
-          Endpoint: <span className="font-semibold">{selectedEndpoint.name}</span>
-        </PageBanner>
-      )}
+      <WorkspaceContextStrip {...contextStrip} />
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
-      <div className="ui-surface-card">
-        <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Accounts</p>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">{total} result(s)</p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <div className="relative" ref={columnPickerRef}>
+      {!selectedEndpointId ? (
+        <PageEmptyState
+          title="Select a Ceph endpoint before listing RGW accounts"
+          description="RGW account administration is endpoint-scoped. Choose an endpoint to load account inventory, quotas, and owner navigation."
+          primaryAction={{ label: "Return to Ceph Admin", to: "/ceph-admin" }}
+          tone="warning"
+        />
+      ) : (
+        <div className="ui-surface-card">
+          <ListToolbar
+            title="Accounts"
+            description="Complete RGW account inventory with quotas, limits, and owner navigation."
+            countLabel={`${total} result(s)`}
+            search={
+              <div className="relative w-full sm:w-72">
+                <textarea
+                  aria-label="Quick filter"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  placeholder="Account ID(s)"
+                  rows={1}
+                  className={`w-full resize-y rounded-md border bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
+                    quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
+                  }`}
+                />
                 <button
                   type="button"
-                  onClick={() => setShowColumnPicker((prev) => !prev)}
-                  className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                  onClick={toggleQuickFilterMode}
+                  disabled={quickFilterDraftForcesExact}
+                  className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
+                  title={
+                    quickFilterDraftForcesExact
+                      ? "Quick filter mode: exact (locked by list input)"
+                      : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
+                  }
+                  aria-label="Toggle quick filter match mode"
                 >
-                  Columns
+                  {quickFilterModeForDisplay === "contains" ? "~" : "="}
                 </button>
-                {showColumnPicker && (
-                  <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-                    <ColumnVisibilityPicker
-                      selectedCount={visibleColumns.length}
-                      onReset={resetColumns}
-                      coreGroups={ACCOUNT_COLUMN_GROUPS.map((group) => ({
-                        id: group.id,
-                        label: group.label,
-                        options: group.options.map((option) => ({
-                          id: option.id,
-                          label: option.label,
-                          checked: visibleColumns.includes(option.id),
-                          onToggle: () => toggleColumn(option.id),
-                        })),
-                      }))}
-                    />
-                  </div>
-                )}
               </div>
-
+            }
+            filters={
               <button
                 type="button"
-                onClick={resetColumns}
-                disabled={!columnsCustomized}
+                onClick={() => setShowAdvancedFilter(true)}
                 className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                  columnsCustomized
-                    ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-                    : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                  showAdvancedFilter || advancedFilterActive
+                    ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
+                    : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                 }`}
               >
-                Reset Columns
+                Advanced filter{advancedFilterActive ? " · Active" : ""}
               </button>
-            </div>
-          </div>
-        </div>
+            }
+            columns={
+              <>
+                <div className="relative" ref={columnPickerRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowColumnPicker((prev) => !prev)}
+                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                  >
+                    Columns
+                  </button>
+                  {showColumnPicker && (
+                    <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                      <ColumnVisibilityPicker
+                        selectedCount={visibleColumns.length}
+                        onReset={resetColumns}
+                        coreGroups={ACCOUNT_COLUMN_GROUPS.map((group) => ({
+                          id: group.id,
+                          label: group.label,
+                          options: group.options.map((option) => ({
+                            id: option.id,
+                            label: option.label,
+                            checked: visibleColumns.includes(option.id),
+                            onToggle: () => toggleColumn(option.id),
+                          })),
+                        }))}
+                      />
+                    </div>
+                  )}
+                </div>
 
-        <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40">
-          <div className="space-y-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filters</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowAdvancedFilter(true)}
+                  onClick={resetColumns}
+                  disabled={!columnsCustomized}
                   className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                    showAdvancedFilter || advancedFilterActive
-                      ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
-                      : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                    columnsCustomized
+                      ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+                      : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
                   }`}
                 >
-                  Advanced filter{advancedFilterActive ? " · Active" : ""}
+                  Reset Columns
                 </button>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div>
-                <div className="relative">
-                  <textarea
-                    aria-label="Quick filter"
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                    onKeyDown={(event) => event.stopPropagation()}
-                    placeholder="Account ID(s)"
-                    rows={1}
-                    className={`w-full resize-y rounded-md border bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
-                      quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={toggleQuickFilterMode}
-                    disabled={quickFilterDraftForcesExact}
-                    className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
-                    title={
-                      quickFilterDraftForcesExact
-                        ? "Quick filter mode: exact (locked by list input)"
-                        : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
-                    }
-                    aria-label="Toggle quick filter match mode"
-                  >
-                    {quickFilterModeForDisplay === "contains" ? "~" : "="}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {showActiveFiltersCard && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-200">ACTIVE FILTERS</p>
-                  {activeFilterSummaryItems.map((item) => (
-                    <span
-                      key={item.id}
-                      className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
-                    >
-                      <span>{item.label}</span>
+              </>
+            }
+            secondaryContent={
+              <>
+                {showActiveFiltersCard && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="ui-caption font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-200">
+                        ACTIVE FILTERS
+                      </p>
+                      {activeFilterSummaryItems.map((item) => (
+                        <span
+                          key={item.id}
+                          className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
+                        >
+                          <span>{item.label}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeActiveFilterItem(item.remove)}
+                            className="rounded-full px-1 leading-none opacity-70 hover:opacity-100"
+                            title="Remove filter"
+                            aria-label={`Remove ${item.label}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
                       <button
                         type="button"
-                        onClick={() => removeActiveFilterItem(item.remove)}
-                        className="rounded-full px-1 leading-none opacity-70 hover:opacity-100"
-                        title="Remove filter"
-                        aria-label={`Remove ${item.label}`}
+                        onClick={resetAllFilters}
+                        className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
                       >
-                        ×
+                        Clear all
                       </button>
-                    </span>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={resetAllFilters}
-                    className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-                  >
-                    Clear all
-                  </button>
-                </div>
-              </div>
-            )}
+                    </div>
+                  </div>
+                )}
 
-            {showAdvancedFilter && (
-              <div className="fixed inset-x-0 bottom-0 top-14 z-40">
-                <button
-                  type="button"
-                  onClick={closeAdvancedFilterDrawer}
-                  className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
-                  aria-label="Close advanced filter drawer"
-                />
-                <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-                  <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Advanced filter</p>
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">RGW Accounts listing</p>
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                            {advancedDraftActiveCount} rule{advancedDraftActiveCount > 1 ? "s" : ""}
-                          </span>
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                            title={advancedDraftGlobalCostTooltip}
+                {showAdvancedFilter && (
+                  <div className="fixed inset-x-0 bottom-0 top-14 z-40">
+                    <button
+                      type="button"
+                      onClick={closeAdvancedFilterDrawer}
+                      className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+                      aria-label="Close advanced filter drawer"
+                    />
+                    <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                      <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Advanced filter</p>
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">RGW Accounts listing</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                                {advancedDraftActiveCount} rule{advancedDraftActiveCount > 1 ? "s" : ""}
+                              </span>
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                title={advancedDraftGlobalCostTooltip}
+                              >
+                                Global draft cost
+                                {renderFilterCostIndicator(advancedDraftGlobalCostLevel, advancedDraftGlobalCostTooltip)}
+                              </span>
+                              <span
+                                className={`rounded-full border px-2 py-0.5 ui-caption font-semibold ${
+                                  hasPendingAdvancedChanges
+                                    ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200"
+                                    : "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-200"
+                                }`}
+                              >
+                                {hasPendingAdvancedChanges ? "Unsaved changes" : "In sync"}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={closeAdvancedFilterDrawer}
+                            className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                           >
-                            Global draft cost
-                            {renderFilterCostIndicator(advancedDraftGlobalCostLevel, advancedDraftGlobalCostTooltip)}
-                          </span>
-                          <span
-                            className={`rounded-full border px-2 py-0.5 ui-caption font-semibold ${
-                              hasPendingAdvancedChanges
-                                ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200"
-                                : "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-200"
-                            }`}
-                          >
-                            {hasPendingAdvancedChanges ? "Unsaved changes" : "In sync"}
-                          </span>
+                            Close
+                          </button>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={closeAdvancedFilterDrawer}
-                        className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
 
-                  <div className="flex-1 overflow-y-auto px-4 py-4">
-                    <div className="space-y-4">
-                      <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Draft summary</p>
-                        {advancedDraftSummaryItems.length === 0 ? (
-                          <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">No advanced rule in draft.</p>
-                        ) : (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {advancedDraftSummaryItems.map((item) => (
-                              <span
-                                key={item.id}
-                                className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
-                              >
-                                {item.label}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </section>
+                      <div className="flex-1 overflow-y-auto px-4 py-4">
+                        <div className="space-y-4">
+                          <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+                            <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Draft summary
+                            </p>
+                            {advancedDraftSummaryItems.length === 0 ? (
+                              <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">No advanced rule in draft.</p>
+                            ) : (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {advancedDraftSummaryItems.map((item) => (
+                                  <span
+                                    key={item.id}
+                                    className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
+                                  >
+                                    {item.label}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </section>
 
-                      <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-                        <p className="mb-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Identity</p>
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                            <div className="flex items-center justify-between gap-2">
-                              <label className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${accountNameFieldState.labelClass}`}>
-                                <span className="inline-flex items-center gap-1">
-                                  <span>Account name</span>
-                                  {renderFilterCostIndicator("low", "Low cost: account name filters are text-based.")}
-                                </span>
-                              </label>
-                              <div className="inline-flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  disabled={accountNameDraftForcesExact}
-                                  onClick={() => updateAdvancedMatchMode("accountNameMatchMode", "contains")}
-                                  className={matchModeButtonClass(accountNameDraftMode === "contains", accountNameDraftForcesExact)}
-                                >
-                                  Contains
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={accountNameDraftForcesExact}
-                                  onClick={() => updateAdvancedMatchMode("accountNameMatchMode", "exact")}
-                                  className={matchModeButtonClass(accountNameDraftMode === "exact", accountNameDraftForcesExact)}
-                                >
-                                  Exact
-                                </button>
+                          <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                            <p className="mb-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Identity
+                            </p>
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                                <div className="flex items-center justify-between gap-2">
+                                  <label
+                                    className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${accountNameFieldState.labelClass}`}
+                                  >
+                                    <span className="inline-flex items-center gap-1">
+                                      <span>Account name</span>
+                                      {renderFilterCostIndicator("low", "Low cost: account name filters are text-based.")}
+                                    </span>
+                                  </label>
+                                  <div className="inline-flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      disabled={accountNameDraftForcesExact}
+                                      onClick={() => updateAdvancedMatchMode("accountNameMatchMode", "contains")}
+                                      className={matchModeButtonClass(accountNameDraftMode === "contains", accountNameDraftForcesExact)}
+                                    >
+                                      Contains
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={accountNameDraftForcesExact}
+                                      onClick={() => updateAdvancedMatchMode("accountNameMatchMode", "exact")}
+                                      className={matchModeButtonClass(accountNameDraftMode === "exact", accountNameDraftForcesExact)}
+                                    >
+                                      Exact
+                                    </button>
+                                  </div>
+                                </div>
+                                <textarea
+                                  value={advancedDraft.accountName}
+                                  onChange={(e) => updateAdvancedField("accountName", e.target.value)}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                  placeholder="account-a, account-b"
+                                  rows={2}
+                                  className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${accountNameFieldState.fieldClass}`}
+                                />
+                              </div>
+
+                              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                                <div className="flex items-center justify-between gap-2">
+                                  <label
+                                    className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${emailFieldState.labelClass}`}
+                                  >
+                                    <span className="inline-flex items-center gap-1">
+                                      <span>Email</span>
+                                      {renderFilterCostIndicator("low", "Low cost: email filters are text-based.")}
+                                    </span>
+                                  </label>
+                                  <div className="inline-flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      disabled={emailDraftForcesExact}
+                                      onClick={() => updateAdvancedMatchMode("emailMatchMode", "contains")}
+                                      className={matchModeButtonClass(emailDraftMode === "contains", emailDraftForcesExact)}
+                                    >
+                                      Contains
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={emailDraftForcesExact}
+                                      onClick={() => updateAdvancedMatchMode("emailMatchMode", "exact")}
+                                      className={matchModeButtonClass(emailDraftMode === "exact", emailDraftForcesExact)}
+                                    >
+                                      Exact
+                                    </button>
+                                  </div>
+                                </div>
+                                <textarea
+                                  value={advancedDraft.email}
+                                  onChange={(e) => updateAdvancedField("email", e.target.value)}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                  placeholder="ops@example.com"
+                                  rows={2}
+                                  className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${emailFieldState.fieldClass}`}
+                                />
                               </div>
                             </div>
-                            <textarea
-                              value={advancedDraft.accountName}
-                              onChange={(e) => updateAdvancedField("accountName", e.target.value)}
-                              onKeyDown={(event) => event.stopPropagation()}
-                              placeholder="account-a, account-b"
-                              rows={2}
-                              className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${accountNameFieldState.fieldClass}`}
-                            />
-                          </div>
+                          </section>
 
-                          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                            <div className="flex items-center justify-between gap-2">
-                              <label className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${emailFieldState.labelClass}`}>
-                                <span className="inline-flex items-center gap-1">
-                                  <span>Email</span>
-                                  {renderFilterCostIndicator("low", "Low cost: email filters are text-based.")}
-                                </span>
-                              </label>
-                              <div className="inline-flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  disabled={emailDraftForcesExact}
-                                  onClick={() => updateAdvancedMatchMode("emailMatchMode", "contains")}
-                                  className={matchModeButtonClass(emailDraftMode === "contains", emailDraftForcesExact)}
+                          <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                            <p className="mb-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Limits and Quotas
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {numericFields.map((field) => (
+                                <label
+                                  key={field.key}
+                                  className={`flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200 ${numericFieldStates[field.key].labelClass}`}
                                 >
-                                  Contains
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={emailDraftForcesExact}
-                                  onClick={() => updateAdvancedMatchMode("emailMatchMode", "exact")}
-                                  className={matchModeButtonClass(emailDraftMode === "exact", emailDraftForcesExact)}
-                                >
-                                  Exact
-                                </button>
-                              </div>
+                                  <span className="inline-flex items-center gap-1">
+                                    <span>{field.label}</span>
+                                    {renderFilterCostIndicator("medium", "Medium cost: numeric filters rely on counters/stats.")}
+                                  </span>
+                                  <input
+                                    type="number"
+                                    value={advancedDraft[field.key]}
+                                    onChange={(e) => updateAdvancedField(field.key, e.target.value)}
+                                    className={`rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${numericFieldStates[field.key].fieldClass}`}
+                                  />
+                                </label>
+                              ))}
                             </div>
-                            <textarea
-                              value={advancedDraft.email}
-                              onChange={(e) => updateAdvancedField("email", e.target.value)}
-                              onKeyDown={(event) => event.stopPropagation()}
-                              placeholder="ops@example.com"
-                              rows={2}
-                              className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${emailFieldState.fieldClass}`}
-                            />
-                          </div>
+                          </section>
                         </div>
-                      </section>
+                      </div>
 
-                      <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-                        <p className="mb-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Limits and Quotas</p>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {numericFields.map((field) => (
-                            <label key={field.key} className={`flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200 ${numericFieldStates[field.key].labelClass}`}>
-                              <span className="inline-flex items-center gap-1">
-                                <span>{field.label}</span>
-                                {renderFilterCostIndicator("medium", "Medium cost: numeric filters rely on counters/stats.")}
-                              </span>
-                              <input
-                                type="number"
-                                value={advancedDraft[field.key]}
-                                onChange={(e) => updateAdvancedField(field.key, e.target.value)}
-                                className={`rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${numericFieldStates[field.key].fieldClass}`}
-                              />
-                            </label>
-                          ))}
+                      <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={resetAdvancedFilter}
+                            disabled={!hasAnyAdvancedToClear}
+                            className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
+                              hasAnyAdvancedToClear
+                                ? "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                                : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                            }`}
+                          >
+                            Clear
+                          </button>
+                          <button
+                            type="button"
+                            onClick={applyAdvancedFilter}
+                            className="rounded-md bg-primary px-2.5 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
+                          >
+                            Apply filter
+                          </button>
                         </div>
-                      </section>
+                      </div>
                     </div>
                   </div>
+                )}
+              </>
+            }
+          />
 
-                  <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={resetAdvancedFilter}
-                        disabled={!hasAnyAdvancedToClear}
-                        className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                          hasAnyAdvancedToClear
-                            ? "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                            : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
-                        }`}
-                      >
-                        Clear
-                      </button>
-                      <button
-                        type="button"
-                        onClick={applyAdvancedFilter}
-                        className="rounded-md bg-primary px-2.5 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
-                      >
-                        Apply filter
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                {accountTableColumns.map((col) => (
-                  <SortableHeader
-                    key={col.id}
-                    label={col.label}
-                    field={col.field}
-                    activeField={sort.field}
-                    direction={sort.direction}
-                    align={col.align ?? "left"}
-                    onSort={(field) => toggleSort(field as SortField)}
-                  />
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={accountTableColumns.length} message="Loading accounts..." />}
-              {tableStatus === "error" && (
-                <TableEmptyState colSpan={accountTableColumns.length} message="Unable to load accounts." tone="error" />
-              )}
-              {tableStatus === "empty" && <TableEmptyState colSpan={accountTableColumns.length} message="No accounts found." />}
-              {items.map((account) => (
+          <div className="overflow-x-auto">
+            <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <tr>
+                  {accountTableColumns.map((col) => (
+                    <SortableHeader
+                      key={col.id}
+                      label={col.label}
+                      field={col.field}
+                      activeField={sort.field}
+                      direction={sort.direction}
+                      align={col.align ?? "left"}
+                      onSort={(field) => toggleSort(field as SortField)}
+                    />
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                {tableStatus === "loading" && <TableEmptyState colSpan={accountTableColumns.length} message="Loading accounts..." />}
+                {tableStatus === "error" && (
+                  <TableEmptyState colSpan={accountTableColumns.length} message="Unable to load accounts." tone="error" />
+                )}
+                {tableStatus === "empty" && <TableEmptyState colSpan={accountTableColumns.length} message="No accounts found." />}
+                {items.map((account) => (
                   <tr key={rowKey(account)} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     {accountTableColumns.map((col) => {
                       const align = col.align ?? "left";
@@ -1250,22 +1263,23 @@ export default function CephAdminAccountsPage() {
                     })}
                   </tr>
                 ))}
-            </tbody>
-          </table>
-        </div>
+              </tbody>
+            </table>
+          </div>
 
-        <PaginationControls
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size);
-            setPage(1);
-          }}
-          disabled={loading || !selectedEndpointId}
-        />
-      </div>
+          <PaginationControls
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+            disabled={loading || !selectedEndpointId}
+          />
+        </div>
+      )}
 
       {selectedEndpointId && editingAccountId && (
         <CephAdminAccountEditModal

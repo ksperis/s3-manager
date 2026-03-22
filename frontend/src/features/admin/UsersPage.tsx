@@ -16,13 +16,14 @@ import {
 import { S3AccountSummary, listMinimalS3Accounts, updateS3Account } from "../../api/accounts";
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
+import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
 import TableEmptyState from "../../components/TableEmptyState";
-import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -788,6 +789,7 @@ export default function UsersPage() {
   const [showEditConnectionPanel, setShowEditConnectionPanel] = useState(false);
   const [editConnectionSelections, setEditConnectionSelections] = useState<number[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<User | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [createRoleHelpOpen, setCreateRoleHelpOpen] = useState(false);
@@ -1457,14 +1459,19 @@ export default function UsersPage() {
     }
   };
 
-  const handleDelete = async (userId: number) => {
+  const handleDeleteRequest = (user: User) => {
+    const userId = user.id;
     if (currentUserId !== null && userId === currentUserId) {
       setActionError("You cannot delete your own user.");
       setActionMessage(null);
       return;
     }
-    const confirmDelete = window.confirm("Delete this user?");
-    if (!confirmDelete) return;
+    setPendingDeleteUser(user);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!pendingDeleteUser) return;
+    const userId = pendingDeleteUser.id;
     setBusyId(userId);
     setActionError(null);
     setActionMessage(null);
@@ -1476,6 +1483,7 @@ export default function UsersPage() {
       setActionError(extractError(err));
     } finally {
       setBusyId(null);
+      setPendingDeleteUser(null);
     }
   };
 
@@ -1749,22 +1757,26 @@ export default function UsersPage() {
         </Modal>
       )}
 
-      <ListSectionCard
-        title="Users"
-        subtitle={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"} · search matches all records`}
-        rightContent={(
-          <div className="flex items-center gap-2">
-            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
-            <input
-              type="text"
-              value={filter}
-              onChange={(e) => handleFilterChange(e.target.value)}
-              placeholder={filterPlaceholder}
-              className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
-            />
-          </div>
-        )}
-      >
+      <div className="ui-surface-card">
+        <ListToolbar
+          title="Users"
+          description="Search matches across the full user record, including role and linked entities."
+          countLabel={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"}`}
+          search={
+            <div className="flex items-center gap-2">
+              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Search
+              </span>
+              <input
+                type="text"
+                value={filter}
+                onChange={(e) => handleFilterChange(e.target.value)}
+                placeholder={filterPlaceholder}
+                className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
+              />
+            </div>
+          }
+        />
         <div className="overflow-x-auto">
           <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -1837,7 +1849,7 @@ export default function UsersPage() {
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDelete(user.id)}
+                          onClick={() => handleDeleteRequest(user)}
                           className={tableDeleteActionClasses}
                           disabled={busyId === user.id || isCurrentUser}
                           title={isCurrentUser ? "You cannot delete your own user." : undefined}
@@ -1860,7 +1872,26 @@ export default function UsersPage() {
           onPageSizeChange={handlePageSizeChange}
           disabled={loading}
         />
-      </ListSectionCard>
+      </div>
+
+      {pendingDeleteUser && (
+        <ConfirmActionDialog
+          title="Delete UI user"
+          description="This removes the platform user and revokes access to the UI workspaces linked to it."
+          confirmLabel="Delete user"
+          details={[
+            { label: "User", value: pendingDeleteUser.email, mono: true },
+            { label: "Role", value: displayUiRole(pendingDeleteUser.role) },
+          ]}
+          impacts={[
+            "The user loses access immediately after deletion.",
+            "Linked accounts, S3 users, and S3 connections remain in the platform but are no longer attached to this UI user.",
+          ]}
+          loading={busyId === pendingDeleteUser.id}
+          onCancel={() => setPendingDeleteUser(null)}
+          onConfirm={() => void handleDeleteConfirm()}
+        />
+      )}
 
       {editingUser && showEditModal && (
         <Modal

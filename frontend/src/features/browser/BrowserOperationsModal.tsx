@@ -211,24 +211,11 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
   const detailsIconButtonClasses =
     "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200/70 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 dark:border-slate-700/80 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200";
 
-  const confirmAndDownloadOperationDetails = (kind: OperationDetailsKind, operationId: string) => {
-    let confirmed = true;
-    try {
-      if (typeof window !== "undefined" && typeof window.confirm === "function") {
-        confirmed = window.confirm("Download operation details as JSON?");
-      }
-    } catch {
-      confirmed = true;
-    }
-    if (!confirmed) return;
-    onDownloadOperationDetails(kind, operationId);
-  };
-
   const renderDetailsAction = (kind: OperationDetailsKind, operationId: string) => (
     <button
       type="button"
       className={detailsIconButtonClasses}
-      onClick={() => confirmAndDownloadOperationDetails(kind, operationId)}
+      onClick={() => onDownloadOperationDetails(kind, operationId)}
       title="Export details (JSON)"
       aria-label="Export operation details (JSON)"
     >

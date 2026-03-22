@@ -6,9 +6,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import PageBanner from "../../components/PageBanner";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
+import WorkspaceContextStrip, {
+  type WorkspaceContextStripAlert,
+  type WorkspaceContextStripItem,
+} from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
@@ -20,6 +25,7 @@ import {
   uiCheckboxClass,
   uiFeatureStateHighlightFieldClasses,
   uiFeatureStateHighlightLabelClasses,
+  type UiTone,
   type UiFeatureStateTone,
 } from "../../components/ui/styles";
 import {
@@ -1838,6 +1844,33 @@ export type BucketOpsMode = "ceph-admin" | "storage-ops";
 
 type BucketOpsWorkbenchProps = {
   mode: BucketOpsMode;
+  shell: {
+    pageDescription: ReactNode;
+    contextStrip: {
+      label: string;
+      title: ReactNode;
+      description: ReactNode;
+      items?: WorkspaceContextStripItem[];
+      alerts?: WorkspaceContextStripAlert[];
+    };
+    emptyState?: {
+      title: string;
+      description: ReactNode;
+      primaryAction?: {
+        label: string;
+        to?: string;
+        onClick?: () => void;
+        variant?: "primary" | "secondary" | "ghost";
+      };
+      secondaryAction?: {
+        label: string;
+        to?: string;
+        onClick?: () => void;
+        variant?: "primary" | "secondary" | "ghost";
+      };
+      tone?: UiTone;
+    };
+  };
 };
 
 type StorageOpsEditingBucket = {
@@ -1845,7 +1878,7 @@ type StorageOpsEditingBucket = {
   contextId: string;
 };
 
-export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
+export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { generalSettings } = useGeneralSettings();
@@ -1912,7 +1945,7 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
     : CEPH_BULK_CONFIG_CLIPBOARD_STORAGE_KEY;
   const defaultVisibleColumns = isStorageOps ? DEFAULT_VISIBLE_COLUMNS_STORAGE_OPS : DEFAULT_VISIBLE_COLUMNS_CEPH;
   const useExplicitBucketName = isStorageOps;
-  const scopeEntityLabel = isStorageOps ? "Scope" : "Endpoint";
+  const scopeDisplayName = isStorageOps ? "Scope" : "Endpoint";
   const exportPrefix = isStorageOps ? "storage-ops" : "ceph-admin";
   const exportScopeKey = isStorageOps ? "scope" : "endpoint";
   const missingScopeError = isStorageOps ? "No Storage Ops scope selected." : "No endpoint selected.";
@@ -3287,7 +3320,7 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
       const timestamp = exportedAt.replace(/[:.]/g, "-");
       const endpointPart = sanitizeExportFilenamePart(
         selectedEndpoint?.name ??
-          (selectedEndpointId ? `${scopeEntityLabel.toLowerCase()}-${selectedEndpointId}` : scopeEntityLabel.toLowerCase())
+          (selectedEndpointId ? `${scopeDisplayName.toLowerCase()}-${selectedEndpointId}` : scopeDisplayName.toLowerCase())
       );
 
       if (format === "text") {
@@ -5862,7 +5895,7 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
     const timestamp = exportedAt.replace(/[:.]/g, "-");
     const endpointPart = sanitizeExportFilenamePart(
       selectedEndpoint?.name ??
-        (selectedEndpointId ? `${scopeEntityLabel.toLowerCase()}-${selectedEndpointId}` : scopeEntityLabel.toLowerCase())
+        (selectedEndpointId ? `${scopeDisplayName.toLowerCase()}-${selectedEndpointId}` : scopeDisplayName.toLowerCase())
     );
     const operationPart = sanitizeExportFilenamePart(bulkOperation || "operation");
 
@@ -6788,20 +6821,12 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
     <div className="space-y-4">
       <PageHeader
         title="Buckets"
-        description={
-          isStorageOps
-            ? "Cross-context bucket listing and bulk configuration operations."
-            : "Cluster-level bucket listing (Admin Ops + S3)."
-        }
+        description={shell.pageDescription}
         breadcrumbs={[{ label: isStorageOps ? "Storage Ops" : "Ceph Admin", to: isStorageOps ? "/storage-ops" : "/ceph-admin" }, { label: "Buckets" }]}
       />
 
-      {!isStorageOps && !selectedEndpointId && <PageBanner tone="warning">Select a Ceph endpoint first.</PageBanner>}
-      {selectedEndpoint && (
-        <PageBanner tone="info">
-          {scopeEntityLabel}: <span className="font-semibold">{selectedEndpoint.name}</span>
-        </PageBanner>
-      )}
+      <WorkspaceContextStrip {...shell.contextStrip} />
+
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {orphanedTagDetails.length > 0 && (
         <PageBanner tone="warning">
@@ -6861,7 +6886,8 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
         </PageBanner>
       )}
 
-        <div className="ui-surface-card">
+      {!selectedEndpointId && shell.emptyState ? <PageEmptyState {...shell.emptyState} /> : null}
+      <div className="ui-surface-card space-y-4">
           <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -6930,108 +6956,107 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
               </div>
             </div>
           </div>
-          <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40">
             <div className="space-y-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filters</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvancedFilter(true)}
-                    className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                      showAdvancedFilter || advancedFiltersApplied
-                        ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
-                        : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    Advanced filter{advancedFiltersApplied ? " · Active" : ""}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div>
-                  <div className="relative">
-                    <textarea
-                      aria-label="Quick filter"
-                      value={filter}
-                      onChange={(e) => setFilter(e.target.value)}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      placeholder="Bucket name(s)"
-                      rows={1}
-                      className={`w-full resize-y rounded-md border bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
-                        quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
-                      }`}
-                    />
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filters</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={toggleQuickFilterMode}
-                      disabled={quickFilterDraftForcesExact}
-                      className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
-                      title={
-                        quickFilterDraftForcesExact
-                          ? "Quick filter mode: exact (locked by list input)"
-                          : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
-                      }
-                      aria-label="Toggle quick filter match mode"
+                      onClick={() => setShowAdvancedFilter(true)}
+                      className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
+                        showAdvancedFilter || advancedFiltersApplied
+                          ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
+                          : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                      }`}
                     >
-                      {quickFilterModeForDisplay === "contains" ? "~" : "="}
+                      Advanced filter{advancedFiltersApplied ? " · Active" : ""}
                     </button>
                   </div>
                 </div>
-                {showTagFilterBar && (
-                  <div className="space-y-1 sm:col-span-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {tagFilters.map((tag) => {
-                          const colors = getTagColors(tag);
-                          return (
-                            <span
-                              key={`filter:${tag}`}
-                              className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 ui-caption font-semibold"
-                              style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
-                            >
-                              {tag}
-                              <button
-                                type="button"
-                                onClick={() => removeTagFilter(tag)}
-                                className="opacity-70 hover:opacity-100"
-                                title="Remove tag filter"
-                              >
-                                ×
-                              </button>
-                            </span>
-                          );
-                        })}
-                        {availableTagFilters.map((tag) => (
-                          <button
-                            type="button"
-                            key={`available:${tag}`}
-                            onClick={() => addTagFilter(tag)}
-                            className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 ui-caption font-semibold text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-                          >
-                            {tag}
-                          </button>
-                        ))}
-                      </div>
-                      <select
-                        value={tagFilterMode}
-                        onChange={(e) => {
-                          setTagFilterMode(e.target.value as "any" | "all");
-                          setPage(1);
-                        }}
-                        className="rounded-md border border-slate-200 px-1.5 py-0.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div>
+                    <div className="relative">
+                      <textarea
+                        aria-label="Quick filter"
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value)}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        placeholder="Bucket name(s)"
+                        rows={1}
+                        className={`w-full resize-y rounded-md border bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
+                          quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={toggleQuickFilterMode}
+                        disabled={quickFilterDraftForcesExact}
+                        className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
+                        title={
+                          quickFilterDraftForcesExact
+                            ? "Quick filter mode: exact (locked by list input)"
+                            : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
+                        }
+                        aria-label="Toggle quick filter match mode"
                       >
-                        <option value="any">OR</option>
-                        <option value="all">AND</option>
-                      </select>
+                        {quickFilterModeForDisplay === "contains" ? "~" : "="}
+                      </button>
                     </div>
                   </div>
-                )}
-              </div>
-
+                  {showTagFilterBar && (
+                    <div className="space-y-1 sm:col-span-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {tagFilters.map((tag) => {
+                            const colors = getTagColors(tag);
+                            return (
+                              <span
+                                key={`filter:${tag}`}
+                                className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 ui-caption font-semibold"
+                                style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
+                              >
+                                {tag}
+                                <button
+                                  type="button"
+                                  onClick={() => removeTagFilter(tag)}
+                                  className="opacity-70 hover:opacity-100"
+                                  title="Remove tag filter"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            );
+                          })}
+                          {availableTagFilters.map((tag) => (
+                            <button
+                              type="button"
+                              key={`available:${tag}`}
+                              onClick={() => addTagFilter(tag)}
+                              className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 ui-caption font-semibold text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                        <select
+                          value={tagFilterMode}
+                          onChange={(e) => {
+                            setTagFilterMode(e.target.value as "any" | "all");
+                            setPage(1);
+                          }}
+                          className="rounded-md border border-slate-200 px-1.5 py-0.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        >
+                          <option value="any">OR</option>
+                          <option value="all">AND</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
               {showAdvancedFilter && (
                 <div className="fixed inset-x-0 bottom-0 top-14 z-40">
                   <button
@@ -8365,7 +8390,7 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
                       <span className="font-semibold">{bulkConfigClipboard.buckets.length}</span> bucket
                       {bulkConfigClipboard.buckets.length > 1 ? "s" : ""} on{" "}
                       <span className="font-semibold">
-                        {bulkConfigClipboard.sourceEndpointName ?? `${scopeEntityLabel} #${bulkConfigClipboard.sourceEndpointId}`}
+                        {bulkConfigClipboard.sourceEndpointName ?? `${scopeDisplayName} #${bulkConfigClipboard.sourceEndpointId}`}
                       </span>
                       {bulkClipboardCopiedAtLabel ? ` (copied ${bulkClipboardCopiedAtLabel})` : ""}.
                     </p>
@@ -8390,7 +8415,7 @@ export default function BucketOpsWorkbench({ mode }: BucketOpsWorkbenchProps) {
                       <p className="ui-caption text-slate-700 dark:text-slate-200">
                         Source:{" "}
                         <span className="font-semibold">
-                          {bulkConfigClipboard.sourceEndpointName ?? `${scopeEntityLabel} #${bulkConfigClipboard.sourceEndpointId}`}
+                          {bulkConfigClipboard.sourceEndpointName ?? `${scopeDisplayName} #${bulkConfigClipboard.sourceEndpointId}`}
                         </span>{" "}
                         · {bulkConfigClipboard.buckets.length} bucket{bulkConfigClipboard.buckets.length > 1 ? "s" : ""} ·
                         {bulkClipboardCopiedAtLabel ? ` copied ${bulkClipboardCopiedAtLabel}` : " copied recently"}

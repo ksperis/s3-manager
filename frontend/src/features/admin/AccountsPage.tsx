@@ -18,12 +18,12 @@ import {
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import Modal from "../../components/Modal";
+import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import PaginationControls from "../../components/PaginationControls";
 import StorageUsageCard from "../../components/StorageUsageCard";
 import TableEmptyState from "../../components/TableEmptyState";
-import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
@@ -636,34 +636,29 @@ export default function S3AccountsPage() {
         title="Accounts"
         description="Provision Ceph RGW accounts (tenants), quotas, and root users."
         breadcrumbs={[{ label: "Admin" }, { label: "Accounts" }]}
-        rightContent={
-          isSuperAdmin ? (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setImportText("");
-                  setImportError(null);
-                  setImportMessage(null);
-                  setShowImportModal(true);
-                  void loadEndpointsIfNeeded();
-                }}
-                className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-              >
-                Import
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreateModal(true);
-                  void loadEndpointsIfNeeded();
-                }}
-                className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Create account
-              </button>
-            </div>
-          ) : null
+        actions={
+          isSuperAdmin
+            ? [
+                {
+                  label: "Import",
+                  onClick: () => {
+                    setImportText("");
+                    setImportError(null);
+                    setImportMessage(null);
+                    setShowImportModal(true);
+                    void loadEndpointsIfNeeded();
+                  },
+                  variant: "ghost",
+                },
+                {
+                  label: "Create account",
+                  onClick: () => {
+                    setShowCreateModal(true);
+                    void loadEndpointsIfNeeded();
+                  },
+                },
+              ]
+            : []
         }
       />
 
@@ -1327,52 +1322,58 @@ export default function S3AccountsPage() {
         </Modal>
       )}
 
-      <ListSectionCard
-        title="Accounts"
-        subtitle={`${totalAccounts} entr${totalAccounts === 1 ? "y" : "ies"} · search matches all records`}
-        rightContent={(
-          <div className="flex items-center gap-2">
-            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
-            <div className="relative w-full sm:w-64 md:w-72">
-              <input
-                type="text"
-                value={filter}
-                onChange={(e) => handleFilterChange(e.target.value)}
-                placeholder="Search by name or RGW ID"
-                className={`${toolbarCompactInputClasses} w-full pr-9 ${quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""}`}
-              />
-              <button
-                type="button"
-                onClick={toggleQuickFilterMode}
-                className="absolute right-1 top-1/2 -translate-y-1/2 rounded border border-slate-200 bg-white px-1 py-0 ui-caption font-semibold text-slate-500 hover:border-primary hover:text-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                title={`Filter mode: ${quickFilterMode === "contains" ? "contains" : "exact"}`}
-                aria-label="Toggle filter match mode"
-              >
-                {quickFilterMode === "contains" ? "~" : "="}
-              </button>
+      <div className="ui-surface-card">
+        <ListToolbar
+          title="Accounts"
+          description="Search matches all records."
+          countLabel={`${totalAccounts} entr${totalAccounts === 1 ? "y" : "ies"}`}
+          search={
+            <div className="flex items-center gap-2">
+              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
+              <div className="relative w-full sm:w-64 md:w-72">
+                <input
+                  type="text"
+                  value={filter}
+                  onChange={(e) => handleFilterChange(e.target.value)}
+                  placeholder="Search by name or RGW ID"
+                  className={`${toolbarCompactInputClasses} w-full pr-9 ${quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""}`}
+                />
+                <button
+                  type="button"
+                  onClick={toggleQuickFilterMode}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 rounded border border-slate-200 bg-white px-1 py-0 ui-caption font-semibold text-slate-500 hover:border-primary hover:text-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                  title={`Filter mode: ${quickFilterMode === "contains" ? "contains" : "exact"}`}
+                  aria-label="Toggle filter match mode"
+                >
+                  {quickFilterMode === "contains" ? "~" : "="}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-        afterHeader={quickFilterActive ? (
-          <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-2 dark:border-slate-800 dark:bg-slate-900/40">
-            <div className="inline-flex items-center gap-2">
-              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active filters summary</p>
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-              >
-                Clear all
-              </button>
-            </div>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100">
-                Search {quickFilterMode === "exact" ? "exact" : "contains"}: {filter.trim()}
-              </span>
-            </div>
-          </div>
-        ) : null}
-      >
+          }
+          secondaryContent={
+            quickFilterActive ? (
+              <div>
+                <div className="inline-flex items-center gap-2">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Active filters summary
+                  </p>
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+                  >
+                    Clear all
+                  </button>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100">
+                    Search {quickFilterMode === "exact" ? "exact" : "contains"}: {filter.trim()}
+                  </span>
+                </div>
+              </div>
+            ) : null
+          }
+        />
         <div className="overflow-x-auto">
           <table className="compact-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -1495,7 +1496,7 @@ export default function S3AccountsPage() {
           onPageSizeChange={handlePageSizeChange}
           disabled={loading}
         />
-      </ListSectionCard>
+      </div>
     </div>
   );
 }

@@ -13,8 +13,11 @@ import {
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import MetricsTrafficOverview, { MetricsSnapshotCard } from "../../components/MetricsTrafficOverview";
 import PageBanner from "../../components/PageBanner";
+import PageControlStrip from "../../components/PageControlStrip";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import UsageBreakdown from "../../components/UsageBreakdown";
+import { toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 
@@ -175,7 +178,7 @@ export default function AdminMetricsPage() {
     [storage?.s3_user_usage]
   );
 
-  const pageError = endpointError || storageError;
+  const pageError = storageError;
   const missingTraffic = selectedEndpointId != null && !traffic && !trafficLoading && !trafficError;
 
   return (
@@ -185,18 +188,18 @@ export default function AdminMetricsPage() {
         description={pageError || "Centralized view of platform storage and traffic."}
         breadcrumbs={[{ label: "Admin" }, { label: "Overview", to: "/admin" }, { label: "Metrics" }]}
       />
-
-      <div className="ui-surface-card p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Ceph endpoint</p>
-            <p className="ui-body text-slate-500 dark:text-slate-400">
-              Choose the storage to analyze (Ceph endpoints only).
-            </p>
-          </div>
-          <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3">
+      <PageControlStrip
+        label="Metrics scope"
+        title={selectedEndpoint?.name ?? (endpointLoading ? "Loading Ceph endpoints..." : "No Ceph endpoint selected")}
+        description="Choose the Ceph endpoint used for storage and traffic analytics."
+        controls={
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Ceph endpoint</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">Only Ceph endpoints are eligible for this page.</p>
+            </div>
             <select
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body font-semibold text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className={toolbarCompactSelectClasses}
               value={selectedEndpointId ?? ""}
               onChange={(event) => setSelectedEndpointId(event.target.value ? Number(event.target.value) : null)}
               disabled={endpointLoading || endpoints.length === 0}
@@ -210,20 +213,30 @@ export default function AdminMetricsPage() {
                   </option>
                 ))}
             </select>
-            {selectedEndpoint && (
-              <span
-                className="max-w-[320px] truncate ui-caption text-slate-500 dark:text-slate-400"
-                title={selectedEndpoint.endpoint_url}
-              >
-                {selectedEndpoint.endpoint_url}
-              </span>
-            )}
           </div>
-        </div>
-      </div>
+        }
+        items={[
+          { label: "Endpoint URL", value: selectedEndpoint?.endpoint_url ?? "Unavailable", mono: Boolean(selectedEndpoint?.endpoint_url) },
+          { label: "Provider", value: selectedEndpoint?.provider?.toUpperCase() ?? "Unavailable" },
+          { label: "Selection", value: selectedEndpoint?.is_default ? "Default endpoint" : "Manual selection" },
+          { label: "Coverage", value: "Storage totals + RGW traffic" },
+        ]}
+        alerts={endpointError ? [{ tone: "warning", message: endpointError }] : []}
+      />
 
       {pageError && <PageBanner tone="warning">{pageError}</PageBanner>}
 
+      {!endpointLoading && selectedEndpointId == null ? (
+        <PageEmptyState
+          title="No Ceph endpoint available for metrics"
+          description={endpointError || "Add or enable a Ceph endpoint before loading platform metrics."}
+          primaryAction={{ label: "Open endpoints", to: "/admin/endpoints" }}
+          tone="warning"
+        />
+      ) : null}
+
+      {selectedEndpointId != null && (
+        <>
       <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
         <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
           <div>
@@ -318,6 +331,8 @@ export default function AdminMetricsPage() {
           />
         </div>
       </section>
+        </>
+      )}
     </div>
   );
 }

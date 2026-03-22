@@ -14,12 +14,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
+import PageControlStrip from "../../components/PageControlStrip";
+import PageEmptyState from "../../components/PageEmptyState";
 import StatCards from "../../components/StatCards";
 import TableEmptyState from "../../components/TableEmptyState";
-import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { toolbarCompactButtonClasses, toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
@@ -344,7 +347,105 @@ export default function BillingPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Billing" description="Monthly usage and cost overview." />
-      {pageError && <PageBanner tone="error">{pageError}</PageBanner>}
+      <PageControlStrip
+        label="Billing scope"
+        title={selectedEndpoint?.name ?? "No Ceph endpoint selected"}
+        description="Choose the month, Ceph endpoint, and billing subject view used to aggregate costs and traffic."
+        controls={
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
+              Month
+              <input
+                type="month"
+                value={month}
+                onChange={(event) => setMonth(event.target.value)}
+                className={toolbarCompactInputClasses}
+              />
+            </label>
+            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
+              Endpoint
+              <select
+                value={selectedEndpointId ?? ""}
+                onChange={(event) => setSelectedEndpointId(event.target.value ? Number(event.target.value) : null)}
+                className={toolbarCompactSelectClasses}
+              >
+                {endpoints.length === 0 ? <option value="">No Ceph endpoint</option> : null}
+                {endpoints.map((endpoint) => (
+                  <option key={endpoint.id} value={endpoint.id}>
+                    {endpoint.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
+              Subject
+              <select
+                value={subjectType}
+                onChange={(event) => setSubjectType(event.target.value as "account" | "s3_user")}
+                className={toolbarCompactSelectClasses}
+              >
+                {SUBJECT_TYPES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
+              Sort by
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                className={toolbarCompactSelectClasses}
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
+              Direction
+              <select
+                value={sortDir}
+                onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+                className={toolbarCompactSelectClasses}
+              >
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
+              Collect day
+              <input
+                type="date"
+                value={collectDay}
+                onChange={(event) => setCollectDay(event.target.value)}
+                className={toolbarCompactInputClasses}
+              />
+            </label>
+            <button type="button" onClick={handleCollectDaily} disabled={collectLoading} className={toolbarCompactButtonClasses}>
+              {collectLoading ? "Collecting..." : "Collect daily"}
+            </button>
+            <button
+              type="button"
+              onClick={handleExport}
+              className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
+            >
+              Export CSV
+            </button>
+          </div>
+        }
+        items={[
+          { label: "Endpoint URL", value: selectedEndpoint?.endpoint_url ?? "Unavailable", mono: Boolean(selectedEndpoint?.endpoint_url) },
+          { label: "Month", value: month || "Unavailable" },
+          { label: "Subject type", value: SUBJECT_TYPES.find((option) => option.value === subjectType)?.label ?? subjectType },
+          { label: "Sort", value: `${SORT_OPTIONS.find((option) => option.value === sortBy)?.label ?? sortBy} (${sortDir})` },
+        ]}
+        alerts={!selectedEndpointId && pageError ? [{ tone: "warning", message: pageError }] : []}
+      />
+      {pageError && selectedEndpointId != null ? <PageBanner tone="error">{pageError}</PageBanner> : null}
       {billingDisabled && (
         <PageBanner tone="warning">
           Billing is disabled. Enable it in General settings to use this page.
@@ -352,102 +453,24 @@ export default function BillingPage() {
       )}
       {collectMessage && <PageBanner tone="success">{collectMessage}</PageBanner>}
       {collectError && <PageBanner tone="error">{collectError}</PageBanner>}
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <label className="flex flex-col text-sm text-slate-600 dark:text-slate-300">
-          Month
-          <input
-            type="month"
-            value={month}
-            onChange={(event) => setMonth(event.target.value)}
-            className="mt-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-          />
-        </label>
-        <label className="flex flex-col text-sm text-slate-600 dark:text-slate-300">
-          Endpoint
-          <select
-            value={selectedEndpointId ?? ""}
-            onChange={(event) => setSelectedEndpointId(event.target.value ? Number(event.target.value) : null)}
-            className="mt-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-          >
-            {endpoints.map((endpoint) => (
-              <option key={endpoint.id} value={endpoint.id}>
-                {endpoint.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col text-sm text-slate-600 dark:text-slate-300">
-          Subject
-          <select
-            value={subjectType}
-            onChange={(event) => setSubjectType(event.target.value as "account" | "s3_user")}
-            className="mt-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-          >
-            {SUBJECT_TYPES.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col text-sm text-slate-600 dark:text-slate-300">
-          Sort by
-          <select
-            value={sortBy}
-            onChange={(event) => setSortBy(event.target.value)}
-            className="mt-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col text-sm text-slate-600 dark:text-slate-300">
-          Direction
-          <select
-            value={sortDir}
-            onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-            className="mt-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-          >
-            <option value="asc">Ascending</option>
-            <option value="desc">Descending</option>
-          </select>
-        </label>
-        <label className="flex flex-col text-sm text-slate-600 dark:text-slate-300">
-          Collect day
-          <input
-            type="date"
-            value={collectDay}
-            onChange={(event) => setCollectDay(event.target.value)}
-            className="mt-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={handleCollectDaily}
-          disabled={collectLoading}
-          className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-        >
-          {collectLoading ? "Collecting..." : "Collect daily"}
-        </button>
-        <button
-          type="button"
-          onClick={handleExport}
-          className="ml-auto inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
-        >
-          Export CSV
-        </button>
-      </div>
-
+      {!selectedEndpointId ? (
+        <PageEmptyState
+          title="No Ceph endpoint available for billing"
+          description={pageError || "Add or enable a Ceph endpoint before loading billing analytics."}
+          primaryAction={{ label: "Open endpoints", to: "/admin/endpoints" }}
+          tone="warning"
+        />
+      ) : (
+        <>
       {summaryError && <PageBanner tone="error">{summaryError}</PageBanner>}
       {summaryLoading ? <PageBanner tone="info">Loading summary...</PageBanner> : <StatCards stats={stats} columns={3} />}
 
-      <ListSectionCard
-        title="Subjects"
-        subtitle={selectedEndpoint ? selectedEndpoint.name : undefined}
-      >
+      <div className="ui-surface-card">
+        <ListToolbar
+          title="Subjects"
+          description={selectedEndpoint ? `Monthly totals for ${selectedEndpoint.name}.` : "Monthly subject totals."}
+          countLabel={`${subjects.length} subject${subjects.length === 1 ? "" : "s"}`}
+        />
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-950">
@@ -488,7 +511,7 @@ export default function BillingPage() {
             </tbody>
           </table>
         </div>
-      </ListSectionCard>
+      </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between">
@@ -598,6 +621,8 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

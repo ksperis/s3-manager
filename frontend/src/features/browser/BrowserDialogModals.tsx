@@ -3,8 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useRef, useState } from "react";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import Modal from "../../components/Modal";
-import { bulkActionClasses, bulkDangerClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
+import { bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
 
 type BrowserConfirmModalProps = {
   title: string;
@@ -34,29 +35,16 @@ export function BrowserConfirmModal({
   onConfirm,
 }: BrowserConfirmModalProps) {
   return (
-    <Modal title={title} onClose={onCancel} maxWidthClass="max-w-lg" closeOnBackdropClick={!loading}>
-      <div className="space-y-4">
-        <p className="ui-body text-slate-600 dark:text-slate-300">{message}</p>
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            className={bulkActionClasses}
-            onClick={onCancel}
-            disabled={loading}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className={tone === "danger" ? bulkDangerClasses : toolbarPrimaryClasses}
-            onClick={onConfirm}
-            disabled={loading}
-          >
-            {loading ? "Processing..." : confirmLabel}
-          </button>
-        </div>
-      </div>
-    </Modal>
+    <ConfirmActionDialog
+      title={title}
+      description={message}
+      confirmLabel={confirmLabel}
+      tone={tone}
+      loading={loading}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+      maxWidthClass="max-w-lg"
+    />
   );
 }
 
