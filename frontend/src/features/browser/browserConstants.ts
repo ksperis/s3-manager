@@ -41,7 +41,7 @@ export const contextMenuItemDisabledClasses = "cursor-not-allowed opacity-50";
 export const contextMenuSeparatorClasses = "my-1 border-t border-slate-200 dark:border-slate-700";
 
 export const bucketButtonClasses =
-  "inline-flex max-w-[220px] items-center gap-1 rounded-md px-1 py-0.5 ui-caption font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-800";
+  "inline-flex max-w-[260px] items-center gap-1 rounded-md px-1 py-0.5 ui-caption font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-800 sm:max-w-[320px]";
 export const treeToggleButtonClasses =
   "inline-flex h-4 w-4 items-center justify-center rounded border border-slate-200 ui-caption font-semibold text-slate-500 transition hover:border-primary hover:text-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary-500 dark:hover:text-primary-200";
 export const treeItemBaseClasses =

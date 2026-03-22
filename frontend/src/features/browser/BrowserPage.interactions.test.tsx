@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
 
 const searchBrowserBucketsMock = vi.fn();
@@ -79,6 +80,14 @@ function renderPage({
   );
 }
 
+function renderEmbeddedPage() {
+  return render(
+    <MemoryRouter initialEntries={["/manager/browser"]}>
+      <BrowserEmbed accountIdForApi="acc-1" hasContext />
+    </MemoryRouter>
+  );
+}
+
 async function findRowByLabel(label: string): Promise<HTMLTableRowElement> {
   const row = (await screen.findByText(label)).closest("tr");
   if (!row) {
@@ -91,6 +100,14 @@ function openHeaderConfigMenu() {
   const actionsHeader = screen.getByRole("columnheader", { name: "Actions" });
   fireEvent.contextMenu(actionsHeader);
   return screen.getByRole("menu");
+}
+
+function getContextToolbar() {
+  return screen.getByRole("toolbar", { name: "Browser context bar" });
+}
+
+function getActionsToolbar() {
+  return screen.getByRole("toolbar", { name: "Browser actions bar" });
 }
 
 describe("BrowserPage interactions", () => {
@@ -387,6 +404,86 @@ describe("BrowserPage interactions", () => {
     const compactPreviewButtonAgain = within(rowA).getByRole("button", { name: "Preview" });
     expect(compactPreviewButtonAgain).toHaveClass("!h-6", "!w-6");
     expect(within(rowA).queryByText("Object")).not.toBeInTheDocument();
+  });
+
+  it("keeps primary browser actions visible and moves status details into More", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const contextToolbar = getContextToolbar();
+    const actionsToolbar = getActionsToolbar();
+
+    expect(screen.getAllByRole("toolbar")).toHaveLength(2);
+    expect(within(contextToolbar).getByRole("button", { name: "Select bucket" })).toBeInTheDocument();
+    expect(within(contextToolbar).getByRole("button", { name: "Operations" })).toBeInTheDocument();
+    expect(within(actionsToolbar).getByText("No selection")).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "Upload files" })).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "New folder" })).toBeInTheDocument();
+    expect(within(actionsToolbar).queryByRole("button", { name: "Operations" })).not.toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "More" })).toBeInTheDocument();
+    expect(screen.queryByText("Choose objects to reveal selection actions. Upload and folder creation stay visible otherwise.")).not.toBeInTheDocument();
+
+    await user.click(within(actionsToolbar).getByRole("button", { name: "More" }));
+    const menu = await screen.findByRole("menu", { name: "More" });
+
+    expect(within(menu).getByText("Compact view")).toBeInTheDocument();
+    expect(within(menu).getByText("Transfers")).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: /Folders panel/i })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: /Inspector panel/i })).toBeInTheDocument();
+  });
+
+  it("keeps selection actions inline and secondary selection actions in More", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await findRowByLabel("a.txt"));
+
+    const actionsToolbar = getActionsToolbar();
+
+    expect(within(actionsToolbar).getByText("1 selected")).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(within(actionsToolbar).queryByRole("button", { name: "Cut" })).not.toBeInTheDocument();
+    expect(within(actionsToolbar).queryByRole("button", { name: "Copy URL" })).not.toBeInTheDocument();
+
+    await user.click(within(actionsToolbar).getByRole("button", { name: "More" }));
+    const menu = await screen.findByRole("menu", { name: "More" });
+
+    expect(within(menu).getByRole("menuitem", { name: "Copy URL" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Cut" })).toBeInTheDocument();
+  });
+
+  it("preserves refresh behavior from the compact toolbar", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const initialCalls = listBrowserObjectsMock.mock.calls.length;
+    await user.click(within(getActionsToolbar()).getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => {
+      expect(listBrowserObjectsMock.mock.calls.length).toBe(initialCalls + 1);
+    });
+  });
+
+  it("hides main-browser-only status and panel controls from More in embedded mode", async () => {
+    const user = userEvent.setup();
+    renderEmbeddedPage();
+    await findRowByLabel("a.txt");
+
+    expect(screen.getAllByRole("toolbar")).toHaveLength(2);
+    expect(within(getContextToolbar()).getByRole("button", { name: "Operations" })).toBeInTheDocument();
+    expect(within(getActionsToolbar()).getByText("No selection")).toBeInTheDocument();
+
+    await user.click(within(getActionsToolbar()).getByRole("button", { name: "More" }));
+    const menu = await screen.findByRole("menu", { name: "More" });
+
+    expect(within(menu).queryByText("Compact view")).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: /Folders panel/i })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: /Inspector panel/i })).not.toBeInTheDocument();
   });
 
   it("supports Cmd/Ctrl click toggle selection", async () => {

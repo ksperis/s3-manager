@@ -139,6 +139,9 @@ import {
   bulkDangerClasses,
   breadcrumbIconButtonClasses,
   countBadgeClasses,
+  contextMenuItemClasses,
+  contextMenuItemDisabledClasses,
+  contextMenuSeparatorClasses,
   filterChipClasses,
   iconButtonClasses,
   iconButtonDangerClasses,
@@ -647,6 +650,7 @@ export default function BrowserPage({
   const [showCorsActionPopover, setShowCorsActionPopover] = useState(false);
   const [filter, setFilter] = useState("");
   const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
+  const [showToolbarMoreMenu, setShowToolbarMoreMenu] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<BrowserColumnId[]>(DEFAULT_VISIBLE_COLUMN_IDS);
   const [lazyColumnCache, setLazyColumnCache] = useState<Record<string, LazyColumnCacheEntry>>({});
   const [searchScope, setSearchScope] = useState<SearchScope>("prefix");
@@ -784,6 +788,8 @@ export default function BrowserPage({
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const bucketMenuRef = useRef<HTMLDivElement | null>(null);
   const searchOptionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const toolbarMoreButtonRef = useRef<HTMLButtonElement | null>(null);
+  const toolbarMoreMenuRef = useRef<HTMLDivElement | null>(null);
   const corsActionTriggerRef = useRef<HTMLButtonElement | null>(null);
   const corsActionPopoverRef = useRef<HTMLDivElement | null>(null);
   const objectsListViewportRef = useRef<HTMLDivElement | null>(null);
@@ -1374,6 +1380,10 @@ export default function BrowserPage({
   }, [bucketName, prefix]);
 
   useEffect(() => {
+    setShowToolbarMoreMenu(false);
+  }, [bucketName, prefix, selectedIds]);
+
+  useEffect(() => {
     setShowCorsActionPopover(false);
   }, [accountIdForApi, bucketName]);
 
@@ -1464,6 +1474,27 @@ export default function BrowserPage({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [showCorsActionPopover]);
+
+  useEffect(() => {
+    if (!showToolbarMoreMenu) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (toolbarMoreButtonRef.current?.contains(target)) return;
+      if (toolbarMoreMenuRef.current?.contains(target)) return;
+      setShowToolbarMoreMenu(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowToolbarMoreMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showToolbarMoreMenu]);
 
   useEffect(() => {
     if (!hasCorsAction) {
@@ -7825,19 +7856,40 @@ export default function BrowserPage({
   const operationsCountBadgeClasses = `${countBadgeClasses} ui-caption ${
     hasFailedOperations ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100" : ""
   }`;
-  const panelToggleClasses = (active: boolean, tone: "amber" | "sky") =>
-    `${filterChipClasses} ${
-      active
-        ? tone === "amber"
-          ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-500/50 dark:bg-amber-900/30 dark:text-amber-100"
-          : "border-sky-300 bg-sky-100 text-sky-800 dark:border-sky-500/50 dark:bg-sky-900/30 dark:text-sky-100"
-        : ""
-    }`;
+  const isCreateBucketNameValid = !createBucketNameValue || isValidS3BucketName(createBucketNameValue);
+  const showFolderToggle = showPanelToggles && canUseFoldersPanel;
+  const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
   const browserViewLabel = compactMode ? "Compact view" : "List view";
-  const selectionSummary =
+  const toolbarStatusTextClassName =
     selectedCount > 0
-      ? `${selectedCount} selected · ${selectionFiles.length} files · ${selectionFolders.length} folders`
-      : "No selection";
+      ? "ui-caption font-semibold text-primary-700 dark:text-primary-100"
+      : "ui-caption font-semibold text-slate-500 dark:text-slate-400";
+  const toolbarOverflowStatusRowClasses =
+    "flex items-start gap-2 rounded-md px-2.5 py-2 ui-caption text-slate-600 dark:text-slate-300";
+  const toolbarOverflowSectionTitleClasses =
+    "px-2.5 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-400";
+  const toolbarSelectionSummary = selectedCount > 0 ? `${selectedCount} selected` : "No selection";
+  const showToolbarCopyUrlAction = Boolean(selectionIsSingle && selectionPrimary);
+  const showToolbarCutAction = canSelectionActions;
+  const hasToolbarStatusSection = isMainBrowserPath || Boolean(accessBadge);
+  const hasToolbarPanelsSection = showFolderToggle || showInspectorToggle;
+  const hasToolbarSecondaryActionsSection = showToolbarCopyUrlAction || showToolbarCutAction || showSseControls;
+  const hasToolbarMoreMenu =
+    hasToolbarStatusSection || hasToolbarPanelsSection || hasToolbarSecondaryActionsSection;
+  const closeToolbarMoreMenu = () => {
+    setShowToolbarMoreMenu(false);
+  };
+  const runToolbarMoreAction = (action: () => void) => {
+    closeToolbarMoreMenu();
+    action();
+  };
+
+  useEffect(() => {
+    if (!hasToolbarMoreMenu && showToolbarMoreMenu) {
+      setShowToolbarMoreMenu(false);
+    }
+  }, [hasToolbarMoreMenu, showToolbarMoreMenu]);
+
   const renderLazyCellValue = (status: LazyFieldStatus, value: string | number | null) => {
     if (status === "idle") {
       return "—";
@@ -7916,311 +7968,376 @@ export default function BrowserPage({
     return <span className="inline-flex h-6 items-center">{column.label}</span>;
   };
 
-  const isCreateBucketNameValid = !createBucketNameValue || isValidS3BucketName(createBucketNameValue);
-  const showFolderToggle = showPanelToggles && canUseFoldersPanel;
-  const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
-
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-        <div className="border-b border-slate-200 px-2 py-2 dark:border-slate-800">
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
-              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-              <div ref={bucketMenuRef} className="relative flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  className={bucketButtonClassName}
-                  onClick={() => setShowBucketMenu((prev) => !prev)}
-                  disabled={!hasS3AccountContext}
-                  aria-haspopup="listbox"
-                  aria-expanded={showBucketMenu}
-                  aria-label="Select bucket"
-                  title="Select bucket"
-                >
-                  <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
-                  <span className="max-w-[160px] truncate">{bucketButtonLabel}</span>
-                  <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
-                </button>
-                {bucketConfigurationEnabled && (
+        <div className="border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
+          <div className="flex flex-col gap-2">
+            <div
+              role="toolbar"
+              aria-label="Browser context bar"
+              className="flex flex-col gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div ref={bucketMenuRef} className="relative flex shrink-0 items-center gap-1">
                   <button
                     type="button"
-                    className={`${iconButtonClasses} h-8 w-8`}
-                    onClick={() => openBucketConfigurationModal(bucketName)}
-                    disabled={!bucketName || !hasS3AccountContext}
-                    aria-label="Configure selected bucket"
-                    title="Configure selected bucket"
+                    className={bucketButtonClassName}
+                    onClick={() => setShowBucketMenu((prev) => !prev)}
+                    disabled={!hasS3AccountContext}
+                    aria-haspopup="listbox"
+                    aria-expanded={showBucketMenu}
+                    aria-label="Select bucket"
+                    title="Select bucket"
                   >
-                    <SettingsIcon className="h-3.5 w-3.5" />
+                    <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
+                    <span className="max-w-[200px] truncate sm:max-w-[260px]">{bucketButtonLabel}</span>
+                    <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
                   </button>
-                )}
-                {showBucketMenu && (
-                  <div className="absolute left-0 top-[calc(100%+6px)] z-[60] w-64 rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                    <div className="flex items-center gap-2 px-2 pb-2 pt-1">
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <SearchIcon className="h-3.5 w-3.5 text-slate-400" />
-                        <input
-                          ref={bucketFilterRef}
-                          type="text"
-                          value={bucketFilter}
-                          onChange={(event) => setBucketFilter(event.target.value)}
-                          placeholder="Filter buckets"
-                          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                          spellCheck={false}
-                        />
-                      </div>
-                      {bucketManagementEnabled && (
-                        <button
-                          type="button"
-                          onClick={openCreateBucketDialog}
-                          disabled={!hasS3AccountContext}
-                          className="shrink-0 rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                          title="Create bucket"
-                          aria-label="Create bucket"
-                        >
-                          + Bucket
-                        </button>
-                      )}
-                    </div>
-                    <div className="max-h-56 overflow-y-auto px-1 pb-1">
-                      {loadingBuckets && bucketOptions.length === 0 ? (
-                        <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
-                          Loading buckets...
+                  {showBucketMenu && (
+                    <div className="absolute left-0 top-[calc(100%+6px)] z-[60] w-80 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      <div className="flex items-center gap-2 px-2 pb-2 pt-1">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <SearchIcon className="h-3.5 w-3.5 text-slate-400" />
+                          <input
+                            ref={bucketFilterRef}
+                            type="text"
+                            value={bucketFilter}
+                            onChange={(event) => setBucketFilter(event.target.value)}
+                            placeholder="Filter buckets"
+                            className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            spellCheck={false}
+                          />
                         </div>
-                      ) : bucketTotalCount === 0 ? (
-                        <div className="space-y-2 px-2 py-2">
-                          <div className="ui-caption text-slate-500 dark:text-slate-400">
-                            {bucketError ? "Unable to load buckets." : "No buckets available."}
-                          </div>
+                        {bucketManagementEnabled && (
                           <button
                             type="button"
-                            className={filterChipClasses}
-                            onClick={() => void refreshBucketList()}
-                            disabled={loadingBuckets || !hasS3AccountContext}
+                            onClick={openCreateBucketDialog}
+                            disabled={!hasS3AccountContext}
+                            className="shrink-0 rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                            title="Create bucket"
+                            aria-label="Create bucket"
                           >
-                            {loadingBuckets ? "Retrying..." : "Retry"}
+                            + Bucket
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-56 overflow-y-auto px-1 pb-1">
+                        {loadingBuckets && bucketOptions.length === 0 ? (
+                          <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
+                            Loading buckets...
+                          </div>
+                        ) : bucketTotalCount === 0 ? (
+                          <div className="space-y-2 px-2 py-2">
+                            <div className="ui-caption text-slate-500 dark:text-slate-400">
+                              {bucketError ? "Unable to load buckets." : "No buckets available."}
+                            </div>
+                            <button
+                              type="button"
+                              className={filterChipClasses}
+                              onClick={() => void refreshBucketList()}
+                              disabled={loadingBuckets || !hasS3AccountContext}
+                            >
+                              {loadingBuckets ? "Retrying..." : "Retry"}
+                            </button>
+                          </div>
+                        ) : bucketOptions.length === 0 ? (
+                          <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
+                            No buckets match this filter.
+                          </div>
+                        ) : (
+                          bucketOptions.map((bucket) => {
+                            const isActive = bucket === bucketName;
+                            return (
+                              <button
+                                key={bucket}
+                                type="button"
+                                onClick={() => handleBucketChange(bucket)}
+                                className={`flex w-full min-w-0 items-center justify-between rounded-md px-2.5 py-2 text-left font-semibold transition ${
+                                  isActive
+                                    ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
+                                    : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                }`}
+                              >
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <BucketIcon className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="truncate">{bucket}</span>
+                                </span>
+                                {isActive && (
+                                  <span className="ui-caption font-semibold uppercase text-primary-600 dark:text-primary-200">
+                                    Active
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                      {!loadingBuckets && bucketTotalCount > 0 && (
+                        <div className="border-t border-slate-200 px-2 py-1 ui-caption text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                          {`${bucketOptions.length} of ${bucketMenuTotal} bucket${bucketMenuTotal === 1 ? "" : "s"}`}
+                        </div>
+                      )}
+                      {canLoadMoreBucketResults && (
+                        <div className="border-t border-slate-200 px-2 py-1.5 dark:border-slate-700">
+                          <button
+                            type="button"
+                            onClick={handleBucketMenuLoadMore}
+                            disabled={bucketMenuLoadingMore}
+                            className={filterChipClasses}
+                          >
+                            {bucketMenuLoadingMore ? "Loading..." : "Load more"}
                           </button>
                         </div>
-                      ) : bucketOptions.length === 0 ? (
-                        <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
-                          No buckets match this filter.
-                        </div>
-                      ) : (
-                        bucketOptions.map((bucket) => {
-                          const isActive = bucket === bucketName;
-                          return (
-                            <button
-                              key={bucket}
-                              type="button"
-                              onClick={() => handleBucketChange(bucket)}
-                              className={`flex w-full min-w-0 items-center justify-between rounded-md px-2.5 py-2 text-left font-semibold transition ${
-                                isActive
-                                  ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
-                                  : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                              }`}
-                            >
-                              <span className="truncate">{bucket}</span>
-                              {isActive && (
-                                <span className="ui-caption font-semibold uppercase text-primary-600 dark:text-primary-200">
-                                  Active
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })
                       )}
                     </div>
-                    {!loadingBuckets && bucketTotalCount > 0 && (
-                      <div className="border-t border-slate-200 px-2 py-1 ui-caption text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                        {`${bucketOptions.length} of ${bucketMenuTotal} bucket${bucketMenuTotal === 1 ? "" : "s"}`}
-                      </div>
-                    )}
-                    {canLoadMoreBucketResults && (
-                      <div className="border-t border-slate-200 px-2 py-1.5 dark:border-slate-700">
-                        <button
-                          type="button"
-                          onClick={handleBucketMenuLoadMore}
-                          disabled={bucketMenuLoadingMore}
-                          className={filterChipClasses}
+                  )}
+                </div>
+                <div
+                  className="flex min-w-0 flex-1 items-center gap-1 ui-caption font-semibold text-slate-500 dark:text-slate-400"
+                  onClick={isEditingPath ? undefined : startEditingPath}
+                  onDoubleClick={isEditingPath ? undefined : startEditingPath}
+                >
+                  {isEditingPath ? (
+                    <div className="relative min-w-0 flex-1">
+                      <input
+                        ref={pathInputRef}
+                        type="text"
+                        value={pathDraft}
+                        onChange={(event) => setPathDraft(event.target.value)}
+                        onBlur={commitPathDraft}
+                        onKeyDown={handlePathKeyDown}
+                        placeholder="root"
+                        aria-label="Path"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        aria-controls="browser-path-suggestion-list"
+                        aria-expanded={pathSuggestions.length > 0 || pathSuggestionsLoading}
+                        aria-activedescendant={
+                          activePathSuggestion ? `browser-path-suggestion-${pathSuggestionIndex}` : undefined
+                        }
+                        className="min-w-0 w-full rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        disabled={!bucketName}
+                        spellCheck={false}
+                      />
+                      {(pathSuggestions.length > 0 || pathSuggestionsLoading) && (
+                        <div
+                          id="browser-path-suggestion-list"
+                          role="listbox"
+                          className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900"
                         >
-                          {bucketMenuLoadingMore ? "Loading..." : "Load more"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div
-                className="flex min-w-0 flex-1 items-center gap-1 ui-caption font-semibold text-slate-500 dark:text-slate-400"
-                onClick={isEditingPath ? undefined : startEditingPath}
-                onDoubleClick={isEditingPath ? undefined : startEditingPath}
-              >
-                {isEditingPath ? (
-                  <div className="relative min-w-0 flex-1">
-                    <input
-                      ref={pathInputRef}
-                      type="text"
-                      value={pathDraft}
-                      onChange={(event) => setPathDraft(event.target.value)}
-                      onBlur={commitPathDraft}
-                      onKeyDown={handlePathKeyDown}
-                      placeholder="root"
-                      aria-label="Path"
-                      role="combobox"
-                      aria-autocomplete="list"
-                      aria-controls="browser-path-suggestion-list"
-                      aria-expanded={pathSuggestions.length > 0 || pathSuggestionsLoading}
-                      aria-activedescendant={
-                        activePathSuggestion ? `browser-path-suggestion-${pathSuggestionIndex}` : undefined
-                      }
-                      className="min-w-0 w-full rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      disabled={!bucketName}
-                      spellCheck={false}
-                    />
-                    {(pathSuggestions.length > 0 || pathSuggestionsLoading) && (
-                      <div
-                        id="browser-path-suggestion-list"
-                        role="listbox"
-                        className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900"
-                      >
-                        {pathSuggestions.length === 0 ? (
-                          <div className="px-2 py-1.5 text-slate-500 dark:text-slate-300">Searching folders...</div>
-                        ) : (
-                          <div className="max-h-56 overflow-y-auto">
-                            {pathSuggestions.map((suggestion, idx) => {
-                              const isActive = idx === pathSuggestionIndex;
-                              const suggestionId = `browser-path-suggestion-${idx}`;
-                              const sourceBadge =
-                                suggestion.source === "history"
-                                  ? "Recent"
-                                  : suggestion.source === "local"
-                                    ? "Visible"
-                                    : null;
-                              return (
-                                <button
-                                  id={suggestionId}
-                                  key={`${suggestion.source}-${suggestion.value}`}
-                                  type="button"
-                                  role="option"
-                                  aria-selected={isActive}
-                                  onMouseEnter={() => setPathSuggestionIndex(idx)}
-                                  onMouseDown={(event) => {
-                                    event.preventDefault();
-                                    applyPathSuggestion(suggestion, { commit: true });
-                                  }}
-                                  className={`flex w-full items-start gap-2 px-2 py-1.5 text-left transition ${
-                                    isActive
-                                      ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
-                                      : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                                  }`}
-                                >
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate font-semibold" title={suggestion.label}>
-                                      {suggestion.label}
+                          {pathSuggestions.length === 0 ? (
+                            <div className="px-2 py-1.5 text-slate-500 dark:text-slate-300">Searching folders...</div>
+                          ) : (
+                            <div className="max-h-56 overflow-y-auto">
+                              {pathSuggestions.map((suggestion, idx) => {
+                                const isActive = idx === pathSuggestionIndex;
+                                const suggestionId = `browser-path-suggestion-${idx}`;
+                                const sourceBadge =
+                                  suggestion.source === "history"
+                                    ? "Recent"
+                                    : suggestion.source === "local"
+                                      ? "Visible"
+                                      : null;
+                                return (
+                                  <button
+                                    id={suggestionId}
+                                    key={`${suggestion.source}-${suggestion.value}`}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={isActive}
+                                    onMouseEnter={() => setPathSuggestionIndex(idx)}
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      applyPathSuggestion(suggestion, { commit: true });
+                                    }}
+                                    className={`flex w-full items-start gap-2 px-2 py-1.5 text-left transition ${
+                                      isActive
+                                        ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
+                                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                    }`}
+                                  >
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate font-semibold" title={suggestion.label}>
+                                        {suggestion.label}
+                                      </span>
+                                      <span
+                                        className="mt-0.5 block break-all text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500"
+                                        title={suggestion.value}
+                                      >
+                                        {suggestion.value}
+                                      </span>
                                     </span>
-                                    <span
-                                      className="mt-0.5 block break-all text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500"
-                                      title={suggestion.value}
-                                    >
-                                      {suggestion.value}
-                                    </span>
-                                  </span>
-                                  {sourceBadge && (
-                                    <span className="ml-2 shrink-0 self-start rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                                      {sourceBadge}
-                                    </span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                        {pathSuggestionsLoading && pathSuggestions.length > 0 && (
-                          <div className="border-t border-slate-200 px-2 py-1 text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                            Searching more folders...
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleGoUp();
-                      }}
-                      className={breadcrumbIconButtonClasses}
-                      disabled={!canGoUp}
-                      aria-label="Parent folder"
-                      title="Parent folder"
-                    >
-                      <UpIcon className="h-3.5 w-3.5" />
-                    </button>
-                    <div className="min-w-0 flex flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap py-0.5">
-                      {breadcrumbs.length === 0 ? (
-                        <span className="shrink-0 text-slate-400">(root)</span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleSelectPrefix("");
-                          }}
-                          className="shrink-0 rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
-                          title="root"
-                        >
-                          root
-                        </button>
+                                    {sourceBadge && (
+                                      <span className="ml-2 shrink-0 self-start rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                                        {sourceBadge}
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {pathSuggestionsLoading && pathSuggestions.length > 0 && (
+                            <div className="border-t border-slate-200 px-2 py-1 text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                              Searching more folders...
+                            </div>
+                          )}
+                        </div>
                       )}
-                      {breadcrumbs.map((crumb) => (
-                        <span key={crumb.prefix} className="flex shrink-0 items-center gap-1">
-                          <span className="text-slate-300">/</span>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleGoUp();
+                        }}
+                        className={breadcrumbIconButtonClasses}
+                        disabled={!canGoUp}
+                        aria-label="Parent folder"
+                        title="Parent folder"
+                      >
+                        <UpIcon className="h-3.5 w-3.5" />
+                      </button>
+                      <div className="min-w-0 flex flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap py-0.5">
+                        {breadcrumbs.length === 0 ? (
+                          <span className="shrink-0 text-slate-400">(root)</span>
+                        ) : (
                           <button
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
-                              handleSelectPrefix(crumb.prefix);
+                              handleSelectPrefix("");
                             }}
-                            className="max-w-[220px] truncate rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 sm:max-w-[320px] md:max-w-[420px]"
-                            title={crumb.prefix}
+                            className="shrink-0 rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
+                            title="root"
                           >
-                            {crumb.label}
+                            root
                           </button>
-                        </span>
-                      ))}
-                    </div>
+                        )}
+                        {breadcrumbs.map((crumb) => (
+                          <span key={crumb.prefix} className="flex shrink-0 items-center gap-1">
+                            <span className="text-slate-300">/</span>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleSelectPrefix(crumb.prefix);
+                              }}
+                              className="max-w-[220px] truncate rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 sm:max-w-[320px] md:max-w-[420px]"
+                              title={crumb.prefix}
+                            >
+                              {crumb.label}
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center sm:justify-end">
+                <button
+                  type="button"
+                  onClick={openOperationsModal}
+                  className={`${filterChipClasses} ${operationsButtonToneClasses}`}
+                  aria-label="Operations"
+                  title="Operations"
+                >
+                  Operations
+                  <span className={operationsCountBadgeClasses}>{formatBadgeCount(totalOperationsCount)}</span>
+                </button>
+              </div>
+            </div>
+            <div
+              role="toolbar"
+              aria-label="Browser actions bar"
+              className="flex flex-col gap-2 rounded-md border border-slate-200/70 bg-slate-50/70 px-2.5 py-1.5 dark:border-slate-700/70 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0 flex items-center">
+                <p className={`${toolbarStatusTextClassName} truncate`}>{toolbarSelectionSummary}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                {selectedCount > 0 ? (
+                  <>
+                    {canSelectionDownloadFolder && selectionPrimary && (
+                      <button
+                        type="button"
+                        className={toolbarPrimaryClasses}
+                        onClick={() => handleDownloadFolder(selectionPrimary)}
+                        disabled={!bucketName || !hasS3AccountContext}
+                      >
+                        <DownloadIcon className="h-3.5 w-3.5" />
+                        Download folder
+                      </button>
+                    )}
+                    {!canSelectionDownloadFolder && canSelectionDownloadFiles && (
+                      <button
+                        type="button"
+                        className={toolbarPrimaryClasses}
+                        onClick={() => handleDownloadItems(selectionFiles)}
+                        disabled={!bucketName || !hasS3AccountContext}
+                      >
+                        <DownloadIcon className="h-3.5 w-3.5" />
+                        Download
+                      </button>
+                    )}
+                    {canSelectionOpen && selectionPrimary && (
+                      <button
+                        type="button"
+                        className={toolbarButtonClasses}
+                        onClick={() => handleOpenItem(selectionPrimary)}
+                      >
+                        <OpenIcon className="h-3.5 w-3.5" />
+                        Open
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={toolbarButtonClasses}
+                      onClick={() => handleCopyItems(selectionItems)}
+                      disabled={!canSelectionCopyItems}
+                    >
+                      <CopyIcon className="h-3.5 w-3.5" />
+                      Copy
+                    </button>
+                    <button
+                      type="button"
+                      className={bulkDangerClasses}
+                      onClick={() => handleDeleteItems(selectionItems)}
+                      disabled={!hasS3AccountContext || !canSelectionDelete}
+                    >
+                      <TrashIcon className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
                   </>
-                )}
-              </div>
-              </div>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {showFolderToggle && (
-                  <button
-                    type="button"
-                    onClick={toggleFoldersPanel}
-                    aria-label={showFolders ? "Hide folders panel" : "Show folders panel"}
-                    aria-pressed={showFolders}
-                    title={showFolders ? "Hide folders" : "Show folders"}
-                    className={panelToggleClasses(showFolders, "amber")}
-                  >
-                    <FolderIcon className="h-3.5 w-3.5" />
-                    {showFolders ? "Folders on" : "Folders off"}
-                  </button>
-                )}
-                {showInspectorToggle && (
-                  <button
-                    type="button"
-                    onClick={toggleInspectorPanel}
-                    aria-label={showInspector ? "Hide inspector panel" : "Show inspector panel"}
-                    aria-pressed={showInspector}
-                    title={showInspector ? "Hide inspector" : "Show inspector"}
-                    className={panelToggleClasses(showInspector, "sky")}
-                  >
-                    <MoreIcon className="h-3.5 w-3.5" />
-                    {showInspector ? "Inspector on" : "Inspector off"}
-                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className={toolbarPrimaryClasses}
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={!bucketName}
+                      aria-label="Upload files"
+                      title="Upload files"
+                    >
+                      <UploadIcon className="h-3.5 w-3.5" />
+                      Upload files
+                    </button>
+                    <button
+                      type="button"
+                      className={toolbarButtonClasses}
+                      onClick={handleNewFolder}
+                      disabled={!bucketName || !hasS3AccountContext}
+                      aria-label="New folder"
+                      title="New folder"
+                    >
+                      <FolderPlusIcon className="h-3.5 w-3.5" />
+                      New folder
+                    </button>
+                  </>
                 )}
                 <button
                   type="button"
@@ -8233,159 +8350,190 @@ export default function BrowserPage({
                   <RefreshIcon className="h-3.5 w-3.5" />
                   Refresh
                 </button>
-                <button
-                  type="button"
-                  onClick={openOperationsModal}
-                  className={`${filterChipClasses} ${operationsButtonToneClasses}`}
-                >
-                  Operations
-                  <span className={operationsCountBadgeClasses}>{formatBadgeCount(totalOperationsCount)}</span>
-                </button>
-                {isMainBrowserPath ? <span className={filterChipClasses}>{browserViewLabel}</span> : null}
-                {accessBadge && (
-                  <span
-                    className={`${filterChipClasses} border-current/10`}
-                    title={`${accessBadge.label} — ${accessBadge.title}`}
-                    aria-label={`${accessBadge.label} — ${accessBadge.title}`}
-                  >
-                    <span className={`inline-flex h-2.5 w-2.5 rounded-full border ${accessBadge.className}`} />
-                    {accessBadge.label}
-                  </span>
+                {hasToolbarMoreMenu && (
+                  <>
+                    <button
+                      ref={toolbarMoreButtonRef}
+                      type="button"
+                      className={toolbarButtonClasses}
+                      onClick={() => setShowToolbarMoreMenu((prev) => !prev)}
+                      aria-haspopup="menu"
+                      aria-expanded={showToolbarMoreMenu}
+                      aria-label="More"
+                      title="More"
+                    >
+                      <MoreIcon className="h-3.5 w-3.5" />
+                      More
+                    </button>
+                    <AnchoredPortalMenu
+                      open={showToolbarMoreMenu}
+                      anchorRef={toolbarMoreButtonRef}
+                      placement="bottom-end"
+                      offset={6}
+                      minWidth={288}
+                      className="w-80 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                    >
+                      <div
+                        ref={toolbarMoreMenuRef}
+                        role="menu"
+                        aria-label="More"
+                        className="max-h-[min(70vh,28rem)] overflow-y-auto"
+                      >
+                        {hasToolbarStatusSection && (
+                          <>
+                            <p className={toolbarOverflowSectionTitleClasses}>Status</p>
+                            {isMainBrowserPath && (
+                              <div className={toolbarOverflowStatusRowClasses}>
+                                <EyeIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-semibold text-slate-700 dark:text-slate-100">View</p>
+                                  <p className="text-slate-500 dark:text-slate-400">{browserViewLabel}</p>
+                                </div>
+                              </div>
+                            )}
+                            {accessBadge && (
+                              <div className={toolbarOverflowStatusRowClasses} title={accessBadge.title}>
+                                <span className={`mt-0.5 inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${accessBadge.className}`} />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="font-semibold text-slate-700 dark:text-slate-100">Transfers</p>
+                                    <span
+                                      className={`${filterChipClasses} shrink-0 border-current/10`}
+                                      aria-label={`${accessBadge.label} — ${accessBadge.title}`}
+                                    >
+                                      {accessBadge.label}
+                                    </span>
+                                  </div>
+                                  <p className="text-slate-500 dark:text-slate-400">{accessBadge.title}</p>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        {hasToolbarPanelsSection && (
+                          <>
+                            {hasToolbarStatusSection && <div className={contextMenuSeparatorClasses} />}
+                            <p className={toolbarOverflowSectionTitleClasses}>Panels</p>
+                            {showFolderToggle && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className={contextMenuItemClasses}
+                                onClick={() => {
+                                  runToolbarMoreAction(toggleFoldersPanel);
+                                }}
+                              >
+                                <FolderIcon className="h-3.5 w-3.5" />
+                                Folders panel
+                                <span
+                                  className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                    showFolders
+                                      ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100"
+                                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
+                                  }`}
+                                >
+                                  {showFolders ? "On" : "Off"}
+                                </span>
+                              </button>
+                            )}
+                            {showInspectorToggle && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className={contextMenuItemClasses}
+                                onClick={() => {
+                                  runToolbarMoreAction(toggleInspectorPanel);
+                                }}
+                              >
+                                <MoreIcon className="h-3.5 w-3.5" />
+                                Inspector panel
+                                <span
+                                  className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                    showInspector
+                                      ? "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-100"
+                                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
+                                  }`}
+                                >
+                                  {showInspector ? "On" : "Off"}
+                                </span>
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {hasToolbarSecondaryActionsSection && (
+                          <>
+                            {(hasToolbarStatusSection || hasToolbarPanelsSection) && (
+                              <div className={contextMenuSeparatorClasses} />
+                            )}
+                            <p className={toolbarOverflowSectionTitleClasses}>More Actions</p>
+                            {showToolbarCopyUrlAction && selectionPrimary && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className={`${contextMenuItemClasses} ${
+                                  !canSelectionCopyUrl || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""
+                                }`}
+                                onClick={() => {
+                                  runToolbarMoreAction(() => handleCopyUrl(selectionPrimary));
+                                }}
+                                disabled={!canSelectionCopyUrl || !hasS3AccountContext}
+                                title={!canSelectionCopyUrl && sseActive ? "Copy URL is disabled in SSE-C mode." : undefined}
+                              >
+                                <LinkIcon className="h-3.5 w-3.5" />
+                                Copy URL
+                              </button>
+                            )}
+                            {showToolbarCutAction && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className={`${contextMenuItemClasses} ${!canSelectionCutItems ? contextMenuItemDisabledClasses : ""}`}
+                                onClick={() => {
+                                  runToolbarMoreAction(() => handleCutItems(selectionItems));
+                                }}
+                                disabled={!canSelectionCutItems}
+                              >
+                                <CutIcon className="h-3.5 w-3.5" />
+                                Cut
+                              </button>
+                            )}
+                            {showSseControls && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className={`${contextMenuItemClasses} ${
+                                  !bucketName || !hasS3AccountContext || !sseFeatureEnabled ? contextMenuItemDisabledClasses : ""
+                                }`}
+                                onClick={() => {
+                                  runToolbarMoreAction(openSseCustomerModal);
+                                }}
+                                disabled={!bucketName || !hasS3AccountContext || !sseFeatureEnabled}
+                                title={sseActive ? "SSE-C enabled for this bucket." : "Configure SSE-C key for this bucket."}
+                              >
+                                <SettingsIcon className="h-3.5 w-3.5" />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block">SSE-C</span>
+                                  <span className="block text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500">
+                                    {sseActive ? "Enabled for this bucket" : "Configure customer key"}
+                                  </span>
+                                </span>
+                                <span
+                                  className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                    sseActive
+                                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100"
+                                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
+                                  }`}
+                                >
+                                  {sseActive ? "On" : "Off"}
+                                </span>
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </AnchoredPortalMenu>
+                  </>
                 )}
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 rounded-lg border border-slate-200/70 bg-slate-50/70 px-3 py-2 dark:border-slate-700/70 dark:bg-slate-900/40">
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    {selectedCount > 0 ? "Selection" : "Primary actions"}
-                  </p>
-                  <p className="truncate ui-body font-semibold text-slate-800 dark:text-slate-100">{selectionSummary}</p>
-                  {selectedCount > 0 ? (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      {selectionIsSingle && selectionPrimary ? `Target: ${selectionPrimary.name} · ` : ""}
-                      {selectionHasDeleted
-                        ? "Contains delete markers. Review before bulk actions."
-                        : `Total size: ${formatBytes(selectedBytes)}`}
-                    </p>
-                  ) : (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Choose objects to reveal selection actions. Upload and folder creation stay visible otherwise.
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                  {selectedCount > 0 ? (
-                    <>
-                      {canSelectionDownloadFolder && selectionPrimary && (
-                        <button
-                          type="button"
-                          className={toolbarPrimaryClasses}
-                          onClick={() => handleDownloadFolder(selectionPrimary)}
-                          disabled={!bucketName || !hasS3AccountContext}
-                        >
-                          <DownloadIcon className="h-3.5 w-3.5" />
-                          Download folder
-                        </button>
-                      )}
-                      {!canSelectionDownloadFolder && canSelectionDownloadFiles && (
-                        <button
-                          type="button"
-                          className={toolbarPrimaryClasses}
-                          onClick={() => handleDownloadItems(selectionFiles)}
-                          disabled={!bucketName || !hasS3AccountContext}
-                        >
-                          <DownloadIcon className="h-3.5 w-3.5" />
-                          Download
-                        </button>
-                      )}
-                      {canSelectionOpen && selectionPrimary && (
-                        <button type="button" className={toolbarButtonClasses} onClick={() => handleOpenItem(selectionPrimary)}>
-                          <OpenIcon className="h-3.5 w-3.5" />
-                          Open
-                        </button>
-                      )}
-                      {canSelectionCopyUrl && selectionPrimary && (
-                        <button
-                          type="button"
-                          className={toolbarButtonClasses}
-                          onClick={() => handleCopyUrl(selectionPrimary)}
-                          disabled={!hasS3AccountContext}
-                        >
-                          <LinkIcon className="h-3.5 w-3.5" />
-                          Copy URL
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className={toolbarButtonClasses}
-                        onClick={() => handleCopyItems(selectionItems)}
-                        disabled={!canSelectionCopyItems}
-                      >
-                        <CopyIcon className="h-3.5 w-3.5" />
-                        Copy
-                      </button>
-                      <button
-                        type="button"
-                        className={toolbarButtonClasses}
-                        onClick={() => handleCutItems(selectionItems)}
-                        disabled={!canSelectionCutItems}
-                      >
-                        <CutIcon className="h-3.5 w-3.5" />
-                        Cut
-                      </button>
-                      <button
-                        type="button"
-                        className={bulkDangerClasses}
-                        onClick={() => handleDeleteItems(selectionItems)}
-                        disabled={!hasS3AccountContext || !canSelectionDelete}
-                      >
-                        <TrashIcon className="h-3.5 w-3.5" />
-                        Delete
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className={toolbarPrimaryClasses}
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={!bucketName}
-                        aria-label="Upload files"
-                        title="Upload files"
-                      >
-                        <UploadIcon className="h-3.5 w-3.5" />
-                        Upload files
-                      </button>
-                      <button
-                        type="button"
-                        className={toolbarButtonClasses}
-                        onClick={handleNewFolder}
-                        disabled={!bucketName || !hasS3AccountContext}
-                        aria-label="New folder"
-                        title="New folder"
-                      >
-                        <FolderPlusIcon className="h-3.5 w-3.5" />
-                        New folder
-                      </button>
-                      {showSseControls && (
-                        <button
-                          type="button"
-                          onClick={openSseCustomerModal}
-                          className={`${filterChipClasses} ${
-                            sseActive
-                              ? "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-100"
-                              : ""
-                          }`}
-                          disabled={!bucketName || !hasS3AccountContext || !sseFeatureEnabled}
-                          title={sseActive ? "SSE-C enabled for this bucket." : "Configure SSE-C key for this bucket."}
-                        >
-                          {sseActive ? "SSE-C On" : "SSE-C"}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
               </div>
             </div>
             <input
@@ -8464,14 +8612,11 @@ export default function BrowserPage({
           <div className={`grid min-h-0 flex-1 grid-rows-1 gap-3 ${layoutClass}`}>
             {isFoldersPanelVisible && (
               <div className="flex min-h-0 h-full min-w-0 flex-col rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Folders</p>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      {bucketName ? `Scope: ${normalizedPrefix || "root"}` : "Select a bucket to load prefixes."}
-                    </p>
-                  </div>
-                  <span className={filterChipClasses}>{showFolders ? "Visible" : "Hidden"}</span>
+                <div>
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Folders</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    {bucketName ? `Scope: ${normalizedPrefix || "root"}` : "Select a bucket to load prefixes."}
+                  </p>
                 </div>
                 <div className="mt-3 min-h-0 flex-1 overflow-hidden overflow-y-auto pr-1">
                   {!bucketName ? (
