@@ -2,11 +2,12 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { InlinePolicy } from "../../api/managerIamPolicies";
 import { confirmAction } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
+import { summarizeInlinePolicyDocument } from "./inlinePolicySummary";
 
 type InlinePolicyEditorProps = {
   entityLabel: string;
@@ -32,6 +33,7 @@ export default function InlinePolicyEditor({
   const [policies, setPolicies] = useState<InlinePolicy[]>([]);
   const [selectedName, setSelectedName] = useState("");
   const [policyText, setPolicyText] = useState("");
+  const [activePolicyName, setActivePolicyName] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("idle");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -39,11 +41,24 @@ export default function InlinePolicyEditor({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const hasExisting = useMemo(
-    () => Boolean(selectedName && policies.some((p) => p.name === selectedName)),
-    [policies, selectedName]
-  );
-  const canDelete = editorMode === "edit" && hasExisting;
+  const trimmedName = selectedName.trim();
+  const hasPolicies = policies.length > 0;
+  const selectedPolicy = activePolicyName ? policies.find((policy) => policy.name === activePolicyName) ?? null : null;
+  const replacementTarget = trimmedName
+    ? policies.find((policy) => policy.name === trimmedName && policy.name !== activePolicyName) ?? null
+    : null;
+  const createsNewFromExisting = Boolean(activePolicyName && trimmedName && trimmedName !== activePolicyName && !replacementTarget);
+  const canDelete = editorMode === "edit" && Boolean(selectedPolicy);
+  const showPromptState = editorMode === "idle";
+  const actionLabel = useMemo(() => {
+    if (activePolicyName && trimmedName === activePolicyName) {
+      return "Update existing inline policy";
+    }
+    if (replacementTarget) {
+      return "Replace existing inline policy";
+    }
+    return "Save new inline policy";
+  }, [activePolicyName, replacementTarget, trimmedName]);
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -65,9 +80,10 @@ export default function InlinePolicyEditor({
     }
   };
 
-  const refresh = async (activeName?: string) => {
+  const refresh = useCallback(async (nextActiveName: string | null) => {
     if (disabled || !entityName) {
       setPolicies([]);
+      setActivePolicyName(null);
       return;
     }
     setLoading(true);
@@ -75,38 +91,46 @@ export default function InlinePolicyEditor({
     try {
       const data = await loadPolicies();
       setPolicies(data);
-      const nameToLoad = activeName ?? (editorMode === "edit" ? selectedName : "");
-      if (nameToLoad) {
-        const current = data.find((p) => p.name === nameToLoad);
-        if (current) {
-          setSelectedName(nameToLoad);
-          setPolicyText(formatPolicyText(current));
-          setEditorMode("edit");
-        } else if (editorMode === "edit" && !activeName) {
-          setSelectedName("");
-          setPolicyText("");
-          setEditorMode("idle");
-        }
+
+      if (!nextActiveName) {
+        return;
       }
+
+      const current = data.find((policy) => policy.name === nextActiveName);
+      if (current) {
+        setActivePolicyName(current.name);
+        setSelectedName(current.name);
+        setPolicyText(formatPolicyText(current));
+        setEditorMode("edit");
+        return;
+      }
+
+      setActivePolicyName(null);
+      setSelectedName("");
+      setPolicyText("");
+      setEditorMode("idle");
     } catch (err) {
       setError(extractError(err));
     } finally {
       setLoading(false);
     }
-  };
+  }, [disabled, entityName, loadPolicies]);
 
   useEffect(() => {
     setSelectedName("");
     setPolicyText("");
+    setActivePolicyName(null);
     setEditorMode("idle");
     setMessage(null);
     setError(null);
-    refresh("");
-  }, [entityName, disabled]);
+    void refresh(null);
+  }, [entityName, disabled, refresh]);
 
   const handleSelectExisting = (name: string) => {
-    setSelectedName(name);
-    const existing = policies.find((p) => p.name === name);
+    const existing = policies.find((policy) => policy.name === name);
+    if (!existing) return;
+    setActivePolicyName(existing.name);
+    setSelectedName(existing.name);
     setPolicyText(formatPolicyText(existing));
     setEditorMode("edit");
     setMessage(null);
@@ -114,6 +138,7 @@ export default function InlinePolicyEditor({
   };
 
   const handleStartCreate = () => {
+    setActivePolicyName(null);
     setSelectedName("");
     setPolicyText("");
     setEditorMode("create");
@@ -122,6 +147,7 @@ export default function InlinePolicyEditor({
   };
 
   const handleCancel = () => {
+    setActivePolicyName(null);
     setSelectedName("");
     setPolicyText("");
     setEditorMode("idle");
@@ -135,10 +161,9 @@ export default function InlinePolicyEditor({
     setError(null);
   };
 
-  const handleSave = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (event: FormEvent) => {
+    event.preventDefault();
     if (disabled) return;
-    const trimmedName = selectedName.trim();
     if (!trimmedName) {
       setError("Inline policy name is required.");
       return;
@@ -150,16 +175,26 @@ export default function InlinePolicyEditor({
       setError("Inline policy must be valid JSON.");
       return;
     }
+
+    const isUpdatingSelected = Boolean(activePolicyName && trimmedName === activePolicyName);
+    const isReplacingExisting = Boolean(replacementTarget);
+    const isCreatingFromExisting = Boolean(activePolicyName && trimmedName !== activePolicyName && !replacementTarget);
+
     setSaving(true);
     setError(null);
     setMessage(null);
     try {
       await savePolicy(trimmedName, parsed);
-      setSelectedName(trimmedName);
-      setPolicyText(JSON.stringify(parsed, null, 2));
-      setEditorMode("edit");
       await refresh(trimmedName);
-      setMessage("Inline policy saved.");
+      if (isUpdatingSelected) {
+        setMessage("Inline policy updated.");
+      } else if (isReplacingExisting) {
+        setMessage(`Inline policy "${trimmedName}" replaced.`);
+      } else if (isCreatingFromExisting) {
+        setMessage(`New inline policy "${trimmedName}" created. "${activePolicyName}" remains unchanged.`);
+      } else {
+        setMessage("Inline policy saved.");
+      }
     } catch (err) {
       setError(extractError(err));
     } finally {
@@ -168,14 +203,15 @@ export default function InlinePolicyEditor({
   };
 
   const handleDelete = async () => {
-    if (disabled || !canDelete) return;
-    if (!confirmAction(`Delete inline policy "${selectedName}" from this ${entityLabel}?`)) return;
+    if (disabled || !selectedPolicy) return;
+    if (!confirmAction(`Delete inline policy "${selectedPolicy.name}" from this ${entityLabel}?`)) return;
     setDeleting(true);
     setError(null);
     setMessage(null);
     try {
-      await deletePolicy(selectedName);
-      await refresh();
+      await deletePolicy(selectedPolicy.name);
+      await refresh(null);
+      setActivePolicyName(null);
       setSelectedName("");
       setPolicyText("");
       setEditorMode("idle");
@@ -193,70 +229,113 @@ export default function InlinePolicyEditor({
         <div>
           <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Inline policies</p>
           <p className="ui-caption text-slate-500 dark:text-slate-400">
-            {editorMode === "edit" && selectedName
-              ? `Editing "${selectedName}".`
-              : "No inline policy selected yet."}
+            {selectedPolicy
+              ? `Editing "${selectedPolicy.name}".`
+              : hasPolicies
+                ? "Select an existing inline policy to review or edit."
+                : "No inline policies created yet."}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => refresh()}
-          disabled={disabled || loading}
-          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100"
-        >
-          {loading ? "Refreshing..." : "Refresh"}
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {policies.length} {policies.length === 1 ? "policy" : "policies"}
+          </span>
+          {hasPolicies ? (
+            <button
+              type="button"
+              onClick={handleStartCreate}
+              disabled={disabled}
+              className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100"
+            >
+              Create new inline policy
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void refresh(activePolicyName)}
+            disabled={disabled || loading}
+            className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100"
+          >
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
       </div>
 
       <div className="space-y-4 p-4">
-        {disabled && (
+        {disabled ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
             {disabledReason ?? "Select an account before editing inline policies."}
           </div>
-        )}
-        {error && (
+        ) : null}
+        {error ? (
           <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-caption text-rose-700 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-100">
             {error}
           </div>
-        )}
-        {message && (
+        ) : null}
+        {message ? (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-caption text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
             {message}
           </div>
-        )}
+        ) : null}
 
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Existing</span>
-            {loading && <span className="ui-caption text-slate-500 dark:text-slate-400">Loading inline policies...</span>}
-            {!loading && policies.length === 0 && (
-              <span className="ui-caption text-slate-500 dark:text-slate-400">None yet</span>
-            )}
-            {policies.map((p) => (
-              <button
-                key={p.name}
-                type="button"
-                onClick={() => handleSelectExisting(p.name)}
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 ui-caption font-semibold transition ${
-                  p.name === selectedName
-                    ? "border-primary bg-primary/10 text-primary dark:border-primary-400 dark:text-primary-100"
-                    : "border-slate-200 text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                }`}
-                disabled={disabled}
-              >
-                {p.name}
-              </button>
-            ))}
+        <div className="space-y-2 rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-950/30">
+          <div className="flex items-center justify-between gap-2">
+            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Existing inline policies
+            </span>
+            {loading ? <span className="ui-caption text-slate-500 dark:text-slate-400">Loading inline policies...</span> : null}
+          </div>
+          {!loading && !hasPolicies ? (
+            <p className="ui-caption text-slate-500 dark:text-slate-400">No inline policy exists yet.</p>
+          ) : null}
+          <div className="space-y-2">
+            {policies.map((policy) => {
+              const isSelected = policy.name === selectedPolicy?.name;
+
+              return (
+                <button
+                  key={policy.name}
+                  type="button"
+                  onClick={() => handleSelectExisting(policy.name)}
+                  disabled={disabled}
+                  className={`flex w-full items-start justify-between gap-3 rounded-xl border px-3 py-2 text-left transition ${
+                    isSelected
+                      ? "border-primary/50 bg-primary/10 dark:border-primary-400/50 dark:bg-primary-500/10"
+                      : "border-slate-200/80 bg-white/80 hover:border-primary/40 dark:border-slate-700 dark:bg-slate-950/20 dark:hover:border-primary-500/40"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate ui-body font-semibold text-slate-900 dark:text-slate-100">{policy.name}</p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      {summarizeInlinePolicyDocument(policy.document)}
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-1 ui-caption font-semibold ${
+                      isSelected
+                        ? "bg-primary/15 text-primary dark:bg-primary-500/20 dark:text-primary-100"
+                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                    }`}
+                  >
+                    {isSelected ? "Selected" : "Edit"}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {editorMode === "idle" ? (
+        {showPromptState ? (
           <div className="rounded-xl border border-dashed border-slate-200/80 bg-slate-50/70 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/40">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Create an inline policy</p>
+                <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">
+                  {hasPolicies ? "Select an existing inline policy to review or edit" : "Create the first inline policy"}
+                </p>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Start with a blank document or insert a template when needed.
+                  {hasPolicies
+                    ? "Existing inline policies stay visible above so you can avoid creating a second policy by mistake."
+                    : `Add an inline JSON policy that will live directly on this ${entityLabel}.`}
                 </p>
               </div>
               <button
@@ -265,7 +344,7 @@ export default function InlinePolicyEditor({
                 disabled={disabled}
                 className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
-                Create
+                {hasPolicies ? "Create new inline policy" : "Create inline policy"}
               </button>
             </div>
           </div>
@@ -273,28 +352,48 @@ export default function InlinePolicyEditor({
           <form className="space-y-4" onSubmit={handleSave}>
             <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
               <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">
-                {editorMode === "edit" ? "Edit inline policy" : "Create inline policy"}
+                {selectedPolicy ? `Edit "${selectedPolicy.name}"` : "Create a new inline policy"}
               </p>
               <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Provide a name and valid JSON. Saving will create or update the policy on this {entityLabel}.
+                {selectedPolicy
+                  ? "Update the selected inline policy or change its name to save a different one."
+                  : `Provide a name and valid JSON to create a new inline policy on this ${entityLabel}.`}
               </p>
             </div>
+
+            {replacementTarget ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                Saving with the name "{replacementTarget.name}" will replace that existing inline policy. The currently selected
+                policy will remain unchanged.
+              </div>
+            ) : createsNewFromExisting ? (
+              <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 ui-caption text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-100">
+                Changing the name from "{activePolicyName}" will create a new inline policy instead of editing the selected one.
+              </div>
+            ) : null}
+
             <div className="flex flex-col gap-2">
-              <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Inline policy name</label>
+              <label htmlFor="inline-policy-name-input" className="ui-body font-semibold text-slate-700 dark:text-slate-200">
+                Inline policy name
+              </label>
               <input
+                id="inline-policy-name-input"
                 type="text"
                 value={selectedName}
-                onChange={(e) => setSelectedName(e.target.value)}
+                onChange={(event) => setSelectedName(event.target.value)}
                 className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 placeholder="inline-policy"
                 disabled={disabled}
               />
             </div>
             <div className="flex flex-col gap-2">
-              <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Inline policy document (JSON)</label>
+              <label htmlFor="inline-policy-document-input" className="ui-body font-semibold text-slate-700 dark:text-slate-200">
+                Inline policy document (JSON)
+              </label>
               <textarea
+                id="inline-policy-document-input"
                 value={policyText}
-                onChange={(e) => setPolicyText(e.target.value)}
+                onChange={(event) => setPolicyText(event.target.value)}
                 className="min-h-[220px] rounded-md border border-slate-200 px-3 py-2 ui-body font-mono focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 spellCheck={false}
                 disabled={disabled}
@@ -317,7 +416,7 @@ export default function InlinePolicyEditor({
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                {canDelete && (
+                {canDelete ? (
                   <button
                     type="button"
                     onClick={handleDelete}
@@ -326,7 +425,7 @@ export default function InlinePolicyEditor({
                   >
                     {deleting ? "Deleting..." : "Delete inline policy"}
                   </button>
-                )}
+                ) : null}
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -342,7 +441,7 @@ export default function InlinePolicyEditor({
                   disabled={disabled || saving}
                   className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                 >
-                  {saving ? "Saving..." : "Save inline policy"}
+                  {saving ? "Saving..." : actionLabel}
                 </button>
               </div>
             </div>
