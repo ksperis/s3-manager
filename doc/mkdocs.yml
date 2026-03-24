@@ -101,6 +101,7 @@ nav:
       - AI assistant guidelines: developer/ai-assistant-guidelines.md
       - Identity and execution model: developer/identity-and-execution-model.md
       - Repository layout: developer/repo-layout.md
+      - Local development: developer/local-development.md
       - Contributing: developer/contributing.md
       - API reference: developer/api-reference.md
       - Listings feature matrix: developer/listings-feature-matrix.md

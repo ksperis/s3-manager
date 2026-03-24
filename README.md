@@ -50,7 +50,6 @@ Default endpoints:
 
 - Frontend: `http://localhost:8080`
 
-
 ## Full Documentation
 
 See `doc/` (MkDocs) for:
