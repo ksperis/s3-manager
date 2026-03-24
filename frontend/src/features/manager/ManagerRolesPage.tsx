@@ -28,6 +28,7 @@ import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
+import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
 
 const DEFAULT_ASSUME_ROLE_DOCUMENT = JSON.stringify(
   {
@@ -64,6 +65,9 @@ export default function ManagerRolesPage() {
   const [inlineDraftName, setInlineDraftName] = useState("");
   const [inlinePolicyText, setInlinePolicyText] = useState("");
   const [inlineDrafts, setInlineDrafts] = useState<InlinePolicy[]>([]);
+  const [selectedInlineDraftName, setSelectedInlineDraftName] = useState<string | null>(null);
+  const [inlineDraftMode, setInlineDraftMode] = useState<InlinePolicyDraftEditorMode>("create");
+  const [showInlinePolicyOptions, setShowInlinePolicyOptions] = useState(false);
   const [showPolicyOptions, setShowPolicyOptions] = useState(false);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -117,8 +121,11 @@ export default function ManagerRolesPage() {
     load(accountIdForApi);
     loadPolicies(accountIdForApi);
     setInlineDrafts([]);
+    setSelectedInlineDraftName(null);
     setInlineDraftName("");
     setInlinePolicyText("");
+    setInlineDraftMode("create");
+    setShowInlinePolicyOptions(false);
   }, [accountIdForApi, needsS3AccountSelection, accessMode]);
 
   useEffect(() => {
@@ -174,8 +181,11 @@ export default function ManagerRolesPage() {
       setPolicySearch("");
       setShowPolicyOptions(false);
       setInlineDrafts([]);
+      setSelectedInlineDraftName(null);
       setInlineDraftName("");
       setInlinePolicyText("");
+      setInlineDraftMode("create");
+      setShowInlinePolicyOptions(false);
       setShowAdvancedModal(false);
       setActionMessage("Role created");
       await load(accountIdForApi);
@@ -205,6 +215,11 @@ export default function ManagerRolesPage() {
 
   const openAdvancedModal = () => {
     setShowAdvancedModal(true);
+    setSelectedInlineDraftName(null);
+    setInlineDraftName("");
+    setInlinePolicyText("");
+    setInlineDraftMode(inlineDrafts.length > 0 ? "idle" : "create");
+    setShowInlinePolicyOptions(false);
   };
 
   const closeAdvancedModal = () => {
@@ -215,12 +230,16 @@ export default function ManagerRolesPage() {
     setPolicySearch("");
     setShowPolicyOptions(false);
     setInlineDrafts([]);
+    setSelectedInlineDraftName(null);
     setInlineDraftName("");
     setInlinePolicyText("");
+    setInlineDraftMode("create");
+    setShowInlinePolicyOptions(false);
   };
 
   const handleAddInlineDraft = () => {
-    if (!inlineDraftName.trim()) {
+    const trimmedName = inlineDraftName.trim();
+    if (!trimmedName) {
       setError("Inline policy name is required.");
       return;
     }
@@ -232,30 +251,64 @@ export default function ManagerRolesPage() {
       return;
     }
     setInlineDrafts((prev) => {
-      const filtered = prev.filter((p) => p.name !== inlineDraftName.trim());
-      return [...filtered, { name: inlineDraftName.trim(), document: parsed }];
+      const filtered = prev.filter((policy) => policy.name !== trimmedName && policy.name !== selectedInlineDraftName);
+      return [...filtered, { name: trimmedName, document: parsed }];
     });
+    setSelectedInlineDraftName(trimmedName);
+    setInlineDraftName(trimmedName);
     setInlinePolicyText(JSON.stringify(parsed, null, 2));
+    setInlineDraftMode("edit");
     setError(null);
   };
 
-  const handleLoadInlineDraft = (name: string) => {
-    const draft = inlineDrafts.find((p) => p.name === name);
+  const handleSelectInlineDraft = (name: string | null) => {
+    if (!name) {
+      setSelectedInlineDraftName(null);
+      setInlineDraftName("");
+      setInlinePolicyText("");
+      setInlineDraftMode(inlineDrafts.length > 0 ? "idle" : "create");
+      setError(null);
+      return;
+    }
+    const draft = inlineDrafts.find((policy) => policy.name === name);
     if (!draft) return;
     try {
       setInlinePolicyText(JSON.stringify(draft.document ?? {}, null, 2));
     } catch {
       setInlinePolicyText("");
     }
+    setSelectedInlineDraftName(draft.name);
     setInlineDraftName(draft.name);
+    setInlineDraftMode("edit");
+    setError(null);
   };
 
   const handleRemoveInlineDraft = (name: string) => {
-    setInlineDrafts((prev) => prev.filter((p) => p.name !== name));
-    if (inlineDraftName === name) {
+    setInlineDrafts((prev) => prev.filter((policy) => policy.name !== name));
+    if (selectedInlineDraftName === name || inlineDraftName === name) {
+      setSelectedInlineDraftName(null);
       setInlineDraftName("");
       setInlinePolicyText("");
+      setInlineDraftMode(inlineDrafts.length > 1 ? "idle" : "create");
     }
+    setError(null);
+  };
+
+  const handleCreateInlineDraft = () => {
+    setSelectedInlineDraftName(null);
+    setInlineDraftName("");
+    setInlinePolicyText("");
+    setInlineDraftMode("create");
+    setError(null);
+  };
+
+  const handleClearInlineDrafts = () => {
+    setInlineDrafts([]);
+    setSelectedInlineDraftName(null);
+    setInlineDraftName("");
+    setInlinePolicyText("");
+    setInlineDraftMode("create");
+    setError(null);
   };
 
   const formatAssumePolicyText = (document: unknown) => {
@@ -572,94 +625,30 @@ export default function ManagerRolesPage() {
                 </>
               )}
             </div>
-            <div className="space-y-2 rounded-xl border border-dashed border-slate-200/80 p-3 dark:border-slate-700">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="ui-body font-semibold text-slate-800 dark:text-slate-100">Inline policies (optional)</div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Create inline JSON policies that live on the role itself.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {inlineDrafts.length > 0 && (
-                    <span className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      {inlineDrafts.length} saved
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInlineDrafts([]);
-                      setInlineDraftName("");
-                      setInlinePolicyText("");
-                    }}
-                    className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Inline policy name</label>
-                  <input
-                    type="text"
-                    value={inlineDraftName}
-                    onChange={(e) => setInlineDraftName(e.target.value)}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    placeholder="inline-policy"
-                  />
-                  {inlineDrafts.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {inlineDrafts.map((draft) => (
-                        <span
-                          key={draft.name}
-                          className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                        >
-                          <button type="button" onClick={() => handleLoadInlineDraft(draft.name)} className="underline">
-                            {draft.name}
-                          </button>
-                          <button
-                            type="button"
-                            className="text-rose-600 hover:text-rose-700 dark:text-rose-200 dark:hover:text-rose-100"
-                            onClick={() => handleRemoveInlineDraft(draft.name)}
-                            aria-label={`Remove inline policy ${draft.name}`}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Inline policy document</label>
-                  <textarea
-                    value={inlinePolicyText}
-                    onChange={(e) => setInlinePolicyText(e.target.value)}
-                    className="min-h-[140px] w-full rounded-md border border-slate-200 px-3 py-2 ui-body font-mono focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    spellCheck={false}
-                  />
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Provide valid JSON. Blank defaults to an empty document.</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setInlinePolicyText(DEFAULT_INLINE_POLICY_TEXT)}
-                  className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                >
-                  Insert template
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAddInlineDraft}
-                  className="rounded-full bg-primary px-4 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
-                >
-                  Add/Update inline policy
-                </button>
-              </div>
-            </div>
+            <InlinePolicyDraftEditor
+              drafts={inlineDrafts}
+              selectedDraftName={selectedInlineDraftName}
+              draftName={inlineDraftName}
+              draftText={inlinePolicyText}
+              entityLabel="role"
+              mode={inlineDraftMode}
+              expanded={showInlinePolicyOptions}
+              onCreateDraft={handleCreateInlineDraft}
+              onSelectDraft={handleSelectInlineDraft}
+              onDraftNameChange={(value) => {
+                setInlineDraftName(value);
+                setError(null);
+              }}
+              onDraftTextChange={(value) => {
+                setInlinePolicyText(value);
+                setError(null);
+              }}
+              onSaveDraft={handleAddInlineDraft}
+              onRemoveDraft={handleRemoveInlineDraft}
+              onClearDrafts={handleClearInlineDrafts}
+              onInsertTemplate={() => setInlinePolicyText(DEFAULT_INLINE_POLICY_TEXT)}
+              onToggleExpanded={() => setShowInlinePolicyOptions((prev) => !prev)}
+            />
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"

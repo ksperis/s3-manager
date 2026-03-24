@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -82,5 +82,53 @@ describe("ManagerUsersPage", () => {
       expect(listIamGroupsMock).toHaveBeenCalledWith("s3u-1");
       expect(listIamPoliciesMock).toHaveBeenCalledWith("s3u-1");
     });
+  });
+
+  it("keeps saved inline policy drafts visible in the create user modal", async () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "acc-1",
+          kind: "account",
+          display_name: "Tenant account",
+          endpoint_name: "Default",
+        },
+      ],
+      selectedS3AccountId: "acc-1",
+      selectedS3AccountType: "tenant",
+      accountIdForApi: "acc-1",
+      requiresS3AccountSelection: true,
+      accessMode: "default",
+      iamIdentity: null,
+      sessionS3AccountName: null,
+    });
+    listIamUsersMock.mockResolvedValue([]);
+    listIamGroupsMock.mockResolvedValue([]);
+    listIamPoliciesMock.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <ManagerUsersPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(listIamUsersMock).toHaveBeenCalledWith("acc-1");
+      expect(listIamGroupsMock).toHaveBeenCalledWith("acc-1");
+      expect(listIamPoliciesMock).toHaveBeenCalledWith("acc-1");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create user" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show inline policies" }));
+    fireEvent.change(screen.getByLabelText("Inline policy name"), { target: { value: "audit-inline" } });
+    fireEvent.change(screen.getByLabelText("Inline policy document"), {
+      target: { value: '{ "Version": "2012-10-17", "Statement": [] }' },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    expect(screen.getByText("Saved inline policies")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /audit-inline/i })[0]).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create new inline policy" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Update draft" })).toBeInTheDocument();
   });
 });
