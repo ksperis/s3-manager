@@ -403,7 +403,7 @@ export default function ManagerRolesPage() {
                 <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
                 <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Path</th>
                 <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Attached Policies</th>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Policies</th>
                 <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
               </tr>
             </thead>
@@ -448,7 +448,7 @@ export default function ManagerRolesPage() {
                           to={`/manager/roles/${encodeURIComponent(r.name)}/policies`}
                           className={tableActionButtonClasses}
                         >
-                          Attached Policies
+                          Policies
                         </Link>
                         <button
                           onClick={() => handleDelete(r.name)}

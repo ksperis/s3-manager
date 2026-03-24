@@ -272,7 +272,7 @@ export default function ManagerGroupsPage() {
               <tr>
                 <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
                 <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Attached Policies</th>
+                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Policies</th>
                 <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
               </tr>
             </thead>
@@ -315,7 +315,7 @@ export default function ManagerGroupsPage() {
                           to={`/manager/groups/${encodeURIComponent(g.name)}/policies`}
                           className={tableActionButtonClasses}
                         >
-                          Attached Policies
+                          Policies
                         </Link>
                         <button
                           onClick={() => handleDelete(g.name)}

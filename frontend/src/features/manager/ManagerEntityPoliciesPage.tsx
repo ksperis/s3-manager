@@ -216,7 +216,7 @@ export default function ManagerEntityPoliciesPage({
             { label: "Manager" },
             { label: "IAM" },
             { label: `${config.pluralLabel[0].toUpperCase()}${config.pluralLabel.slice(1)}` },
-            { label: "Attached Policies" },
+            { label: "Policies" },
           ]}
         />
         <PageBanner tone="info">
@@ -259,7 +259,7 @@ export default function ManagerEntityPoliciesPage({
           { label: "Manager" },
           { label: "IAM", to: config.managerRoute },
           { label: decodedEntity },
-          { label: "Attached Policies" },
+          { label: "Policies" },
         ]}
         actions={[
           { label: `← Back to ${config.pluralLabel}`, to: config.managerRoute, variant: "ghost" },
