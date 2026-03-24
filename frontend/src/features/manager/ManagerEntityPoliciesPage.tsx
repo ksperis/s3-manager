@@ -216,7 +216,7 @@ export default function ManagerEntityPoliciesPage({
             { label: "Manager" },
             { label: "IAM" },
             { label: `${config.pluralLabel[0].toUpperCase()}${config.pluralLabel.slice(1)}` },
-            { label: "Policies" },
+            { label: "Attached Policies" },
           ]}
         />
         <PageBanner tone="info">
@@ -259,7 +259,7 @@ export default function ManagerEntityPoliciesPage({
           { label: "Manager" },
           { label: "IAM", to: config.managerRoute },
           { label: decodedEntity },
-          { label: "Policies" },
+          { label: "Attached Policies" },
         ]}
         actions={[
           { label: `← Back to ${config.pluralLabel}`, to: config.managerRoute, variant: "ghost" },
@@ -288,7 +288,7 @@ export default function ManagerEntityPoliciesPage({
 
         <div className="ui-surface-card">
           <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Policies</p>
+            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Attached Policies</p>
             <p className="ui-caption text-slate-500 dark:text-slate-400">Attach/detach managed policies for this {config.singularLabel}.</p>
           </div>
           <div className="space-y-3 px-4 py-3">

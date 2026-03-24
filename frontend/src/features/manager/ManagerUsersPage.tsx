@@ -69,7 +69,7 @@ export default function ManagerUsersPage() {
     { label: "Name", field: "name" },
     { label: "ARN", field: "arn" },
     { label: "Groups", field: null },
-    { label: "Policies", field: null },
+    { label: "Attached Policies", field: null },
     { label: "Actions", field: null, align: "right" },
   ];
 
@@ -519,7 +519,7 @@ export default function ManagerUsersPage() {
                             to={`/manager/users/${encodeURIComponent(u.name)}/policies`}
                             className={tableActionButtonClasses}
                           >
-                            Policies
+                            Attached Policies
                           </Link>
                           <button
                             onClick={() => handleDelete(u.name)}
