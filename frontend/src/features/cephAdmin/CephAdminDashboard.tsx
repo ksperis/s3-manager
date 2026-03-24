@@ -8,11 +8,9 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import WorkspaceNavCards from "../../components/WorkspaceNavCards";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
 import { extractApiError } from "../../utils/apiError";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
-import useCephAdminWorkspaceContextStrip from "./useCephAdminWorkspaceContextStrip";
 
 type CardLink = {
   title: string;
@@ -33,9 +31,6 @@ export default function CephAdminDashboard() {
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
-  const contextStrip = useCephAdminWorkspaceContextStrip({
-    description: "Ceph Admin stays endpoint-scoped. Endpoint-wide credentials and capabilities apply to the workflows below.",
-  });
 
   useEffect(() => {
     if (!generalSettings.endpoint_status_enabled || !selectedEndpoint?.id) {
@@ -74,7 +69,6 @@ export default function CephAdminDashboard() {
         description={`Cluster-level RGW administration. Active endpoint: ${selectedEndpoint?.name ?? "—"}.`}
         breadcrumbs={[{ label: "Ceph Admin" }]}
       />
-      <WorkspaceContextStrip {...contextStrip} />
       {!selectedEndpoint?.id ? (
         <PageEmptyState
           title="Select a Ceph endpoint before using Ceph Admin"

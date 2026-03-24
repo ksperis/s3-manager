@@ -7,10 +7,8 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import UsageBreakdown from "../../components/UsageBreakdown";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import TrafficAnalytics from "./TrafficAnalytics";
 import { useS3AccountContext } from "./S3AccountContext";
-import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 import { useManagerStats } from "./useManagerStats";
 
 export default function ManagerMetricsPage() {
@@ -41,10 +39,6 @@ export default function ManagerMetricsPage() {
     hasContext && !managerStatsEnabled
       ? managerStatsMessage || "Metrics are unavailable for this context."
       : null;
-  const contextStrip = useManagerWorkspaceContextStrip({
-    description: "Storage and traffic analytics use the selected execution context and the active endpoint capabilities.",
-    extraAlerts: managerMetricsMessage ? [{ tone: "warning", message: managerMetricsMessage }] : [],
-  });
 
   const { stats, loading, error } = useManagerStats(
     accountIdForApi,
@@ -59,7 +53,6 @@ export default function ManagerMetricsPage() {
         description="Storage and traffic analytics for the active execution context."
         breadcrumbs={[{ label: "Manager" }, { label: "Overview" }, { label: "Metrics" }]}
       />
-      <WorkspaceContextStrip {...contextStrip} />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
 

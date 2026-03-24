@@ -82,36 +82,36 @@ describe("manager shell pages", () => {
     listBucketsMock.mockResolvedValue([]);
   });
 
-  it("renders the helperized execution context strip on the manager dashboard", () => {
+  it("renders the manager dashboard without a page-level context strip", () => {
     render(
       <MemoryRouter>
         <ManagerDashboard />
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Execution context")).toBeInTheDocument();
     expect(screen.getByText("Select an account to start")).toBeInTheDocument();
+    expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
   });
 
-  it("renders the helperized execution context strip on the manager browser page", () => {
+  it("renders the manager browser page without a page-level context strip", () => {
     render(
       <MemoryRouter>
         <ManagerBrowserPage />
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Execution context")).toBeInTheDocument();
     expect(screen.getByText("Select a manager context first")).toBeInTheDocument();
+    expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
   });
 
-  it("renders the helperized execution context strip on the manager buckets page", () => {
+  it("renders the manager buckets page without a page-level context strip", () => {
     render(
       <MemoryRouter>
         <BucketsPage />
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Execution context")).toBeInTheDocument();
     expect(screen.getByText("Select an account before managing buckets")).toBeInTheDocument();
+    expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
   });
 });

@@ -23,7 +23,6 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -32,7 +31,6 @@ import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
-import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 export default function ManagerUsersPage() {
   type SortField = keyof IAMUser;
@@ -62,9 +60,6 @@ export default function ManagerUsersPage() {
   const [showGroupOptions, setShowGroupOptions] = useState(false);
   const [showPolicyOptions, setShowPolicyOptions] = useState(false);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
-  const contextStrip = useManagerWorkspaceContextStrip({
-    description: "IAM users are created in the active execution context and can inherit groups, policies, and access keys.",
-  });
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>({
     field: "name",
     direction: "asc",
@@ -331,7 +326,6 @@ export default function ManagerUsersPage() {
             : []
         }
       />
-      <WorkspaceContextStrip {...contextStrip} />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}

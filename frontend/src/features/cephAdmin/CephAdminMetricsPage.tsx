@@ -15,11 +15,9 @@ import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import UsageBreakdown from "../../components/UsageBreakdown";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
-import useCephAdminWorkspaceContextStrip from "./useCephAdminWorkspaceContextStrip";
 
 function extractError(err: unknown, fallback: string): string {
   return extractApiError(err, fallback);
@@ -160,10 +158,6 @@ export default function CephAdminMetricsPage() {
   const noMetricsSurfaceAvailable =
     selectedEndpointId != null && metricsCredentialsReady && !storageFeatureEnabled && !usageLogFeatureEnabled;
   const missingTraffic = canLoadTraffic && !traffic && !trafficLoading && !trafficError;
-  const contextStrip = useCephAdminWorkspaceContextStrip({
-    description: "Cluster-wide RGW storage and traffic metrics depend on the selected endpoint and its supervision capabilities.",
-    extraAlerts: metricsUnavailableError ? [{ tone: "warning", message: metricsUnavailableError }] : [],
-  });
 
   return (
     <div className="space-y-4 ui-caption leading-relaxed">
@@ -172,7 +166,6 @@ export default function CephAdminMetricsPage() {
         description="Cluster-wide Ceph RGW storage and traffic metrics."
         breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Metrics" }]}
       />
-      <WorkspaceContextStrip {...contextStrip} />
       {storageError && <PageBanner tone="error">{storageError}</PageBanner>}
 
       {endpointRequired ? (

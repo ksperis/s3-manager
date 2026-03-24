@@ -18,12 +18,10 @@ import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
 import { useS3AccountContext } from "./S3AccountContext";
-import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const handleCopy = () => {
@@ -85,9 +83,6 @@ export default function ManagerCephKeysPage() {
 
   const isS3UserContext = selectedS3AccountType === "s3_user";
   const canManageCephKeys = Boolean(hasS3AccountContext && isS3UserContext && managerCephKeysEnabled);
-  const contextStrip = useManagerWorkspaceContextStrip({
-    description: "Ceph RGW access keys are available only for managed S3 user contexts with RGW admin key management enabled.",
-  });
 
   const loadKeys = useCallback(async () => {
     if (!canManageCephKeys) {
@@ -192,7 +187,6 @@ export default function ManagerCephKeysPage() {
             : []
         }
       />
-      <WorkspaceContextStrip {...contextStrip} />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}

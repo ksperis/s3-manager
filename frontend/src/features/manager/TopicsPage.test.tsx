@@ -41,15 +41,15 @@ describe("TopicsPage", () => {
     listTopicsMock.mockResolvedValue([]);
   });
 
-  it("shows execution context and an empty state when no account is selected", () => {
+  it("shows an empty state without a page-level context strip when no account is selected", () => {
     render(
       <MemoryRouter>
         <TopicsPage />
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Execution context")).toBeInTheDocument();
     expect(screen.getByText("Select an account before managing SNS topics")).toBeInTheDocument();
+    expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
     expect(screen.queryByText("Select an account to manage its topics.")).not.toBeInTheDocument();
   });
 });

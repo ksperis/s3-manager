@@ -3,17 +3,29 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { ReactNode } from "react";
-import type { WorkspaceContextStripAlert, WorkspaceContextStripItem } from "./WorkspaceContextStrip";
 import { cx, uiCardMutedClass, uiToneBannerClasses } from "./ui/styles";
 import UiBadge from "./ui/UiBadge";
+
+export type PageControlStripItem = {
+  label: string;
+  value: ReactNode;
+  tone?: "neutral" | "primary" | "success" | "warning" | "danger";
+  mono?: boolean;
+  title?: string;
+};
+
+export type PageControlStripAlert = {
+  tone?: "neutral" | "primary" | "success" | "warning" | "danger";
+  message: ReactNode;
+};
 
 type PageControlStripProps = {
   label: string;
   title: ReactNode;
   description?: ReactNode;
   controls?: ReactNode;
-  items?: WorkspaceContextStripItem[];
-  alerts?: WorkspaceContextStripAlert[];
+  items?: PageControlStripItem[];
+  alerts?: PageControlStripAlert[];
   className?: string;
 };
 

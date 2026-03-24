@@ -28,8 +28,8 @@ vi.mock("../browser/BrowserEmbed", () => ({
 vi.mock("../shared/BucketOpsWorkbench", () => ({
   default: (props: Record<string, unknown>) => {
     capturedWorkbenchProps.push(props);
-    const shell = props.shell as { contextStrip?: { label?: string } } | undefined;
-    return <div>{shell?.contextStrip?.label}</div>;
+    const shell = props.shell as { pageDescription?: string } | undefined;
+    return <div>{shell?.pageDescription}</div>;
   },
 }));
 
@@ -47,38 +47,36 @@ describe("ceph-admin shell pages", () => {
     });
   });
 
-  it("renders the helperized endpoint context strip on the ceph-admin dashboard", () => {
+  it("renders the ceph-admin dashboard without a page-level context strip", () => {
     render(
       <MemoryRouter>
         <CephAdminDashboard />
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Endpoint context")).toBeInTheDocument();
     expect(screen.getByText("Select a Ceph endpoint before using Ceph Admin")).toBeInTheDocument();
+    expect(screen.queryByText("Endpoint context")).not.toBeInTheDocument();
   });
 
-  it("renders the helperized endpoint context strip on the ceph-admin browser page", () => {
+  it("renders the ceph-admin browser page without a page-level context strip", () => {
     render(
       <MemoryRouter>
         <CephAdminBrowserPage />
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Endpoint context")).toBeInTheDocument();
     expect(screen.getByText("Select a Ceph endpoint")).toBeInTheDocument();
+    expect(screen.queryByText("Endpoint context")).not.toBeInTheDocument();
   });
 
-  it("injects the endpoint context strip into the shared buckets workbench", () => {
+  it("keeps the shared buckets workbench shell without injecting a context strip", () => {
     render(<CephAdminBucketsPage />);
 
-    expect(screen.getByText("Endpoint context")).toBeInTheDocument();
+    expect(screen.getByText("Cluster-level bucket listing (Admin Ops + S3).")).toBeInTheDocument();
     expect(capturedWorkbenchProps[0]).toMatchObject({
       mode: "ceph-admin",
       shell: {
-        contextStrip: {
-          label: "Endpoint context",
-        },
+        pageDescription: "Cluster-level bucket listing (Admin Ops + S3).",
       },
     });
   });

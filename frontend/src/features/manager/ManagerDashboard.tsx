@@ -8,7 +8,6 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageEmptyState from "../../components/PageEmptyState";
 import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
 import WorkspaceNavCards from "../../components/WorkspaceNavCards";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { useS3AccountContext } from "./S3AccountContext";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
@@ -17,7 +16,6 @@ import { useManagerStats } from "./useManagerStats";
 import { useIamOverview } from "./useIamOverview";
 import { extractApiError } from "../../utils/apiError";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
-import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 export default function ManagerDashboard() {
   const { generalSettings } = useGeneralSettings();
@@ -68,10 +66,6 @@ export default function ManagerDashboard() {
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
-  const contextStrip = useManagerWorkspaceContextStrip({
-    description: "Actions in Manager use the selected execution context and storage endpoint capabilities.",
-    extraAlerts: metricsStatusMessage ? [{ tone: "warning", message: metricsStatusMessage }] : [],
-  });
 
   useEffect(() => {
     if (!generalSettings.endpoint_status_enabled || !hasContext) {
@@ -141,8 +135,6 @@ export default function ManagerDashboard() {
         breadcrumbs={[{ label: "Manager" }, { label: "Dashboard" }]}
       />
 
-      <WorkspaceContextStrip {...contextStrip} />
-
       {!hasContext ? (
         <PageEmptyState
           title="Select an account to start"
@@ -152,6 +144,8 @@ export default function ManagerDashboard() {
           tone="warning"
         />
       ) : null}
+
+      {hasContext && metricsStatusMessage ? <PageBanner tone="warning">{metricsStatusMessage}</PageBanner> : null}
 
       {hasContext && (
         <>

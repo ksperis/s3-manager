@@ -37,15 +37,15 @@ describe("CephAdminAccountsPage", () => {
     });
   });
 
-  it("shows endpoint context and an empty state when no endpoint is selected", async () => {
+  it("shows an empty state without a page-level context strip when no endpoint is selected", async () => {
     render(
       <MemoryRouter>
         <CephAdminAccountsPage />
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Endpoint context")).toBeInTheDocument();
     expect(screen.getByText("Select a Ceph endpoint before listing RGW accounts")).toBeInTheDocument();
+    expect(screen.queryByText("Endpoint context")).not.toBeInTheDocument();
     expect(screen.queryByText("Select a Ceph endpoint first.")).not.toBeInTheDocument();
   });
 });

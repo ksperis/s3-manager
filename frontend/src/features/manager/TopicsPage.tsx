@@ -21,12 +21,10 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { useS3AccountContext } from "./S3AccountContext";
-import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 const defaultPolicyTemplate = `{
   "Version": "2012-10-17",
@@ -124,9 +122,6 @@ export default function TopicsPage() {
   const [attributesSaving, setAttributesSaving] = useState(false);
   const [attributesError, setAttributesError] = useState<string | null>(null);
   const [attributesStatus, setAttributesStatus] = useState<string | null>(null);
-  const contextStrip = useManagerWorkspaceContextStrip({
-    description: "SNS topics belong to the active execution context and depend on the selected endpoint notification capabilities.",
-  });
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -426,7 +421,6 @@ export default function TopicsPage() {
             : []
         }
       />
-      <WorkspaceContextStrip {...contextStrip} />
 
       {actionMessage && (
         <PageBanner tone="success" className="flex items-center justify-between">

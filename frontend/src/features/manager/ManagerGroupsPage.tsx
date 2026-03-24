@@ -14,14 +14,12 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { uiCheckboxClass } from "../../components/ui/styles";
-import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 export default function ManagerGroupsPage() {
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, selectedS3AccountId, accessMode } = useS3AccountContext();
@@ -42,9 +40,6 @@ export default function ManagerGroupsPage() {
   const [showPolicyOptions, setShowPolicyOptions] = useState(false);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const contextStrip = useManagerWorkspaceContextStrip({
-    description: "IAM groups are managed in the active execution context and bundle reusable permissions for account users.",
-  });
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -238,7 +233,6 @@ export default function ManagerGroupsPage() {
             : []
         }
       />
-      <WorkspaceContextStrip {...contextStrip} />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}

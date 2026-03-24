@@ -8,7 +8,6 @@ import Layout from "../../components/Layout";
 import TopbarContextAccountSelector, {
   type ContextAccessMode,
 } from "../../components/TopbarContextAccountSelector";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { BrowserContextProvider, useBrowserContext } from "./BrowserContext";
 import { fetchManagerContext } from "../../api/managerContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
@@ -21,7 +20,6 @@ function BrowserShell() {
     setSelectedContextId,
     requiresContextSelection,
     sessionAccountName,
-    accessError,
   } = useBrowserContext();
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
   const [identityAccessMode, setIdentityAccessMode] = useState<ContextAccessMode>(null);
@@ -137,59 +135,9 @@ function BrowserShell() {
       disableMainScroll
       fullHeight
     >
-      <>
-        <div className="mb-4">
-          <WorkspaceContextStrip
-            label="Execution context"
-            title={selectedLabel}
-            description="The standalone Browser is credential-first. All object operations use the execution context shown here."
-            items={[
-              {
-                label: "Context type",
-                value: selected
-                  ? selected.kind === "connection"
-                    ? "S3 connection"
-                    : selected.kind === "legacy_user"
-                      ? "Legacy S3 user"
-                      : "RGW account"
-                  : requiresContextSelection
-                    ? "Not selected"
-                    : "S3 session",
-              },
-              {
-                label: "Endpoint",
-                value: selected?.endpoint_name ?? "Default endpoint",
-              },
-              {
-                label: "Execution mode",
-                value: getAccessModeLabel(identityAccessMode),
-                tone:
-                  identityAccessMode === "admin"
-                    ? "warning"
-                    : identityAccessMode === "connection"
-                      ? "primary"
-                      : "neutral",
-              },
-              {
-                label: "IAM identity",
-                value: iamIdentity ?? "Unavailable",
-                mono: Boolean(iamIdentity),
-              },
-            ]}
-            alerts={accessError ? [{ tone: "danger", message: accessError }] : []}
-          />
-        </div>
-        <Outlet key={`${selectedContextId ?? "none"}`} />
-      </>
+      <Outlet key={`${selectedContextId ?? "none"}`} />
     </Layout>
   );
-}
-
-function getAccessModeLabel(mode: ContextAccessMode) {
-  if (mode === "admin") return "Admin mode";
-  if (mode === "connection") return "Connection mode";
-  if (mode === "s3_user") return "S3 user mode";
-  return "Session";
 }
 
 function AccountControlIcon(props: React.SVGProps<SVGSVGElement>) {

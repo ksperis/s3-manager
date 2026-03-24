@@ -7,10 +7,8 @@ import { useNavigate } from "react-router-dom";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import BrowserEmbed from "../browser/BrowserEmbed";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
-import useCephAdminWorkspaceContextStrip from "./useCephAdminWorkspaceContextStrip";
 
 export default function CephAdminBrowserPage() {
   const navigate = useNavigate();
@@ -18,16 +16,6 @@ export default function CephAdminBrowserPage() {
   const [acceptedRisk, setAcceptedRisk] = useState(false);
   const [showRiskModal, setShowRiskModal] = useState(true);
   const browserSelector = acceptedRisk && selectedEndpointId ? `ceph-admin-${selectedEndpointId}` : null;
-  const contextStrip = useCephAdminWorkspaceContextStrip({
-    description: "This browser uses endpoint-wide Ceph admin credentials. Prefer tenant-owned credentials for regular object work.",
-    extraAlerts: [
-      {
-        tone: "warning",
-        message:
-          "Use this view only for endpoint-wide investigation or recovery. Owner attribution may differ from the tenant that normally owns the bucket.",
-      },
-    ],
-  });
 
   const handleCloseModal = () => {
     setShowRiskModal(false);
@@ -42,7 +30,6 @@ export default function CephAdminBrowserPage() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
       <PageHeader title="Browser" description="Endpoint-wide object browser for Ceph admin workflows." />
-      <WorkspaceContextStrip {...contextStrip} />
       <div className="min-h-0 flex-1">
         {!selectedEndpointId ? (
           <PageEmptyState

@@ -23,13 +23,11 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
-import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 const DEFAULT_ASSUME_ROLE_DOCUMENT = JSON.stringify(
   {
@@ -75,9 +73,6 @@ export default function ManagerRolesPage() {
   const [loadingRoleDetails, setLoadingRoleDetails] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const contextStrip = useManagerWorkspaceContextStrip({
-    description: "IAM roles are scoped to the active execution context and expose trust plus attached policy management.",
-  });
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -368,7 +363,6 @@ export default function ManagerRolesPage() {
             : []
         }
       />
-      <WorkspaceContextStrip {...contextStrip} />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}

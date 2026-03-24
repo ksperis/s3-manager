@@ -9,10 +9,8 @@ import ListToolbar from "../../../components/ListToolbar";
 import PageBanner from "../../../components/PageBanner";
 import PageEmptyState from "../../../components/PageEmptyState";
 import PageHeader from "../../../components/PageHeader";
-import WorkspaceContextStrip from "../../../components/WorkspaceContextStrip";
 import { type BucketMigrationStatus } from "../../../api/managerMigrations";
 import { useS3AccountContext } from "../S3AccountContext";
-import useManagerWorkspaceContextStrip from "../useManagerWorkspaceContextStrip";
 import { useManagerContexts, useManagerMigrationsList } from "./hooks";
 import {
   computeProgress,
@@ -39,9 +37,6 @@ export default function ManagerMigrationsListPage() {
   const navigate = useNavigate();
   const { selectedS3AccountId, requiresS3AccountSelection } = useS3AccountContext();
   const sourceContextId = selectedS3AccountId ?? "";
-  const contextStrip = useManagerWorkspaceContextStrip({
-    description: "Bucket migrations use the active execution context as the source and let you track operational status for each run.",
-  });
 
   const { contextLabelById, contextsLoading, contextsError } = useManagerContexts();
   const { migrations, migrationsLoading, migrationsError } = useManagerMigrationsList(sourceContextId);
@@ -70,7 +65,6 @@ export default function ManagerMigrationsListPage() {
           },
         ]}
       />
-      <WorkspaceContextStrip {...contextStrip} />
 
       {contextsLoading && <PageBanner tone="info">Loading contexts…</PageBanner>}
       {contextsError && <PageBanner tone="error">{contextsError}</PageBanner>}

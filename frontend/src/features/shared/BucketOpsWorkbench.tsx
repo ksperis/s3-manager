@@ -10,10 +10,6 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
-import WorkspaceContextStrip, {
-  type WorkspaceContextStripAlert,
-  type WorkspaceContextStripItem,
-} from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
@@ -1846,13 +1842,6 @@ type BucketOpsWorkbenchProps = {
   mode: BucketOpsMode;
   shell: {
     pageDescription: ReactNode;
-    contextStrip: {
-      label: string;
-      title: ReactNode;
-      description: ReactNode;
-      items?: WorkspaceContextStripItem[];
-      alerts?: WorkspaceContextStripAlert[];
-    };
     emptyState?: {
       title: string;
       description: ReactNode;
@@ -6824,8 +6813,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         description={shell.pageDescription}
         breadcrumbs={[{ label: isStorageOps ? "Storage Ops" : "Ceph Admin", to: isStorageOps ? "/storage-ops" : "/ceph-admin" }, { label: "Buckets" }]}
       />
-
-      <WorkspaceContextStrip {...shell.contextStrip} />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {orphanedTagDetails.length > 0 && (

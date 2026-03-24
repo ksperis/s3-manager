@@ -10,7 +10,6 @@ import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
@@ -20,7 +19,6 @@ import { tableActionMenuItemClasses } from "../../components/tableActionClasses"
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
 import CephAdminUserEditModal from "./CephAdminUserEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
-import useCephAdminWorkspaceContextStrip from "./useCephAdminWorkspaceContextStrip";
 import {
   FILTER_COST_LABEL,
   buildTextFieldRules,
@@ -262,9 +260,6 @@ export default function CephAdminUsersPage() {
   const navigate = useNavigate();
   const { selectedEndpointId, selectedEndpoint, selectedEndpointAccess } = useCephAdminEndpoint();
   const canViewMetrics = Boolean(selectedEndpointAccess?.can_metrics) && (selectedEndpoint?.capabilities?.metrics !== false);
-  const contextStrip = useCephAdminWorkspaceContextStrip({
-    description: "Endpoint-scoped RGW user administration. Actions use the selected Ceph admin endpoint capabilities.",
-  });
   const [items, setItems] = useState<CephAdminRgwUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -965,7 +960,6 @@ export default function CephAdminUsersPage() {
             : []
         }
       />
-      <WorkspaceContextStrip {...contextStrip} />
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
       {!selectedEndpointId ? (

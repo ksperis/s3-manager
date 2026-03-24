@@ -12,11 +12,9 @@ import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
 import { useS3AccountContext } from "./S3AccountContext";
-import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 function extractError(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -28,9 +26,6 @@ function extractError(error: unknown): string {
 export default function ManagerBucketComparePage() {
   const { selectedS3AccountId, requiresS3AccountSelection } = useS3AccountContext();
   const sourceContextId = selectedS3AccountId ?? "";
-  const contextStrip = useManagerWorkspaceContextStrip({
-    description: "Bucket compare uses the active execution context as the source inventory and lets you compare it with other manager contexts.",
-  });
   const [contexts, setContexts] = useState<ExecutionContext[]>([]);
   const [contextsLoading, setContextsLoading] = useState(true);
   const [contextsError, setContextsError] = useState<string | null>(null);
@@ -156,7 +151,6 @@ export default function ManagerBucketComparePage() {
         description="Compare selected buckets across manager contexts."
         breadcrumbs={[{ label: "Manager" }, { label: "Tools" }, { label: "Compare" }]}
       />
-      <WorkspaceContextStrip {...contextStrip} />
 
       {contextsError && <PageBanner tone="error">{contextsError}</PageBanner>}
       {bucketsError && <PageBanner tone="error">{bucketsError}</PageBanner>}

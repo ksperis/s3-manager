@@ -25,7 +25,6 @@ import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactButtonClasses, toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
@@ -37,7 +36,6 @@ import {
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
-import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 type BucketForm = {
   name: string;
@@ -251,9 +249,6 @@ export default function BucketsPage() {
       ? "Not selected"
       : sessionS3AccountName || "S3 session";
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
-  const contextStrip = useManagerWorkspaceContextStrip({
-    description: "Bucket operations use the selected manager execution context and its storage endpoint capabilities.",
-  });
 
   const includeParams = useMemo(() => {
     const include: string[] = [];
@@ -698,8 +693,6 @@ export default function BucketsPage() {
           },
         ]}
       />
-
-      <WorkspaceContextStrip {...contextStrip} />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionError && <PageBanner tone="error">{actionError}</PageBanner>}

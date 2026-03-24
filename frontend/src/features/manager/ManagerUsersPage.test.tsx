@@ -67,15 +67,15 @@ describe("ManagerUsersPage", () => {
     listIamPoliciesMock.mockResolvedValue([]);
   });
 
-  it("shows execution context and an empty state for managed S3 user contexts", async () => {
+  it("shows an empty state without a page-level context strip for managed S3 user contexts", async () => {
     render(
       <MemoryRouter>
         <ManagerUsersPage />
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Execution context")).toBeInTheDocument();
     expect(await screen.findByText("IAM users are unavailable for managed S3 user contexts")).toBeInTheDocument();
+    expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
     expect(screen.queryByText("IAM is not available for standalone S3 users. Select an S3 Account (tenant) to continue.")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(listIamUsersMock).toHaveBeenCalledWith("s3u-1");

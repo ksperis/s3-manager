@@ -12,10 +12,8 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
-import WorkspaceContextStrip from "../../components/WorkspaceContextStrip";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
-import useManagerWorkspaceContextStrip from "./useManagerWorkspaceContextStrip";
 
 const DEFAULT_POLICY_DOCUMENT = JSON.stringify(
   {
@@ -39,9 +37,6 @@ export default function PoliciesPage() {
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const contextStrip = useManagerWorkspaceContextStrip({
-    description: "Managed IAM policies are scoped to the active execution context and reused across users, groups, and roles.",
-  });
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -139,7 +134,6 @@ export default function PoliciesPage() {
             : []
         }
       />
-      <WorkspaceContextStrip {...contextStrip} />
 
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       {error && <PageBanner tone="error">{error}</PageBanner>}
