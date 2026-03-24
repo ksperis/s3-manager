@@ -149,7 +149,6 @@ export default function ManagerDashboard() {
 
       {hasContext && (
         <>
-          {nextStepCards.length > 0 ? <WorkspaceNavCards items={nextStepCards} columns={3} /> : null}
           <UsageOverview
             accountName={accountLabel}
             storage={{
@@ -181,6 +180,7 @@ export default function ManagerDashboard() {
               showStatusCounters={false}
             />
           )}
+          {nextStepCards.length > 0 ? <WorkspaceNavCards items={nextStepCards} columns={3} /> : null}
         </>
       )}
 
