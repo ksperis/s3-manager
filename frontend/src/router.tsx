@@ -7,6 +7,7 @@ import { Navigate, Outlet, Route, RouterProvider, createBrowserRouter, createRou
 import Layout from "./components/Layout";
 import { useS3AccountContext } from "./features/manager/S3AccountContext";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
+import RouteErrorPage from "./features/shared/RouteErrorPage";
 import {
   isAdminLikeRole,
   isSuperAdminRole,
@@ -386,117 +387,120 @@ function RequireManagerBucketCompareFeature() {
   return <Navigate to="/unauthorized" replace />;
 }
 
-export default function AppRouter() {
-  const router = useMemo(() => {
-    const routes = createRoutesFromElements(
-      <>
-        <Route element={<RequireAuth />}>
-          <Route index element={<RoleRedirect />} />
-          <Route path="/profile" element={<Layout headerTitle="Profile" headerSubtitle="Account" hideSidebar />}>
-            <Route index element={<ProfilePage />} />
-          </Route>
+export function createAppRoutes() {
+  return createRoutesFromElements(
+    <Route element={<Outlet />} errorElement={<RouteErrorPage />}>
+      <Route element={<RequireAuth />}>
+        <Route index element={<RoleRedirect />} />
+        <Route path="/profile" element={<Layout headerTitle="Profile" headerSubtitle="Account" hideSidebar />}>
+          <Route index element={<ProfilePage />} />
+        </Route>
 
-          <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE]} />}>
-            <Route path="/admin" element={<AdminLayoutShell />}>
-              <Route index element={<AdminDashboard />} />
-              <Route path="s3-accounts" element={<S3AccountsPage />} />
-              <Route path="accounts" element={<Navigate to="/admin/s3-accounts" replace />} />
-              <Route path="s3-users" element={<S3UsersPage />} />
-              <Route path="s3-connections" element={<S3ConnectionsPage />} />
-              <Route path="s3-users/:userId/keys" element={<S3UserKeysPage />} />
-              <Route path="storage-endpoints" element={<StorageEndpointsPage />} />
-              <Route path="endpoint-status" element={<AdminEndpointStatusRoute />} />
-              <Route path="endpoint-status/:endpointId" element={<AdminEndpointStatusDetailRoute />} />
-              <Route path="users" element={<UsersPage />} />
-              <Route path="audit" element={<AuditLogsPage />} />
-              <Route path="metrics" element={<AdminMetricsPage />} />
-              <Route path="billing" element={<AdminBillingRoute />} />
-              <Route element={<RequireRole roles={[SUPERADMIN_ROLE]} />}>
-                <Route path="general-settings" element={<GeneralSettingsPage />} />
-                <Route path="manager-settings" element={<ManagerSettingsPage />} />
-                <Route path="browser-settings" element={<BrowserSettingsPage />} />
-                <Route path="key-rotation" element={<KeyRotationPage />} />
-              </Route>
+        <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE]} />}>
+          <Route path="/admin" element={<AdminLayoutShell />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="s3-accounts" element={<S3AccountsPage />} />
+            <Route path="accounts" element={<Navigate to="/admin/s3-accounts" replace />} />
+            <Route path="s3-users" element={<S3UsersPage />} />
+            <Route path="s3-connections" element={<S3ConnectionsPage />} />
+            <Route path="s3-users/:userId/keys" element={<S3UserKeysPage />} />
+            <Route path="storage-endpoints" element={<StorageEndpointsPage />} />
+            <Route path="endpoint-status" element={<AdminEndpointStatusRoute />} />
+            <Route path="endpoint-status/:endpointId" element={<AdminEndpointStatusDetailRoute />} />
+            <Route path="users" element={<UsersPage />} />
+            <Route path="audit" element={<AuditLogsPage />} />
+            <Route path="metrics" element={<AdminMetricsPage />} />
+            <Route path="billing" element={<AdminBillingRoute />} />
+            <Route element={<RequireRole roles={[SUPERADMIN_ROLE]} />}>
+              <Route path="general-settings" element={<GeneralSettingsPage />} />
+              <Route path="manager-settings" element={<ManagerSettingsPage />} />
+              <Route path="browser-settings" element={<BrowserSettingsPage />} />
+              <Route path="key-rotation" element={<KeyRotationPage />} />
             </Route>
-          </Route>
-
-          <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE]} />}>
-            <Route element={<RequireCephAdminFeature />}>
-              <Route path="/ceph-admin" element={<CephAdminLayout />}>
-                <Route index element={<CephAdminDashboard />} />
-                <Route path="metrics" element={<CephAdminMetricsPage />} />
-                <Route path="accounts" element={<CephAdminAccountsPage />} />
-                <Route path="users" element={<CephAdminUsersPage />} />
-                <Route path="buckets" element={<CephAdminBucketsPage />} />
-                <Route path="buckets/:bucketName" element={<CephAdminBucketDetailPage />} />
-                <Route element={<RequireBrowserSurface surface="ceph_admin" />}>
-                  <Route path="browser" element={<CephAdminBrowserPage />} />
-                </Route>
-              </Route>
-            </Route>
-          </Route>
-
-          <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
-            <Route element={<RequireStorageOpsFeature />}>
-              <Route path="/storage-ops" element={<StorageOpsLayout />}>
-                <Route index element={<StorageOpsDashboard />} />
-                <Route path="buckets" element={<StorageOpsBucketsPage />} />
-              </Route>
-            </Route>
-          </Route>
-
-          <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
-            <Route element={<RequireFeature feature="manager" />}>
-              <Route path="/manager" element={<ManagerLayout />}>
-                <Route index element={<ManagerDashboard />} />
-                <Route path="buckets" element={<BucketsPage />} />
-                <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
-                <Route element={<RequireBrowserSurface surface="manager" />}>
-                  <Route path="browser" element={<ManagerBrowserPage />} />
-                </Route>
-                <Route path="metrics" element={<ManagerMetricsPage />} />
-                <Route element={<RequireManagerIamFeature />}>
-                  <Route path="users" element={<ManagerUsersPage />} />
-                  <Route path="users/:userName/keys" element={<ManagerUserKeysPage />} />
-                  <Route path="users/:userName/policies" element={<ManagerUserPoliciesPage />} />
-                  <Route path="groups" element={<ManagerGroupsPage />} />
-                  <Route path="groups/:groupName/policies" element={<ManagerGroupPoliciesPage />} />
-                  <Route path="groups/:groupName/users" element={<ManagerGroupUsersPage />} />
-                  <Route path="roles" element={<ManagerRolesPage />} />
-                  <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
-                  <Route path="iam/policies" element={<PoliciesPage />} />
-                </Route>
-                <Route path="topics" element={<TopicsPage />} />
-                <Route path="ceph/keys" element={<ManagerCephKeysPage />} />
-                <Route element={<RequireManagerBucketCompareFeature />}>
-                  <Route path="bucket-compare" element={<ManagerBucketComparePage />} />
-                </Route>
-                <Route element={<RequireManagerMigrationFeature />}>
-                  <Route path="migrations" element={<ManagerMigrationsPage />} />
-                  <Route path="migrations/new" element={<ManagerMigrationWizardPage />} />
-                  <Route path="migrations/:migrationId" element={<ManagerMigrationDetailPage />} />
-                </Route>
-              </Route>
-            </Route>
-
-            <Route element={<RequireBrowserSurface surface="root" />}>
-              <Route path="/browser" element={<BrowserLayout />}>
-                <Route index element={<BrowserPage />} />
-              </Route>
-            </Route>
-          </Route>
-
-          <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
           </Route>
         </Route>
 
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/oidc/:provider/callback" element={<OidcCallbackPage />} />
-        <Route path="/unauthorized" element={<UnauthorizedPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </>
-    );
-    return createBrowserRouter(routes, {
+        <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE]} />}>
+          <Route element={<RequireCephAdminFeature />}>
+            <Route path="/ceph-admin" element={<CephAdminLayout />}>
+              <Route index element={<CephAdminDashboard />} />
+              <Route path="metrics" element={<CephAdminMetricsPage />} />
+              <Route path="accounts" element={<CephAdminAccountsPage />} />
+              <Route path="users" element={<CephAdminUsersPage />} />
+              <Route path="buckets" element={<CephAdminBucketsPage />} />
+              <Route path="buckets/:bucketName" element={<CephAdminBucketDetailPage />} />
+              <Route element={<RequireBrowserSurface surface="ceph_admin" />}>
+                <Route path="browser" element={<CephAdminBrowserPage />} />
+              </Route>
+            </Route>
+          </Route>
+        </Route>
+
+        <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
+          <Route element={<RequireStorageOpsFeature />}>
+            <Route path="/storage-ops" element={<StorageOpsLayout />}>
+              <Route index element={<StorageOpsDashboard />} />
+              <Route path="buckets" element={<StorageOpsBucketsPage />} />
+            </Route>
+          </Route>
+        </Route>
+
+        <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
+          <Route element={<RequireFeature feature="manager" />}>
+            <Route path="/manager" element={<ManagerLayout />}>
+              <Route index element={<ManagerDashboard />} />
+              <Route path="buckets" element={<BucketsPage />} />
+              <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
+              <Route element={<RequireBrowserSurface surface="manager" />}>
+                <Route path="browser" element={<ManagerBrowserPage />} />
+              </Route>
+              <Route path="metrics" element={<ManagerMetricsPage />} />
+              <Route element={<RequireManagerIamFeature />}>
+                <Route path="users" element={<ManagerUsersPage />} />
+                <Route path="users/:userName/keys" element={<ManagerUserKeysPage />} />
+                <Route path="users/:userName/policies" element={<ManagerUserPoliciesPage />} />
+                <Route path="groups" element={<ManagerGroupsPage />} />
+                <Route path="groups/:groupName/policies" element={<ManagerGroupPoliciesPage />} />
+                <Route path="groups/:groupName/users" element={<ManagerGroupUsersPage />} />
+                <Route path="roles" element={<ManagerRolesPage />} />
+                <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
+                <Route path="iam/policies" element={<PoliciesPage />} />
+              </Route>
+              <Route path="topics" element={<TopicsPage />} />
+              <Route path="ceph/keys" element={<ManagerCephKeysPage />} />
+              <Route element={<RequireManagerBucketCompareFeature />}>
+                <Route path="bucket-compare" element={<ManagerBucketComparePage />} />
+              </Route>
+              <Route element={<RequireManagerMigrationFeature />}>
+                <Route path="migrations" element={<ManagerMigrationsPage />} />
+                <Route path="migrations/new" element={<ManagerMigrationWizardPage />} />
+                <Route path="migrations/:migrationId" element={<ManagerMigrationDetailPage />} />
+              </Route>
+            </Route>
+          </Route>
+
+          <Route element={<RequireBrowserSurface surface="root" />}>
+            <Route path="/browser" element={<BrowserLayout />}>
+              <Route index element={<BrowserPage />} />
+            </Route>
+          </Route>
+        </Route>
+
+        <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
+        </Route>
+      </Route>
+
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/oidc/:provider/callback" element={<OidcCallbackPage />} />
+      <Route path="/unauthorized" element={<UnauthorizedPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Route>
+  );
+}
+
+export default function AppRouter() {
+  const router = useMemo(() => {
+    return createBrowserRouter(createAppRoutes(), {
       future: { v7_relativeSplatPath: true },
     });
   }, []);
