@@ -177,7 +177,7 @@ describe("BrowserPage multipart uploads modal", () => {
     expect(await screen.findByText("Multipart upload aborted for uploads/big-file.bin.")).toBeInTheDocument();
   });
 
-  it("opens the inspector panel when clicking More actions while the inspector is hidden", async () => {
+  it("opens the row actions menu from More actions and only opens the inspector after choosing Details", async () => {
     const user = userEvent.setup();
 
     listBrowserObjectsMock.mockResolvedValue({
@@ -201,6 +201,13 @@ describe("BrowserPage multipart uploads modal", () => {
 
     const moreButton = await screen.findByRole("button", { name: "More actions" });
     await user.click(moreButton);
+    const menu = await screen.findByRole("menu");
+
+    expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+
+    await user.click(within(menu).getByRole("button", { name: "Details" }));
 
     expect(await screen.findByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");

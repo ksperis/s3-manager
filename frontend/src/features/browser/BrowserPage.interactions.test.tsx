@@ -72,10 +72,11 @@ vi.mock("../../api/buckets", async () => {
 function renderPage({
   defaultShowInspector = false,
   initialEntry = "/browser",
-}: { defaultShowInspector?: boolean; initialEntry?: string } = {}) {
+  allowInspectorPanel = true,
+}: { defaultShowInspector?: boolean; initialEntry?: string; allowInspectorPanel?: boolean } = {}) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <BrowserPage defaultShowInspector={defaultShowInspector} />
+      <BrowserPage defaultShowInspector={defaultShowInspector} allowInspectorPanel={allowInspectorPanel} />
     </MemoryRouter>
   );
 }
@@ -108,6 +109,19 @@ function getContextToolbar() {
 
 function getActionsToolbar() {
   return screen.getByRole("toolbar", { name: "Browser actions bar" });
+}
+
+async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(within(getContextToolbar()).getByRole("button", { name: "More" }));
+  return await screen.findByRole("menu", { name: "More" });
+}
+
+async function enableActionBar(user: ReturnType<typeof userEvent.setup>) {
+  const menu = await openContextMoreMenu(user);
+  await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }));
+  await waitFor(() => {
+    expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+  });
 }
 
 describe("BrowserPage interactions", () => {
@@ -406,44 +420,64 @@ describe("BrowserPage interactions", () => {
     expect(within(rowA).queryByText("Object")).not.toBeInTheDocument();
   });
 
-  it("keeps primary browser actions visible and moves status details into More", async () => {
+  it("uses the compact browser toolbar by default and exposes upload and layout controls", async () => {
     const user = userEvent.setup();
     renderPage();
     await findRowByLabel("a.txt");
 
     const contextToolbar = getContextToolbar();
-    const actionsToolbar = getActionsToolbar();
+    const uploadButton = within(contextToolbar).getByRole("button", { name: "Upload" });
+    const newFolderButton = within(contextToolbar).getByRole("button", { name: "New folder" });
+    const refreshButton = within(contextToolbar).getByRole("button", { name: "Refresh" });
+    const moreButton = within(contextToolbar).getByRole("button", { name: "More" });
+    const operationsButton = within(contextToolbar).getByRole("button", { name: "Operations" });
 
-    expect(screen.getAllByRole("toolbar")).toHaveLength(2);
+    expect(screen.getAllByRole("toolbar")).toHaveLength(1);
     expect(within(contextToolbar).getByRole("button", { name: "Select bucket" })).toBeInTheDocument();
-    expect(within(contextToolbar).getByRole("button", { name: "Operations" })).toBeInTheDocument();
-    expect(within(actionsToolbar).getByText("No selection")).toBeInTheDocument();
-    expect(within(actionsToolbar).getByRole("button", { name: "Upload files" })).toBeInTheDocument();
-    expect(within(actionsToolbar).getByRole("button", { name: "New folder" })).toBeInTheDocument();
-    expect(within(actionsToolbar).queryByRole("button", { name: "Operations" })).not.toBeInTheDocument();
-    expect(within(actionsToolbar).getByRole("button", { name: "Refresh" })).toBeInTheDocument();
-    expect(within(actionsToolbar).getByRole("button", { name: "More" })).toBeInTheDocument();
-    expect(screen.queryByText("Choose objects to reveal selection actions. Upload and folder creation stay visible otherwise.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
+    expect(within(contextToolbar).queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
+    expect(uploadButton).toHaveClass("h-7", "w-7", "rounded-md");
+    expect(uploadButton).not.toHaveClass("h-9", "w-9", "rounded-xl");
+    expect(newFolderButton).toHaveClass("h-7", "w-7", "rounded-md");
+    expect(refreshButton).toHaveClass("h-7", "w-7", "rounded-md");
+    expect(moreButton).toHaveClass("h-7", "w-7", "rounded-md");
+    expect(Boolean(operationsButton.compareDocumentPosition(uploadButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(uploadButton.compareDocumentPosition(newFolderButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(newFolderButton.compareDocumentPosition(refreshButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(refreshButton.compareDocumentPosition(moreButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
 
-    await user.click(within(actionsToolbar).getByRole("button", { name: "More" }));
-    const menu = await screen.findByRole("menu", { name: "More" });
+    await user.click(uploadButton);
+    const uploadMenu = await screen.findByRole("menu", { name: "Upload" });
+    expect(within(uploadMenu).getByRole("menuitem", { name: "Upload files" })).toBeInTheDocument();
+    expect(within(uploadMenu).getByRole("menuitem", { name: "Upload folder" })).toBeInTheDocument();
 
+    const menu = await openContextMoreMenu(user);
     expect(within(menu).getByText("Compact view")).toBeInTheDocument();
     expect(within(menu).getByText("Transfers")).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: /Folders panel/i })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: /Inspector panel/i })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitemcheckbox", { name: /Folders panel/i })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i })).toHaveAttribute("aria-checked", "false");
+
+    await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+    });
   });
 
-  it("keeps selection actions inline and secondary selection actions in More", async () => {
+  it("shows selection actions inline and secondary actions in More when the action bar is enabled", async () => {
     const user = userEvent.setup();
     renderPage();
+    await enableActionBar(user);
 
     await user.click(await findRowByLabel("a.txt"));
 
     const actionsToolbar = getActionsToolbar();
 
     expect(within(actionsToolbar).getByText("1 selected")).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "Upload files" })).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "New folder" })).toBeInTheDocument();
     expect(within(actionsToolbar).getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "Open" })).toBeDisabled();
     expect(within(actionsToolbar).getByRole("button", { name: "Copy" })).toBeInTheDocument();
     expect(within(actionsToolbar).getByRole("button", { name: "Delete" })).toBeInTheDocument();
     expect(within(actionsToolbar).queryByRole("button", { name: "Cut" })).not.toBeInTheDocument();
@@ -456,17 +490,55 @@ describe("BrowserPage interactions", () => {
     expect(within(menu).getByRole("menuitem", { name: "Cut" })).toBeInTheDocument();
   });
 
+  it("keeps a single folder selection downloadable with a stable toolbar label", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await enableActionBar(user);
+
+    await user.click(await findRowByLabel("docs"));
+
+    const actionsToolbar = getActionsToolbar();
+
+    expect(within(actionsToolbar).getByText("1 selected")).toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "Download" })).toBeEnabled();
+    expect(within(actionsToolbar).queryByRole("button", { name: "Download folder" })).not.toBeInTheDocument();
+    expect(within(actionsToolbar).getByRole("button", { name: "Open" })).toBeEnabled();
+  });
+
   it("preserves refresh behavior from the compact toolbar", async () => {
     const user = userEvent.setup();
     renderPage();
     await findRowByLabel("a.txt");
 
     const initialCalls = listBrowserObjectsMock.mock.calls.length;
-    await user.click(within(getActionsToolbar()).getByRole("button", { name: "Refresh" }));
+    await user.click(within(getContextToolbar()).getByRole("button", { name: "Refresh" }));
 
     await waitFor(() => {
       expect(listBrowserObjectsMock.mock.calls.length).toBe(initialCalls + 1);
     });
+  });
+
+  it("keeps selection actions out of the compact toolbar and available from the selection context menu", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const rowA = await findRowByLabel("a.txt");
+    const rowB = await findRowByLabel("b.txt");
+
+    await user.click(rowA);
+    fireEvent.click(rowB, { ctrlKey: true });
+
+    const contextToolbar = getContextToolbar();
+    expect(within(contextToolbar).queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
+    expect(within(contextToolbar).queryByRole("button", { name: "Copy" })).not.toBeInTheDocument();
+    expect(within(contextToolbar).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(rowB);
+    const menu = await screen.findByRole("menu");
+
+    expect(within(menu).getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 
   it("hides main-browser-only status and panel controls from More in embedded mode", async () => {
@@ -482,8 +554,9 @@ describe("BrowserPage interactions", () => {
     const menu = await screen.findByRole("menu", { name: "More" });
 
     expect(within(menu).queryByText("Compact view")).not.toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitem", { name: /Folders panel/i })).not.toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitem", { name: /Inspector panel/i })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitemcheckbox", { name: /Folders panel/i })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitemcheckbox", { name: /Inspector panel/i })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitemcheckbox", { name: /Action bar/i })).not.toBeInTheDocument();
   });
 
   it("supports Cmd/Ctrl click toggle selection", async () => {
@@ -529,7 +602,7 @@ describe("BrowserPage interactions", () => {
     });
   });
 
-  it("opens Details explicitly via More actions when inspector is hidden", async () => {
+  it("opens the single-row actions menu from More actions and only opens Details on explicit choice", async () => {
     const user = userEvent.setup();
     renderPage({ defaultShowInspector: false });
 
@@ -537,6 +610,19 @@ describe("BrowserPage interactions", () => {
     expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
 
     await user.click(within(await findRowByLabel("a.txt")).getByRole("button", { name: "More actions" }));
+    const menu = await screen.findByRole("menu");
+
+    expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Copy URL" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Cut" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Advanced" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+
+    await user.click(within(menu).getByRole("button", { name: "Details" }));
 
     expect(await screen.findByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
@@ -548,6 +634,7 @@ describe("BrowserPage interactions", () => {
     renderPage({ defaultShowInspector: true });
 
     await user.click(within(await findRowByLabel("a.txt")).getByRole("button", { name: "More actions" }));
+    await user.click(within(await screen.findByRole("menu")).getByRole("button", { name: "Details" }));
     const objectsList = screen.getByLabelText("Objects list");
     (objectsList as HTMLDivElement).focus();
     fireEvent.keyDown(objectsList, { key: "Escape" });
@@ -556,6 +643,57 @@ describe("BrowserPage interactions", () => {
 
     expect(screen.queryByText(/^Focused:/)).not.toBeInTheDocument();
     expect(screen.getByText("Select one or more objects to see selection actions.")).toBeInTheDocument();
+  });
+
+  it("shows folder row actions from More actions with the same single-item menu content", async () => {
+    const user = userEvent.setup();
+    renderPage({ defaultShowInspector: false });
+
+    await user.click(within(await findRowByLabel("docs")).getByRole("button", { name: "More actions" }));
+    const menu = await screen.findByRole("menu");
+
+    expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Open" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Download folder" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Cut" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("keeps More actions available when the inspector panel is disabled and omits Details", async () => {
+    const user = userEvent.setup();
+    renderPage({ defaultShowInspector: false, allowInspectorPanel: false });
+
+    const row = await findRowByLabel("a.txt");
+    const moreButton = within(row).getByRole("button", { name: "More actions" });
+    expect(moreButton).toBeInTheDocument();
+
+    await user.click(moreButton);
+    const menu = await screen.findByRole("menu");
+
+    expect(within(menu).queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+  });
+
+  it("keeps inspector tabs on one line and removes the counter from the Selection tab", async () => {
+    const user = userEvent.setup();
+    renderPage({ defaultShowInspector: true });
+
+    await user.click(await findRowByLabel("a.txt"));
+
+    const tablist = screen.getByRole("tablist", { name: "Inspector tabs" });
+    const tabs = within(tablist).getAllByRole("tab");
+    const selectionTab = within(tablist).getByRole("tab", { name: "Selection" });
+
+    expect(tablist).toHaveClass("flex-nowrap");
+    expect(tabs).toHaveLength(4);
+    expect(selectionTab).toHaveTextContent(/^Selection$/);
+
+    await user.click(selectionTab);
+
+    expect(within(screen.getByRole("tabpanel", { name: "Selection" })).getByText("1 selected")).toBeInTheDocument();
   });
 
   it("updates Details on simple row click when Details tab is active", async () => {

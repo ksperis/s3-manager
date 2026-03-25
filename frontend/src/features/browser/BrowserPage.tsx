@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { unstable_usePrompt, useLocation, useSearchParams } from "react-router-dom";
 import JSZip from "jszip";
 import { ZipWriter } from "@zip.js/zip.js";
@@ -148,6 +148,7 @@ import {
   storageClassChipClasses,
   storageClassOptions,
   toolbarButtonClasses,
+  toolbarIconButtonClasses,
   toolbarPrimaryClasses,
   treeItemActiveClasses,
   treeItemBaseClasses,
@@ -221,6 +222,48 @@ type BrowserPageProps = {
   defaultShowFolders?: boolean;
   defaultShowInspector?: boolean;
 };
+
+type ToolbarToggleMenuItemProps = {
+  label: string;
+  icon: ReactNode;
+  checked: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+};
+
+function ToolbarToggleMenuItem({
+  label,
+  icon,
+  checked,
+  onToggle,
+  disabled = false,
+}: ToolbarToggleMenuItemProps) {
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={checked}
+      className={`${contextMenuItemClasses} ${disabled ? contextMenuItemDisabledClasses : ""}`}
+      onClick={onToggle}
+      disabled={disabled}
+    >
+      <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">{icon}</span>
+      <span className="min-w-0 flex-1">{label}</span>
+      <span
+        aria-hidden="true"
+        className={`relative ml-auto inline-flex h-5 w-9 shrink-0 rounded-full transition ${
+          checked ? "bg-emerald-500" : "bg-slate-200 dark:bg-slate-700"
+        }`}
+      >
+        <span
+          className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition ${
+            checked ? "translate-x-4" : ""
+          }`}
+        />
+      </span>
+    </button>
+  );
+}
 
 type OperationDetailsKind = "download" | "delete" | "copy" | "upload" | "other";
 type BucketInspectorTone = "active" | "inactive" | "unknown";
@@ -396,9 +439,9 @@ const BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES: Record<BucketInspectorTone, string>
   unknown: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
 };
 const inspectorTabListClasses =
-  "flex flex-wrap gap-1 rounded-xl border border-slate-200/90 bg-slate-100/80 p-1 dark:border-slate-700 dark:bg-slate-900/70";
+  "flex flex-nowrap gap-1 rounded-xl border border-slate-200/90 bg-slate-100/80 p-1 dark:border-slate-700 dark:bg-slate-900/70";
 const inspectorTabBaseClasses =
-  "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 ui-caption font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+  "inline-flex min-w-0 flex-1 items-center justify-center rounded-lg border px-2.5 py-1.5 text-center ui-caption font-semibold whitespace-nowrap transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const inspectorTabInactiveClasses =
   "border-transparent bg-transparent text-slate-600 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800/70 dark:hover:text-slate-100";
 const inspectorTabActiveClasses =
@@ -586,6 +629,7 @@ export default function BrowserPage({
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
   const [showFolders, setShowFolders] = useState(Boolean(allowFoldersPanel && defaultShowFolders));
   const [showInspector, setShowInspector] = useState(Boolean(allowInspectorPanel && defaultShowInspector));
+  const [showActionBar, setShowActionBar] = useState(() => location.pathname.replace(/\/+$/, "") !== "/browser");
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
@@ -651,6 +695,7 @@ export default function BrowserPage({
   const [filter, setFilter] = useState("");
   const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
   const [showToolbarMoreMenu, setShowToolbarMoreMenu] = useState(false);
+  const [showUploadQuickMenu, setShowUploadQuickMenu] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<BrowserColumnId[]>(DEFAULT_VISIBLE_COLUMN_IDS);
   const [lazyColumnCache, setLazyColumnCache] = useState<Record<string, LazyColumnCacheEntry>>({});
   const [searchScope, setSearchScope] = useState<SearchScope>("prefix");
@@ -788,6 +833,8 @@ export default function BrowserPage({
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const bucketMenuRef = useRef<HTMLDivElement | null>(null);
   const searchOptionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const uploadQuickButtonRef = useRef<HTMLButtonElement | null>(null);
+  const uploadQuickMenuRef = useRef<HTMLDivElement | null>(null);
   const toolbarMoreButtonRef = useRef<HTMLButtonElement | null>(null);
   const toolbarMoreMenuRef = useRef<HTMLDivElement | null>(null);
   const corsActionTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -854,6 +901,7 @@ export default function BrowserPage({
     normalizedPath.endsWith("/manager/browser") ||
     normalizedPath.endsWith("/ceph-admin/browser");
   const isMainBrowserPath = normalizedPath === "/browser";
+  const showActionBarToggle = showPanelToggles && isMainBrowserPath;
   const bucketManagementEnabled = normalizedPath.endsWith("/browser") && !isEmbeddedBrowserPath;
   const bucketConfigurationEnabled = bucketManagementEnabled;
   const bucketConfigContextScope = "browser";
@@ -867,6 +915,12 @@ export default function BrowserPage({
       setCompactMode(true);
     }
   }, [normalizedPath]);
+
+  useEffect(() => {
+    if (!isMainBrowserPath && !showActionBar) {
+      setShowActionBar(true);
+    }
+  }, [isMainBrowserPath, showActionBar]);
   const contextId = typeof accountIdForApi === "string" ? accountIdForApi : null;
   const isCephAdminContext = Boolean(contextId && contextId.startsWith("ceph-admin-"));
   const isLegacyS3UserContext = Boolean(contextId && contextId.startsWith("s3u-"));
@@ -1495,6 +1549,39 @@ export default function BrowserPage({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [showToolbarMoreMenu]);
+
+  useEffect(() => {
+    if (!showUploadQuickMenu) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (uploadQuickButtonRef.current?.contains(target)) return;
+      if (uploadQuickMenuRef.current?.contains(target)) return;
+      setShowUploadQuickMenu(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowUploadQuickMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showUploadQuickMenu]);
+
+  useEffect(() => {
+    setShowToolbarMoreMenu(false);
+    setShowUploadQuickMenu(false);
+  }, [showActionBar]);
+
+  useEffect(() => {
+    if (isMainBrowserPath) return;
+    if (showUploadQuickMenu) {
+      setShowUploadQuickMenu(false);
+    }
+  }, [isMainBrowserPath, showUploadQuickMenu]);
 
   useEffect(() => {
     if (!hasCorsAction) {
@@ -3690,10 +3777,6 @@ export default function BrowserPage({
     syncInspectorTabWithSelection(nextIds.length);
   };
 
-  const toggleInspectorForItem = (item: BrowserItem) => {
-    openItemDetails(item);
-  };
-
   const handleItemContextMenu = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
     event.preventDefault();
     event.stopPropagation();
@@ -3711,6 +3794,31 @@ export default function BrowserPage({
       y,
       item,
       items: itemsForMenu,
+    });
+  };
+
+  const handleItemActionsButtonClick = (event: ReactMouseEvent<HTMLButtonElement>, item: BrowserItem) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (selectedIds.length !== 1 || selectedIds[0] !== item.id) {
+      selectSingleRow(item.id);
+    } else {
+      setSelectionAnchorId(item.id);
+      setActiveRowId(item.id);
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const { x, y } = clampContextMenuPosition(
+      rect.right - CONTEXT_MENU_FALLBACK_WIDTH_PX,
+      rect.bottom + 6,
+      CONTEXT_MENU_FALLBACK_WIDTH_PX,
+      CONTEXT_MENU_FALLBACK_HEIGHT_PX
+    );
+    setContextMenu({
+      kind: "item",
+      x,
+      y,
+      item,
+      items: [item],
     });
   };
 
@@ -7859,6 +7967,8 @@ export default function BrowserPage({
   const isCreateBucketNameValid = !createBucketNameValue || isValidS3BucketName(createBucketNameValue);
   const showFolderToggle = showPanelToggles && canUseFoldersPanel;
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
+  const isActionBarVisible = !isMainBrowserPath || showActionBar;
+  const isCompactToolbarMode = isMainBrowserPath && !showActionBar;
   const browserViewLabel = compactMode ? "Compact view" : "List view";
   const toolbarStatusTextClassName =
     selectedCount > 0
@@ -7869,19 +7979,61 @@ export default function BrowserPage({
   const toolbarOverflowSectionTitleClasses =
     "px-2.5 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-400";
   const toolbarSelectionSummary = selectedCount > 0 ? `${selectedCount} selected` : "No selection";
-  const showToolbarCopyUrlAction = Boolean(selectionIsSingle && selectionPrimary);
-  const showToolbarCutAction = canSelectionActions;
+  const toolbarCanUploadFiles = Boolean(bucketName);
+  const toolbarCanUploadFolder = Boolean(bucketName && hasS3AccountContext);
+  const toolbarCanCreateFolder = Boolean(bucketName && hasS3AccountContext);
+  const toolbarCanDownload = Boolean(
+    bucketName && hasS3AccountContext && (canSelectionDownloadFolder || canSelectionDownloadFiles)
+  );
+  const toolbarCanOpen = Boolean(selectionPrimary && canSelectionOpen);
+  const toolbarCanCopy = canSelectionCopyItems;
+  const toolbarCanDelete = Boolean(hasS3AccountContext && canSelectionDelete);
+  const showToolbarCopyUrlAction = isActionBarVisible && Boolean(selectionIsSingle && selectionPrimary);
+  const showToolbarCutAction = isActionBarVisible && canSelectionActions;
   const hasToolbarStatusSection = isMainBrowserPath || Boolean(accessBadge);
-  const hasToolbarPanelsSection = showFolderToggle || showInspectorToggle;
+  const hasToolbarLayoutSection = showFolderToggle || showInspectorToggle || showActionBarToggle;
   const hasToolbarSecondaryActionsSection = showToolbarCopyUrlAction || showToolbarCutAction || showSseControls;
   const hasToolbarMoreMenu =
-    hasToolbarStatusSection || hasToolbarPanelsSection || hasToolbarSecondaryActionsSection;
+    hasToolbarStatusSection || hasToolbarLayoutSection || hasToolbarSecondaryActionsSection;
   const closeToolbarMoreMenu = () => {
     setShowToolbarMoreMenu(false);
+  };
+  const closeUploadQuickMenu = () => {
+    setShowUploadQuickMenu(false);
   };
   const runToolbarMoreAction = (action: () => void) => {
     closeToolbarMoreMenu();
     action();
+  };
+  const toggleToolbarMoreMenu = () => {
+    setShowUploadQuickMenu(false);
+    setShowToolbarMoreMenu((prev) => !prev);
+  };
+  const toggleUploadQuickMenu = () => {
+    setShowToolbarMoreMenu(false);
+    setShowUploadQuickMenu((prev) => !prev);
+  };
+  const handleToolbarDownload = () => {
+    if (canSelectionDownloadFolder && selectionPrimary) {
+      handleDownloadFolder(selectionPrimary);
+      return;
+    }
+    if (canSelectionDownloadFiles) {
+      handleDownloadItems(selectionFiles);
+    }
+  };
+  const handleToolbarOpen = () => {
+    if (selectionPrimary && canSelectionOpen) {
+      handleOpenItem(selectionPrimary);
+    }
+  };
+  const openQuickUploadFiles = () => {
+    closeUploadQuickMenu();
+    fileInputRef.current?.click();
+  };
+  const openQuickUploadFolder = () => {
+    closeUploadQuickMenu();
+    folderInputRef.current?.click();
   };
 
   useEffect(() => {
@@ -8238,7 +8390,9 @@ export default function BrowserPage({
                   )}
                 </div>
               </div>
-              <div className="flex shrink-0 items-center sm:justify-end">
+              <div
+                className={`flex shrink-0 items-center ${isCompactToolbarMode ? "gap-1.5 sm:justify-end" : "sm:justify-end"}`}
+              >
                 <button
                   type="button"
                   onClick={openOperationsModal}
@@ -8249,293 +8403,334 @@ export default function BrowserPage({
                   Operations
                   <span className={operationsCountBadgeClasses}>{formatBadgeCount(totalOperationsCount)}</span>
                 </button>
-              </div>
-            </div>
-            <div
-              role="toolbar"
-              aria-label="Browser actions bar"
-              className="flex flex-col gap-2 rounded-md border border-slate-200/70 bg-slate-50/70 px-2.5 py-1.5 dark:border-slate-700/70 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="min-w-0 flex items-center">
-                <p className={`${toolbarStatusTextClassName} truncate`}>{toolbarSelectionSummary}</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
-                {selectedCount > 0 ? (
-                  <>
-                    {canSelectionDownloadFolder && selectionPrimary && (
-                      <button
-                        type="button"
-                        className={toolbarPrimaryClasses}
-                        onClick={() => handleDownloadFolder(selectionPrimary)}
-                        disabled={!bucketName || !hasS3AccountContext}
-                      >
-                        <DownloadIcon className="h-3.5 w-3.5" />
-                        Download folder
-                      </button>
-                    )}
-                    {!canSelectionDownloadFolder && canSelectionDownloadFiles && (
-                      <button
-                        type="button"
-                        className={toolbarPrimaryClasses}
-                        onClick={() => handleDownloadItems(selectionFiles)}
-                        disabled={!bucketName || !hasS3AccountContext}
-                      >
-                        <DownloadIcon className="h-3.5 w-3.5" />
-                        Download
-                      </button>
-                    )}
-                    {canSelectionOpen && selectionPrimary && (
-                      <button
-                        type="button"
-                        className={toolbarButtonClasses}
-                        onClick={() => handleOpenItem(selectionPrimary)}
-                      >
-                        <OpenIcon className="h-3.5 w-3.5" />
-                        Open
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className={toolbarButtonClasses}
-                      onClick={() => handleCopyItems(selectionItems)}
-                      disabled={!canSelectionCopyItems}
-                    >
-                      <CopyIcon className="h-3.5 w-3.5" />
-                      Copy
-                    </button>
-                    <button
-                      type="button"
-                      className={bulkDangerClasses}
-                      onClick={() => handleDeleteItems(selectionItems)}
-                      disabled={!hasS3AccountContext || !canSelectionDelete}
-                    >
-                      <TrashIcon className="h-3.5 w-3.5" />
-                      Delete
-                    </button>
-                  </>
-                ) : (
+                {isCompactToolbarMode && (
                   <>
                     <button
+                      ref={uploadQuickButtonRef}
                       type="button"
-                      className={toolbarPrimaryClasses}
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={!bucketName}
-                      aria-label="Upload files"
-                      title="Upload files"
+                      className={toolbarIconButtonClasses}
+                      onClick={toggleUploadQuickMenu}
+                      disabled={!toolbarCanUploadFiles && !toolbarCanUploadFolder}
+                      aria-haspopup={toolbarCanUploadFiles || toolbarCanUploadFolder ? "menu" : undefined}
+                      aria-expanded={toolbarCanUploadFiles || toolbarCanUploadFolder ? showUploadQuickMenu : undefined}
+                      aria-label="Upload"
+                      title="Upload"
                     >
                       <UploadIcon className="h-3.5 w-3.5" />
-                      Upload files
                     </button>
+                    <AnchoredPortalMenu
+                      open={showUploadQuickMenu}
+                      anchorRef={uploadQuickButtonRef}
+                      placement="bottom-end"
+                      offset={6}
+                      minWidth={224}
+                      className="w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                    >
+                      <div ref={uploadQuickMenuRef} role="menu" aria-label="Upload" className="max-h-[min(70vh,20rem)] overflow-y-auto">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className={`${contextMenuItemClasses} ${!toolbarCanUploadFiles ? contextMenuItemDisabledClasses : ""}`}
+                          onClick={openQuickUploadFiles}
+                          disabled={!toolbarCanUploadFiles}
+                        >
+                          <UploadIcon className="h-3.5 w-3.5" />
+                          Upload files
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className={`${contextMenuItemClasses} ${!toolbarCanUploadFolder ? contextMenuItemDisabledClasses : ""}`}
+                          onClick={openQuickUploadFolder}
+                          disabled={!toolbarCanUploadFolder}
+                        >
+                          <FolderIcon className="h-3.5 w-3.5" />
+                          Upload folder
+                        </button>
+                      </div>
+                    </AnchoredPortalMenu>
                     <button
                       type="button"
-                      className={toolbarButtonClasses}
+                      className={toolbarIconButtonClasses}
                       onClick={handleNewFolder}
-                      disabled={!bucketName || !hasS3AccountContext}
+                      disabled={!toolbarCanCreateFolder}
                       aria-label="New folder"
                       title="New folder"
                     >
                       <FolderPlusIcon className="h-3.5 w-3.5" />
-                      New folder
                     </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  className={toolbarButtonClasses}
-                  onClick={handleRefresh}
-                  disabled={!bucketName || objectsLoading}
-                  aria-label="Refresh"
-                  title="Refresh"
-                >
-                  <RefreshIcon className="h-3.5 w-3.5" />
-                  Refresh
-                </button>
-                {hasToolbarMoreMenu && (
-                  <>
+                    <button
+                      type="button"
+                      className={toolbarIconButtonClasses}
+                      onClick={handleRefresh}
+                      disabled={!bucketName || objectsLoading}
+                      aria-label="Refresh"
+                      title="Refresh"
+                    >
+                      <RefreshIcon className="h-3.5 w-3.5" />
+                    </button>
                     <button
                       ref={toolbarMoreButtonRef}
                       type="button"
-                      className={toolbarButtonClasses}
-                      onClick={() => setShowToolbarMoreMenu((prev) => !prev)}
-                      aria-haspopup="menu"
-                      aria-expanded={showToolbarMoreMenu}
+                      className={toolbarIconButtonClasses}
+                      onClick={toggleToolbarMoreMenu}
+                      disabled={!hasToolbarMoreMenu}
+                      aria-haspopup={hasToolbarMoreMenu ? "menu" : undefined}
+                      aria-expanded={hasToolbarMoreMenu ? showToolbarMoreMenu : undefined}
                       aria-label="More"
                       title="More"
                     >
                       <MoreIcon className="h-3.5 w-3.5" />
-                      More
                     </button>
-                    <AnchoredPortalMenu
-                      open={showToolbarMoreMenu}
-                      anchorRef={toolbarMoreButtonRef}
-                      placement="bottom-end"
-                      offset={6}
-                      minWidth={288}
-                      className="w-80 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
-                    >
-                      <div
-                        ref={toolbarMoreMenuRef}
-                        role="menu"
-                        aria-label="More"
-                        className="max-h-[min(70vh,28rem)] overflow-y-auto"
-                      >
-                        {hasToolbarStatusSection && (
-                          <>
-                            <p className={toolbarOverflowSectionTitleClasses}>Status</p>
-                            {isMainBrowserPath && (
-                              <div className={toolbarOverflowStatusRowClasses}>
-                                <EyeIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
-                                <div className="min-w-0 flex-1">
-                                  <p className="font-semibold text-slate-700 dark:text-slate-100">View</p>
-                                  <p className="text-slate-500 dark:text-slate-400">{browserViewLabel}</p>
-                                </div>
-                              </div>
-                            )}
-                            {accessBadge && (
-                              <div className={toolbarOverflowStatusRowClasses} title={accessBadge.title}>
-                                <span className={`mt-0.5 inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${accessBadge.className}`} />
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <p className="font-semibold text-slate-700 dark:text-slate-100">Transfers</p>
-                                    <span
-                                      className={`${filterChipClasses} shrink-0 border-current/10`}
-                                      aria-label={`${accessBadge.label} — ${accessBadge.title}`}
-                                    >
-                                      {accessBadge.label}
-                                    </span>
-                                  </div>
-                                  <p className="text-slate-500 dark:text-slate-400">{accessBadge.title}</p>
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )}
-                        {hasToolbarPanelsSection && (
-                          <>
-                            {hasToolbarStatusSection && <div className={contextMenuSeparatorClasses} />}
-                            <p className={toolbarOverflowSectionTitleClasses}>Panels</p>
-                            {showFolderToggle && (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={contextMenuItemClasses}
-                                onClick={() => {
-                                  runToolbarMoreAction(toggleFoldersPanel);
-                                }}
-                              >
-                                <FolderIcon className="h-3.5 w-3.5" />
-                                Folders panel
-                                <span
-                                  className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                    showFolders
-                                      ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100"
-                                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
-                                  }`}
-                                >
-                                  {showFolders ? "On" : "Off"}
-                                </span>
-                              </button>
-                            )}
-                            {showInspectorToggle && (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={contextMenuItemClasses}
-                                onClick={() => {
-                                  runToolbarMoreAction(toggleInspectorPanel);
-                                }}
-                              >
-                                <MoreIcon className="h-3.5 w-3.5" />
-                                Inspector panel
-                                <span
-                                  className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                    showInspector
-                                      ? "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-100"
-                                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
-                                  }`}
-                                >
-                                  {showInspector ? "On" : "Off"}
-                                </span>
-                              </button>
-                            )}
-                          </>
-                        )}
-                        {hasToolbarSecondaryActionsSection && (
-                          <>
-                            {(hasToolbarStatusSection || hasToolbarPanelsSection) && (
-                              <div className={contextMenuSeparatorClasses} />
-                            )}
-                            <p className={toolbarOverflowSectionTitleClasses}>More Actions</p>
-                            {showToolbarCopyUrlAction && selectionPrimary && (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={`${contextMenuItemClasses} ${
-                                  !canSelectionCopyUrl || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""
-                                }`}
-                                onClick={() => {
-                                  runToolbarMoreAction(() => handleCopyUrl(selectionPrimary));
-                                }}
-                                disabled={!canSelectionCopyUrl || !hasS3AccountContext}
-                                title={!canSelectionCopyUrl && sseActive ? "Copy URL is disabled in SSE-C mode." : undefined}
-                              >
-                                <LinkIcon className="h-3.5 w-3.5" />
-                                Copy URL
-                              </button>
-                            )}
-                            {showToolbarCutAction && (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={`${contextMenuItemClasses} ${!canSelectionCutItems ? contextMenuItemDisabledClasses : ""}`}
-                                onClick={() => {
-                                  runToolbarMoreAction(() => handleCutItems(selectionItems));
-                                }}
-                                disabled={!canSelectionCutItems}
-                              >
-                                <CutIcon className="h-3.5 w-3.5" />
-                                Cut
-                              </button>
-                            )}
-                            {showSseControls && (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={`${contextMenuItemClasses} ${
-                                  !bucketName || !hasS3AccountContext || !sseFeatureEnabled ? contextMenuItemDisabledClasses : ""
-                                }`}
-                                onClick={() => {
-                                  runToolbarMoreAction(openSseCustomerModal);
-                                }}
-                                disabled={!bucketName || !hasS3AccountContext || !sseFeatureEnabled}
-                                title={sseActive ? "SSE-C enabled for this bucket." : "Configure SSE-C key for this bucket."}
-                              >
-                                <SettingsIcon className="h-3.5 w-3.5" />
-                                <span className="min-w-0 flex-1">
-                                  <span className="block">SSE-C</span>
-                                  <span className="block text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500">
-                                    {sseActive ? "Enabled for this bucket" : "Configure customer key"}
-                                  </span>
-                                </span>
-                                <span
-                                  className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                    sseActive
-                                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100"
-                                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
-                                  }`}
-                                >
-                                  {sseActive ? "On" : "Off"}
-                                </span>
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </AnchoredPortalMenu>
                   </>
                 )}
               </div>
             </div>
+            {isActionBarVisible && (
+              <div
+                role="toolbar"
+                aria-label="Browser actions bar"
+                className="flex flex-col gap-2 rounded-md border border-slate-200/70 bg-slate-50/70 px-2.5 py-1.5 dark:border-slate-700/70 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0 flex items-center">
+                  <p className={`${toolbarStatusTextClassName} truncate`}>{toolbarSelectionSummary}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                  <button
+                    type="button"
+                    className={toolbarPrimaryClasses}
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={!toolbarCanUploadFiles}
+                    aria-label="Upload files"
+                    title="Upload files"
+                  >
+                    <UploadIcon className="h-3.5 w-3.5" />
+                    Upload files
+                  </button>
+                  <button
+                    type="button"
+                    className={toolbarButtonClasses}
+                    onClick={handleNewFolder}
+                    disabled={!toolbarCanCreateFolder}
+                    aria-label="New folder"
+                    title="New folder"
+                  >
+                    <FolderPlusIcon className="h-3.5 w-3.5" />
+                    New folder
+                  </button>
+                  <button
+                    type="button"
+                    className={toolbarButtonClasses}
+                    onClick={handleToolbarDownload}
+                    disabled={!toolbarCanDownload}
+                  >
+                    <DownloadIcon className="h-3.5 w-3.5" />
+                    Download
+                  </button>
+                  <button
+                    type="button"
+                    className={toolbarButtonClasses}
+                    onClick={handleToolbarOpen}
+                    disabled={!toolbarCanOpen}
+                  >
+                    <OpenIcon className="h-3.5 w-3.5" />
+                    Open
+                  </button>
+                  <button
+                    type="button"
+                    className={toolbarButtonClasses}
+                    onClick={() => handleCopyItems(selectionItems)}
+                    disabled={!toolbarCanCopy}
+                  >
+                    <CopyIcon className="h-3.5 w-3.5" />
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    className={bulkDangerClasses}
+                    onClick={() => handleDeleteItems(selectionItems)}
+                    disabled={!toolbarCanDelete}
+                  >
+                    <TrashIcon className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    className={toolbarButtonClasses}
+                    onClick={handleRefresh}
+                    disabled={!bucketName || objectsLoading}
+                    aria-label="Refresh"
+                    title="Refresh"
+                  >
+                    <RefreshIcon className="h-3.5 w-3.5" />
+                    Refresh
+                  </button>
+                  <button
+                    ref={toolbarMoreButtonRef}
+                    type="button"
+                    className={toolbarButtonClasses}
+                    onClick={toggleToolbarMoreMenu}
+                    disabled={!hasToolbarMoreMenu}
+                    aria-haspopup={hasToolbarMoreMenu ? "menu" : undefined}
+                    aria-expanded={hasToolbarMoreMenu ? showToolbarMoreMenu : undefined}
+                    aria-label="More"
+                    title="More"
+                  >
+                    <MoreIcon className="h-3.5 w-3.5" />
+                    More
+                  </button>
+                </div>
+              </div>
+            )}
+            {hasToolbarMoreMenu && (
+              <AnchoredPortalMenu
+                open={showToolbarMoreMenu}
+                anchorRef={toolbarMoreButtonRef}
+                placement="bottom-end"
+                offset={6}
+                minWidth={288}
+                className="w-80 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+              >
+                <div
+                  ref={toolbarMoreMenuRef}
+                  role="menu"
+                  aria-label="More"
+                  className="max-h-[min(70vh,28rem)] overflow-y-auto"
+                >
+                  {hasToolbarStatusSection && (
+                    <>
+                      <p className={toolbarOverflowSectionTitleClasses}>Status</p>
+                      {isMainBrowserPath && (
+                        <div className={toolbarOverflowStatusRowClasses}>
+                          <EyeIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-slate-700 dark:text-slate-100">View</p>
+                            <p className="text-slate-500 dark:text-slate-400">{browserViewLabel}</p>
+                          </div>
+                        </div>
+                      )}
+                      {accessBadge && (
+                        <div className={toolbarOverflowStatusRowClasses} title={accessBadge.title}>
+                          <span className={`mt-0.5 inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${accessBadge.className}`} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="font-semibold text-slate-700 dark:text-slate-100">Transfers</p>
+                              <span
+                                className={`${filterChipClasses} shrink-0 border-current/10`}
+                                aria-label={`${accessBadge.label} — ${accessBadge.title}`}
+                              >
+                                {accessBadge.label}
+                              </span>
+                            </div>
+                            <p className="text-slate-500 dark:text-slate-400">{accessBadge.title}</p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {hasToolbarLayoutSection && (
+                    <>
+                      {hasToolbarStatusSection && <div className={contextMenuSeparatorClasses} />}
+                      <p className={toolbarOverflowSectionTitleClasses}>Layout</p>
+                      {showFolderToggle && (
+                        <ToolbarToggleMenuItem
+                          label="Folders panel"
+                          icon={<FolderIcon className="h-3.5 w-3.5" />}
+                          checked={showFolders}
+                          onToggle={toggleFoldersPanel}
+                        />
+                      )}
+                      {showInspectorToggle && (
+                        <ToolbarToggleMenuItem
+                          label="Inspector panel"
+                          icon={<InfoIcon className="h-3.5 w-3.5" />}
+                          checked={showInspector}
+                          onToggle={toggleInspectorPanel}
+                        />
+                      )}
+                      {showActionBarToggle && (
+                        <ToolbarToggleMenuItem
+                          label="Action bar"
+                          icon={<SlidersIcon className="h-3.5 w-3.5" />}
+                          checked={showActionBar}
+                          onToggle={() => setShowActionBar((prev) => !prev)}
+                        />
+                      )}
+                    </>
+                  )}
+                  {hasToolbarSecondaryActionsSection && (
+                    <>
+                      {(hasToolbarStatusSection || hasToolbarLayoutSection) && (
+                        <div className={contextMenuSeparatorClasses} />
+                      )}
+                      <p className={toolbarOverflowSectionTitleClasses}>More Actions</p>
+                      {showToolbarCopyUrlAction && selectionPrimary && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className={`${contextMenuItemClasses} ${
+                            !canSelectionCopyUrl || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""
+                          }`}
+                          onClick={() => {
+                            runToolbarMoreAction(() => handleCopyUrl(selectionPrimary));
+                          }}
+                          disabled={!canSelectionCopyUrl || !hasS3AccountContext}
+                          title={!canSelectionCopyUrl && sseActive ? "Copy URL is disabled in SSE-C mode." : undefined}
+                        >
+                          <LinkIcon className="h-3.5 w-3.5" />
+                          Copy URL
+                        </button>
+                      )}
+                      {showToolbarCutAction && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className={`${contextMenuItemClasses} ${!canSelectionCutItems ? contextMenuItemDisabledClasses : ""}`}
+                          onClick={() => {
+                            runToolbarMoreAction(() => handleCutItems(selectionItems));
+                          }}
+                          disabled={!canSelectionCutItems}
+                        >
+                          <CutIcon className="h-3.5 w-3.5" />
+                          Cut
+                        </button>
+                      )}
+                      {showSseControls && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className={`${contextMenuItemClasses} ${
+                            !bucketName || !hasS3AccountContext || !sseFeatureEnabled ? contextMenuItemDisabledClasses : ""
+                          }`}
+                          onClick={() => {
+                            runToolbarMoreAction(openSseCustomerModal);
+                          }}
+                          disabled={!bucketName || !hasS3AccountContext || !sseFeatureEnabled}
+                          title={sseActive ? "SSE-C enabled for this bucket." : "Configure SSE-C key for this bucket."}
+                        >
+                          <SettingsIcon className="h-3.5 w-3.5" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block">SSE-C</span>
+                            <span className="block text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500">
+                              {sseActive ? "Enabled for this bucket" : "Configure customer key"}
+                            </span>
+                          </span>
+                          <span
+                            className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                              sseActive
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100"
+                                : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
+                            }`}
+                          >
+                            {sseActive ? "On" : "Off"}
+                          </span>
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </AnchoredPortalMenu>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -9082,17 +9277,15 @@ export default function BrowserPage({
                                     >
                                       <TrashIcon />
                                     </button>
-                                    {canUseInspectorPanel && (
-                                      <button
-                                        type="button"
-                                        className={rowActionButtonClasses}
-                                        aria-label="More actions"
-                                        title="More"
-                                        onClick={() => toggleInspectorForItem(item)}
-                                      >
-                                        <MoreIcon />
-                                      </button>
-                                    )}
+                                    <button
+                                      type="button"
+                                      className={rowActionButtonClasses}
+                                      aria-label="More actions"
+                                      title="More"
+                                      onClick={(event) => handleItemActionsButtonClick(event, item)}
+                                    >
+                                      <MoreIcon />
+                                    </button>
                                   </div>
                                 </td>
                               </tr>
@@ -9171,7 +9364,6 @@ export default function BrowserPage({
                           }`}
                         >
                           Selection
-                          {selectedCount > 0 && <span className={countBadgeClasses}>{selectedCount}</span>}
                         </button>
                       </div>
 
