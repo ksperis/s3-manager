@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
+import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CreateUserPayload,
   UpdateUserPayload,
@@ -33,6 +33,7 @@ import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/w
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
 type UserModalTab = "general" | "associations" | "access";
+type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 
 type AccountSelection = {
   id: number;
@@ -802,6 +803,9 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalUsers, setTotalUsers] = useState(0);
+  const s3AccountsLoadStateRef = useRef<AuxiliaryLoadState>("idle");
+  const s3UsersLoadStateRef = useRef<AuxiliaryLoadState>("idle");
+  const s3ConnectionsLoadStateRef = useRef<AuxiliaryLoadState>("idle");
   const accountDbId = (account: S3AccountSummary) => account.db_id ?? Number(account.id);
   const accountOptions = useMemo(
     () =>
@@ -1098,12 +1102,16 @@ export default function UsersPage() {
   }, [filter, page, pageSize, sort.direction, sort.field]);
 
   const fetchS3Accounts = useCallback(async () => {
+    if (s3AccountsLoadStateRef.current === "loading") return;
+    s3AccountsLoadStateRef.current = "loading";
     setS3AccountsLoading(true);
     try {
       const data = await listMinimalS3Accounts();
       setS3Accounts(data);
       setS3AccountsLoaded(true);
+      s3AccountsLoadStateRef.current = "loaded";
     } catch (err) {
+      s3AccountsLoadStateRef.current = "error";
       console.error(err);
     } finally {
       setS3AccountsLoading(false);
@@ -1111,12 +1119,16 @@ export default function UsersPage() {
   }, []);
 
   const fetchS3Users = useCallback(async () => {
+    if (s3UsersLoadStateRef.current === "loading") return;
+    s3UsersLoadStateRef.current = "loading";
     setS3UsersLoading(true);
     try {
       const data = await listMinimalS3Users();
       setS3Users(data);
       setS3UsersLoaded(true);
+      s3UsersLoadStateRef.current = "loaded";
     } catch (err) {
+      s3UsersLoadStateRef.current = "error";
       console.error(err);
     } finally {
       setS3UsersLoading(false);
@@ -1124,32 +1136,57 @@ export default function UsersPage() {
   }, []);
 
   const fetchS3Connections = useCallback(async () => {
+    if (s3ConnectionsLoadStateRef.current === "loading") return;
+    s3ConnectionsLoadStateRef.current = "loading";
     setS3ConnectionsLoading(true);
     try {
       const data = await listMinimalS3Connections();
       setS3Connections(data);
       setS3ConnectionsLoaded(true);
+      s3ConnectionsLoadStateRef.current = "loaded";
     } catch (err) {
+      s3ConnectionsLoadStateRef.current = "error";
       console.error(err);
     } finally {
       setS3ConnectionsLoading(false);
     }
   }, []);
 
-  const ensureS3Accounts = useCallback(async () => {
-    if (s3AccountsLoaded || s3AccountsLoading) return;
+  const ensureS3Accounts = useCallback(async (options?: { retryOnError?: boolean }) => {
+    const loadState = s3AccountsLoadStateRef.current;
+    if (loadState === "loaded" || loadState === "loading") return;
+    if (loadState === "error" && !options?.retryOnError) return;
     await fetchS3Accounts();
-  }, [s3AccountsLoaded, s3AccountsLoading, fetchS3Accounts]);
+  }, [fetchS3Accounts]);
 
-  const ensureS3Users = useCallback(async () => {
-    if (s3UsersLoaded || s3UsersLoading) return;
+  const ensureS3Users = useCallback(async (options?: { retryOnError?: boolean }) => {
+    const loadState = s3UsersLoadStateRef.current;
+    if (loadState === "loaded" || loadState === "loading") return;
+    if (loadState === "error" && !options?.retryOnError) return;
     await fetchS3Users();
-  }, [s3UsersLoaded, s3UsersLoading, fetchS3Users]);
+  }, [fetchS3Users]);
 
-  const ensureS3Connections = useCallback(async () => {
-    if (s3ConnectionsLoaded || s3ConnectionsLoading) return;
+  const ensureS3Connections = useCallback(async (options?: { retryOnError?: boolean }) => {
+    const loadState = s3ConnectionsLoadStateRef.current;
+    if (loadState === "loaded" || loadState === "loading") return;
+    if (loadState === "error" && !options?.retryOnError) return;
     await fetchS3Connections();
-  }, [s3ConnectionsLoaded, s3ConnectionsLoading, fetchS3Connections]);
+  }, [fetchS3Connections]);
+
+  const ensureAssociationOptionsForTab = useCallback(
+    async (tab: AssociationTab, options?: { retryOnError?: boolean }) => {
+      if (tab === "accounts") {
+        await ensureS3Accounts(options);
+        return;
+      }
+      if (tab === "s3_users") {
+        await ensureS3Users(options);
+        return;
+      }
+      await ensureS3Connections(options);
+    },
+    [ensureS3Accounts, ensureS3Connections, ensureS3Users]
+  );
 
   useEffect(() => {
     fetchUsers();
@@ -1158,36 +1195,6 @@ export default function UsersPage() {
   useEffect(() => {
     ensureS3Accounts();
   }, [ensureS3Accounts]);
-
-  useEffect(() => {
-    if (showCreateModal) {
-      if (createAssociationsTab === "accounts") {
-        ensureS3Accounts();
-      } else if (createAssociationsTab === "s3_users") {
-        ensureS3Users();
-      } else {
-        ensureS3Connections();
-      }
-      return;
-    }
-    if (showEditModal) {
-      if (editAssociationsTab === "accounts") {
-        ensureS3Accounts();
-      } else if (editAssociationsTab === "s3_users") {
-        ensureS3Users();
-      } else {
-        ensureS3Connections();
-      }
-    }
-  }, [
-    showCreateModal,
-    showEditModal,
-    createAssociationsTab,
-    editAssociationsTab,
-    ensureS3Accounts,
-    ensureS3Users,
-    ensureS3Connections,
-  ]);
 
   const toggleCreateAccountSelection = (accountId: number) => {
     setCreateAccountSelections((prev) =>
@@ -1335,15 +1342,14 @@ export default function UsersPage() {
     const hasAccounts = selectedAccounts.length > 0;
     const hasS3Users = Boolean(user.s3_users && user.s3_users.length > 0);
     const hasConnections = Boolean(user.s3_connections && user.s3_connections.length > 0);
-    if (hasAccounts) {
-      setEditAssociationsTab("accounts");
-    } else if (hasS3Users) {
-      setEditAssociationsTab("s3_users");
-    } else if (hasConnections) {
-      setEditAssociationsTab("connections");
-    } else {
-      setEditAssociationsTab("accounts");
-    }
+    const initialAssociationsTab: AssociationTab = hasAccounts
+      ? "accounts"
+      : hasS3Users
+        ? "s3_users"
+        : hasConnections
+          ? "connections"
+          : "accounts";
+    setEditAssociationsTab(initialAssociationsTab);
     setShowEditAccountPanel(false);
     setShowEditS3UserPanel(false);
     setShowEditConnectionPanel(false);
@@ -1355,6 +1361,7 @@ export default function UsersPage() {
     setActionError(null);
     setActionMessage(null);
     setShowEditModal(true);
+    void ensureAssociationOptionsForTab(initialAssociationsTab, { retryOnError: true });
   };
 
   const submitEdit = async (e: FormEvent) => {
@@ -1510,6 +1517,7 @@ export default function UsersPage() {
               setCreateAssociationsTab("accounts");
               setCreateRoleHelpOpen(false);
               setShowCreateModal(true);
+              void ensureS3Accounts({ retryOnError: true });
             },
           },
         ]}
@@ -1663,10 +1671,14 @@ export default function UsersPage() {
               <AssociationsTabs
                 activeTab={createAssociationsTab}
                 onTabChange={(nextTab) => {
+                  const tabChanged = nextTab !== createAssociationsTab;
                   setCreateAssociationsTab(nextTab);
                   setShowCreateAccountPanel(false);
                   setShowCreateS3UserPanel(false);
                   setShowCreateConnectionPanel(false);
+                  if (tabChanged) {
+                    void ensureAssociationOptionsForTab(nextTab, { retryOnError: true });
+                  }
                 }}
                 maxVisibleOptions={MAX_VISIBLE_OPTIONS}
                 accounts={{
@@ -2037,10 +2049,14 @@ export default function UsersPage() {
               <AssociationsTabs
                 activeTab={editAssociationsTab}
                 onTabChange={(nextTab) => {
+                  const tabChanged = nextTab !== editAssociationsTab;
                   setEditAssociationsTab(nextTab);
                   setShowEditAccountPanel(false);
                   setShowEditS3UserPanel(false);
                   setShowEditConnectionPanel(false);
+                  if (tabChanged) {
+                    void ensureAssociationOptionsForTab(nextTab, { retryOnError: true });
+                  }
                 }}
                 maxVisibleOptions={MAX_VISIBLE_OPTIONS}
                 accounts={{

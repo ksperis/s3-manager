@@ -158,6 +158,59 @@ describe("UsersPage modal tabs", () => {
     );
   });
 
+  it("does not retry minimal account loading in a loop after an initial failure", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    listMinimalS3AccountsMock.mockRejectedValue(new Error("backend down"));
+
+    render(<UsersPage />);
+
+    await waitFor(() => {
+      expect(listMinimalS3AccountsMock).toHaveBeenCalledTimes(1);
+    });
+
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+
+    expect(listMinimalS3AccountsMock).toHaveBeenCalledTimes(1);
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("retries minimal account loading only on explicit modal and tab transitions after a failure", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    listMinimalS3AccountsMock.mockRejectedValue(new Error("backend down"));
+
+    render(<UsersPage />);
+
+    await waitFor(() => {
+      expect(listMinimalS3AccountsMock).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+
+    await waitFor(() => {
+      expect(listMinimalS3AccountsMock).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Associations" }));
+    fireEvent.click(screen.getByRole("button", { name: /S3 Users \(0\)/ }));
+
+    await waitFor(() => {
+      expect(listMinimalS3UsersMock).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Accounts \(0\)/ }));
+
+    await waitFor(() => {
+      expect(listMinimalS3AccountsMock).toHaveBeenCalledTimes(3);
+    });
+
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+
+    expect(listMinimalS3AccountsMock).toHaveBeenCalledTimes(3);
+
+    consoleErrorSpy.mockRestore();
+  });
+
   it("returns to General when required fields are missing and submit is triggered from Associations", async () => {
     render(<UsersPage />);
 
