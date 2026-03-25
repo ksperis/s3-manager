@@ -8537,7 +8537,7 @@ export default function BrowserPage({
                   </button>
                   <button
                     type="button"
-                    className={toolbarButtonClasses}
+                    className={toolbarPrimaryClasses}
                     onClick={handleToolbarDownload}
                     disabled={!toolbarCanDownload}
                   >
