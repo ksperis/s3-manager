@@ -8617,15 +8617,6 @@ export default function BrowserPage({
                   {hasToolbarStatusSection && (
                     <>
                       <p className={toolbarOverflowSectionTitleClasses}>Status</p>
-                      {isMainBrowserPath && (
-                        <div className={toolbarOverflowStatusRowClasses}>
-                          <EyeIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
-                          <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-slate-700 dark:text-slate-100">View</p>
-                            <p className="text-slate-500 dark:text-slate-400">{browserViewLabel}</p>
-                          </div>
-                        </div>
-                      )}
                       {accessBadge && (
                         <div className={toolbarOverflowStatusRowClasses} title={accessBadge.title}>
                           <span className={`mt-0.5 inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${accessBadge.className}`} />
@@ -8640,6 +8631,15 @@ export default function BrowserPage({
                               </span>
                             </div>
                             <p className="text-slate-500 dark:text-slate-400">{accessBadge.title}</p>
+                          </div>
+                        </div>
+                      )}
+                      {isMainBrowserPath && (
+                        <div className={toolbarOverflowStatusRowClasses}>
+                          <EyeIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-slate-700 dark:text-slate-100">View</p>
+                            <p className="text-slate-500 dark:text-slate-400">{browserViewLabel}</p>
                           </div>
                         </div>
                       )}
