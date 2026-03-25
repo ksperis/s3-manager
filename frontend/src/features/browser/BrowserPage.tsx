@@ -629,7 +629,7 @@ export default function BrowserPage({
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
   const [showFolders, setShowFolders] = useState(Boolean(allowFoldersPanel && defaultShowFolders));
   const [showInspector, setShowInspector] = useState(Boolean(allowInspectorPanel && defaultShowInspector));
-  const [showActionBar, setShowActionBar] = useState(() => location.pathname.replace(/\/+$/, "") !== "/browser");
+  const [showActionBar, setShowActionBar] = useState(false);
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
@@ -918,8 +918,8 @@ export default function BrowserPage({
   }, [normalizedPath]);
 
   useEffect(() => {
-    if (!isMainBrowserPath && !showActionBar) {
-      setShowActionBar(true);
+    if (!isMainBrowserPath && showActionBar) {
+      setShowActionBar(false);
     }
   }, [isMainBrowserPath, showActionBar]);
   const contextId = typeof accountIdForApi === "string" ? accountIdForApi : null;
@@ -1578,11 +1578,11 @@ export default function BrowserPage({
   }, [showActionBar]);
 
   useEffect(() => {
-    if (isMainBrowserPath) return;
+    if (!showActionBar) return;
     if (showUploadQuickMenu) {
       setShowUploadQuickMenu(false);
     }
-  }, [isMainBrowserPath, showUploadQuickMenu]);
+  }, [showActionBar, showUploadQuickMenu]);
 
   useEffect(() => {
     if (!hasCorsAction) {
@@ -7984,8 +7984,8 @@ export default function BrowserPage({
   const isCreateBucketNameValid = !createBucketNameValue || isValidS3BucketName(createBucketNameValue);
   const showFolderToggle = showPanelToggles && canUseFoldersPanel;
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
-  const isActionBarVisible = !isMainBrowserPath || showActionBar;
-  const isCompactToolbarMode = isMainBrowserPath && !showActionBar;
+  const isActionBarVisible = isMainBrowserPath && showActionBar;
+  const isCompactToolbarMode = !isActionBarVisible;
   const browserViewLabel = compactMode ? "Compact view" : "List view";
   const toolbarStatusTextClassName =
     selectedCount > 0

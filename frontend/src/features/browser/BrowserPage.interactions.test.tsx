@@ -546,11 +546,12 @@ describe("BrowserPage interactions", () => {
     renderEmbeddedPage();
     await findRowByLabel("a.txt");
 
-    expect(screen.getAllByRole("toolbar")).toHaveLength(2);
+    expect(screen.getAllByRole("toolbar")).toHaveLength(1);
     expect(within(getContextToolbar()).getByRole("button", { name: "Operations" })).toBeInTheDocument();
-    expect(within(getActionsToolbar()).getByText("No selection")).toBeInTheDocument();
+    expect(within(getContextToolbar()).getByRole("button", { name: "Upload" })).toBeInTheDocument();
+    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
 
-    await user.click(within(getActionsToolbar()).getByRole("button", { name: "More" }));
+    await user.click(within(getContextToolbar()).getByRole("button", { name: "More" }));
     const menu = await screen.findByRole("menu", { name: "More" });
 
     expect(within(menu).queryByText("Compact view")).not.toBeInTheDocument();
