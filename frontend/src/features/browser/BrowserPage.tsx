@@ -850,6 +850,7 @@ export default function BrowserPage({
   const objectsRequestSeqRef = useRef(0);
   const objectsAbortControllerRef = useRef<AbortController | null>(null);
   const objectsSearchDebounceRef = useRef<number | null>(null);
+  const objectsNavigationKeyRef = useRef<string | null>(null);
   const pathSuggestionsRequestIdRef = useRef(0);
   const objectsRefreshTimeoutRef = useRef<number | null>(null);
   const uploadRefreshTimeoutRef = useRef<number | null>(null);
@@ -2326,18 +2327,7 @@ export default function BrowserPage({
   }, [accountIdForApi]);
 
   useEffect(() => {
-    if (accountSwitchInFlight) {
-      objectsAbortControllerRef.current?.abort();
-      objectsAbortControllerRef.current = null;
-      return;
-    }
-    if (objectsSearchDebounceRef.current !== null) {
-      window.clearTimeout(objectsSearchDebounceRef.current);
-      objectsSearchDebounceRef.current = null;
-    }
-    if (!bucketName || !hasS3AccountContext) {
-      objectsAbortControllerRef.current?.abort();
-      objectsAbortControllerRef.current = null;
+    const resetObjectListingState = () => {
       setObjects([]);
       setDeletedObjects([]);
       setDeletedPrefixes([]);
@@ -2347,12 +2337,39 @@ export default function BrowserPage({
       setPrefixes([]);
       setObjectsNextToken(null);
       setObjectsIsTruncated(false);
-      setObjectsLoading(false);
+      setObjectsError(null);
       setObjectsLoadingMore(false);
+    };
+
+    if (accountSwitchInFlight) {
+      objectsAbortControllerRef.current?.abort();
+      objectsAbortControllerRef.current = null;
+      objectsNavigationKeyRef.current = null;
+      return;
+    }
+    if (objectsSearchDebounceRef.current !== null) {
+      window.clearTimeout(objectsSearchDebounceRef.current);
+      objectsSearchDebounceRef.current = null;
+    }
+    if (!bucketName || !hasS3AccountContext) {
+      objectsAbortControllerRef.current?.abort();
+      objectsAbortControllerRef.current = null;
+      objectsNavigationKeyRef.current = null;
+      resetObjectListingState();
+      setObjectsLoading(false);
+      return;
+    }
+    const navigationKey = `${String(accountIdForApi ?? "")}::${String(accessMode ?? "")}::${bucketName}::${normalizedPrefix}`;
+    const shouldLoadImmediately = objectsNavigationKeyRef.current !== navigationKey;
+    objectsNavigationKeyRef.current = navigationKey;
+    if (shouldLoadImmediately) {
+      resetObjectListingState();
+      setObjectsLoading(true);
+      void loadObjects({ prefixOverride: normalizedPrefix });
       return;
     }
     objectsSearchDebounceRef.current = window.setTimeout(() => {
-      void loadObjects({ prefixOverride: prefix });
+      void loadObjects({ prefixOverride: normalizedPrefix });
     }, BROWSER_QUERY_DEBOUNCE_MS);
     return () => {
       if (objectsSearchDebounceRef.current !== null) {
@@ -2360,7 +2377,7 @@ export default function BrowserPage({
         objectsSearchDebounceRef.current = null;
       }
     };
-  }, [accountIdForApi, accessMode, accountSwitchInFlight, bucketName, filter, hasS3AccountContext, isVersioningEnabled, prefix, searchCaseSensitive, searchExactMatch, searchRecursive, searchScope, showDeletedObjects, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [accountIdForApi, accessMode, accountSwitchInFlight, bucketName, filter, hasS3AccountContext, isVersioningEnabled, normalizedPrefix, searchCaseSensitive, searchExactMatch, searchRecursive, searchScope, showDeletedObjects, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (filter.trim()) return;

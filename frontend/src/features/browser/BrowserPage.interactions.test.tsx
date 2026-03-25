@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -587,8 +587,60 @@ describe("BrowserPage interactions", () => {
     expect(screen.getByRole("checkbox", { name: "Select c.txt" })).toBeChecked();
   });
 
-  it("keeps double-click default action for folders", async () => {
+  it("navigates into a folder on double-click without leaving the previous listing visible", async () => {
     const user = userEvent.setup();
+    let resolveDocsListing: ((value: {
+      prefix: string;
+      objects: Array<{
+        key: string;
+        size: number;
+        last_modified: string;
+        storage_class: string;
+        etag: string;
+      }>;
+      prefixes: string[];
+      is_truncated: boolean;
+      next_continuation_token: null;
+    }) => void) | null = null;
+
+    listBrowserObjectsMock.mockImplementation((_accountId: string, _bucketName: string, payload?: { prefix?: string }) => {
+      const nextPrefix = payload?.prefix ?? "";
+      if (nextPrefix === "docs/") {
+        return new Promise((resolve) => {
+          resolveDocsListing = resolve;
+        });
+      }
+      return Promise.resolve({
+        prefix: "",
+        objects: [
+          {
+            key: "a.txt",
+            size: 10,
+            last_modified: "2026-03-10T10:15:00Z",
+            storage_class: "STANDARD",
+            etag: "\"etag-a\"",
+          },
+          {
+            key: "b.txt",
+            size: 20,
+            last_modified: "2026-03-10T10:16:00Z",
+            storage_class: "STANDARD",
+            etag: "\"etag-b\"",
+          },
+          {
+            key: "c.txt",
+            size: 30,
+            last_modified: "2026-03-10T10:17:00Z",
+            storage_class: "STANDARD",
+            etag: "\"etag-c\"",
+          },
+        ],
+        prefixes: ["docs/"],
+        is_truncated: false,
+        next_continuation_token: null,
+      });
+    });
+
     renderPage();
 
     await user.dblClick(await findRowByLabel("docs"));
@@ -599,6 +651,29 @@ describe("BrowserPage interactions", () => {
         "bucket-1",
         expect.objectContaining({ prefix: "docs/" })
       );
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "a.txt" })).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Loading objects...")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveDocsListing?.({
+        prefix: "docs/",
+        objects: [
+          {
+            key: "docs/readme.txt",
+            size: 42,
+            last_modified: "2026-03-10T10:45:00Z",
+            storage_class: "STANDARD",
+            etag: "\"etag-docs\"",
+          },
+        ],
+        prefixes: [],
+        is_truncated: false,
+        next_continuation_token: null,
+      });
     });
   });
 
