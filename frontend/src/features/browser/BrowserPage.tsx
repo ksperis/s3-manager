@@ -69,6 +69,17 @@ import { useBrowserContext } from "./BrowserContext";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
+import {
+  type BrowserActionState,
+  getVisibleBrowserActions,
+  INSPECTOR_CONTEXT_ACTION_IDS,
+  INSPECTOR_SELECTION_ACTION_IDS,
+  INSPECTOR_SELECTION_BULK_ACTION_IDS,
+  resolveBrowserActions,
+  TOOLBAR_MORE_PATH_ACTION_IDS,
+  TOOLBAR_MORE_SELECTION_FULL_ACTION_IDS,
+  TOOLBAR_MORE_SELECTION_OVERFLOW_ACTION_IDS,
+} from "./browserActions";
 import { BrowserConfirmModal, BrowserCopyValueModal } from "./BrowserDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
 import BrowserOperationsModal from "./BrowserOperationsModal";
@@ -3008,6 +3019,70 @@ export default function BrowserPage({
     const trimmed = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
     return `${bucketName}/${trimmed}`;
   }, [bucketName, prefix]);
+  const copyUrlDisabledReason = "Copy URL is disabled in SSE-C mode.";
+  const pathActionStates = useMemo(
+    () =>
+      resolveBrowserActions({
+        scope: "path",
+        bucketName,
+        hasS3AccountContext,
+        versioningEnabled: isVersioningEnabled,
+        canPaste,
+        clipboardMode: clipboard?.mode ?? null,
+        currentPath,
+        showFolderItems,
+        showDeletedObjects,
+      }),
+    [bucketName, canPaste, clipboard?.mode, currentPath, hasS3AccountContext, isVersioningEnabled, showDeletedObjects, showFolderItems]
+  );
+  const selectionActionStates = useMemo(
+    () =>
+      resolveBrowserActions({
+        scope: "selection",
+        items: selectionItems,
+        bucketName,
+        hasS3AccountContext,
+        versioningEnabled: isVersioningEnabled,
+        canPaste,
+        clipboardMode: clipboard?.mode ?? null,
+        copyUrlDisabled: sseActive,
+        copyUrlDisabledReason,
+      }),
+    [
+      bucketName,
+      canPaste,
+      clipboard?.mode,
+      copyUrlDisabledReason,
+      hasS3AccountContext,
+      isVersioningEnabled,
+      selectionItems,
+      sseActive,
+    ]
+  );
+  const toolbarMorePathActions = useMemo(
+    () => getVisibleBrowserActions(pathActionStates, TOOLBAR_MORE_PATH_ACTION_IDS),
+    [pathActionStates]
+  );
+  const toolbarMoreSelectionFullActions = useMemo(
+    () => getVisibleBrowserActions(selectionActionStates, TOOLBAR_MORE_SELECTION_FULL_ACTION_IDS),
+    [selectionActionStates]
+  );
+  const toolbarMoreSelectionOverflowActions = useMemo(
+    () => getVisibleBrowserActions(selectionActionStates, TOOLBAR_MORE_SELECTION_OVERFLOW_ACTION_IDS),
+    [selectionActionStates]
+  );
+  const inspectorContextActions = useMemo(
+    () => getVisibleBrowserActions(pathActionStates, INSPECTOR_CONTEXT_ACTION_IDS),
+    [pathActionStates]
+  );
+  const inspectorSelectionActions = useMemo(
+    () => getVisibleBrowserActions(selectionActionStates, INSPECTOR_SELECTION_ACTION_IDS),
+    [selectionActionStates]
+  );
+  const inspectorSelectionBulkActions = useMemo(
+    () => getVisibleBrowserActions(selectionActionStates, INSPECTOR_SELECTION_BULK_ACTION_IDS),
+    [selectionActionStates]
+  );
   const inspectedPath = inspectedItem ? `${bucketName}/${inspectedItem.key}` : currentPath;
 
   const openItemPrimaryAction = (item: BrowserItem) => {
@@ -7297,6 +7372,93 @@ export default function BrowserPage({
     }
   };
 
+  const runPathAction = (actionId: string) => {
+    switch (actionId) {
+      case "uploadFiles":
+        fileInputRef.current?.click();
+        return;
+      case "uploadFolder":
+        folderInputRef.current?.click();
+        return;
+      case "newFolder":
+        handleNewFolder();
+        return;
+      case "paste":
+        void handlePasteItems();
+        return;
+      case "versions":
+        setShowPrefixVersions(true);
+        return;
+      case "restoreToDate":
+        openBulkRestoreModal([]);
+        return;
+      case "cleanOldVersions":
+        openCleanupModal();
+        return;
+      case "copyPath":
+        void handleCopyPath(currentPath);
+        return;
+      default:
+        return;
+    }
+  };
+
+  const runSelectionAction = (actionId: string) => {
+    switch (actionId) {
+      case "download":
+        if (selectionActionStates.download.label === "Download folder" && selectionPrimary) {
+          handleDownloadFolder(selectionPrimary);
+          return;
+        }
+        void handleDownloadItems(selectionFiles);
+        return;
+      case "open":
+        if (selectionPrimary) {
+          handleOpenItem(selectionPrimary);
+        }
+        return;
+      case "copyUrl":
+        void handleCopyUrl(selectionPrimary);
+        return;
+      case "copy":
+        handleCopyItems(selectionItems);
+        return;
+      case "cut":
+        handleCutItems(selectionItems);
+        return;
+      case "bulkAttributes":
+        openBulkAttributesModal(selectionItems);
+        return;
+      case "advanced":
+        if (selectionPrimary) {
+          openAdvancedForItem(selectionPrimary);
+        }
+        return;
+      case "restoreToDate":
+        openBulkRestoreModal(selectionItems);
+        return;
+      case "delete":
+        void handleDeleteItems(selectionItems);
+        return;
+      default:
+        return;
+    }
+  };
+
+  const resolveItemActionStates = (item: BrowserItem) =>
+    resolveBrowserActions({
+      scope: "item",
+      items: [item],
+      bucketName,
+      hasS3AccountContext,
+      versioningEnabled: isVersioningEnabled,
+      canPaste,
+      clipboardMode: clipboard?.mode ?? null,
+      copyUrlDisabled: sseActive,
+      copyUrlDisabledReason,
+      inspectorAvailable: canUseInspectorPanel,
+    });
+
   const activeOperations = useMemo(() => operations.filter((op) => !op.completedAt), [operations]);
   const uploadGroups = useMemo(() => {
     const groups = new Map<
@@ -7504,7 +7666,6 @@ export default function BrowserPage({
       ),
     [operations]
   );
-  const pasteLabel = clipboard?.mode === "move" ? "Paste (Move)" : "Paste";
   const totalOperationsCount =
     activeOperations.length + uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount;
   const hasPendingOperations = totalOperationsCount > 0;
@@ -7996,20 +8157,19 @@ export default function BrowserPage({
   const toolbarOverflowSectionTitleClasses =
     "px-2.5 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-400";
   const toolbarSelectionSummary = selectedCount > 0 ? `${selectedCount} selected` : "No selection";
-  const toolbarCanUploadFiles = Boolean(bucketName);
-  const toolbarCanUploadFolder = Boolean(bucketName && hasS3AccountContext);
-  const toolbarCanCreateFolder = Boolean(bucketName && hasS3AccountContext);
-  const toolbarCanDownload = Boolean(
-    bucketName && hasS3AccountContext && (canSelectionDownloadFolder || canSelectionDownloadFiles)
-  );
-  const toolbarCanOpen = Boolean(selectionPrimary && canSelectionOpen);
-  const toolbarCanCopy = canSelectionCopyItems;
-  const toolbarCanDelete = Boolean(hasS3AccountContext && canSelectionDelete);
-  const showToolbarCopyUrlAction = isActionBarVisible && Boolean(selectionIsSingle && selectionPrimary);
-  const showToolbarCutAction = isActionBarVisible && canSelectionActions;
+  const toolbarCanUploadFiles = pathActionStates.uploadFiles.enabled;
+  const toolbarCanUploadFolder = pathActionStates.uploadFolder.enabled;
+  const toolbarCanCreateFolder = pathActionStates.newFolder.enabled;
+  const toolbarCanDownload = selectionActionStates.download.visible && selectionActionStates.download.enabled;
+  const toolbarCanOpen = selectionActionStates.open.visible && selectionActionStates.open.enabled;
+  const toolbarCanCopy = selectionActionStates.copy.visible && selectionActionStates.copy.enabled;
+  const toolbarCanDelete = selectionActionStates.delete.visible && selectionActionStates.delete.enabled;
+  const hasToolbarPathActions = !canSelectionActions && toolbarMorePathActions.length > 0;
+  const toolbarSelectionActions = isActionBarVisible ? toolbarMoreSelectionOverflowActions : toolbarMoreSelectionFullActions;
+  const hasToolbarSelectionActions = canSelectionActions && toolbarSelectionActions.length > 0;
   const hasToolbarStatusSection = isMainBrowserPath || Boolean(accessBadge);
   const hasToolbarLayoutSection = showFolderToggle || showInspectorToggle || showActionBarToggle;
-  const hasToolbarSecondaryActionsSection = showToolbarCopyUrlAction || showToolbarCutAction || showSseControls;
+  const hasToolbarSecondaryActionsSection = hasToolbarPathActions || hasToolbarSelectionActions || showSseControls;
   const hasToolbarMoreMenu =
     hasToolbarStatusSection || hasToolbarLayoutSection || hasToolbarSecondaryActionsSection;
   const closeToolbarMoreMenu = () => {
@@ -8052,6 +8212,59 @@ export default function BrowserPage({
     closeUploadQuickMenu();
     folderInputRef.current?.click();
   };
+  const browserActionIconById: Partial<Record<BrowserActionState["id"], ReactNode>> = {
+    uploadFiles: <UploadIcon className="h-3.5 w-3.5" />,
+    uploadFolder: <FolderIcon className="h-3.5 w-3.5" />,
+    newFolder: <FolderPlusIcon className="h-3.5 w-3.5" />,
+    paste: <PasteIcon className="h-3.5 w-3.5" />,
+    versions: <ListIcon className="h-3.5 w-3.5" />,
+    restoreToDate: <HistoryIcon className="h-3.5 w-3.5" />,
+    cleanOldVersions: <TrashIcon className="h-3.5 w-3.5" />,
+    copyPath: <CopyIcon className="h-3.5 w-3.5" />,
+    details: <InfoIcon className="h-3.5 w-3.5" />,
+    open: <OpenIcon className="h-3.5 w-3.5" />,
+    preview: <EyeIcon className="h-3.5 w-3.5" />,
+    download: <DownloadIcon className="h-3.5 w-3.5" />,
+    copyUrl: <LinkIcon className="h-3.5 w-3.5" />,
+    copy: <CopyIcon className="h-3.5 w-3.5" />,
+    cut: <CutIcon className="h-3.5 w-3.5" />,
+    bulkAttributes: <SlidersIcon className="h-3.5 w-3.5" />,
+    advanced: <SettingsIcon className="h-3.5 w-3.5" />,
+    delete: <TrashIcon className="h-3.5 w-3.5" />,
+  };
+  const renderToolbarMoreActionButton = (action: BrowserActionState, onClick: () => void) => (
+    <button
+      key={action.id}
+      type="button"
+      role="menuitem"
+      className={`${contextMenuItemClasses} ${!action.enabled ? contextMenuItemDisabledClasses : ""}`}
+      onClick={() => {
+        runToolbarMoreAction(onClick);
+      }}
+      disabled={!action.enabled}
+      title={action.disabledReason}
+    >
+      {browserActionIconById[action.id]}
+      {action.label}
+    </button>
+  );
+  const renderInspectorActionButton = (
+    action: BrowserActionState,
+    onClick: () => void,
+    options?: { danger?: boolean }
+  ) => (
+    <button
+      key={action.id}
+      type="button"
+      className={options?.danger ? bulkDangerClasses : bulkActionClasses}
+      onClick={onClick}
+      disabled={!action.enabled}
+      title={action.disabledReason}
+    >
+      {browserActionIconById[action.id]}
+      {action.label}
+    </button>
+  );
 
   useEffect(() => {
     if (!hasToolbarMoreMenu && showToolbarMoreMenu) {
@@ -8680,68 +8893,61 @@ export default function BrowserPage({
                       {(hasToolbarStatusSection || hasToolbarLayoutSection) && (
                         <div className={contextMenuSeparatorClasses} />
                       )}
-                      <p className={toolbarOverflowSectionTitleClasses}>More Actions</p>
-                      {showToolbarCopyUrlAction && selectionPrimary && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className={`${contextMenuItemClasses} ${
-                            !canSelectionCopyUrl || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""
-                          }`}
-                          onClick={() => {
-                            runToolbarMoreAction(() => handleCopyUrl(selectionPrimary));
-                          }}
-                          disabled={!canSelectionCopyUrl || !hasS3AccountContext}
-                          title={!canSelectionCopyUrl && sseActive ? "Copy URL is disabled in SSE-C mode." : undefined}
-                        >
-                          <LinkIcon className="h-3.5 w-3.5" />
-                          Copy URL
-                        </button>
+                      {hasToolbarPathActions && (
+                        <>
+                          <p className={toolbarOverflowSectionTitleClasses}>Current path</p>
+                          {toolbarMorePathActions.map((action) =>
+                            renderToolbarMoreActionButton(action, () => runPathAction(action.id))
+                          )}
+                        </>
                       )}
-                      {showToolbarCutAction && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className={`${contextMenuItemClasses} ${!canSelectionCutItems ? contextMenuItemDisabledClasses : ""}`}
-                          onClick={() => {
-                            runToolbarMoreAction(() => handleCutItems(selectionItems));
-                          }}
-                          disabled={!canSelectionCutItems}
-                        >
-                          <CutIcon className="h-3.5 w-3.5" />
-                          Cut
-                        </button>
+                      {hasToolbarSelectionActions && (
+                        <>
+                          {hasToolbarPathActions && <div className={contextMenuSeparatorClasses} />}
+                          <p className={toolbarOverflowSectionTitleClasses}>
+                            {isActionBarVisible ? "Selection overflow" : "Selection actions"}
+                          </p>
+                          {toolbarSelectionActions.map((action) =>
+                            renderToolbarMoreActionButton(action, () => runSelectionAction(action.id))
+                          )}
+                        </>
                       )}
                       {showSseControls && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className={`${contextMenuItemClasses} ${
-                            !bucketName || !hasS3AccountContext || !sseFeatureEnabled ? contextMenuItemDisabledClasses : ""
-                          }`}
-                          onClick={() => {
-                            runToolbarMoreAction(openSseCustomerModal);
-                          }}
-                          disabled={!bucketName || !hasS3AccountContext || !sseFeatureEnabled}
-                          title={sseActive ? "SSE-C enabled for this bucket." : "Configure SSE-C key for this bucket."}
-                        >
-                          <SettingsIcon className="h-3.5 w-3.5" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block">SSE-C</span>
-                            <span className="block text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500">
-                              {sseActive ? "Enabled for this bucket" : "Configure customer key"}
-                            </span>
-                          </span>
-                          <span
-                            className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                              sseActive
-                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100"
-                                : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
+                        <>
+                          {(hasToolbarPathActions || hasToolbarSelectionActions) && (
+                            <div className={contextMenuSeparatorClasses} />
+                          )}
+                          <p className={toolbarOverflowSectionTitleClasses}>Security</p>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className={`${contextMenuItemClasses} ${
+                              !bucketName || !hasS3AccountContext || !sseFeatureEnabled ? contextMenuItemDisabledClasses : ""
                             }`}
+                            onClick={() => {
+                              runToolbarMoreAction(openSseCustomerModal);
+                            }}
+                            disabled={!bucketName || !hasS3AccountContext || !sseFeatureEnabled}
+                            title={sseActive ? "SSE-C enabled for this bucket." : "Configure SSE-C key for this bucket."}
                           >
-                            {sseActive ? "On" : "Off"}
-                          </span>
-                        </button>
+                            <SettingsIcon className="h-3.5 w-3.5" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block">SSE-C</span>
+                              <span className="block text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500">
+                                {sseActive ? "Enabled for this bucket" : "Configure customer key"}
+                              </span>
+                            </span>
+                            <span
+                              className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                sseActive
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100"
+                                  : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
+                              }`}
+                            >
+                              {sseActive ? "On" : "Off"}
+                            </span>
+                          </button>
+                        </>
                       )}
                     </>
                   )}
@@ -9128,6 +9334,7 @@ export default function BrowserPage({
                               const isSelected = selectedSet.has(item.id);
                               const isActiveRow = activeRowId === item.id;
                               const isDeleted = Boolean(item.isDeleted);
+                              const itemActionStates = resolveItemActionStates(item);
                               return (
                               <tr
                                 key={item.id}
@@ -9248,6 +9455,7 @@ export default function BrowserPage({
                                         aria-label="Open"
                                         title="Open"
                                         onClick={() => handleOpenItem(item)}
+                                        disabled={!itemActionStates.open.enabled}
                                       >
                                         <OpenIcon />
                                       </button>
@@ -9259,6 +9467,7 @@ export default function BrowserPage({
                                         aria-label="Preview"
                                         title="Preview"
                                         onClick={() => handlePreviewItem(item)}
+                                        disabled={!itemActionStates.preview.enabled}
                                       >
                                         <EyeIcon />
                                       </button>
@@ -9270,27 +9479,28 @@ export default function BrowserPage({
                                         aria-label="Versions"
                                         title="Versions"
                                         onClick={() => openObjectVersionsModal(item)}
+                                        disabled={!itemActionStates.versions.enabled}
                                       >
                                         <HistoryIcon />
                                       </button>
                                     )}
                                     <button
                                       type="button"
-                                      className={`${rowActionButtonClasses} ${isDeleted ? "opacity-50" : ""}`}
+                                      className={`${rowActionButtonClasses} ${!itemActionStates.download.enabled ? "opacity-50" : ""}`}
                                       aria-label="Download"
-                                      title={isDeleted ? "Restore from versions before download" : "Download"}
+                                      title={!itemActionStates.download.enabled ? "Restore from versions before download" : "Download"}
                                       onClick={() => handleDownloadTarget(item)}
-                                      disabled={isDeleted}
+                                      disabled={!itemActionStates.download.enabled}
                                     >
                                       <DownloadIcon />
                                     </button>
                                     <button
                                       type="button"
-                                      className={`${rowActionDangerButtonClasses} ${isDeleted ? "opacity-50" : ""}`}
+                                      className={`${rowActionDangerButtonClasses} ${!itemActionStates.delete.enabled ? "opacity-50" : ""}`}
                                       aria-label="Delete"
-                                      title={isDeleted ? "Delete marker entries are managed in versions." : "Delete"}
+                                      title={!itemActionStates.delete.enabled ? "Delete marker entries are managed in versions." : "Delete"}
                                       onClick={() => handleDeleteItems([item])}
-                                      disabled={isDeleted}
+                                      disabled={!itemActionStates.delete.enabled}
                                     >
                                       <TrashIcon />
                                     </button>
@@ -9402,77 +9612,9 @@ export default function BrowserPage({
                               <div className={inspectorSectionCardClasses}>
                                 <p className={inspectorSectionTitleClasses}>Actions</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={() => {
-                                      fileInputRef.current?.click();
-                                    }}
-                                    disabled={!bucketName || !hasS3AccountContext}
-                                  >
-                                    <UploadIcon className="h-3.5 w-3.5" />
-                                    Upload files
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={() => {
-                                      folderInputRef.current?.click();
-                                    }}
-                                    disabled={!bucketName || !hasS3AccountContext}
-                                  >
-                                    <FolderIcon className="h-3.5 w-3.5" />
-                                    Upload folder
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={handleNewFolder}
-                                    disabled={!bucketName || !hasS3AccountContext}
-                                  >
-                                    <FolderPlusIcon className="h-3.5 w-3.5" />
-                                    New folder
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={handlePasteItems}
-                                    disabled={!canPaste}
-                                  >
-                                    <PasteIcon className="h-3.5 w-3.5" />
-                                    {pasteLabel}
-                                  </button>
-                                  {isVersioningEnabled && (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className={bulkActionClasses}
-                                        onClick={() => setShowPrefixVersions(true)}
-                                        disabled={!bucketName || !hasS3AccountContext}
-                                      >
-                                        <ListIcon className="h-3.5 w-3.5" />
-                                        Versions
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className={bulkActionClasses}
-                                        onClick={openCleanupModal}
-                                        disabled={!bucketName || !hasS3AccountContext}
-                                      >
-                                        <TrashIcon className="h-3.5 w-3.5" />
-                                        Clean old versions
-                                      </button>
-                                    </>
+                                  {inspectorContextActions.map((action) =>
+                                    renderInspectorActionButton(action, () => runPathAction(action.id))
                                   )}
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={() => handleCopyPath(currentPath)}
-                                    disabled={!currentPath}
-                                  >
-                                    <CopyIcon className="h-3.5 w-3.5" />
-                                    Copy path
-                                  </button>
                                 </div>
                               </div>
                               <div className={inspectorSectionCardClasses}>
@@ -9785,120 +9927,19 @@ export default function BrowserPage({
                               <div className={inspectorSectionCardClasses}>
                                 <p className={inspectorSectionTitleClasses}>Actions</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
-                                  {canSelectionDownloadFolder && selectionPrimary && (
-                                    <button
-                                      type="button"
-                                      className={bulkActionClasses}
-                                      onClick={() => handleDownloadFolder(selectionPrimary)}
-                                      disabled={!bucketName || !hasS3AccountContext}
-                                    >
-                                      <DownloadIcon className="h-3.5 w-3.5" />
-                                      Download folder
-                                    </button>
-                                  )}
-                                  {!canSelectionDownloadFolder && canSelectionDownloadFiles && (
-                                    <button
-                                      type="button"
-                                      className={bulkActionClasses}
-                                      onClick={() => handleDownloadItems(selectionFiles)}
-                                      disabled={!bucketName || !hasS3AccountContext}
-                                    >
-                                      <DownloadIcon className="h-3.5 w-3.5" />
-                                      Download
-                                    </button>
-                                  )}
-                                  {canSelectionOpen && selectionPrimary && (
-                                    <button
-                                      type="button"
-                                      className={bulkActionClasses}
-                                      onClick={() => handleOpenItem(selectionPrimary)}
-                                    >
-                                      <OpenIcon className="h-3.5 w-3.5" />
-                                      Open
-                                    </button>
-                                  )}
-                                  {canSelectionCopyUrl && selectionPrimary && (
-                                    <button
-                                      type="button"
-                                      className={bulkActionClasses}
-                                      onClick={() => handleCopyUrl(selectionPrimary)}
-                                      disabled={!hasS3AccountContext}
-                                    >
-                                      <LinkIcon className="h-3.5 w-3.5" />
-                                      Copy URL
-                                    </button>
-                                  )}
-                                  {selectionIsSingle && selectionPrimary && (
-                                    <button
-                                      type="button"
-                                      className={bulkActionClasses}
-                                      onClick={() => handleCopyPath(`${bucketName}/${selectionPrimary.key}`)}
-                                    >
-                                      <CopyIcon className="h-3.5 w-3.5" />
-                                      Copy path
-                                    </button>
-                                  )}
-                                  {canSelectionAdvanced && (
-                                    <button
-                                      type="button"
-                                      className={bulkActionClasses}
-                                      onClick={() => setShowAdvancedModal(true)}
-                                    >
-                                      <SettingsIcon className="h-3.5 w-3.5" />
-                                      Advanced
-                                    </button>
+                                  {inspectorSelectionActions.map((action) =>
+                                    renderInspectorActionButton(action, () => runSelectionAction(action.id))
                                   )}
                                 </div>
                               </div>
                               <div className={inspectorSectionCardClasses}>
                                 <p className={inspectorSectionTitleClasses}>Bulk actions</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={() => handleCopyItems(selectionItems)}
-                                    disabled={!canSelectionCopyItems}
-                                  >
-                                    <CopyIcon className="h-3.5 w-3.5" />
-                                    Copy
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={() => handleCutItems(selectionItems)}
-                                    disabled={!canSelectionCutItems}
-                                  >
-                                    <CutIcon className="h-3.5 w-3.5" />
-                                    Cut
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={() => openBulkAttributesModal(selectionItems)}
-                                    disabled={!canSelectionBulkAttributes}
-                                  >
-                                    <SlidersIcon className="h-3.5 w-3.5" />
-                                    Bulk attributes
-                                  </button>
-                                  {isVersioningEnabled && (
-                                    <button
-                                      type="button"
-                                      className={bulkActionClasses}
-                                      onClick={() => openBulkRestoreModal(selectionItems)}
-                                    >
-                                      <HistoryIcon className="h-3.5 w-3.5" />
-                                      Restore to date
-                                    </button>
+                                  {inspectorSelectionBulkActions.map((action) =>
+                                    renderInspectorActionButton(action, () => runSelectionAction(action.id), {
+                                      danger: action.id === "delete",
+                                    })
                                   )}
-                                  <button
-                                    type="button"
-                                    className={bulkDangerClasses}
-                                    onClick={() => handleDeleteItems(selectionItems)}
-                                    disabled={!hasS3AccountContext || !canSelectionDelete}
-                                  >
-                                    <TrashIcon className="h-3.5 w-3.5" />
-                                    Delete
-                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -10091,6 +10132,7 @@ export default function BrowserPage({
           contextMenu={contextMenu}
           contextMenuRef={contextMenuRef}
           bucketName={bucketName}
+          currentPath={currentPath}
           hasS3AccountContext={hasS3AccountContext}
           versioningEnabled={isVersioningEnabled}
           showFolderItems={showFolderItems}
@@ -10098,7 +10140,7 @@ export default function BrowserPage({
           allowInspectorPanel={canUseInspectorPanel}
           canPaste={canPaste}
           copyUrlDisabled={sseActive}
-          copyUrlDisabledReason="Copy URL is disabled in SSE-C mode."
+          copyUrlDisabledReason={copyUrlDisabledReason}
           clipboard={clipboard}
           fileInputRef={fileInputRef}
           folderInputRef={folderInputRef}
@@ -10110,6 +10152,9 @@ export default function BrowserPage({
           onDownloadTarget={handleDownloadTarget}
           onPreviewItem={handlePreviewItem}
           onCopyUrl={handleCopyUrl}
+          onCopyPath={(path) => {
+            void handleCopyPath(path);
+          }}
           onCopyItems={handleCopyItems}
           onCutItems={handleCutItems}
           onOpenBulkAttributes={openBulkAttributesModal}

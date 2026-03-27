@@ -454,6 +454,9 @@ describe("BrowserPage interactions", () => {
     const menu = await openContextMoreMenu(user);
     expect(within(menu).getByText("Compact view")).toBeInTheDocument();
     expect(within(menu).getByText("Transfers")).toBeInTheDocument();
+    expect(within(menu).getByText("Current path")).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Paste" })).toBeDisabled();
+    expect(within(menu).getByRole("menuitem", { name: "Copy path" })).toBeInTheDocument();
     expect(within(menu).getByRole("menuitemcheckbox", { name: /Folders panel/i })).toBeInTheDocument();
     expect(within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i })).toBeInTheDocument();
     expect(within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i })).toHaveAttribute("aria-checked", "false");
@@ -488,6 +491,8 @@ describe("BrowserPage interactions", () => {
 
     expect(within(menu).getByRole("menuitem", { name: "Copy URL" })).toBeInTheDocument();
     expect(within(menu).getByRole("menuitem", { name: "Cut" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Bulk attributes" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Advanced" })).toBeInTheDocument();
   });
 
   it("keeps a single folder selection downloadable with a stable toolbar label", async () => {
@@ -518,7 +523,7 @@ describe("BrowserPage interactions", () => {
     });
   });
 
-  it("keeps selection actions out of the compact toolbar and available from the selection context menu", async () => {
+  it("uses More as the non-context fallback for selection actions in compact mode", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -532,6 +537,17 @@ describe("BrowserPage interactions", () => {
     expect(within(contextToolbar).queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
     expect(within(contextToolbar).queryByRole("button", { name: "Copy" })).not.toBeInTheDocument();
     expect(within(contextToolbar).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+
+    await user.click(within(contextToolbar).getByRole("button", { name: "More" }));
+    const moreMenu = await screen.findByRole("menu", { name: "More" });
+
+    expect(within(moreMenu).getByText("Selection actions")).toBeInTheDocument();
+    expect(within(moreMenu).getByRole("menuitem", { name: "Download" })).toBeInTheDocument();
+    expect(within(moreMenu).getByRole("menuitem", { name: "Copy" })).toBeInTheDocument();
+    expect(within(moreMenu).getByRole("menuitem", { name: "Cut" })).toBeInTheDocument();
+    expect(within(moreMenu).getByRole("menuitem", { name: "Bulk attributes" })).toBeInTheDocument();
+    expect(within(moreMenu).getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+    await user.click(document.body);
 
     fireEvent.contextMenu(rowB);
     const menu = await screen.findByRole("menu");
@@ -555,6 +571,9 @@ describe("BrowserPage interactions", () => {
     const menu = await screen.findByRole("menu", { name: "More" });
 
     expect(within(menu).queryByText("Compact view")).not.toBeInTheDocument();
+    expect(within(menu).getByText("Current path")).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Copy path" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Paste" })).toBeDisabled();
     expect(within(menu).queryByRole("menuitemcheckbox", { name: /Folders panel/i })).not.toBeInTheDocument();
     expect(within(menu).queryByRole("menuitemcheckbox", { name: /Inspector panel/i })).not.toBeInTheDocument();
     expect(within(menu).queryByRole("menuitemcheckbox", { name: /Action bar/i })).not.toBeInTheDocument();
@@ -770,6 +789,39 @@ describe("BrowserPage interactions", () => {
     await user.click(selectionTab);
 
     expect(within(screen.getByRole("tabpanel", { name: "Selection" })).getByText("1 selected")).toBeInTheDocument();
+  });
+
+  it("aligns inspector context actions with path actions including restore and copy path", async () => {
+    const user = userEvent.setup();
+    getBucketVersioningMock.mockResolvedValue({ enabled: true, status: "Enabled" });
+    renderPage({ defaultShowInspector: true });
+
+    await findRowByLabel("a.txt");
+    await user.click(screen.getByRole("tab", { name: "Context" }));
+
+    const panel = screen.getByRole("tabpanel", { name: "Context" });
+    expect(within(panel).getByRole("button", { name: "Upload files" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Upload folder" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "New folder" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Paste" })).toBeDisabled();
+    expect(within(panel).getByRole("button", { name: "Versions" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Restore to date" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Clean old versions" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Copy path" })).toBeInTheDocument();
+  });
+
+  it("removes selection-only copy path from inspector to match More and context menu rules", async () => {
+    const user = userEvent.setup();
+    renderPage({ defaultShowInspector: true });
+
+    await user.click(await findRowByLabel("a.txt"));
+    await user.click(screen.getByRole("tab", { name: "Selection" }));
+
+    const panel = screen.getByRole("tabpanel", { name: "Selection" });
+    expect(within(panel).getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Copy URL" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "Copy path" })).not.toBeInTheDocument();
   });
 
   it("updates Details on simple row click when Details tab is active", async () => {

@@ -28,7 +28,14 @@ import {
   TrashIcon,
   UploadIcon,
 } from "./browserIcons";
-import { getSelectionInfo } from "./browserUtils";
+import {
+  CONTEXT_MENU_ITEM_ACTION_IDS,
+  CONTEXT_MENU_PATH_ACTION_IDS,
+  CONTEXT_MENU_PATH_LAYOUT_ACTION_IDS,
+  CONTEXT_MENU_SELECTION_ACTION_IDS,
+  getVisibleBrowserActions,
+  resolveBrowserActions,
+} from "./browserActions";
 import type { BrowserItem, ClipboardState, ContextMenuState } from "./browserTypes";
 
 type HeaderConfigColumnOption = {
@@ -40,6 +47,7 @@ type BrowserContextMenuProps = {
   contextMenu: ContextMenuState | null;
   contextMenuRef: RefObject<HTMLDivElement>;
   bucketName: string;
+  currentPath: string;
   hasS3AccountContext: boolean;
   versioningEnabled: boolean;
   showFolderItems: boolean;
@@ -59,6 +67,7 @@ type BrowserContextMenuProps = {
   onDownloadTarget: (item: BrowserItem) => void;
   onPreviewItem: (item: BrowserItem) => void;
   onCopyUrl: (item: BrowserItem | null) => void;
+  onCopyPath: (path: string) => void;
   onCopyItems: (items: BrowserItem[]) => void;
   onCutItems: (items: BrowserItem[]) => void;
   onOpenBulkAttributes: (items: BrowserItem[]) => void;
@@ -85,6 +94,7 @@ export default function BrowserContextMenu({
   contextMenu,
   contextMenuRef,
   bucketName,
+  currentPath,
   hasS3AccountContext,
   versioningEnabled,
   showFolderItems,
@@ -104,6 +114,7 @@ export default function BrowserContextMenu({
   onDownloadTarget,
   onPreviewItem,
   onCopyUrl,
+  onCopyPath,
   onCopyItems,
   onCutItems,
   onOpenBulkAttributes,
@@ -128,11 +139,226 @@ export default function BrowserContextMenu({
   if (!contextMenu) return null;
 
   const contextItem = contextMenu.kind === "item" ? contextMenu.item ?? null : null;
-  const contextSelectionInfo = contextMenu.kind === "selection"
-    ? getSelectionInfo(contextMenu.items ?? [])
+  const pathActionStates = resolveBrowserActions({
+    scope: "path",
+    bucketName,
+    hasS3AccountContext,
+    versioningEnabled,
+    canPaste,
+    clipboardMode: clipboard?.mode ?? null,
+    currentPath,
+    showFolderItems,
+    showDeletedObjects,
+  });
+  const itemActionStates = contextItem
+    ? resolveBrowserActions({
+      scope: "item",
+      items: [contextItem],
+      bucketName,
+      hasS3AccountContext,
+      versioningEnabled,
+      canPaste,
+      clipboardMode: clipboard?.mode ?? null,
+      copyUrlDisabled,
+      copyUrlDisabledReason,
+      inspectorAvailable: allowInspectorPanel,
+    })
     : null;
-  const contextItemDeleted = Boolean(contextItem?.isDeleted);
-  const pasteLabel = clipboard?.mode === "move" ? "Paste (Move)" : "Paste";
+  const selectionActionStates = contextMenu.kind === "selection"
+    ? resolveBrowserActions({
+      scope: "selection",
+      items: contextMenu.items ?? [],
+      bucketName,
+      hasS3AccountContext,
+      versioningEnabled,
+      canPaste,
+      clipboardMode: clipboard?.mode ?? null,
+      copyUrlDisabled,
+      copyUrlDisabledReason,
+    })
+    : null;
+  const visiblePathActions = getVisibleBrowserActions(pathActionStates, CONTEXT_MENU_PATH_ACTION_IDS);
+  const visiblePathLayoutActions = getVisibleBrowserActions(pathActionStates, CONTEXT_MENU_PATH_LAYOUT_ACTION_IDS);
+  const visibleItemActions = itemActionStates ? getVisibleBrowserActions(itemActionStates, CONTEXT_MENU_ITEM_ACTION_IDS) : [];
+  const visibleSelectionActions = selectionActionStates
+    ? getVisibleBrowserActions(selectionActionStates, CONTEXT_MENU_SELECTION_ACTION_IDS)
+    : [];
+
+  const runPathAction = (actionId: string) => {
+    onClose();
+    switch (actionId) {
+      case "newFolder":
+        onNewFolder();
+        return;
+      case "uploadFiles":
+        fileInputRef.current?.click();
+        return;
+      case "uploadFolder":
+        folderInputRef.current?.click();
+        return;
+      case "paste":
+        onPasteItems();
+        return;
+      case "versions":
+        onOpenPrefixVersions();
+        return;
+      case "restoreToDate":
+        onOpenBulkRestore([]);
+        return;
+      case "cleanOldVersions":
+        onOpenCleanupVersions();
+        return;
+      case "copyPath":
+        onCopyPath(pathActionStates.copyPath.enabled ? currentPath : "");
+        return;
+      case "toggleShowFolders":
+        onToggleShowFolders();
+        return;
+      case "toggleShowDeleted":
+        onToggleShowDeleted();
+        return;
+      default:
+        return;
+    }
+  };
+
+  const runItemAction = (actionId: string) => {
+    if (!contextItem) return;
+    onClose();
+    switch (actionId) {
+      case "details":
+        onOpenDetails(contextItem);
+        return;
+      case "versions":
+        onOpenObjectVersions(contextItem);
+        return;
+      case "open":
+        onOpenItem(contextItem);
+        return;
+      case "preview":
+        onPreviewItem(contextItem);
+        return;
+      case "download":
+        onDownloadTarget(contextItem);
+        return;
+      case "copyUrl":
+        onCopyUrl(contextItem);
+        return;
+      case "copy":
+        onCopyItems([contextItem]);
+        return;
+      case "cut":
+        onCutItems([contextItem]);
+        return;
+      case "bulkAttributes":
+        onOpenBulkAttributes([contextItem]);
+        return;
+      case "restoreToDate":
+        onOpenBulkRestore([contextItem]);
+        return;
+      case "advanced":
+        onOpenAdvanced(contextItem);
+        return;
+      case "delete":
+        onDeleteItems([contextItem]);
+        return;
+      default:
+        return;
+    }
+  };
+
+  const runSelectionAction = (actionId: string) => {
+    const selectionItems = contextMenu.items ?? [];
+    if (!selectionActionStates) return;
+    onClose();
+    switch (actionId) {
+      case "download": {
+        const info = selectionItems;
+        const summary = selectionActionStates.download.label === "Download folder"
+          ? selectionItems[0] ?? null
+          : null;
+        if (summary) {
+          onDownloadFolder(summary);
+          return;
+        }
+        onDownloadItems(info.filter((item) => item.type === "file" && !item.isDeleted));
+        return;
+      }
+      case "open":
+        if (selectionItems[0]) {
+          onOpenItem(selectionItems[0]);
+        }
+        return;
+      case "copyUrl":
+        onCopyUrl(selectionItems[0] ?? null);
+        return;
+      case "copy":
+        onCopyItems(selectionItems);
+        return;
+      case "cut":
+        onCutItems(selectionItems);
+        return;
+      case "bulkAttributes":
+        onOpenBulkAttributes(selectionItems);
+        return;
+      case "restoreToDate":
+        onOpenBulkRestore(selectionItems);
+        return;
+      case "advanced":
+        if (selectionItems[0]) {
+          onOpenAdvanced(selectionItems[0]);
+        }
+        return;
+      case "delete":
+        onDeleteItems(selectionItems);
+        return;
+      default:
+        return;
+    }
+  };
+
+  const iconByActionId = {
+    uploadFiles: <UploadIcon className="h-3.5 w-3.5" />,
+    uploadFolder: <FolderIcon className="h-3.5 w-3.5" />,
+    newFolder: <FolderPlusIcon className="h-3.5 w-3.5" />,
+    paste: <PasteIcon className="h-3.5 w-3.5" />,
+    versions: <ListIcon className="h-3.5 w-3.5" />,
+    restoreToDate: <HistoryIcon className="h-3.5 w-3.5" />,
+    cleanOldVersions: <TrashIcon className="h-3.5 w-3.5" />,
+    copyPath: <CopyIcon className="h-3.5 w-3.5" />,
+    toggleShowFolders: <FolderIcon className="h-3.5 w-3.5" />,
+    toggleShowDeleted: <TrashIcon className="h-3.5 w-3.5" />,
+    details: <InfoIcon className="h-3.5 w-3.5" />,
+    open: <OpenIcon className="h-3.5 w-3.5" />,
+    preview: <EyeIcon className="h-3.5 w-3.5" />,
+    download: <DownloadIcon className="h-3.5 w-3.5" />,
+    copyUrl: <LinkIcon className="h-3.5 w-3.5" />,
+    copy: <CopyIcon className="h-3.5 w-3.5" />,
+    cut: <CutIcon className="h-3.5 w-3.5" />,
+    bulkAttributes: <SlidersIcon className="h-3.5 w-3.5" />,
+    advanced: <SettingsIcon className="h-3.5 w-3.5" />,
+    delete: <TrashIcon className="h-3.5 w-3.5" />,
+  } as const;
+
+  const renderActionButton = (
+    action: (typeof visiblePathActions)[number],
+    onClick: () => void,
+    options?: { danger?: boolean }
+  ) => (
+    <button
+      key={action.id}
+      type="button"
+      className={`${options?.danger ? contextMenuItemDangerClasses : contextMenuItemClasses} ${
+        !action.enabled ? contextMenuItemDisabledClasses : ""
+      }`}
+      onClick={onClick}
+      disabled={!action.enabled}
+      title={action.disabledReason}
+    >
+      {iconByActionId[action.id]}
+      {action.label}
+    </button>
+  );
 
   return (
     <div
@@ -213,425 +439,27 @@ export default function BrowserContextMenu({
       )}
       {contextMenu.kind === "path" && (
         <>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onNewFolder();
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            <FolderPlusIcon className="h-3.5 w-3.5" />
-            New folder
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              fileInputRef.current?.click();
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            <UploadIcon className="h-3.5 w-3.5" />
-            Upload files
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              folderInputRef.current?.click();
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            <FolderIcon className="h-3.5 w-3.5" />
-            Upload folder
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!canPaste ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onPasteItems();
-            }}
-            disabled={!canPaste}
-          >
-            <PasteIcon className="h-3.5 w-3.5" />
-            {pasteLabel}
-          </button>
-          {versioningEnabled && (
+          {visiblePathActions.map((action) => renderActionButton(action, () => runPathAction(action.id)))}
+          {visiblePathLayoutActions.length > 0 && (
             <>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  onClose();
-                  onOpenPrefixVersions();
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                <ListIcon className="h-3.5 w-3.5" />
-                Versions
-              </button>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  onClose();
-                  onOpenBulkRestore([]);
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                <HistoryIcon className="h-3.5 w-3.5" />
-                Restore to date
-              </button>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  onClose();
-                  onOpenCleanupVersions();
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                <TrashIcon className="h-3.5 w-3.5" />
-                Clean old versions
-              </button>
+              <div className={contextMenuSeparatorClasses} />
+              {visiblePathLayoutActions.map((action) => renderActionButton(action, () => runPathAction(action.id)))}
             </>
-          )}
-          <div className={contextMenuSeparatorClasses} />
-          <button
-            type="button"
-            className={contextMenuItemClasses}
-            onClick={() => {
-              onClose();
-              onToggleShowFolders();
-            }}
-          >
-            <FolderIcon className="h-3.5 w-3.5" />
-            {showFolderItems ? "Hide folders" : "Show folders"}
-          </button>
-          {versioningEnabled && (
-            <button
-              type="button"
-              className={contextMenuItemClasses}
-              onClick={() => {
-                onClose();
-                onToggleShowDeleted();
-              }}
-            >
-              <TrashIcon className="h-3.5 w-3.5" />
-              {showDeletedObjects ? "Hide deleted" : "Show deleted"}
-            </button>
           )}
         </>
       )}
       {contextMenu.kind === "item" && contextItem && (
         <>
-          {allowInspectorPanel && (
-            <button
-              type="button"
-              className={contextMenuItemClasses}
-              onClick={() => {
-                onClose();
-                onOpenDetails(contextItem);
-              }}
-            >
-              <InfoIcon className="h-3.5 w-3.5" />
-              Details
-            </button>
+          {visibleItemActions.map((action) =>
+            renderActionButton(action, () => runItemAction(action.id), { danger: action.id === "delete" })
           )}
-          {versioningEnabled && contextItem.type === "file" && (
-            <button
-              type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-              onClick={() => {
-                onClose();
-                onOpenObjectVersions(contextItem);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              <HistoryIcon className="h-3.5 w-3.5" />
-              Versions
-            </button>
-          )}
-          {contextItem.type === "folder" ? (
-            <button
-              type="button"
-              className={contextMenuItemClasses}
-              onClick={() => {
-                onClose();
-                onOpenItem(contextItem);
-              }}
-            >
-              <OpenIcon className="h-3.5 w-3.5" />
-              Open
-            </button>
-          ) : (
-            <button
-              type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
-              onClick={() => {
-                onClose();
-                onPreviewItem(contextItem);
-              }}
-              disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
-            >
-              <EyeIcon className="h-3.5 w-3.5" />
-              Preview
-            </button>
-          )}
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onDownloadTarget(contextItem);
-            }}
-            disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
-          >
-            <DownloadIcon className="h-3.5 w-3.5" />
-            {contextItem.type === "folder" ? "Download folder" : "Download"}
-          </button>
-          {contextItem.type === "file" && (
-            <button
-              type="button"
-              className={`${contextMenuItemClasses} ${
-                !bucketName || !hasS3AccountContext || contextItemDeleted || copyUrlDisabled
-                  ? contextMenuItemDisabledClasses
-                  : ""
-              }`}
-              onClick={() => {
-                onClose();
-                onCopyUrl(contextItem);
-              }}
-              disabled={!bucketName || !hasS3AccountContext || contextItemDeleted || copyUrlDisabled}
-              title={copyUrlDisabled ? copyUrlDisabledReason : undefined}
-            >
-              <LinkIcon className="h-3.5 w-3.5" />
-              Copy URL
-            </button>
-          )}
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onCopyItems([contextItem]);
-            }}
-            disabled={!bucketName || contextItemDeleted}
-          >
-            <CopyIcon className="h-3.5 w-3.5" />
-            Copy
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onCutItems([contextItem]);
-            }}
-            disabled={!bucketName || contextItemDeleted}
-          >
-            <CutIcon className="h-3.5 w-3.5" />
-            Cut
-          </button>
-          <div className={contextMenuSeparatorClasses} />
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onOpenBulkAttributes([contextItem]);
-            }}
-            disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
-          >
-            <SlidersIcon className="h-3.5 w-3.5" />
-            Bulk attributes
-          </button>
-          {versioningEnabled && (
-            <button
-              type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-              onClick={() => {
-                onClose();
-                onOpenBulkRestore([contextItem]);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              <HistoryIcon className="h-3.5 w-3.5" />
-              Restore to date
-            </button>
-          )}
-          {contextItem.type === "file" && (
-            <button
-              type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
-              onClick={() => {
-                onClose();
-                onOpenAdvanced(contextItem);
-              }}
-              disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
-            >
-              <SettingsIcon className="h-3.5 w-3.5" />
-              Advanced
-            </button>
-          )}
-          <div className={contextMenuSeparatorClasses} />
-          <button
-            type="button"
-            className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onDeleteItems([contextItem]);
-            }}
-            disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
-          >
-            <TrashIcon className="h-3.5 w-3.5" />
-            Delete
-          </button>
         </>
       )}
-      {contextMenu.kind === "selection" && contextSelectionInfo && (
+      {contextMenu.kind === "selection" && selectionActionStates && (
         <>
-          {contextSelectionInfo.canDownloadFolder && contextSelectionInfo.primary && (
-            <button
-              type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-              onClick={() => {
-                onClose();
-                onDownloadFolder(contextSelectionInfo.primary);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              <DownloadIcon className="h-3.5 w-3.5" />
-              Download folder
-            </button>
+          {visibleSelectionActions.map((action) =>
+            renderActionButton(action, () => runSelectionAction(action.id), { danger: action.id === "delete" })
           )}
-          {!contextSelectionInfo.canDownloadFolder && contextSelectionInfo.canDownloadFiles && (
-            <button
-              type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-              onClick={() => {
-                onClose();
-                onDownloadItems(contextSelectionInfo.files);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              <DownloadIcon className="h-3.5 w-3.5" />
-              Download
-            </button>
-          )}
-          {contextSelectionInfo.canOpen && contextSelectionInfo.primary && (
-            <button
-              type="button"
-              className={contextMenuItemClasses}
-              onClick={() => {
-                onClose();
-                onOpenItem(contextSelectionInfo.primary);
-              }}
-            >
-              <OpenIcon className="h-3.5 w-3.5" />
-              Open
-            </button>
-          )}
-          {contextSelectionInfo.canCopyUrl && contextSelectionInfo.primary && (
-            <button
-              type="button"
-              className={`${contextMenuItemClasses} ${
-                !bucketName || !hasS3AccountContext || copyUrlDisabled ? contextMenuItemDisabledClasses : ""
-              }`}
-              onClick={() => {
-                onClose();
-                onCopyUrl(contextSelectionInfo.primary);
-              }}
-              disabled={!bucketName || !hasS3AccountContext || copyUrlDisabled}
-              title={copyUrlDisabled ? copyUrlDisabledReason : undefined}
-            >
-              <LinkIcon className="h-3.5 w-3.5" />
-              Copy URL
-            </button>
-          )}
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !contextSelectionInfo.canCopyItems ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onCopyItems(contextSelectionInfo.items);
-            }}
-            disabled={!bucketName || !contextSelectionInfo.canCopyItems}
-          >
-            <CopyIcon className="h-3.5 w-3.5" />
-            Copy
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !contextSelectionInfo.canCutItems ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onCutItems(contextSelectionInfo.items);
-            }}
-            disabled={!bucketName || !contextSelectionInfo.canCutItems}
-          >
-            <CutIcon className="h-3.5 w-3.5" />
-            Cut
-          </button>
-          <div className={contextMenuSeparatorClasses} />
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || !contextSelectionInfo.canBulkAttributes ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onOpenBulkAttributes(contextSelectionInfo.items);
-            }}
-            disabled={!bucketName || !hasS3AccountContext || !contextSelectionInfo.canBulkAttributes}
-          >
-            <SlidersIcon className="h-3.5 w-3.5" />
-            Bulk attributes
-          </button>
-          {versioningEnabled && (
-            <button
-              type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-              onClick={() => {
-                onClose();
-                onOpenBulkRestore(contextSelectionInfo.items);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              <HistoryIcon className="h-3.5 w-3.5" />
-              Restore to date
-            </button>
-          )}
-          {contextSelectionInfo.canAdvanced && contextSelectionInfo.primary && (
-            <button
-              type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-              onClick={() => {
-                onClose();
-                onOpenAdvanced(contextSelectionInfo.primary);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              <SettingsIcon className="h-3.5 w-3.5" />
-              Advanced
-            </button>
-          )}
-          <div className={contextMenuSeparatorClasses} />
-          <button
-            type="button"
-            className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext || !contextSelectionInfo.canDelete ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onDeleteItems(contextSelectionInfo.items);
-            }}
-            disabled={!bucketName || !hasS3AccountContext || !contextSelectionInfo.canDelete}
-          >
-            <TrashIcon className="h-3.5 w-3.5" />
-            Delete
-          </button>
         </>
       )}
     </div>
