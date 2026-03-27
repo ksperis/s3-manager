@@ -4,6 +4,7 @@
  */
 import client from "./client";
 import { PaginatedResponse } from "./types";
+import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 
 export type AccountUserLink = {
   user_id: number;
@@ -15,6 +16,7 @@ export type S3Account = {
   id: string;
   db_id?: number | null;
   name: string;
+  tags: TagDefinitionSummary[];
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
   rgw_account_id?: string;
@@ -41,6 +43,7 @@ export type S3AccountSummary = {
   id: string;
   db_id?: number | null;
   name: string;
+  tags: TagDefinitionSummary[];
   rgw_account_id?: string | null;
   is_s3_user?: boolean | null;
   user_ids?: number[] | null;
@@ -90,6 +93,7 @@ export type CreateS3AccountPayload = {
   quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;
   storage_endpoint_id?: number | null;
+  tags?: TagDefinitionInput[] | null;
 };
 
 export async function createS3Account(payload: CreateS3AccountPayload): Promise<S3Account> {
@@ -106,6 +110,7 @@ export type UpdateS3AccountPayload = {
   name?: string | null;
   email?: string | null;
   storage_endpoint_id?: number | null;
+  tags?: TagDefinitionInput[] | null;
 };
 
 export async function updateS3Account(accountId: number, payload: UpdateS3AccountPayload): Promise<S3Account> {

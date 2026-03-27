@@ -13,6 +13,13 @@ const listStorageEndpointsMock = vi.fn();
 const getStorageEndpointMock = vi.fn();
 
 const listMinimalUsersMock = vi.fn();
+const listAdminTagDefinitionsMock = vi.fn();
+
+const makeTag = (id: number, label: string, color_key = "neutral") => ({
+  id,
+  label,
+  color_key,
+});
 
 vi.mock("./useAdminAccountStats", () => ({
   useAdminAccountStats: () => ({
@@ -40,6 +47,11 @@ vi.mock("../../api/users", () => ({
   listMinimalUsers: () => listMinimalUsersMock(),
 }));
 
+vi.mock("../../api/tags", () => ({
+  listAdminTagDefinitions: (domain: unknown) => listAdminTagDefinitionsMock(domain),
+  listPrivateConnectionTagDefinitions: vi.fn(),
+}));
+
 describe("AccountsPage modal tabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,6 +64,7 @@ describe("AccountsPage modal tabs", () => {
           id: "RGW000000000000001",
           db_id: 1,
           name: "acc-1",
+          tags: [makeTag(501, "gold", "amber")],
           rgw_account_id: "RGW000000000000001",
           storage_endpoint_id: 10,
           storage_endpoint_name: "ceph-main",
@@ -99,11 +112,13 @@ describe("AccountsPage modal tabs", () => {
       { id: 7, email: "ui7@example.com" },
       { id: 8, email: "ui8@example.com" },
     ]);
+    listAdminTagDefinitionsMock.mockResolvedValue([makeTag(501, "gold", "amber"), makeTag(502, "prod")]);
 
     getS3AccountMock.mockResolvedValue({
       id: "RGW000000000000001",
       db_id: 1,
       name: "acc-1",
+      tags: [makeTag(501, "gold", "amber")],
       rgw_account_id: "RGW000000000000001",
       storage_endpoint_id: 10,
       storage_endpoint_name: "ceph-main",
@@ -132,12 +147,16 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
 
     const generalTab = await screen.findByRole("button", { name: "General" });
+    const tagsTab = screen.getByRole("button", { name: "Tags" });
     const usersTab = screen.getByRole("button", { name: "Linked UI users" });
 
     const tabLabels = Array.from(generalTab.parentElement?.querySelectorAll("button") ?? []).map((button) =>
       button.textContent?.trim()
     );
-    expect(tabLabels.slice(0, 2)).toEqual(["General", "Linked UI users"]);
+    expect(tabLabels.slice(0, 3)).toEqual(["General", "Tags", "Linked UI users"]);
+
+    fireEvent.click(tagsTab);
+    expect(screen.getByText("Selected tags")).toBeInTheDocument();
 
     fireEvent.click(usersTab);
 
@@ -155,6 +174,7 @@ describe("AccountsPage modal tabs", () => {
     expect(lastCall?.[0]).toBe(1);
     expect(lastCall?.[1]).toEqual(
       expect.objectContaining({
+        tags: [expect.objectContaining({ label: "gold", color_key: "amber" })],
         user_links: expect.arrayContaining([
           expect.objectContaining({
             user_id: 7,
@@ -162,6 +182,35 @@ describe("AccountsPage modal tabs", () => {
         ]),
       })
     );
+  });
+
+  it("separates selected, existing and new-tag flows in the tags tab", async () => {
+    render(<AccountsPage />);
+
+    await screen.findByText("acc-1");
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
+
+    expect(screen.getByText("Selected tags")).toBeInTheDocument();
+    expect(screen.getByText("Add existing tag")).toBeInTheDocument();
+    expect(screen.getByText("Create new tag")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change shared color for gold" }));
+    expect(
+      screen.getByText("This updates the shared tag definition for all objects in this domain.")
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Search existing tags" }), {
+      target: { value: "prod" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add prod" }));
+    expect(screen.getAllByText("prod").length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "New tag label" }), {
+      target: { value: "finance" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create and add tag" }));
+    expect(screen.getAllByText("finance").length).toBeGreaterThan(0);
   });
 
   it("does not auto-enable admin when adding a linked user", async () => {
@@ -190,6 +239,7 @@ describe("AccountsPage modal tabs", () => {
     const lastCall = updateS3AccountMock.mock.calls.at(-1);
     expect(lastCall?.[1]).toEqual(
       expect.objectContaining({
+        tags: [expect.objectContaining({ label: "gold", color_key: "amber" })],
         user_links: expect.arrayContaining([
           expect.objectContaining({
             user_id: 7,
@@ -198,5 +248,95 @@ describe("AccountsPage modal tabs", () => {
         ]),
       })
     );
+  });
+
+  it("creates an account with normalized tags", async () => {
+    render(<AccountsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create account" }));
+    const dialog = screen.getByRole("dialog");
+    const nameInput = dialog.querySelector("input[required]") as HTMLInputElement | null;
+    if (!nameInput) {
+      throw new Error("Account name input not found");
+    }
+
+    fireEvent.change(nameInput, { target: { value: "account-with-tags" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tags" }));
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "New tag label" }), {
+      target: { value: "finance" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create and add tag" }));
+    await waitFor(() => {
+      expect(within(dialog).getByRole("button", { name: "Create account" })).toBeEnabled();
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create account" }));
+
+    await waitFor(() => {
+      expect(createS3AccountMock).toHaveBeenCalled();
+    });
+    expect(createS3AccountMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "account-with-tags",
+        tags: [expect.objectContaining({ label: "finance", color_key: "neutral" })],
+      })
+    );
+  });
+
+  it("keeps tagged accounts visible with exact quick filter mode", async () => {
+    listS3AccountsMock.mockImplementation((params?: { search?: string }) => {
+      const taggedAccount = {
+        id: "RGW000000000000001",
+        db_id: 1,
+        name: "acc-1",
+        tags: [makeTag(501, "gold", "amber")],
+        rgw_account_id: "RGW000000000000001",
+        storage_endpoint_id: 10,
+        storage_endpoint_name: "ceph-main",
+        storage_endpoint_url: "https://ceph.example.test",
+        user_ids: [],
+        user_links: [],
+      };
+      const plainAccount = {
+        id: "RGW000000000000002",
+        db_id: 2,
+        name: "acc-2",
+        tags: [],
+        rgw_account_id: "RGW000000000000002",
+        storage_endpoint_id: 10,
+        storage_endpoint_name: "ceph-main",
+        storage_endpoint_url: "https://ceph.example.test",
+        user_ids: [],
+        user_links: [],
+      };
+      const items = params?.search === "gold" ? [taggedAccount] : [taggedAccount, plainAccount];
+      return Promise.resolve({
+        items,
+        total: items.length,
+        page: 1,
+        page_size: 25,
+        has_next: false,
+      });
+    });
+
+    render(<AccountsPage />);
+
+    await screen.findByText("acc-1");
+    await screen.findByText("acc-2");
+
+    fireEvent.click(screen.getByLabelText("Toggle filter match mode"));
+    fireEvent.change(screen.getByPlaceholderText("Search by name, RGW ID, or tag"), {
+      target: { value: "gold" },
+    });
+
+    await waitFor(() => {
+      expect(listS3AccountsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          search: "gold",
+        })
+      );
+    });
+    expect(screen.getByText("acc-1")).toBeInTheDocument();
+    expect(screen.queryByText("acc-2")).not.toBeInTheDocument();
+    expect(screen.getByText("gold").parentElement?.className).toContain("text-[10px]");
   });
 });

@@ -116,7 +116,7 @@ function BrowserShell() {
             identityLabel={identityLabel}
             defaultEndpointId={defaultEndpointId}
             defaultEndpointName={defaultEndpointName}
-            widthClassName={mode === "icon" ? "w-9" : "w-44 lg:w-64 xl:w-[26rem] min-w-[11rem] max-w-[42vw]"}
+            widthClassName={mode === "icon" ? "w-9" : "w-48 lg:w-[20rem] xl:w-[28rem] min-w-[12rem] max-w-[48vw]"}
             triggerMode={mode}
           />
         ) : (

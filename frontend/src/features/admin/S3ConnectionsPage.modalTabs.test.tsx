@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import S3ConnectionsPage from "./S3ConnectionsPage";
 
@@ -14,6 +14,13 @@ const removeS3ConnectionUserMock = vi.fn();
 
 const listMinimalUsersMock = vi.fn();
 const listStorageEndpointsMock = vi.fn();
+const listAdminTagDefinitionsMock = vi.fn();
+
+const makeTag = (id: number, label: string, color_key = "neutral") => ({
+  id,
+  label,
+  color_key,
+});
 
 vi.mock("../../api/s3ConnectionsAdmin", () => ({
   listAdminS3Connections: (params?: unknown) => listAdminS3ConnectionsMock(params),
@@ -35,9 +42,15 @@ vi.mock("../../api/storageEndpoints", () => ({
   listStorageEndpoints: () => listStorageEndpointsMock(),
 }));
 
+vi.mock("../../api/tags", () => ({
+  listAdminTagDefinitions: (domain: unknown) => listAdminTagDefinitionsMock(domain),
+  listPrivateConnectionTagDefinitions: vi.fn(),
+}));
+
 const makeConnection = (id: number, overrides?: Partial<Record<string, unknown>>) => ({
   id,
   name: `connection-${id}`,
+  tags: [makeTag(701, "shared", "sky")],
   endpoint_url: `https://endpoint-${id}.example.test`,
   is_shared: true,
   is_active: true,
@@ -72,6 +85,7 @@ describe("S3ConnectionsPage modal tabs", () => {
     ]);
 
     listStorageEndpointsMock.mockResolvedValue([]);
+    listAdminTagDefinitionsMock.mockResolvedValue([makeTag(701, "shared", "sky"), makeTag(702, "prod")]);
 
     createAdminS3ConnectionMock.mockResolvedValue(makeConnection(2));
     updateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
@@ -117,6 +131,12 @@ describe("S3ConnectionsPage modal tabs", () => {
     });
 
     expect(listS3ConnectionUsersMock).toHaveBeenCalledWith(1);
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        tags: [expect.objectContaining({ label: "shared", color_key: "sky" })],
+      })
+    );
     expect(upsertS3ConnectionUserMock).toHaveBeenCalledWith(1, { user_id: 13 });
     expect(removeS3ConnectionUserMock).toHaveBeenCalledWith(1, 12);
   });
@@ -166,5 +186,43 @@ describe("S3ConnectionsPage modal tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Linked UI users" }));
     expect(screen.getByRole("button", { name: "Add UI users" })).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Search...")).not.toBeInTheDocument();
+  });
+
+  it("creates a shared connection with tags", async () => {
+    render(<S3ConnectionsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add connection" }));
+    await screen.findByText("Add S3 Connection");
+
+    const dialog = screen.getByRole("dialog");
+    const nameInput = dialog.querySelector("input[required]") as HTMLInputElement | null;
+    if (!nameInput) {
+      throw new Error("Name input not found");
+    }
+
+    fireEvent.change(nameInput, { target: { value: "tagged-shared-connection" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tags" }));
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "New tag label" }), {
+      target: { value: "finance" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create and add tag" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "General" }));
+    fireEvent.change(within(dialog).getByPlaceholderText("https://s3.amazonaws.com"), {
+      target: { value: "https://tagged.example.test" },
+    });
+    const textInputs = dialog.querySelectorAll("input:not([type='radio']):not([type='checkbox'])");
+    fireEvent.change(textInputs[textInputs.length - 2] as HTMLInputElement, { target: { value: "AKIA-TAGGED" } });
+    fireEvent.change(textInputs[textInputs.length - 1] as HTMLInputElement, { target: { value: "SECRET-TAGGED" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createAdminS3ConnectionMock).toHaveBeenCalled();
+    });
+    expect(createAdminS3ConnectionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "tagged-shared-connection",
+        tags: [expect.objectContaining({ label: "finance", color_key: "neutral" })],
+      })
+    );
   });
 });

@@ -19,7 +19,8 @@ Use this page when you log in for the first time and need to understand where to
    - `Browser`: object operations.
    - `Ceph Admin`: Ceph cluster-level tasks.
    - `Storage Ops`: cross-context bucket operations.
-4. If you see context/account selectors, select the right account/endpoint before acting.
+4. If you see context or endpoint selectors, select the right account or endpoint before acting.
+5. If compact selector tags help your workflow, enable **Show tags in top selectors** from [User profile](profile.md) to display color-coded tags directly in the top selectors.
 
 ## Expected result
 
@@ -34,6 +35,7 @@ You know which workspace to use and can start from the correct context.
 
 - [Use cases for storage administrators](use-cases-storage-admin.md)
 - [Use cases for storage users](use-cases-storage-user.md)
+- [User profile](profile.md)
 - [Troubleshooting](troubleshooting.md)
 
 ## Visual example

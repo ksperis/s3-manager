@@ -3,9 +3,10 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.pagination import PaginatedResponse
+from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 
 
 class S3User(BaseModel):
@@ -21,6 +22,7 @@ class S3User(BaseModel):
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_url: Optional[str] = None
     bucket_count: Optional[int] = None
+    tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 
 class S3UserCreate(BaseModel):
@@ -31,6 +33,12 @@ class S3UserCreate(BaseModel):
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
     storage_endpoint_id: Optional[int] = None
+    tags: list[TagDefinitionInput] = Field(default_factory=list)
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def normalize_tags(cls, value: object) -> list[dict[str, str]]:
+        return validate_tag_definition_list(value, allow_none=False) or []
 
 
 class S3UserImport(BaseModel):
@@ -48,6 +56,12 @@ class S3UserUpdate(BaseModel):
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
     storage_endpoint_id: Optional[int] = None
+    tags: Optional[list[TagDefinitionInput]] = None
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def normalize_optional_tags(cls, value: object) -> Optional[list[dict[str, str]]]:
+        return validate_tag_definition_list(value, allow_none=True)
 
 
 class S3UserAccessKey(BaseModel):
@@ -75,6 +89,7 @@ class S3UserSummary(BaseModel):
     storage_endpoint_id: Optional[int] = None
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_url: Optional[str] = None
+    tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 
 class PaginatedS3UsersResponse(PaginatedResponse):

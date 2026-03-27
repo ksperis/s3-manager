@@ -12,6 +12,7 @@ from app.models.storage_endpoint import (
     StorageEndpointFeatureDetectionRequest,
     StorageEndpointFeatureDetectionResult,
     StorageEndpointMeta,
+    StorageEndpointTagsUpdate,
     StorageEndpointUpdate,
 )
 from app.routers.dependencies import get_audit_logger, get_current_super_admin, get_current_ui_superadmin
@@ -20,6 +21,7 @@ from app.services.storage_endpoints_service import (
     StorageEndpointsService,
     get_storage_endpoints_service,
 )
+from app.services.tags_service import serialize_tag_summaries
 
 router = APIRouter(prefix="/admin/storage-endpoints", tags=["admin-storage-endpoints"])
 logger = logging.getLogger(__name__)
@@ -120,6 +122,36 @@ def update_storage_endpoint(
                 "admin_endpoint": updated.admin_endpoint,
                 "verify_tls": updated.verify_tls,
             },
+        )
+        return updated
+    except ValueError as exc:
+        detail = str(exc)
+        lowered = detail.lower()
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if "not found" in lowered or "introuvable" in lowered
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.put("/{endpoint_id}/tags", response_model=StorageEndpoint)
+def update_storage_endpoint_tags(
+    endpoint_id: int,
+    payload: StorageEndpointTagsUpdate,
+    service: StorageEndpointsService = Depends(get_service),
+    audit_service: AuditService = Depends(get_audit_logger),
+    current_user=Depends(get_current_ui_superadmin),
+) -> StorageEndpoint:
+    try:
+        updated = service.update_endpoint_tags(endpoint_id, payload)
+        audit_service.record_action(
+            user=current_user,
+            scope="admin",
+            action="update_storage_endpoint_tags",
+            entity_type="storage_endpoint",
+            entity_id=str(endpoint_id),
+            metadata={"tags": serialize_tag_summaries(updated.tags)},
         )
         return updated
     except ValueError as exc:

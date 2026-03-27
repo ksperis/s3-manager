@@ -4,12 +4,15 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SidebarSection } from "../../components/Sidebar";
+import type { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
+import { SELECTOR_TAGS_PREFERENCE_KEY } from "../../utils/selectorTagsPreference";
 import CephAdminLayout from "./CephAdminLayout";
 
 const useCephAdminEndpointMock = vi.fn();
 const useGeneralSettingsMock = vi.fn();
 
 let capturedNavSections: SidebarSection[] = [];
+let capturedEndpointSelectProps: { options?: TopbarDropdownOption[] } | null = null;
 
 vi.mock("./CephAdminEndpointContext", () => ({
   CephAdminEndpointProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -21,15 +24,30 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
 }));
 
 vi.mock("../../components/Layout", () => ({
-  default: ({ navSections }: { navSections?: SidebarSection[] }) => {
+  default: ({
+    navSections,
+    topbarControlDescriptors,
+  }: {
+    navSections?: SidebarSection[];
+    topbarControlDescriptors?: Array<{ id: string; renderControl: (mode: "icon" | "icon_label") => ReactNode }>;
+  }) => {
     capturedNavSections = navSections ?? [];
-    return <div />;
+    return (
+      <div>
+        {topbarControlDescriptors?.map((descriptor) => (
+          <div key={descriptor.id}>{descriptor.renderControl("icon_label")}</div>
+        ))}
+      </div>
+    );
   },
 }));
 
 vi.mock("../../components/TopbarDropdownSelect", () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: { options?: TopbarDropdownOption[] }) => {
+    capturedEndpointSelectProps = props;
+    return null;
+  },
 }));
 
 vi.mock("../../components/PageBanner", () => ({
@@ -82,6 +100,8 @@ function getNavLink(label: string) {
 describe("CephAdminLayout", () => {
   beforeEach(() => {
     capturedNavSections = [];
+    capturedEndpointSelectProps = null;
+    localStorage.clear();
     useCephAdminEndpointMock.mockReset();
     useGeneralSettingsMock.mockReset();
   });
@@ -273,5 +293,55 @@ describe("CephAdminLayout", () => {
     const browserLink = getNavLink("Browser");
     expect(browserLink?.disabled).toBe(false);
     expect(browserLink?.disabledHint).toBeUndefined();
+  });
+
+  it("passes endpoint tag details to the selector when the preference is enabled", () => {
+    localStorage.setItem(SELECTOR_TAGS_PREFERENCE_KEY, "1");
+    useCephAdminEndpointMock.mockReturnValue(
+      buildEndpointContext({
+        endpoints: [
+          {
+            id: 7,
+            name: "Ceph Endpoint",
+            is_default: true,
+            endpoint_url: "https://ceph.example.test",
+            tags: ["prod", "rgw-a"],
+            capabilities: {
+              metrics: true,
+              usage: true,
+            },
+          },
+          {
+            id: 8,
+            name: "Backup Endpoint",
+            is_default: false,
+            endpoint_url: "https://backup.example.test",
+            tags: [],
+            capabilities: {
+              metrics: true,
+              usage: true,
+            },
+          },
+        ],
+      })
+    );
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/ceph-admin"]}>
+        <CephAdminLayout />
+      </MemoryRouter>
+    );
+
+    expect(capturedEndpointSelectProps?.options).toHaveLength(2);
+    expect(capturedEndpointSelectProps?.options?.[0].inlineAddon).toBeTruthy();
+    expect(capturedEndpointSelectProps?.options?.[0].triggerAddon).toBeTruthy();
+    expect(capturedEndpointSelectProps?.options?.[1].inlineAddon).toBeUndefined();
+    expect(capturedEndpointSelectProps).toEqual(
+      expect.objectContaining({
+        widthClassName: expect.stringContaining("w-[19rem]"),
+        menuMinWidthClassName: "min-w-[24rem]",
+      })
+    );
   });
 });

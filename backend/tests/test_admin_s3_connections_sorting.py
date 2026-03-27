@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from app.db import S3Connection, User, UserRole
+from app.services.tags_service import TagsService
 
 
 def _seed_connection(
@@ -109,3 +110,16 @@ def test_admin_s3_connections_lists_shared_only(client, db_session):
     names = [item["name"] for item in payload["items"]]
     assert names == ["shared-visible"]
     assert payload["items"][0]["is_shared"] is True
+
+
+def test_admin_s3_connections_search_matches_tag_labels(client, db_session):
+    tagged = _seed_connection(db_session, name="tagged-connection", is_shared=True)
+    _seed_connection(db_session, name="plain-connection", is_shared=True)
+    TagsService(db_session).replace_connection_tags(tagged, [{"label": "prod", "color_key": "emerald"}])
+    db_session.commit()
+
+    response = client.get("/api/admin/s3-connections", params={"search": "prod"})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert [item["name"] for item in payload["items"]] == ["tagged-connection"]

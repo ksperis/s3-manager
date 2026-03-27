@@ -14,7 +14,11 @@ from app.db import (
     User,
     UserRole,
 )
-from app.models.storage_endpoint import StorageEndpointFeatureDetectionRequest, StorageEndpointUpdate
+from app.models.storage_endpoint import (
+    StorageEndpointFeatureDetectionRequest,
+    StorageEndpointTagsUpdate,
+    StorageEndpointUpdate,
+)
 from app.services.rgw_admin import RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.utils.time import utcnow
@@ -258,6 +262,22 @@ def test_update_endpoint_clearing_access_keys_also_clears_secrets(db_session):
     assert persisted.supervision_secret_key is None
     assert persisted.ceph_admin_access_key is None
     assert persisted.ceph_admin_secret_key is None
+
+
+def test_update_endpoint_tags_normalizes_and_serializes_tags(db_session):
+    endpoint = _create_ceph_endpoint(db_session, name="ceph-tags")
+    service = StorageEndpointsService(db_session)
+
+    updated = service.update_endpoint_tags(
+        endpoint.id,
+        StorageEndpointTagsUpdate(tags=["prod", "prod", "  rgw-a  ", ""]),
+    )
+
+    assert [tag.label for tag in updated.tags] == ["prod", "rgw-a"]
+    assert [tag.color_key for tag in updated.tags] == ["neutral", "neutral"]
+    persisted = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint.id).first()
+    assert persisted is not None
+    assert json.loads(persisted.tags_json) == ["prod", "rgw-a"]
 
 
 def test_detect_features_warns_when_usage_log_endpoint_is_unavailable(db_session, monkeypatch):

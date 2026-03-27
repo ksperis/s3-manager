@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
+import type { TagDefinitionSummary } from "./tags";
 
 export type ExecutionContextKind = "account" | "connection" | "legacy_user";
 
@@ -16,6 +17,8 @@ export type ExecutionContext = {
   kind: ExecutionContextKind;
   id: string;
   display_name: string;
+  tags: TagDefinitionSummary[];
+  endpoint_tags: TagDefinitionSummary[];
   hidden?: boolean;
   manager_account_is_admin?: boolean | null;
   rgw_account_id?: string | null;

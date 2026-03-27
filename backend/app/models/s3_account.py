@@ -2,9 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.pagination import PaginatedResponse
+from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 
 
 class AccountUserLink(BaseModel):
@@ -38,6 +39,7 @@ class S3Account(BaseModel):
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_url: Optional[str] = None
     storage_endpoint_capabilities: Optional[dict[str, bool]] = None
+    tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 
 class S3AccountCreate(BaseModel):
@@ -49,6 +51,12 @@ class S3AccountCreate(BaseModel):
     storage_endpoint_id: Optional[int] = None
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_url: Optional[str] = None
+    tags: list[TagDefinitionInput] = Field(default_factory=list)
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def normalize_tags(cls, value: object) -> list[dict[str, str]]:
+        return validate_tag_definition_list(value, allow_none=False) or []
 
 
 class S3AccountImport(BaseModel):
@@ -67,6 +75,12 @@ class S3AccountUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
+    tags: Optional[list[TagDefinitionInput]] = None
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def normalize_optional_tags(cls, value: object) -> Optional[list[dict[str, str]]]:
+        return validate_tag_definition_list(value, allow_none=True)
 
 
 class S3AccountSummary(BaseModel):
@@ -80,6 +94,7 @@ class S3AccountSummary(BaseModel):
     storage_endpoint_id: Optional[int] = None
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_capabilities: Optional[dict[str, bool]] = None
+    tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 
 class PaginatedS3AccountsResponse(PaginatedResponse):

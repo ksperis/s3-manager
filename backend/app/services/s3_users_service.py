@@ -5,21 +5,24 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session
 
 from app.db import (
     BillingAssignment,
     BillingStorageDaily,
     BillingUsageDaily,
+    S3UserTag,
     S3User as S3UserModel,
     StorageEndpoint,
     StorageProvider,
+    TagDefinition,
     User,
     UserS3User as UserS3UserModel,
     UserRole,
 )
 from app.services.storage_endpoints_service import StorageEndpointsService
+from app.services.tags_service import TagsService
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.models.s3_user import (
     S3User as S3UserSchema,
@@ -43,6 +46,7 @@ logger = logging.getLogger(__name__)
 class S3UsersService:
     def __init__(self, db: Session, rgw_admin_client: Optional[RGWAdminClient] = None) -> None:
         self.db = db
+        self.tags = TagsService(db)
         self.storage_endpoints = StorageEndpointsService(db)
         self.default_admin = rgw_admin_client
 
@@ -337,6 +341,7 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            tags=self.tags.get_s3_user_tags(row),
         )
 
     def list_users(self, include_quota: bool = False) -> list[S3UserSchema]:
@@ -364,6 +369,7 @@ class S3UsersService:
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                    tags=self.tags.get_s3_user_tags(row),
                 )
             )
         return summaries
@@ -381,6 +387,12 @@ class S3UsersService:
         search_value = search.strip() if isinstance(search, str) else ""
         if search_value:
             pattern = f"%{search_value}%"
+            tag_match = (
+                exists()
+                .where(S3UserTag.s3_user_id == S3UserModel.id)
+                .where(TagDefinition.id == S3UserTag.tag_definition_id)
+                .where(TagDefinition.label.ilike(pattern))
+            )
             query = (
                 query.outerjoin(UserS3UserModel, S3UserModel.id == UserS3UserModel.s3_user_id)
                 .outerjoin(User, UserS3UserModel.user_id == User.id)
@@ -391,6 +403,7 @@ class S3UsersService:
                     S3UserModel.rgw_user_uid.ilike(pattern),
                     func.coalesce(S3UserModel.email, "").ilike(pattern),
                     func.coalesce(User.email, "").ilike(pattern),
+                    tag_match,
                 )
             )
             query = query.distinct()
@@ -466,6 +479,7 @@ class S3UsersService:
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
             bucket_count=bucket_count,
+            tags=self.tags.get_s3_user_tags(s3_user),
         )
 
     def create_user(self, payload: S3UserCreate) -> S3UserSchema:
@@ -503,8 +517,11 @@ class S3UsersService:
             rgw_access_key=access_key,
             rgw_secret_key=secret_key,
             storage_endpoint_id=endpoint.id,
+            tags_json="[]",
         )
         self.db.add(s3_user)
+        self.db.flush()
+        self.tags.replace_s3_user_tags(s3_user, payload.tags)
 
         if payload.quota_max_size_gb is not None or payload.quota_max_objects is not None:
             self._apply_user_quota(
@@ -529,6 +546,7 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_url=endpoint.endpoint_url,
+            tags=self.tags.get_s3_user_tags(s3_user),
         )
 
     def import_users(self, items: list[S3UserImport]) -> list[S3UserSchema]:
@@ -568,6 +586,7 @@ class S3UsersService:
                 rgw_access_key=access_key,
                 rgw_secret_key=secret_key,
                 storage_endpoint_id=endpoint.id,
+                tags_json="[]",
             )
             self.db.add(s3_user)
             self.db.flush()
@@ -585,6 +604,7 @@ class S3UsersService:
                     storage_endpoint_id=endpoint.id,
                     storage_endpoint_name=endpoint.name,
                     storage_endpoint_url=endpoint.endpoint_url,
+                    tags=[],
                 )
             )
         self.db.commit()
@@ -606,6 +626,8 @@ class S3UsersService:
                 s3_user.storage_endpoint_id = endpoint.id
         if payload.user_ids is not None:
             self._ensure_links(s3_user, payload.user_ids)
+        if payload.tags is not None:
+            self.tags.replace_s3_user_tags(s3_user, payload.tags)
 
         if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
             self._apply_user_quota(
@@ -640,6 +662,7 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            tags=self.tags.get_s3_user_tags(s3_user),
         )
 
     def rotate_keys(self, user_id: int) -> S3UserSchema:
@@ -702,6 +725,7 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id if endpoint else s3_user.storage_endpoint_id,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            tags=self.tags.get_s3_user_tags(s3_user),
         )
 
     def list_keys(self, user_id: int) -> list[S3UserAccessKey]:
@@ -894,6 +918,8 @@ class S3UsersService:
             .update({BillingStorageDaily.s3_user_id: None}, synchronize_session=False)
         )
         self.db.delete(s3_user)
+        self.db.flush()
+        self.tags.cleanup_orphan_definitions()
         self.db.commit()
 
     def unlink_user(self, user_id: int) -> None:

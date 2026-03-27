@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.models.bucket import BucketFeatureStatus, BucketTag
 from app.models.pagination import PaginatedResponse
+from app.models.tagging import TagDefinitionSummary
 
 class CephAdminEndpoint(BaseModel):
     id: int
@@ -16,6 +17,7 @@ class CephAdminEndpoint(BaseModel):
     region: Optional[str] = None
     is_default: bool = False
     capabilities: dict[str, bool] = Field(default_factory=dict)
+    tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 
 class CephAdminEndpointAccess(BaseModel):

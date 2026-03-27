@@ -4,12 +4,15 @@
  */
 import { Outlet, useLocation } from "react-router-dom";
 import Layout from "../../components/Layout";
+import UiTagBadgeList from "../../components/UiTagBadgeList";
 import TopbarDropdownSelect, { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
 import { SidebarSection } from "../../components/Sidebar";
 import PageBanner from "../../components/PageBanner";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { CephAdminEndpointProvider, useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
+import { useSelectorTagsPreference } from "../../utils/selectorTagsPreference";
+import { buildUiTagItems } from "../../utils/uiTags";
 
 function CephAdminShell() {
   const location = useLocation();
@@ -25,6 +28,7 @@ function CephAdminShell() {
     loading,
     error,
   } = useCephAdminEndpoint();
+  const showSelectorTags = useSelectorTagsPreference();
   const showSelector = endpoints.length > 1;
   const selectorEnabled = endpoints.length > 0;
   const endpointSelected = selectorEnabled && selectedEndpointId != null;
@@ -148,6 +152,24 @@ function CephAdminShell() {
     description: endpoint.endpoint_url,
     title: endpoint.endpoint_url,
     icon: <EndpointItemIcon className="h-4 w-4" />,
+    inlineAddon:
+      showSelectorTags && endpoint.tags.length > 0 ? (
+        <UiTagBadgeList
+          items={buildUiTagItems(undefined, endpoint.tags)}
+          layout="inline-compact"
+          maxVisible={4}
+          className="max-w-full"
+        />
+      ) : undefined,
+    triggerAddon:
+      showSelectorTags && endpoint.tags.length > 0 ? (
+        <UiTagBadgeList
+          items={buildUiTagItems(undefined, endpoint.tags)}
+          layout="inline-compact"
+          maxVisible={3}
+          className="max-w-full"
+        />
+      ) : undefined,
   }));
   const pillClasses =
     "inline-flex h-9 items-center rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
@@ -191,7 +213,8 @@ function CephAdminShell() {
             ariaLabel="Select Ceph endpoint"
             triggerLabel="Endpoint"
             title={selectedEndpoint?.endpoint_url ?? undefined}
-            widthClassName={mode === "icon" ? "w-9" : "w-52 lg:w-64 xl:w-80"}
+            widthClassName={mode === "icon" ? "w-9" : "w-[19rem] lg:w-[26rem] xl:w-[32rem] max-w-[72vw]"}
+            menuMinWidthClassName="min-w-[24rem]"
             icon={<EndpointIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
             disabled={!selectorEnabled || loading}
             triggerMode={mode}

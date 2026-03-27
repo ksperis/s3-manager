@@ -12,6 +12,7 @@ Use **Manager** for account-scoped administration aligned with S3/IAM semantics.
 ## Steps
 
 1. Open `/manager` and select the correct account/context.
+   - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded account and endpoint tags are shown directly in the selector.
 2. Use **Storage** for buckets and manager browser (if enabled).
 3. Use **IAM** for users, groups, roles, and policies (if IAM capability is available).
 4. Use **Events** for SNS topics (if endpoint supports SNS).
@@ -31,6 +32,7 @@ Tenant resources are managed in the right scope with explicit context control.
 ## Related pages
 
 - [Feature: Buckets](feature-buckets.md)
+- [User profile](profile.md)
 - [How-to: Configure a bucket from Manager](howto-manager-bucket-configuration.md)
 - [Feature: IAM](feature-iam.md)
 - [Feature: SNS topics](feature-topics.md)

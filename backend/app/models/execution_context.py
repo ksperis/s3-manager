@@ -2,7 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from app.models.tagging import TagDefinitionSummary
 
 
 class ExecutionContextCapabilities(BaseModel):
@@ -25,4 +26,6 @@ class ExecutionContext(BaseModel):
     endpoint_provider: Optional[str] = None
     endpoint_url: Optional[str] = None
     storage_endpoint_capabilities: Optional[dict[str, bool]] = None
+    tags: list[TagDefinitionSummary] = Field(default_factory=list)
+    endpoint_tags: list[TagDefinitionSummary] = Field(default_factory=list)
     capabilities: ExecutionContextCapabilities

@@ -15,12 +15,17 @@ import {
   listStorageEndpoints,
   setDefaultStorageEndpoint,
   updateStorageEndpoint,
+  updateStorageEndpointTags,
 } from "../../api/storageEndpoints";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
+import UiTagBadgeList from "../../components/UiTagBadgeList";
+import UiTagEditor from "../../components/UiTagEditor";
+import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { extractApiError } from "../../utils/apiError";
+import { buildUiTagItems, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type FormState = {
@@ -317,6 +322,15 @@ export default function StorageEndpointsPage() {
   const [featureDetectBusy, setFeatureDetectBusy] = useState(false);
   const [featureDetectError, setFeatureDetectError] = useState<string | null>(null);
   const [featureDetectWarnings, setFeatureDetectWarnings] = useState<string[]>([]);
+  const [tagEditTarget, setTagEditTarget] = useState<StorageEndpoint | null>(null);
+  const [tagEditValues, setTagEditValues] = useState<UiTagDefinition[]>([]);
+  const {
+    catalog: endpointTagCatalog,
+    loading: endpointTagCatalogLoading,
+    error: endpointTagCatalogError,
+  } = useTagCatalog({ kind: "admin", domain: "endpoint" }, Boolean(tagEditTarget));
+  const [tagEditBusy, setTagEditBusy] = useState(false);
+  const [tagEditError, setTagEditError] = useState<string | null>(null);
 
   const resetForm = useCallback(() => {
     setForm(createEmptyForm());
@@ -561,6 +575,38 @@ export default function StorageEndpointsPage() {
     resetForm();
   };
 
+  const openTagEditor = (endpoint: StorageEndpoint) => {
+    if (!canEditEndpoints) return;
+    setTagEditTarget(endpoint);
+    setTagEditValues(normalizeUiTags(endpoint.tags));
+    setTagEditError(null);
+  };
+
+  const closeTagEditor = () => {
+    if (tagEditBusy) return;
+    setTagEditTarget(null);
+    setTagEditValues([]);
+    setTagEditError(null);
+  };
+
+  const handleSaveTags = async () => {
+    if (!tagEditTarget || !canEditEndpoints) return;
+    setTagEditBusy(true);
+    setTagEditError(null);
+    try {
+      await updateStorageEndpointTags(tagEditTarget.id, { tags: normalizeUiTags(tagEditValues) });
+      setActionMessage("Endpoint tags updated.");
+      setTagEditTarget(null);
+      setTagEditValues([]);
+      setTagEditError(null);
+      await loadEndpoints();
+    } catch (err) {
+      setTagEditError(extractError(err));
+    } finally {
+      setTagEditBusy(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (envManaged || !canEditEndpoints) return;
     if (!deleteTarget) return;
@@ -707,6 +753,7 @@ export default function StorageEndpointsPage() {
   const renderEndpointCard = (endpoint: StorageEndpoint) => {
     const showSupervision = endpoint.supervision_access_key || endpoint.has_supervision_secret;
     const showCephAdmin = endpoint.ceph_admin_access_key || endpoint.has_ceph_admin_secret;
+    const tagItems = buildUiTagItems(endpoint.tags);
     const verifyTls = endpoint.verify_tls !== false;
     const features = resolveFeatureState(endpoint, endpoint.provider);
     const adminEnabled = features.admin.enabled;
@@ -740,12 +787,23 @@ export default function StorageEndpointsPage() {
       >
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="ui-section font-semibold text-slate-900 dark:text-white">{endpoint.name}</h3>
-              <ProviderBadge provider={endpoint.provider} />
-              {endpoint.is_default && <StatusBadge label="Default" />}
-              {envManaged && <LockBadge label="Env managed" />}
-              {!envManaged && !endpoint.is_editable && <LockBadge label="Protected" />}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <h3 className="ui-section font-semibold text-slate-900 dark:text-white">{endpoint.name}</h3>
+                <ProviderBadge provider={endpoint.provider} />
+                {endpoint.is_default && <StatusBadge label="Default" />}
+                {envManaged && <LockBadge label="Env managed" />}
+                {!envManaged && !endpoint.is_editable && <LockBadge label="Protected" />}
+              </div>
+              {tagItems.length > 0 && (
+                <UiTagBadgeList
+                  items={tagItems}
+                  variant="listing-compact"
+                  layout="inline-compact"
+                  className="ml-auto max-w-full"
+                  maxVisible={6}
+                />
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
               <span className="font-semibold text-slate-700 dark:text-slate-100">Endpoint:</span>
@@ -792,6 +850,15 @@ export default function StorageEndpointsPage() {
                 {settingDefault ? "Setting..." : "Set as default"}
               </button>
             )}
+            {canEditEndpoints && (
+              <button
+                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                onClick={() => openTagEditor(endpoint)}
+                type="button"
+              >
+                Edit tags
+              </button>
+            )}
             {!readOnly ? (
               <>
                 <button
@@ -814,7 +881,7 @@ export default function StorageEndpointsPage() {
               </>
             ) : (
               <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                Read-only
+                {canEditEndpoints ? "Config read-only" : "Read-only"}
               </span>
             )}
           </div>
@@ -1011,7 +1078,7 @@ export default function StorageEndpointsPage() {
 
       {envManaged && (
         <PageBanner tone="info">
-          Storage endpoints are managed by environment variables (ENV_STORAGE_ENDPOINTS). UI changes are disabled.
+          Storage endpoints are managed by environment variables (ENV_STORAGE_ENDPOINTS). Configuration changes are disabled.
         </PageBanner>
       )}
       {!envManaged && !canEditEndpoints && (
@@ -1032,6 +1099,45 @@ export default function StorageEndpointsPage() {
         </div>
       ) : (
         <div className="grid gap-4">{endpoints.map((ep) => renderEndpointCard(ep))}</div>
+      )}
+
+      {tagEditTarget && (
+        <Modal title={`Edit tags: ${tagEditTarget.name}`} onClose={closeTagEditor}>
+          <div className="space-y-4">
+            {tagEditError && <PageBanner tone="error">{tagEditError}</PageBanner>}
+            {endpointTagCatalogError && <PageBanner tone="warning">{endpointTagCatalogError}</PageBanner>}
+            <UiTagEditor
+              label="Endpoint tags"
+              tags={tagEditValues}
+              catalog={endpointTagCatalog}
+              onChange={setTagEditValues}
+              placeholder="Add a tag for this endpoint"
+              hint={
+                endpointTagCatalogLoading
+                  ? "Loading existing endpoint tags..."
+                  : "Endpoint tags can be shown in endpoint and context selectors when users enable the preference."
+              }
+            />
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeTagEditor}
+                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                disabled={tagEditBusy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveTags()}
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                disabled={tagEditBusy}
+              >
+                {tagEditBusy ? "Saving..." : "Save tags"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {showForm && (

@@ -62,6 +62,7 @@ def _build_endpoint(
         supervision_secret_key="METRICS-SK" if has_supervision_credentials else None,
         ceph_admin_access_key="ADMIN-AK",
         ceph_admin_secret_key="ADMIN-SK",
+        tags_json='["prod","rgw-a"]',
     )
 
 
@@ -91,6 +92,8 @@ def test_list_ceph_admin_endpoints_includes_ceph_even_when_admin_feature_disable
 
     assert len(payload) == 1
     assert payload[0].id == 2
+    assert [tag.label for tag in payload[0].tags] == ["prod", "rgw-a"]
+    assert [tag.color_key for tag in payload[0].tags] == ["neutral", "neutral"]
 
 
 def test_list_ceph_admin_endpoints_are_sorted_by_name_case_insensitive(monkeypatch):

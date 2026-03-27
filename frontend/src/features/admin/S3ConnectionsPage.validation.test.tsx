@@ -37,6 +37,7 @@ vi.mock("../../api/storageEndpoints", () => ({
 const makeConnection = (id: number, overrides?: Partial<Record<string, unknown>>) => ({
   id,
   name: `connection-${id}`,
+  tags: [],
   endpoint_url: `https://endpoint-${id}.example.test`,
   is_shared: true,
   is_active: true,
@@ -96,8 +97,8 @@ describe("S3ConnectionsPage live validation", () => {
     );
     const nameInput = textInputs[0];
     const endpointInput = textInputs.find((input) => input.placeholder === "https://s3.amazonaws.com");
-    const accessKeyInput = textInputs[3];
-    const secretKeyInput = textInputs[4];
+    const accessKeyInput = textInputs[textInputs.length - 2];
+    const secretKeyInput = textInputs[textInputs.length - 1];
     if (!nameInput || !endpointInput || !accessKeyInput || !secretKeyInput) {
       throw new Error("Expected create modal inputs were not found");
     }
@@ -259,5 +260,42 @@ describe("S3ConnectionsPage live validation", () => {
     });
     expect(deleteAdminS3ConnectionMock).toHaveBeenCalledWith(1);
     expect(deleteAdminS3ConnectionMock).toHaveBeenCalledWith(2);
+  });
+
+  it("searches shared connections by tag label", async () => {
+    listAdminS3ConnectionsMock.mockImplementation((params?: { search?: string }) => {
+      const taggedConnection = makeConnection(1, {
+        name: "connection-tagged",
+        tags: [{ id: 701, label: "shared", color_key: "sky" }],
+      });
+      const plainConnection = makeConnection(2, { name: "connection-plain" });
+      const items = params?.search === "shared" ? [taggedConnection] : [taggedConnection, plainConnection];
+      return Promise.resolve({
+        items,
+        total: items.length,
+        page: 1,
+        page_size: 25,
+        has_next: false,
+      });
+    });
+
+    render(<S3ConnectionsPage />);
+    await screen.findByText("connection-tagged");
+    await screen.findByText("connection-plain");
+
+    fireEvent.change(screen.getByPlaceholderText("Search name, endpoint, created by, or tag..."), {
+      target: { value: "shared" },
+    });
+
+    await waitFor(() => {
+      expect(listAdminS3ConnectionsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          search: "shared",
+        })
+      );
+    });
+    expect(screen.getByText("connection-tagged")).toBeInTheDocument();
+    expect(screen.queryByText("connection-plain")).not.toBeInTheDocument();
+    expect(screen.getByText("shared").parentElement?.className).toContain("text-[10px]");
   });
 });

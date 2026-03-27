@@ -57,6 +57,7 @@ nav:
   - User Guide:
       - Overview: user/index.md
       - Start here: user/start-here.md
+      - User profile: user/profile.md
       - Use cases (storage admin): user/use-cases-storage-admin.md
       - Use cases (storage user): user/use-cases-storage-user.md
       - "Workspace: Admin": user/workspace-admin.md

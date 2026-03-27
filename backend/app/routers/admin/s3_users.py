@@ -26,6 +26,7 @@ from app.routers.dependencies import (
 )
 from app.services.s3_users_service import S3UsersService, get_s3_users_service
 from app.services.audit_service import AuditService
+from app.services.tags_service import serialize_tag_summaries
 
 router = APIRouter(prefix="/admin/s3-users", tags=["admin-s3-users"])
 logger = logging.getLogger(__name__)
@@ -90,7 +91,7 @@ def create_s3_user(
             action="create_s3_user",
             entity_type="s3_user",
             entity_id=str(created.id),
-            metadata={"rgw_user_uid": created.rgw_user_uid},
+            metadata={"rgw_user_uid": created.rgw_user_uid, "tags": serialize_tag_summaries(created.tags)},
         )
         return created
     except ValueError as exc:

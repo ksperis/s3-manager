@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import S3UsersPage from "./S3UsersPage";
@@ -14,6 +14,13 @@ const deleteS3UserMock = vi.fn();
 const listStorageEndpointsMock = vi.fn();
 const getStorageEndpointMock = vi.fn();
 const listMinimalUsersMock = vi.fn();
+const listAdminTagDefinitionsMock = vi.fn();
+
+const makeTag = (id: number, label: string, color_key = "neutral") => ({
+  id,
+  label,
+  color_key,
+});
 
 vi.mock("./useAdminS3UserStats", () => ({
   useAdminS3UserStats: () => ({
@@ -42,6 +49,11 @@ vi.mock("../../api/users", () => ({
   listMinimalUsers: () => listMinimalUsersMock(),
 }));
 
+vi.mock("../../api/tags", () => ({
+  listAdminTagDefinitions: (domain: unknown) => listAdminTagDefinitionsMock(domain),
+  listPrivateConnectionTagDefinitions: vi.fn(),
+}));
+
 describe("S3UsersPage modal tabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -54,6 +66,7 @@ describe("S3UsersPage modal tabs", () => {
           id: 5,
           name: "rgw-user-1",
           rgw_user_uid: "rgw-uid-1",
+          tags: [makeTag(601, "legacy")],
           email: "rgw-user-1@example.com",
           storage_endpoint_id: 10,
           storage_endpoint_name: "ceph-main",
@@ -96,9 +109,11 @@ describe("S3UsersPage modal tabs", () => {
     });
 
     listMinimalUsersMock.mockResolvedValue([{ id: 33, email: "ui33@example.com" }]);
+    listAdminTagDefinitionsMock.mockResolvedValue([makeTag(601, "legacy"), makeTag(602, "prod")]);
 
     getS3UserMock.mockResolvedValue({
       id: 5,
+      tags: [makeTag(601, "legacy")],
       quota_max_size_gb: 1,
       quota_max_objects: 100,
     });
@@ -141,8 +156,110 @@ describe("S3UsersPage modal tabs", () => {
     expect(lastCall?.[0]).toBe(5);
     expect(lastCall?.[1]).toEqual(
       expect.objectContaining({
+        tags: [expect.objectContaining({ label: "legacy", color_key: "neutral" })],
         user_ids: [33],
       })
     );
+  });
+
+  it("creates a user with tags", async () => {
+    render(
+      <MemoryRouter>
+        <S3UsersPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+    const dialog = screen.getByRole("dialog");
+    const nameInput = dialog.querySelector("input[required]") as HTMLInputElement | null;
+    if (!nameInput) {
+      throw new Error("User name input not found");
+    }
+    fireEvent.change(nameInput, { target: { value: "tagged-user" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tags" }));
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "New tag label" }), {
+      target: { value: "finance" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create and add tag" }));
+    await waitFor(() => {
+      expect(within(dialog).getByRole("button", { name: "Create user" })).toBeEnabled();
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create user" }));
+
+    await waitFor(() => {
+      expect(createS3UserMock).toHaveBeenCalled();
+    });
+    expect(createS3UserMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "tagged-user",
+        tags: [expect.objectContaining({ label: "finance", color_key: "neutral" })],
+      })
+    );
+  });
+
+  it("keeps tagged users visible with exact quick filter mode", async () => {
+    listS3UsersMock.mockImplementation((params?: { search?: string }) => {
+      const taggedUser = {
+        id: 5,
+        name: "rgw-user-1",
+        rgw_user_uid: "rgw-uid-1",
+        tags: [makeTag(601, "legacy")],
+        email: "rgw-user-1@example.com",
+        storage_endpoint_id: 10,
+        storage_endpoint_name: "ceph-main",
+        storage_endpoint_url: "https://ceph.example.test",
+        user_ids: [],
+        quota_max_size_gb: 1,
+        quota_max_objects: 100,
+        bucket_count: 0,
+      };
+      const plainUser = {
+        id: 6,
+        name: "rgw-user-2",
+        rgw_user_uid: "rgw-uid-2",
+        tags: [],
+        email: "rgw-user-2@example.com",
+        storage_endpoint_id: 10,
+        storage_endpoint_name: "ceph-main",
+        storage_endpoint_url: "https://ceph.example.test",
+        user_ids: [],
+        quota_max_size_gb: 1,
+        quota_max_objects: 100,
+        bucket_count: 0,
+      };
+      const items = params?.search === "legacy" ? [taggedUser] : [taggedUser, plainUser];
+      return Promise.resolve({
+        items,
+        total: items.length,
+        page: 1,
+        page_size: 25,
+        has_next: false,
+      });
+    });
+
+    render(
+      <MemoryRouter>
+        <S3UsersPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("rgw-user-1");
+    await screen.findByText("rgw-user-2");
+
+    fireEvent.click(screen.getByLabelText("Toggle filter match mode"));
+    fireEvent.change(screen.getByPlaceholderText("Search by name, UID, email, or tag"), {
+      target: { value: "legacy" },
+    });
+
+    await waitFor(() => {
+      expect(listS3UsersMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          search: "legacy",
+        })
+      );
+    });
+    expect(screen.getByText("rgw-user-1")).toBeInTheDocument();
+    expect(screen.queryByText("rgw-user-2")).not.toBeInTheDocument();
+    expect(screen.getByText("legacy").parentElement?.className).toContain("text-[10px]");
   });
 });

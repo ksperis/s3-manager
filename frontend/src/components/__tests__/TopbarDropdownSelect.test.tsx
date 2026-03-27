@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import TopbarDropdownSelect from "../TopbarDropdownSelect";
@@ -62,5 +62,38 @@ describe("TopbarDropdownSelect", () => {
 
     expect(screen.queryByRole("listbox", { name: "Select workspace" })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  it("renders option details in the menu and trigger addons for the selected value", () => {
+    render(
+      <TopbarDropdownSelect
+        value="manager"
+        options={[
+          {
+            value: "manager",
+            label: "Manager",
+            inlineAddon: <span>inline-tag</span>,
+            details: <span>primary-tag</span>,
+            triggerAddon: <span>selected-tag</span>,
+          },
+          { value: "portal", label: "Portal" },
+        ]}
+        onChange={() => undefined}
+        ariaLabel="Select workspace"
+      />
+    );
+
+    const trigger = screen.getByRole("button", { name: "Select workspace" });
+    const valueSlot = trigger.querySelector('[data-slot="topbar-trigger-value"]');
+    const addonSlot = trigger.querySelector('[data-slot="topbar-trigger-addon"]');
+    expect(valueSlot).toHaveTextContent("Manager");
+    expect(addonSlot).toHaveTextContent("selected-tag");
+    expect(addonSlot).toHaveClass("items-center");
+    expect(trigger).toHaveTextContent("selected-tag");
+
+    fireEvent.click(trigger);
+    const listbox = screen.getByRole("listbox", { name: "Select workspace" });
+    expect(within(listbox).getByText("inline-tag")).toBeInTheDocument();
+    expect(within(listbox).getByText("primary-tag")).toBeInTheDocument();
   });
 });

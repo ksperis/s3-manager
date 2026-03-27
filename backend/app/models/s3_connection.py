@@ -4,9 +4,10 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.pagination import PaginatedResponse
+from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 
 
 class S3Connection(BaseModel):
@@ -27,6 +28,7 @@ class S3Connection(BaseModel):
     force_path_style: bool = False
     verify_tls: bool = True
     capabilities: dict[str, Any] = Field(default_factory=dict)
+    tags: list[TagDefinitionSummary] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
@@ -48,6 +50,12 @@ class S3ConnectionCreate(BaseModel):
     secret_access_key: str
     force_path_style: bool = False
     verify_tls: bool = True
+    tags: list[TagDefinitionInput] = Field(default_factory=list)
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def normalize_tags(cls, value: object) -> list[dict[str, str]]:
+        return validate_tag_definition_list(value, allow_none=False) or []
 
 
 class S3ConnectionUpdate(BaseModel):
@@ -67,6 +75,12 @@ class S3ConnectionUpdate(BaseModel):
     secret_access_key: Optional[str] = None
     force_path_style: Optional[bool] = None
     verify_tls: Optional[bool] = None
+    tags: Optional[list[TagDefinitionInput]] = None
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def normalize_optional_tags(cls, value: object) -> Optional[list[dict[str, str]]]:
+        return validate_tag_definition_list(value, allow_none=True)
 
 
 class S3ConnectionCredentialsUpdate(BaseModel):

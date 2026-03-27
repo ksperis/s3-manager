@@ -9,14 +9,23 @@ type UiBadgeProps = {
   tone?: UiTone;
   className?: string;
   children: ReactNode;
+  title?: string;
+  disableToneStyles?: boolean;
 };
 
-export default function UiBadge({ tone = "neutral", className, children }: UiBadgeProps) {
+export default function UiBadge({
+  tone = "neutral",
+  className,
+  children,
+  title,
+  disableToneStyles = false,
+}: UiBadgeProps) {
   return (
     <span
+      title={title}
       className={cx(
         "inline-flex items-center rounded-full border px-2 py-0.5 ui-caption font-semibold",
-        uiToneBadgeClasses[tone],
+        !disableToneStyles && uiToneBadgeClasses[tone],
         className
       )}
     >
@@ -24,4 +33,3 @@ export default function UiBadge({ tone = "neutral", className, children }: UiBad
     </span>
   );
 }
-

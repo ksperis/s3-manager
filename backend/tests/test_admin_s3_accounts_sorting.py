@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.db import S3Account
+from app.services.tags_service import TagsService
 
 
 def _seed_account(
@@ -73,3 +74,16 @@ def test_admin_accounts_minimal_is_sorted_case_insensitive(client, db_session):
     payload = response.json()
 
     assert [item["name"] for item in payload] == ["alpha", "Beta", "Zulu"]
+
+
+def test_admin_accounts_search_matches_tag_labels(client, db_session):
+    tagged = _seed_account(db_session, name="finance-account", rgw_account_id="RGW-TAG-ACCOUNT")
+    _seed_account(db_session, name="plain-account", rgw_account_id="RGW-PLAIN-ACCOUNT")
+    TagsService(db_session).replace_account_tags(tagged, [{"label": "prod", "color_key": "emerald"}])
+    db_session.commit()
+
+    response = client.get("/api/admin/accounts", params={"search": "prod"})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert [item["name"] for item in payload["items"]] == ["finance-account"]

@@ -4,11 +4,13 @@
  */
 import client from "./client";
 import { PaginatedResponse } from "./types";
+import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 
 export type S3User = {
   id: number;
   name: string;
   rgw_user_uid: string;
+  tags: TagDefinitionSummary[];
   email?: string | null;
   created_at?: string | null;
   user_ids: number[];
@@ -24,6 +26,7 @@ export type S3UserSummary = {
   id: number;
   name: string;
   rgw_user_uid: string;
+  tags: TagDefinitionSummary[];
   storage_endpoint_id?: number | null;
   storage_endpoint_name?: string | null;
   storage_endpoint_url?: string | null;
@@ -37,6 +40,7 @@ export type CreateS3UserPayload = {
   quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;
   storage_endpoint_id?: number | null;
+  tags?: TagDefinitionInput[] | null;
 };
 
 export type ImportS3UserPayload = {
@@ -54,6 +58,7 @@ export type UpdateS3UserPayload = {
   quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;
   storage_endpoint_id?: number | null;
+  tags?: TagDefinitionInput[] | null;
 };
 
 export type S3UserAccessKey = {

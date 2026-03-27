@@ -24,6 +24,7 @@ from app.routers.dependencies import (
 from app.services.s3_accounts_service import S3AccountsService, get_s3_accounts_service
 from app.services.audit_service import AuditService
 from app.services.rgw_admin import RGWAdminError
+from app.services.tags_service import serialize_tag_summaries
 
 router = APIRouter(prefix="/admin/accounts", tags=["admin-accounts"])
 logger = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ def list_accounts(
             for acc in accounts
             if search_value in (acc.name or "").lower()
             or search_value in (acc.rgw_account_id or acc.rgw_user_uid or acc.id or "").lower()
+            or any(search_value in (tag.label or "").lower() for tag in (acc.tags or []))
         ]
     else:
         filtered = accounts
@@ -157,6 +159,7 @@ def create_account(
             metadata={
                 "quota_max_size_gb": created.quota_max_size_gb,
                 "quota_max_objects": created.quota_max_objects,
+                "tags": serialize_tag_summaries(created.tags),
             },
         )
         return created

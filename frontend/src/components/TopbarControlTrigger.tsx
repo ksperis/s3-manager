@@ -52,8 +52,8 @@ export default function TopbarControlTrigger({
       onKeyDown={onKeyDown}
       className={
         className ??
-        `inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200/80 bg-white text-left shadow-sm transition hover:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-500 dark:focus-visible:ring-offset-slate-900 ${
-          iconOnly ? iconModeClassName ?? "w-9 justify-center px-0" : "w-full px-2"
+        `inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white text-left shadow-sm transition hover:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-500 dark:focus-visible:ring-offset-slate-900 ${
+          iconOnly ? iconModeClassName ?? "w-9 justify-center px-0" : "w-full px-2.5"
         } ${open ? "border-primary/70" : ""}`
       }
     >
@@ -72,11 +72,23 @@ export default function TopbarControlTrigger({
           >
             {icon}
           </span>
-          <span className="min-w-0 flex-1 leading-tight">
+          <div className="min-w-0 flex-1 leading-tight">
             <span className="block truncate ui-caption uppercase tracking-wide text-slate-400 dark:text-slate-500">{label}</span>
-            <span className="block truncate ui-caption font-semibold text-slate-700 dark:text-slate-100">{value}</span>
-          </span>
-          {rightAddon}
+            <span
+              data-slot="topbar-trigger-value"
+              className="mt-px block min-w-0 truncate ui-caption font-semibold text-slate-700 dark:text-slate-100"
+            >
+              {value}
+            </span>
+          </div>
+          {rightAddon ? (
+            <div
+              data-slot="topbar-trigger-addon"
+              className="ml-1.5 flex min-w-0 max-w-[12rem] shrink-0 items-center overflow-hidden"
+            >
+              {rightAddon}
+            </div>
+          ) : null}
           <ChevronDownIcon
             className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform dark:text-slate-300 ${open ? "rotate-180" : ""}`}
           />

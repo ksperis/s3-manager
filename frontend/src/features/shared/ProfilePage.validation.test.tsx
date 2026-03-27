@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SELECTOR_TAGS_PREFERENCE_KEY } from "../../utils/selectorTagsPreference";
 import ProfilePage from "./ProfilePage";
 
 const listConnectionsMock = vi.fn();
@@ -12,6 +13,7 @@ const fetchCurrentUserMock = vi.fn();
 const updateCurrentUserMock = vi.fn();
 const setThemeMock = vi.fn();
 const setLanguagePreferenceMock = vi.fn();
+const listPrivateConnectionTagDefinitionsMock = vi.fn();
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({
@@ -52,6 +54,11 @@ vi.mock("../../api/storageEndpoints", () => ({
   listStorageEndpoints: () => listStorageEndpointsMock(),
 }));
 
+vi.mock("../../api/tags", () => ({
+  listAdminTagDefinitions: vi.fn(),
+  listPrivateConnectionTagDefinitions: () => listPrivateConnectionTagDefinitionsMock(),
+}));
+
 vi.mock("../../utils/workspaces", () => ({
   WORKSPACE_STORAGE_KEY: "workspace",
   isAdminLikeRole: () => true,
@@ -76,6 +83,7 @@ describe("ProfilePage live validation", () => {
     endpoint_url: "https://managed-a.example.test",
     region: "us-east-1",
     provider_hint: "ceph",
+    tags: [],
     access_key_id: "AKIA***1234",
     force_path_style: false,
     verify_tls: true,
@@ -98,12 +106,22 @@ describe("ProfilePage live validation", () => {
       code: "InvalidAccessKeyId",
       message: "Invalid S3 credentials.",
     });
+    updateCurrentUserMock.mockResolvedValue({
+      ui_language: null,
+      quota_alerts_enabled: true,
+      quota_alerts_global_watch: false,
+    });
+    listPrivateConnectionTagDefinitionsMock.mockResolvedValue([
+      { id: 901, label: "ops", color_key: "teal" },
+      { id: 902, label: "finance", color_key: "amber" },
+    ]);
     updateConnectionMock.mockResolvedValue(makeConnection());
     deleteConnectionMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it("shows validation error without disabling Create connection", async () => {
@@ -340,5 +358,79 @@ describe("ProfilePage live validation", () => {
     } finally {
       confirmSpy.mockRestore();
     }
+  });
+
+  it("saves the selector-tags preference to localStorage", async () => {
+    render(<ProfilePage showPageHeader={false} showConnectionsSection={false} />);
+
+    await screen.findByText("Preferences");
+    fireEvent.click(screen.getByRole("checkbox", { name: /show tags in top selectors/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+
+    await waitFor(() => {
+      expect(localStorage.getItem(SELECTOR_TAGS_PREFERENCE_KEY)).toBe("1");
+    });
+  });
+
+  it("renders private connection tags and includes them in the filter", async () => {
+    listConnectionsMock.mockResolvedValue([
+      makeConnection({ id: 41, name: "connection-a", tags: ["prod", "ops"] }),
+      makeConnection({ id: 42, name: "connection-b", tags: ["test"] }),
+    ]);
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+    await screen.findByText("connection-a");
+    expect(screen.getByText("prod")).toBeInTheDocument();
+    expect(screen.getByText("ops")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Name, endpoint, provider, tag..."), {
+      target: { value: "ops" },
+    });
+
+    expect(screen.getByText("connection-a")).toBeInTheDocument();
+    expect(screen.queryByText("connection-b")).not.toBeInTheDocument();
+  });
+
+  it("uses the explicit private tag flows in the create modal", async () => {
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+    await screen.findByText("Private S3 connections");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
+    await screen.findByText("Add private S3 connection");
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tags" }));
+
+    expect(within(dialog).getByText("Add existing tag")).toBeInTheDocument();
+    expect(within(dialog).getByText("Create new tag")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Reuse a private tag from your private-connection tag catalog.")
+    ).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "New tag label" }), {
+      target: { value: "ops" },
+    });
+    expect(
+      within(dialog).getByText("This tag already exists. Add it from Add existing tag.")
+    ).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search existing tags" }), {
+      target: { value: "ops" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add ops" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Change shared color for ops" }));
+
+    expect(
+      within(dialog).getByText(
+        "This updates the private tag definition for your private-connection tag catalog."
+      )
+    ).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "New tag label" }), {
+      target: { value: "team-a" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create and add tag" }));
+
+    expect(within(dialog).getAllByText("team-a").length).toBeGreaterThan(0);
   });
 });

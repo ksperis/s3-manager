@@ -5,8 +5,11 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ExecutionContext } from "../api/executionContexts";
 import { formatAccountLabel } from "../features/shared/storageEndpointLabel";
+import UiTagBadgeList from "./UiTagBadgeList";
 import TopbarControlTrigger from "./TopbarControlTrigger";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
+import { useSelectorTagsPreference } from "../utils/selectorTagsPreference";
+import { buildUiTagItems, extractUiTagLabels } from "../utils/uiTags";
 
 export type ContextAccessMode = "admin" | "session" | "s3_user" | "connection" | null;
 
@@ -71,7 +74,7 @@ export default function TopbarContextAccountSelector({
   identityLabel,
   defaultEndpointId,
   defaultEndpointName,
-  widthClassName = "w-[26rem] max-w-[55vw] min-w-[19rem]",
+  widthClassName = "w-[32rem] max-w-[70vw] min-w-[22rem]",
   searchThreshold = 6,
   openInPortal = true,
   triggerMode = "icon_label",
@@ -79,6 +82,7 @@ export default function TopbarContextAccountSelector({
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(-1);
+  const showSelectorTags = useSelectorTagsPreference();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuSurfaceRef = useRef<HTMLDivElement | null>(null);
@@ -97,10 +101,19 @@ export default function TopbarContextAccountSelector({
                 ? "Legacy S3 user identity"
                 : "RGW account";
           const displayName = context.display_name.trim();
-          const haystack = [label, context.display_name, context.endpoint_name, context.endpoint_url, description]
+          const haystack = [
+            label,
+            context.display_name,
+            context.endpoint_name,
+            context.endpoint_url,
+            description,
+            ...extractUiTagLabels(context.tags),
+            ...extractUiTagLabels(context.endpoint_tags),
+          ]
             .filter(Boolean)
             .join(" ")
             .toLowerCase();
+          const tagItems = buildUiTagItems(context.tags, context.endpoint_tags);
           return {
             id: context.id,
             kind: context.kind,
@@ -110,6 +123,7 @@ export default function TopbarContextAccountSelector({
             description,
             haystack,
             endpointUrl: context.endpoint_url ?? null,
+            tagItems,
           };
         })
         .sort((a, b) => {
@@ -128,6 +142,10 @@ export default function TopbarContextAccountSelector({
     if (!normalized) return contextItems;
     return contextItems.filter((item) => item.haystack.includes(normalized));
   }, [contextItems, query]);
+  const selectedItem = useMemo(
+    () => contextItems.find((item) => item.id === selectedContextId) ?? null,
+    [contextItems, selectedContextId]
+  );
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -296,15 +314,27 @@ export default function TopbarContextAccountSelector({
                 <span className="mt-0.5 h-4 w-4 shrink-0">
                   {active ? <CheckIcon className="h-4 w-4" /> : null}
                 </span>
-                <span className="min-w-0">
-                  <span className="block truncate ui-caption font-semibold">{item.label}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="block min-w-0 flex-1 truncate ui-caption font-semibold">{item.label}</span>
+                    {showSelectorTags && item.tagItems.length > 0 && (
+                      <div className="ml-auto min-w-0 max-w-[14rem] shrink-0 overflow-hidden">
+                        <UiTagBadgeList
+                          items={item.tagItems}
+                          layout="inline-compact"
+                          className="max-w-full"
+                          maxVisible={4}
+                        />
+                      </div>
+                    )}
+                  </div>
                   <span className="block truncate ui-caption text-slate-500 dark:text-slate-400">
                     {item.description}
                     {item.endpointUrl ? ` · ${item.endpointUrl}` : ""}
                   </span>
-                </span>
-              </button>
-            );
+                </div>
+                </button>
+              );
           })
         )}
       </div>
@@ -322,6 +352,16 @@ export default function TopbarContextAccountSelector({
         open={menuOpen}
         ariaLabel="Select context account"
         title={identityLabel ?? undefined}
+        rightAddon={
+          showSelectorTags && triggerMode !== "icon" && selectedItem && selectedItem.tagItems.length > 0 ? (
+            <UiTagBadgeList
+              items={selectedItem.tagItems}
+              layout="inline-compact"
+              maxVisible={3}
+              className="max-w-full"
+            />
+          ) : undefined
+        }
         onClick={() => setMenuOpen((open) => !open)}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {

@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
+import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 
 export type StorageProvider = "ceph" | "other";
 
@@ -57,8 +58,13 @@ export type StorageEndpoint = {
   features?: StorageEndpointFeatures;
   is_default: boolean;
   is_editable: boolean;
+  tags: TagDefinitionSummary[];
   created_at: string;
   updated_at: string;
+};
+
+export type StorageEndpointTagsPayload = {
+  tags: TagDefinitionInput[];
 };
 
 export type StorageEndpointMeta = {
@@ -145,6 +151,14 @@ export async function updateStorageEndpoint(
   payload: StorageEndpointPayload
 ): Promise<StorageEndpoint> {
   const { data } = await client.put<StorageEndpoint>(`/admin/storage-endpoints/${id}`, payload);
+  return data;
+}
+
+export async function updateStorageEndpointTags(
+  id: number,
+  payload: StorageEndpointTagsPayload
+): Promise<StorageEndpoint> {
+  const { data } = await client.put<StorageEndpoint>(`/admin/storage-endpoints/${id}/tags`, payload);
   return data;
 }
 

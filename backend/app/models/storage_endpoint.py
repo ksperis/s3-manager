@@ -6,6 +6,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.db import StorageProvider
+from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 
 
 class StorageEndpointFeature(BaseModel):
@@ -89,6 +90,15 @@ class StorageEndpointUpdate(BaseModel):
         return value or None
 
 
+class StorageEndpointTagsUpdate(BaseModel):
+    tags: list[TagDefinitionInput] = Field(default_factory=list)
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def normalize_tags(cls, value: object) -> list[dict[str, str]]:
+        return validate_tag_definition_list(value, allow_none=False) or []
+
+
 class StorageEndpoint(StorageEndpointBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -98,6 +108,7 @@ class StorageEndpoint(StorageEndpointBase):
     is_editable: bool = True
     created_at: datetime
     updated_at: datetime
+    tags: list[TagDefinitionSummary] = Field(default_factory=list)
     has_admin_secret: bool = False
     has_supervision_secret: bool = False
     has_ceph_admin_secret: bool = False

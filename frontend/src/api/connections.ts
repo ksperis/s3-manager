@@ -3,10 +3,12 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
+import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 
 export type S3Connection = {
   id: number;
   name: string;
+  tags: TagDefinitionSummary[];
   storage_endpoint_id?: number | null;
   created_by_user_id: number;
   is_shared?: boolean | null;
@@ -42,6 +44,7 @@ export type CreateConnectionPayload = {
   secret_access_key: string;
   force_path_style?: boolean | null;
   verify_tls?: boolean | null;
+  tags?: TagDefinitionInput[] | null;
 };
 
 export type UpdateConnectionPayload = {
@@ -55,8 +58,11 @@ export type UpdateConnectionPayload = {
   credential_owner_identifier?: string | null;
   endpoint_url?: string | null;
   region?: string | null;
+  access_key_id?: string | null;
+  secret_access_key?: string | null;
   force_path_style?: boolean | null;
   verify_tls?: boolean | null;
+  tags?: TagDefinitionInput[] | null;
 };
 
 export type ValidateConnectionCredentialsPayload = {

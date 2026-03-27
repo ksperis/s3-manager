@@ -26,6 +26,7 @@ from app.models.s3_account import (
 )
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
+from app.services.tags_service import TagsService
 from app.utils.storage_endpoint_features import (
     features_to_capabilities,
     normalize_features_config,
@@ -56,6 +57,7 @@ class S3AccountsService:
     ) -> None:
         self.db = db
         self.storage_endpoints = StorageEndpointsService(db)
+        self.tags = TagsService(db)
         if rgw_admin_client is not None:
             self.rgw_admin = rgw_admin_client
         elif allow_missing_admin:
@@ -539,6 +541,7 @@ class S3AccountsService:
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+                    tags=self.tags.get_account_tags(acc),
                 )
             )
         return results
@@ -562,6 +565,7 @@ class S3AccountsService:
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+                    tags=self.tags.get_account_tags(acc),
                 )
             )
         return summaries
@@ -615,6 +619,7 @@ class S3AccountsService:
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+            tags=self.tags.get_account_tags(account),
         )
 
     def import_accounts(self, imports: list[S3AccountImport]) -> list[S3AccountSchema]:
@@ -690,6 +695,7 @@ class S3AccountsService:
                 rgw_user_uid=root_uid,
                 email=item.email,
                 storage_endpoint_id=endpoint.id if endpoint else None,
+                tags_json="[]",
             )
             self.db.add(account)
             self.db.flush()
@@ -710,6 +716,7 @@ class S3AccountsService:
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+                    tags=[],
                 )
             )
         self.db.commit()
@@ -762,9 +769,11 @@ class S3AccountsService:
             rgw_user_uid=root_uid,
             email=payload.email,
             storage_endpoint_id=endpoint.id,
+            tags_json="[]",
         )
         self.db.add(account)
         self.db.flush()
+        self.tags.replace_account_tags(account, payload.tags)
 
         if payload.quota_max_size_gb is not None or payload.quota_max_objects is not None:
             self._apply_account_quota(
@@ -793,6 +802,7 @@ class S3AccountsService:
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+            tags=self.tags.get_account_tags(account),
         )
 
     def update_account(self, account_id: int, payload: S3AccountUpdate) -> S3AccountSchema:
@@ -807,6 +817,8 @@ class S3AccountsService:
         if payload.storage_endpoint_id is not None:
             endpoint = self._resolve_storage_endpoint(payload.storage_endpoint_id, require_ceph=True)
             account.storage_endpoint_id = endpoint.id
+        if payload.tags is not None:
+            self.tags.replace_account_tags(account, payload.tags)
 
         if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
             quota_requested = payload.quota_max_size_gb is not None or payload.quota_max_objects is not None
@@ -907,6 +919,7 @@ class S3AccountsService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+            tags=self.tags.get_account_tags(account),
         )
 
     def delete_account(self, account_id: int, delete_rgw: bool = False) -> None:
@@ -994,6 +1007,8 @@ class S3AccountsService:
             .update({AuditLog.account_id: None}, synchronize_session=False)
         )
         self.db.delete(account)
+        self.db.flush()
+        self.tags.cleanup_orphan_definitions()
         self.db.commit()
 
 

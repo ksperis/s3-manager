@@ -64,6 +64,7 @@ class S3Connection(Base):
 
     # Cached capability profile (JSON) computed from probes (optional)
     capabilities_json = Column(Text, nullable=False, default="{}", server_default="{}")
+    tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
 
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, nullable=False)
@@ -84,6 +85,7 @@ class S3Connection(Base):
         overlaps="users,shared_s3_connections,connection_links,created_by",
         cascade="all, delete-orphan",
     )
+    tag_links = relationship("S3ConnectionTag", back_populates="connection", cascade="all, delete-orphan")
 
 
 class UserS3Connection(Base):

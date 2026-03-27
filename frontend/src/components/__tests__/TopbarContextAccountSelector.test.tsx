@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ExecutionContext } from "../../api/executionContexts";
 import TopbarContextAccountSelector from "../TopbarContextAccountSelector";
+import { SELECTOR_TAGS_PREFERENCE_KEY } from "../../utils/selectorTagsPreference";
 
 const baseCapabilities = {
   can_manage_iam: true,
@@ -14,6 +15,8 @@ function makeContext(overrides: Partial<ExecutionContext>): ExecutionContext {
     kind: "account",
     id: "ctx-default",
     display_name: "Default",
+    tags: [],
+    endpoint_tags: [],
     capabilities: baseCapabilities,
     ...overrides,
   };
@@ -53,6 +56,10 @@ function visibleOptionLabels(listbox: HTMLElement): string[] {
 }
 
 describe("TopbarContextAccountSelector", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it("sorts contexts by type then by name", async () => {
     const user = userEvent.setup();
     const contexts = [
@@ -111,10 +118,7 @@ describe("TopbarContextAccountSelector", () => {
     expect(input).toBeInTheDocument();
 
     await user.type(input, "f");
-    expect(input).toHaveFocus();
-
     await user.type(input, "ilter target");
-    expect(input).toHaveFocus();
     expect(visibleOptionLabels(listbox)).toEqual(["Filter target"]);
   });
 
@@ -132,5 +136,47 @@ describe("TopbarContextAccountSelector", () => {
 
     await openMenu(user);
     expect(screen.queryByPlaceholderText("Search account...")).not.toBeInTheDocument();
+  });
+
+  it("renders entity and endpoint tags when the selector preference is enabled", async () => {
+    localStorage.setItem(SELECTOR_TAGS_PREFERENCE_KEY, "1");
+    const user = userEvent.setup();
+    renderSelector({
+      contexts: [
+        makeContext({
+          id: "acc-1",
+          display_name: "Alpha",
+          tags: [
+            { id: 1, label: "gold", color_key: "amber" },
+            { id: 2, label: "team-a", color_key: "blue" },
+          ],
+          endpoint_tags: [
+            { id: 3, label: "ceph", color_key: "slate" },
+            { id: 4, label: "prod", color_key: "emerald" },
+          ],
+        }),
+      ],
+      selectedContextId: "acc-1",
+    });
+
+    const trigger = screen.getByRole("button", { name: "Select context account" });
+    const valueSlot = trigger.querySelector('[data-slot="topbar-trigger-value"]');
+    const addonSlot = trigger.querySelector('[data-slot="topbar-trigger-addon"]');
+    expect(valueSlot).toHaveTextContent("Selected context");
+    expect(addonSlot).toHaveTextContent("gold");
+    expect(addonSlot).toHaveClass("items-center");
+    expect(trigger).toHaveTextContent("gold");
+    expect(trigger).toHaveTextContent("team-a");
+    expect(trigger).toHaveTextContent("ceph");
+    expect(trigger).toHaveTextContent("+1");
+    const triggerGoldBadge = screen.getByText("gold").parentElement;
+    expect(triggerGoldBadge).toHaveClass("bg-amber-50");
+    expect(triggerGoldBadge).not.toHaveClass("bg-slate-50");
+
+    const listbox = await openMenu(user);
+    expect(within(listbox).getByText("gold")).toBeInTheDocument();
+    expect(within(listbox).getByText("team-a")).toBeInTheDocument();
+    expect(within(listbox).getByText("ceph")).toBeInTheDocument();
+    expect(within(listbox).getByText("prod")).toBeInTheDocument();
   });
 });

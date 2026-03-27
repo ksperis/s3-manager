@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from app.db import S3Connection, StorageEndpoint, StorageProvider, User, UserRole, UserS3Connection
 from app.models.s3_connection import S3ConnectionCreate, S3ConnectionUpdate
@@ -176,6 +177,56 @@ def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session
     assert preset_conn.endpoint_url == endpoint.endpoint_url
     assert preset_conn.force_path_style is False
     assert preset_conn.verify_tls is True
+
+
+def test_create_and_update_connection_normalize_tags(db_session, monkeypatch):
+    owner = _user(db_session, "owner-tags@example.test")
+    service = S3ConnectionsService(db_session)
+
+    monkeypatch.setattr(
+        service,
+        "_refresh_detected_capabilities",
+        lambda row: setattr(row, "capabilities_json", '{"can_manage_iam": false}'),
+    )
+
+    created = service.create(
+        owner.id,
+        S3ConnectionCreate(
+            name="tagged-conn",
+            endpoint_url="https://tags.example.test",
+            access_key_id="AKIA-TAGS-0001",
+            secret_access_key="SECRET-TAGS-0001",
+            access_manager=True,
+            access_browser=True,
+            tags=["prod", "prod", "  finance  ", ""],
+        ),
+    )
+
+    assert [tag.label for tag in created.tags] == ["prod", "finance"]
+    assert [tag.color_key for tag in created.tags] == ["neutral", "neutral"]
+
+    updated = service.update(
+        owner.id,
+        created.id,
+        S3ConnectionUpdate(tags=["finance", "archive", "archive", "  prod  "]),
+    )
+
+    assert [tag.label for tag in updated.tags] == ["finance", "archive", "prod"]
+    assert [tag.color_key for tag in updated.tags] == ["neutral", "neutral", "neutral"]
+    persisted = db_session.query(S3Connection).filter(S3Connection.id == created.id).first()
+    assert persisted is not None
+    assert json.loads(persisted.tags_json) == ["finance", "archive", "prod"]
+
+
+def test_connection_models_reject_non_string_tags():
+    with pytest.raises(ValidationError, match="tags must be a list of tag definitions"):
+        S3ConnectionCreate(
+            name="invalid-tags",
+            endpoint_url="https://invalid-tags.example.test",
+            access_key_id="AKIA-INVALID-TAGS",
+            secret_access_key="SECRET-INVALID-TAGS",
+            tags=["ok", 123],
+        )
 
 
 def test_update_connection_updates_private_connection(db_session, monkeypatch):

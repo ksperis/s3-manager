@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from app.db import S3User
+from app.services.tags_service import TagsService
 
 
 def _seed_s3_user(
@@ -83,3 +84,16 @@ def test_admin_s3_users_minimal_is_sorted_case_insensitive(client, db_session):
     payload = response.json()
 
     assert [item["name"] for item in payload] == ["alpha", "Beta", "Zulu"]
+
+
+def test_admin_s3_users_search_matches_tag_labels(client, db_session):
+    tagged = _seed_s3_user(db_session, name="tagged-user", uid="uid-tagged")
+    _seed_s3_user(db_session, name="plain-user", uid="uid-plain")
+    TagsService(db_session).replace_s3_user_tags(tagged, [{"label": "prod", "color_key": "emerald"}])
+    db_session.commit()
+
+    response = client.get("/api/admin/s3-users", params={"search": "prod"})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert [item["name"] for item in payload["items"]] == ["tagged-user"]

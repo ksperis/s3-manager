@@ -7,11 +7,11 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import exists, func
 from sqlalchemy.orm import Session, aliased
 
 from app.core.database import get_db
-from app.db import S3Connection, StorageEndpoint, User, UserS3Connection
+from app.db import S3Connection, S3ConnectionTag, StorageEndpoint, TagDefinition, User, UserS3Connection
 from app.models.s3_connection import (
     S3ConnectionCredentialsUpdate,
     S3ConnectionCredentialsValidationRequest,
@@ -30,6 +30,7 @@ from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
+from app.services.tags_service import TagsService, serialize_tag_summaries
 from app.utils.s3_connection_capabilities import (
     parse_s3_connection_capabilities,
     s3_connection_can_manage_iam,
@@ -40,8 +41,6 @@ from app.utils.s3_connection_endpoint import (
     resolve_connection_details,
 )
 from app.utils.s3_connection_ordering import s3_connection_name_order_by
-
-
 router = APIRouter(prefix="/admin/s3-connections", tags=["admin-s3-connections"])
 logger = logging.getLogger(__name__)
 
@@ -99,6 +98,7 @@ def _to_admin_item(
     created_by_email: Optional[str],
     user_count: int,
     user_ids: list[int],
+    tags_service: TagsService,
 ) -> S3ConnectionAdminItem:
     details = resolve_connection_details(conn)
     capabilities = _parse_capabilities(conn.capabilities_json)
@@ -122,6 +122,7 @@ def _to_admin_item(
         created_by_email=created_by_email,
         user_count=int(user_count),
         user_ids=sorted(user_ids),
+        tags=tags_service.get_connection_tags(conn),
         last_used_at=conn.last_used_at,
         created_at=conn.created_at,
         updated_at=conn.updated_at,
@@ -140,6 +141,7 @@ def list_s3_connections(
     current_user: User = Depends(get_current_super_admin),
 ) -> PaginatedS3ConnectionsResponse:
     _ = current_user
+    tags_service = TagsService(db)
     linked_user = aliased(User)
     q = (
         db.query(
@@ -159,6 +161,12 @@ def list_s3_connections(
     )
     if search:
         term = f"%{search.strip()}%"
+        tag_match = (
+            exists()
+            .where(S3ConnectionTag.s3_connection_id == S3Connection.id)
+            .where(TagDefinition.id == S3ConnectionTag.tag_definition_id)
+            .where(TagDefinition.label.ilike(term))
+        )
         q = q.filter(
             (S3Connection.name.ilike(term))
             | (StorageEndpoint.endpoint_url.ilike(term))
@@ -166,6 +174,7 @@ def list_s3_connections(
             | (User.email.ilike(term))
             | (linked_user.email.ilike(term))
             | (linked_user.full_name.ilike(term))
+            | tag_match
         )
 
     sort_map = {
@@ -213,6 +222,7 @@ def list_s3_connections(
                 created_by_email=created_by_email,
                 user_count=int(user_count or 0),
                 user_ids=user_ids_by_connection.get(conn.id, []),
+                tags_service=tags_service,
             )
         )
     has_next = page * page_size < total
@@ -275,6 +285,7 @@ def create_s3_connection(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_logger),
 ) -> S3ConnectionAdminItem:
+    tags_service = TagsService(db)
     endpoint_url = (payload.endpoint_url or "").strip()
     region = payload.region
     force_path_style = bool(payload.force_path_style)
@@ -314,12 +325,14 @@ def create_s3_connection(
         access_key_id=payload.access_key_id,
         secret_access_key=payload.secret_access_key,
         capabilities_json=json.dumps({}),
+        tags_json="[]",
         created_at=utcnow(),
         updated_at=utcnow(),
     )
     try:
         db.add(conn)
         db.flush()
+        tags_service.replace_connection_tags(conn, payload.tags)
         _refresh_detected_capabilities(conn)
         db.commit()
     except Exception as exc:
@@ -343,6 +356,7 @@ def create_s3_connection(
                 "access_browser": bool(conn.access_browser),
                 "can_manage_iam": _connection_iam_capable(conn),
                 "access_key_id": _mask_access_key(conn.access_key_id),
+                "tags": serialize_tag_summaries(tags_service.get_connection_tags(conn)),
             },
         )
     return _to_admin_item(
@@ -350,6 +364,7 @@ def create_s3_connection(
         created_by_email=current_user.email,
         user_count=0,
         user_ids=[],
+        tags_service=tags_service,
     )
 
 
@@ -361,6 +376,7 @@ def update_s3_connection(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_logger),
 ) -> S3ConnectionAdminItem:
+    tags_service = TagsService(db)
     conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
@@ -421,6 +437,8 @@ def update_s3_connection(
         conn.credential_owner_type = payload.credential_owner_type
     if "credential_owner_identifier" in payload_data:
         conn.credential_owner_identifier = payload.credential_owner_identifier
+    if "tags" in payload_data:
+        tags_service.replace_connection_tags(conn, payload.tags)
     if should_probe_iam:
         _refresh_detected_capabilities(conn)
     conn.updated_at = utcnow()
@@ -437,7 +455,13 @@ def update_s3_connection(
     created_by_email = db.query(User.email).filter(User.id == conn.created_by_user_id).scalar()
     user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
     user_ids = _linked_user_ids(db, conn.id)
-    return _to_admin_item(conn, created_by_email=created_by_email, user_count=int(user_count), user_ids=user_ids)
+    return _to_admin_item(
+        conn,
+        created_by_email=created_by_email,
+        user_count=int(user_count),
+        user_ids=user_ids,
+        tags_service=tags_service,
+    )
 
 
 @router.put("/{connection_id}/credentials", response_model=S3ConnectionAdminItem)
@@ -448,6 +472,7 @@ def rotate_s3_connection_credentials(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_logger),
 ) -> S3ConnectionAdminItem:
+    tags_service = TagsService(db)
     conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
@@ -469,7 +494,13 @@ def rotate_s3_connection_credentials(
     created_by_email = db.query(User.email).filter(User.id == conn.created_by_user_id).scalar()
     user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
     user_ids = _linked_user_ids(db, conn.id)
-    return _to_admin_item(conn, created_by_email=created_by_email, user_count=int(user_count), user_ids=user_ids)
+    return _to_admin_item(
+        conn,
+        created_by_email=created_by_email,
+        user_count=int(user_count),
+        user_ids=user_ids,
+        tags_service=tags_service,
+    )
 
 
 @router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -479,6 +510,7 @@ def delete_s3_connection(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_logger),
 ):
+    tags_service = TagsService(db)
     conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
@@ -487,6 +519,8 @@ def delete_s3_connection(
     meta = {"name": conn.name, "endpoint_url": details.endpoint_url, "provider_hint": details.provider}
     db.query(UserS3Connection).filter(UserS3Connection.s3_connection_id == conn.id).delete()
     db.delete(conn)
+    db.flush()
+    tags_service.cleanup_orphan_definitions()
     db.commit()
     audit.record_action(
         user=current_user,

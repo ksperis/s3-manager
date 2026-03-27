@@ -30,9 +30,11 @@ from app.models.storage_endpoint import (
     StorageEndpointAdminOpsPermissions,
     StorageEndpoint as StorageEndpointSchema,
     StorageEndpointCreate,
+    StorageEndpointTagsUpdate,
     StorageEndpointUpdate,
 )
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
+from app.services.tags_service import TagsService
 from app.utils.s3_endpoint import configured_s3_endpoint
 from app.utils.storage_endpoint_features import (
     dump_features_config,
@@ -76,6 +78,7 @@ class EnvStorageEndpoint(BaseModel):
 class StorageEndpointsService:
     def __init__(self, db: Session) -> None:
         self.db = db
+        self.tags = TagsService(db)
 
     def env_endpoints_locked(self) -> bool:
         raw = settings.env_storage_endpoints
@@ -259,6 +262,7 @@ class StorageEndpointsService:
             is_editable=bool(endpoint.is_editable),
             created_at=endpoint.created_at,
             updated_at=endpoint.updated_at,
+            tags=self.tags.get_storage_endpoint_tags(endpoint),
             has_admin_secret=bool(endpoint.admin_secret_key),
             has_supervision_secret=bool(endpoint.supervision_secret_key),
             has_ceph_admin_secret=bool(endpoint.ceph_admin_secret_key),
@@ -572,6 +576,15 @@ class StorageEndpointsService:
             raise ValueError("Endpoint not found.")
         return self._serialize(endpoint, include_admin_ops_permissions=include_admin_ops_permissions)
 
+    def update_endpoint_tags(self, endpoint_id: int, payload: StorageEndpointTagsUpdate) -> StorageEndpointSchema:
+        endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
+        if not endpoint:
+            raise ValueError("Endpoint not found.")
+        self.tags.replace_storage_endpoint_tags(endpoint, payload.tags)
+        self.db.commit()
+        self.db.refresh(endpoint)
+        return self._serialize(endpoint)
+
     def create_endpoint(self, payload: StorageEndpointCreate) -> StorageEndpointSchema:
         self._ensure_env_editable()
         name = self._normalize_name(payload.name, fallback="Endpoint")
@@ -794,6 +807,8 @@ class StorageEndpointsService:
             synchronize_session=False
         )
         self.db.delete(endpoint)
+        self.db.flush()
+        self.tags.cleanup_orphan_definitions()
         self.db.commit()
 
     def set_default_endpoint(self, endpoint_id: int) -> StorageEndpointSchema:

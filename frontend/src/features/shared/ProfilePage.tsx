@@ -8,6 +8,8 @@ import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PaginationControls from "../../components/PaginationControls";
+import UiTagBadgeList from "../../components/UiTagBadgeList";
+import UiTagEditor from "../../components/UiTagEditor";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useTheme } from "../../components/theme";
@@ -34,9 +36,16 @@ import {
   readStoredWorkspaceId,
   resolveAvailableWorkspacesWithFlags,
 } from "../../utils/workspaces";
+import {
+  readSelectorTagsPreference,
+  writeSelectorTagsPreference,
+} from "../../utils/selectorTagsPreference";
+import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
+import { useTagCatalog } from "../../hooks/useTagCatalog";
 
 const defaultCreateConnectionForm = {
   name: "",
+  tags: [] as UiTagDefinition[],
   provider_hint: "",
   endpoint_url: "",
   region: "",
@@ -49,9 +58,11 @@ const defaultCreateConnectionForm = {
 };
 
 type CreateConnectionEndpointMode = "preset" | "custom";
+type ConnectionModalTab = "general" | "tags";
 
 type ConnectionDraft = {
   name: string;
+  tags: UiTagDefinition[];
   provider_hint: string;
   endpoint_url: string;
   region: string;
@@ -99,6 +110,7 @@ function getErrorMessage(error: unknown, fallback: string): string {
 function buildConnectionDraft(connection: S3Connection): ConnectionDraft {
   return {
     name: connection.name ?? "",
+    tags: normalizeUiTags(connection.tags),
     provider_hint: connection.provider_hint ?? "",
     endpoint_url: connection.endpoint_url ?? "",
     region: connection.region ?? "",
@@ -156,6 +168,7 @@ export default function ProfilePage({
   const [preferencesMessage, setPreferencesMessage] = useState<string | null>(null);
   const [preferencesTheme, setPreferencesTheme] = useState<"light" | "dark">(theme);
   const [preferencesLanguage, setPreferencesLanguage] = useState<UiLanguagePreference>(languagePreference);
+  const [preferencesShowSelectorTags, setPreferencesShowSelectorTags] = useState<boolean>(() => readSelectorTagsPreference());
   const [quotaAlertsEnabled, setQuotaAlertsEnabled] = useState(true);
   const [quotaAlertsGlobalWatch, setQuotaAlertsGlobalWatch] = useState(false);
   const [connections, setConnections] = useState<S3Connection[]>([]);
@@ -163,6 +176,7 @@ export default function ProfilePage({
   const [connectionsError, setConnectionsError] = useState<string | null>(null);
   const [connectionsMessage, setConnectionsMessage] = useState<string | null>(null);
   const [showCreateConnectionModal, setShowCreateConnectionModal] = useState(false);
+  const [createConnectionTab, setCreateConnectionTab] = useState<ConnectionModalTab>("general");
   const [creatingConnection, setCreatingConnection] = useState(false);
   const [savingConnectionBusyId, setSavingConnectionBusyId] = useState<number | null>(null);
   const [deletingConnectionBusyId, setDeletingConnectionBusyId] = useState<number | null>(null);
@@ -172,6 +186,7 @@ export default function ProfilePage({
   const [bulkDisablingConnections, setBulkDisablingConnections] = useState(false);
   const [bulkDeletingConnections, setBulkDeletingConnections] = useState(false);
   const [editingConnectionId, setEditingConnectionId] = useState<number | null>(null);
+  const [editConnectionTab, setEditConnectionTab] = useState<ConnectionModalTab>("general");
   const [createConnectionForm, setCreateConnectionForm] = useState(defaultCreateConnectionForm);
   const [createConnectionEndpointMode, setCreateConnectionEndpointMode] = useState<CreateConnectionEndpointMode>("custom");
   const [createConnectionEndpointId, setCreateConnectionEndpointId] = useState("");
@@ -187,6 +202,10 @@ export default function ProfilePage({
   const [connectionsFilter, setConnectionsFilter] = useState("");
   const [connectionsPage, setConnectionsPage] = useState(1);
   const [connectionsPageSize, setConnectionsPageSize] = useState(10);
+  const { catalog: privateTagCatalog, loading: privateTagCatalogLoading, error: privateTagCatalogError } = useTagCatalog(
+    { kind: "private" },
+    Boolean(showCreateConnectionModal || editingConnectionId != null)
+  );
   const availableWorkspaces = useMemo(
     () => resolveAvailableWorkspacesWithFlags(storedUser, generalSettings),
     [generalSettings, storedUser]
@@ -259,6 +278,7 @@ export default function ProfilePage({
     return sortedConnections.filter((connection) => {
       const values = [
         connection.name,
+        ...extractUiTagLabels(connection.tags),
         connection.endpoint_url,
         connection.region,
         connection.provider_hint,
@@ -534,6 +554,7 @@ export default function ProfilePage({
     setConnectionsError(null);
     setConnectionsMessage(null);
     setCreateConnectionForm(defaultCreateConnectionForm);
+    setCreateConnectionTab("general");
     if (availableStorageEndpoints.length > 0) {
       const preferred = availableStorageEndpoints.find((item) => item.is_default) ?? availableStorageEndpoints[0];
       setCreateConnectionEndpointMode("preset");
@@ -552,6 +573,7 @@ export default function ProfilePage({
       ...prev,
       [connection.id]: prev[connection.id] ?? buildConnectionDraft(connection),
     }));
+    setEditConnectionTab("general");
     if (connection.storage_endpoint_id != null) {
       setEditConnectionEndpointMode("preset");
       setEditConnectionEndpointId(String(connection.storage_endpoint_id));
@@ -644,6 +666,7 @@ export default function ProfilePage({
     } else {
       localStorage.removeItem(WORKSPACE_STORAGE_KEY);
     }
+    writeSelectorTagsPreference(preferencesShowSelectorTags);
     setPreferencesMessage("Preferences saved.");
   };
 
@@ -680,6 +703,7 @@ export default function ProfilePage({
     try {
       await createConnection({
         name: createConnectionForm.name.trim(),
+        tags: normalizeUiTags(createConnectionForm.tags),
         provider_hint:
           createConnectionEndpointMode === "custom" ? createConnectionForm.provider_hint.trim() || undefined : undefined,
         storage_endpoint_id: storageEndpointId,
@@ -708,7 +732,11 @@ export default function ProfilePage({
     }
   };
 
-  const handleUpdateConnectionDraft = (connectionId: number, field: keyof ConnectionDraft, value: string | boolean) => {
+  const handleUpdateConnectionDraft = (
+    connectionId: number,
+    field: keyof ConnectionDraft,
+    value: ConnectionDraft[keyof ConnectionDraft]
+  ) => {
     setConnectionDrafts((prev) => ({
       ...prev,
       [connectionId]: {
@@ -778,6 +806,7 @@ export default function ProfilePage({
           };
       await updateConnection(connectionId, {
         name: draft.name.trim(),
+        tags: normalizeUiTags(draft.tags),
         access_manager: draft.access_manager,
         access_browser: draft.access_browser,
         ...endpointPayload,
@@ -1168,6 +1197,20 @@ export default function ProfilePage({
                 </select>
               </label>
             </div>
+            <label className="flex items-start gap-3 rounded-md border border-slate-200 px-3 py-3 dark:border-slate-700">
+              <input
+                type="checkbox"
+                checked={preferencesShowSelectorTags}
+                onChange={(event) => setPreferencesShowSelectorTags(event.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+              />
+              <span>
+                <span className="ui-body text-slate-700 dark:text-slate-200">Show tags in top selectors</span>
+                <span className="mt-1 block ui-caption text-slate-500 dark:text-slate-400">
+                  Display compact endpoint and context tags in the topbar selectors on this browser only.
+                </span>
+              </span>
+            </label>
             {!isS3Session && (
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
@@ -1242,7 +1285,7 @@ export default function ProfilePage({
                       type="text"
                       value={connectionsFilter}
                       onChange={(event) => handleConnectionsFilterChange(event.target.value)}
-                      placeholder="Name, endpoint, provider..."
+                      placeholder="Name, endpoint, provider, tag..."
                       className={`${toolbarCompactInputClasses} w-full sm:w-72`}
                     />
                   </div>
@@ -1330,6 +1373,7 @@ export default function ProfilePage({
                       {!connectionsLoading &&
                         pagedConnections.map((connection) => {
                           const isActive = connection.is_active !== false;
+                          const connectionTagItems = buildUiTagItems(connection.tags);
                           const endpointLabel = connection.storage_endpoint_id
                             ? storageEndpointLabelById.get(connection.storage_endpoint_id) ||
                               `Managed endpoint #${connection.storage_endpoint_id}`
@@ -1347,10 +1391,25 @@ export default function ProfilePage({
                                 />
                               </td>
                               <td className="px-4 py-4">
-                                <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
-                                  {connection.name || "-"}
-                                </p>
-                                <p className="ui-caption text-slate-500 dark:text-slate-400">Access Key: {connection.access_key_id || "-"}</p>
+                                <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate ui-body font-semibold text-slate-900 dark:text-slate-100">
+                                      {connection.name || "-"}
+                                    </p>
+                                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                      Access Key: {connection.access_key_id || "-"}
+                                    </p>
+                                  </div>
+                                  {connectionTagItems.length > 0 && (
+                                    <UiTagBadgeList
+                                      items={connectionTagItems}
+                                      variant="listing-compact"
+                                      layout="inline-compact"
+                                      className="ml-auto max-w-full"
+                                      maxVisible={4}
+                                    />
+                                  )}
+                                </div>
                               </td>
                               <td className="px-4 py-4 ui-caption text-slate-600 dark:text-slate-300">
                                 {connection.storage_endpoint_id ? (
@@ -1451,7 +1510,12 @@ export default function ProfilePage({
       {showConnectionsSection && showCreateConnectionModal && (
         <Modal
           title="Add private S3 connection"
-          onClose={() => (!creatingConnection ? setShowCreateConnectionModal(false) : null)}
+          onClose={() => {
+            if (creatingConnection) return null;
+            setCreateConnectionTab("general");
+            setShowCreateConnectionModal(false);
+            return null;
+          }}
           maxWidthClass="max-w-3xl"
         >
           {connectionsError && (
@@ -1460,232 +1524,279 @@ export default function ProfilePage({
             </div>
           )}
           <form onSubmit={handleCreatePrivateConnection} className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Name
-                </span>
-                <input
-                  type="text"
-                  value={createConnectionForm.name}
-                  onChange={(event) => setCreateConnectionForm((prev) => ({ ...prev, name: event.target.value }))}
-                  className={inputClasses}
-                  placeholder="Mon endpoint S3"
-                />
-              </label>
-              <div className="sm:col-span-2 space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-                <div>
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Endpoint
-                  </p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Choose a configured endpoint or enter a custom endpoint.
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                    <input
-                      type="radio"
-                      name="create-connection-endpoint-mode"
-                      checked={createConnectionEndpointMode === "preset"}
-                      onChange={() => setCreateConnectionEndpointMode("preset")}
-                      disabled={availableStorageEndpoints.length === 0}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
-                    />
-                    Endpoint UI existant
-                  </label>
-                  <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                    <input
-                      type="radio"
-                      name="create-connection-endpoint-mode"
-                      checked={createConnectionEndpointMode === "custom"}
-                      onChange={() => setCreateConnectionEndpointMode("custom")}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                    />
-                    Endpoint custom
-                  </label>
-                </div>
-                {createConnectionEndpointMode === "preset" ? (
-                  <label className="block">
-                    <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Configured endpoint
-                    </span>
-                    <select
-                      value={createConnectionEndpointId}
-                      onChange={(event) => setCreateConnectionEndpointId(event.target.value)}
-                      disabled={loadingStorageEndpoints || availableStorageEndpoints.length === 0}
-                      className={inputClasses}
-                    >
-                      <option value="">
-                        {loadingStorageEndpoints
-                          ? "Loading endpoints..."
-                          : availableStorageEndpoints.length === 0
-                            ? "No configured endpoint"
-                            : "Select endpoint"}
-                      </option>
-                      {availableStorageEndpoints.map((endpoint) => (
-                        <option key={endpoint.id} value={endpoint.id}>
-                          {endpoint.name} ({endpoint.endpoint_url})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Provider
-                      </span>
-                      <input
-                        type="text"
-                        value={createConnectionForm.provider_hint}
-                        onChange={(event) =>
-                          setCreateConnectionForm((prev) => ({ ...prev, provider_hint: event.target.value }))
-                        }
-                        className={inputClasses}
-                        placeholder="aws | minio | ceph ..."
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Region
-                      </span>
-                      <input
-                        type="text"
-                        value={createConnectionForm.region}
-                        onChange={(event) => setCreateConnectionForm((prev) => ({ ...prev, region: event.target.value }))}
-                        className={inputClasses}
-                        placeholder="us-east-1"
-                      />
-                    </label>
-                    <label className="block sm:col-span-2">
-                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Endpoint URL
-                      </span>
-                      <input
-                        type="url"
-                        value={createConnectionForm.endpoint_url}
-                        onChange={(event) =>
-                          setCreateConnectionForm((prev) => ({ ...prev, endpoint_url: event.target.value }))
-                        }
-                        className={inputClasses}
-                        placeholder="https://s3.example.com"
-                      />
-                    </label>
-                    <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
-                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={createConnectionForm.force_path_style}
-                          onChange={(event) =>
-                            setCreateConnectionForm((prev) => ({ ...prev, force_path_style: event.target.checked }))
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                        />
-                        Force path style
-                      </label>
-                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={createConnectionForm.verify_tls}
-                          onChange={(event) =>
-                            setCreateConnectionForm((prev) => ({ ...prev, verify_tls: event.target.checked }))
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                        />
-                        Verify TLS
-                      </label>
-                    </div>
-                  </div>
-                )}
-                {storageEndpointsError && (
-                  <p className="ui-caption text-amber-700 dark:text-amber-300">
-                    Unable to load configured endpoints ({storageEndpointsError}). Use custom mode.
-                  </p>
-                )}
-              </div>
-              <label className="block">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Access Key
-                </span>
-                <input
-                  type="text"
-                  value={createConnectionForm.access_key_id}
-                  onChange={(event) =>
-                    setCreateConnectionForm((prev) => ({ ...prev, access_key_id: event.target.value }))
-                  }
-                  className={inputClasses}
-                  placeholder="AKIA..."
-                />
-              </label>
-              <label className="block">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Secret Key
-                </span>
-                <input
-                  type="password"
-                  value={createConnectionForm.secret_access_key}
-                  onChange={(event) =>
-                    setCreateConnectionForm((prev) => ({ ...prev, secret_access_key: event.target.value }))
-                  }
-                  className={inputClasses}
-                  placeholder="********"
-                />
-              </label>
-              <div className="sm:col-span-2">
-                {createConnectionValidation.status === "loading" && (
-                  <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 ui-caption text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-100">
-                    Validating credentials...
-                  </p>
-                )}
-                {createConnectionValidation.status === "done" && createConnectionValidation.result && (
-                  <p
-                    className={`rounded-md px-3 py-2 ui-caption ${
-                      createConnectionValidation.result.severity === "success"
-                        ? "border border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200"
-                        : createConnectionValidation.result.severity === "warning"
-                          ? "border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100"
-                          : "border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200"
-                    }`}
-                  >
-                    {createConnectionValidation.result.message}
-                  </p>
-                )}
-              </div>
-              <div className="sm:col-span-2 space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace access</p>
-                <div className="flex flex-wrap items-center gap-4">
-                  <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={createConnectionForm.access_manager}
-                      onChange={(event) =>
-                        setCreateConnectionForm((prev) => ({ ...prev, access_manager: event.target.checked }))
-                      }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                    />
-                    Access manager
-                  </label>
-                  <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={createConnectionForm.access_browser}
-                      onChange={(event) =>
-                        setCreateConnectionForm((prev) => ({ ...prev, access_browser: event.target.checked }))
-                      }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                    />
-                    Access browser
-                  </label>
-                </div>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">At least one access must be enabled.</p>
-              </div>
+            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
+              <button
+                type="button"
+                onClick={() => setCreateConnectionTab("general")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  createConnectionTab === "general"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                General
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateConnectionTab("tags")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  createConnectionTab === "tags"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                Tags
+              </button>
             </div>
+            {createConnectionTab === "general" && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Name
+                  </span>
+                  <input
+                    type="text"
+                    value={createConnectionForm.name}
+                    onChange={(event) => setCreateConnectionForm((prev) => ({ ...prev, name: event.target.value }))}
+                    className={inputClasses}
+                    placeholder="Mon endpoint S3"
+                  />
+                </label>
+                <div className="sm:col-span-2 space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <div>
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Endpoint
+                    </p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Choose a configured endpoint or enter a custom endpoint.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                      <input
+                        type="radio"
+                        name="create-connection-endpoint-mode"
+                        checked={createConnectionEndpointMode === "preset"}
+                        onChange={() => setCreateConnectionEndpointMode("preset")}
+                        disabled={availableStorageEndpoints.length === 0}
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                      />
+                      Endpoint UI existant
+                    </label>
+                    <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                      <input
+                        type="radio"
+                        name="create-connection-endpoint-mode"
+                        checked={createConnectionEndpointMode === "custom"}
+                        onChange={() => setCreateConnectionEndpointMode("custom")}
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                      />
+                      Endpoint custom
+                    </label>
+                  </div>
+                  {createConnectionEndpointMode === "preset" ? (
+                    <label className="block">
+                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Configured endpoint
+                      </span>
+                      <select
+                        value={createConnectionEndpointId}
+                        onChange={(event) => setCreateConnectionEndpointId(event.target.value)}
+                        disabled={loadingStorageEndpoints || availableStorageEndpoints.length === 0}
+                        className={inputClasses}
+                      >
+                        <option value="">
+                          {loadingStorageEndpoints
+                            ? "Loading endpoints..."
+                            : availableStorageEndpoints.length === 0
+                              ? "No configured endpoint"
+                              : "Select endpoint"}
+                        </option>
+                        {availableStorageEndpoints.map((endpoint) => (
+                          <option key={endpoint.id} value={endpoint.id}>
+                            {endpoint.name} ({endpoint.endpoint_url})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Provider
+                        </span>
+                        <input
+                          type="text"
+                          value={createConnectionForm.provider_hint}
+                          onChange={(event) =>
+                            setCreateConnectionForm((prev) => ({ ...prev, provider_hint: event.target.value }))
+                          }
+                          className={inputClasses}
+                          placeholder="aws | minio | ceph ..."
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Region
+                        </span>
+                        <input
+                          type="text"
+                          value={createConnectionForm.region}
+                          onChange={(event) => setCreateConnectionForm((prev) => ({ ...prev, region: event.target.value }))}
+                          className={inputClasses}
+                          placeholder="us-east-1"
+                        />
+                      </label>
+                      <label className="block sm:col-span-2">
+                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Endpoint URL
+                        </span>
+                        <input
+                          type="url"
+                          value={createConnectionForm.endpoint_url}
+                          onChange={(event) =>
+                            setCreateConnectionForm((prev) => ({ ...prev, endpoint_url: event.target.value }))
+                          }
+                          className={inputClasses}
+                          placeholder="https://s3.example.com"
+                        />
+                      </label>
+                      <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
+                        <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={createConnectionForm.force_path_style}
+                            onChange={(event) =>
+                              setCreateConnectionForm((prev) => ({ ...prev, force_path_style: event.target.checked }))
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                          />
+                          Force path style
+                        </label>
+                        <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={createConnectionForm.verify_tls}
+                            onChange={(event) =>
+                              setCreateConnectionForm((prev) => ({ ...prev, verify_tls: event.target.checked }))
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                          />
+                          Verify TLS
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                  {storageEndpointsError && (
+                    <p className="ui-caption text-amber-700 dark:text-amber-300">
+                      Unable to load configured endpoints ({storageEndpointsError}). Use custom mode.
+                    </p>
+                  )}
+                </div>
+                <label className="block">
+                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Access Key
+                  </span>
+                  <input
+                    type="text"
+                    value={createConnectionForm.access_key_id}
+                    onChange={(event) =>
+                      setCreateConnectionForm((prev) => ({ ...prev, access_key_id: event.target.value }))
+                    }
+                    className={inputClasses}
+                    placeholder="AKIA..."
+                  />
+                </label>
+                <label className="block">
+                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Secret Key
+                  </span>
+                  <input
+                    type="password"
+                    value={createConnectionForm.secret_access_key}
+                    onChange={(event) =>
+                      setCreateConnectionForm((prev) => ({ ...prev, secret_access_key: event.target.value }))
+                    }
+                    className={inputClasses}
+                    placeholder="********"
+                  />
+                </label>
+                <div className="sm:col-span-2">
+                  {createConnectionValidation.status === "loading" && (
+                    <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 ui-caption text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-100">
+                      Validating credentials...
+                    </p>
+                  )}
+                  {createConnectionValidation.status === "done" && createConnectionValidation.result && (
+                    <p
+                      className={`rounded-md px-3 py-2 ui-caption ${
+                        createConnectionValidation.result.severity === "success"
+                          ? "border border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200"
+                          : createConnectionValidation.result.severity === "warning"
+                            ? "border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100"
+                            : "border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200"
+                      }`}
+                    >
+                      {createConnectionValidation.result.message}
+                    </p>
+                  )}
+                </div>
+                <div className="sm:col-span-2 space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace access</p>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={createConnectionForm.access_manager}
+                        onChange={(event) =>
+                          setCreateConnectionForm((prev) => ({ ...prev, access_manager: event.target.checked }))
+                        }
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                      />
+                      Access manager
+                    </label>
+                    <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={createConnectionForm.access_browser}
+                        onChange={(event) =>
+                          setCreateConnectionForm((prev) => ({ ...prev, access_browser: event.target.checked }))
+                        }
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                      />
+                      Access browser
+                    </label>
+                  </div>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">At least one access must be enabled.</p>
+                </div>
+              </div>
+            )}
+            {createConnectionTab === "tags" && (
+              <div className="space-y-3">
+                {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
+                <UiTagEditor
+                  label="Tags"
+                  tags={createConnectionForm.tags}
+                  catalog={privateTagCatalog}
+                  onChange={(tags) => setCreateConnectionForm((prev) => ({ ...prev, tags }))}
+                  catalogMode="private"
+                  placeholder="Add a tag for this private connection"
+                  hint={
+                    privateTagCatalogLoading
+                      ? "Loading existing private tags..."
+                      : "Private tags are used for filtering and optional selector display."
+                  }
+                />
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 className={secondaryButtonClasses}
-                onClick={() => setShowCreateConnectionModal(false)}
+                onClick={() => {
+                  setCreateConnectionTab("general");
+                  setShowCreateConnectionModal(false);
+                }}
                 disabled={creatingConnection}
               >
                 Cancel
@@ -1701,7 +1812,12 @@ export default function ProfilePage({
       {showConnectionsSection && editingConnection && (
         <Modal
           title={`Edit connection - ${editingConnection.name}`}
-          onClose={() => (savingConnectionBusyId === editingConnection.id ? null : setEditingConnectionId(null))}
+          onClose={() => {
+            if (savingConnectionBusyId === editingConnection.id) return null;
+            setEditConnectionTab("general");
+            setEditingConnectionId(null);
+            return null;
+          }}
           maxWidthClass="max-w-3xl"
         >
           {connectionsError && (
@@ -1725,250 +1841,298 @@ export default function ProfilePage({
               };
               return (
                 <>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Name
-                      </span>
-                      <input
-                        type="text"
-                        value={draft.name}
-                        onChange={(event) => handleUpdateConnectionDraft(editingConnection.id, "name", event.target.value)}
-                        className={inputClasses}
-                      />
-                    </label>
+                  <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
+                    <button
+                      type="button"
+                      onClick={() => setEditConnectionTab("general")}
+                      className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                        editConnectionTab === "general"
+                          ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                          : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                      }`}
+                    >
+                      General
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditConnectionTab("tags")}
+                      className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                        editConnectionTab === "tags"
+                          ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                          : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                      }`}
+                    >
+                      Tags
+                    </button>
                   </div>
 
-                  <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-                    <div>
-                      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Endpoint
-                      </p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">
-                        Choose a configured endpoint or enter a custom endpoint.
-                      </p>
-                    </div>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                        <input
-                          type="radio"
-                          name={`edit-connection-endpoint-mode-${editingConnection.id}`}
-                          checked={editConnectionEndpointMode === "preset"}
-                          onChange={() => setEditConnectionEndpointMode("preset")}
-                          disabled={availableStorageEndpoints.length === 0}
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
-                        />
-                        Endpoint UI existant
-                      </label>
-                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                        <input
-                          type="radio"
-                          name={`edit-connection-endpoint-mode-${editingConnection.id}`}
-                          checked={editConnectionEndpointMode === "custom"}
-                          onChange={() => setEditConnectionEndpointMode("custom")}
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                        />
-                        Endpoint custom
-                      </label>
-                    </div>
-                    {editConnectionEndpointMode === "preset" ? (
-                      <label className="block">
-                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Configured endpoint
-                        </span>
-                        <select
-                          value={editConnectionEndpointId}
-                          onChange={(event) => setEditConnectionEndpointId(event.target.value)}
-                          disabled={loadingStorageEndpoints || availableStorageEndpoints.length === 0}
-                          className={inputClasses}
-                        >
-                          <option value="">
-                            {loadingStorageEndpoints
-                              ? "Loading endpoints..."
-                              : availableStorageEndpoints.length === 0
-                                ? "No configured endpoint"
-                                : "Select endpoint"}
-                          </option>
-                          {availableStorageEndpoints.map((endpoint) => (
-                            <option key={endpoint.id} value={endpoint.id}>
-                              {endpoint.name} ({endpoint.endpoint_url})
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : (
+                  {editConnectionTab === "general" && (
+                    <>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <label className="block">
                           <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            Provider
+                            Name
                           </span>
                           <input
                             type="text"
-                            value={draft.provider_hint}
-                            onChange={(event) =>
-                              handleUpdateConnectionDraft(editingConnection.id, "provider_hint", event.target.value)
-                            }
+                            value={draft.name}
+                            onChange={(event) => handleUpdateConnectionDraft(editingConnection.id, "name", event.target.value)}
                             className={inputClasses}
-                            placeholder="aws | minio | ceph ..."
                           />
                         </label>
-                        <label className="block">
-                          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            Region
-                          </span>
-                          <input
-                            type="text"
-                            value={draft.region}
-                            onChange={(event) =>
-                              handleUpdateConnectionDraft(editingConnection.id, "region", event.target.value)
-                            }
-                            className={inputClasses}
-                            placeholder="us-east-1"
-                          />
-                        </label>
-                        <label className="block sm:col-span-2">
-                          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            Endpoint URL
-                          </span>
-                          <input
-                            type="url"
-                            value={draft.endpoint_url}
-                            onChange={(event) =>
-                              handleUpdateConnectionDraft(editingConnection.id, "endpoint_url", event.target.value)
-                            }
-                            className={inputClasses}
-                            placeholder="https://s3.example.com"
-                          />
-                        </label>
-                        <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
+                      </div>
+
+                      <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                        <div>
+                          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Endpoint
+                          </p>
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">
+                            Choose a configured endpoint or enter a custom endpoint.
+                          </p>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                           <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
                             <input
-                              type="checkbox"
-                              checked={Boolean(draft.force_path_style)}
-                              onChange={(event) =>
-                                handleUpdateConnectionDraft(
-                                  editingConnection.id,
-                                  "force_path_style",
-                                  event.target.checked
-                                )
-                              }
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                              type="radio"
+                              name={`edit-connection-endpoint-mode-${editingConnection.id}`}
+                              checked={editConnectionEndpointMode === "preset"}
+                              onChange={() => setEditConnectionEndpointMode("preset")}
+                              disabled={availableStorageEndpoints.length === 0}
+                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
                             />
-                            Force path style
+                            Endpoint UI existant
                           </label>
                           <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
                             <input
-                              type="checkbox"
-                              checked={Boolean(draft.verify_tls)}
-                              onChange={(event) =>
-                                handleUpdateConnectionDraft(editingConnection.id, "verify_tls", event.target.checked)
-                              }
+                              type="radio"
+                              name={`edit-connection-endpoint-mode-${editingConnection.id}`}
+                              checked={editConnectionEndpointMode === "custom"}
+                              onChange={() => setEditConnectionEndpointMode("custom")}
                               className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                             />
-                            Verify TLS
+                            Endpoint custom
                           </label>
                         </div>
+                        {editConnectionEndpointMode === "preset" ? (
+                          <label className="block">
+                            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Configured endpoint
+                            </span>
+                            <select
+                              value={editConnectionEndpointId}
+                              onChange={(event) => setEditConnectionEndpointId(event.target.value)}
+                              disabled={loadingStorageEndpoints || availableStorageEndpoints.length === 0}
+                              className={inputClasses}
+                            >
+                              <option value="">
+                                {loadingStorageEndpoints
+                                  ? "Loading endpoints..."
+                                  : availableStorageEndpoints.length === 0
+                                    ? "No configured endpoint"
+                                    : "Select endpoint"}
+                              </option>
+                              {availableStorageEndpoints.map((endpoint) => (
+                                <option key={endpoint.id} value={endpoint.id}>
+                                  {endpoint.name} ({endpoint.endpoint_url})
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <label className="block">
+                              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Provider
+                              </span>
+                              <input
+                                type="text"
+                                value={draft.provider_hint}
+                                onChange={(event) =>
+                                  handleUpdateConnectionDraft(editingConnection.id, "provider_hint", event.target.value)
+                                }
+                                className={inputClasses}
+                                placeholder="aws | minio | ceph ..."
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Region
+                              </span>
+                              <input
+                                type="text"
+                                value={draft.region}
+                                onChange={(event) =>
+                                  handleUpdateConnectionDraft(editingConnection.id, "region", event.target.value)
+                                }
+                                className={inputClasses}
+                                placeholder="us-east-1"
+                              />
+                            </label>
+                            <label className="block sm:col-span-2">
+                              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Endpoint URL
+                              </span>
+                              <input
+                                type="url"
+                                value={draft.endpoint_url}
+                                onChange={(event) =>
+                                  handleUpdateConnectionDraft(editingConnection.id, "endpoint_url", event.target.value)
+                                }
+                                className={inputClasses}
+                                placeholder="https://s3.example.com"
+                              />
+                            </label>
+                            <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
+                              <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(draft.force_path_style)}
+                                  onChange={(event) =>
+                                    handleUpdateConnectionDraft(
+                                      editingConnection.id,
+                                      "force_path_style",
+                                      event.target.checked
+                                    )
+                                  }
+                                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                />
+                                Force path style
+                              </label>
+                              <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(draft.verify_tls)}
+                                  onChange={(event) =>
+                                    handleUpdateConnectionDraft(editingConnection.id, "verify_tls", event.target.checked)
+                                  }
+                                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                />
+                                Verify TLS
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                        {storageEndpointsError && (
+                          <p className="ui-caption text-amber-700 dark:text-amber-300">
+                            Unable to load configured endpoints ({storageEndpointsError}). Use custom mode.
+                          </p>
+                        )}
                       </div>
-                    )}
-                    {storageEndpointsError && (
-                      <p className="ui-caption text-amber-700 dark:text-amber-300">
-                        Unable to load configured endpoints ({storageEndpointsError}). Use custom mode.
-                      </p>
-                    )}
-                  </div>
 
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Credentials
-                    </p>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Current Access Key: <span className="ui-mono">{editingConnection.access_key_id || "-"}</span>
-                    </p>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Leave blank to keep current credentials.
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block">
-                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Access key ID
-                        </span>
-                        <input
-                          type="text"
-                          value={credentialDraft.access_key_id}
-                          onChange={(event) =>
-                            handleUpdateConnectionCredentialDraft(editingConnection.id, "access_key_id", event.target.value)
-                          }
-                          className={inputClasses}
-                          placeholder="AKIA..."
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Secret access key
-                        </span>
-                        <input
-                          type="password"
-                          value={credentialDraft.secret_access_key}
-                          onChange={(event) =>
-                            handleUpdateConnectionCredentialDraft(
-                              editingConnection.id,
-                              "secret_access_key",
-                              event.target.value
-                            )
-                          }
-                          className={inputClasses}
-                          placeholder="********"
-                        />
-                      </label>
-                    </div>
-                    {editConnectionValidation.status === "loading" && (
-                      <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 ui-caption text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-100">
-                        Validating credentials...
-                      </p>
-                    )}
-                    {editConnectionValidation.status === "done" && editConnectionValidation.result && (
-                      <p
-                        className={`rounded-md px-3 py-2 ui-caption ${
-                          editConnectionValidation.result.severity === "success"
-                            ? "border border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200"
-                            : editConnectionValidation.result.severity === "warning"
-                              ? "border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100"
-                              : "border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200"
-                        }`}
-                      >
-                        {editConnectionValidation.result.message}
-                      </p>
-                    )}
-                  </div>
+                      <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Credentials
+                        </p>
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Current Access Key: <span className="ui-mono">{editingConnection.access_key_id || "-"}</span>
+                        </p>
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Leave blank to keep current credentials.
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Access key ID
+                            </span>
+                            <input
+                              type="text"
+                              value={credentialDraft.access_key_id}
+                              onChange={(event) =>
+                                handleUpdateConnectionCredentialDraft(editingConnection.id, "access_key_id", event.target.value)
+                              }
+                              className={inputClasses}
+                              placeholder="AKIA..."
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Secret access key
+                            </span>
+                            <input
+                              type="password"
+                              value={credentialDraft.secret_access_key}
+                              onChange={(event) =>
+                                handleUpdateConnectionCredentialDraft(
+                                  editingConnection.id,
+                                  "secret_access_key",
+                                  event.target.value
+                                )
+                              }
+                              className={inputClasses}
+                              placeholder="********"
+                            />
+                          </label>
+                        </div>
+                        {editConnectionValidation.status === "loading" && (
+                          <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 ui-caption text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-100">
+                            Validating credentials...
+                          </p>
+                        )}
+                        {editConnectionValidation.status === "done" && editConnectionValidation.result && (
+                          <p
+                            className={`rounded-md px-3 py-2 ui-caption ${
+                              editConnectionValidation.result.severity === "success"
+                                ? "border border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200"
+                                : editConnectionValidation.result.severity === "warning"
+                                  ? "border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100"
+                                  : "border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200"
+                            }`}
+                          >
+                            {editConnectionValidation.result.message}
+                          </p>
+                        )}
+                      </div>
 
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace access</p>
-                    <div className="flex flex-wrap items-center gap-4">
-                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(draft.access_manager)}
-                          onChange={(event) =>
-                            handleUpdateConnectionDraft(editingConnection.id, "access_manager", event.target.checked)
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                        />
-                        Access manager
-                      </label>
-                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(draft.access_browser)}
-                          onChange={(event) =>
-                            handleUpdateConnectionDraft(editingConnection.id, "access_browser", event.target.checked)
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                        />
-                        Access browser
-                      </label>
+                      <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace access</p>
+                        <div className="flex flex-wrap items-center gap-4">
+                          <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(draft.access_manager)}
+                              onChange={(event) =>
+                                handleUpdateConnectionDraft(editingConnection.id, "access_manager", event.target.checked)
+                              }
+                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                            />
+                            Access manager
+                          </label>
+                          <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(draft.access_browser)}
+                              onChange={(event) =>
+                                handleUpdateConnectionDraft(editingConnection.id, "access_browser", event.target.checked)
+                              }
+                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                            />
+                            Access browser
+                          </label>
+                        </div>
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">At least one access must be enabled.</p>
+                      </div>
+                    </>
+                  )}
+
+                  {editConnectionTab === "tags" && (
+                    <div className="space-y-3">
+                      {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
+                      <UiTagEditor
+                        label="Tags"
+                        tags={draft.tags}
+                        catalog={privateTagCatalog}
+                        onChange={(tags) => handleUpdateConnectionDraft(editingConnection.id, "tags", tags)}
+                        catalogMode="private"
+                        placeholder="Add a tag for this private connection"
+                        hint={
+                          privateTagCatalogLoading
+                            ? "Loading existing private tags..."
+                            : "Private tags are used for filtering and optional selector display."
+                        }
+                      />
                     </div>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">At least one access must be enabled.</p>
-                  </div>
+                  )}
                 </>
               );
             })()}
@@ -1976,7 +2140,10 @@ export default function ProfilePage({
               <button
                 type="button"
                 className={secondaryButtonClasses}
-                onClick={() => setEditingConnectionId(null)}
+                onClick={() => {
+                  setEditConnectionTab("general");
+                  setEditingConnectionId(null);
+                }}
                 disabled={savingConnectionBusyId === editingConnection.id}
               >
                 Cancel

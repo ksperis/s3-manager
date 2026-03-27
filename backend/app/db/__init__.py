@@ -11,6 +11,7 @@ from .refresh_session import RefreshSession
 from .api_token import ApiToken
 from .s3_user import S3User, UserS3User
 from .s3_connection import S3Connection, UserS3Connection
+from .tag_definition import TagDefinition, StorageEndpointTag, S3AccountTag, S3UserTag, S3ConnectionTag
 from .oidc import OidcLoginState
 from .billing import BillingAssignment, BillingRateCard, BillingStorageDaily, BillingUsageDaily
 from .quota_monitoring import QuotaAlertState, QuotaUsageDaily, QuotaUsageHourly
@@ -41,6 +42,11 @@ __all__ = [
     "UserS3User",
     "S3Connection",
     "UserS3Connection",
+    "TagDefinition",
+    "StorageEndpointTag",
+    "S3AccountTag",
+    "S3UserTag",
+    "S3ConnectionTag",
     "OidcLoginState",
     "BillingAssignment",
     "BillingRateCard",

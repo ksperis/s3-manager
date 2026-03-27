@@ -24,13 +24,18 @@ import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import StorageUsageCard from "../../components/StorageUsageCard";
+import UiTagBadgeList from "../../components/UiTagBadgeList";
+import UiTagEditor from "../../components/UiTagEditor";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { extractApiError } from "../../utils/apiError";
+import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
 type TextMatchMode = "contains" | "exact";
-type EditTab = "general" | "users";
+type CreateTab = "general" | "tags";
+type EditTab = "general" | "tags" | "users";
 
 export default function S3UsersPage() {
   const resolveQuotaForEdit = (quotaGb?: number | null) => {
@@ -62,10 +67,12 @@ export default function S3UsersPage() {
   const [endpointPermissionErrors, setEndpointPermissionErrors] = useState<Record<number, string | null>>({});
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createTab, setCreateTab] = useState<CreateTab>("general");
   const [createForm, setCreateForm] = useState({
     name: "",
     uid: "",
     email: "",
+    tags: [] as UiTagDefinition[],
     quota_max_size_gb: "",
     quota_max_size_unit: "GiB",
     quota_max_objects: "",
@@ -85,6 +92,7 @@ export default function S3UsersPage() {
   const [editForm, setEditForm] = useState({
     name: "",
     email: "",
+    tags: [] as UiTagDefinition[],
     user_ids: [] as number[],
     quota_max_size_gb: "",
     quota_max_size_unit: "GiB",
@@ -134,6 +142,19 @@ export default function S3UsersPage() {
     loading: editingUsageLoading,
     error: editingUsageError,
   } = useAdminS3UserStats(editingUserId, Boolean(editingUserId));
+  const showCreateGeneralTab = createTab === "general";
+  const showCreateTagsTab = createTab === "tags";
+  const showEditGeneralTab = editTab === "general";
+  const showEditTagsTab = editTab === "tags";
+  const showEditUsersTab = editTab === "users";
+  const {
+    catalog: adminTagCatalog,
+    loading: adminTagCatalogLoading,
+    error: adminTagCatalogError,
+  } = useTagCatalog(
+    { kind: "admin", domain: "admin_managed" },
+    Boolean(showCreateModal || editingUser)
+  );
 
   const extractError = (err: unknown) => extractApiError(err, "Unexpected error");
 
@@ -159,7 +180,7 @@ export default function S3UsersPage() {
 
         const needle = quick.toLowerCase();
         const exactMatches = allMatches.filter((user) => {
-          const candidates = [user.name, user.rgw_user_uid, user.email ?? ""];
+          const candidates = [user.name, user.rgw_user_uid, user.email ?? "", ...extractUiTagLabels(user.tags)];
           return candidates.some((candidate) => candidate.trim().toLowerCase() === needle);
         });
         const totalExact = exactMatches.length;
@@ -352,6 +373,7 @@ export default function S3UsersPage() {
     setEditForm({
       name: user.name,
       email: user.email ?? "",
+      tags: normalizeUiTags(user.tags),
       user_ids: user.user_ids ?? [],
       quota_max_size_gb: quota.value,
       quota_max_size_unit: quota.unit,
@@ -388,6 +410,7 @@ export default function S3UsersPage() {
       } = {
         name: editForm.name || undefined,
         email: editForm.email || undefined,
+        tags: normalizeUiTags(editForm.tags),
         user_ids: editForm.user_ids,
       };
       if (allowUserQuotaUpdates) {
@@ -435,17 +458,20 @@ export default function S3UsersPage() {
         name: createForm.name.trim(),
         uid: createForm.uid.trim() || undefined,
         email: createForm.email.trim() || undefined,
+        tags: normalizeUiTags(createForm.tags),
         quota_max_size_gb: createForm.quota_max_size_gb ? Number(createForm.quota_max_size_gb) : undefined,
         quota_max_size_unit: createForm.quota_max_size_gb ? createForm.quota_max_size_unit : undefined,
         quota_max_objects: createForm.quota_max_objects ? Number(createForm.quota_max_objects) : undefined,
         storage_endpoint_id: createForm.storage_endpoint_id ? Number(createForm.storage_endpoint_id) : undefined,
       });
       setShowCreateModal(false);
+      setCreateTab("general");
       setCreateForm((prev) => ({
         ...prev,
         name: "",
         uid: "",
         email: "",
+        tags: [],
         quota_max_size_gb: "",
         quota_max_objects: "",
       }));
@@ -580,6 +606,7 @@ export default function S3UsersPage() {
             label: "Create user",
             onClick: () => {
               setShowCreateModal(true);
+              setCreateTab("general");
               void loadEndpointsIfNeeded();
             },
           },
@@ -604,7 +631,7 @@ export default function S3UsersPage() {
                   type="text"
                   value={filter}
                   onChange={(e) => handleFilterChange(e.target.value)}
-                  placeholder="Search by name, UID, or email"
+                  placeholder="Search by name, UID, email, or tag"
                   className={`${toolbarCompactInputClasses} w-full pr-9 ${quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""}`}
                 />
                 <button
@@ -675,10 +702,22 @@ export default function S3UsersPage() {
               )}
               {users.map((user) => {
                 const deleteBusy = deleteBusyId === user.id;
+                const tagItems = buildUiTagItems(user.tags);
                 return (
                   <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     <td className="sticky left-0 z-10 min-w-[14rem] bg-white px-6 py-4 ui-body font-semibold text-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:text-slate-100 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]">
-                      {user.name}
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className="min-w-0 flex-1 truncate">{user.name}</p>
+                        {tagItems.length > 0 && (
+                          <UiTagBadgeList
+                            items={tagItems}
+                            variant="listing-compact"
+                            layout="inline-compact"
+                            className="ml-auto max-w-full"
+                            maxVisible={4}
+                          />
+                        )}
+                      </div>
                     </td>
                     <td className="w-56 min-w-[11rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{user.rgw_user_uid}</td>
                     <td className="w-48 min-w-[10rem] px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
@@ -735,113 +774,158 @@ export default function S3UsersPage() {
               {createError}
             </div>
           )}
-          <form onSubmit={submitCreate} className="space-y-3">
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Display name *</label>
-              <input
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                value={createForm.name}
-                onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">UID (optional)</label>
-              <input
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                value={createForm.uid}
-                onChange={(e) => setCreateForm((prev) => ({ ...prev, uid: e.target.value }))}
-                placeholder="user-123"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
-              <select
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                value={createForm.storage_endpoint_id}
-                onChange={(e) => setCreateForm((prev) => ({ ...prev, storage_endpoint_id: e.target.value }))}
-                disabled={loadingEndpoints || adminCephEndpoints.length === 0}
-                required
+          <form onSubmit={submitCreate} className="space-y-4">
+            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
+              <button
+                type="button"
+                onClick={() => setCreateTab("general")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  createTab === "general"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
               >
-                <option value="" disabled>
-                  {loadingEndpoints
-                    ? "Loading..."
-                    : adminCephEndpoints.length === 0
-                      ? "No Ceph endpoint with admin enabled"
-                      : "Select"}
-                </option>
-                {adminCephEndpoints.map((ep) => (
-                  <option key={ep.id} value={ep.id}>
-                    {ep.name} {ep.is_default ? "(default)" : ""}
-                  </option>
-                ))}
-              </select>
+                General
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateTab("tags")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  createTab === "tags"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                Tags
+              </button>
             </div>
-            {createForm.storage_endpoint_id && (
-              <div className="flex flex-col gap-1">
-                {createPermissionLoading ? (
-                  <PageBanner tone="info">Checking endpoint permissions...</PageBanner>
-                ) : createPermissionError ? (
-                  <PageBanner tone="warning">
-                    {createPermissionError}. Validation is disabled until permissions can be verified.
-                  </PageBanner>
-                ) : !createEndpointCanWrite ? (
-                  <PageBanner tone="warning">
-                    Selected endpoint does not allow this operation: missing <code>users=write</code>.
-                  </PageBanner>
-                ) : null}
-              </div>
-            )}
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Email</label>
-              <input
-                type="email"
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                value={createForm.email}
-                onChange={(e) => setCreateForm((prev) => ({ ...prev, email: e.target.value }))}
-                placeholder="user@example.com"
-              />
-            </div>
-            <div className="flex flex-col gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-              <div className="flex flex-col gap-1">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Quota max size</label>
-                <div className="flex gap-2">
+            {showCreateGeneralTab && (
+              <>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Display name *</label>
                   <input
-                    type="number"
-                    min={0}
-                    step="any"
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={createForm.quota_max_size_gb}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
-                    placeholder="e.g. 500"
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                    required
                   />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">UID (optional)</label>
+                  <input
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={createForm.uid}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, uid: e.target.value }))}
+                    placeholder="user-123"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
                   <select
                     className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={createForm.quota_max_size_unit}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
-                    disabled={!createForm.quota_max_size_gb}
+                    value={createForm.storage_endpoint_id}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, storage_endpoint_id: e.target.value }))}
+                    disabled={loadingEndpoints || adminCephEndpoints.length === 0}
+                    required
                   >
-                    {["MiB", "GiB", "TiB"].map((u) => (
-                      <option key={u} value={u}>
-                        {u}
+                    <option value="" disabled>
+                      {loadingEndpoints
+                        ? "Loading..."
+                        : adminCephEndpoints.length === 0
+                          ? "No Ceph endpoint with admin enabled"
+                          : "Select"}
+                    </option>
+                    {adminCephEndpoints.map((ep) => (
+                      <option key={ep.id} value={ep.id}>
+                        {ep.name} {ep.is_default ? "(default)" : ""}
                       </option>
                     ))}
                   </select>
                 </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Quota max objects</label>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={createForm.quota_max_objects}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
-                  placeholder="e.g. 1000000"
+                {createForm.storage_endpoint_id && (
+                  <div className="flex flex-col gap-1">
+                    {createPermissionLoading ? (
+                      <PageBanner tone="info">Checking endpoint permissions...</PageBanner>
+                    ) : createPermissionError ? (
+                      <PageBanner tone="warning">
+                        {createPermissionError}. Validation is disabled until permissions can be verified.
+                      </PageBanner>
+                    ) : !createEndpointCanWrite ? (
+                      <PageBanner tone="warning">
+                        Selected endpoint does not allow this operation: missing <code>users=write</code>.
+                      </PageBanner>
+                    ) : null}
+                  </div>
+                )}
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Email</label>
+                  <input
+                    type="email"
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={createForm.email}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, email: e.target.value }))}
+                    placeholder="user@example.com"
+                  />
+                </div>
+                <div className="flex flex-col gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div className="flex flex-col gap-1">
+                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Quota max size</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        value={createForm.quota_max_size_gb}
+                        onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
+                        placeholder="e.g. 500"
+                      />
+                      <select
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        value={createForm.quota_max_size_unit}
+                        onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
+                        disabled={!createForm.quota_max_size_gb}
+                      >
+                        {["MiB", "GiB", "TiB"].map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Quota max objects</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      value={createForm.quota_max_objects}
+                      onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
+                      placeholder="e.g. 1000000"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+            {showCreateTagsTab && (
+              <>
+                {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                <UiTagEditor
+                  label="Tags"
+                  tags={createForm.tags}
+                  catalog={adminTagCatalog}
+                  onChange={(tags) => setCreateForm((prev) => ({ ...prev, tags }))}
+                  placeholder="Add a tag for this RGW user"
+                  hint={
+                    adminTagCatalogLoading
+                      ? "Loading existing tag catalog..."
+                      : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
+                  }
                 />
-              </div>
-            </div>
+              </>
+            )}
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
@@ -973,6 +1057,17 @@ export default function S3UsersPage() {
               </button>
               <button
                 type="button"
+                onClick={() => setEditTab("tags")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editTab === "tags"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                Tags
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   void loadPortalUsersIfNeeded();
                   setEditTab("users");
@@ -987,7 +1082,7 @@ export default function S3UsersPage() {
               </button>
             </div>
 
-            {editTab === "general" && (
+            {showEditGeneralTab && (
               <>
                 <StorageUsageCard
                   accountName={editingUser.name}
@@ -1086,7 +1181,25 @@ export default function S3UsersPage() {
               </>
             )}
 
-            {editTab === "users" && (
+            {showEditTagsTab && (
+              <div className="space-y-3">
+                {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                <UiTagEditor
+                  label="Tags"
+                  tags={editForm.tags}
+                  catalog={adminTagCatalog}
+                  onChange={(tags) => setEditForm((prev) => ({ ...prev, tags }))}
+                  placeholder="Add a tag for this RGW user"
+                  hint={
+                    adminTagCatalogLoading
+                      ? "Loading existing tag catalog..."
+                      : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
+                  }
+                />
+              </div>
+            )}
+
+            {showEditUsersTab && (
               <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">

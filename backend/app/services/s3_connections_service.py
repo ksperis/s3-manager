@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.db.s3_connection import S3Connection as DBS3Connection, UserS3Connection
 from app.models.s3_connection import S3Connection, S3ConnectionCreate, S3ConnectionUpdate
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
+from app.services.tags_service import TagsService
 from app.utils.s3_connection_capabilities import (
     parse_s3_connection_capabilities,
     s3_connection_can_manage_iam,
@@ -28,6 +29,7 @@ class S3ConnectionsService:
 
     def __init__(self, db: Session):
         self.db = db
+        self.tags = TagsService(db)
 
     def list_for_user(self, user_id: int) -> list[S3Connection]:
         """List connections visible to a UI user."""
@@ -189,11 +191,13 @@ class S3ConnectionsService:
             access_key_id=payload.access_key_id,
             secret_access_key=payload.secret_access_key,
             capabilities_json=json.dumps({}),
+            tags_json="[]",
             created_at=utcnow(),
             updated_at=utcnow(),
         )
         self.db.add(row)
         self.db.flush()
+        self.tags.replace_connection_tags(row, payload.tags)
         self._refresh_detected_capabilities(row)
         self.db.commit()
         self.db.refresh(row)
@@ -256,6 +260,8 @@ class S3ConnectionsService:
             row.credential_owner_type = payload.credential_owner_type
         if "credential_owner_identifier" in payload_data:
             row.credential_owner_identifier = payload.credential_owner_identifier
+        if "tags" in payload_data:
+            self.tags.replace_connection_tags(row, payload.tags)
         if should_probe_iam:
             self._refresh_detected_capabilities(row)
         row.updated_at = utcnow()
@@ -266,6 +272,8 @@ class S3ConnectionsService:
     def delete(self, user_id: int, connection_id: int) -> None:
         row = self.get_owned(user_id, connection_id)
         self.db.delete(row)
+        self.db.flush()
+        self.tags.cleanup_orphan_definitions()
         self.db.commit()
 
     def get_capabilities(self, user_id: int, connection_id: int) -> dict[str, Any]:
@@ -320,6 +328,7 @@ class S3ConnectionsService:
             force_path_style=details.force_path_style,
             verify_tls=details.verify_tls,
             capabilities=self._capabilities(row),
+            tags=self.tags.get_connection_tags(row),
             created_at=row.created_at,
             updated_at=row.updated_at,
             last_used_at=row.last_used_at,

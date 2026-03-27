@@ -14,11 +14,14 @@ from app.models.s3_connection import (
     S3ConnectionCredentialsValidationResult,
     S3ConnectionUpdate,
 )
+from app.models.tagging import TagDefinitionListResponse
 from app.routers.dependencies import get_current_account_user
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
 from app.services.s3_connections_service import S3ConnectionsService
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
+from app.services.tags_service import TagsService, serialize_tag_summaries
+from app.utils.tagging import TAG_DOMAIN_PRIVATE_CONNECTION_USER
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
@@ -42,6 +45,21 @@ def list_connections(
     _ensure_private_connections_allowed(user)
     service = S3ConnectionsService(db)
     return service.list_owned_private(user.id)
+
+
+@router.get("/tag-definitions", response_model=TagDefinitionListResponse)
+def list_private_connection_tag_definitions(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_account_user),
+) -> TagDefinitionListResponse:
+    _ensure_private_connections_allowed(user)
+    service = TagsService(db)
+    return TagDefinitionListResponse(
+        items=service.list_definitions(
+            domain_kind=TAG_DOMAIN_PRIVATE_CONNECTION_USER,
+            owner_user_id=user.id,
+        )
+    )
 
 
 @router.post("/validate-credentials", response_model=S3ConnectionCredentialsValidationResult)
@@ -90,6 +108,7 @@ def create_connection(
                 "access_browser": created.access_browser,
                 "can_manage_iam": bool((created.capabilities or {}).get("can_manage_iam", False)),
                 "access_key_id": created.access_key_id,
+                "tags": serialize_tag_summaries(created.tags),
             },
         )
         return created
@@ -137,6 +156,7 @@ def update_connection(
                 "access_manager": updated.access_manager,
                 "access_browser": updated.access_browser,
                 "can_manage_iam": bool((updated.capabilities or {}).get("can_manage_iam", False)),
+                "tags": serialize_tag_summaries(updated.tags),
             },
         )
         return updated

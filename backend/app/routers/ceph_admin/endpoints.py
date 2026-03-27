@@ -22,6 +22,7 @@ from app.routers.ceph_admin.dependencies import (
 )
 from app.routers.dependencies import get_current_ceph_admin
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
+from app.services.tags_service import TagsService
 from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 from app.utils.storage_endpoint_ordering import endpoint_name_order_by
 
@@ -164,6 +165,7 @@ def list_ceph_admin_endpoints(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_ceph_admin),
 ) -> list[CephAdminEndpoint]:
+    tags_service = TagsService(db)
     endpoints = (
         db.query(DbStorageEndpoint)
         .order_by(*endpoint_name_order_by(DbStorageEndpoint))
@@ -174,6 +176,7 @@ def list_ceph_admin_endpoints(
         if str(endpoint.provider) != StorageProvider.CEPH.value:
             continue
         payload = build_ceph_admin_endpoint_payload(endpoint)
+        payload["tags"] = tags_service.get_storage_endpoint_tags(endpoint)
         results.append(CephAdminEndpoint(**payload))
     return results
 

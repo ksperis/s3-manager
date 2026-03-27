@@ -7,7 +7,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db import S3Account, S3Connection, User, UserRole, UserS3Account
+from app.db import S3Account, S3Connection, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.main import app
 from app.routers import dependencies
 
@@ -200,11 +200,23 @@ def test_admin_connections_api_returns_404_for_non_shared_targets(contract_clien
 
 def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
     client, db_session, user = contract_client
+    endpoint = StorageEndpoint(
+        name="contract-endpoint",
+        endpoint_url="https://contract-endpoint.example.test",
+        provider=StorageProvider.CEPH.value,
+        tags_json=json.dumps(["endpoint-prod", "ceph-a"]),
+        is_default=True,
+        is_editable=True,
+    )
+    db_session.add(endpoint)
+    db_session.flush()
     account = S3Account(
         name="contract-account",
         rgw_account_id="RGWCONTRACT0001",
         rgw_access_key="AK-CONTRACT-ACCOUNT",
         rgw_secret_key="SK-CONTRACT-ACCOUNT",
+        storage_endpoint_id=endpoint.id,
+        tags_json=json.dumps(["account-finance"]),
     )
     db_session.add(account)
     db_session.flush()
@@ -220,11 +232,13 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
         S3Connection(
             created_by_user_id=user.id,
             name="contract-execution-context-connection",
+            storage_endpoint_id=endpoint.id,
             access_manager=False,
             access_browser=True,
             access_key_id="AK-CONN-CTX",
             secret_access_key="SK-CONN-CTX",
             capabilities_json=json.dumps({"can_manage_iam": False}),
+            tags_json=json.dumps(["connection-shared"]),
         )
     )
     db_session.commit()
@@ -238,3 +252,13 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
         capabilities = item.get("capabilities", {})
         assert "can_manage_iam" in capabilities
         assert "iam_capable" not in capabilities
+        if item["kind"] == "account":
+            assert [tag["label"] for tag in item["tags"]] == ["account-finance"]
+            assert [tag["color_key"] for tag in item["tags"]] == ["neutral"]
+            assert [tag["label"] for tag in item["endpoint_tags"]] == ["endpoint-prod", "ceph-a"]
+            assert [tag["color_key"] for tag in item["endpoint_tags"]] == ["neutral", "neutral"]
+        if item["kind"] == "connection":
+            assert [tag["label"] for tag in item["tags"]] == ["connection-shared"]
+            assert [tag["color_key"] for tag in item["tags"]] == ["neutral"]
+            assert [tag["label"] for tag in item["endpoint_tags"]] == ["endpoint-prod", "ceph-a"]
+            assert [tag["color_key"] for tag in item["endpoint_tags"]] == ["neutral", "neutral"]

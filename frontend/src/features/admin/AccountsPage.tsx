@@ -24,15 +24,20 @@ import PageBanner from "../../components/PageBanner";
 import PaginationControls from "../../components/PaginationControls";
 import StorageUsageCard from "../../components/StorageUsageCard";
 import TableEmptyState from "../../components/TableEmptyState";
+import UiTagBadgeList from "../../components/UiTagBadgeList";
+import UiTagEditor from "../../components/UiTagEditor";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { useAdminAccountStats } from "./useAdminAccountStats";
 import { extractApiError } from "../../utils/apiError";
 import { isAdminLikeRole } from "../../utils/workspaces";
+import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 
 type SortField = "name" | "rgw_account_id";
-type EditTab = "general" | "users";
+type CreateTab = "general" | "tags";
+type EditTab = "general" | "tags" | "users";
 type TextMatchMode = "contains" | "exact";
 
 export default function S3AccountsPage() {
@@ -57,9 +62,11 @@ export default function S3AccountsPage() {
   const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [createTab, setCreateTab] = useState<CreateTab>("general");
   const [form, setForm] = useState({
     name: "",
     email: "",
+    tags: [] as UiTagDefinition[],
     quota_max_size_gb: "",
     quota_max_size_unit: "GiB",
     quota_max_objects: "",
@@ -77,6 +84,7 @@ export default function S3AccountsPage() {
   const [importTenantEndpointId, setImportTenantEndpointId] = useState<string>("");
   const [editingS3Account, setEditingS3Account] = useState<S3Account | null>(null);
   const [editForm, setEditForm] = useState({
+    tags: [] as UiTagDefinition[],
     quota_max_size_gb: "",
     quota_max_size_unit: "GiB",
     quota_max_objects: "",
@@ -118,8 +126,19 @@ export default function S3AccountsPage() {
     adminEnabled &&
     editingEndpointCanWrite &&
     Boolean(editingS3Account?.rgw_account_id);
+  const showCreateGeneralTab = createTab === "general";
+  const showCreateTagsTab = createTab === "tags";
   const showGeneralTab = editTab === "general";
+  const showTagsTab = editTab === "tags";
   const showUsersTab = editTab === "users";
+  const {
+    catalog: adminTagCatalog,
+    loading: adminTagCatalogLoading,
+    error: adminTagCatalogError,
+  } = useTagCatalog(
+    { kind: "admin", domain: "admin_managed" },
+    Boolean(isSuperAdmin && (showCreateModal || editingS3Account))
+  );
   const {
     stats: editingUsageStats,
     loading: editingUsageLoading,
@@ -207,7 +226,7 @@ export default function S3AccountsPage() {
 
         const needle = quick.toLowerCase();
         const exactMatches = allMatches.filter((account) => {
-          const candidates = [account.name, account.rgw_account_id ?? "", account.id ?? ""];
+          const candidates = [account.name, account.rgw_account_id ?? "", account.id ?? "", ...extractUiTagLabels(account.tags)];
           return candidates.some((candidate) => candidate.trim().toLowerCase() === needle);
         });
         const totalExact = exactMatches.length;
@@ -465,6 +484,7 @@ export default function S3AccountsPage() {
       await createS3Account({
         name: form.name.trim(),
         email: form.email.trim() || undefined,
+        tags: normalizeUiTags(form.tags),
         quota_max_size_gb: form.quota_max_size_gb ? Number(form.quota_max_size_gb) : undefined,
         quota_max_size_unit: form.quota_max_size_gb ? form.quota_max_size_unit : undefined,
         quota_max_objects: form.quota_max_objects ? Number(form.quota_max_objects) : undefined,
@@ -476,12 +496,14 @@ export default function S3AccountsPage() {
       setForm({
         name: "",
         email: "",
+        tags: [],
         quota_max_size_gb: "",
         quota_max_size_unit: "GiB",
         quota_max_objects: "",
         storage_endpoint_id: defaultCeph ? String(defaultCeph.id) : "",
       });
       await fetchS3Accounts();
+      setCreateTab("general");
       setShowCreateModal(false);
     } catch (err) {
       setActionError(extractError(err));
@@ -543,6 +565,7 @@ export default function S3AccountsPage() {
     const quota = resolveQuotaForEdit(detail.quota_max_size_gb);
     setEditingS3Account(detail);
     setEditForm({
+      tags: normalizeUiTags(detail.tags),
       quota_max_size_gb: quota.value,
       quota_max_size_unit: quota.unit,
       quota_max_objects: detail.quota_max_objects != null ? String(detail.quota_max_objects) : "",
@@ -572,6 +595,7 @@ export default function S3AccountsPage() {
     try {
       const payload = {
         user_links: editForm.user_links,
+        tags: normalizeUiTags(editForm.tags),
         ...(allowQuotaUpdates
           ? {
               quota_max_size_gb: editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null,
@@ -654,6 +678,7 @@ export default function S3AccountsPage() {
                   label: "Create account",
                   onClick: () => {
                     setShowCreateModal(true);
+                    setCreateTab("general");
                     void loadEndpointsIfNeeded();
                   },
                 },
@@ -679,95 +704,140 @@ export default function S3AccountsPage() {
               {actionMessage}
             </PageBanner>
           )}
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">S3Account name *</label>
-              <input
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Email contact</label>
-              <input
-                type="email"
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="contact@example.com"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Storage endpoint (Ceph) *</label>
-              <select
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                value={form.storage_endpoint_id}
-                onChange={(e) => setForm((f) => ({ ...f, storage_endpoint_id: e.target.value }))}
-                required
-                disabled={loadingEndpoints || accountCephEndpoints.length === 0}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
+              <button
+                type="button"
+                onClick={() => setCreateTab("general")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  createTab === "general"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
               >
-                <option value="" disabled>
-                  {loadingEndpoints ? "Loading..." : "No Ceph endpoint with account API enabled"}
-                </option>
-                {accountCephEndpoints.map((ep) => (
-                  <option key={ep.id} value={ep.id}>
-                    {ep.name} {ep.is_default ? "(default)" : ""}
-                  </option>
-                ))}
-              </select>
+                General
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateTab("tags")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  createTab === "tags"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                Tags
+              </button>
             </div>
-            {form.storage_endpoint_id && (
-              <div className="md:col-span-2">
-                {createPermissionLoading ? (
-                  <PageBanner tone="info">Checking endpoint permissions...</PageBanner>
-                ) : createPermissionError ? (
-                  <PageBanner tone="warning">
-                    {createPermissionError}. Validation is disabled until permissions can be verified.
-                  </PageBanner>
-                ) : !createEndpointCanWrite ? (
-                  <PageBanner tone="warning">
-                    Selected endpoint does not allow this operation: missing <code>accounts=write</code>.
-                  </PageBanner>
-                ) : null}
+            {showCreateGeneralTab && (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">S3Account name *</label>
+                  <input
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Email contact</label>
+                  <input
+                    type="email"
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder="contact@example.com"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Storage endpoint (Ceph) *</label>
+                  <select
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={form.storage_endpoint_id}
+                    onChange={(e) => setForm((f) => ({ ...f, storage_endpoint_id: e.target.value }))}
+                    required
+                    disabled={loadingEndpoints || accountCephEndpoints.length === 0}
+                  >
+                    <option value="" disabled>
+                      {loadingEndpoints ? "Loading..." : "No Ceph endpoint with account API enabled"}
+                    </option>
+                    {accountCephEndpoints.map((ep) => (
+                      <option key={ep.id} value={ep.id}>
+                        {ep.name} {ep.is_default ? "(default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Capacity quota</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      value={form.quota_max_size_gb}
+                      onChange={(e) => setForm((f) => ({ ...f, quota_max_size_gb: e.target.value }))}
+                      placeholder="e.g. 500"
+                    />
+                    <select
+                      className="w-24 rounded-md border border-slate-200 px-2 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      value={form.quota_max_size_unit}
+                      onChange={(e) => setForm((f) => ({ ...f, quota_max_size_unit: e.target.value }))}
+                    >
+                      <option value="MiB">MiB</option>
+                      <option value="GiB">GiB</option>
+                      <option value="TiB">TiB</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Object quota (count)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={form.quota_max_objects}
+                    onChange={(e) => setForm((f) => ({ ...f, quota_max_objects: e.target.value }))}
+                    placeholder="e.g. 1000000"
+                  />
+                </div>
+                {form.storage_endpoint_id && (
+                  <div className="md:col-span-2">
+                    {createPermissionLoading ? (
+                      <PageBanner tone="info">Checking endpoint permissions...</PageBanner>
+                    ) : createPermissionError ? (
+                      <PageBanner tone="warning">
+                        {createPermissionError}. Validation is disabled until permissions can be verified.
+                      </PageBanner>
+                    ) : !createEndpointCanWrite ? (
+                      <PageBanner tone="warning">
+                        Selected endpoint does not allow this operation: missing <code>accounts=write</code>.
+                      </PageBanner>
+                    ) : null}
+                  </div>
+                )}
               </div>
             )}
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Capacity quota</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={form.quota_max_size_gb}
-                  onChange={(e) => setForm((f) => ({ ...f, quota_max_size_gb: e.target.value }))}
-                  placeholder="e.g. 500"
+            {showCreateTagsTab && (
+              <div className="space-y-3">
+                {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                <UiTagEditor
+                  label="Tags"
+                  tags={form.tags}
+                  catalog={adminTagCatalog}
+                  onChange={(tags) => setForm((current) => ({ ...current, tags }))}
+                  placeholder="Add a tag for this account"
+                  hint={
+                    adminTagCatalogLoading
+                      ? "Loading existing tag catalog..."
+                      : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
+                  }
                 />
-                <select
-                  className="w-24 rounded-md border border-slate-200 px-2 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={form.quota_max_size_unit}
-                  onChange={(e) => setForm((f) => ({ ...f, quota_max_size_unit: e.target.value }))}
-                >
-                  <option value="MiB">MiB</option>
-                  <option value="GiB">GiB</option>
-                  <option value="TiB">TiB</option>
-                </select>
               </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Object quota (count)</label>
-              <input
-                type="number"
-                min="0"
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                value={form.quota_max_objects}
-                onChange={(e) => setForm((f) => ({ ...f, quota_max_objects: e.target.value }))}
-                placeholder="e.g. 1000000"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-3 md:col-span-2">
+            )}
+            <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
@@ -784,7 +854,7 @@ export default function S3AccountsPage() {
               </button>
             </div>
           </form>
-      </Modal>
+        </Modal>
     )}
 
       {isSuperAdmin && accountToDelete && (
@@ -1028,6 +1098,17 @@ export default function S3AccountsPage() {
               </button>
               <button
                 type="button"
+                onClick={() => setEditTab("tags")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editTab === "tags"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                Tags
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   void loadUsersIfNeeded();
                   setEditTab("users");
@@ -1102,6 +1183,23 @@ export default function S3AccountsPage() {
                     </div>
                   </div>
                 </>
+              )}
+              {showTagsTab && (
+                <div className="space-y-3">
+                  {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                  <UiTagEditor
+                    label="Tags"
+                    tags={editForm.tags}
+                    catalog={adminTagCatalog}
+                    onChange={(tags) => setEditForm((prev) => ({ ...prev, tags }))}
+                    placeholder="Add a tag for this account"
+                    hint={
+                      adminTagCatalogLoading
+                        ? "Loading existing tag catalog..."
+                        : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
+                    }
+                  />
+                </div>
               )}
               {showUsersTab && (
                 <div className="space-y-3">
@@ -1335,7 +1433,7 @@ export default function S3AccountsPage() {
                   type="text"
                   value={filter}
                   onChange={(e) => handleFilterChange(e.target.value)}
-                  placeholder="Search by name or RGW ID"
+                  placeholder="Search by name, RGW ID, or tag"
                   className={`${toolbarCompactInputClasses} w-full pr-9 ${quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""}`}
                 />
                 <button
@@ -1414,22 +1512,34 @@ export default function S3AccountsPage() {
                   const summaryDbId = accountDbId(account);
                   const deleteBusy = summaryDbId != null && deletingS3AccountId === summaryDbId;
                   const accountUserLinks = resolveAccountUserLinks(account);
+                  const tagItems = buildUiTagItems(account.tags);
                   return (
                     <tr key={account.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                   <td className="sticky left-0 z-10 min-w-[16rem] bg-white px-6 py-4 ui-body font-semibold text-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:text-slate-100 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {isSuperAdmin ? (
-                        <button
-                          type="button"
-                          onClick={() => startEditS3Account(account)}
-                          className="text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
-                        >
-                          {account.name}
-                        </button>
-                      ) : (
-                        <span>{account.name}</span>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        {isSuperAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => startEditS3Account(account)}
+                            className="min-w-0 truncate text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
+                          >
+                            {account.name}
+                          </button>
+                        ) : (
+                          <span className="min-w-0 truncate">{account.name}</span>
+                        )}
+                        {renderS3AccountTypeBadge(account)}
+                      </div>
+                      {tagItems.length > 0 && (
+                        <UiTagBadgeList
+                          items={tagItems}
+                          variant="listing-compact"
+                          layout="inline-compact"
+                          className="ml-auto max-w-full"
+                          maxVisible={4}
+                        />
                       )}
-                      {renderS3AccountTypeBadge(account)}
                     </div>
                   </td>
                   <td className="w-56 min-w-[11rem] px-6 py-4 ui-body text-slate-700 dark:text-slate-200">

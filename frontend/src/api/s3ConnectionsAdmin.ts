@@ -4,10 +4,12 @@
  */
 import client from "./client";
 import { PaginatedResponse } from "./types";
+import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 
 export type S3ConnectionAdminItem = {
   id: number;
   name: string;
+  tags: TagDefinitionSummary[];
   storage_endpoint_id?: number | null;
   endpoint_url: string;
   is_shared?: boolean | null;
@@ -63,6 +65,7 @@ export type CreateS3ConnectionPayload = {
   secret_access_key: string;
   force_path_style?: boolean | null;
   verify_tls?: boolean | null;
+  tags?: TagDefinitionInput[] | null;
 };
 
 export type UpdateS3ConnectionPayload = {
@@ -78,6 +81,7 @@ export type UpdateS3ConnectionPayload = {
   region?: string | null;
   force_path_style?: boolean | null;
   verify_tls?: boolean | null;
+  tags?: TagDefinitionInput[] | null;
 };
 
 export type RotateS3ConnectionCredentialsPayload = {

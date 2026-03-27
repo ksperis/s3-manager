@@ -12,6 +12,9 @@ export type TopbarDropdownOption = {
   description?: string;
   title?: string;
   icon?: ReactNode;
+  details?: ReactNode;
+  inlineAddon?: ReactNode;
+  triggerAddon?: ReactNode;
 };
 
 type TopbarDropdownSelectProps = {
@@ -155,6 +158,7 @@ export default function TopbarDropdownSelect({
         disabled={disabled}
         ariaLabel={ariaLabel}
         title={title}
+        rightAddon={selectedOption?.triggerAddon}
         onClick={() => setOpen((prev) => !prev)}
         onKeyDown={(event) => {
           if (disabled) return;
@@ -165,7 +169,7 @@ export default function TopbarDropdownSelect({
         }}
         className={
           compactOnNarrow && !iconOnly
-            ? `inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-2 min-[560px]:px-3 text-left shadow-sm transition hover:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-500 dark:focus-visible:ring-offset-slate-900 ${open ? "border-primary/70" : ""}`
+            ? `inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-2.5 min-[560px]:px-3 text-left shadow-sm transition hover:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-500 dark:focus-visible:ring-offset-slate-900 ${open ? "border-primary/70" : ""}`
             : undefined
         }
       />
@@ -222,14 +226,20 @@ export default function TopbarDropdownSelect({
                       {option.icon && (
                         <span className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-300">{option.icon}</span>
                       )}
-                      <span className="min-w-0">
-                        <span className="block truncate ui-caption font-semibold">{option.label}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="block min-w-0 flex-1 truncate ui-caption font-semibold">{option.label}</span>
+                          {option.inlineAddon ? (
+                            <div className="ml-auto min-w-0 max-w-[14rem] shrink-0 overflow-hidden">{option.inlineAddon}</div>
+                          ) : null}
+                        </div>
                         {option.description && (
                           <span className="block truncate ui-caption text-slate-500 dark:text-slate-400">
                             {option.description}
                           </span>
                         )}
-                      </span>
+                        {option.details && <span className="mt-1 block">{option.details}</span>}
+                      </div>
                     </button>
                   );
                 })}
@@ -281,14 +291,20 @@ export default function TopbarDropdownSelect({
                       {active ? <CheckIcon className="h-4 w-4" /> : null}
                     </span>
                     {option.icon && <span className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-300">{option.icon}</span>}
-                    <span className="min-w-0">
-                      <span className="block truncate ui-caption font-semibold">{option.label}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="block min-w-0 flex-1 truncate ui-caption font-semibold">{option.label}</span>
+                        {option.inlineAddon ? (
+                          <div className="ml-auto min-w-0 max-w-[14rem] shrink-0 overflow-hidden">{option.inlineAddon}</div>
+                        ) : null}
+                      </div>
                       {option.description && (
                         <span className="block truncate ui-caption text-slate-500 dark:text-slate-400">
                           {option.description}
                         </span>
                       )}
-                    </span>
+                      {option.details && <span className="mt-1 block">{option.details}</span>}
+                    </div>
                   </button>
                 );
               })}

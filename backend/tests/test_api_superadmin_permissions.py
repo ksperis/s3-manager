@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db import User, UserRole
+from app.db import StorageEndpoint, StorageProvider, User, UserRole
 from app.main import app
 from app.routers import dependencies
 from fastapi.testclient import TestClient
@@ -60,3 +60,45 @@ def test_superadmin_can_access_admin_settings(client: TestClient):
     app.dependency_overrides.pop(dependencies.get_current_ui_superadmin, None)
     resp = client.get("/api/admin/settings")
     assert resp.status_code == 200, resp.text
+
+
+def test_admin_cannot_update_storage_endpoint_tags(client: TestClient, db_session):
+    endpoint = StorageEndpoint(
+        name="endpoint-tags-admin-denied",
+        endpoint_url="https://endpoint-tags-admin-denied.example.test",
+        provider=StorageProvider.CEPH.value,
+        is_default=False,
+        is_editable=True,
+    )
+    db_session.add(endpoint)
+    db_session.commit()
+    db_session.refresh(endpoint)
+
+    app.dependency_overrides[dependencies.get_current_user] = _admin_user
+    app.dependency_overrides.pop(dependencies.get_current_ui_superadmin, None)
+
+    resp = client.put(f"/api/admin/storage-endpoints/{endpoint.id}/tags", json={"tags": ["prod"]})
+
+    assert resp.status_code == 403, resp.text
+
+
+def test_superadmin_can_update_storage_endpoint_tags(client: TestClient, db_session):
+    endpoint = StorageEndpoint(
+        name="endpoint-tags-superadmin",
+        endpoint_url="https://endpoint-tags-superadmin.example.test",
+        provider=StorageProvider.CEPH.value,
+        is_default=False,
+        is_editable=True,
+    )
+    db_session.add(endpoint)
+    db_session.commit()
+    db_session.refresh(endpoint)
+
+    app.dependency_overrides[dependencies.get_current_user] = _superadmin_user
+    app.dependency_overrides.pop(dependencies.get_current_ui_superadmin, None)
+
+    resp = client.put(f"/api/admin/storage-endpoints/{endpoint.id}/tags", json={"tags": ["prod", "rgw-a"]})
+
+    assert resp.status_code == 200, resp.text
+    assert [tag["label"] for tag in resp.json()["tags"]] == ["prod", "rgw-a"]
+    assert [tag["color_key"] for tag in resp.json()["tags"]] == ["neutral", "neutral"]
