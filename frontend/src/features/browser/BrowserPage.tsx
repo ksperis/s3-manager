@@ -1174,7 +1174,7 @@ export default function BrowserPage({
   const corsActionPopoverRef = useRef<HTMLDivElement | null>(null);
   const objectsListViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketMenuFilterRef = useRef<HTMLInputElement | null>(null);
-  const bucketPanelOtherBucketsRef = useRef<HTMLDivElement | null>(null);
+  const bucketPanelViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketPanelLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
@@ -3906,6 +3906,13 @@ export default function BrowserPage({
       })),
     [bucketAccessByName, otherBucketPanelItems],
   );
+  const currentBucketMatchesFilter = useMemo(() => {
+    const searchValue = bucketFilter.trim().toLowerCase();
+    if (!searchValue || !currentBucketPanelItem) {
+      return true;
+    }
+    return currentBucketPanelItem.name.toLowerCase().includes(searchValue);
+  }, [bucketFilter, currentBucketPanelItem]);
   const treeRootNode = useMemo(
     () => treeNodes.find((node) => node.prefix === "") ?? null,
     [treeNodes],
@@ -3962,7 +3969,7 @@ export default function BrowserPage({
     if (!useBucketsPanel) {
       return;
     }
-    const scroller = bucketPanelOtherBucketsRef.current;
+    const scroller = bucketPanelViewportRef.current;
     if (!scroller) {
       return;
     }
@@ -3977,7 +3984,7 @@ export default function BrowserPage({
     if (!useBucketsPanel) {
       return;
     }
-    const root = bucketPanelOtherBucketsRef.current;
+    const root = bucketPanelViewportRef.current;
     if (!root) {
       return;
     }
@@ -4045,7 +4052,7 @@ export default function BrowserPage({
     if (!useBucketsPanel || !canLoadMoreBucketResults) {
       return;
     }
-    const root = bucketPanelOtherBucketsRef.current;
+    const root = bucketPanelViewportRef.current;
     const sentinel = bucketPanelLoadMoreSentinelRef.current;
     if (
       !root ||
@@ -11458,6 +11465,7 @@ export default function BrowserPage({
               <BrowserBucketsPanel
                 hasS3AccountContext={hasS3AccountContext}
                 currentBucket={currentBucketPanelItem}
+                currentBucketMatchesFilter={currentBucketMatchesFilter}
                 activePrefix={normalizedPrefix}
                 currentBucketAccess={currentBucketAccess}
                 currentBucketError={
@@ -11480,7 +11488,7 @@ export default function BrowserPage({
                 bucketMenuLoadingMore={bucketMenuLoadingMore}
                 bucketMenuTotal={bucketMenuTotal}
                 bucketTotalCount={bucketTotalCount}
-                otherBucketsViewportRef={bucketPanelOtherBucketsRef}
+                panelViewportRef={bucketPanelViewportRef}
                 loadMoreSentinelRef={bucketPanelLoadMoreSentinelRef}
               />
             )}

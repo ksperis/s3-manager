@@ -1167,6 +1167,14 @@ describe("BrowserPage interactions", () => {
       await screen.findByText("No other buckets match this filter."),
     ).toBeInTheDocument();
     expect(getCurrentBucketPanel().getByText("bucket-2")).toBeInTheDocument();
+    expect(getCurrentBucketPanel().getByText("Outside filter")).toBeInTheDocument();
+
+    await user.clear(screen.getByPlaceholderText("Filter buckets"));
+    await waitFor(() => {
+      expect(
+        getCurrentBucketPanel().queryByText("Outside filter"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("marks inaccessible buckets from the visible panel list and keeps them selectable", async () => {
@@ -1258,9 +1266,7 @@ describe("BrowserPage interactions", () => {
       expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
     });
 
-    await user.click(
-      getOtherBucketsPanel().getByRole("button", { name: "Load more" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => {
       expect(
         getOtherBucketsPanel().getByRole("button", { name: /bucket-4/i }),

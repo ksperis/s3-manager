@@ -32,6 +32,7 @@ type BucketRow = {
 type BrowserBucketsPanelProps = {
   hasS3AccountContext: boolean;
   currentBucket: BrowserBucket | null;
+  currentBucketMatchesFilter: boolean;
   activePrefix: string;
   currentBucketAccess: BucketAccessEntry;
   currentBucketError: string | null;
@@ -52,12 +53,14 @@ type BrowserBucketsPanelProps = {
   bucketMenuLoadingMore: boolean;
   bucketMenuTotal: number;
   bucketTotalCount: number;
-  otherBucketsViewportRef: RefObject<HTMLDivElement | null>;
+  panelViewportRef: RefObject<HTMLDivElement | null>;
   loadMoreSentinelRef: RefObject<HTMLDivElement | null>;
 };
 
 const currentBucketCardClasses =
   "rounded-xl border border-primary-200 bg-primary-50/70 p-3 shadow-sm dark:border-primary-500/40 dark:bg-primary-500/10";
+const currentBucketFilteredCardClasses =
+  "rounded-xl border border-slate-200 bg-slate-50/85 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900/60";
 const bucketSectionTitleClasses = "ui-caption font-semibold text-slate-500 dark:text-slate-400";
 const bucketFilterInputClasses =
   cx(toolbarCompactInputClasses, "w-full py-2 font-medium");
@@ -87,6 +90,8 @@ const bucketAccessLabel: Record<BucketAccessStatus, string> = {
   available: "Ready",
   unavailable: "No list access",
 };
+const currentBucketFilterBadgeClasses =
+  "inline-flex shrink-0 items-center rounded-md border border-slate-200 bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300";
 
 function BucketAccessBadge({ status }: { status: BucketAccessStatus }) {
   return (
@@ -154,6 +159,7 @@ function renderTreeNodes(
 export default function BrowserBucketsPanel({
   hasS3AccountContext,
   currentBucket,
+  currentBucketMatchesFilter,
   activePrefix,
   currentBucketAccess,
   currentBucketError,
@@ -174,7 +180,7 @@ export default function BrowserBucketsPanel({
   bucketMenuLoadingMore,
   bucketMenuTotal,
   bucketTotalCount,
-  otherBucketsViewportRef,
+  panelViewportRef,
   loadMoreSentinelRef,
 }: BrowserBucketsPanelProps) {
   const currentBucketDetail = currentBucketError ?? currentBucketAccess.detail ?? "Unable to list folders for this bucket.";
@@ -224,15 +230,31 @@ export default function BrowserBucketsPanel({
         </label>
       </div>
 
-      <div className="mt-3 min-h-0 flex-1 overflow-hidden">
-        <div className="flex h-full min-h-0 flex-col gap-3">
-          <section className={currentBucketCardClasses} aria-label="Current bucket">
+      <div
+        ref={panelViewportRef}
+        className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1"
+      >
+        <div className="space-y-3">
+          <section
+            className={
+              currentBucketMatchesFilter
+                ? currentBucketCardClasses
+                : currentBucketFilteredCardClasses
+            }
+            aria-label="Current bucket"
+          >
             <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className={bucketSectionTitleClasses}>Current bucket</p>
                 {currentBucket ? (
                   <div className="mt-1 flex min-w-0 items-center gap-2">
-                    <BucketIcon className="h-4 w-4 shrink-0 text-primary-700 dark:text-primary-200" />
+                    <BucketIcon
+                      className={`h-4 w-4 shrink-0 ${
+                        currentBucketMatchesFilter
+                          ? "text-primary-700 dark:text-primary-200"
+                          : "text-slate-500 dark:text-slate-300"
+                      }`}
+                    />
                     <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">{currentBucket.name}</p>
                   </div>
                 ) : (
@@ -240,8 +262,15 @@ export default function BrowserBucketsPanel({
                 )}
               </div>
               {currentBucket && (
-                <div title={currentBucketAccess.detail ?? undefined}>
-                  <BucketAccessBadge status={currentBucketAccess.status} />
+                <div className="flex flex-col items-end gap-1">
+                  {!currentBucketMatchesFilter && (
+                    <span className={currentBucketFilterBadgeClasses}>
+                      Outside filter
+                    </span>
+                  )}
+                  <div title={currentBucketAccess.detail ?? undefined}>
+                    <BucketAccessBadge status={currentBucketAccess.status} />
+                  </div>
                 </div>
               )}
             </div>
@@ -274,7 +303,7 @@ export default function BrowserBucketsPanel({
             </div>
           </section>
 
-          <section className={`${bucketSubtleCardClasses} min-h-0 flex-1 overflow-hidden`} aria-label="Other buckets">
+          <section className={bucketSubtleCardClasses} aria-label="Other buckets">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className={bucketSectionTitleClasses}>Other buckets</p>
@@ -284,7 +313,7 @@ export default function BrowserBucketsPanel({
               </div>
             </div>
 
-            <div ref={otherBucketsViewportRef} className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="mt-3">
               {!hasS3AccountContext ? (
                 <p className="ui-caption text-slate-500 dark:text-slate-400">Select a context to list buckets.</p>
               ) : loadingBuckets && otherBuckets.length === 0 ? (
@@ -328,15 +357,15 @@ export default function BrowserBucketsPanel({
                 </div>
               )}
             </div>
-
-            {canLoadMore && (
-              <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
-                <button type="button" className={panelButtonClasses} onClick={onLoadMore} disabled={bucketMenuLoadingMore}>
-                  {bucketMenuLoadingMore ? "Loading..." : "Load more"}
-                </button>
-              </div>
-            )}
           </section>
+
+          {canLoadMore && (
+            <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
+              <button type="button" className={panelButtonClasses} onClick={onLoadMore} disabled={bucketMenuLoadingMore}>
+                {bucketMenuLoadingMore ? "Loading..." : "Load more"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
