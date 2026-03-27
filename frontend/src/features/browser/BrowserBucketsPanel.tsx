@@ -83,6 +83,13 @@ const bucketAccessBadgeClasses: Record<BucketAccessStatus, string> = {
   unavailable:
     "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-900/30 dark:text-amber-100",
 };
+const bucketAccessIndicatorClasses: Record<BucketAccessStatus, string> = {
+  unknown: bucketAccessBadgeClasses.unknown,
+  checking: bucketAccessBadgeClasses.checking,
+  available:
+    "border-emerald-200/70 bg-emerald-200/60 text-emerald-600/70 dark:border-emerald-400/40 dark:bg-emerald-400/25 dark:text-emerald-200/90",
+  unavailable: bucketAccessBadgeClasses.unavailable,
+};
 
 const bucketAccessLabel: Record<BucketAccessStatus, string> = {
   unknown: "Idle",
@@ -93,7 +100,25 @@ const bucketAccessLabel: Record<BucketAccessStatus, string> = {
 const currentBucketFilterBadgeClasses =
   "inline-flex shrink-0 items-center rounded-md border border-slate-200 bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300";
 
-function BucketAccessBadge({ status }: { status: BucketAccessStatus }) {
+type BucketAccessStatusProps = {
+  status: BucketAccessStatus;
+  variant?: "badge" | "compact";
+};
+
+function BucketAccessStatus({
+  status,
+  variant = "badge",
+}: BucketAccessStatusProps) {
+  if (variant === "compact" && status === "available") {
+    return (
+      <span
+        className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${bucketAccessIndicatorClasses[status]}`}
+        aria-label={bucketAccessLabel[status]}
+        title={bucketAccessLabel[status]}
+      />
+    );
+  }
+
   return (
     <span
       className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${bucketAccessBadgeClasses[status]}`}
@@ -269,7 +294,7 @@ export default function BrowserBucketsPanel({
                     </span>
                   )}
                   <div title={currentBucketAccess.detail ?? undefined}>
-                    <BucketAccessBadge status={currentBucketAccess.status} />
+                    <BucketAccessStatus status={currentBucketAccess.status} variant="compact" />
                   </div>
                 </div>
               )}
@@ -346,7 +371,7 @@ export default function BrowserBucketsPanel({
                           <BucketIcon className="h-3.5 w-3.5 shrink-0" />
                           <span className="truncate font-semibold">{bucket.name}</span>
                         </span>
-                        {access.status !== "unknown" && <BucketAccessBadge status={access.status} />}
+                        {access.status !== "unknown" && <BucketAccessStatus status={access.status} variant="compact" />}
                       </button>
                     );
                   })}
