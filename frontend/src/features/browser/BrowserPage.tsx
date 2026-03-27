@@ -2295,13 +2295,6 @@ export default function BrowserPage({
   }, [showActionBar]);
 
   useEffect(() => {
-    if (!showActionBar) return;
-    if (showUploadQuickMenu) {
-      setShowUploadQuickMenu(false);
-    }
-  }, [showActionBar, showUploadQuickMenu]);
-
-  useEffect(() => {
     if (!hasCorsAction) {
       setShowCorsActionPopover(false);
     }
@@ -10534,6 +10527,44 @@ export default function BrowserPage({
     closeUploadQuickMenu();
     folderInputRef.current?.click();
   };
+  const renderUploadQuickMenu = (placement: "bottom-end" | "bottom-start") => (
+    <AnchoredPortalMenu
+      open={showUploadQuickMenu}
+      anchorRef={uploadQuickButtonRef}
+      placement={placement}
+      offset={6}
+      minWidth={224}
+      className={`w-56 ${browserFloatingMenuClasses}`}
+    >
+      <div
+        ref={uploadQuickMenuRef}
+        role="menu"
+        aria-label="Upload"
+        className="max-h-[min(70vh,20rem)] overflow-y-auto"
+      >
+        <button
+          type="button"
+          role="menuitem"
+          className={`${contextMenuItemClasses} ${!toolbarCanUploadFiles ? contextMenuItemDisabledClasses : ""}`}
+          onClick={openQuickUploadFiles}
+          disabled={!toolbarCanUploadFiles}
+        >
+          <UploadIcon className="h-3.5 w-3.5" />
+          Upload files
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={`${contextMenuItemClasses} ${!toolbarCanUploadFolder ? contextMenuItemDisabledClasses : ""}`}
+          onClick={openQuickUploadFolder}
+          disabled={!toolbarCanUploadFolder}
+        >
+          <FolderIcon className="h-3.5 w-3.5" />
+          Upload folder
+        </button>
+      </div>
+    </AnchoredPortalMenu>
+  );
   const browserActionIconById: Partial<
     Record<BrowserActionState["id"], ReactNode>
   > = {
@@ -11039,42 +11070,7 @@ export default function BrowserPage({
                     >
                       <UploadIcon className="h-3.5 w-3.5" />
                     </button>
-                    <AnchoredPortalMenu
-                      open={showUploadQuickMenu}
-                      anchorRef={uploadQuickButtonRef}
-                      placement="bottom-end"
-                      offset={6}
-                      minWidth={224}
-                      className={`w-56 ${browserFloatingMenuClasses}`}
-                    >
-                      <div
-                        ref={uploadQuickMenuRef}
-                        role="menu"
-                        aria-label="Upload"
-                        className="max-h-[min(70vh,20rem)] overflow-y-auto"
-                      >
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className={`${contextMenuItemClasses} ${!toolbarCanUploadFiles ? contextMenuItemDisabledClasses : ""}`}
-                          onClick={openQuickUploadFiles}
-                          disabled={!toolbarCanUploadFiles}
-                        >
-                          <UploadIcon className="h-3.5 w-3.5" />
-                          Upload files
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className={`${contextMenuItemClasses} ${!toolbarCanUploadFolder ? contextMenuItemDisabledClasses : ""}`}
-                          onClick={openQuickUploadFolder}
-                          disabled={!toolbarCanUploadFolder}
-                        >
-                          <FolderIcon className="h-3.5 w-3.5" />
-                          Upload folder
-                        </button>
-                      </div>
-                    </AnchoredPortalMenu>
+                    {renderUploadQuickMenu("bottom-end")}
                     <button
                       type="button"
                       className={chromeToolbarIconButtonClasses}
@@ -11129,16 +11125,29 @@ export default function BrowserPage({
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                   <button
+                    ref={uploadQuickButtonRef}
                     type="button"
                     className={chromeToolbarPrimaryClasses}
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={!toolbarCanUploadFiles}
-                    aria-label="Upload files"
-                    title="Upload files"
+                    onClick={toggleUploadQuickMenu}
+                    disabled={!toolbarCanUploadFiles && !toolbarCanUploadFolder}
+                    aria-haspopup={
+                      toolbarCanUploadFiles || toolbarCanUploadFolder
+                        ? "menu"
+                        : undefined
+                    }
+                    aria-expanded={
+                      toolbarCanUploadFiles || toolbarCanUploadFolder
+                        ? showUploadQuickMenu
+                        : undefined
+                    }
+                    aria-label="Upload"
+                    title="Upload"
                   >
                     <UploadIcon className="h-3.5 w-3.5" />
-                    Upload files
+                    Upload
+                    <ChevronDownIcon className="h-3.5 w-3.5" />
                   </button>
+                  {renderUploadQuickMenu("bottom-start")}
                   <button
                     type="button"
                     className={chromeToolbarButtonClasses}

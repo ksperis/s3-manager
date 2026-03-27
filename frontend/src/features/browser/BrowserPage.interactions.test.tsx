@@ -1390,7 +1390,7 @@ describe("BrowserPage interactions", () => {
 
     expect(within(actionsToolbar).getByText("1 selected")).toBeInTheDocument();
     expect(
-      within(actionsToolbar).getByRole("button", { name: "Upload files" }),
+      within(actionsToolbar).getByRole("button", { name: "Upload" }),
     ).toBeInTheDocument();
     expect(
       within(actionsToolbar).getByRole("button", { name: "New folder" }),
@@ -1413,6 +1413,17 @@ describe("BrowserPage interactions", () => {
     expect(
       within(actionsToolbar).queryByRole("button", { name: "Copy URL" }),
     ).not.toBeInTheDocument();
+
+    await user.click(
+      within(actionsToolbar).getByRole("button", { name: "Upload" }),
+    );
+    const uploadMenu = await screen.findByRole("menu", { name: "Upload" });
+    expect(
+      within(uploadMenu).getByRole("menuitem", { name: "Upload files" }),
+    ).toBeInTheDocument();
+    expect(
+      within(uploadMenu).getByRole("menuitem", { name: "Upload folder" }),
+    ).toBeInTheDocument();
 
     await user.click(
       within(actionsToolbar).getByRole("button", { name: "More" }),
