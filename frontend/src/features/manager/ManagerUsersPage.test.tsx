@@ -131,4 +131,40 @@ describe("ManagerUsersPage", () => {
     expect(screen.getByRole("button", { name: "Create new inline policy" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update draft" })).toBeInTheDocument();
   });
+
+  it("renders a single attach policies section in the create user modal", async () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "acc-1",
+          kind: "account",
+          display_name: "Tenant account",
+          endpoint_name: "Default",
+        },
+      ],
+      selectedS3AccountId: "acc-1",
+      selectedS3AccountType: "tenant",
+      accountIdForApi: "acc-1",
+      requiresS3AccountSelection: true,
+      accessMode: "default",
+      iamIdentity: null,
+      sessionS3AccountName: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerUsersPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(listIamUsersMock).toHaveBeenCalledWith("acc-1");
+      expect(listIamGroupsMock).toHaveBeenCalledWith("acc-1");
+      expect(listIamPoliciesMock).toHaveBeenCalledWith("acc-1");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create user" }));
+
+    expect(screen.getAllByText("Attach policies (optional)")).toHaveLength(1);
+  });
 });
