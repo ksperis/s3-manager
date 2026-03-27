@@ -36,7 +36,7 @@ export default function TableEmptyState({
     (title || description ? (
       <div className="space-y-1">
         {title ? <p className="ui-body font-semibold">{title}</p> : null}
-        {description ? <p className="ui-caption">{description}</p> : null}
+        {description ? <div className="ui-caption">{description}</div> : null}
       </div>
     ) : (
       "No data available."

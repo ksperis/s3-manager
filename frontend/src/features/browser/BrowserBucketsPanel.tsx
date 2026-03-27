@@ -34,7 +34,6 @@ type BrowserBucketsPanelProps = {
   currentBucket: BrowserBucket | null;
   activePrefix: string;
   currentBucketAccess: BucketAccessEntry;
-  currentBucketError: string | null;
   treeRootNode: TreeNode | null;
   bucketFilter: string;
   onBucketFilterChange: (value: string) => void;
@@ -181,7 +180,6 @@ export default function BrowserBucketsPanel({
   currentBucket,
   activePrefix,
   currentBucketAccess,
-  currentBucketError,
   treeRootNode,
   bucketFilter,
   onBucketFilterChange,
@@ -202,7 +200,6 @@ export default function BrowserBucketsPanel({
   panelViewportRef,
   loadMoreSentinelRef,
 }: BrowserBucketsPanelProps) {
-  const currentBucketDetail = currentBucketError ?? currentBucketAccess.detail ?? "Unable to list folders for this bucket.";
   const currentBucketUnavailable = currentBucketAccess.status === "unavailable";
   const currentBucketChildren = treeRootNode?.children ?? [];
   const currentBucketLoading = Boolean(currentBucket && treeRootNode?.isLoading);
@@ -273,7 +270,13 @@ export default function BrowserBucketsPanel({
                   )}
                 </div>
                 {currentBucket && (
-                  <div title={currentBucketAccess.detail ?? undefined}>
+                  <div
+                    title={
+                      currentBucketUnavailable
+                        ? "Listing not allowed with current credentials."
+                        : undefined
+                    }
+                  >
                     <BucketAccessStatus status={currentBucketAccess.status} variant="compact" />
                   </div>
                 )}
@@ -286,8 +289,7 @@ export default function BrowserBucketsPanel({
                   <p className="ui-caption text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
                 ) : currentBucketUnavailable ? (
                   <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 ui-caption text-amber-900 dark:border-amber-500/40 dark:bg-amber-900/30 dark:text-amber-100">
-                    <p className="font-semibold">Simple listing is not available for this bucket.</p>
-                    <p className="mt-1 break-words">{currentBucketDetail}</p>
+                    <p className="font-semibold">Folder tree unavailable with current credentials.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -345,7 +347,11 @@ export default function BrowserBucketsPanel({
                         data-bucket-panel-name={bucket.name}
                         className={`${bucketRowBaseClasses} ${unavailable ? bucketRowUnavailableClasses : bucketRowIdleClasses}`}
                         onClick={() => onSelectBucket(bucket.name)}
-                        title={access.detail ?? bucket.name}
+                        title={
+                          unavailable
+                            ? "Listing not allowed with current credentials."
+                            : bucket.name
+                        }
                       >
                         <span className="flex min-w-0 items-center gap-2">
                           <BucketIcon className="h-3.5 w-3.5 shrink-0" />

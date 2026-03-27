@@ -244,9 +244,12 @@ import {
   prepareLatestRequest,
 } from "./browserSearchHelpers";
 import {
+  normalizeBrowserListingIssue,
   resolveBucketAccessEntry,
   sanitizeBucketAccessEntries,
   splitBucketPanelBuckets,
+  UNKNOWN_BUCKET_ACCESS,
+  type BrowserListingIssue,
   type BucketAccessEntry,
 } from "./browserBucketsPanelHelpers";
 import type {
@@ -937,7 +940,11 @@ export default function BrowserPage({
   const [bucketError, setBucketError] = useState<string | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
   const [objectsLoadingMore, setObjectsLoadingMore] = useState(false);
-  const [objectsError, setObjectsError] = useState<string | null>(null);
+  const [objectsIssue, setObjectsIssue] = useState<BrowserListingIssue | null>(
+    null,
+  );
+  const [showObjectsIssueTechnicalDetails, setShowObjectsIssueTechnicalDetails] =
+    useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const [browserSettings, setBrowserSettings] =
@@ -1488,10 +1495,19 @@ export default function BrowserPage({
           ) {
             return;
           }
-          updateBucketAccessEntry(targetBucketName, {
-            status: "unavailable",
-            detail: extractApiError(error, "Unable to list bucket."),
-          });
+          const issue = normalizeBrowserListingIssue(
+            error,
+            "Unable to list bucket.",
+          );
+          updateBucketAccessEntry(
+            targetBucketName,
+            issue.kind === "access_denied"
+              ? {
+                  status: "unavailable",
+                  detail: issue.technicalDetail,
+                }
+              : UNKNOWN_BUCKET_ACCESS,
+          );
         })
         .finally(() => {
           bucketAccessAbortControllersRef.current.delete(targetBucketName);
@@ -2793,7 +2809,8 @@ export default function BrowserPage({
       if (!isSilent) {
         setObjectsLoading(true);
         setObjectsLoadingMore(false);
-        setObjectsError(null);
+        setObjectsIssue(null);
+        setShowObjectsIssueTechnicalDetails(false);
       }
     } else {
       setObjectsLoadingMore(true);
@@ -2829,6 +2846,8 @@ export default function BrowserPage({
         loadedPrefixes = data.prefixes;
         loadedObjectsNextToken = data.next_continuation_token ?? null;
         loadedObjectsTruncated = Boolean(data.is_truncated);
+        setObjectsIssue(null);
+        setShowObjectsIssueTechnicalDetails(false);
         updateBucketAccessEntry(bucketName, {
           status: "available",
           detail: null,
@@ -2976,15 +2995,21 @@ export default function BrowserPage({
       if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
         return;
       }
-      const errorDetail = extractApiError(
+      const issue = normalizeBrowserListingIssue(
         err,
         "Unable to list objects for this prefix.",
       );
-      updateBucketAccessEntry(bucketName, {
-        status: "unavailable",
-        detail: errorDetail,
-      });
-      setObjectsError(errorDetail);
+      const previousAccess = resolveBucketAccessEntry(bucketName, bucketAccessByName);
+      if (issue.kind === "access_denied") {
+        updateBucketAccessEntry(bucketName, {
+          status: "unavailable",
+          detail: issue.technicalDetail,
+        });
+      } else if (previousAccess.status === "unavailable" || previousAccess.status === "checking") {
+        updateBucketAccessEntry(bucketName, UNKNOWN_BUCKET_ACCESS);
+      }
+      setObjectsIssue(issue);
+      setShowObjectsIssueTechnicalDetails(false);
     } finally {
       if (objectsAbortControllerRef.current === controller) {
         objectsAbortControllerRef.current = null;
@@ -3228,7 +3253,8 @@ export default function BrowserPage({
       setPrefixes([]);
       setObjectsNextToken(null);
       setObjectsIsTruncated(false);
-      setObjectsError(null);
+      setObjectsIssue(null);
+      setShowObjectsIssueTechnicalDetails(false);
       setObjectsLoadingMore(false);
     };
 
@@ -3403,6 +3429,32 @@ export default function BrowserPage({
   const currentBucketUnavailable = bucketName
     ? currentBucketAccess.status === "unavailable"
     : false;
+  const objectsIssueDescription = useMemo<ReactNode>(() => {
+    if (!objectsIssue) {
+      return null;
+    }
+    return (
+      <div className="space-y-2">
+        <p>{objectsIssue.description}</p>
+        <details
+          open={showObjectsIssueTechnicalDetails}
+          onToggle={(event) =>
+            setShowObjectsIssueTechnicalDetails(event.currentTarget.open)
+          }
+          className="mx-auto max-w-xl rounded-md border border-rose-200/70 bg-rose-50/70 px-2 py-1.5 text-left dark:border-rose-500/30 dark:bg-rose-900/20"
+        >
+          <summary className="list-none cursor-pointer ui-caption font-semibold text-rose-700 dark:text-rose-100 [&::-webkit-details-marker]:hidden">
+            Show technical details
+          </summary>
+          {showObjectsIssueTechnicalDetails && (
+            <p className="mt-2 break-words ui-caption text-rose-700 dark:text-rose-100">
+              {objectsIssue.technicalDetail}
+            </p>
+          )}
+        </details>
+      </div>
+    );
+  }, [objectsIssue, showObjectsIssueTechnicalDetails]);
 
   const listTreePrefixes = useCallback(
     async (targetPrefix: string) => {
@@ -11369,10 +11421,7 @@ export default function BrowserPage({
           </div>
         </div>
 
-        {(bucketError ||
-          objectsError ||
-          statusMessage ||
-          warnings.length > 0) && (
+        {(bucketError || statusMessage || warnings.length > 0) && (
           <div className="shrink-0 px-3 pb-0 pt-3">
             <div
               className={`${browserSubtleSurfaceClasses} px-3 py-2.5 ui-caption text-slate-600 dark:text-slate-300`}
@@ -11380,11 +11429,6 @@ export default function BrowserPage({
               {bucketError && (
                 <p className="font-semibold text-rose-600 dark:text-rose-200">
                   {bucketError}
-                </p>
-              )}
-              {!bucketError && objectsError && (
-                <p className="font-semibold text-rose-600 dark:text-rose-200">
-                  {objectsError}
                 </p>
               )}
               {statusMessage && (
@@ -11460,9 +11504,6 @@ export default function BrowserPage({
                 currentBucket={currentBucketPanelItem}
                 activePrefix={normalizedPrefix}
                 currentBucketAccess={currentBucketAccess}
-                currentBucketError={
-                  currentBucketUnavailable ? objectsError : null
-                }
                 treeRootNode={treeRootNode}
                 bucketFilter={bucketFilter}
                 onBucketFilterChange={setBucketFilter}
@@ -11852,18 +11893,19 @@ export default function BrowserPage({
                       )}
                       {!objectsLoading &&
                         bucketName &&
-                        objectsError &&
+                        objectsIssue &&
                         listItems.length === 0 && (
                           <TableEmptyState
                             colSpan={objectTableColSpan}
-                            message={objectsError}
+                            title={objectsIssue.title}
+                            description={objectsIssueDescription}
                             tone="error"
                             className="py-10 text-center"
                           />
                         )}
                       {!objectsLoading &&
                         bucketName &&
-                        !objectsError &&
+                        !objectsIssue &&
                         listItems.length === 0 && (
                           <TableEmptyState
                             colSpan={objectTableColSpan}

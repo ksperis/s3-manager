@@ -1221,18 +1221,88 @@ describe("BrowserPage interactions", () => {
     });
     expect(inaccessibleBucketButton).toHaveAttribute(
       "title",
-      "Forbidden by policy",
+      "Listing not allowed with current credentials.",
     );
 
     await user.click(inaccessibleBucketButton);
     expect(
       await screen.findByText(
-        "Simple listing is not available for this bucket.",
+        "Listing is not available for this bucket.",
       ),
     ).toBeInTheDocument();
-    expect(await screen.findAllByText("Forbidden by policy")).not.toHaveLength(
-      0,
+    expect(
+      getCurrentBucketPanel().getByText(
+        "Folder tree unavailable with current credentials.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Forbidden by policy")).not.toBeInTheDocument();
+
+    await user.click(screen.getByText("Show technical details"));
+    expect(await screen.findByText("Forbidden by policy")).toBeInTheDocument();
+    expect(screen.getAllByText("Forbidden by policy")).toHaveLength(1);
+  });
+
+  it("keeps generic bucket probe failures out of the no-access state", async () => {
+    const user = userEvent.setup();
+    searchBrowserBucketsMock.mockResolvedValue({
+      items: [{ name: "bucket-1" }, { name: "flaky-bucket" }],
+      total: 2,
+      page: 1,
+      page_size: 50,
+      has_next: false,
+    });
+    listBrowserObjectsMock.mockImplementation(
+      (_accountId: string, bucket: string, _options?: { maxKeys?: number }) => {
+        if (bucket === "flaky-bucket") {
+          return Promise.reject({
+            isAxiosError: true,
+            response: { status: 502, data: {} },
+            message: "Network Error",
+          });
+        }
+        return Promise.resolve({
+          prefix: "",
+          objects: [],
+          prefixes: ["docs/"],
+          is_truncated: false,
+          next_continuation_token: null,
+        });
+      },
     );
+
+    renderPage({
+      defaultShowFolders: true,
+      initialEntry: "/browser?bucket=bucket-1",
+    });
+
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "flaky-bucket",
+        expect.objectContaining({ maxKeys: 1 }),
+      );
+    });
+    expect(getOtherBucketsPanel().queryByText("No list access")).not.toBeInTheDocument();
+
+    const flakyBucketButton = await screen.findByRole("button", {
+      name: /flaky-bucket/i,
+    });
+    expect(flakyBucketButton).toHaveAttribute("title", "flaky-bucket");
+
+    await user.click(flakyBucketButton);
+    expect(
+      await screen.findByText("Unable to load objects for this bucket."),
+    ).toBeInTheDocument();
+    expect(
+      getCurrentBucketPanel().queryByText(
+        "Folder tree unavailable with current credentials.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Network Error")).not.toBeInTheDocument();
+
+    await user.click(screen.getByText("Show technical details"));
+    expect(await screen.findByText("Network Error")).toBeInTheDocument();
+    expect(screen.getAllByText("Network Error")).toHaveLength(1);
   });
 
   it("loads more buckets from the panel without dropping the pinned current bucket", async () => {
