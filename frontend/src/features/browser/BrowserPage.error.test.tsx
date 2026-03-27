@@ -48,6 +48,7 @@ function renderPage() {
 describe("BrowserPage error handling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     fetchBrowserSettingsMock.mockResolvedValue({
       allow_proxy_transfers: false,
       direct_upload_parallelism: 3,

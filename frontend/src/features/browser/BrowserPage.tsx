@@ -89,6 +89,13 @@ import BrowserMultipartUploadsModal from "./BrowserMultipartUploadsModal";
 import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
 import BrowserPreviewModal from "./BrowserPreviewModal";
 import ObjectAdvancedModal from "./ObjectAdvancedModal";
+import {
+  readBrowserRootContextSelection,
+  readStoredBrowserRootUiState,
+  readBrowserRootUiState,
+  writeBrowserRootContextSelection,
+  writeBrowserRootUiLayout,
+} from "./browserRootUiState";
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { S3AccountProvider } from "../manager/S3AccountContext";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
@@ -614,6 +621,16 @@ export default function BrowserPage({
   const accountIdForApi = accountIdOverride ?? browserContext.selectorForApi;
   const hasS3AccountContext = hasContextOverride ?? browserContext.hasContext;
   const location = useLocation();
+  const normalizedPath = location.pathname.replace(/\/+$/, "");
+  const isEmbeddedBrowserPath =
+    normalizedPath.endsWith("/manager/browser") ||
+    normalizedPath.endsWith("/ceph-admin/browser");
+  const isMainBrowserPath = normalizedPath === "/browser";
+  const initialRootUiLayout = useMemo(
+    () => (isMainBrowserPath ? readStoredBrowserRootUiState()?.layout ?? null : null),
+    [isMainBrowserPath]
+  );
+  const browserRootContextId = accountIdForApi == null ? null : String(accountIdForApi);
   // /browser is credential-first.
   const accessMode = null;
   const [bucketName, setBucketName] = useState("");
@@ -638,17 +655,21 @@ export default function BrowserPage({
   const [objectsNextToken, setObjectsNextToken] = useState<string | null>(null);
   const [objectsIsTruncated, setObjectsIsTruncated] = useState(false);
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
-  const [showFolders, setShowFolders] = useState(Boolean(allowFoldersPanel && defaultShowFolders));
-  const [showInspector, setShowInspector] = useState(Boolean(allowInspectorPanel && defaultShowInspector));
-  const [showActionBar, setShowActionBar] = useState(false);
+  const [showFolders, setShowFolders] = useState(
+    () => (isMainBrowserPath ? initialRootUiLayout?.showFolders ?? defaultShowFolders : defaultShowFolders)
+  );
+  const [showInspector, setShowInspector] = useState(
+    () => (isMainBrowserPath ? initialRootUiLayout?.showInspector ?? defaultShowInspector : defaultShowInspector)
+  );
+  const [showActionBar, setShowActionBar] = useState(
+    () => (isMainBrowserPath ? initialRootUiLayout?.showActionBar ?? false : false)
+  );
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
   });
   const [inspectorTab, setInspectorTab] = useState<"context" | "bucket" | "selection" | "details">("context");
-  const [compactMode, setCompactMode] = useState(
-    () => location.pathname.replace(/\/+$/, "").endsWith("/browser")
-  );
+  const [compactMode, setCompactMode] = useState(() => normalizedPath.endsWith("/browser"));
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
   const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
   const [prefixVersionsLoading, setPrefixVersionsLoading] = useState(false);
@@ -880,6 +901,8 @@ export default function BrowserPage({
   const browserPathRef = useRef("");
   const browserHistoryStateRef = useRef<{ bucketName: string; prefix: string } | null>(null);
   const skipHistoryPushRef = useRef(false);
+  const browserRootSelectionPersistenceReadyRef = useRef(false);
+  const browserRootSelectionContextIdRef = useRef<string | null>(browserRootContextId);
   const operationIdsRef = useRef(new Set<string>());
   const bucketNameRef = useRef(bucketName);
   const prefixRef = useRef(prefix);
@@ -908,11 +931,6 @@ export default function BrowserPage({
     effectiveContextQuotaSizeGb != null && effectiveContextQuotaSizeGb > 0 ? effectiveContextQuotaSizeGb * BYTES_PER_GIB : null;
   const cephContextQuotaObjects = effectiveContextQuotaObjects != null && effectiveContextQuotaObjects > 0 ? effectiveContextQuotaObjects : null;
   const isCephContext = effectiveContextEndpointProvider === "ceph";
-  const normalizedPath = location.pathname.replace(/\/+$/, "");
-  const isEmbeddedBrowserPath =
-    normalizedPath.endsWith("/manager/browser") ||
-    normalizedPath.endsWith("/ceph-admin/browser");
-  const isMainBrowserPath = normalizedPath === "/browser";
   const showActionBarToggle = showPanelToggles && isMainBrowserPath;
   const bucketManagementEnabled = normalizedPath.endsWith("/browser") && !isEmbeddedBrowserPath;
   const bucketConfigurationEnabled = bucketManagementEnabled;
@@ -927,12 +945,6 @@ export default function BrowserPage({
       setCompactMode(true);
     }
   }, [normalizedPath]);
-
-  useEffect(() => {
-    if (!isMainBrowserPath && showActionBar) {
-      setShowActionBar(false);
-    }
-  }, [isMainBrowserPath, showActionBar]);
   const contextId = typeof accountIdForApi === "string" ? accountIdForApi : null;
   const isCephAdminContext = Boolean(contextId && contextId.startsWith("ceph-admin-"));
   const isLegacyS3UserContext = Boolean(contextId && contextId.startsWith("s3u-"));
@@ -989,16 +1001,13 @@ export default function BrowserPage({
   }, []);
 
   useEffect(() => {
-    if (!allowFoldersPanel && showFolders) {
-      setShowFolders(false);
-    }
-  }, [allowFoldersPanel, showFolders]);
-
-  useEffect(() => {
-    if (!allowInspectorPanel && showInspector) {
-      setShowInspector(false);
-    }
-  }, [allowInspectorPanel, showInspector]);
+    if (!isMainBrowserPath) return;
+    writeBrowserRootUiLayout({
+      showFolders,
+      showInspector,
+      showActionBar,
+    });
+  }, [isMainBrowserPath, showActionBar, showFolders, showInspector]);
 
   const toggleFoldersPanel = useCallback(() => {
     if (!canUseFoldersPanel) return;
@@ -1097,6 +1106,12 @@ export default function BrowserPage({
     bucketNameRef.current = bucketName;
     prefixRef.current = prefix;
   }, [bucketName, prefix]);
+  useEffect(() => {
+    if (!isMainBrowserPath || !browserRootContextId || !hasS3AccountContext) return;
+    if (!browserRootSelectionPersistenceReadyRef.current) return;
+    if (browserRootSelectionContextIdRef.current !== browserRootContextId) return;
+    writeBrowserRootContextSelection(browserRootContextId, { bucketName, prefix });
+  }, [browserRootContextId, bucketName, hasS3AccountContext, isMainBrowserPath, prefix]);
   const uiOrigin = useMemo(
     () => (typeof window === "undefined" ? undefined : window.location.origin),
     []
@@ -1659,6 +1674,10 @@ export default function BrowserPage({
 
   const refreshBucketList = useCallback(
     async (options?: { preferredBucket?: string | null }) => {
+      if (isMainBrowserPath) {
+        browserRootSelectionPersistenceReadyRef.current = false;
+        browserRootSelectionContextIdRef.current = browserRootContextId;
+      }
       if (!hasS3AccountContext) {
         setBucketMenuItems([]);
         setBucketMenuPage(1);
@@ -1688,7 +1707,11 @@ export default function BrowserPage({
         setBucketMenuTotal(firstPage.total);
         setBucketTotalCount(firstPage.total);
         const previousBucket = bucketNameRef.current;
+        const previousPrefix = prefixRef.current;
         const preferredBucket = options?.preferredBucket?.trim() ?? "";
+        const storedSelection = isMainBrowserPath
+          ? readBrowserRootContextSelection(browserRootContextId)
+          : null;
         const exactMatchCache = new Map<string, boolean>();
 
         const bucketExists = async (value: string): Promise<boolean> => {
@@ -1713,21 +1736,43 @@ export default function BrowserPage({
         };
 
         let nextBucket = "";
+        let nextPrefix = previousPrefix;
+        let bucketSource: "preferred" | "requested" | "stored" | "previous" | "single" | "ceph-requested" | "none" = "none";
         if (preferredBucket && (await bucketExists(preferredBucket))) {
           nextBucket = preferredBucket;
+          bucketSource = "preferred";
         } else if (isCephAdminContext && requestedBucket) {
           nextBucket = requestedBucket;
+          bucketSource = "ceph-requested";
         } else if (requestedBucket && (await bucketExists(requestedBucket))) {
           nextBucket = requestedBucket;
+          bucketSource = "requested";
+        } else if (storedSelection?.bucketName && (await bucketExists(storedSelection.bucketName))) {
+          nextBucket = storedSelection.bucketName;
+          nextPrefix = normalizePrefix(storedSelection.prefix);
+          bucketSource = "stored";
         } else if (previousBucket && (await bucketExists(previousBucket))) {
           nextBucket = previousBucket;
+          bucketSource = "previous";
         } else if (firstPage.total === 1 && firstPage.items.length === 1) {
           nextBucket = firstPage.items[0].name;
+          bucketSource = "single";
         }
-        if (nextBucket !== previousBucket) {
-          setPrefix("");
+        if (bucketSource !== "stored") {
+          nextPrefix =
+            bucketSource === "preferred" ||
+            bucketSource === "requested" ||
+            bucketSource === "ceph-requested" ||
+            nextBucket !== previousBucket
+              ? ""
+              : previousPrefix;
         }
         setBucketName(nextBucket);
+        setPrefix(nextPrefix);
+        if (isMainBrowserPath) {
+          browserRootSelectionContextIdRef.current = browserRootContextId;
+          browserRootSelectionPersistenceReadyRef.current = true;
+        }
       } catch (err) {
         setBucketError(extractApiError(err, "Unable to list buckets for this account."));
         setBucketMenuItems([]);
@@ -1746,11 +1791,12 @@ export default function BrowserPage({
         setDeletedObjectsNextKeyMarker(null);
         setDeletedObjectsNextVersionIdMarker(null);
         setDeletedObjectsIsTruncated(false);
+        browserRootSelectionContextIdRef.current = browserRootContextId;
       } finally {
         setLoadingBuckets(false);
       }
     },
-    [accountIdForApi, hasS3AccountContext, isCephAdminContext, requestedBucket]
+    [accountIdForApi, browserRootContextId, hasS3AccountContext, isCephAdminContext, isMainBrowserPath, requestedBucket]
   );
 
   useEffect(() => {
@@ -2323,6 +2369,8 @@ export default function BrowserPage({
       return;
     }
     previousAccountIdRef.current = accountIdForApi;
+    browserRootSelectionPersistenceReadyRef.current = false;
+    browserRootSelectionContextIdRef.current = browserRootContextId;
     // Clear selection synchronously on context switch so bucket-scoped effects
     // don't issue stale requests with the next credentials.
     bucketNameRef.current = "";
@@ -2335,7 +2383,7 @@ export default function BrowserPage({
     setDeletedObjectsNextKeyMarker(null);
     setDeletedObjectsNextVersionIdMarker(null);
     setDeletedObjectsIsTruncated(false);
-  }, [accountIdForApi]);
+  }, [accountIdForApi, browserRootContextId]);
 
   useEffect(() => {
     const resetObjectListingState = () => {

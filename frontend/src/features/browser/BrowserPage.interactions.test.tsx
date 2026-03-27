@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
+import { BROWSER_ROOT_UI_STATE_STORAGE_KEY } from "./browserRootUiState";
 
 const searchBrowserBucketsMock = vi.fn();
 const fetchBrowserSettingsMock = vi.fn();
@@ -71,20 +72,39 @@ vi.mock("../../api/buckets", async () => {
 
 function renderPage({
   defaultShowInspector = false,
+  defaultShowFolders = false,
   initialEntry = "/browser",
   allowInspectorPanel = true,
-}: { defaultShowInspector?: boolean; initialEntry?: string; allowInspectorPanel?: boolean } = {}) {
+  allowFoldersPanel = true,
+  accountIdForApi,
+}: {
+  defaultShowInspector?: boolean;
+  defaultShowFolders?: boolean;
+  initialEntry?: string;
+  allowInspectorPanel?: boolean;
+  allowFoldersPanel?: boolean;
+  accountIdForApi?: string;
+} = {}) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <BrowserPage defaultShowInspector={defaultShowInspector} allowInspectorPanel={allowInspectorPanel} />
+      <BrowserPage
+        accountIdForApi={accountIdForApi}
+        defaultShowInspector={defaultShowInspector}
+        defaultShowFolders={defaultShowFolders}
+        allowInspectorPanel={allowInspectorPanel}
+        allowFoldersPanel={allowFoldersPanel}
+      />
     </MemoryRouter>
   );
 }
 
-function renderEmbeddedPage() {
+function renderEmbeddedPage({
+  initialEntry = "/manager/browser",
+  accountIdForApi = "acc-1",
+}: { initialEntry?: string; accountIdForApi?: string } = {}) {
   return render(
-    <MemoryRouter initialEntries={["/manager/browser"]}>
-      <BrowserEmbed accountIdForApi="acc-1" hasContext />
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <BrowserEmbed accountIdForApi={accountIdForApi} hasContext />
     </MemoryRouter>
   );
 }
@@ -111,6 +131,14 @@ function getActionsToolbar() {
   return screen.getByRole("toolbar", { name: "Browser actions bar" });
 }
 
+function getContextPanel() {
+  return screen.getByRole("tabpanel", { name: "Context" });
+}
+
+function seedBrowserRootUiState(value: unknown) {
+  window.localStorage.setItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY, JSON.stringify(value));
+}
+
 async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
   await user.click(within(getContextToolbar()).getByRole("button", { name: "More" }));
   return await screen.findByRole("menu", { name: "More" });
@@ -127,6 +155,7 @@ async function enableActionBar(user: ReturnType<typeof userEvent.setup>) {
 describe("BrowserPage interactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
 
     fetchBrowserSettingsMock.mockResolvedValue({
       allow_proxy_transfers: false,
@@ -465,6 +494,245 @@ describe("BrowserPage interactions", () => {
     await waitFor(() => {
       expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
     });
+  });
+
+  it("restores folders, inspector, and action bar on /browser after remount", async () => {
+    const user = userEvent.setup();
+    const firstRender = renderPage();
+
+    await findRowByLabel("a.txt");
+
+    const menu = await openContextMoreMenu(user);
+    await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Folders panel/i }));
+    await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i }));
+
+    expect(await screen.findByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+
+    await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Scope: root")).toBeInTheDocument();
+      expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+    });
+
+    firstRender.unmount();
+
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    expect(screen.getByText("Scope: root")).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+  });
+
+  it("keeps a stored inspector preference when the workspace temporarily disallows it", async () => {
+    const user = userEvent.setup();
+    const firstRender = renderPage();
+
+    await findRowByLabel("a.txt");
+
+    const menu = await openContextMoreMenu(user);
+    await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i }));
+
+    expect(await screen.findByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+
+    firstRender.unmount();
+
+    const blockedRender = renderPage({ allowInspectorPanel: false });
+    await findRowByLabel("a.txt");
+
+    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+
+    const blockedMenu = await openContextMoreMenu(user);
+    expect(within(blockedMenu).queryByRole("menuitemcheckbox", { name: /Inspector panel/i })).not.toBeInTheDocument();
+
+    blockedRender.unmount();
+
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    expect(screen.getByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+  });
+
+  it("keeps /browser preferences isolated from embedded browser surfaces", async () => {
+    seedBrowserRootUiState({
+      layout: { showFolders: true, showInspector: true, showActionBar: true },
+      contextSelections: {},
+    });
+
+    const rootRender = renderPage();
+    await findRowByLabel("a.txt");
+
+    expect(screen.getByText("Scope: root")).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+
+    rootRender.unmount();
+
+    const managerRender = renderEmbeddedPage();
+    await findRowByLabel("a.txt");
+
+    expect(screen.queryByText("Scope: root")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
+
+    managerRender.unmount();
+
+    const cephAdminRender = renderEmbeddedPage({
+      initialEntry: "/ceph-admin/browser",
+      accountIdForApi: "ceph-admin-1",
+    });
+    await findRowByLabel("a.txt");
+
+    expect(screen.queryByText("Scope: root")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
+
+    cephAdminRender.unmount();
+
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    expect(screen.getByText("Scope: root")).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+  });
+
+  it("restores the last bucket and path for the same execution context", async () => {
+    const user = userEvent.setup();
+    searchBrowserBucketsMock.mockImplementation((accountId: string, options?: { search?: string; exact?: boolean }) => {
+      const allBuckets = accountId === "acc-2" ? [{ name: "bucket-a" }] : [{ name: "bucket-1" }, { name: "bucket-2" }];
+      const search = options?.search?.trim() ?? "";
+      const filtered = search
+        ? allBuckets.filter((bucket) => (options?.exact ? bucket.name === search : bucket.name.includes(search)))
+        : allBuckets;
+      return Promise.resolve({
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        page_size: 50,
+        has_next: false,
+      });
+    });
+
+    const firstRender = renderPage({ accountIdForApi: "acc-1", defaultShowInspector: true });
+    await user.click(within(getContextToolbar()).getByRole("button", { name: "Select bucket" }));
+    await user.click(await screen.findByRole("button", { name: "bucket-2" }));
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-2",
+        expect.objectContaining({ prefix: "" })
+      );
+    });
+    await findRowByLabel("docs");
+
+    await user.dblClick(await findRowByLabel("docs"));
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-2",
+        expect.objectContaining({ prefix: "docs/" })
+      );
+    });
+    expect(within(getContextPanel()).getByText("bucket-2/docs")).toBeInTheDocument();
+
+    firstRender.unmount();
+
+    const secondRender = renderPage({ accountIdForApi: "acc-2", defaultShowInspector: true });
+    await findRowByLabel("a.txt");
+
+    expect(within(getContextPanel()).getByText("bucket-a")).toBeInTheDocument();
+    expect(within(getContextPanel()).queryByText("bucket-2/docs")).not.toBeInTheDocument();
+
+    secondRender.unmount();
+
+    renderPage({ accountIdForApi: "acc-1", defaultShowInspector: true });
+    await screen.findByText("readme.txt");
+
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-2",
+        expect.objectContaining({ prefix: "docs/" })
+      );
+    });
+    expect(within(getContextPanel()).getByText("bucket-2/docs")).toBeInTheDocument();
+  });
+
+  it("falls back cleanly when a stored bucket is no longer available", async () => {
+    searchBrowserBucketsMock.mockImplementation((_accountId: string, options?: { search?: string; exact?: boolean }) => {
+      const allBuckets = [{ name: "bucket-1" }];
+      const search = options?.search?.trim() ?? "";
+      const filtered = search
+        ? allBuckets.filter((bucket) => (options?.exact ? bucket.name === search : bucket.name.includes(search)))
+        : allBuckets;
+      return Promise.resolve({
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        page_size: 50,
+        has_next: false,
+      });
+    });
+    seedBrowserRootUiState({
+      layout: { showFolders: false, showInspector: true, showActionBar: false },
+      contextSelections: {
+        "acc-1": { bucketName: "missing-bucket", prefix: "docs/" },
+      },
+    });
+
+    renderPage({ accountIdForApi: "acc-1", defaultShowInspector: true });
+
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({ prefix: "" })
+      );
+    });
+    expect(within(getContextPanel()).getByText("bucket-1")).toBeInTheDocument();
+    expect(within(getContextPanel()).queryByText("bucket-1/docs")).not.toBeInTheDocument();
+  });
+
+  it("lets an explicit ?bucket override reset the restored path to the bucket root", async () => {
+    searchBrowserBucketsMock.mockImplementation((_accountId: string, options?: { search?: string; exact?: boolean }) => {
+      const allBuckets = [{ name: "bucket-1" }, { name: "bucket-2" }];
+      const search = options?.search?.trim() ?? "";
+      const filtered = search
+        ? allBuckets.filter((bucket) => (options?.exact ? bucket.name === search : bucket.name.includes(search)))
+        : allBuckets;
+      return Promise.resolve({
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        page_size: 50,
+        has_next: false,
+      });
+    });
+    seedBrowserRootUiState({
+      layout: { showFolders: false, showInspector: true, showActionBar: false },
+      contextSelections: {
+        "acc-1": { bucketName: "bucket-2", prefix: "docs/" },
+      },
+    });
+
+    renderPage({
+      accountIdForApi: "acc-1",
+      defaultShowInspector: true,
+      initialEntry: "/browser?bucket=bucket-1",
+    });
+    await findRowByLabel("a.txt");
+
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({ prefix: "" })
+      );
+    });
+    expect(within(getContextPanel()).getByText("bucket-1")).toBeInTheDocument();
+    expect(within(getContextPanel()).queryByText("bucket-1/docs")).not.toBeInTheDocument();
   });
 
   it("shows selection actions inline and secondary actions in More when the action bar is enabled", async () => {

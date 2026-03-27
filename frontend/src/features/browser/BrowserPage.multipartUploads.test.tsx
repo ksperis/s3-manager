@@ -77,6 +77,7 @@ function renderPage({ defaultShowInspector = true }: { defaultShowInspector?: bo
 describe("BrowserPage multipart uploads modal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
 
     fetchBrowserSettingsMock.mockResolvedValue({
       allow_proxy_transfers: false,
