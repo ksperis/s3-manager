@@ -147,12 +147,12 @@ describe("TopbarContextAccountSelector", () => {
           id: "acc-1",
           display_name: "Alpha",
           tags: [
-            { id: 1, label: "gold", color_key: "amber" },
-            { id: 2, label: "team-a", color_key: "blue" },
+            { id: 1, label: "gold", color_key: "amber", scope: "standard" },
+            { id: 2, label: "team-a", color_key: "blue", scope: "administrative" },
           ],
           endpoint_tags: [
-            { id: 3, label: "ceph", color_key: "slate" },
-            { id: 4, label: "prod", color_key: "emerald" },
+            { id: 3, label: "ceph", color_key: "slate", scope: "standard" },
+            { id: 4, label: "prod", color_key: "emerald", scope: "administrative" },
           ],
         }),
       ],
@@ -166,17 +166,17 @@ describe("TopbarContextAccountSelector", () => {
     expect(addonSlot).toHaveTextContent("gold");
     expect(addonSlot).toHaveClass("items-center");
     expect(trigger).toHaveTextContent("gold");
-    expect(trigger).toHaveTextContent("team-a");
     expect(trigger).toHaveTextContent("ceph");
-    expect(trigger).toHaveTextContent("+1");
+    expect(trigger).not.toHaveTextContent("team-a");
+    expect(trigger).not.toHaveTextContent("prod");
     const triggerGoldBadge = screen.getByText("gold").parentElement;
     expect(triggerGoldBadge).toHaveClass("bg-amber-50");
     expect(triggerGoldBadge).not.toHaveClass("bg-slate-50");
 
     const listbox = await openMenu(user);
     expect(within(listbox).getByText("gold")).toBeInTheDocument();
-    expect(within(listbox).getByText("team-a")).toBeInTheDocument();
     expect(within(listbox).getByText("ceph")).toBeInTheDocument();
-    expect(within(listbox).getByText("prod")).toBeInTheDocument();
+    expect(within(listbox).queryByText("team-a")).not.toBeInTheDocument();
+    expect(within(listbox).queryByText("prod")).not.toBeInTheDocument();
   });
 });

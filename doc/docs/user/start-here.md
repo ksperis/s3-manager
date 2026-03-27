@@ -20,7 +20,7 @@ Use this page when you log in for the first time and need to understand where to
    - `Ceph Admin`: Ceph cluster-level tasks.
    - `Storage Ops`: cross-context bucket operations.
 4. If you see context or endpoint selectors, select the right account or endpoint before acting.
-5. If compact selector tags help your workflow, enable **Show tags in top selectors** from [User profile](profile.md) to display color-coded tags directly in the top selectors.
+5. If compact selector tags help your workflow, enable **Show tags in top selectors** from [User profile](profile.md) to display color-coded `Standard` tags directly in the top selectors. `Administrative` tags stay limited to management lists and edit surfaces.
 
 ## Expected result
 

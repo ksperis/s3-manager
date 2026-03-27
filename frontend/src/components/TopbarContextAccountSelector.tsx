@@ -9,7 +9,7 @@ import UiTagBadgeList from "./UiTagBadgeList";
 import TopbarControlTrigger from "./TopbarControlTrigger";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
 import { useSelectorTagsPreference } from "../utils/selectorTagsPreference";
-import { buildUiTagItems, extractUiTagLabels } from "../utils/uiTags";
+import { buildUiTagItems, extractUiTagLabels, filterSelectorVisibleUiTags } from "../utils/uiTags";
 
 export type ContextAccessMode = "admin" | "session" | "s3_user" | "connection" | null;
 
@@ -100,6 +100,8 @@ export default function TopbarContextAccountSelector({
               : context.kind === "legacy_user"
                 ? "Legacy S3 user identity"
                 : "RGW account";
+          const selectorEntityTags = filterSelectorVisibleUiTags(context.tags);
+          const selectorEndpointTags = filterSelectorVisibleUiTags(context.endpoint_tags);
           const displayName = context.display_name.trim();
           const haystack = [
             label,
@@ -107,13 +109,13 @@ export default function TopbarContextAccountSelector({
             context.endpoint_name,
             context.endpoint_url,
             description,
-            ...extractUiTagLabels(context.tags),
-            ...extractUiTagLabels(context.endpoint_tags),
+            ...extractUiTagLabels(selectorEntityTags),
+            ...extractUiTagLabels(selectorEndpointTags),
           ]
             .filter(Boolean)
             .join(" ")
             .toLowerCase();
-          const tagItems = buildUiTagItems(context.tags, context.endpoint_tags);
+          const tagItems = buildUiTagItems(selectorEntityTags, selectorEndpointTags);
           return {
             id: context.id,
             kind: context.kind,

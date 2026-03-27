@@ -14,7 +14,7 @@ Use **Ceph Admin** for Ceph RGW cluster-level operations.
 
 1. Open `/ceph-admin`.
 2. Select the active endpoint in the top selector.
-   - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded endpoint tags are shown directly in the selector.
+   - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded `Standard` endpoint tags are shown directly in the selector. `Administrative` tags remain limited to management surfaces.
 3. Use pages:
    - **Accounts**: RGW account operations.
    - **Users**: RGW user operations.

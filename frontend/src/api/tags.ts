@@ -28,19 +28,23 @@ export const TAG_COLOR_KEYS = [
   "pink",
   "rose",
 ] as const;
+export const TAG_SCOPES = ["administrative", "standard"] as const;
 
 export type TagColorKey = (typeof TAG_COLOR_KEYS)[number];
+export type TagScope = (typeof TAG_SCOPES)[number];
 export type TagCatalogDomain = "admin_managed" | "endpoint";
 
 export type TagDefinitionSummary = {
   id: number;
   label: string;
   color_key: TagColorKey;
+  scope: TagScope;
 };
 
 export type TagDefinitionInput = {
   label: string;
   color_key: TagColorKey;
+  scope: TagScope;
 };
 
 type TagDefinitionListResponse = {

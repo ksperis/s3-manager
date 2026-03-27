@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { TagColorKey, TagDefinitionInput, TagDefinitionSummary } from "../api/tags";
+import type { TagColorKey, TagDefinitionInput, TagDefinitionSummary, TagScope } from "../api/tags";
 
 export type UiTagDefinition = TagDefinitionInput & {
   id?: number | null;
@@ -23,6 +23,7 @@ export type UiTagItem = {
 };
 
 const DEFAULT_TAG_COLOR_KEY: TagColorKey = "neutral";
+export const DEFAULT_TAG_SCOPE: TagScope = "standard";
 
 export function normalizeUiTags(values?: Array<UiTagLike> | null): UiTagDefinition[] {
   if (!Array.isArray(values)) return [];
@@ -34,7 +35,7 @@ export function normalizeUiTags(values?: Array<UiTagLike> | null): UiTagDefiniti
       const key = cleaned.toLocaleLowerCase();
       if (!cleaned || seen.has(key)) return;
       seen.add(key);
-      normalized.push({ label: cleaned, color_key: DEFAULT_TAG_COLOR_KEY });
+      normalized.push({ label: cleaned, color_key: DEFAULT_TAG_COLOR_KEY, scope: DEFAULT_TAG_SCOPE });
       return;
     }
     if (!entry || typeof entry.label !== "string") return;
@@ -46,9 +47,19 @@ export function normalizeUiTags(values?: Array<UiTagLike> | null): UiTagDefiniti
       id: typeof entry.id === "number" ? entry.id : undefined,
       label: cleaned,
       color_key: (entry.color_key ?? DEFAULT_TAG_COLOR_KEY) as TagColorKey,
+      scope: (entry.scope ?? DEFAULT_TAG_SCOPE) as TagScope,
     });
   });
   return normalized;
+}
+
+export function isSelectorVisibleUiTag(value: UiTagLike): boolean {
+  const normalized = normalizeUiTags(value ? [value] : []);
+  return normalized[0]?.scope !== "administrative";
+}
+
+export function filterSelectorVisibleUiTags(values?: Array<UiTagLike> | null): UiTagDefinition[] {
+  return normalizeUiTags(values).filter((entry) => entry.scope !== "administrative");
 }
 
 export function extractUiTagLabels(values?: Array<UiTagLike> | null): string[] {

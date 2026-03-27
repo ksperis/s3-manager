@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { KeyboardEvent, useMemo, useState } from "react";
-import type { TagColorKey, TagDefinitionSummary } from "../api/tags";
+import type { TagColorKey, TagDefinitionSummary, TagScope } from "../api/tags";
 import { normalizeUiTags, type UiTagDefinition } from "../utils/uiTags";
 import { getTagColorOption, TAG_COLOR_OPTIONS } from "../utils/tagPalette";
 import UiBadge from "./ui/UiBadge";
@@ -19,8 +19,31 @@ type UiTagEditorProps = {
   catalogMode?: "shared" | "private";
 };
 
+type TagScopeOption = {
+  key: TagScope;
+  label: string;
+  description: string;
+};
+
+const TAG_SCOPE_OPTIONS: TagScopeOption[] = [
+  {
+    key: "standard",
+    label: "Standard",
+    description: "Also visible in selectors.",
+  },
+  {
+    key: "administrative",
+    label: "Administrative",
+    description: "Visible only in management lists and edit surfaces.",
+  },
+];
+
 function getLabelKey(value: string) {
   return value.trim().toLocaleLowerCase();
+}
+
+function getScopeOption(scope: TagScope) {
+  return TAG_SCOPE_OPTIONS.find((option) => option.key === scope) ?? TAG_SCOPE_OPTIONS[0];
 }
 
 function renderColorSwatch(
@@ -51,6 +74,38 @@ function renderColorSwatch(
   );
 }
 
+function renderScopeChoice(
+  option: TagScopeOption,
+  selected: boolean,
+  onClick: () => void,
+  ariaLabel: string,
+  disabled = false
+) {
+  return (
+    <button
+      key={option.key}
+      type="button"
+      aria-label={ariaLabel}
+      onClick={onClick}
+      disabled={disabled}
+      className={cx(
+        "flex min-w-[11rem] flex-1 flex-col rounded-lg border px-3 py-2 text-left transition",
+        disabled
+          ? "cursor-not-allowed opacity-50"
+          : "hover:border-primary/50 hover:bg-primary-50/30 dark:hover:border-primary-500/50 dark:hover:bg-primary-950/20",
+        selected
+          ? "border-primary/40 bg-primary-50/60 dark:border-primary-500/40 dark:bg-primary-950/20"
+          : "border-slate-200/70 bg-white/80 dark:border-slate-700 dark:bg-slate-900/60"
+      )}
+    >
+      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+        {option.label}
+      </span>
+      <span className="ui-caption text-slate-500 dark:text-slate-400">{option.description}</span>
+    </button>
+  );
+}
+
 export default function UiTagEditor({
   label = "Tags",
   tags,
@@ -63,17 +118,15 @@ export default function UiTagEditor({
   const [existingSearch, setExistingSearch] = useState("");
   const [newTagLabel, setNewTagLabel] = useState("");
   const [newTagColorKey, setNewTagColorKey] = useState<TagColorKey>("neutral");
-  const [colorEditorTagKey, setColorEditorTagKey] = useState<string | null>(null);
+  const [newTagScope, setNewTagScope] = useState<TagScope>("standard");
+  const [settingsEditorTagKey, setSettingsEditorTagKey] = useState<string | null>(null);
   const [pendingSharedColorKey, setPendingSharedColorKey] = useState<TagColorKey>("neutral");
+  const [pendingSharedScope, setPendingSharedScope] = useState<TagScope>("standard");
   const normalizedTags = useMemo(() => normalizeUiTags(tags), [tags]);
   const normalizedCatalog = useMemo(() => normalizeUiTags(catalog), [catalog]);
   const selectedLabelKeys = useMemo(
     () => new Set(normalizedTags.map((tag) => getLabelKey(tag.label))),
     [normalizedTags]
-  );
-  const activeColorEditorTag = useMemo(
-    () => normalizedTags.find((tag) => getLabelKey(tag.label) === colorEditorTagKey) ?? null,
-    [colorEditorTagKey, normalizedTags]
   );
   const availableCatalogTags = useMemo(() => {
     const needle = existingSearch.trim().toLocaleLowerCase();
@@ -98,16 +151,16 @@ export default function UiTagEditor({
       ? "This tag already exists. Add it from Add existing tag."
       : null;
   const canCreateNewTag = Boolean(trimmedNewTagLabel) && !newTagValidationMessage;
-  const canPickNewTagColor = canCreateNewTag;
+  const canPickNewTagSettings = canCreateNewTag;
   const existingTagHelp =
     catalogMode === "private"
       ? "Reuse a private tag from your private-connection tag catalog."
       : "Reuse a shared tag from this catalog.";
   const createTagHelp =
     catalogMode === "private"
-      ? "Create a new private tag with its initial color."
-      : "Create a new shared tag with its initial color.";
-  const sharedColorHelp =
+      ? "Create a new private tag with its initial color and scope."
+      : "Create a new shared tag with its initial color and scope.";
+  const sharedSettingsHelp =
     catalogMode === "private"
       ? "This updates the private tag definition for your private-connection tag catalog."
       : "This updates the shared tag definition for all objects in this domain.";
@@ -119,35 +172,42 @@ export default function UiTagEditor({
 
   const createNewTag = () => {
     if (!canCreateNewTag) return;
-    onChange(normalizeUiTags([...normalizedTags, { label: trimmedNewTagLabel, color_key: newTagColorKey }]));
+    onChange(
+      normalizeUiTags([
+        ...normalizedTags,
+        { label: trimmedNewTagLabel, color_key: newTagColorKey, scope: newTagScope },
+      ])
+    );
     setNewTagLabel("");
     setNewTagColorKey("neutral");
+    setNewTagScope("standard");
   };
 
   const removeTag = (value: string) => {
     const target = getLabelKey(value);
     onChange(normalizeUiTags(normalizedTags.filter((tag) => getLabelKey(tag.label) !== target)));
-    if (colorEditorTagKey === target) {
-      setColorEditorTagKey(null);
+    if (settingsEditorTagKey === target) {
+      setSettingsEditorTagKey(null);
     }
   };
 
-  const recolorTag = (value: string, colorKey: TagColorKey) => {
+  const updateTag = (value: string, updates: Partial<Pick<UiTagDefinition, "color_key" | "scope">>) => {
     const target = getLabelKey(value);
     onChange(
       normalizeUiTags(
         normalizedTags.map((tag) =>
-          getLabelKey(tag.label) === target ? { ...tag, color_key: colorKey } : tag
+          getLabelKey(tag.label) === target ? { ...tag, ...updates } : tag
         )
       )
     );
   };
 
-  const openColorEditor = (tag: UiTagDefinition) => {
+  const openSettingsEditor = (tag: UiTagDefinition) => {
     const target = getLabelKey(tag.label);
-    setColorEditorTagKey((current) => {
+    setSettingsEditorTagKey((current) => {
       if (current === target) return null;
       setPendingSharedColorKey(tag.color_key);
+      setPendingSharedScope(tag.scope ?? "standard");
       return target;
     });
   };
@@ -174,15 +234,17 @@ export default function UiTagEditor({
           ) : (
             <div className="space-y-2">
               {normalizedTags.map((tag) => {
-                const isColorEditorOpen = colorEditorTagKey === getLabelKey(tag.label);
+                const isSettingsEditorOpen = settingsEditorTagKey === getLabelKey(tag.label);
                 const isSharedTag = typeof tag.id === "number";
                 const previewColor = isSharedTag ? pendingSharedColorKey : tag.color_key;
+                const previewScope = isSharedTag ? pendingSharedScope : tag.scope;
+                const scopeOption = getScopeOption(previewScope);
                 return (
                   <div
-                    key={`${tag.id ?? tag.label}-${tag.color_key}`}
+                    key={`${tag.id ?? tag.label}-${tag.color_key}-${tag.scope}`}
                     className={cx(
                       "space-y-2 rounded-lg border px-2.5 py-2",
-                      isColorEditorOpen
+                      isSettingsEditorOpen
                         ? "border-primary/40 bg-primary-50/60 dark:border-primary-500/40 dark:bg-primary-950/20"
                         : "border-slate-200/70 bg-white/80 dark:border-slate-700 dark:bg-slate-900/60"
                     )}
@@ -197,13 +259,16 @@ export default function UiTagEditor({
                       >
                         <span className="truncate">{tag.label}</span>
                       </UiBadge>
+                      <UiBadge tone="neutral" className="px-2 py-0.5 text-[10px]">
+                        {getScopeOption(tag.scope).label}
+                      </UiBadge>
                       <button
                         type="button"
-                        aria-label={`${isSharedTag ? "Change shared color" : "Change color"} for ${tag.label}`}
-                        onClick={() => openColorEditor(tag)}
+                        aria-label={`${isSharedTag ? "Edit shared settings" : "Edit settings"} for ${tag.label}`}
+                        onClick={() => openSettingsEditor(tag)}
                         className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100"
                       >
-                        {isSharedTag ? "Change shared color" : "Change color"}
+                        {isSharedTag ? "Edit shared settings" : "Edit settings"}
                       </button>
                       <button
                         type="button"
@@ -214,11 +279,11 @@ export default function UiTagEditor({
                       </button>
                     </div>
 
-                    {isColorEditorOpen && (
-                      <div className="space-y-2 rounded-lg border border-slate-200/70 bg-white/80 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/60">
+                    {isSettingsEditorOpen && (
+                      <div className="space-y-3 rounded-lg border border-slate-200/70 bg-white/80 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/60">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            {isSharedTag ? "Change shared color" : "Change color"}
+                            {isSharedTag ? "Edit shared settings" : "Edit tag settings"}
                           </p>
                           <UiBadge
                             disableToneStyles
@@ -229,33 +294,61 @@ export default function UiTagEditor({
                           >
                             <span className="truncate">{tag.label}</span>
                           </UiBadge>
+                          <UiBadge tone="neutral" className="px-2 py-0.5 text-[10px]">
+                            {scopeOption.label}
+                          </UiBadge>
                         </div>
                         <p className="ui-caption text-slate-500 dark:text-slate-400">
                           {isSharedTag
-                            ? sharedColorHelp
-                            : "This color only affects the new tag you are editing on this object."}
+                            ? sharedSettingsHelp
+                            : "These changes only affect the new tag you are editing on this object."}
                         </p>
-                        <div className="flex flex-wrap gap-2">
-                          {TAG_COLOR_OPTIONS.map((option) =>
-                            renderColorSwatch(
-                              option,
-                              option.key === previewColor,
-                              () => {
-                                if (isSharedTag) {
-                                  setPendingSharedColorKey(option.key);
-                                  return;
-                                }
-                                recolorTag(tag.label, option.key);
-                                setColorEditorTagKey(null);
-                              },
-                              `${isSharedTag ? "Select" : "Use"} ${option.label} for ${tag.label}`
-                            )
-                          )}
+                        <div className="space-y-2">
+                          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Color
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {TAG_COLOR_OPTIONS.map((option) =>
+                              renderColorSwatch(
+                                option,
+                                option.key === previewColor,
+                                () => {
+                                  if (isSharedTag) {
+                                    setPendingSharedColorKey(option.key);
+                                    return;
+                                  }
+                                  updateTag(tag.label, { color_key: option.key });
+                                },
+                                `${isSharedTag ? "Select" : "Use"} ${option.label} for ${tag.label}`
+                              )
+                            )}
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Scope
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {TAG_SCOPE_OPTIONS.map((option) =>
+                              renderScopeChoice(
+                                option,
+                                option.key === previewScope,
+                                () => {
+                                  if (isSharedTag) {
+                                    setPendingSharedScope(option.key);
+                                    return;
+                                  }
+                                  updateTag(tag.label, { scope: option.key });
+                                },
+                                `${isSharedTag ? "Select" : "Use"} ${option.label} scope for ${tag.label}`
+                              )
+                            )}
+                          </div>
                         </div>
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           <button
                             type="button"
-                            onClick={() => setColorEditorTagKey(null)}
+                            onClick={() => setSettingsEditorTagKey(null)}
                             className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                           >
                             {isSharedTag ? "Cancel" : "Close"}
@@ -264,12 +357,15 @@ export default function UiTagEditor({
                             <button
                               type="button"
                               onClick={() => {
-                                recolorTag(tag.label, pendingSharedColorKey);
-                                setColorEditorTagKey(null);
+                                updateTag(tag.label, {
+                                  color_key: pendingSharedColorKey,
+                                  scope: pendingSharedScope,
+                                });
+                                setSettingsEditorTagKey(null);
                               }}
                               className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 ui-caption font-semibold text-primary transition hover:bg-primary/15 dark:border-primary-500/40 dark:bg-primary-500/10 dark:text-primary-100"
                             >
-                              Apply color change
+                              Apply shared changes
                             </button>
                           )}
                         </div>
@@ -312,15 +408,20 @@ export default function UiTagEditor({
                   key={tag.id ?? tag.label}
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900/50"
                 >
-                  <UiBadge
-                    disableToneStyles
-                    className={cx(
-                      "max-w-full gap-1 px-2 py-0.5 text-[10px]",
-                      getTagColorOption(tag.color_key).badgeClassName
-                    )}
-                  >
-                    <span className="truncate">{tag.label}</span>
-                  </UiBadge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <UiBadge
+                      disableToneStyles
+                      className={cx(
+                        "max-w-full gap-1 px-2 py-0.5 text-[10px]",
+                        getTagColorOption(tag.color_key).badgeClassName
+                      )}
+                    >
+                      <span className="truncate">{tag.label}</span>
+                    </UiBadge>
+                    <UiBadge tone="neutral" className="px-2 py-0.5 text-[10px]">
+                      {getScopeOption(tag.scope).label}
+                    </UiBadge>
+                  </div>
                   <button
                     type="button"
                     aria-label={`Add ${tag.label}`}
@@ -356,7 +457,7 @@ export default function UiTagEditor({
               <p className="ui-caption text-amber-700 dark:text-amber-300">{newTagValidationMessage}</p>
             )}
           </div>
-          <div className={cx("space-y-2", !canPickNewTagColor && "opacity-60")}>
+          <div className={cx("space-y-2", !canPickNewTagSettings && "opacity-60")}>
             <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Initial color
             </p>
@@ -367,11 +468,27 @@ export default function UiTagEditor({
                   option.key === newTagColorKey,
                   () => setNewTagColorKey(option.key),
                   `Use ${option.label} for new tag`,
-                  !canPickNewTagColor
+                  !canPickNewTagSettings
                 )
               )}
             </div>
-            {canPickNewTagColor && (
+          </div>
+          <div className={cx("space-y-2", !canPickNewTagSettings && "opacity-60")}>
+            <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Initial scope
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {TAG_SCOPE_OPTIONS.map((option) =>
+                renderScopeChoice(
+                  option,
+                  option.key === newTagScope,
+                  () => setNewTagScope(option.key),
+                  `Use ${option.label} scope for new tag`,
+                  !canPickNewTagSettings
+                )
+              )}
+            </div>
+            {canPickNewTagSettings && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="ui-caption text-slate-500 dark:text-slate-400">Preview</span>
                 <UiBadge
@@ -379,6 +496,9 @@ export default function UiTagEditor({
                   className={cx("px-2 py-0.5 text-[10px]", getTagColorOption(newTagColorKey).badgeClassName)}
                 >
                   {trimmedNewTagLabel}
+                </UiBadge>
+                <UiBadge tone="neutral" className="px-2 py-0.5 text-[10px]">
+                  {getScopeOption(newTagScope).label}
                 </UiBadge>
               </div>
             )}

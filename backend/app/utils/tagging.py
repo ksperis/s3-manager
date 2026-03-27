@@ -6,6 +6,7 @@ from typing import Optional
 
 
 DEFAULT_TAG_COLOR_KEY = "neutral"
+DEFAULT_TAG_SCOPE = "standard"
 TAG_COLOR_KEYS: tuple[str, ...] = (
     "neutral",
     "slate",
@@ -29,6 +30,12 @@ TAG_COLOR_KEYS: tuple[str, ...] = (
     "fuchsia",
     "pink",
     "rose",
+)
+TAG_SCOPE_ADMINISTRATIVE = "administrative"
+TAG_SCOPE_STANDARD = "standard"
+TAG_SCOPES: tuple[str, ...] = (
+    TAG_SCOPE_ADMINISTRATIVE,
+    TAG_SCOPE_STANDARD,
 )
 
 TAG_DOMAIN_ENDPOINT = "endpoint"
@@ -63,6 +70,19 @@ def normalize_tag_color_key(value: object) -> str:
     return cleaned
 
 
+def normalize_tag_scope(value: object) -> str:
+    if value is None:
+        return DEFAULT_TAG_SCOPE
+    if not isinstance(value, str):
+        raise ValueError("tag scope is invalid.")
+    cleaned = value.strip().lower()
+    if not cleaned:
+        return DEFAULT_TAG_SCOPE
+    if cleaned not in TAG_SCOPES:
+        raise ValueError("tag scope is invalid.")
+    return cleaned
+
+
 def _get_mapping_value(entry: object, key: str) -> object:
     if isinstance(entry, dict):
         return entry.get(key)
@@ -72,12 +92,13 @@ def _get_mapping_value(entry: object, key: str) -> object:
 def normalize_tag_item(entry: object) -> dict[str, str]:
     if isinstance(entry, str):
         label = normalize_tag_label(entry)
-        return {"label": label, "color_key": DEFAULT_TAG_COLOR_KEY}
+        return {"label": label, "color_key": DEFAULT_TAG_COLOR_KEY, "scope": DEFAULT_TAG_SCOPE}
     if not isinstance(entry, dict) and not hasattr(entry, "label"):
         raise ValueError("tags must be a list of tag definitions.")
     label = normalize_tag_label(_get_mapping_value(entry, "label"))
     color_key = normalize_tag_color_key(_get_mapping_value(entry, "color_key"))
-    return {"label": label, "color_key": color_key}
+    scope = normalize_tag_scope(_get_mapping_value(entry, "scope"))
+    return {"label": label, "color_key": color_key, "scope": scope}
 
 
 def normalize_tag_items_input(value: object, *, allow_none: bool = False) -> Optional[list[dict[str, str]]]:

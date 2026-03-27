@@ -13,7 +13,7 @@ Use **Browser** for direct bucket/object operations.
 
 1. Open `/browser`.
 2. Select the context/account in the top selector.
-   - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded context and endpoint tags are shown directly in the selector.
+   - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded `Standard` context and endpoint tags are shown directly in the selector. `Administrative` tags remain limited to management surfaces.
 3. Navigate buckets and prefixes.
    - Use the left panel to switch buckets directly from the workspace and browse folders for the active bucket.
    - The active bucket stays pinned at the top of the panel while other buckets remain collapsed.

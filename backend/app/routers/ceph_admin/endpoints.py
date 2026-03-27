@@ -176,7 +176,7 @@ def list_ceph_admin_endpoints(
         if str(endpoint.provider) != StorageProvider.CEPH.value:
             continue
         payload = build_ceph_admin_endpoint_payload(endpoint)
-        payload["tags"] = tags_service.get_storage_endpoint_tags(endpoint)
+        payload["tags"] = tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint))
         results.append(CephAdminEndpoint(**payload))
     return results
 

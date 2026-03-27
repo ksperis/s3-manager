@@ -305,7 +305,10 @@ describe("CephAdminLayout", () => {
             name: "Ceph Endpoint",
             is_default: true,
             endpoint_url: "https://ceph.example.test",
-            tags: ["prod", "rgw-a"],
+            tags: [
+              { id: 1, label: "prod", color_key: "emerald", scope: "standard" },
+              { id: 2, label: "ops-note", color_key: "amber", scope: "administrative" },
+            ],
             capabilities: {
               metrics: true,
               usage: true,
@@ -337,6 +340,9 @@ describe("CephAdminLayout", () => {
     expect(capturedEndpointSelectProps?.options?.[0].inlineAddon).toBeTruthy();
     expect(capturedEndpointSelectProps?.options?.[0].triggerAddon).toBeTruthy();
     expect(capturedEndpointSelectProps?.options?.[1].inlineAddon).toBeUndefined();
+    const { getByText, queryByText } = render(<>{capturedEndpointSelectProps?.options?.[0].triggerAddon}</>);
+    expect(getByText("prod")).toBeInTheDocument();
+    expect(queryByText("ops-note")).not.toBeInTheDocument();
     expect(capturedEndpointSelectProps).toEqual(
       expect.objectContaining({
         widthClassName: expect.stringContaining("w-[19rem]"),

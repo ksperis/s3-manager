@@ -112,8 +112,8 @@ describe("ProfilePage live validation", () => {
       quota_alerts_global_watch: false,
     });
     listPrivateConnectionTagDefinitionsMock.mockResolvedValue([
-      { id: 901, label: "ops", color_key: "teal" },
-      { id: 902, label: "finance", color_key: "amber" },
+      { id: 901, label: "ops", color_key: "teal", scope: "standard" },
+      { id: 902, label: "finance", color_key: "amber", scope: "standard" },
     ]);
     updateConnectionMock.mockResolvedValue(makeConnection());
     deleteConnectionMock.mockResolvedValue(undefined);
@@ -418,7 +418,7 @@ describe("ProfilePage live validation", () => {
       target: { value: "ops" },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Add ops" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Change shared color for ops" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Edit shared settings for ops" }));
 
     expect(
       within(dialog).getByText(

@@ -55,8 +55,8 @@ def _build_account_context(
         endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
         endpoint_url=endpoint.endpoint_url if endpoint else None,
         storage_endpoint_capabilities=endpoint_caps,
-        tags=tags_service.get_account_tags(account),
-        endpoint_tags=tags_service.get_storage_endpoint_tags(endpoint) if endpoint else [],
+        tags=tags_service.filter_selector_visible(tags_service.get_account_tags(account)),
+        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)) if endpoint else [],
         capabilities=ExecutionContextCapabilities(
             can_manage_iam=True,
             sts_capable=sts_capable,
@@ -89,8 +89,8 @@ def _build_legacy_user_context(
         endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
         endpoint_url=endpoint.endpoint_url if endpoint else None,
         storage_endpoint_capabilities=endpoint_caps,
-        tags=tags_service.get_s3_user_tags(s3_user),
-        endpoint_tags=tags_service.get_storage_endpoint_tags(endpoint) if endpoint else [],
+        tags=tags_service.filter_selector_visible(tags_service.get_s3_user_tags(s3_user)),
+        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)) if endpoint else [],
         capabilities=ExecutionContextCapabilities(
             can_manage_iam=False,
             sts_capable=False,
@@ -136,8 +136,8 @@ def _build_connection_context(
         endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
         endpoint_url=details.endpoint_url,
         storage_endpoint_capabilities=endpoint_caps,
-        tags=tags_service.get_connection_tags(connection),
-        endpoint_tags=tags_service.get_storage_endpoint_tags(endpoint) if endpoint else [],
+        tags=tags_service.filter_selector_visible(tags_service.get_connection_tags(connection)),
+        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)) if endpoint else [],
         capabilities=ExecutionContextCapabilities(
             can_manage_iam=can_manage_iam,
             sts_capable=False,

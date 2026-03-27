@@ -15,10 +15,11 @@ const getStorageEndpointMock = vi.fn();
 const listMinimalUsersMock = vi.fn();
 const listAdminTagDefinitionsMock = vi.fn();
 
-const makeTag = (id: number, label: string, color_key = "neutral") => ({
+const makeTag = (id: number, label: string, color_key = "neutral", scope = "standard") => ({
   id,
   label,
   color_key,
+  scope,
 });
 
 vi.mock("./useAdminAccountStats", () => ({
@@ -195,7 +196,7 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.getByText("Add existing tag")).toBeInTheDocument();
     expect(screen.getByText("Create new tag")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Change shared color for gold" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit shared settings for gold" }));
     expect(
       screen.getByText("This updates the shared tag definition for all objects in this domain.")
     ).toBeInTheDocument();

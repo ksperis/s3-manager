@@ -266,7 +266,7 @@ describe("S3ConnectionsPage live validation", () => {
     listAdminS3ConnectionsMock.mockImplementation((params?: { search?: string }) => {
       const taggedConnection = makeConnection(1, {
         name: "connection-tagged",
-        tags: [{ id: 701, label: "shared", color_key: "sky" }],
+        tags: [{ id: 701, label: "shared", color_key: "sky", scope: "standard" }],
       });
       const plainConnection = makeConnection(2, { name: "connection-plain" });
       const items = params?.search === "shared" ? [taggedConnection] : [taggedConnection, plainConnection];

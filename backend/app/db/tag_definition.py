@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.utils.time import utcnow
+from app.utils.tagging import DEFAULT_TAG_SCOPE
 
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import relationship
@@ -39,6 +40,7 @@ class TagDefinition(Base):
     label = Column(String, nullable=False)
     label_key = Column(String, nullable=False)
     color_key = Column(String, nullable=False)
+    scope = Column(String, nullable=False, default=DEFAULT_TAG_SCOPE, server_default=DEFAULT_TAG_SCOPE)
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 

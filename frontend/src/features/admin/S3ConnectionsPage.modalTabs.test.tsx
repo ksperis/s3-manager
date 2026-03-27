@@ -16,10 +16,11 @@ const listMinimalUsersMock = vi.fn();
 const listStorageEndpointsMock = vi.fn();
 const listAdminTagDefinitionsMock = vi.fn();
 
-const makeTag = (id: number, label: string, color_key = "neutral") => ({
+const makeTag = (id: number, label: string, color_key = "neutral", scope = "standard") => ({
   id,
   label,
   color_key,
+  scope,
 });
 
 vi.mock("../../api/s3ConnectionsAdmin", () => ({

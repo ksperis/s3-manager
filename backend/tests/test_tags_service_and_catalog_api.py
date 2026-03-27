@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.db import S3Account, S3Connection, S3User, StorageEndpoint, StorageProvider, TagDefinition, User, UserRole
+from app.db import S3Account, S3Connection, S3User, StorageEndpoint, StorageProvider, TagDefinition, User, UserRole, UserS3Account
 from app.main import app
 from app.routers import dependencies
 from app.services.tags_service import TagsService
@@ -92,12 +92,15 @@ def test_tags_service_propagates_admin_managed_color_updates_across_entities(db_
 
     assert [tag.label for tag in service.get_account_tags(account)] == ["prod"]
     assert [tag.color_key for tag in service.get_account_tags(account)] == ["blue"]
+    assert [tag.scope for tag in service.get_account_tags(account)] == ["standard"]
     assert [tag.color_key for tag in service.get_s3_user_tags(s3_user)] == ["blue"]
+    assert [tag.scope for tag in service.get_s3_user_tags(s3_user)] == ["standard"]
 
     definitions = service.list_definitions(domain_kind=TAG_DOMAIN_ADMIN_MANAGED, owner_user_id=None)
     assert len(definitions) == 1
     assert definitions[0].label == "prod"
     assert definitions[0].color_key == "blue"
+    assert definitions[0].scope == "standard"
 
 
 def test_tags_service_isolates_private_tag_colors_per_owner(db_session):
@@ -118,8 +121,8 @@ def test_tags_service_isolates_private_tag_colors_per_owner(db_session):
 
     owner_a_catalog = service.list_definitions(domain_kind=TAG_DOMAIN_PRIVATE_CONNECTION_USER, owner_user_id=owner_a.id)
     owner_b_catalog = service.list_definitions(domain_kind=TAG_DOMAIN_PRIVATE_CONNECTION_USER, owner_user_id=owner_b.id)
-    assert [(item.label, item.color_key) for item in owner_a_catalog] == [("prod", "amber")]
-    assert [(item.label, item.color_key) for item in owner_b_catalog] == [("prod", "blue")]
+    assert [(item.label, item.color_key, item.scope) for item in owner_a_catalog] == [("prod", "amber", "standard")]
+    assert [(item.label, item.color_key, item.scope) for item in owner_b_catalog] == [("prod", "blue", "standard")]
     assert db_session.query(TagDefinition).filter(TagDefinition.domain_kind == TAG_DOMAIN_PRIVATE_CONNECTION_USER).count() == 2
 
 
@@ -134,11 +137,15 @@ def test_admin_tag_definitions_api_respects_domain_permissions(client: TestClien
 
     admin_managed_resp = client.get("/api/admin/tag-definitions", params={"domain": "admin_managed"})
     assert admin_managed_resp.status_code == 200, admin_managed_resp.text
-    assert [(item["label"], item["color_key"]) for item in admin_managed_resp.json()["items"]] == [("finance", "emerald")]
+    assert [(item["label"], item["color_key"], item["scope"]) for item in admin_managed_resp.json()["items"]] == [
+        ("finance", "emerald", "standard")
+    ]
 
     endpoint_resp = client.get("/api/admin/tag-definitions", params={"domain": "endpoint"})
     assert endpoint_resp.status_code == 200, endpoint_resp.text
-    assert [(item["label"], item["color_key"]) for item in endpoint_resp.json()["items"]] == [("rgw-a", "violet")]
+    assert [(item["label"], item["color_key"], item["scope"]) for item in endpoint_resp.json()["items"]] == [
+        ("rgw-a", "violet", "standard")
+    ]
 
     app.dependency_overrides[dependencies.get_current_super_admin] = lambda: _ui_admin(5001, "admin@example.test")
     admin_endpoint_resp = client.get("/api/admin/tag-definitions", params={"domain": "endpoint"})
@@ -146,7 +153,9 @@ def test_admin_tag_definitions_api_respects_domain_permissions(client: TestClien
 
     admin_managed_as_admin_resp = client.get("/api/admin/tag-definitions", params={"domain": "admin_managed"})
     assert admin_managed_as_admin_resp.status_code == 200, admin_managed_as_admin_resp.text
-    assert [(item["label"], item["color_key"]) for item in admin_managed_as_admin_resp.json()["items"]] == [("finance", "emerald")]
+    assert [(item["label"], item["color_key"], item["scope"]) for item in admin_managed_as_admin_resp.json()["items"]] == [
+        ("finance", "emerald", "standard")
+    ]
 
 
 def test_private_connection_tag_definitions_api_isolated_by_owner(client: TestClient, db_session):
@@ -165,9 +174,86 @@ def test_private_connection_tag_definitions_api_isolated_by_owner(client: TestCl
     app.dependency_overrides[dependencies.get_current_account_user] = lambda: owner_a
     owner_a_resp = client.get("/api/connections/tag-definitions")
     assert owner_a_resp.status_code == 200, owner_a_resp.text
-    assert [(item["label"], item["color_key"]) for item in owner_a_resp.json()["items"]] == [("ops", "orange")]
+    assert [(item["label"], item["color_key"], item["scope"]) for item in owner_a_resp.json()["items"]] == [
+        ("ops", "orange", "standard")
+    ]
 
     app.dependency_overrides[dependencies.get_current_account_user] = lambda: owner_b
     owner_b_resp = client.get("/api/connections/tag-definitions")
     assert owner_b_resp.status_code == 200, owner_b_resp.text
-    assert [(item["label"], item["color_key"]) for item in owner_b_resp.json()["items"]] == [("ops", "sky")]
+    assert [(item["label"], item["color_key"], item["scope"]) for item in owner_b_resp.json()["items"]] == [
+        ("ops", "sky", "standard")
+    ]
+
+
+def test_execution_contexts_selector_hides_administrative_tags(client: TestClient, db_session):
+    user = _ui_admin(7101, "selector-user@example.test")
+    db_session.add(user)
+    db_session.commit()
+
+    endpoint = _endpoint(db_session, name="selector-endpoint")
+    account = _account(db_session, endpoint.id, name="selector-account")
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            account_admin=True,
+            is_root=False,
+        )
+    )
+    db_session.commit()
+
+    service = TagsService(db_session)
+    service.replace_storage_endpoint_tags(
+        endpoint,
+        [
+            {"label": "ceph", "color_key": "slate", "scope": "standard"},
+            {"label": "internal", "color_key": "rose", "scope": "administrative"},
+        ],
+    )
+    service.replace_account_tags(
+        account,
+        [
+            {"label": "finance", "color_key": "emerald", "scope": "standard"},
+            {"label": "billing", "color_key": "amber", "scope": "administrative"},
+        ],
+    )
+    db_session.commit()
+
+    app.dependency_overrides[dependencies.get_current_account_user] = lambda: user
+    response = client.get("/api/me/execution-contexts", params={"workspace": "manager"})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert len(payload) == 1
+    assert [(item["label"], item["scope"]) for item in payload[0]["tags"]] == [("finance", "standard")]
+    assert [(item["label"], item["scope"]) for item in payload[0]["endpoint_tags"]] == [("ceph", "standard")]
+
+
+def test_ceph_admin_endpoint_selector_hides_administrative_tags(client: TestClient, db_session):
+    admin = User(
+        id=7201,
+        email="ceph-admin@example.test",
+        full_name="ceph-admin",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_SUPERADMIN.value,
+    )
+    db_session.add(admin)
+    db_session.commit()
+    endpoint = _endpoint(db_session, name="ceph-selector-endpoint")
+    service = TagsService(db_session)
+    service.replace_storage_endpoint_tags(
+        endpoint,
+        [
+            {"label": "rgw-a", "color_key": "violet", "scope": "standard"},
+            {"label": "ops-note", "color_key": "orange", "scope": "administrative"},
+        ],
+    )
+    db_session.commit()
+
+    app.dependency_overrides[dependencies.get_current_ceph_admin] = lambda: admin
+    response = client.get("/api/ceph-admin/endpoints")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert len(payload) == 1
+    assert [(item["label"], item["scope"]) for item in payload[0]["tags"]] == [("rgw-a", "standard")]

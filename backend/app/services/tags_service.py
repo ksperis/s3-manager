@@ -12,9 +12,11 @@ from app.models.tagging import TagDefinitionSummary
 from app.utils.normalize import dump_string_list_json, parse_string_list_json
 from app.utils.tagging import (
     DEFAULT_TAG_COLOR_KEY,
+    DEFAULT_TAG_SCOPE,
     TAG_DOMAIN_ADMIN_MANAGED,
     TAG_DOMAIN_ENDPOINT,
     TAG_DOMAIN_PRIVATE_CONNECTION_USER,
+    TAG_SCOPE_STANDARD,
     build_tag_label_key,
     normalize_tag_items_input,
     tag_definition_sort_key,
@@ -34,6 +36,10 @@ class TagsService:
         rows = query.all()
         rows.sort(key=tag_definition_sort_key)
         return [self._to_summary(row) for row in rows]
+
+    @staticmethod
+    def filter_selector_visible(items: Sequence[TagDefinitionSummary] | None) -> list[TagDefinitionSummary]:
+        return [item for item in (items or []) if item.scope == TAG_SCOPE_STANDARD]
 
     def resolve_connection_domain(self, connection: S3Connection) -> tuple[str, Optional[int]]:
         if bool(connection.is_shared):
@@ -162,6 +168,7 @@ class TagsService:
                 owner_user_id=owner_user_id,
                 label=item["label"],
                 color_key=item["color_key"],
+                scope=item["scope"],
             )
             for item in normalized
         ]
@@ -207,6 +214,7 @@ class TagsService:
                 owner_user_id=owner_user_id,
                 label=label,
                 color_key=DEFAULT_TAG_COLOR_KEY,
+                scope=DEFAULT_TAG_SCOPE,
             )
             for label in legacy_labels
         ]
@@ -227,6 +235,7 @@ class TagsService:
                 id=-(position + 1),
                 label=label,
                 color_key=DEFAULT_TAG_COLOR_KEY,
+                scope=DEFAULT_TAG_SCOPE,
             )
             for position, label in enumerate(legacy_labels)
         ]
@@ -238,6 +247,7 @@ class TagsService:
         owner_user_id: Optional[int],
         label: str,
         color_key: str,
+        scope: str,
     ) -> TagDefinition:
         label_key = build_tag_label_key(label)
         query = (
@@ -259,12 +269,14 @@ class TagsService:
                 label=label,
                 label_key=label_key,
                 color_key=color_key,
+                scope=scope,
             )
             self.db.add(definition)
             self.db.flush()
             return definition
         definition.label = label
         definition.color_key = color_key
+        definition.scope = scope
         self.db.add(definition)
         self.db.flush()
         return definition
@@ -275,6 +287,7 @@ class TagsService:
             id=definition.id,
             label=definition.label,
             color_key=definition.color_key,
+            scope=getattr(definition, "scope", DEFAULT_TAG_SCOPE) or DEFAULT_TAG_SCOPE,
         )
 
 

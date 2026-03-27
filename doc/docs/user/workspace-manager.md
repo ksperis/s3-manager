@@ -12,7 +12,7 @@ Use **Manager** for account-scoped administration aligned with S3/IAM semantics.
 ## Steps
 
 1. Open `/manager` and select the correct account/context.
-   - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded account and endpoint tags are shown directly in the selector.
+   - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded `Standard` account and endpoint tags are shown directly in the selector. `Administrative` tags remain limited to management surfaces.
 2. Use **Storage** for buckets and manager browser (if enabled).
 3. Use **IAM** for users, groups, roles, and policies (if IAM capability is available).
 4. Use **Events** for SNS topics (if endpoint supports SNS).

@@ -255,8 +255,10 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
         if item["kind"] == "account":
             assert [tag["label"] for tag in item["tags"]] == ["account-finance"]
             assert [tag["color_key"] for tag in item["tags"]] == ["neutral"]
+            assert [tag["scope"] for tag in item["tags"]] == ["standard"]
             assert [tag["label"] for tag in item["endpoint_tags"]] == ["endpoint-prod", "ceph-a"]
             assert [tag["color_key"] for tag in item["endpoint_tags"]] == ["neutral", "neutral"]
+            assert [tag["scope"] for tag in item["endpoint_tags"]] == ["standard", "standard"]
         if item["kind"] == "connection":
             assert [tag["label"] for tag in item["tags"]] == ["connection-shared"]
             assert [tag["color_key"] for tag in item["tags"]] == ["neutral"]
