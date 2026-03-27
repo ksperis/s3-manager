@@ -2,8 +2,24 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { unstable_usePrompt, useLocation, useSearchParams } from "react-router-dom";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
+import {
+  unstable_usePrompt,
+  useLocation,
+  useSearchParams,
+} from "react-router-dom";
 import JSZip from "jszip";
 import { ZipWriter } from "@zip.js/zip.js";
 import axios from "axios";
@@ -19,8 +35,17 @@ import {
   normalizeS3BucketName,
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
-import { withS3AccountParam, type S3AccountSelector } from "../../api/accountParams";
-import { getBucketLogging, getBucketPolicy, getBucketProperties, getBucketStats, getBucketWebsite } from "../../api/buckets";
+import {
+  withS3AccountParam,
+  type S3AccountSelector,
+} from "../../api/accountParams";
+import {
+  getBucketLogging,
+  getBucketPolicy,
+  getBucketProperties,
+  getBucketStats,
+  getBucketWebsite,
+} from "../../api/buckets";
 import {
   BrowserBucket,
   BrowserObject,
@@ -81,7 +106,10 @@ import {
   TOOLBAR_MORE_SELECTION_FULL_ACTION_IDS,
   TOOLBAR_MORE_SELECTION_OVERFLOW_ACTION_IDS,
 } from "./browserActions";
-import { BrowserConfirmModal, BrowserCopyValueModal } from "./BrowserDialogModals";
+import {
+  BrowserConfirmModal,
+  BrowserCopyValueModal,
+} from "./BrowserDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
 import BrowserOperationsModal from "./BrowserOperationsModal";
 import BrowserObjectVersionsList from "./BrowserObjectVersionsList";
@@ -99,7 +127,10 @@ import {
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { S3AccountProvider } from "../manager/S3AccountContext";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
-import { resolveSimpleUploadOperation, shouldUseStsPresigner } from "./sseBrowserLogic";
+import {
+  resolveSimpleUploadOperation,
+  shouldUseStsPresigner,
+} from "./sseBrowserLogic";
 import {
   activateSseCustomerKeyForScope,
   copySseCustomerKeyWithFallback,
@@ -267,7 +298,9 @@ function ToolbarToggleMenuItem({
       onClick={onToggle}
       disabled={disabled}
     >
-      <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">{icon}</span>
+      <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+        {icon}
+      </span>
       <span className="min-w-0 flex-1">{label}</span>
       <span
         aria-hidden="true"
@@ -364,7 +397,8 @@ const PANELS_DISABLE_MEDIA_QUERY = `(max-width: ${PANELS_DISABLE_MAX_WIDTH_PX}px
 const CONTEXT_MENU_PADDING_PX = 8;
 const CONTEXT_MENU_FALLBACK_WIDTH_PX = 240;
 const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 320;
-const CORS_DIRECT_TRANSFER_WARNING = "Direct download/upload is not allowed on this bucket.";
+const CORS_DIRECT_TRANSFER_WARNING =
+  "Direct download/upload is not allowed on this bucket.";
 const TREE_PREFIXES_PAGE_BUDGET = 50;
 const PATH_SUGGESTION_SOURCE_WEIGHT: Record<PathSuggestionSource, number> = {
   history: 300,
@@ -377,12 +411,43 @@ const LAZY_COLUMN_CONCURRENCY = 4;
 const LAZY_COLUMN_ROOT_MARGIN = "200px";
 const COLUMN_DEFINITIONS: ColumnDefinition[] = [
   { id: "type", label: "Type", defaultVisible: false, widthClassName: "w-28" },
-  { id: "size", label: "Size", defaultVisible: true, sortable: "size", widthClassName: "w-20", align: "right" },
-  { id: "modified", label: "Modified", defaultVisible: true, sortable: "modified", widthClassName: "w-40" },
-  { id: "storageClass", label: "Storage class", defaultVisible: false, widthClassName: "w-40" },
+  {
+    id: "size",
+    label: "Size",
+    defaultVisible: true,
+    sortable: "size",
+    widthClassName: "w-20",
+    align: "right",
+  },
+  {
+    id: "modified",
+    label: "Modified",
+    defaultVisible: true,
+    sortable: "modified",
+    widthClassName: "w-40",
+  },
+  {
+    id: "storageClass",
+    label: "Storage class",
+    defaultVisible: false,
+    widthClassName: "w-40",
+  },
   { id: "etag", label: "ETag", defaultVisible: false, widthClassName: "w-48" },
-  { id: "contentType", label: "Content-Type", defaultVisible: false, lazySource: "metadata", widthClassName: "w-44" },
-  { id: "tagsCount", label: "Tags", defaultVisible: false, lazySource: "tags", widthClassName: "w-20", align: "right" },
+  {
+    id: "contentType",
+    label: "Content-Type",
+    defaultVisible: false,
+    lazySource: "metadata",
+    widthClassName: "w-44",
+  },
+  {
+    id: "tagsCount",
+    label: "Tags",
+    defaultVisible: false,
+    lazySource: "tags",
+    widthClassName: "w-20",
+    align: "right",
+  },
   {
     id: "metadataCount",
     label: "Metadata",
@@ -392,10 +457,12 @@ const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     align: "right",
   },
 ];
-const COLUMN_IDS_IN_ORDER = COLUMN_DEFINITIONS.map((definition) => definition.id);
-const DEFAULT_VISIBLE_COLUMN_IDS = COLUMN_DEFINITIONS.filter((definition) => definition.defaultVisible).map(
-  (definition) => definition.id
+const COLUMN_IDS_IN_ORDER = COLUMN_DEFINITIONS.map(
+  (definition) => definition.id,
 );
+const DEFAULT_VISIBLE_COLUMN_IDS = COLUMN_DEFINITIONS.filter(
+  (definition) => definition.defaultVisible,
+).map((definition) => definition.id);
 
 const createLazyColumnCacheEntry = (): LazyColumnCacheEntry => ({
   contentType: null,
@@ -405,10 +472,15 @@ const createLazyColumnCacheEntry = (): LazyColumnCacheEntry => ({
   tagsStatus: "idle",
 });
 
-const getDeletedObjectEntryId = (value: Pick<BrowserObject, "key" | "version_id">) =>
-  `${value.key}::${value.version_id ?? "null"}`;
+const getDeletedObjectEntryId = (
+  value: Pick<BrowserObject, "key" | "version_id">,
+) => `${value.key}::${value.version_id ?? "null"}`;
 
-const mergeUniqueStringsWithLimit = (base: string[], incoming: string[], limit: number) => {
+const mergeUniqueStringsWithLimit = (
+  base: string[],
+  incoming: string[],
+  limit: number,
+) => {
   if (base.length >= limit || incoming.length === 0) {
     return { items: base.slice(0, limit), limitReached: base.length >= limit };
   }
@@ -419,7 +491,11 @@ const mergeUniqueStringsWithLimit = (base: string[], incoming: string[], limit: 
   };
 };
 
-const mergeDeletedObjectsWithLimit = (base: BrowserObject[], incoming: BrowserObject[], limit: number) => {
+const mergeDeletedObjectsWithLimit = (
+  base: BrowserObject[],
+  incoming: BrowserObject[],
+  limit: number,
+) => {
   const byId = new Map<string, BrowserObject>();
   base.forEach((item) => byId.set(getDeletedObjectEntryId(item), item));
   incoming.forEach((item) => {
@@ -455,37 +531,78 @@ const BUCKET_INSPECTOR_FEATURE_LABELS: Record<string, string> = {
   cors: "CORS",
   access_logging: "Access logging",
 };
-const BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES: Record<BucketInspectorTone, string> = {
-  active: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100",
-  inactive: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-100",
+const BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES: Record<
+  BucketInspectorTone,
+  string
+> = {
+  active:
+    "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100",
+  inactive:
+    "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-100",
   unknown: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
 };
+const browserSectionEyebrowClasses =
+  "ui-caption font-semibold uppercase tracking-[0.18em] text-slate-400";
+const browserShellClasses =
+  "flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.92))] shadow-sm dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.92),rgba(2,6,23,0.88))]";
+const browserSubtleSurfaceClasses =
+  "rounded-2xl border border-slate-200/80 bg-white/80 shadow-sm dark:border-slate-800 dark:bg-slate-900/55";
+const browserToolbarShellClasses =
+  "flex flex-col gap-2 rounded-2xl border border-slate-200/80 bg-white/85 p-2 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/70 lg:flex-row lg:items-center lg:justify-between";
+const browserToolbarPathStripClasses =
+  "flex min-w-0 flex-1 items-center gap-1 rounded-2xl border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.9),rgba(255,255,255,0.92))] px-2.5 py-1.5 shadow-sm dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.84),rgba(15,23,42,0.68))]";
+const browserToolbarControlsGroupClasses =
+  "flex shrink-0 items-center gap-1.5 rounded-2xl border border-slate-200/80 bg-white/80 px-1.5 py-0.5 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/70";
+const browserFloatingMenuClasses =
+  "rounded-2xl border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,0.96))] p-2 shadow-xl backdrop-blur dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(15,23,42,0.94))]";
+const browserInputClasses =
+  "w-full rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100";
+const browserSearchInputClasses =
+  "h-8 w-full rounded-xl border border-slate-200/80 bg-white/92 px-3 ui-body font-medium tracking-normal text-slate-700 shadow-sm transition placeholder:font-normal placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700/80 dark:bg-slate-900/82 dark:text-slate-100 dark:placeholder:text-slate-500";
+const browserSelectClasses =
+  "h-9 w-full rounded-xl border border-slate-200/80 bg-white/90 px-3 ui-caption font-medium text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100";
+const browserOptionCardClasses =
+  "inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-2.5 py-2 ui-caption font-medium text-slate-700 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100";
+const browserSearchLabelClasses =
+  "ui-caption font-medium tracking-normal text-slate-500 dark:text-slate-300";
+const browserSearchStatusChipClasses =
+  "inline-flex max-w-full items-center gap-1 rounded-full border border-slate-200/80 bg-white/90 px-2.5 py-1 ui-caption font-medium text-slate-600 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75 dark:text-slate-200";
+const browserExplorerShellClasses =
+  "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.9),rgba(255,255,255,0.94))] shadow-sm dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.88),rgba(2,6,23,0.84))]";
 const inspectorTabListClasses =
-  "flex flex-nowrap gap-1 rounded-xl border border-slate-200/90 bg-slate-100/80 p-1 dark:border-slate-700 dark:bg-slate-900/70";
+  "flex flex-nowrap gap-1 rounded-2xl border border-slate-200/90 bg-slate-100/80 p-1 shadow-sm dark:border-slate-700/90 dark:bg-slate-900/70";
 const inspectorTabBaseClasses =
-  "inline-flex min-w-0 flex-1 items-center justify-center rounded-lg border px-2.5 py-1.5 text-center ui-caption font-semibold whitespace-nowrap transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+  "inline-flex min-w-0 flex-1 items-center justify-center rounded-xl border px-2.5 py-2 text-center ui-caption font-semibold whitespace-nowrap transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const inspectorTabInactiveClasses =
   "border-transparent bg-transparent text-slate-600 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800/70 dark:hover:text-slate-100";
 const inspectorTabActiveClasses =
-  "border-slate-300 bg-white text-slate-900 shadow-sm dark:border-slate-500 dark:bg-slate-800 dark:text-slate-100";
-const inspectorTabPanelClasses = "space-y-4 ui-caption text-slate-600 dark:text-slate-300";
+  "border-slate-300/90 bg-white text-slate-900 shadow-sm dark:border-slate-500 dark:bg-slate-800 dark:text-slate-100";
+const inspectorTabPanelClasses =
+  "space-y-4 ui-caption text-slate-600 dark:text-slate-300";
 const inspectorSectionCardClasses =
-  "rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/40";
-const inspectorSectionTitleClasses = "ui-caption font-semibold uppercase tracking-wide text-slate-400";
+  "rounded-2xl border border-slate-200/80 bg-white/80 px-3.5 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/55";
+const inspectorSectionTitleClasses =
+  "ui-caption font-semibold uppercase tracking-[0.18em] text-slate-400";
 const inspectorEmptyStateClasses =
-  "rounded-lg border border-dashed border-slate-200 px-3 py-3 ui-caption text-slate-500 dark:border-slate-800 dark:text-slate-400";
+  "rounded-2xl border border-dashed border-slate-200/80 bg-white/60 px-3 py-4 ui-caption text-slate-500 dark:border-slate-800 dark:bg-slate-900/35 dark:text-slate-400";
 const inspectorInlineActionClasses =
   "ui-caption font-semibold text-slate-500 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200 dark:disabled:text-slate-500";
-const getMultipartUploadEntryId = (upload: Pick<MultipartUploadItem, "key" | "upload_id">) =>
-  `${upload.key}::${upload.upload_id}`;
-const normalizePathDraftValue = (value: string) => value.trim().replace(/^\/+/, "");
+const getMultipartUploadEntryId = (
+  upload: Pick<MultipartUploadItem, "key" | "upload_id">,
+) => `${upload.key}::${upload.upload_id}`;
+const normalizePathDraftValue = (value: string) =>
+  value.trim().replace(/^\/+/, "");
 
 const resolvePathDraftContext = (value: string): PathDraftContext => {
   const cleaned = normalizePathDraftValue(value);
   const hasTrailingSlash = cleaned.endsWith("/");
   const slashIndex = cleaned.lastIndexOf("/");
   const parentRaw = slashIndex >= 0 ? cleaned.slice(0, slashIndex + 1) : "";
-  const fragment = hasTrailingSlash ? "" : slashIndex >= 0 ? cleaned.slice(slashIndex + 1) : cleaned;
+  const fragment = hasTrailingSlash
+    ? ""
+    : slashIndex >= 0
+      ? cleaned.slice(slashIndex + 1)
+      : cleaned;
   return {
     parentPrefix: parentRaw ? normalizePrefix(parentRaw) : "",
     fragment,
@@ -496,7 +613,7 @@ const buildPathSuggestionEntries = (
   prefixes: string[],
   parentPrefix: string,
   fragment: string,
-  source: PathSuggestionSource
+  source: PathSuggestionSource,
 ): PathSuggestion[] => {
   const normalizedFragment = fragment.trim().toLowerCase();
   const seen = new Set<string>();
@@ -508,7 +625,8 @@ const buildPathSuggestionEntries = (
     const relative = shortName(normalized, parentPrefix || "");
     const label = relative.endsWith("/") ? relative.slice(0, -1) : relative;
     if (!label) return;
-    if (normalizedFragment && !label.toLowerCase().includes(normalizedFragment)) return;
+    if (normalizedFragment && !label.toLowerCase().includes(normalizedFragment))
+      return;
     if (seen.has(normalized)) return;
     seen.add(normalized);
     entries.push({ value: normalized, label, source });
@@ -516,7 +634,10 @@ const buildPathSuggestionEntries = (
   return entries;
 };
 
-const scorePathSuggestion = (entry: PathSuggestion, fragment: string): number => {
+const scorePathSuggestion = (
+  entry: PathSuggestion,
+  fragment: string,
+): number => {
   const query = fragment.trim().toLowerCase();
   const label = entry.label.toLowerCase();
   let score = PATH_SUGGESTION_SOURCE_WEIGHT[entry.source] ?? 0;
@@ -540,7 +661,10 @@ const scorePathSuggestion = (entry: PathSuggestion, fragment: string): number =>
   return score;
 };
 
-const mergePathSuggestions = (fragment: string, ...groups: PathSuggestion[][]): PathSuggestion[] => {
+const mergePathSuggestions = (
+  fragment: string,
+  ...groups: PathSuggestion[][]
+): PathSuggestion[] => {
   const byValue = new Map<string, PathSuggestion>();
   groups.forEach((group) => {
     group.forEach((entry) => {
@@ -549,14 +673,18 @@ const mergePathSuggestions = (fragment: string, ...groups: PathSuggestion[][]): 
         byValue.set(entry.value, entry);
         return;
       }
-      if ((PATH_SUGGESTION_SOURCE_WEIGHT[entry.source] ?? 0) > (PATH_SUGGESTION_SOURCE_WEIGHT[existing.source] ?? 0)) {
+      if (
+        (PATH_SUGGESTION_SOURCE_WEIGHT[entry.source] ?? 0) >
+        (PATH_SUGGESTION_SOURCE_WEIGHT[existing.source] ?? 0)
+      ) {
         byValue.set(entry.value, entry);
       }
     });
   });
   return Array.from(byValue.values())
     .sort((a, b) => {
-      const scoreDiff = scorePathSuggestion(b, fragment) - scorePathSuggestion(a, fragment);
+      const scoreDiff =
+        scorePathSuggestion(b, fragment) - scorePathSuggestion(a, fragment);
       if (scoreDiff !== 0) return scoreDiff;
       return a.label.localeCompare(b.label);
     })
@@ -592,16 +720,27 @@ const readBucketPathHistory = (bucketName: string): string[] => {
   return entries.slice(0, PATH_HISTORY_LIMIT);
 };
 
-const pushBucketPathHistory = (bucketName: string, prefixValue: string): string[] => {
+const pushBucketPathHistory = (
+  bucketName: string,
+  prefixValue: string,
+): string[] => {
   if (!bucketName || typeof window === "undefined") return [];
-  const normalized = normalizePrefix(normalizePathDraftValue(prefixValue || ""));
+  const normalized = normalizePrefix(
+    normalizePathDraftValue(prefixValue || ""),
+  );
   if (!normalized) return readBucketPathHistory(bucketName);
   const store = readPathHistoryStore();
   const current = readBucketPathHistory(bucketName);
-  const next = [normalized, ...current.filter((entry) => entry !== normalized)].slice(0, PATH_HISTORY_LIMIT);
+  const next = [
+    normalized,
+    ...current.filter((entry) => entry !== normalized),
+  ].slice(0, PATH_HISTORY_LIMIT);
   store[bucketName] = next;
   try {
-    window.localStorage.setItem(PATH_HISTORY_STORAGE_KEY, JSON.stringify(store));
+    window.localStorage.setItem(
+      PATH_HISTORY_STORAGE_KEY,
+      JSON.stringify(store),
+    );
   } catch {
     // Ignore localStorage write failures (private mode / quota).
   }
@@ -631,11 +770,16 @@ export default function BrowserPage({
     normalizedPath.endsWith("/ceph-admin/browser");
   const isMainBrowserPath = normalizedPath === "/browser";
   const initialRootUiLayout = useMemo(
-    () => (isMainBrowserPath ? readStoredBrowserRootUiState()?.layout ?? null : null),
-    [isMainBrowserPath]
+    () =>
+      isMainBrowserPath
+        ? (readStoredBrowserRootUiState()?.layout ?? null)
+        : null,
+    [isMainBrowserPath],
   );
-  const browserRootContextId = accountIdForApi == null ? null : String(accountIdForApi);
-  const bucketAccessContextKey = accountIdForApi == null ? null : String(accountIdForApi);
+  const browserRootContextId =
+    accountIdForApi == null ? null : String(accountIdForApi);
+  const bucketAccessContextKey =
+    accountIdForApi == null ? null : String(accountIdForApi);
   // /browser is credential-first.
   const accessMode = null;
   const [bucketName, setBucketName] = useState("");
@@ -647,66 +791,130 @@ export default function BrowserPage({
   const [bucketMenuTotal, setBucketMenuTotal] = useState(0);
   const [bucketTotalCount, setBucketTotalCount] = useState(0);
   const [bucketMenuLoadingMore, setBucketMenuLoadingMore] = useState(false);
-  const [bucketAccessByName, setBucketAccessByName] = useState<Record<string, BucketAccessEntry>>({});
+  const [bucketAccessByName, setBucketAccessByName] = useState<
+    Record<string, BucketAccessEntry>
+  >({});
   const [searchParams] = useSearchParams();
-  const requestedBucket = useMemo(() => searchParams.get("bucket")?.trim() ?? "", [searchParams]);
+  const requestedBucket = useMemo(
+    () => searchParams.get("bucket")?.trim() ?? "",
+    [searchParams],
+  );
   const [prefix, setPrefix] = useState("");
   const [objects, setObjects] = useState<BrowserObject[]>([]);
   const [deletedObjects, setDeletedObjects] = useState<BrowserObject[]>([]);
   const [deletedPrefixes, setDeletedPrefixes] = useState<string[]>([]);
-  const [deletedObjectsNextKeyMarker, setDeletedObjectsNextKeyMarker] = useState<string | null>(null);
-  const [deletedObjectsNextVersionIdMarker, setDeletedObjectsNextVersionIdMarker] = useState<string | null>(null);
-  const [deletedObjectsIsTruncated, setDeletedObjectsIsTruncated] = useState(false);
+  const [deletedObjectsNextKeyMarker, setDeletedObjectsNextKeyMarker] =
+    useState<string | null>(null);
+  const [
+    deletedObjectsNextVersionIdMarker,
+    setDeletedObjectsNextVersionIdMarker,
+  ] = useState<string | null>(null);
+  const [deletedObjectsIsTruncated, setDeletedObjectsIsTruncated] =
+    useState(false);
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [objectsNextToken, setObjectsNextToken] = useState<string | null>(null);
   const [objectsIsTruncated, setObjectsIsTruncated] = useState(false);
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
-  const [showFolders, setShowFolders] = useState(
-    () => (isMainBrowserPath ? initialRootUiLayout?.showFolders ?? defaultShowFolders : defaultShowFolders)
+  const [showFolders, setShowFolders] = useState(() =>
+    isMainBrowserPath
+      ? (initialRootUiLayout?.showFolders ?? defaultShowFolders)
+      : defaultShowFolders,
   );
-  const [showInspector, setShowInspector] = useState(
-    () => (isMainBrowserPath ? initialRootUiLayout?.showInspector ?? defaultShowInspector : defaultShowInspector)
+  const [showInspector, setShowInspector] = useState(() =>
+    isMainBrowserPath
+      ? (initialRootUiLayout?.showInspector ?? defaultShowInspector)
+      : defaultShowInspector,
   );
-  const [showActionBar, setShowActionBar] = useState(
-    () => (isMainBrowserPath ? initialRootUiLayout?.showActionBar ?? false : false)
+  const [showActionBar, setShowActionBar] = useState(() =>
+    isMainBrowserPath ? (initialRootUiLayout?.showActionBar ?? false) : false,
   );
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
   });
-  const [inspectorTab, setInspectorTab] = useState<"context" | "bucket" | "selection" | "details">("context");
-  const [compactMode, setCompactMode] = useState(() => normalizedPath.endsWith("/browser"));
-  const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
-  const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
+  const [inspectorTab, setInspectorTab] = useState<
+    "context" | "bucket" | "selection" | "details"
+  >("context");
+  const [compactMode, setCompactMode] = useState(() =>
+    normalizedPath.endsWith("/browser"),
+  );
+  const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>(
+    [],
+  );
+  const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<
+    BrowserObjectVersion[]
+  >([]);
   const [prefixVersionsLoading, setPrefixVersionsLoading] = useState(false);
-  const [prefixVersionsError, setPrefixVersionsError] = useState<string | null>(null);
-  const [prefixVersionKeyMarker, setPrefixVersionKeyMarker] = useState<string | null>(null);
-  const [prefixVersionIdMarker, setPrefixVersionIdMarker] = useState<string | null>(null);
-  const [objectVersions, setObjectVersions] = useState<BrowserObjectVersion[]>([]);
-  const [objectDeleteMarkers, setObjectDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
+  const [prefixVersionsError, setPrefixVersionsError] = useState<string | null>(
+    null,
+  );
+  const [prefixVersionKeyMarker, setPrefixVersionKeyMarker] = useState<
+    string | null
+  >(null);
+  const [prefixVersionIdMarker, setPrefixVersionIdMarker] = useState<
+    string | null
+  >(null);
+  const [objectVersions, setObjectVersions] = useState<BrowserObjectVersion[]>(
+    [],
+  );
+  const [objectDeleteMarkers, setObjectDeleteMarkers] = useState<
+    BrowserObjectVersion[]
+  >([]);
   const [objectVersionsLoading, setObjectVersionsLoading] = useState(false);
-  const [objectVersionsError, setObjectVersionsError] = useState<string | null>(null);
-  const [objectVersionKeyMarker, setObjectVersionKeyMarker] = useState<string | null>(null);
-  const [objectVersionIdMarker, setObjectVersionIdMarker] = useState<string | null>(null);
+  const [objectVersionsError, setObjectVersionsError] = useState<string | null>(
+    null,
+  );
+  const [objectVersionKeyMarker, setObjectVersionKeyMarker] = useState<
+    string | null
+  >(null);
+  const [objectVersionIdMarker, setObjectVersionIdMarker] = useState<
+    string | null
+  >(null);
   const [bucketVersioningEnabled, setBucketVersioningEnabled] = useState(false);
   const [showObjectVersionsModal, setShowObjectVersionsModal] = useState(false);
-  const [objectVersionsModalKey, setObjectVersionsModalKey] = useState<string | null>(null);
-  const [objectVersionsModalPath, setObjectVersionsModalPath] = useState<string | null>(null);
-  const [objectVersionsModal, setObjectVersionsModal] = useState<BrowserObjectVersion[]>([]);
-  const [objectDeleteMarkersModal, setObjectDeleteMarkersModal] = useState<BrowserObjectVersion[]>([]);
-  const [objectVersionsModalLoading, setObjectVersionsModalLoading] = useState(false);
-  const [objectVersionsModalError, setObjectVersionsModalError] = useState<string | null>(null);
-  const [objectVersionModalKeyMarker, setObjectVersionModalKeyMarker] = useState<string | null>(null);
-  const [objectVersionModalIdMarker, setObjectVersionModalIdMarker] = useState<string | null>(null);
-  const [showMultipartUploadsModal, setShowMultipartUploadsModal] = useState(false);
-  const [multipartUploads, setMultipartUploads] = useState<MultipartUploadItem[]>([]);
+  const [objectVersionsModalKey, setObjectVersionsModalKey] = useState<
+    string | null
+  >(null);
+  const [objectVersionsModalPath, setObjectVersionsModalPath] = useState<
+    string | null
+  >(null);
+  const [objectVersionsModal, setObjectVersionsModal] = useState<
+    BrowserObjectVersion[]
+  >([]);
+  const [objectDeleteMarkersModal, setObjectDeleteMarkersModal] = useState<
+    BrowserObjectVersion[]
+  >([]);
+  const [objectVersionsModalLoading, setObjectVersionsModalLoading] =
+    useState(false);
+  const [objectVersionsModalError, setObjectVersionsModalError] = useState<
+    string | null
+  >(null);
+  const [objectVersionModalKeyMarker, setObjectVersionModalKeyMarker] =
+    useState<string | null>(null);
+  const [objectVersionModalIdMarker, setObjectVersionModalIdMarker] = useState<
+    string | null
+  >(null);
+  const [showMultipartUploadsModal, setShowMultipartUploadsModal] =
+    useState(false);
+  const [multipartUploads, setMultipartUploads] = useState<
+    MultipartUploadItem[]
+  >([]);
   const [multipartUploadsLoading, setMultipartUploadsLoading] = useState(false);
-  const [multipartUploadsLoadingMore, setMultipartUploadsLoadingMore] = useState(false);
-  const [multipartUploadsError, setMultipartUploadsError] = useState<string | null>(null);
-  const [multipartUploadsNextKey, setMultipartUploadsNextKey] = useState<string | null>(null);
-  const [multipartUploadsNextUploadId, setMultipartUploadsNextUploadId] = useState<string | null>(null);
-  const [multipartUploadsIsTruncated, setMultipartUploadsIsTruncated] = useState(false);
-  const [abortingMultipartUploadIds, setAbortingMultipartUploadIds] = useState<Set<string>>(new Set());
+  const [multipartUploadsLoadingMore, setMultipartUploadsLoadingMore] =
+    useState(false);
+  const [multipartUploadsError, setMultipartUploadsError] = useState<
+    string | null
+  >(null);
+  const [multipartUploadsNextKey, setMultipartUploadsNextKey] = useState<
+    string | null
+  >(null);
+  const [multipartUploadsNextUploadId, setMultipartUploadsNextUploadId] =
+    useState<string | null>(null);
+  const [multipartUploadsIsTruncated, setMultipartUploadsIsTruncated] =
+    useState(false);
+  const [abortingMultipartUploadIds, setAbortingMultipartUploadIds] = useState<
+    Set<string>
+  >(new Set());
   const [loadingBuckets, setLoadingBuckets] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
@@ -714,16 +922,27 @@ export default function BrowserPage({
   const [objectsError, setObjectsError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
-  const [browserSettings, setBrowserSettings] = useState<BrowserSettings | null>(null);
+  const [browserSettings, setBrowserSettings] =
+    useState<BrowserSettings | null>(null);
   const [corsStatus, setCorsStatus] = useState<BucketCorsStatus | null>(null);
   const [stsStatus, setStsStatus] = useState<StsStatus | null>(null);
-  const [stsCredentials, setStsCredentials] = useState<StsCredentials | null>(null);
-  const [stsCredentialsError, setStsCredentialsError] = useState<string | null>(null);
-  const [sseCustomerKeysByScope, setSseCustomerKeysByScope] = useState<Record<string, string>>({});
+  const [stsCredentials, setStsCredentials] = useState<StsCredentials | null>(
+    null,
+  );
+  const [stsCredentialsError, setStsCredentialsError] = useState<string | null>(
+    null,
+  );
+  const [sseCustomerKeysByScope, setSseCustomerKeysByScope] = useState<
+    Record<string, string>
+  >({});
   const [showSseCustomerModal, setShowSseCustomerModal] = useState(false);
   const [sseCustomerKeyInput, setSseCustomerKeyInput] = useState("");
-  const [sseCustomerKeyError, setSseCustomerKeyError] = useState<string | null>(null);
-  const [sseCustomerKeyNotice, setSseCustomerKeyNotice] = useState<string | null>(null);
+  const [sseCustomerKeyError, setSseCustomerKeyError] = useState<string | null>(
+    null,
+  );
+  const [sseCustomerKeyNotice, setSseCustomerKeyNotice] = useState<
+    string | null
+  >(null);
   const [sseCustomerKeyVisible, setSseCustomerKeyVisible] = useState(false);
   const [useProxyTransfers, setUseProxyTransfers] = useState(false);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
@@ -734,8 +953,12 @@ export default function BrowserPage({
   const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
   const [showToolbarMoreMenu, setShowToolbarMoreMenu] = useState(false);
   const [showUploadQuickMenu, setShowUploadQuickMenu] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<BrowserColumnId[]>(DEFAULT_VISIBLE_COLUMN_IDS);
-  const [lazyColumnCache, setLazyColumnCache] = useState<Record<string, LazyColumnCacheEntry>>({});
+  const [visibleColumns, setVisibleColumns] = useState<BrowserColumnId[]>(
+    DEFAULT_VISIBLE_COLUMN_IDS,
+  );
+  const [lazyColumnCache, setLazyColumnCache] = useState<
+    Record<string, LazyColumnCacheEntry>
+  >({});
   const [searchScope, setSearchScope] = useState<SearchScope>("prefix");
   const [searchRecursive, setSearchRecursive] = useState(false);
   const [searchExactMatch, setSearchExactMatch] = useState(false);
@@ -746,17 +969,27 @@ export default function BrowserPage({
     deleteMarkers: number;
   } | null>(null);
   const [contextCountsLoading, setContextCountsLoading] = useState(false);
-  const [contextCountsError, setContextCountsError] = useState<string | null>(null);
-  const [bucketInspectorByName, setBucketInspectorByName] = useState<Record<string, BucketInspectorData>>({});
+  const [contextCountsError, setContextCountsError] = useState<string | null>(
+    null,
+  );
+  const [bucketInspectorByName, setBucketInspectorByName] = useState<
+    Record<string, BucketInspectorData>
+  >({});
   const [bucketInspectorLoading, setBucketInspectorLoading] = useState(false);
-  const [bucketInspectorError, setBucketInspectorError] = useState<string | null>(null);
+  const [bucketInspectorError, setBucketInspectorError] = useState<
+    string | null
+  >(null);
   const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(
+    null,
+  );
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const [showDeletedObjects, setShowDeletedObjects] = useState(false);
   const [showFolderItems, setShowFolderItems] = useState(true);
-  const [typeFilter, setTypeFilter] = useState<"all" | "file" | "folder">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "file" | "folder">(
+    "all",
+  );
   const [storageFilter, setStorageFilter] = useState<string>("all");
   const [sortId, setSortId] = useState("name-asc");
   const [operations, setOperations] = useState<OperationItem[]>([]);
@@ -771,15 +1004,30 @@ export default function BrowserPage({
   const [showQueuedOperations, setShowQueuedOperations] = useState(false);
   const [showCompletedOperations, setShowCompletedOperations] = useState(false);
   const [showFailedOperations, setShowFailedOperations] = useState(false);
-  const [expandedOperationGroups, setExpandedOperationGroups] = useState<Record<string, boolean>>({});
-  const [queuedVisibleCountByGroup, setQueuedVisibleCountByGroup] = useState<Record<string, number>>({});
-  const [completedOperations, setCompletedOperations] = useState<CompletedOperationItem[]>([]);
-  const [downloadDetails, setDownloadDetails] = useState<Record<string, DownloadDetailItem[]>>({});
-  const [deleteDetails, setDeleteDetails] = useState<Record<string, DeleteDetailItem[]>>({});
-  const [copyDetails, setCopyDetails] = useState<Record<string, CopyDetailItem[]>>({});
-  const [inspectedMetadata, setInspectedMetadata] = useState<ObjectMetadata | null>(null);
+  const [expandedOperationGroups, setExpandedOperationGroups] = useState<
+    Record<string, boolean>
+  >({});
+  const [queuedVisibleCountByGroup, setQueuedVisibleCountByGroup] = useState<
+    Record<string, number>
+  >({});
+  const [completedOperations, setCompletedOperations] = useState<
+    CompletedOperationItem[]
+  >([]);
+  const [downloadDetails, setDownloadDetails] = useState<
+    Record<string, DownloadDetailItem[]>
+  >({});
+  const [deleteDetails, setDeleteDetails] = useState<
+    Record<string, DeleteDetailItem[]>
+  >({});
+  const [copyDetails, setCopyDetails] = useState<
+    Record<string, CopyDetailItem[]>
+  >({});
+  const [inspectedMetadata, setInspectedMetadata] =
+    useState<ObjectMetadata | null>(null);
   const [inspectedTags, setInspectedTags] = useState<ObjectTag[]>([]);
-  const [inspectedTagsVersionId, setInspectedTagsVersionId] = useState<string | null>(null);
+  const [inspectedTagsVersionId, setInspectedTagsVersionId] = useState<
+    string | null
+  >(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
@@ -788,19 +1036,27 @@ export default function BrowserPage({
   const [createBucketNameValue, setCreateBucketNameValue] = useState("");
   const [createBucketVersioning, setCreateBucketVersioning] = useState(false);
   const [createBucketLoading, setCreateBucketLoading] = useState(false);
-  const [createBucketError, setCreateBucketError] = useState<string | null>(null);
-  const invalidBucketNameMessage = "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.";
+  const [createBucketError, setCreateBucketError] = useState<string | null>(
+    null,
+  );
+  const invalidBucketNameMessage =
+    "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.";
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderError, setNewFolderError] = useState<string | null>(null);
   const [newFolderLoading, setNewFolderLoading] = useState(false);
-  const [confirmDialog, setConfirmDialog] = useState<BrowserConfirmDialogState | null>(null);
+  const [confirmDialog, setConfirmDialog] =
+    useState<BrowserConfirmDialogState | null>(null);
   const [confirmDialogLoading, setConfirmDialogLoading] = useState(false);
-  const [copyDialog, setCopyDialog] = useState<BrowserCopyDialogState | null>(null);
+  const [copyDialog, setCopyDialog] = useState<BrowserCopyDialogState | null>(
+    null,
+  );
   const [showOperationsModal, setShowOperationsModal] = useState(false);
   const [previewItem, setPreviewItem] = useState<BrowserItem | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewContentType, setPreviewContentType] = useState<string | null>(null);
+  const [previewContentType, setPreviewContentType] = useState<string | null>(
+    null,
+  );
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isEditingPath, setIsEditingPath] = useState(false);
@@ -809,45 +1065,63 @@ export default function BrowserPage({
   const [pathSuggestionsLoading, setPathSuggestionsLoading] = useState(false);
   const [pathSuggestionIndex, setPathSuggestionIndex] = useState(-1);
   const [pathHistory, setPathHistory] = useState<string[]>([]);
-  const [selectionStats, setSelectionStats] = useState<SelectionStats | null>(null);
+  const [selectionStats, setSelectionStats] = useState<SelectionStats | null>(
+    null,
+  );
   const [selectionStatsLoading, setSelectionStatsLoading] = useState(false);
-  const [selectionStatsError, setSelectionStatsError] = useState<string | null>(null);
+  const [selectionStatsError, setSelectionStatsError] = useState<string | null>(
+    null,
+  );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [showBulkAttributesModal, setShowBulkAttributesModal] = useState(false);
   const [showBulkRestoreModal, setShowBulkRestoreModal] = useState(false);
   const [bulkActionItems, setBulkActionItems] = useState<BrowserItem[]>([]);
   const [bulkAttributesLoading, setBulkAttributesLoading] = useState(false);
-  const [bulkAttributesError, setBulkAttributesError] = useState<string | null>(null);
-  const [bulkAttributesSummary, setBulkAttributesSummary] = useState<string | null>(null);
+  const [bulkAttributesError, setBulkAttributesError] = useState<string | null>(
+    null,
+  );
+  const [bulkAttributesSummary, setBulkAttributesSummary] = useState<
+    string | null
+  >(null);
   const [bulkApplyMetadata, setBulkApplyMetadata] = useState(false);
   const [bulkApplyTags, setBulkApplyTags] = useState(false);
   const [bulkApplyStorageClass, setBulkApplyStorageClass] = useState(false);
   const [bulkApplyAcl, setBulkApplyAcl] = useState(false);
   const [bulkApplyLegalHold, setBulkApplyLegalHold] = useState(false);
   const [bulkApplyRetention, setBulkApplyRetention] = useState(false);
-  const [bulkMetadataDraft, setBulkMetadataDraft] = useState<BulkMetadataDraft>({
-    contentType: "",
-    cacheControl: "",
-    contentDisposition: "",
-    contentEncoding: "",
-    contentLanguage: "",
-    expires: "",
-  });
+  const [bulkMetadataDraft, setBulkMetadataDraft] = useState<BulkMetadataDraft>(
+    {
+      contentType: "",
+      cacheControl: "",
+      contentDisposition: "",
+      contentEncoding: "",
+      contentLanguage: "",
+      expires: "",
+    },
+  );
   const [bulkMetadataEntries, setBulkMetadataEntries] = useState("");
   const [bulkTagsDraft, setBulkTagsDraft] = useState("");
   const [bulkStorageClass, setBulkStorageClass] = useState("");
   const [bulkAclValue, setBulkAclValue] = useState("private");
-  const [bulkLegalHoldStatus, setBulkLegalHoldStatus] = useState<"ON" | "OFF">("OFF");
-  const [bulkRetentionMode, setBulkRetentionMode] = useState<"" | "GOVERNANCE" | "COMPLIANCE">("");
+  const [bulkLegalHoldStatus, setBulkLegalHoldStatus] = useState<"ON" | "OFF">(
+    "OFF",
+  );
+  const [bulkRetentionMode, setBulkRetentionMode] = useState<
+    "" | "GOVERNANCE" | "COMPLIANCE"
+  >("");
   const [bulkRetentionDate, setBulkRetentionDate] = useState("");
   const [bulkRetentionBypass, setBulkRetentionBypass] = useState(false);
   const [bulkRestoreDate, setBulkRestoreDate] = useState("");
-  const [bulkRestoreDeleteMissing, setBulkRestoreDeleteMissing] = useState(false);
-  const [bulkRestoreRestoreDeleted, setBulkRestoreRestoreDeleted] = useState(false);
+  const [bulkRestoreDeleteMissing, setBulkRestoreDeleteMissing] =
+    useState(false);
+  const [bulkRestoreRestoreDeleted, setBulkRestoreRestoreDeleted] =
+    useState(false);
   const [bulkRestoreDryRun, setBulkRestoreDryRun] = useState(false);
   const [bulkRestoreLoading, setBulkRestoreLoading] = useState(false);
   const [bulkRestoreError, setBulkRestoreError] = useState<string | null>(null);
-  const [bulkRestoreSummary, setBulkRestoreSummary] = useState<string | null>(null);
+  const [bulkRestoreSummary, setBulkRestoreSummary] = useState<string | null>(
+    null,
+  );
   const [bulkRestorePreview, setBulkRestorePreview] = useState<{
     restoreKeys: string[];
     deleteKeys: string[];
@@ -856,11 +1130,14 @@ export default function BrowserPage({
     totalDelete: number;
     totalUnchanged: number;
   } | null>(null);
-  const [bulkRestoreTargetPath, setBulkRestoreTargetPath] = useState<string | null>(null);
+  const [bulkRestoreTargetPath, setBulkRestoreTargetPath] = useState<
+    string | null
+  >(null);
   const [showCleanupModal, setShowCleanupModal] = useState(false);
   const [cleanupKeepLast, setCleanupKeepLast] = useState("");
   const [cleanupOlderThanDays, setCleanupOlderThanDays] = useState("");
-  const [cleanupDeleteOrphanMarkers, setCleanupDeleteOrphanMarkers] = useState(false);
+  const [cleanupDeleteOrphanMarkers, setCleanupDeleteOrphanMarkers] =
+    useState(false);
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [cleanupError, setCleanupError] = useState<string | null>(null);
   const [cleanupSummary, setCleanupSummary] = useState<string | null>(null);
@@ -888,11 +1165,15 @@ export default function BrowserPage({
   const bucketSearchDebounceRef = useRef<number | null>(null);
   const bucketSearchValueRef = useRef("");
   const bucketSearchRequestIdRef = useRef(0);
-  const bucketAccessCacheRef = useRef<Map<string, Record<string, BucketAccessEntry>>>(new Map());
+  const bucketAccessCacheRef = useRef<
+    Map<string, Record<string, BucketAccessEntry>>
+  >(new Map());
   const bucketAccessQueueRef = useRef<string[]>([]);
   const bucketAccessQueuedRef = useRef(new Set<string>());
   const bucketAccessInFlightRef = useRef(0);
-  const bucketAccessAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const bucketAccessAbortControllersRef = useRef<Map<string, AbortController>>(
+    new Map(),
+  );
   const bucketAccessSessionRef = useRef(0);
   const objectsRequestSeqRef = useRef(0);
   const objectsAbortControllerRef = useRef<AbortController | null>(null);
@@ -901,7 +1182,9 @@ export default function BrowserPage({
   const pathSuggestionsRequestIdRef = useRef(0);
   const objectsRefreshTimeoutRef = useRef<number | null>(null);
   const uploadRefreshTimeoutRef = useRef<number | null>(null);
-  const pendingUploadedKeysByBucketRef = useRef<Map<string, Set<string>>>(new Map());
+  const pendingUploadedKeysByBucketRef = useRef<Map<string, Set<string>>>(
+    new Map(),
+  );
   const lazyColumnCacheRef = useRef<Record<string, LazyColumnCacheEntry>>({});
   const lazyListItemsByIdRef = useRef<Map<string, BrowserItem>>(new Map());
   const lazyQueueRef = useRef<string[]>([]);
@@ -914,16 +1197,24 @@ export default function BrowserPage({
   const bucketInspectorRequestIdRef = useRef(0);
   const selectionStatsRequestIdRef = useRef(0);
   const browserPathRef = useRef("");
-  const browserHistoryStateRef = useRef<{ bucketName: string; prefix: string } | null>(null);
+  const browserHistoryStateRef = useRef<{
+    bucketName: string;
+    prefix: string;
+  } | null>(null);
   const skipHistoryPushRef = useRef(false);
   const browserRootSelectionPersistenceReadyRef = useRef(false);
-  const browserRootSelectionContextIdRef = useRef<string | null>(browserRootContextId);
+  const browserRootSelectionContextIdRef = useRef<string | null>(
+    browserRootContextId,
+  );
   const operationIdsRef = useRef(new Set<string>());
   const bucketNameRef = useRef(bucketName);
   const prefixRef = useRef(prefix);
   const selectedContext = useMemo(
-    () => browserContext.contexts.find((ctx) => ctx.id === browserContext.selectedContextId) ?? null,
-    [browserContext.contexts, browserContext.selectedContextId]
+    () =>
+      browserContext.contexts.find(
+        (ctx) => ctx.id === browserContext.selectedContextId,
+      ) ?? null,
+    [browserContext.contexts, browserContext.selectedContextId],
   );
   const storageEndpointCaps = useMemo(() => {
     if (selectedContext?.storage_endpoint_capabilities) {
@@ -932,22 +1223,47 @@ export default function BrowserPage({
     const raw = (selectedContext as { raw?: unknown } | null)?.raw;
     if (!raw || typeof raw !== "object") return null;
     if (!("storage_endpoint_capabilities" in raw)) return null;
-    return (raw as { storage_endpoint_capabilities?: Record<string, boolean> | null }).storage_endpoint_capabilities ?? null;
+    return (
+      (
+        raw as {
+          storage_endpoint_capabilities?: Record<string, boolean> | null;
+        }
+      ).storage_endpoint_capabilities ?? null
+    );
   }, [selectedContext]);
-  const effectiveCaps = storageEndpointCapabilities === undefined ? storageEndpointCaps : storageEndpointCapabilities;
-  const selectedContextEndpointProvider = selectedContext?.endpoint_provider ?? null;
+  const effectiveCaps =
+    storageEndpointCapabilities === undefined
+      ? storageEndpointCaps
+      : storageEndpointCapabilities;
+  const selectedContextEndpointProvider =
+    selectedContext?.endpoint_provider ?? null;
   const effectiveContextEndpointProvider =
-    contextEndpointProvider === undefined ? selectedContextEndpointProvider : contextEndpointProvider;
+    contextEndpointProvider === undefined
+      ? selectedContextEndpointProvider
+      : contextEndpointProvider;
   const selectedContextQuotaSizeGb = selectedContext?.quota_max_size_gb ?? null;
-  const selectedContextQuotaObjects = selectedContext?.quota_max_objects ?? null;
-  const effectiveContextQuotaSizeGb = contextQuotaMaxSizeGb === undefined ? selectedContextQuotaSizeGb : contextQuotaMaxSizeGb;
-  const effectiveContextQuotaObjects = contextQuotaMaxObjects === undefined ? selectedContextQuotaObjects : contextQuotaMaxObjects;
+  const selectedContextQuotaObjects =
+    selectedContext?.quota_max_objects ?? null;
+  const effectiveContextQuotaSizeGb =
+    contextQuotaMaxSizeGb === undefined
+      ? selectedContextQuotaSizeGb
+      : contextQuotaMaxSizeGb;
+  const effectiveContextQuotaObjects =
+    contextQuotaMaxObjects === undefined
+      ? selectedContextQuotaObjects
+      : contextQuotaMaxObjects;
   const cephContextQuotaSizeBytes =
-    effectiveContextQuotaSizeGb != null && effectiveContextQuotaSizeGb > 0 ? effectiveContextQuotaSizeGb * BYTES_PER_GIB : null;
-  const cephContextQuotaObjects = effectiveContextQuotaObjects != null && effectiveContextQuotaObjects > 0 ? effectiveContextQuotaObjects : null;
+    effectiveContextQuotaSizeGb != null && effectiveContextQuotaSizeGb > 0
+      ? effectiveContextQuotaSizeGb * BYTES_PER_GIB
+      : null;
+  const cephContextQuotaObjects =
+    effectiveContextQuotaObjects != null && effectiveContextQuotaObjects > 0
+      ? effectiveContextQuotaObjects
+      : null;
   const isCephContext = effectiveContextEndpointProvider === "ceph";
   const showActionBarToggle = showPanelToggles && isMainBrowserPath;
-  const bucketManagementEnabled = normalizedPath.endsWith("/browser") && !isEmbeddedBrowserPath;
+  const bucketManagementEnabled =
+    normalizedPath.endsWith("/browser") && !isEmbeddedBrowserPath;
   const bucketConfigurationEnabled = bucketManagementEnabled;
   const bucketConfigContextScope = "browser";
 
@@ -960,19 +1276,30 @@ export default function BrowserPage({
       setCompactMode(true);
     }
   }, [normalizedPath]);
-  const contextId = typeof accountIdForApi === "string" ? accountIdForApi : null;
-  const isCephAdminContext = Boolean(contextId && contextId.startsWith("ceph-admin-"));
-  const isLegacyS3UserContext = Boolean(contextId && contextId.startsWith("s3u-"));
-  const isLegacyConnectionContext = Boolean(contextId && contextId.startsWith("conn-"));
+  const contextId =
+    typeof accountIdForApi === "string" ? accountIdForApi : null;
+  const isCephAdminContext = Boolean(
+    contextId && contextId.startsWith("ceph-admin-"),
+  );
+  const isLegacyS3UserContext = Boolean(
+    contextId && contextId.startsWith("s3u-"),
+  );
+  const isLegacyConnectionContext = Boolean(
+    contextId && contextId.startsWith("conn-"),
+  );
   const isLegacyContext = isLegacyS3UserContext || isLegacyConnectionContext;
   const stsEnabled = Boolean(effectiveCaps?.sts) && !isLegacyContext;
   const sseFeatureEnabled = Boolean(effectiveCaps?.sse);
-  const normalizeAccountId = useCallback((value: S3AccountSelector | null | undefined) => {
-    if (value == null) return null;
-    return String(value);
-  }, []);
+  const normalizeAccountId = useCallback(
+    (value: S3AccountSelector | null | undefined) => {
+      if (value == null) return null;
+      return String(value);
+    },
+    [],
+  );
   const currentAccountId = normalizeAccountId(accountIdForApi);
-  const accountSwitchInFlight = previousAccountIdRef.current !== accountIdForApi;
+  const accountSwitchInFlight =
+    previousAccountIdRef.current !== accountIdForApi;
   const sseCustomerScopeKey = useMemo(() => {
     if (!currentAccountId || !bucketName) return null;
     return `${currentAccountId}::${bucketName}`;
@@ -981,20 +1308,34 @@ export default function BrowserPage({
     if (!sseCustomerScopeKey) return null;
     return sseCustomerKeysByScope[sseCustomerScopeKey] ?? null;
   }, [sseCustomerKeysByScope, sseCustomerScopeKey]);
-  const sseCustomerKeyBase64 = sseFeatureEnabled ? sseCustomerKeyBase64Raw : null;
+  const sseCustomerKeyBase64 = sseFeatureEnabled
+    ? sseCustomerKeyBase64Raw
+    : null;
   const sseActive = Boolean(sseCustomerKeyBase64);
-  const showSseControls = Boolean(sseFeatureEnabled && hasS3AccountContext && bucketName);
-  const clipboardAccountId = normalizeAccountId(clipboard?.sourceAccountId ?? null);
-  const clipboardMatchesContext = Boolean(clipboard && clipboardAccountId === currentAccountId);
-  const canPaste = Boolean(clipboard && bucketName && hasS3AccountContext && clipboardMatchesContext);
-  const { canUseFoldersPanel, canUseInspectorPanel, isFoldersPanelVisible, isInspectorPanelVisible } =
-    resolveBrowserPanelVisibility({
-      allowFoldersPanel,
-      allowInspectorPanel,
-      isNarrowViewport,
-      showFolders,
-      showInspector,
-    });
+  const showSseControls = Boolean(
+    sseFeatureEnabled && hasS3AccountContext && bucketName,
+  );
+  const clipboardAccountId = normalizeAccountId(
+    clipboard?.sourceAccountId ?? null,
+  );
+  const clipboardMatchesContext = Boolean(
+    clipboard && clipboardAccountId === currentAccountId,
+  );
+  const canPaste = Boolean(
+    clipboard && bucketName && hasS3AccountContext && clipboardMatchesContext,
+  );
+  const {
+    canUseFoldersPanel,
+    canUseInspectorPanel,
+    isFoldersPanelVisible,
+    isInspectorPanelVisible,
+  } = resolveBrowserPanelVisibility({
+    allowFoldersPanel,
+    allowInspectorPanel,
+    isNarrowViewport,
+    showFolders,
+    showInspector,
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1059,14 +1400,16 @@ export default function BrowserPage({
         return next;
       });
     },
-    [bucketAccessContextKey]
+    [bucketAccessContextKey],
   );
 
   const resetBucketAccessQueue = useCallback(() => {
     bucketAccessSessionRef.current += 1;
     bucketAccessQueueRef.current = [];
     bucketAccessQueuedRef.current.clear();
-    bucketAccessAbortControllersRef.current.forEach((controller) => controller.abort());
+    bucketAccessAbortControllersRef.current.forEach((controller) =>
+      controller.abort(),
+    );
     bucketAccessAbortControllersRef.current.clear();
     bucketAccessInFlightRef.current = 0;
     setBucketAccessByName((prev) => {
@@ -1075,7 +1418,10 @@ export default function BrowserPage({
         Object.keys(prev).length === Object.keys(sanitized).length &&
         Object.entries(prev).every(([bucket, entry]) => {
           const nextEntry = sanitized[bucket];
-          return nextEntry?.status === entry.status && nextEntry?.detail === entry.detail;
+          return (
+            nextEntry?.status === entry.status &&
+            nextEntry?.detail === entry.detail
+          );
         });
       if (sameShape) {
         return prev;
@@ -1118,7 +1464,10 @@ export default function BrowserPage({
           });
         })
         .catch((error) => {
-          if (isAbortError(error) || requestSession !== bucketAccessSessionRef.current) {
+          if (
+            isAbortError(error) ||
+            requestSession !== bucketAccessSessionRef.current
+          ) {
             return;
           }
           updateBucketAccessEntry(targetBucketName, {
@@ -1128,7 +1477,10 @@ export default function BrowserPage({
         })
         .finally(() => {
           bucketAccessAbortControllersRef.current.delete(targetBucketName);
-          bucketAccessInFlightRef.current = Math.max(0, bucketAccessInFlightRef.current - 1);
+          bucketAccessInFlightRef.current = Math.max(
+            0,
+            bucketAccessInFlightRef.current - 1,
+          );
           if (requestSession === bucketAccessSessionRef.current) {
             drainBucketAccessQueue();
           }
@@ -1138,10 +1490,18 @@ export default function BrowserPage({
 
   const scheduleBucketAccessProbe = useCallback(
     (targetBucketName: string) => {
-      if (!targetBucketName || !hasS3AccountContext || !accountIdForApi || targetBucketName === bucketName) {
+      if (
+        !targetBucketName ||
+        !hasS3AccountContext ||
+        !accountIdForApi ||
+        targetBucketName === bucketName
+      ) {
         return;
       }
-      const currentAccess = resolveBucketAccessEntry(targetBucketName, bucketAccessByName);
+      const currentAccess = resolveBucketAccessEntry(
+        targetBucketName,
+        bucketAccessByName,
+      );
       if (currentAccess.status !== "unknown") {
         return;
       }
@@ -1159,7 +1519,14 @@ export default function BrowserPage({
       });
       drainBucketAccessQueue();
     },
-    [accountIdForApi, bucketAccessByName, bucketName, drainBucketAccessQueue, hasS3AccountContext, updateBucketAccessEntry]
+    [
+      accountIdForApi,
+      bucketAccessByName,
+      bucketName,
+      drainBucketAccessQueue,
+      hasS3AccountContext,
+      updateBucketAccessEntry,
+    ],
   );
 
   useEffect(() => {
@@ -1168,7 +1535,9 @@ export default function BrowserPage({
       setBucketAccessByName({});
       return;
     }
-    const cached = sanitizeBucketAccessEntries(bucketAccessCacheRef.current.get(bucketAccessContextKey) ?? {});
+    const cached = sanitizeBucketAccessEntries(
+      bucketAccessCacheRef.current.get(bucketAccessContextKey) ?? {},
+    );
     bucketAccessCacheRef.current.set(bucketAccessContextKey, cached);
     setBucketAccessByName(cached);
   }, [bucketAccessContextKey, hasS3AccountContext, resetBucketAccessQueue]);
@@ -1184,14 +1553,21 @@ export default function BrowserPage({
   const handleActivateSseCustomerKey = useCallback(() => {
     if (!sseCustomerScopeKey) return;
     try {
-      const result = activateSseCustomerKeyForScope(sseCustomerKeysByScope, sseCustomerScopeKey, sseCustomerKeyInput);
+      const result = activateSseCustomerKeyForScope(
+        sseCustomerKeysByScope,
+        sseCustomerScopeKey,
+        sseCustomerKeyInput,
+      );
       setSseCustomerKeysByScope(result.next);
       setSseCustomerKeyError(null);
       setSseCustomerKeyNotice(null);
       setShowSseCustomerModal(false);
       setStatusMessage("SSE-C key enabled for this bucket.");
     } catch (err) {
-      const message = err instanceof Error && err.message ? err.message : "Unable to activate SSE-C key.";
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Unable to activate SSE-C key.";
       setSseCustomerKeyError(message);
     }
   }, [sseCustomerKeyInput, sseCustomerKeysByScope, sseCustomerScopeKey]);
@@ -1199,14 +1575,20 @@ export default function BrowserPage({
     if (!sseCustomerScopeKey) return;
     let generatedKey = "";
     try {
-      const result = generateAndActivateSseCustomerKeyForScope(sseCustomerKeysByScope, sseCustomerScopeKey);
+      const result = generateAndActivateSseCustomerKeyForScope(
+        sseCustomerKeysByScope,
+        sseCustomerScopeKey,
+      );
       generatedKey = result.normalizedKey;
       setSseCustomerKeysByScope(result.next);
       setSseCustomerKeyInput(generatedKey);
       setSseCustomerKeyError(null);
       setSseCustomerKeyVisible(false);
     } catch (err) {
-      const message = err instanceof Error && err.message ? err.message : "Unable to generate SSE-C key.";
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Unable to generate SSE-C key.";
       setSseCustomerKeyError(message);
       setSseCustomerKeyNotice(null);
       return;
@@ -1221,19 +1603,23 @@ export default function BrowserPage({
           value: generatedKey,
           successMessage: "SSE-C key copied to clipboard.",
         });
-      }
+      },
     );
     if (copyOutcome === "copied") {
       setSseCustomerKeyNotice(
-        "SSE-C key generated and enabled. Copy and save this key now; it will be lost on browser refresh."
+        "SSE-C key generated and enabled. Copy and save this key now; it will be lost on browser refresh.",
       );
-      setStatusMessage("SSE-C key generated, enabled, and copied to clipboard.");
+      setStatusMessage(
+        "SSE-C key generated, enabled, and copied to clipboard.",
+      );
       return;
     }
     setSseCustomerKeyNotice(
-      "SSE-C key generated and enabled. Clipboard access failed: copy and save the key now using the manual dialog."
+      "SSE-C key generated and enabled. Clipboard access failed: copy and save the key now using the manual dialog.",
     );
-    setStatusMessage("SSE-C key generated and enabled. Copy it manually from the dialog.");
+    setStatusMessage(
+      "SSE-C key generated and enabled. Copy it manually from the dialog.",
+    );
   }, [sseCustomerKeysByScope, sseCustomerScopeKey]);
   const handleClearSseCustomerKey = useCallback(() => {
     if (!sseCustomerScopeKey) return;
@@ -1262,19 +1648,36 @@ export default function BrowserPage({
     prefixRef.current = prefix;
   }, [bucketName, prefix]);
   useEffect(() => {
-    if (!isMainBrowserPath || !browserRootContextId || !hasS3AccountContext) return;
+    if (!isMainBrowserPath || !browserRootContextId || !hasS3AccountContext)
+      return;
     if (!browserRootSelectionPersistenceReadyRef.current) return;
-    if (browserRootSelectionContextIdRef.current !== browserRootContextId) return;
-    writeBrowserRootContextSelection(browserRootContextId, { bucketName, prefix });
-  }, [browserRootContextId, bucketName, hasS3AccountContext, isMainBrowserPath, prefix]);
+    if (browserRootSelectionContextIdRef.current !== browserRootContextId)
+      return;
+    writeBrowserRootContextSelection(browserRootContextId, {
+      bucketName,
+      prefix,
+    });
+  }, [
+    browserRootContextId,
+    bucketName,
+    hasS3AccountContext,
+    isMainBrowserPath,
+    prefix,
+  ]);
   const uiOrigin = useMemo(
     () => (typeof window === "undefined" ? undefined : window.location.origin),
-    []
+    [],
   );
   const uploadParallelism = useMemo(() => {
-    const direct = browserSettings?.direct_upload_parallelism ?? DEFAULT_DIRECT_UPLOAD_PARALLELISM;
-    const proxy = browserSettings?.proxy_upload_parallelism ?? DEFAULT_PROXY_UPLOAD_PARALLELISM;
-    const fallback = useProxyTransfers ? DEFAULT_PROXY_UPLOAD_PARALLELISM : DEFAULT_DIRECT_UPLOAD_PARALLELISM;
+    const direct =
+      browserSettings?.direct_upload_parallelism ??
+      DEFAULT_DIRECT_UPLOAD_PARALLELISM;
+    const proxy =
+      browserSettings?.proxy_upload_parallelism ??
+      DEFAULT_PROXY_UPLOAD_PARALLELISM;
+    const fallback = useProxyTransfers
+      ? DEFAULT_PROXY_UPLOAD_PARALLELISM
+      : DEFAULT_DIRECT_UPLOAD_PARALLELISM;
     return clampParallelism(useProxyTransfers ? proxy : direct, fallback);
   }, [browserSettings, useProxyTransfers]);
   const uploadParallelismRef = useRef(uploadParallelism);
@@ -1282,9 +1685,15 @@ export default function BrowserPage({
     uploadParallelismRef.current = uploadParallelism;
   }, [uploadParallelism]);
   const downloadParallelism = useMemo(() => {
-    const direct = browserSettings?.direct_download_parallelism ?? DEFAULT_DIRECT_DOWNLOAD_PARALLELISM;
-    const proxy = browserSettings?.proxy_download_parallelism ?? DEFAULT_PROXY_DOWNLOAD_PARALLELISM;
-    const fallback = useProxyTransfers ? DEFAULT_PROXY_DOWNLOAD_PARALLELISM : DEFAULT_DIRECT_DOWNLOAD_PARALLELISM;
+    const direct =
+      browserSettings?.direct_download_parallelism ??
+      DEFAULT_DIRECT_DOWNLOAD_PARALLELISM;
+    const proxy =
+      browserSettings?.proxy_download_parallelism ??
+      DEFAULT_PROXY_DOWNLOAD_PARALLELISM;
+    const fallback = useProxyTransfers
+      ? DEFAULT_PROXY_DOWNLOAD_PARALLELISM
+      : DEFAULT_DIRECT_DOWNLOAD_PARALLELISM;
     return clampParallelism(useProxyTransfers ? proxy : direct, fallback);
   }, [browserSettings, useProxyTransfers]);
   const downloadParallelismRef = useRef(downloadParallelism);
@@ -1295,7 +1704,9 @@ export default function BrowserPage({
     stsCredentialsRef.current = stsCredentials;
   }, [stsCredentials]);
   const otherOperationsParallelism = useMemo(() => {
-    const value = browserSettings?.other_operations_parallelism ?? DEFAULT_OTHER_OPERATIONS_PARALLELISM;
+    const value =
+      browserSettings?.other_operations_parallelism ??
+      DEFAULT_OTHER_OPERATIONS_PARALLELISM;
     return clampParallelism(value, DEFAULT_OTHER_OPERATIONS_PARALLELISM);
   }, [browserSettings]);
   const otherOperationsParallelismRef = useRef(otherOperationsParallelism);
@@ -1331,7 +1742,9 @@ export default function BrowserPage({
         })
         .catch((err) => {
           setStsCredentials(null);
-          setStsCredentialsError(extractApiError(err, "Unable to load STS credentials."));
+          setStsCredentialsError(
+            extractApiError(err, "Unable to load STS credentials."),
+          );
           return null;
         })
         .finally(() => {
@@ -1340,7 +1753,7 @@ export default function BrowserPage({
       stsRefreshRef.current = request;
       return request;
     },
-    [accountIdForApi, hasS3AccountContext, stsEnabled, stsStatus?.available]
+    [accountIdForApi, hasS3AccountContext, stsEnabled, stsStatus?.available],
   );
   const stsAvailable = Boolean(stsEnabled && stsStatus?.available);
   const useStsPresigner = shouldUseStsPresigner({ stsAvailable, sseActive });
@@ -1350,12 +1763,20 @@ export default function BrowserPage({
         const credentials = await ensureStsCredentials();
         if (credentials) {
           try {
-            return await presignObjectWithSts(credentials, targetBucket, payload);
+            return await presignObjectWithSts(
+              credentials,
+              targetBucket,
+              payload,
+            );
           } catch {
             const refreshed = await ensureStsCredentials(true);
             if (refreshed) {
               try {
-                return await presignObjectWithSts(refreshed, targetBucket, payload);
+                return await presignObjectWithSts(
+                  refreshed,
+                  targetBucket,
+                  payload,
+                );
               } catch {
                 // ignore and fall back to backend presign
               }
@@ -1363,22 +1784,46 @@ export default function BrowserPage({
           }
         }
       }
-      return presignObject(accountIdForApi, targetBucket, payload, sseCustomerKeyBase64);
+      return presignObject(
+        accountIdForApi,
+        targetBucket,
+        payload,
+        sseCustomerKeyBase64,
+      );
     },
-    [accountIdForApi, ensureStsCredentials, sseCustomerKeyBase64, useStsPresigner]
+    [
+      accountIdForApi,
+      ensureStsCredentials,
+      sseCustomerKeyBase64,
+      useStsPresigner,
+    ],
   );
   const presignPartRequest = useCallback(
-    async (targetBucket: string, uploadId: string, payload: PresignPartRequest) => {
+    async (
+      targetBucket: string,
+      uploadId: string,
+      payload: PresignPartRequest,
+    ) => {
       if (useStsPresigner) {
         const credentials = await ensureStsCredentials();
         if (credentials) {
           try {
-            return await presignPartWithSts(credentials, targetBucket, uploadId, payload);
+            return await presignPartWithSts(
+              credentials,
+              targetBucket,
+              uploadId,
+              payload,
+            );
           } catch {
             const refreshed = await ensureStsCredentials(true);
             if (refreshed) {
               try {
-                return await presignPartWithSts(refreshed, targetBucket, uploadId, payload);
+                return await presignPartWithSts(
+                  refreshed,
+                  targetBucket,
+                  uploadId,
+                  payload,
+                );
               } catch {
                 // ignore and fall back to backend presign
               }
@@ -1386,9 +1831,20 @@ export default function BrowserPage({
           }
         }
       }
-      return presignPart(accountIdForApi, targetBucket, uploadId, payload, sseCustomerKeyBase64);
+      return presignPart(
+        accountIdForApi,
+        targetBucket,
+        uploadId,
+        payload,
+        sseCustomerKeyBase64,
+      );
     },
-    [accountIdForApi, ensureStsCredentials, sseCustomerKeyBase64, useStsPresigner]
+    [
+      accountIdForApi,
+      ensureStsCredentials,
+      sseCustomerKeyBase64,
+      useStsPresigner,
+    ],
   );
   const warnings = useMemo(() => {
     const items: string[] = [];
@@ -1438,7 +1894,8 @@ export default function BrowserPage({
     if (transfersBlocked) {
       return {
         label: "Unavailable",
-        title: "Download/Upload unavailable: CORS is disabled and proxy transfers are disabled.",
+        title:
+          "Download/Upload unavailable: CORS is disabled and proxy transfers are disabled.",
         className:
           "border-rose-200/70 bg-rose-200/60 text-rose-600/70 dark:border-rose-400/40 dark:bg-rose-400/25 dark:text-rose-200/90",
       };
@@ -1454,7 +1911,8 @@ export default function BrowserPage({
     if (sseActive) {
       return {
         label: "SSE-C",
-        title: "Download/Upload mode: SSE-C customer key is active for this bucket.",
+        title:
+          "Download/Upload mode: SSE-C customer key is active for this bucket.",
         className:
           "border-sky-200/70 bg-sky-200/60 text-sky-700/80 dark:border-sky-400/40 dark:bg-sky-400/25 dark:text-sky-100/90",
       };
@@ -1493,22 +1951,35 @@ export default function BrowserPage({
       x: number,
       y: number,
       menuWidth = CONTEXT_MENU_FALLBACK_WIDTH_PX,
-      menuHeight = CONTEXT_MENU_FALLBACK_HEIGHT_PX
+      menuHeight = CONTEXT_MENU_FALLBACK_HEIGHT_PX,
     ) => {
       if (typeof window === "undefined") {
         return { x, y };
       }
-      const safeWidth = Number.isFinite(menuWidth) && menuWidth > 0 ? menuWidth : CONTEXT_MENU_FALLBACK_WIDTH_PX;
-      const safeHeight = Number.isFinite(menuHeight) && menuHeight > 0 ? menuHeight : CONTEXT_MENU_FALLBACK_HEIGHT_PX;
-      const maxX = Math.max(CONTEXT_MENU_PADDING_PX, window.innerWidth - safeWidth - CONTEXT_MENU_PADDING_PX);
-      const maxY = Math.max(CONTEXT_MENU_PADDING_PX, window.innerHeight - safeHeight - CONTEXT_MENU_PADDING_PX);
-      const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+      const safeWidth =
+        Number.isFinite(menuWidth) && menuWidth > 0
+          ? menuWidth
+          : CONTEXT_MENU_FALLBACK_WIDTH_PX;
+      const safeHeight =
+        Number.isFinite(menuHeight) && menuHeight > 0
+          ? menuHeight
+          : CONTEXT_MENU_FALLBACK_HEIGHT_PX;
+      const maxX = Math.max(
+        CONTEXT_MENU_PADDING_PX,
+        window.innerWidth - safeWidth - CONTEXT_MENU_PADDING_PX,
+      );
+      const maxY = Math.max(
+        CONTEXT_MENU_PADDING_PX,
+        window.innerHeight - safeHeight - CONTEXT_MENU_PADDING_PX,
+      );
+      const clamp = (value: number, min: number, max: number) =>
+        Math.min(Math.max(value, min), max);
       return {
         x: clamp(x, CONTEXT_MENU_PADDING_PX, maxX),
         y: clamp(y, CONTEXT_MENU_PADDING_PX, maxY),
       };
     },
-    []
+    [],
   );
   const repositionContextMenu = useCallback(() => {
     setContextMenu((previous) => {
@@ -1516,8 +1987,16 @@ export default function BrowserPage({
       const menuNode = contextMenuRef.current;
       if (!menuNode) return previous;
       const menuRect = menuNode.getBoundingClientRect();
-      const nextPosition = clampContextMenuPosition(previous.x, previous.y, menuRect.width, menuRect.height);
-      if (Math.abs(nextPosition.x - previous.x) < 0.5 && Math.abs(nextPosition.y - previous.y) < 0.5) {
+      const nextPosition = clampContextMenuPosition(
+        previous.x,
+        previous.y,
+        menuRect.width,
+        menuRect.height,
+      );
+      if (
+        Math.abs(nextPosition.x - previous.x) < 0.5 &&
+        Math.abs(nextPosition.y - previous.y) < 0.5
+      ) {
         return previous;
       }
       return { ...previous, ...nextPosition };
@@ -1528,7 +2007,7 @@ export default function BrowserPage({
       const { clientX, clientY } = event;
       return clampContextMenuPosition(clientX, clientY);
     },
-    [clampContextMenuPosition]
+    [clampContextMenuPosition],
   );
 
   useEffect(() => {
@@ -1545,11 +2024,17 @@ export default function BrowserPage({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handlePopState = (event: PopStateEvent) => {
-      const state = event.state as { browserPage?: boolean; bucketName?: string; prefix?: string } | null;
+      const state = event.state as {
+        browserPage?: boolean;
+        bucketName?: string;
+        prefix?: string;
+      } | null;
       if (state?.browserPage) {
         const nextBucket = state.bucketName ?? "";
         const nextPrefix = state.prefix ?? "";
-        const isSame = nextBucket === bucketNameRef.current && nextPrefix === prefixRef.current;
+        const isSame =
+          nextBucket === bucketNameRef.current &&
+          nextPrefix === prefixRef.current;
         skipHistoryPushRef.current = !isSame;
         if (nextBucket !== bucketNameRef.current) {
           setBucketName(nextBucket);
@@ -1568,7 +2053,8 @@ export default function BrowserPage({
       window.history.pushState(
         safeState,
         "",
-        browserPathRef.current || `${window.location.pathname}${window.location.search}${window.location.hash}`
+        browserPathRef.current ||
+          `${window.location.pathname}${window.location.search}${window.location.hash}`,
       );
     };
     window.addEventListener("popstate", handlePopState);
@@ -1594,7 +2080,8 @@ export default function BrowserPage({
       window.history.replaceState(
         nextState,
         "",
-        browserPathRef.current || `${window.location.pathname}${window.location.search}${window.location.hash}`
+        browserPathRef.current ||
+          `${window.location.pathname}${window.location.search}${window.location.hash}`,
       );
       browserHistoryStateRef.current = { bucketName, prefix };
       return;
@@ -1602,7 +2089,8 @@ export default function BrowserPage({
     window.history.pushState(
       nextState,
       "",
-      browserPathRef.current || `${window.location.pathname}${window.location.search}${window.location.hash}`
+      browserPathRef.current ||
+        `${window.location.pathname}${window.location.search}${window.location.hash}`,
     );
     browserHistoryStateRef.current = { bucketName, prefix };
   }, [bucketName, prefix]);
@@ -1632,7 +2120,10 @@ export default function BrowserPage({
   useEffect(() => {
     if (!showBucketMenu) return;
     const handleMouseDown = (event: MouseEvent) => {
-      if (bucketMenuRef.current && !bucketMenuRef.current.contains(event.target as Node)) {
+      if (
+        bucketMenuRef.current &&
+        !bucketMenuRef.current.contains(event.target as Node)
+      ) {
         setShowBucketMenu(false);
       }
     };
@@ -1660,7 +2151,9 @@ export default function BrowserPage({
       bucketAccessSessionRef.current += 1;
       bucketAccessQueueRef.current = [];
       bucketAccessQueuedRef.current.clear();
-      bucketAccessAbortControllersRef.current.forEach((controller) => controller.abort());
+      bucketAccessAbortControllersRef.current.forEach((controller) =>
+        controller.abort(),
+      );
       bucketAccessAbortControllersRef.current.clear();
       bucketAccessInFlightRef.current = 0;
       if (bucketSearchDebounceRef.current !== null) {
@@ -1679,7 +2172,10 @@ export default function BrowserPage({
   useEffect(() => {
     if (!showSearchOptionsMenu) return;
     const handleMouseDown = (event: MouseEvent) => {
-      if (searchOptionsMenuRef.current && !searchOptionsMenuRef.current.contains(event.target as Node)) {
+      if (
+        searchOptionsMenuRef.current &&
+        !searchOptionsMenuRef.current.contains(event.target as Node)
+      ) {
         setShowSearchOptionsMenu(false);
       }
     };
@@ -1780,7 +2276,10 @@ export default function BrowserPage({
   useEffect(() => {
     if (!contextMenu) return;
     const handleMouseDown = (event: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
+      if (
+        contextMenuRef.current &&
+        !contextMenuRef.current.contains(event.target as Node)
+      ) {
         setContextMenu(null);
       }
     };
@@ -1884,7 +2383,9 @@ export default function BrowserPage({
           if (exactMatchCache.has(value)) {
             return Boolean(exactMatchCache.get(value));
           }
-          const includedInFirstPage = firstPage.items.some((bucket) => bucket.name === value);
+          const includedInFirstPage = firstPage.items.some(
+            (bucket) => bucket.name === value,
+          );
           if (includedInFirstPage) {
             exactMatchCache.set(value, true);
             return true;
@@ -1902,7 +2403,14 @@ export default function BrowserPage({
 
         let nextBucket = "";
         let nextPrefix = previousPrefix;
-        let bucketSource: "preferred" | "requested" | "stored" | "previous" | "single" | "ceph-requested" | "none" = "none";
+        let bucketSource:
+          | "preferred"
+          | "requested"
+          | "stored"
+          | "previous"
+          | "single"
+          | "ceph-requested"
+          | "none" = "none";
         if (preferredBucket && (await bucketExists(preferredBucket))) {
           nextBucket = preferredBucket;
           bucketSource = "preferred";
@@ -1912,7 +2420,10 @@ export default function BrowserPage({
         } else if (requestedBucket && (await bucketExists(requestedBucket))) {
           nextBucket = requestedBucket;
           bucketSource = "requested";
-        } else if (storedSelection?.bucketName && (await bucketExists(storedSelection.bucketName))) {
+        } else if (
+          storedSelection?.bucketName &&
+          (await bucketExists(storedSelection.bucketName))
+        ) {
           nextBucket = storedSelection.bucketName;
           nextPrefix = normalizePrefix(storedSelection.prefix);
           bucketSource = "stored";
@@ -1940,7 +2451,9 @@ export default function BrowserPage({
         }
       } catch (err) {
         bucketSearchValueRef.current = "";
-        setBucketError(extractApiError(err, "Unable to list buckets for this account."));
+        setBucketError(
+          extractApiError(err, "Unable to list buckets for this account."),
+        );
         setBucketMenuItems([]);
         setBucketMenuPage(1);
         setBucketMenuHasNext(false);
@@ -1970,7 +2483,7 @@ export default function BrowserPage({
       isMainBrowserPath,
       requestedBucket,
       resetBucketAccessQueue,
-    ]
+    ],
   );
 
   useEffect(() => {
@@ -2023,7 +2536,9 @@ export default function BrowserPage({
         if (requestId !== bucketSearchRequestIdRef.current) {
           return;
         }
-        setBucketError(extractApiError(err, "Unable to list buckets for this account."));
+        setBucketError(
+          extractApiError(err, "Unable to list buckets for this account."),
+        );
         if (!append) {
           setBucketMenuItems([]);
           setBucketMenuPage(1);
@@ -2041,10 +2556,11 @@ export default function BrowserPage({
         }
       }
     },
-    [accountIdForApi, hasS3AccountContext, resetBucketAccessQueue]
+    [accountIdForApi, hasS3AccountContext, resetBucketAccessQueue],
   );
 
-  const bucketSearchUiActive = showBucketMenu || (isMainBrowserPath && isFoldersPanelVisible);
+  const bucketSearchUiActive =
+    showBucketMenu || (isMainBrowserPath && isFoldersPanelVisible);
 
   useEffect(() => {
     if (!bucketSearchUiActive) return;
@@ -2057,7 +2573,11 @@ export default function BrowserPage({
       bucketSearchDebounceRef.current = null;
     }
     bucketSearchDebounceRef.current = window.setTimeout(() => {
-      void loadBucketSearchPage({ search: nextSearchValue, page: 1, append: false });
+      void loadBucketSearchPage({
+        search: nextSearchValue,
+        page: 1,
+        append: false,
+      });
     }, BROWSER_QUERY_DEBOUNCE_MS);
     return () => {
       if (bucketSearchDebounceRef.current !== null) {
@@ -2065,7 +2585,13 @@ export default function BrowserPage({
         bucketSearchDebounceRef.current = null;
       }
     };
-  }, [bucketFilter, bucketSearchUiActive, isFoldersPanelVisible, isMainBrowserPath, loadBucketSearchPage]);
+  }, [
+    bucketFilter,
+    bucketSearchUiActive,
+    isFoldersPanelVisible,
+    isMainBrowserPath,
+    loadBucketSearchPage,
+  ]);
 
   useEffect(() => {
     if (!hasS3AccountContext || !accountIdForApi) {
@@ -2100,9 +2626,14 @@ export default function BrowserPage({
       caseSensitive?: boolean;
       keyMarker?: string | null;
       versionIdMarker?: string | null;
-    }
+    },
   ) => {
-    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled || !showDeletedObjects) {
+    if (
+      !bucketName ||
+      !hasS3AccountContext ||
+      !isVersioningEnabled ||
+      !showDeletedObjects
+    ) {
       return {
         deletedObjects: [] as BrowserObject[],
         deletedPrefixes: [] as string[],
@@ -2127,7 +2658,9 @@ export default function BrowserPage({
     const isRecursiveSearch = Boolean(opts?.recursive);
     const exactMatch = Boolean(opts?.exactMatch);
     const caseSensitive = Boolean(opts?.caseSensitive);
-    const normalizedQuery = caseSensitive ? queryValue : queryValue.toLowerCase();
+    const normalizedQuery = caseSensitive
+      ? queryValue
+      : queryValue.toLowerCase();
 
     const matchesQuery = (key: string) => {
       if (!normalizedQuery) return true;
@@ -2204,7 +2737,9 @@ export default function BrowserPage({
         is_delete_marker: true,
         version_id: marker.version_id ?? null,
       }));
-    const deletedFolderRows = Array.from(markerPrefixes.values()).sort((a, b) => a.localeCompare(b));
+    const deletedFolderRows = Array.from(markerPrefixes.values()).sort((a, b) =>
+      a.localeCompare(b),
+    );
     const nextKeyMarker = data.next_key_marker ?? null;
     const nextVersionIdMarker = data.next_version_id_marker ?? null;
     return {
@@ -2212,7 +2747,9 @@ export default function BrowserPage({
       deletedPrefixes: deletedFolderRows,
       nextKeyMarker,
       nextVersionIdMarker,
-      isTruncated: Boolean(data.is_truncated && (nextKeyMarker || nextVersionIdMarker)),
+      isTruncated: Boolean(
+        data.is_truncated && (nextKeyMarker || nextVersionIdMarker),
+      ),
     };
   };
 
@@ -2228,7 +2765,10 @@ export default function BrowserPage({
     const isAppend = Boolean(opts?.append);
     const isSilent = Boolean(opts?.silent);
     const loadDeletedOnly = Boolean(opts?.loadDeletedOnly);
-    const { requestSeq, controller } = prepareLatestRequest(objectsAbortControllerRef.current, objectsRequestSeqRef.current);
+    const { requestSeq, controller } = prepareLatestRequest(
+      objectsAbortControllerRef.current,
+      objectsRequestSeqRef.current,
+    );
     objectsRequestSeqRef.current = requestSeq;
     objectsAbortControllerRef.current = controller;
     if (!isAppend) {
@@ -2243,7 +2783,8 @@ export default function BrowserPage({
     const query = filter.trim();
     const searchFromBucket = searchScope === "bucket" && Boolean(query);
     const requestPrefix = searchFromBucket ? "" : targetPrefix;
-    const requestRecursive = Boolean(query) && (searchFromBucket || searchRecursive);
+    const requestRecursive =
+      Boolean(query) && (searchFromBucket || searchRecursive);
     try {
       let loadedObjects: BrowserObject[] = [];
       let loadedPrefixes: string[] = [];
@@ -2276,18 +2817,30 @@ export default function BrowserPage({
         });
       }
 
-      const mergedObjects = isAppend ? [...objects, ...loadedObjects] : loadedObjects;
-      const mergedPrefixesRaw = isAppend ? Array.from(new Set([...prefixes, ...loadedPrefixes])) : loadedPrefixes;
-      const objectsLimitReached = mergedObjects.length > OBJECTS_LIST_HARD_LIMIT;
-      const prefixesLimitReached = mergedPrefixesRaw.length > OBJECTS_LIST_HARD_LIMIT;
+      const mergedObjects = isAppend
+        ? [...objects, ...loadedObjects]
+        : loadedObjects;
+      const mergedPrefixesRaw = isAppend
+        ? Array.from(new Set([...prefixes, ...loadedPrefixes]))
+        : loadedPrefixes;
+      const objectsLimitReached =
+        mergedObjects.length > OBJECTS_LIST_HARD_LIMIT;
+      const prefixesLimitReached =
+        mergedPrefixesRaw.length > OBJECTS_LIST_HARD_LIMIT;
       const boundedObjects = mergedObjects.slice(0, OBJECTS_LIST_HARD_LIMIT);
-      const boundedPrefixes = mergedPrefixesRaw.slice(0, OBJECTS_LIST_HARD_LIMIT);
+      const boundedPrefixes = mergedPrefixesRaw.slice(
+        0,
+        OBJECTS_LIST_HARD_LIMIT,
+      );
 
-      const shouldLoadDeleted = showDeletedObjects && isVersioningEnabled && storageFilter === "all";
+      const shouldLoadDeleted =
+        showDeletedObjects && isVersioningEnabled && storageFilter === "all";
       let nextDeletedObjects = isAppend ? deletedObjects : [];
       let nextDeletedPrefixes = isAppend ? deletedPrefixes : [];
       let nextDeletedKeyMarker = isAppend ? deletedObjectsNextKeyMarker : null;
-      let nextDeletedVersionIdMarker = isAppend ? deletedObjectsNextVersionIdMarker : null;
+      let nextDeletedVersionIdMarker = isAppend
+        ? deletedObjectsNextVersionIdMarker
+        : null;
       let nextDeletedTruncated = isAppend ? deletedObjectsIsTruncated : false;
       let deletedLimitReached = false;
 
@@ -2303,25 +2856,46 @@ export default function BrowserPage({
               exactMatch: searchExactMatch,
               caseSensitive: searchCaseSensitive,
               keyMarker: isAppend ? deletedObjectsNextKeyMarker : null,
-              versionIdMarker: isAppend ? deletedObjectsNextVersionIdMarker : null,
-            }
+              versionIdMarker: isAppend
+                ? deletedObjectsNextVersionIdMarker
+                : null,
+            },
           );
           if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
             return;
           }
           const deletedObjectsMerged = isAppend
-            ? mergeDeletedObjectsWithLimit(deletedObjects, deletedResult.deletedObjects, OBJECTS_LIST_HARD_LIMIT)
+            ? mergeDeletedObjectsWithLimit(
+                deletedObjects,
+                deletedResult.deletedObjects,
+                OBJECTS_LIST_HARD_LIMIT,
+              )
             : {
-                items: deletedResult.deletedObjects.slice(0, OBJECTS_LIST_HARD_LIMIT),
-                limitReached: deletedResult.deletedObjects.length > OBJECTS_LIST_HARD_LIMIT,
+                items: deletedResult.deletedObjects.slice(
+                  0,
+                  OBJECTS_LIST_HARD_LIMIT,
+                ),
+                limitReached:
+                  deletedResult.deletedObjects.length > OBJECTS_LIST_HARD_LIMIT,
               };
           const deletedPrefixesMerged = isAppend
-            ? mergeUniqueStringsWithLimit(deletedPrefixes, deletedResult.deletedPrefixes, OBJECTS_LIST_HARD_LIMIT)
+            ? mergeUniqueStringsWithLimit(
+                deletedPrefixes,
+                deletedResult.deletedPrefixes,
+                OBJECTS_LIST_HARD_LIMIT,
+              )
             : {
-                items: deletedResult.deletedPrefixes.slice(0, OBJECTS_LIST_HARD_LIMIT),
-                limitReached: deletedResult.deletedPrefixes.length > OBJECTS_LIST_HARD_LIMIT,
+                items: deletedResult.deletedPrefixes.slice(
+                  0,
+                  OBJECTS_LIST_HARD_LIMIT,
+                ),
+                limitReached:
+                  deletedResult.deletedPrefixes.length >
+                  OBJECTS_LIST_HARD_LIMIT,
               };
-          deletedLimitReached = deletedObjectsMerged.limitReached || deletedPrefixesMerged.limitReached;
+          deletedLimitReached =
+            deletedObjectsMerged.limitReached ||
+            deletedPrefixesMerged.limitReached;
           nextDeletedObjects = deletedObjectsMerged.items;
           nextDeletedPrefixes = deletedPrefixesMerged.items;
           if (deletedLimitReached) {
@@ -2366,7 +2940,7 @@ export default function BrowserPage({
         setObjectsNextToken(null);
         setObjectsIsTruncated(false);
         setWarningMessage(
-          `Object listing is limited to ${OBJECTS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path or search to continue.`
+          `Object listing is limited to ${OBJECTS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path or search to continue.`,
         );
       } else {
         setObjectsNextToken(loadedObjectsNextToken);
@@ -2374,7 +2948,7 @@ export default function BrowserPage({
       }
       if (deletedLimitReached) {
         setWarningMessage(
-          `Deleted markers listing is limited to ${OBJECTS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path or search to continue.`
+          `Deleted markers listing is limited to ${OBJECTS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path or search to continue.`,
         );
       }
     } catch (err) {
@@ -2384,7 +2958,10 @@ export default function BrowserPage({
       if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
         return;
       }
-      const errorDetail = extractApiError(err, "Unable to list objects for this prefix.");
+      const errorDetail = extractApiError(
+        err,
+        "Unable to list objects for this prefix.",
+      );
       updateBucketAccessEntry(bucketName, {
         status: "unavailable",
         detail: errorDetail,
@@ -2394,7 +2971,10 @@ export default function BrowserPage({
       if (objectsAbortControllerRef.current === controller) {
         objectsAbortControllerRef.current = null;
       }
-      const isLatestRequest = !isStaleRequest(requestSeq, objectsRequestSeqRef.current);
+      const isLatestRequest = !isStaleRequest(
+        requestSeq,
+        objectsRequestSeqRef.current,
+      );
       if (isLatestRequest) {
         if (!isAppend) {
           if (!isSilent) {
@@ -2407,7 +2987,11 @@ export default function BrowserPage({
     }
   };
 
-  const loadPrefixVersions = async (opts?: { append?: boolean; keyMarker?: string | null; versionIdMarker?: string | null }) => {
+  const loadPrefixVersions = async (opts?: {
+    append?: boolean;
+    keyMarker?: string | null;
+    versionIdMarker?: string | null;
+  }) => {
     if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
     if (!opts?.append) {
       setPrefixVersionsLoading(true);
@@ -2415,8 +2999,12 @@ export default function BrowserPage({
     } else {
       setPrefixVersionsLoading(true);
     }
-    const resolvedKeyMarker = opts?.keyMarker !== undefined ? opts.keyMarker : prefixVersionKeyMarker;
-    const resolvedVersionIdMarker = opts?.versionIdMarker !== undefined ? opts.versionIdMarker : prefixVersionIdMarker;
+    const resolvedKeyMarker =
+      opts?.keyMarker !== undefined ? opts.keyMarker : prefixVersionKeyMarker;
+    const resolvedVersionIdMarker =
+      opts?.versionIdMarker !== undefined
+        ? opts.versionIdMarker
+        : prefixVersionIdMarker;
     try {
       const data = await listObjectVersions(accountIdForApi, bucketName, {
         prefix: normalizedPrefix,
@@ -2424,24 +3012,33 @@ export default function BrowserPage({
         versionIdMarker: resolvedVersionIdMarker ?? undefined,
         maxKeys: VERSIONS_PAGE_SIZE,
       });
-      const mergedVersions = opts?.append ? [...prefixVersions, ...data.versions] : data.versions;
-      const mergedDeleteMarkers = opts?.append ? [...prefixDeleteMarkers, ...data.delete_markers] : data.delete_markers;
+      const mergedVersions = opts?.append
+        ? [...prefixVersions, ...data.versions]
+        : data.versions;
+      const mergedDeleteMarkers = opts?.append
+        ? [...prefixDeleteMarkers, ...data.delete_markers]
+        : data.delete_markers;
       const versionsLimitReached =
-        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT || mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
+        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT ||
+        mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
       setPrefixVersions(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
-      setPrefixDeleteMarkers(mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT));
+      setPrefixDeleteMarkers(
+        mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT),
+      );
       if (versionsLimitReached) {
         setPrefixVersionKeyMarker(null);
         setPrefixVersionIdMarker(null);
         setWarningMessage(
-          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`
+          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
         );
       } else {
         setPrefixVersionKeyMarker(data.next_key_marker ?? null);
         setPrefixVersionIdMarker(data.next_version_id_marker ?? null);
       }
     } catch (err) {
-      setPrefixVersionsError(extractApiError(err, "Unable to list versions for this prefix."));
+      setPrefixVersionsError(
+        extractApiError(err, "Unable to list versions for this prefix."),
+      );
       if (!opts?.append) {
         setPrefixVersions([]);
         setPrefixDeleteMarkers([]);
@@ -2466,8 +3063,12 @@ export default function BrowserPage({
     } else {
       setObjectVersionsLoading(true);
     }
-    const resolvedKeyMarker = opts?.keyMarker !== undefined ? opts.keyMarker : objectVersionKeyMarker;
-    const resolvedVersionIdMarker = opts?.versionIdMarker !== undefined ? opts.versionIdMarker : objectVersionIdMarker;
+    const resolvedKeyMarker =
+      opts?.keyMarker !== undefined ? opts.keyMarker : objectVersionKeyMarker;
+    const resolvedVersionIdMarker =
+      opts?.versionIdMarker !== undefined
+        ? opts.versionIdMarker
+        : objectVersionIdMarker;
     try {
       const data = await listObjectVersions(accountIdForApi, bucketName, {
         key: targetKey,
@@ -2475,24 +3076,33 @@ export default function BrowserPage({
         versionIdMarker: resolvedVersionIdMarker ?? undefined,
         maxKeys: VERSIONS_PAGE_SIZE,
       });
-      const mergedVersions = opts?.append ? [...objectVersions, ...data.versions] : data.versions;
-      const mergedDeleteMarkers = opts?.append ? [...objectDeleteMarkers, ...data.delete_markers] : data.delete_markers;
+      const mergedVersions = opts?.append
+        ? [...objectVersions, ...data.versions]
+        : data.versions;
+      const mergedDeleteMarkers = opts?.append
+        ? [...objectDeleteMarkers, ...data.delete_markers]
+        : data.delete_markers;
       const versionsLimitReached =
-        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT || mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
+        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT ||
+        mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
       setObjectVersions(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
-      setObjectDeleteMarkers(mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT));
+      setObjectDeleteMarkers(
+        mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT),
+      );
       if (versionsLimitReached) {
         setObjectVersionKeyMarker(null);
         setObjectVersionIdMarker(null);
         setWarningMessage(
-          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`
+          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
         );
       } else {
         setObjectVersionKeyMarker(data.next_key_marker ?? null);
         setObjectVersionIdMarker(data.next_version_id_marker ?? null);
       }
     } catch (err) {
-      setObjectVersionsError(extractApiError(err, "Unable to list versions for this object."));
+      setObjectVersionsError(
+        extractApiError(err, "Unable to list versions for this object."),
+      );
       if (!opts?.append) {
         setObjectVersions([]);
         setObjectDeleteMarkers([]);
@@ -2518,9 +3128,13 @@ export default function BrowserPage({
       setObjectVersionsModalLoading(true);
     }
     const resolvedKeyMarker =
-      opts?.keyMarker !== undefined ? opts.keyMarker : objectVersionModalKeyMarker;
+      opts?.keyMarker !== undefined
+        ? opts.keyMarker
+        : objectVersionModalKeyMarker;
     const resolvedVersionIdMarker =
-      opts?.versionIdMarker !== undefined ? opts.versionIdMarker : objectVersionModalIdMarker;
+      opts?.versionIdMarker !== undefined
+        ? opts.versionIdMarker
+        : objectVersionModalIdMarker;
     try {
       const data = await listObjectVersions(accountIdForApi, bucketName, {
         key: targetKey,
@@ -2528,26 +3142,33 @@ export default function BrowserPage({
         versionIdMarker: resolvedVersionIdMarker ?? undefined,
         maxKeys: VERSIONS_PAGE_SIZE,
       });
-      const mergedVersions = opts?.append ? [...objectVersionsModal, ...data.versions] : data.versions;
+      const mergedVersions = opts?.append
+        ? [...objectVersionsModal, ...data.versions]
+        : data.versions;
       const mergedDeleteMarkers = opts?.append
         ? [...objectDeleteMarkersModal, ...data.delete_markers]
         : data.delete_markers;
       const versionsLimitReached =
-        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT || mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
+        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT ||
+        mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
       setObjectVersionsModal(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
-      setObjectDeleteMarkersModal(mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT));
+      setObjectDeleteMarkersModal(
+        mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT),
+      );
       if (versionsLimitReached) {
         setObjectVersionModalKeyMarker(null);
         setObjectVersionModalIdMarker(null);
         setWarningMessage(
-          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`
+          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
         );
       } else {
         setObjectVersionModalKeyMarker(data.next_key_marker ?? null);
         setObjectVersionModalIdMarker(data.next_version_id_marker ?? null);
       }
     } catch (err) {
-      setObjectVersionsModalError(extractApiError(err, "Unable to list versions for this object."));
+      setObjectVersionsModalError(
+        extractApiError(err, "Unable to list versions for this object."),
+      );
       if (!opts?.append) {
         setObjectVersionsModal([]);
         setObjectDeleteMarkersModal([]);
@@ -2612,7 +3233,8 @@ export default function BrowserPage({
       return;
     }
     const navigationKey = `${String(accountIdForApi ?? "")}::${String(accessMode ?? "")}::${bucketName}::${normalizedPrefix}`;
-    const shouldLoadImmediately = objectsNavigationKeyRef.current !== navigationKey;
+    const shouldLoadImmediately =
+      objectsNavigationKeyRef.current !== navigationKey;
     objectsNavigationKeyRef.current = navigationKey;
     if (shouldLoadImmediately) {
       resetObjectListingState();
@@ -2629,7 +3251,23 @@ export default function BrowserPage({
         objectsSearchDebounceRef.current = null;
       }
     };
-  }, [accountIdForApi, accessMode, accountSwitchInFlight, bucketName, filter, hasS3AccountContext, isVersioningEnabled, normalizedPrefix, searchCaseSensitive, searchExactMatch, searchRecursive, searchScope, showDeletedObjects, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    accountIdForApi,
+    accessMode,
+    accountSwitchInFlight,
+    bucketName,
+    filter,
+    hasS3AccountContext,
+    isVersioningEnabled,
+    normalizedPrefix,
+    searchCaseSensitive,
+    searchExactMatch,
+    searchRecursive,
+    searchScope,
+    showDeletedObjects,
+    storageFilter,
+    typeFilter,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (filter.trim()) return;
@@ -2645,10 +3283,21 @@ export default function BrowserPage({
     if (searchCaseSensitive) {
       setSearchCaseSensitive(false);
     }
-  }, [filter, searchCaseSensitive, searchExactMatch, searchRecursive, searchScope]);
+  }, [
+    filter,
+    searchCaseSensitive,
+    searchExactMatch,
+    searchRecursive,
+    searchScope,
+  ]);
 
   useEffect(() => {
-    if (!showPrefixVersions || !bucketName || !hasS3AccountContext || !isVersioningEnabled) {
+    if (
+      !showPrefixVersions ||
+      !bucketName ||
+      !hasS3AccountContext ||
+      !isVersioningEnabled
+    ) {
       setPrefixVersions([]);
       setPrefixDeleteMarkers([]);
       setPrefixVersionsError(null);
@@ -2658,8 +3307,19 @@ export default function BrowserPage({
     }
     setPrefixVersionKeyMarker(null);
     setPrefixVersionIdMarker(null);
-    loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
-  }, [accountIdForApi, accessMode, bucketName, hasS3AccountContext, normalizedPrefix, showPrefixVersions]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadPrefixVersions({
+      append: false,
+      keyMarker: null,
+      versionIdMarker: null,
+    });
+  }, [
+    accountIdForApi,
+    accessMode,
+    bucketName,
+    hasS3AccountContext,
+    normalizedPrefix,
+    showPrefixVersions,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
@@ -2720,9 +3380,11 @@ export default function BrowserPage({
             status: "unknown",
             detail: null,
           },
-    [bucketAccessByName, bucketName]
+    [bucketAccessByName, bucketName],
   );
-  const currentBucketUnavailable = bucketName ? currentBucketAccess.status === "unavailable" : false;
+  const currentBucketUnavailable = bucketName
+    ? currentBucketAccess.status === "unavailable"
+    : false;
 
   const listTreePrefixes = useCallback(
     async (targetPrefix: string) => {
@@ -2760,11 +3422,16 @@ export default function BrowserPage({
         truncated,
       };
     },
-    [accountIdForApi, bucketName, hasS3AccountContext]
+    [accountIdForApi, bucketName, hasS3AccountContext],
   );
 
   useEffect(() => {
-    if (accountSwitchInFlight || !bucketName || !hasS3AccountContext || currentBucketUnavailable) {
+    if (
+      accountSwitchInFlight ||
+      !bucketName ||
+      !hasS3AccountContext ||
+      currentBucketUnavailable
+    ) {
       setTreeNodes([]);
       return;
     }
@@ -2786,7 +3453,7 @@ export default function BrowserPage({
         const children = buildTreeNodes(data.prefixes, "");
         if (data.truncated) {
           setWarningMessage(
-            `Folders panel is limited to ${TREE_PREFIXES_HARD_LIMIT.toLocaleString()} prefixes. Narrow the path to continue.`
+            `Folders panel is limited to ${TREE_PREFIXES_HARD_LIMIT.toLocaleString()} prefixes. Narrow the path to continue.`,
           );
         }
         setTreeNodes([
@@ -2807,16 +3474,31 @@ export default function BrowserPage({
     return () => {
       isMounted = false;
     };
-  }, [accessMode, accountSwitchInFlight, bucketName, currentBucketUnavailable, hasS3AccountContext, listTreePrefixes]);
+  }, [
+    accessMode,
+    accountSwitchInFlight,
+    bucketName,
+    currentBucketUnavailable,
+    hasS3AccountContext,
+    listTreePrefixes,
+  ]);
 
   useEffect(() => {
-    if (!bucketName || !hasS3AccountContext || currentBucketUnavailable || treeNodes.length === 0) return;
+    if (
+      !bucketName ||
+      !hasS3AccountContext ||
+      currentBucketUnavailable ||
+      treeNodes.length === 0
+    )
+      return;
     const rootNode = treeNodes.find((node) => node.prefix === "");
     if (!rootNode || rootNode.isLoading) return;
     const targetPrefix = prefix ? normalizePrefix(prefix) : "";
     if (!targetPrefix) {
       if (!rootNode.isExpanded) {
-        setTreeNodes((prev) => updateTreeNodes(prev, "", (node) => ({ ...node, isExpanded: true })));
+        setTreeNodes((prev) =>
+          updateTreeNodes(prev, "", (node) => ({ ...node, isExpanded: true })),
+        );
       }
       return;
     }
@@ -2842,16 +3524,29 @@ export default function BrowserPage({
     setTreeNodes((prev) => {
       let next = prev;
       if (needsRootExpansion) {
-        next = updateTreeNodes(next, "", (node) => ({ ...node, isExpanded: true }));
+        next = updateTreeNodes(next, "", (node) => ({
+          ...node,
+          isExpanded: true,
+        }));
       }
       prefixesNeedingExpansion.forEach((prefixKey) => {
         const node = findTreeNodeByPrefix(next, prefixKey);
         if (!node || node.isExpanded) return;
-        next = updateTreeNodes(next, prefixKey, (entry) => ({ ...entry, isExpanded: true }));
+        next = updateTreeNodes(next, prefixKey, (entry) => ({
+          ...entry,
+          isExpanded: true,
+        }));
       });
       return next;
     });
-  }, [accessMode, bucketName, currentBucketUnavailable, hasS3AccountContext, prefix, treeNodes]);
+  }, [
+    accessMode,
+    bucketName,
+    currentBucketUnavailable,
+    hasS3AccountContext,
+    prefix,
+    treeNodes,
+  ]);
 
   useEffect(() => {
     if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
@@ -2868,12 +3563,23 @@ export default function BrowserPage({
       })
       .catch(() => {
         if (!isMounted) return;
-        setCorsStatus({ enabled: false, rules: [], error: "Unable to check bucket CORS." });
+        setCorsStatus({
+          enabled: false,
+          rules: [],
+          error: "Unable to check bucket CORS.",
+        });
       });
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, accessMode, accountSwitchInFlight, bucketName, hasS3AccountContext, uiOrigin]);
+  }, [
+    accountIdForApi,
+    accessMode,
+    accountSwitchInFlight,
+    bucketName,
+    hasS3AccountContext,
+    uiOrigin,
+  ]);
 
   useEffect(() => {
     if (!hasS3AccountContext || !stsEnabled) {
@@ -2907,7 +3613,14 @@ export default function BrowserPage({
       return;
     }
     ensureStsCredentials(true);
-  }, [accountIdForApi, accessMode, ensureStsCredentials, hasS3AccountContext, stsEnabled, stsStatus?.available]);
+  }, [
+    accountIdForApi,
+    accessMode,
+    ensureStsCredentials,
+    hasS3AccountContext,
+    stsEnabled,
+    stsStatus?.available,
+  ]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext) {
@@ -2935,7 +3648,9 @@ export default function BrowserPage({
 
   const items = useMemo(() => {
     const activePrefixSet = new Set(prefixes);
-    const combinedPrefixes = Array.from(new Set([...prefixes, ...deletedPrefixes]));
+    const combinedPrefixes = Array.from(
+      new Set([...prefixes, ...deletedPrefixes]),
+    );
     const folderItems = combinedPrefixes.map((prefixKey) => {
       const rawName = shortName(prefixKey, displayPrefixForItems);
       const name = rawName.endsWith("/") ? rawName.slice(0, -1) : rawName;
@@ -2954,7 +3669,9 @@ export default function BrowserPage({
       } satisfies BrowserItem;
     });
     const objectItems = objects.map((obj) => {
-      const modifiedAt = obj.last_modified ? new Date(obj.last_modified).getTime() : null;
+      const modifiedAt = obj.last_modified
+        ? new Date(obj.last_modified).getTime()
+        : null;
       return {
         id: obj.key,
         key: obj.key,
@@ -2970,7 +3687,9 @@ export default function BrowserPage({
       } satisfies BrowserItem;
     });
     const deletedItemRows = deletedObjects.map((obj) => {
-      const modifiedAt = obj.last_modified ? new Date(obj.last_modified).getTime() : null;
+      const modifiedAt = obj.last_modified
+        ? new Date(obj.last_modified).getTime()
+        : null;
       return {
         id: `${obj.key}::deleted::${obj.version_id ?? "null"}`,
         key: obj.key,
@@ -2986,17 +3705,54 @@ export default function BrowserPage({
       } satisfies BrowserItem;
     });
     return [...folderItems, ...objectItems, ...deletedItemRows];
-  }, [deletedObjects, deletedPrefixes, displayPrefixForItems, objects, prefixes]);
+  }, [
+    deletedObjects,
+    deletedPrefixes,
+    displayPrefixForItems,
+    objects,
+    prefixes,
+  ]);
 
   const sortOptions = [
-    { id: "name-asc", label: "Name (A-Z)", key: "name", direction: "asc" as const },
-    { id: "name-desc", label: "Name (Z-A)", key: "name", direction: "desc" as const },
-    { id: "modified-desc", label: "Last modified (newest)", key: "modified", direction: "desc" as const },
-    { id: "modified-asc", label: "Last modified (oldest)", key: "modified", direction: "asc" as const },
-    { id: "size-desc", label: "Size (largest)", key: "size", direction: "desc" as const },
-    { id: "size-asc", label: "Size (smallest)", key: "size", direction: "asc" as const },
+    {
+      id: "name-asc",
+      label: "Name (A-Z)",
+      key: "name",
+      direction: "asc" as const,
+    },
+    {
+      id: "name-desc",
+      label: "Name (Z-A)",
+      key: "name",
+      direction: "desc" as const,
+    },
+    {
+      id: "modified-desc",
+      label: "Last modified (newest)",
+      key: "modified",
+      direction: "desc" as const,
+    },
+    {
+      id: "modified-asc",
+      label: "Last modified (oldest)",
+      key: "modified",
+      direction: "asc" as const,
+    },
+    {
+      id: "size-desc",
+      label: "Size (largest)",
+      key: "size",
+      direction: "desc" as const,
+    },
+    {
+      id: "size-asc",
+      label: "Size (smallest)",
+      key: "size",
+      direction: "asc" as const,
+    },
   ];
-  const activeSort = sortOptions.find((option) => option.id === sortId) ?? sortOptions[0];
+  const activeSort =
+    sortOptions.find((option) => option.id === sortId) ?? sortOptions[0];
 
   const filteredItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -3016,19 +3772,36 @@ export default function BrowserPage({
   }, [activeSort.direction, activeSort.key, items]);
 
   const listItems = useMemo(
-    () => (showFolderItems ? filteredItems : filteredItems.filter((item) => item.type !== "folder")),
-    [filteredItems, showFolderItems]
+    () =>
+      showFolderItems
+        ? filteredItems
+        : filteredItems.filter((item) => item.type !== "folder"),
+    [filteredItems, showFolderItems],
   );
-  const listItemById = useMemo(() => new Map(listItems.map((item) => [item.id, item])), [listItems]);
-  const effectiveVisibleColumns = isMainBrowserPath ? visibleColumns : DEFAULT_VISIBLE_COLUMN_IDS;
-  const visibleColumnSet = useMemo(() => new Set(effectiveVisibleColumns), [effectiveVisibleColumns]);
+  const listItemById = useMemo(
+    () => new Map(listItems.map((item) => [item.id, item])),
+    [listItems],
+  );
+  const effectiveVisibleColumns = isMainBrowserPath
+    ? visibleColumns
+    : DEFAULT_VISIBLE_COLUMN_IDS;
+  const visibleColumnSet = useMemo(
+    () => new Set(effectiveVisibleColumns),
+    [effectiveVisibleColumns],
+  );
   const visibleColumnDefinitions = useMemo(
-    () => COLUMN_DEFINITIONS.filter((definition) => visibleColumnSet.has(definition.id)),
-    [visibleColumnSet]
+    () =>
+      COLUMN_DEFINITIONS.filter((definition) =>
+        visibleColumnSet.has(definition.id),
+      ),
+    [visibleColumnSet],
   );
-  const lazyMetadataColumnsVisible = visibleColumnSet.has("contentType") || visibleColumnSet.has("metadataCount");
+  const lazyMetadataColumnsVisible =
+    visibleColumnSet.has("contentType") ||
+    visibleColumnSet.has("metadataCount");
   const lazyTagsColumnsVisible = visibleColumnSet.has("tagsCount");
-  const hasActiveLazyColumns = isMainBrowserPath && (lazyMetadataColumnsVisible || lazyTagsColumnsVisible);
+  const hasActiveLazyColumns =
+    isMainBrowserPath && (lazyMetadataColumnsVisible || lazyTagsColumnsVisible);
   const objectTableColSpan = 3 + visibleColumnDefinitions.length;
   const normalizedSearchQuery = filter.trim();
   const hasSearchQuery = normalizedSearchQuery.length > 0;
@@ -3056,25 +3829,55 @@ export default function BrowserPage({
     searchCaseSensitive ||
     typeFilter !== "all" ||
     storageFilter !== "all";
+  const searchResultScopeLabel = hasSearchQuery
+    ? isSearchingInWholeBucket
+      ? "Whole bucket"
+      : searchRecursive
+        ? "Current path + subfolders"
+        : "Current path"
+    : "Filters applied";
+  const activeSearchStatusChips = [
+    hasSearchQuery ? { label: "Query", value: filter } : null,
+    hasSearchQuery ? { label: "Scope", value: searchResultScopeLabel } : null,
+    searchRecursive && !isSearchingInWholeBucket
+      ? { label: "Mode", value: "Recursive" }
+      : null,
+    searchExactMatch ? { label: "Match", value: "Exact" } : null,
+    searchCaseSensitive ? { label: "Case", value: "Sensitive" } : null,
+    typeFilter !== "all" ? { label: "Type", value: typeFilter } : null,
+    storageFilter !== "all" ? { label: "Storage", value: storageFilter } : null,
+  ].filter((entry): entry is { label: string; value: string } =>
+    Boolean(entry),
+  );
 
-  const prefixParts = useMemo(() => prefix.split("/").filter(Boolean), [prefix]);
-  const bucketOptions = useMemo(() => bucketMenuItems.map((bucket) => bucket.name), [bucketMenuItems]);
+  const prefixParts = useMemo(
+    () => prefix.split("/").filter(Boolean),
+    [prefix],
+  );
+  const bucketOptions = useMemo(
+    () => bucketMenuItems.map((bucket) => bucket.name),
+    [bucketMenuItems],
+  );
   const bucketButtonLabel = useMemo(() => {
     if (bucketName) return bucketName;
     if (loadingBuckets) return "Loading buckets...";
     if (bucketTotalCount === 0) return "No buckets";
     return "Select bucket";
   }, [bucketName, bucketTotalCount, loadingBuckets]);
-  const bucketSelectorNeedsAttention = hasS3AccountContext && !bucketName && bucketTotalCount > 0;
+  const bucketSelectorNeedsAttention =
+    hasS3AccountContext && !bucketName && bucketTotalCount > 0;
   const bucketButtonClassName = `${bucketButtonClasses} ${
     bucketSelectorNeedsAttention
-      ? "rounded-md border border-amber-300 bg-amber-50/80 text-amber-800 shadow-sm ring-2 ring-amber-200/70 dark:border-amber-400/60 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/30"
-      : ""
+      ? "rounded-2xl border border-amber-300 bg-amber-50/85 px-3 py-2 text-amber-800 shadow-sm ring-2 ring-amber-200/70 dark:border-amber-400/60 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/30"
+      : "rounded-2xl border border-slate-200/80 bg-white/90 px-3 py-2 text-slate-700 shadow-sm hover:border-primary-200 hover:bg-primary-50/60 dark:border-slate-700/80 dark:bg-slate-900/75 dark:text-slate-100 dark:hover:border-primary-500/50 dark:hover:bg-slate-900"
   }`;
   const useBucketsPanel = isMainBrowserPath && isFoldersPanelVisible;
-  const { currentBucket: currentBucketPanelItem, otherBuckets: otherBucketPanelItems } = useMemo(
+  const {
+    currentBucket: currentBucketPanelItem,
+    otherBuckets: otherBucketPanelItems,
+  } = useMemo(
     () => splitBucketPanelBuckets(bucketName, bucketMenuItems),
-    [bucketMenuItems, bucketName]
+    [bucketMenuItems, bucketName],
   );
   const otherBucketPanelRows = useMemo(
     () =>
@@ -3082,14 +3885,20 @@ export default function BrowserPage({
         bucket,
         access: resolveBucketAccessEntry(bucket.name, bucketAccessByName),
       })),
-    [bucketAccessByName, otherBucketPanelItems]
+    [bucketAccessByName, otherBucketPanelItems],
   );
-  const treeRootNode = useMemo(() => treeNodes.find((node) => node.prefix === "") ?? null, [treeNodes]);
-  const canLoadMoreBucketResults = bucketMenuHasNext && !loadingBuckets && !bucketMenuLoadingMore;
+  const treeRootNode = useMemo(
+    () => treeNodes.find((node) => node.prefix === "") ?? null,
+    [treeNodes],
+  );
+  const canLoadMoreBucketResults =
+    bucketMenuHasNext && !loadingBuckets && !bucketMenuLoadingMore;
   const sortKey = sortId.split("-")[0] as "name" | "size" | "modified";
   const sortDirection = sortId.endsWith("asc") ? "asc" : "desc";
   const activePathSuggestion =
-    pathSuggestionIndex >= 0 && pathSuggestionIndex < pathSuggestions.length ? pathSuggestions[pathSuggestionIndex] : null;
+    pathSuggestionIndex >= 0 && pathSuggestionIndex < pathSuggestions.length
+      ? pathSuggestions[pathSuggestionIndex]
+      : null;
   const handleBucketMenuLoadMore = useCallback(() => {
     if (loadingBuckets || bucketMenuLoadingMore || !bucketMenuHasNext) {
       return;
@@ -3099,7 +3908,14 @@ export default function BrowserPage({
       page: bucketMenuPage + 1,
       append: true,
     });
-  }, [bucketFilter, bucketMenuHasNext, bucketMenuLoadingMore, bucketMenuPage, loadBucketSearchPage, loadingBuckets]);
+  }, [
+    bucketFilter,
+    bucketMenuHasNext,
+    bucketMenuLoadingMore,
+    bucketMenuPage,
+    loadBucketSearchPage,
+    loadingBuckets,
+  ]);
   const handleBucketChange = useCallback(
     (value: string) => {
       setShowBucketMenu(false);
@@ -3109,7 +3925,7 @@ export default function BrowserPage({
       setPrefix("");
       setActiveItem(null);
     },
-    [bucketName]
+    [bucketName],
   );
 
   useEffect(() => {
@@ -3146,7 +3962,9 @@ export default function BrowserPage({
     if (!root) {
       return;
     }
-    const rowNodes = Array.from(root.querySelectorAll<HTMLElement>("[data-bucket-panel-name]"));
+    const rowNodes = Array.from(
+      root.querySelectorAll<HTMLElement>("[data-bucket-panel-name]"),
+    );
     if (rowNodes.length === 0) {
       return;
     }
@@ -3165,7 +3983,8 @@ export default function BrowserPage({
         return;
       }
       const rowRect = node.getBoundingClientRect();
-      const intersectsViewport = rowRect.bottom >= viewportTop && rowRect.top <= viewportBottom;
+      const intersectsViewport =
+        rowRect.bottom >= viewportTop && rowRect.top <= viewportBottom;
       if (intersectsViewport) {
         scheduleBucketAccessProbe(targetBucketName);
       }
@@ -3187,14 +4006,15 @@ export default function BrowserPage({
           if (!entry.isIntersecting) {
             return;
           }
-          const targetBucketName = (entry.target as HTMLElement).dataset.bucketPanelName;
+          const targetBucketName = (entry.target as HTMLElement).dataset
+            .bucketPanelName;
           if (targetBucketName) {
             scheduleBucketAccessProbe(targetBucketName);
           }
           observer.unobserve(entry.target);
         });
       },
-      { root, rootMargin: BUCKET_ACCESS_ROOT_MARGIN }
+      { root, rootMargin: BUCKET_ACCESS_ROOT_MARGIN },
     );
     rowNodes.forEach((node) => observer.observe(node));
     return () => {
@@ -3208,7 +4028,12 @@ export default function BrowserPage({
     }
     const root = bucketPanelOtherBucketsRef.current;
     const sentinel = bucketPanelLoadMoreSentinelRef.current;
-    if (!root || !sentinel || typeof window === "undefined" || !("IntersectionObserver" in window)) {
+    if (
+      !root ||
+      !sentinel ||
+      typeof window === "undefined" ||
+      !("IntersectionObserver" in window)
+    ) {
       return;
     }
     const observer = new IntersectionObserver(
@@ -3219,7 +4044,7 @@ export default function BrowserPage({
           }
         });
       },
-      { root, rootMargin: "160px" }
+      { root, rootMargin: "160px" },
     );
     observer.observe(sentinel);
     return () => {
@@ -3242,16 +4067,20 @@ export default function BrowserPage({
   const canGoUp = prefixParts.length > 0;
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const allSelected = listItems.length > 0 && listItems.every((item) => selectedSet.has(item.id));
-  const selectedItems = useMemo(() => items.filter((item) => selectedSet.has(item.id)), [items, selectedSet]);
+  const allSelected =
+    listItems.length > 0 && listItems.every((item) => selectedSet.has(item.id));
+  const selectedItems = useMemo(
+    () => items.filter((item) => selectedSet.has(item.id)),
+    [items, selectedSet],
+  );
   const selectedCount = selectedItems.length;
   const bulkActionFileCount = useMemo(
     () => bulkActionItems.filter((item) => item.type === "file").length,
-    [bulkActionItems]
+    [bulkActionItems],
   );
   const bulkActionFolderCount = useMemo(
     () => bulkActionItems.filter((item) => item.type === "folder").length,
-    [bulkActionItems]
+    [bulkActionItems],
   );
   const selectedBytes = useMemo(() => {
     return selectedItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
@@ -3299,14 +4128,23 @@ export default function BrowserPage({
       const storage = item.storageClass ?? "STANDARD";
       storageCounts[storage] = (storageCounts[storage] ?? 0) + 1;
     });
-    return { totalBytes, files, deletedFiles, folders, deletedFolders, storageCounts };
+    return {
+      totalBytes,
+      files,
+      deletedFiles,
+      folders,
+      deletedFolders,
+      storageCounts,
+    };
   }, [items]);
 
   const bucketInspectorData = useMemo(
-    () => (bucketName ? bucketInspectorByName[bucketName] ?? null : null),
-    [bucketInspectorByName, bucketName]
+    () => (bucketName ? (bucketInspectorByName[bucketName] ?? null) : null),
+    [bucketInspectorByName, bucketName],
   );
-  const cephQuotaScopeLabel = isLegacyS3UserContext ? "User quota" : "Account quota";
+  const cephQuotaScopeLabel = isLegacyS3UserContext
+    ? "User quota"
+    : "Account quota";
   const bucketInspectorFeatures = useMemo(() => {
     const featureMap = bucketInspectorData?.features ?? null;
     if (!featureMap) return [];
@@ -3371,32 +4209,37 @@ export default function BrowserPage({
     return previewKindForItem(previewItem, previewContentType);
   }, [previewContentType, previewItem]);
 
-  const layoutClass = isFoldersPanelVisible && isInspectorPanelVisible
-    ? "lg:grid-cols-[280px_minmax(0,1fr)_320px]"
-    : isFoldersPanelVisible
-      ? "lg:grid-cols-[280px_minmax(0,1fr)]"
-      : isInspectorPanelVisible
-        ? "lg:grid-cols-[minmax(0,1fr)_320px]"
-        : "lg:grid-cols-[minmax(0,1fr)]";
+  const layoutClass =
+    isFoldersPanelVisible && isInspectorPanelVisible
+      ? "lg:grid-cols-[280px_minmax(0,1fr)_320px]"
+      : isFoldersPanelVisible
+        ? "lg:grid-cols-[280px_minmax(0,1fr)]"
+        : isInspectorPanelVisible
+          ? "lg:grid-cols-[minmax(0,1fr)_320px]"
+          : "lg:grid-cols-[minmax(0,1fr)]";
   const rowPadding = compactMode ? "!py-0.5" : "py-2.5";
   const rowHeightClasses = compactMode ? "h-9" : "h-16";
   const rowCellClasses = rowPadding;
   const headerPadding = compactMode ? "!py-1" : "py-3";
   const iconBoxClasses = compactMode ? "h-6 w-6" : "h-9 w-9";
   const nameGapClasses = compactMode ? "gap-1.5" : "gap-3";
-  const rowActionButtonClasses = compactMode ? `${iconButtonClasses} !h-6 !w-6` : iconButtonClasses;
-  const rowActionDangerButtonClasses = compactMode ? `${iconButtonDangerClasses} !h-6 !w-6` : iconButtonDangerClasses;
+  const rowActionButtonClasses = compactMode
+    ? `${iconButtonClasses} !h-6 !w-6`
+    : iconButtonClasses;
+  const rowActionDangerButtonClasses = compactMode
+    ? `${iconButtonDangerClasses} !h-6 !w-6`
+    : iconButtonDangerClasses;
   const prefixVersionRows = useMemo(
     () => buildVersionRows(prefixVersions, prefixDeleteMarkers),
-    [prefixDeleteMarkers, prefixVersions]
+    [prefixDeleteMarkers, prefixVersions],
   );
   const objectVersionRows = useMemo(
     () => buildVersionRows(objectVersions, objectDeleteMarkers),
-    [objectDeleteMarkers, objectVersions]
+    [objectDeleteMarkers, objectVersions],
   );
   const objectVersionModalRows = useMemo(
     () => buildVersionRows(objectVersionsModal, objectDeleteMarkersModal),
-    [objectDeleteMarkersModal, objectVersionsModal]
+    [objectDeleteMarkersModal, objectVersionsModal],
   );
 
   const currentPath = useMemo(() => {
@@ -3419,7 +4262,16 @@ export default function BrowserPage({
         showFolderItems,
         showDeletedObjects,
       }),
-    [bucketName, canPaste, clipboard?.mode, currentPath, hasS3AccountContext, isVersioningEnabled, showDeletedObjects, showFolderItems]
+    [
+      bucketName,
+      canPaste,
+      clipboard?.mode,
+      currentPath,
+      hasS3AccountContext,
+      isVersioningEnabled,
+      showDeletedObjects,
+      showFolderItems,
+    ],
   );
   const selectionActionStates = useMemo(
     () =>
@@ -3443,33 +4295,53 @@ export default function BrowserPage({
       isVersioningEnabled,
       selectionItems,
       sseActive,
-    ]
+    ],
   );
   const toolbarMorePathActions = useMemo(
-    () => getVisibleBrowserActions(pathActionStates, TOOLBAR_MORE_PATH_ACTION_IDS),
-    [pathActionStates]
+    () =>
+      getVisibleBrowserActions(pathActionStates, TOOLBAR_MORE_PATH_ACTION_IDS),
+    [pathActionStates],
   );
   const toolbarMoreSelectionFullActions = useMemo(
-    () => getVisibleBrowserActions(selectionActionStates, TOOLBAR_MORE_SELECTION_FULL_ACTION_IDS),
-    [selectionActionStates]
+    () =>
+      getVisibleBrowserActions(
+        selectionActionStates,
+        TOOLBAR_MORE_SELECTION_FULL_ACTION_IDS,
+      ),
+    [selectionActionStates],
   );
   const toolbarMoreSelectionOverflowActions = useMemo(
-    () => getVisibleBrowserActions(selectionActionStates, TOOLBAR_MORE_SELECTION_OVERFLOW_ACTION_IDS),
-    [selectionActionStates]
+    () =>
+      getVisibleBrowserActions(
+        selectionActionStates,
+        TOOLBAR_MORE_SELECTION_OVERFLOW_ACTION_IDS,
+      ),
+    [selectionActionStates],
   );
   const inspectorContextActions = useMemo(
-    () => getVisibleBrowserActions(pathActionStates, INSPECTOR_CONTEXT_ACTION_IDS),
-    [pathActionStates]
+    () =>
+      getVisibleBrowserActions(pathActionStates, INSPECTOR_CONTEXT_ACTION_IDS),
+    [pathActionStates],
   );
   const inspectorSelectionActions = useMemo(
-    () => getVisibleBrowserActions(selectionActionStates, INSPECTOR_SELECTION_ACTION_IDS),
-    [selectionActionStates]
+    () =>
+      getVisibleBrowserActions(
+        selectionActionStates,
+        INSPECTOR_SELECTION_ACTION_IDS,
+      ),
+    [selectionActionStates],
   );
   const inspectorSelectionBulkActions = useMemo(
-    () => getVisibleBrowserActions(selectionActionStates, INSPECTOR_SELECTION_BULK_ACTION_IDS),
-    [selectionActionStates]
+    () =>
+      getVisibleBrowserActions(
+        selectionActionStates,
+        INSPECTOR_SELECTION_BULK_ACTION_IDS,
+      ),
+    [selectionActionStates],
   );
-  const inspectedPath = inspectedItem ? `${bucketName}/${inspectedItem.key}` : currentPath;
+  const inspectedPath = inspectedItem
+    ? `${bucketName}/${inspectedItem.key}`
+    : currentPath;
 
   const openItemPrimaryAction = (item: BrowserItem) => {
     if (item.type === "folder") {
@@ -3497,10 +4369,15 @@ export default function BrowserPage({
 
   const isInteractiveTarget = (target: EventTarget | null) => {
     const element = target as HTMLElement | null;
-    return Boolean(element?.closest("button, a, input, textarea, select, label"));
+    return Boolean(
+      element?.closest("button, a, input, textarea, select, label"),
+    );
   };
 
-  const handleItemDoubleClick = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
+  const handleItemDoubleClick = (
+    event: ReactMouseEvent<HTMLElement>,
+    item: BrowserItem,
+  ) => {
     if (isInteractiveTarget(event.target)) return;
     openItemPrimaryAction(item);
   };
@@ -3534,7 +4411,9 @@ export default function BrowserPage({
   const handlePreviewItem = (item: BrowserItem) => {
     if (item.type !== "file") return;
     if (item.isDeleted) {
-      setWarningMessage("This object is deleted. Open versions to inspect or restore it.");
+      setWarningMessage(
+        "This object is deleted. Open versions to inspect or restore it.",
+      );
       if (isVersioningEnabled) {
         openObjectVersionsModal(item);
       }
@@ -3594,8 +4473,13 @@ export default function BrowserPage({
     setIsEditingPath(false);
   };
 
-  const applyPathSuggestion = (suggestion: PathSuggestion, options?: { commit?: boolean }) => {
-    const nextPrefix = suggestion.value ? normalizePrefix(suggestion.value) : "";
+  const applyPathSuggestion = (
+    suggestion: PathSuggestion,
+    options?: { commit?: boolean },
+  ) => {
+    const nextPrefix = suggestion.value
+      ? normalizePrefix(suggestion.value)
+      : "";
     setPathDraft(nextPrefix);
     setPathSuggestionIndex(-1);
     if (!options?.commit) return;
@@ -3616,13 +4500,17 @@ export default function BrowserPage({
     if (event.key === "ArrowDown") {
       if (pathSuggestions.length === 0) return;
       event.preventDefault();
-      setPathSuggestionIndex((prev) => (prev < pathSuggestions.length - 1 ? prev + 1 : 0));
+      setPathSuggestionIndex((prev) =>
+        prev < pathSuggestions.length - 1 ? prev + 1 : 0,
+      );
       return;
     }
     if (event.key === "ArrowUp") {
       if (pathSuggestions.length === 0) return;
       event.preventDefault();
-      setPathSuggestionIndex((prev) => (prev > 0 ? prev - 1 : pathSuggestions.length - 1));
+      setPathSuggestionIndex((prev) =>
+        prev > 0 ? prev - 1 : pathSuggestions.length - 1,
+      );
       return;
     }
     if (event.key === "Tab" && activePathSuggestion) {
@@ -3691,7 +4579,9 @@ export default function BrowserPage({
       return changed ? next : prev;
     });
     if (lazyQueueRef.current.length > 0) {
-      const filteredQueue = lazyQueueRef.current.filter((itemId) => listItemIds.has(itemId));
+      const filteredQueue = lazyQueueRef.current.filter((itemId) =>
+        listItemIds.has(itemId),
+      );
       if (filteredQueue.length !== lazyQueueRef.current.length) {
         lazyQueueRef.current = filteredQueue;
         lazyQueuedIdsRef.current = new Set(filteredQueue);
@@ -3730,10 +4620,25 @@ export default function BrowserPage({
     }
 
     const { parentPrefix, fragment } = resolvePathDraftContext(pathDraft);
-    const localCandidates = parentPrefix === normalizePrefix(prefix) ? prefixes : [];
-    const localSuggestions = buildPathSuggestionEntries(localCandidates, parentPrefix, fragment, "local");
-    const historySuggestions = buildPathSuggestionEntries(pathHistory, parentPrefix, fragment, "history");
-    const localOnlySuggestions = mergePathSuggestions(fragment, historySuggestions, localSuggestions);
+    const localCandidates =
+      parentPrefix === normalizePrefix(prefix) ? prefixes : [];
+    const localSuggestions = buildPathSuggestionEntries(
+      localCandidates,
+      parentPrefix,
+      fragment,
+      "local",
+    );
+    const historySuggestions = buildPathSuggestionEntries(
+      pathHistory,
+      parentPrefix,
+      fragment,
+      "history",
+    );
+    const localOnlySuggestions = mergePathSuggestions(
+      fragment,
+      historySuggestions,
+      localSuggestions,
+    );
     setPathSuggestions(localOnlySuggestions);
     setPathSuggestionIndex(-1);
 
@@ -3753,8 +4658,20 @@ export default function BrowserPage({
       })
         .then((data) => {
           if (pathSuggestionsRequestIdRef.current !== requestId) return;
-          const remoteSuggestions = buildPathSuggestionEntries(data.prefixes || [], parentPrefix, fragment, "remote");
-          setPathSuggestions(mergePathSuggestions(fragment, historySuggestions, localSuggestions, remoteSuggestions));
+          const remoteSuggestions = buildPathSuggestionEntries(
+            data.prefixes || [],
+            parentPrefix,
+            fragment,
+            "remote",
+          );
+          setPathSuggestions(
+            mergePathSuggestions(
+              fragment,
+              historySuggestions,
+              localSuggestions,
+              remoteSuggestions,
+            ),
+          );
         })
         .catch(() => {
           if (pathSuggestionsRequestIdRef.current !== requestId) return;
@@ -3795,7 +4712,9 @@ export default function BrowserPage({
   }, [pathSuggestionIndex, pathSuggestions.length]);
 
   useEffect(() => {
-    setSelectedIds((prev) => prev.filter((id) => items.some((item) => item.id === id)));
+    setSelectedIds((prev) =>
+      prev.filter((id) => items.some((item) => item.id === id)),
+    );
     if (activeItem && !items.some((item) => item.id === activeItem.id)) {
       setActiveItem(null);
     }
@@ -3831,19 +4750,29 @@ export default function BrowserPage({
       if (prev && listItems.some((item) => item.id === prev)) {
         return prev;
       }
-      const firstVisibleSelected = listItems.find((item) => selectedIds.includes(item.id));
+      const firstVisibleSelected = listItems.find((item) =>
+        selectedIds.includes(item.id),
+      );
       return firstVisibleSelected?.id ?? null;
     });
   }, [listItems, selectedIds]);
 
   useEffect(() => {
-    if (storageFilter !== "all" && !searchableStorageClasses.includes(storageFilter)) {
+    if (
+      storageFilter !== "all" &&
+      !searchableStorageClasses.includes(storageFilter)
+    ) {
       setStorageFilter("all");
     }
   }, [searchableStorageClasses, storageFilter]);
 
   useEffect(() => {
-    if (!bucketName || !inspectedItem || inspectedItem.type === "folder" || !hasS3AccountContext) {
+    if (
+      !bucketName ||
+      !inspectedItem ||
+      inspectedItem.type === "folder" ||
+      !hasS3AccountContext
+    ) {
       setInspectedMetadata(null);
       setInspectedTags([]);
       setInspectedTagsVersionId(null);
@@ -3855,7 +4784,9 @@ export default function BrowserPage({
       setInspectedMetadata(null);
       setInspectedTags([]);
       setInspectedTagsVersionId(inspectedItem.deleteMarkerVersionId ?? null);
-      setMetadataError("Latest state: deleted (delete marker). Open versions to restore or remove marker.");
+      setMetadataError(
+        "Latest state: deleted (delete marker). Open versions to restore or remove marker.",
+      );
       setMetadataLoading(false);
       return;
     }
@@ -3863,7 +4794,13 @@ export default function BrowserPage({
     setMetadataLoading(true);
     setMetadataError(null);
     Promise.all([
-      fetchObjectMetadata(accountIdForApi, bucketName, inspectedItem.key, null, sseCustomerKeyBase64),
+      fetchObjectMetadata(
+        accountIdForApi,
+        bucketName,
+        inspectedItem.key,
+        null,
+        sseCustomerKeyBase64,
+      ),
       getObjectTags(accountIdForApi, bucketName, inspectedItem.key),
     ])
       .then(([meta, tags]) => {
@@ -3874,7 +4811,9 @@ export default function BrowserPage({
       })
       .catch((err) => {
         if (!isMounted) return;
-        setMetadataError(extractApiError(err, "Unable to load object details."));
+        setMetadataError(
+          extractApiError(err, "Unable to load object details."),
+        );
         setInspectedMetadata(null);
         setInspectedTags([]);
         setInspectedTagsVersionId(null);
@@ -3898,12 +4837,19 @@ export default function BrowserPage({
   ]);
 
   useEffect(() => {
-    if (!previewItem || !bucketName || !hasS3AccountContext || !accountIdForApi) {
+    if (
+      !previewItem ||
+      !bucketName ||
+      !hasS3AccountContext ||
+      !accountIdForApi
+    ) {
       return;
     }
     if (previewItem.type !== "file" || previewItem.isDeleted) {
       setPreviewError(
-        previewItem.isDeleted ? "Preview unavailable for deleted objects." : "Preview is available for files only."
+        previewItem.isDeleted
+          ? "Preview unavailable for deleted objects."
+          : "Preview is available for files only.",
       );
       setPreviewLoading(false);
       return;
@@ -3921,14 +4867,20 @@ export default function BrowserPage({
         bucketName,
         previewItem.key,
         null,
-        sseCustomerKeyBase64
+        sseCustomerKeyBase64,
       )
         .then((meta) => meta.content_type ?? null)
         .catch(() => null);
 
       if (useProxyTransfers || sseActive) {
         const blob = useProxyTransfers
-          ? await proxyDownload(accountIdForApi, bucketName, previewItem.key, undefined, sseCustomerKeyBase64)
+          ? await proxyDownload(
+              accountIdForApi,
+              bucketName,
+              previewItem.key,
+              undefined,
+              sseCustomerKeyBase64,
+            )
           : await (async () => {
               const presign = await presignObjectRequest(bucketName, {
                 key: previewItem.key,
@@ -3968,7 +4920,11 @@ export default function BrowserPage({
     loadPreview()
       .catch(() => {
         if (!isMounted) return;
-        setPreviewError(useProxyTransfers ? "Unable to load preview." : "Unable to generate preview URL.");
+        setPreviewError(
+          useProxyTransfers
+            ? "Unable to load preview."
+            : "Unable to generate preview URL.",
+        );
       })
       .finally(() => {
         if (isMounted) {
@@ -4015,8 +4971,19 @@ export default function BrowserPage({
     }
     setObjectVersionKeyMarker(null);
     setObjectVersionIdMarker(null);
-    loadObjectVersions({ append: false, keyMarker: null, versionIdMarker: null, targetKey: inspectedItem.key });
-  }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem?.key, inspectedItem?.type]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadObjectVersions({
+      append: false,
+      keyMarker: null,
+      versionIdMarker: null,
+      targetKey: inspectedItem.key,
+    });
+  }, [
+    accountIdForApi,
+    bucketName,
+    hasS3AccountContext,
+    inspectedItem?.key,
+    inspectedItem?.type,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadBucketInspectorData = useCallback(
     async (force = false) => {
@@ -4030,14 +4997,20 @@ export default function BrowserPage({
       setBucketInspectorLoading(true);
       setBucketInspectorError(null);
       try {
-        const usageFeatureEnabled = effectiveCaps ? effectiveCaps.metrics !== false : true;
+        const usageFeatureEnabled = effectiveCaps
+          ? effectiveCaps.metrics !== false
+          : true;
         const staticWebsiteEnabled = effectiveCaps?.static_website ?? true;
         const results = await Promise.allSettled([
-          getBucketStats(accountIdForApi, bucketName, { with_stats: usageFeatureEnabled }),
+          getBucketStats(accountIdForApi, bucketName, {
+            with_stats: usageFeatureEnabled,
+          }),
           getBucketProperties(accountIdForApi, bucketName),
           getBucketPolicy(accountIdForApi, bucketName),
           getBucketLogging(accountIdForApi, bucketName),
-          staticWebsiteEnabled ? getBucketWebsite(accountIdForApi, bucketName) : Promise.resolve(null),
+          staticWebsiteEnabled
+            ? getBucketWebsite(accountIdForApi, bucketName)
+            : Promise.resolve(null),
         ]);
         if (bucketInspectorRequestIdRef.current !== requestId) return;
         const bucketsResult = results[0];
@@ -4046,28 +5019,45 @@ export default function BrowserPage({
         const loggingResult = results[3];
         const websiteResult = results[4];
 
-        const selectedBucket = bucketsResult.status === "fulfilled" ? bucketsResult.value : null;
+        const selectedBucket =
+          bucketsResult.status === "fulfilled" ? bucketsResult.value : null;
 
-        const unavailableFeature = (state = "Unavailable"): BucketInspectorFeature => ({ state, tone: "unknown" });
-        const activeFeature = (state: string): BucketInspectorFeature => ({ state, tone: "active" });
-        const inactiveFeature = (state: string): BucketInspectorFeature => ({ state, tone: "inactive" });
+        const unavailableFeature = (
+          state = "Unavailable",
+        ): BucketInspectorFeature => ({ state, tone: "unknown" });
+        const activeFeature = (state: string): BucketInspectorFeature => ({
+          state,
+          tone: "active",
+        });
+        const inactiveFeature = (state: string): BucketInspectorFeature => ({
+          state,
+          tone: "inactive",
+        });
 
         const features: Record<string, BucketInspectorFeature> = {};
 
         if (propertiesResult.status === "fulfilled") {
           const properties = propertiesResult.value;
-          const versioningRaw = (properties.versioning_status ?? "Disabled").trim();
+          const versioningRaw = (
+            properties.versioning_status ?? "Disabled"
+          ).trim();
           const versioningNormalized = versioningRaw.toLowerCase();
           if (versioningNormalized === "enabled") {
             features.versioning = activeFeature("Enabled");
           } else if (versioningNormalized === "suspended") {
-            features.versioning = unavailableFeature(versioningRaw || "Suspended");
+            features.versioning = unavailableFeature(
+              versioningRaw || "Suspended",
+            );
           } else {
             features.versioning = inactiveFeature(versioningRaw || "Disabled");
           }
 
-          const objectLockEnabled = Boolean(properties.object_lock?.enabled ?? properties.object_lock_enabled);
-          features.object_lock = objectLockEnabled ? activeFeature("Enabled") : inactiveFeature("Disabled");
+          const objectLockEnabled = Boolean(
+            properties.object_lock?.enabled ?? properties.object_lock_enabled,
+          );
+          features.object_lock = objectLockEnabled
+            ? activeFeature("Enabled")
+            : inactiveFeature("Disabled");
 
           const publicBlock = properties.public_access_block;
           if (!publicBlock) {
@@ -4080,7 +5070,8 @@ export default function BrowserPage({
               publicBlock.restrict_public_buckets,
             ];
             const fullyEnabled = flags.every((flag) => flag === true);
-            const partiallyEnabled = !fullyEnabled && flags.some((flag) => flag === true);
+            const partiallyEnabled =
+              !fullyEnabled && flags.some((flag) => flag === true);
             features.block_public_access = fullyEnabled
               ? activeFeature("Enabled")
               : partiallyEnabled
@@ -4089,10 +5080,16 @@ export default function BrowserPage({
           }
 
           const lifecycleRules = properties.lifecycle_rules ?? [];
-          features.lifecycle_rules = lifecycleRules.length > 0 ? activeFeature("Enabled") : inactiveFeature("Disabled");
+          features.lifecycle_rules =
+            lifecycleRules.length > 0
+              ? activeFeature("Enabled")
+              : inactiveFeature("Disabled");
 
           const corsRules = properties.cors_rules ?? [];
-          features.cors = corsRules.length > 0 ? activeFeature("Configured") : inactiveFeature("Not set");
+          features.cors =
+            corsRules.length > 0
+              ? activeFeature("Configured")
+              : inactiveFeature("Not set");
         } else {
           features.versioning = unavailableFeature();
           features.object_lock = unavailableFeature();
@@ -4104,15 +5101,21 @@ export default function BrowserPage({
         if (policyResult.status === "fulfilled") {
           const policy = policyResult.value.policy;
           const configured = Boolean(policy && Object.keys(policy).length > 0);
-          features.bucket_policy = configured ? activeFeature("Configured") : inactiveFeature("Not set");
+          features.bucket_policy = configured
+            ? activeFeature("Configured")
+            : inactiveFeature("Not set");
         } else {
           features.bucket_policy = unavailableFeature();
         }
 
         if (loggingResult.status === "fulfilled") {
           const logging = loggingResult.value;
-          const enabled = Boolean(logging.enabled && (logging.target_bucket ?? "").trim().length > 0);
-          features.access_logging = enabled ? activeFeature("Enabled") : inactiveFeature("Disabled");
+          const enabled = Boolean(
+            logging.enabled && (logging.target_bucket ?? "").trim().length > 0,
+          );
+          features.access_logging = enabled
+            ? activeFeature("Enabled")
+            : inactiveFeature("Disabled");
         } else {
           features.access_logging = unavailableFeature();
         }
@@ -4121,19 +5124,24 @@ export default function BrowserPage({
           features.static_website = unavailableFeature();
         } else if (websiteResult.status === "fulfilled") {
           const website = websiteResult.value;
-          const routingRules = Array.isArray(website?.routing_rules) ? website.routing_rules : [];
+          const routingRules = Array.isArray(website?.routing_rules)
+            ? website.routing_rules
+            : [];
           const configured = Boolean(
             (website?.redirect_all_requests_to?.host_name ?? "").trim() ||
-              (website?.index_document ?? "").trim() ||
-              routingRules.length > 0
+            (website?.index_document ?? "").trim() ||
+            routingRules.length > 0,
           );
-          features.static_website = configured ? activeFeature("Enabled") : inactiveFeature("Disabled");
+          features.static_website = configured
+            ? activeFeature("Enabled")
+            : inactiveFeature("Disabled");
         } else {
           features.static_website = unavailableFeature();
         }
 
         const quotaConfigured = Boolean(
-          (selectedBucket?.quota_max_size_bytes ?? 0) > 0 || (selectedBucket?.quota_max_objects ?? 0) > 0
+          (selectedBucket?.quota_max_size_bytes ?? 0) > 0 ||
+          (selectedBucket?.quota_max_objects ?? 0) > 0,
         );
         features.quota = selectedBucket
           ? quotaConfigured
@@ -4156,14 +5164,23 @@ export default function BrowserPage({
         }));
       } catch (err) {
         if (bucketInspectorRequestIdRef.current !== requestId) return;
-        setBucketInspectorError(extractApiError(err, "Unable to load bucket stats and features."));
+        setBucketInspectorError(
+          extractApiError(err, "Unable to load bucket stats and features."),
+        );
       } finally {
         if (bucketInspectorRequestIdRef.current === requestId) {
           setBucketInspectorLoading(false);
         }
       }
     },
-    [accountIdForApi, bucketInspectorByName, bucketName, effectiveCaps?.metrics, effectiveCaps?.static_website, hasS3AccountContext]
+    [
+      accountIdForApi,
+      bucketInspectorByName,
+      bucketName,
+      effectiveCaps?.metrics,
+      effectiveCaps?.static_website,
+      hasS3AccountContext,
+    ],
   );
 
   const handleOpenBucketInspector = useCallback(() => {
@@ -4171,16 +5188,25 @@ export default function BrowserPage({
     if (!bucketName || !hasS3AccountContext || bucketInspectorLoading) return;
     if (bucketInspectorByName[bucketName]) return;
     void loadBucketInspectorData();
-  }, [bucketInspectorByName, bucketInspectorLoading, bucketName, hasS3AccountContext, loadBucketInspectorData]);
+  }, [
+    bucketInspectorByName,
+    bucketInspectorLoading,
+    bucketName,
+    hasS3AccountContext,
+    loadBucketInspectorData,
+  ]);
 
-  const syncInspectorTabWithSelection = useCallback((nextSelectedCount: number) => {
-    setInspectorTab((currentTab) => {
-      if (isInspectorPanelVisible && currentTab === "details") {
-        return "details";
-      }
-      return nextSelectedCount > 0 ? "selection" : "context";
-    });
-  }, [isInspectorPanelVisible]);
+  const syncInspectorTabWithSelection = useCallback(
+    (nextSelectedCount: number) => {
+      setInspectorTab((currentTab) => {
+        if (isInspectorPanelVisible && currentTab === "details") {
+          return "details";
+        }
+        return nextSelectedCount > 0 ? "selection" : "context";
+      });
+    },
+    [isInspectorPanelVisible],
+  );
 
   const selectRangeBetweenRows = (anchorId: string, targetId: string) => {
     const anchorIndex = listItems.findIndex((item) => item.id === anchorId);
@@ -4192,7 +5218,10 @@ export default function BrowserPage({
       syncInspectorTabWithSelection(1);
       return;
     }
-    const [start, end] = anchorIndex <= targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+    const [start, end] =
+      anchorIndex <= targetIndex
+        ? [anchorIndex, targetIndex]
+        : [targetIndex, anchorIndex];
     const rangeIds = listItems.slice(start, end + 1).map((item) => item.id);
     setSelectedIds(rangeIds);
     setSelectionAnchorId(anchorId);
@@ -4203,7 +5232,9 @@ export default function BrowserPage({
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) => {
       const isSelected = prev.includes(id);
-      const next = isSelected ? prev.filter((itemId) => itemId !== id) : [...prev, id];
+      const next = isSelected
+        ? prev.filter((itemId) => itemId !== id)
+        : [...prev, id];
       syncInspectorTabWithSelection(next.length);
       return next;
     });
@@ -4218,12 +5249,20 @@ export default function BrowserPage({
     syncInspectorTabWithSelection(1);
   };
 
-  const handleItemSelectionClick = (event: ReactMouseEvent<HTMLElement>, itemId: string) => {
+  const handleItemSelectionClick = (
+    event: ReactMouseEvent<HTMLElement>,
+    itemId: string,
+  ) => {
     if (event.detail > 1) return;
     if (event.shiftKey) {
       const anchorId =
-        (selectionAnchorId && listItems.some((item) => item.id === selectionAnchorId) ? selectionAnchorId : null) ??
-        (activeRowId && listItems.some((item) => item.id === activeRowId) ? activeRowId : null) ??
+        (selectionAnchorId &&
+        listItems.some((item) => item.id === selectionAnchorId)
+          ? selectionAnchorId
+          : null) ??
+        (activeRowId && listItems.some((item) => item.id === activeRowId)
+          ? activeRowId
+          : null) ??
         listItems.find((item) => selectedSet.has(item.id))?.id ??
         itemId;
       selectRangeBetweenRows(anchorId, itemId);
@@ -4236,7 +5275,10 @@ export default function BrowserPage({
     selectSingleRow(itemId);
   };
 
-  const handleItemNameClick = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
+  const handleItemNameClick = (
+    event: ReactMouseEvent<HTMLElement>,
+    item: BrowserItem,
+  ) => {
     handleItemSelectionClick(event, item.id);
   };
 
@@ -4255,7 +5297,10 @@ export default function BrowserPage({
     syncInspectorTabWithSelection(nextIds.length);
   };
 
-  const handleItemContextMenu = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
+  const handleItemContextMenu = (
+    event: ReactMouseEvent<HTMLElement>,
+    item: BrowserItem,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     const isSelected = selectedSet.has(item.id);
@@ -4275,7 +5320,10 @@ export default function BrowserPage({
     });
   };
 
-  const handleItemActionsButtonClick = (event: ReactMouseEvent<HTMLButtonElement>, item: BrowserItem) => {
+  const handleItemActionsButtonClick = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    item: BrowserItem,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     if (selectedIds.length !== 1 || selectedIds[0] !== item.id) {
@@ -4289,7 +5337,7 @@ export default function BrowserPage({
       rect.right - CONTEXT_MENU_FALLBACK_WIDTH_PX,
       rect.bottom + 6,
       CONTEXT_MENU_FALLBACK_WIDTH_PX,
-      CONTEXT_MENU_FALLBACK_HEIGHT_PX
+      CONTEXT_MENU_FALLBACK_HEIGHT_PX,
     );
     setContextMenu({
       kind: "item",
@@ -4328,22 +5376,32 @@ export default function BrowserPage({
     }
     const getCurrentIndex = () => {
       if (activeRowId) {
-        const activeIndex = listItems.findIndex((item) => item.id === activeRowId);
+        const activeIndex = listItems.findIndex(
+          (item) => item.id === activeRowId,
+        );
         if (activeIndex >= 0) {
           return activeIndex;
         }
       }
-      const selectedIndex = listItems.findIndex((item) => selectedSet.has(item.id));
+      const selectedIndex = listItems.findIndex((item) =>
+        selectedSet.has(item.id),
+      );
       return selectedIndex;
     };
     const currentIndex = getCurrentIndex();
     const applyRowSelection = (nextIndex: number, extendRange: boolean) => {
-      const clampedIndex = Math.max(0, Math.min(listItems.length - 1, nextIndex));
+      const clampedIndex = Math.max(
+        0,
+        Math.min(listItems.length - 1, nextIndex),
+      );
       const targetId = listItems[clampedIndex]?.id;
       if (!targetId) return;
       if (extendRange) {
         const anchorId =
-          (selectionAnchorId && listItems.some((item) => item.id === selectionAnchorId) ? selectionAnchorId : null) ??
+          (selectionAnchorId &&
+          listItems.some((item) => item.id === selectionAnchorId)
+            ? selectionAnchorId
+            : null) ??
           listItems[Math.max(0, currentIndex)]?.id ??
           targetId;
         selectRangeBetweenRows(anchorId, targetId);
@@ -4354,13 +5412,15 @@ export default function BrowserPage({
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      const nextIndex = currentIndex < 0 ? 0 : Math.min(listItems.length - 1, currentIndex + 1);
+      const nextIndex =
+        currentIndex < 0 ? 0 : Math.min(listItems.length - 1, currentIndex + 1);
       applyRowSelection(nextIndex, event.shiftKey);
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      const nextIndex = currentIndex < 0 ? listItems.length - 1 : Math.max(0, currentIndex - 1);
+      const nextIndex =
+        currentIndex < 0 ? listItems.length - 1 : Math.max(0, currentIndex - 1);
       applyRowSelection(nextIndex, event.shiftKey);
       return;
     }
@@ -4459,15 +5519,23 @@ export default function BrowserPage({
     try {
       const data = await listMultipartUploads(accountIdForApi, bucketName, {
         keyMarker: append ? (options?.keyMarker ?? undefined) : undefined,
-        uploadIdMarker: append ? (options?.uploadIdMarker ?? undefined) : undefined,
+        uploadIdMarker: append
+          ? (options?.uploadIdMarker ?? undefined)
+          : undefined,
         maxUploads: MULTIPART_UPLOADS_PAGE_SIZE,
       });
       const baseUploads = append ? multipartUploads : [];
-      const knownIds = new Set(baseUploads.map((upload) => getMultipartUploadEntryId(upload)));
+      const knownIds = new Set(
+        baseUploads.map((upload) => getMultipartUploadEntryId(upload)),
+      );
       const incomingUploads = append
-        ? data.uploads.filter((upload) => !knownIds.has(getMultipartUploadEntryId(upload)))
+        ? data.uploads.filter(
+            (upload) => !knownIds.has(getMultipartUploadEntryId(upload)),
+          )
         : data.uploads;
-      const mergedUploads = append ? [...baseUploads, ...incomingUploads] : incomingUploads;
+      const mergedUploads = append
+        ? [...baseUploads, ...incomingUploads]
+        : incomingUploads;
       const limitReached = mergedUploads.length > MULTIPART_UPLOADS_HARD_LIMIT;
       setMultipartUploads(mergedUploads.slice(0, MULTIPART_UPLOADS_HARD_LIMIT));
       setMultipartUploadsError(null);
@@ -4476,7 +5544,7 @@ export default function BrowserPage({
         setMultipartUploadsNextUploadId(null);
         setMultipartUploadsIsTruncated(false);
         setWarningMessage(
-          `Multipart uploads listing is limited to ${MULTIPART_UPLOADS_HARD_LIMIT.toLocaleString()} entries. Narrow your scope to continue.`
+          `Multipart uploads listing is limited to ${MULTIPART_UPLOADS_HARD_LIMIT.toLocaleString()} entries. Narrow your scope to continue.`,
         );
       } else {
         setMultipartUploadsNextKey(data.next_key ?? null);
@@ -4484,7 +5552,9 @@ export default function BrowserPage({
         setMultipartUploadsIsTruncated(Boolean(data.is_truncated));
       }
     } catch (err) {
-      setMultipartUploadsError(extractApiError(err, "Unable to list multipart uploads."));
+      setMultipartUploadsError(
+        extractApiError(err, "Unable to list multipart uploads."),
+      );
       if (!append) {
         setMultipartUploads([]);
         setMultipartUploadsNextKey(null);
@@ -4513,7 +5583,8 @@ export default function BrowserPage({
   };
 
   const loadMoreMultipartUploads = () => {
-    if (!bucketName || !hasS3AccountContext || !multipartUploadsIsTruncated) return;
+    if (!bucketName || !hasS3AccountContext || !multipartUploadsIsTruncated)
+      return;
     void loadMultipartUploadsPage({
       append: true,
       keyMarker: multipartUploadsNextKey,
@@ -4534,8 +5605,17 @@ export default function BrowserPage({
       return next;
     });
     try {
-      await abortMultipartUpload(accountIdForApi, bucketName, upload.upload_id, upload.key);
-      setMultipartUploads((prev) => prev.filter((entry) => getMultipartUploadEntryId(entry) !== uploadRowId));
+      await abortMultipartUpload(
+        accountIdForApi,
+        bucketName,
+        upload.upload_id,
+        upload.key,
+      );
+      setMultipartUploads((prev) =>
+        prev.filter(
+          (entry) => getMultipartUploadEntryId(entry) !== uploadRowId,
+        ),
+      );
       setStatusMessage(`Multipart upload aborted for ${upload.key}.`);
     } catch (err) {
       const message = extractApiError(err, "Unable to abort multipart upload.");
@@ -4589,7 +5669,8 @@ export default function BrowserPage({
   };
 
   const handleCreateBucketSubmit = async () => {
-    if (!hasS3AccountContext || !bucketManagementEnabled || createBucketLoading) return;
+    if (!hasS3AccountContext || !bucketManagementEnabled || createBucketLoading)
+      return;
     const bucketNameInput = normalizeS3BucketName(createBucketNameValue);
     if (!bucketNameInput) {
       setCreateBucketError("Bucket name is required.");
@@ -4603,11 +5684,17 @@ export default function BrowserPage({
     setCreateBucketError(null);
     setCorsFixError(null);
     try {
-      await createBrowserBucket(accountIdForApi, bucketNameInput, { versioning: createBucketVersioning });
+      await createBrowserBucket(accountIdForApi, bucketNameInput, {
+        versioning: createBucketVersioning,
+      });
       let corsApplied = false;
       if (uiOrigin) {
         try {
-          const status = await ensureBucketCors(accountIdForApi, bucketNameInput, uiOrigin);
+          const status = await ensureBucketCors(
+            accountIdForApi,
+            bucketNameInput,
+            uiOrigin,
+          );
           corsApplied = status.enabled;
           if (bucketName === bucketNameInput) {
             setCorsStatus(status);
@@ -4625,13 +5712,15 @@ export default function BrowserPage({
           ? corsApplied
             ? `Bucket ${bucketNameInput} created with CORS enabled.`
             : `Bucket ${bucketNameInput} created. CORS could not be auto-enabled.`
-          : `Bucket ${bucketNameInput} created.`
+          : `Bucket ${bucketNameInput} created.`,
       );
       await refreshBucketList({ preferredBucket: bucketNameInput });
       void loadBucketInspectorData(true);
     } catch (err) {
       const message = axios.isAxiosError(err)
-        ? ((err.response?.data as { detail?: string })?.detail || err.message || "Unable to create bucket.")
+        ? (err.response?.data as { detail?: string })?.detail ||
+          err.message ||
+          "Unable to create bucket."
         : err instanceof Error
           ? err.message
           : "Unable to create bucket.";
@@ -4641,10 +5730,13 @@ export default function BrowserPage({
     }
   };
 
-  const normalizeVisibleColumns = useCallback((columnIds: BrowserColumnId[]) => {
-    const selected = new Set(columnIds);
-    return COLUMN_IDS_IN_ORDER.filter((columnId) => selected.has(columnId));
-  }, []);
+  const normalizeVisibleColumns = useCallback(
+    (columnIds: BrowserColumnId[]) => {
+      const selected = new Set(columnIds);
+      return COLUMN_IDS_IN_ORDER.filter((columnId) => selected.has(columnId));
+    },
+    [],
+  );
 
   const handleToggleVisibleColumn = useCallback(
     (columnId: BrowserColumnId) => {
@@ -4658,7 +5750,7 @@ export default function BrowserPage({
         return normalizeVisibleColumns(Array.from(selected));
       });
     },
-    [normalizeVisibleColumns]
+    [normalizeVisibleColumns],
   );
 
   const handleResetVisibleColumns = useCallback(() => {
@@ -4667,18 +5759,27 @@ export default function BrowserPage({
 
   const loadLazyColumnDataForItem = useCallback(
     async (itemId: string) => {
-      const currentEntry = lazyColumnCacheRef.current[itemId] ?? createLazyColumnCacheEntry();
+      const currentEntry =
+        lazyColumnCacheRef.current[itemId] ?? createLazyColumnCacheEntry();
       const shouldLoadMetadata =
         lazyMetadataColumnsVisible &&
-        (currentEntry.metadataStatus === "loading" || currentEntry.metadataStatus === "idle");
+        (currentEntry.metadataStatus === "loading" ||
+          currentEntry.metadataStatus === "idle");
       const shouldLoadTags =
         lazyTagsColumnsVisible &&
-        (currentEntry.tagsStatus === "loading" || currentEntry.tagsStatus === "idle");
+        (currentEntry.tagsStatus === "loading" ||
+          currentEntry.tagsStatus === "idle");
       if (!shouldLoadMetadata && !shouldLoadTags) {
         return;
       }
       const item = lazyListItemsByIdRef.current.get(itemId);
-      if (!item || item.type !== "file" || item.isDeleted || !bucketName || !hasS3AccountContext) {
+      if (
+        !item ||
+        item.type !== "file" ||
+        item.isDeleted ||
+        !bucketName ||
+        !hasS3AccountContext
+      ) {
         setLazyColumnCache((prev) => {
           const entry = prev[itemId];
           if (!entry) return prev;
@@ -4699,10 +5800,21 @@ export default function BrowserPage({
 
       try {
         const metadataPromise = shouldLoadMetadata
-          ? fetchObjectMetadata(accountIdForApi, bucketName, item.key, null, sseCustomerKeyBase64)
+          ? fetchObjectMetadata(
+              accountIdForApi,
+              bucketName,
+              item.key,
+              null,
+              sseCustomerKeyBase64,
+            )
           : Promise.resolve(null);
-        const tagsPromise = shouldLoadTags ? getObjectTags(accountIdForApi, bucketName, item.key) : Promise.resolve(null);
-        const [metadataResult, tagsResult] = await Promise.allSettled([metadataPromise, tagsPromise]);
+        const tagsPromise = shouldLoadTags
+          ? getObjectTags(accountIdForApi, bucketName, item.key)
+          : Promise.resolve(null);
+        const [metadataResult, tagsResult] = await Promise.allSettled([
+          metadataPromise,
+          tagsPromise,
+        ]);
         if (
           accountIdForApiRef.current !== accountIdForApi ||
           bucketNameRef.current !== bucketName ||
@@ -4721,7 +5833,9 @@ export default function BrowserPage({
               nextEntry = {
                 ...nextEntry,
                 contentType: metadata?.content_type ?? null,
-                metadataCount: metadata ? Object.keys(metadata.metadata ?? {}).length : 0,
+                metadataCount: metadata
+                  ? Object.keys(metadata.metadata ?? {}).length
+                  : 0,
                 metadataStatus: "ready",
               };
             } else {
@@ -4762,7 +5876,15 @@ export default function BrowserPage({
         });
       }
     },
-    [accountIdForApi, bucketName, hasS3AccountContext, lazyMetadataColumnsVisible, lazyTagsColumnsVisible, prefix, sseCustomerKeyBase64]
+    [
+      accountIdForApi,
+      bucketName,
+      hasS3AccountContext,
+      lazyMetadataColumnsVisible,
+      lazyTagsColumnsVisible,
+      prefix,
+      sseCustomerKeyBase64,
+    ],
   );
 
   const drainLazyColumnQueue = useCallback(() => {
@@ -4788,9 +5910,12 @@ export default function BrowserPage({
       const item = lazyListItemsByIdRef.current.get(itemId);
       if (!item || item.type !== "file" || item.isDeleted) return;
 
-      const currentEntry = lazyColumnCacheRef.current[itemId] ?? createLazyColumnCacheEntry();
-      const shouldLoadMetadata = lazyMetadataColumnsVisible && currentEntry.metadataStatus === "idle";
-      const shouldLoadTags = lazyTagsColumnsVisible && currentEntry.tagsStatus === "idle";
+      const currentEntry =
+        lazyColumnCacheRef.current[itemId] ?? createLazyColumnCacheEntry();
+      const shouldLoadMetadata =
+        lazyMetadataColumnsVisible && currentEntry.metadataStatus === "idle";
+      const shouldLoadTags =
+        lazyTagsColumnsVisible && currentEntry.tagsStatus === "idle";
       if (!shouldLoadMetadata && !shouldLoadTags) return;
 
       setLazyColumnCache((prev) => {
@@ -4811,7 +5936,12 @@ export default function BrowserPage({
       }
       drainLazyColumnQueue();
     },
-    [drainLazyColumnQueue, hasActiveLazyColumns, lazyMetadataColumnsVisible, lazyTagsColumnsVisible]
+    [
+      drainLazyColumnQueue,
+      hasActiveLazyColumns,
+      lazyMetadataColumnsVisible,
+      lazyTagsColumnsVisible,
+    ],
   );
 
   useEffect(() => {
@@ -4819,7 +5949,9 @@ export default function BrowserPage({
     const root = objectsListViewportRef.current;
     if (!root) return;
 
-    const rowNodes = Array.from(root.querySelectorAll<HTMLElement>("[data-lazy-item-id]"));
+    const rowNodes = Array.from(
+      root.querySelectorAll<HTMLElement>("[data-lazy-item-id]"),
+    );
     if (rowNodes.length === 0) return;
 
     const rootRect = root.getBoundingClientRect();
@@ -4834,7 +5966,8 @@ export default function BrowserPage({
         return;
       }
       const rowRect = node.getBoundingClientRect();
-      const intersectsViewport = rowRect.bottom >= viewportTop && rowRect.top <= viewportBottom;
+      const intersectsViewport =
+        rowRect.bottom >= viewportTop && rowRect.top <= viewportBottom;
       if (intersectsViewport) {
         scheduleLazyColumnLoad(itemId);
       }
@@ -4861,7 +5994,7 @@ export default function BrowserPage({
           observer.unobserve(entry.target);
         });
       },
-      { root, rootMargin: LAZY_COLUMN_ROOT_MARGIN }
+      { root, rootMargin: LAZY_COLUMN_ROOT_MARGIN },
     );
     rowNodes.forEach((node) => observer.observe(node));
     return () => {
@@ -4869,9 +6002,17 @@ export default function BrowserPage({
     };
   }, [hasActiveLazyColumns, listItems, scheduleLazyColumnLoad]);
 
-  const listVersionStats = async (opts: { prefix?: string; key?: string | null }) => {
+  const listVersionStats = async (opts: {
+    prefix?: string;
+    key?: string | null;
+  }) => {
     if (!isVersioningEnabled) {
-      return { objectCount: 0, totalBytes: 0, versionsCount: 0, deleteMarkersCount: 0 };
+      return {
+        objectCount: 0,
+        totalBytes: 0,
+        versionsCount: 0,
+        deleteMarkersCount: 0,
+      };
     }
     let versionsCount = 0;
     let deleteMarkersCount = 0;
@@ -4893,7 +6034,10 @@ export default function BrowserPage({
       deleteMarkersCount += data.delete_markers.length;
       data.versions.forEach((version) => {
         if (!version.is_latest) return;
-        latestByKey.set(version.key, { isDelete: false, size: version.size ?? 0 });
+        latestByKey.set(version.key, {
+          isDelete: false,
+          size: version.size ?? 0,
+        });
       });
       data.delete_markers.forEach((marker) => {
         if (!marker.is_latest) return;
@@ -4903,7 +6047,11 @@ export default function BrowserPage({
       keyMarker = data.next_key_marker ?? null;
       versionIdMarker = data.next_version_id_marker ?? null;
       pageGuard += 1;
-      if (!isTruncated || pageGuard > 1000 || (!keyMarker && !versionIdMarker)) {
+      if (
+        !isTruncated ||
+        pageGuard > 1000 ||
+        (!keyMarker && !versionIdMarker)
+      ) {
         break;
       }
     }
@@ -4964,18 +6112,24 @@ export default function BrowserPage({
       const folderPrefixes = selectionItems
         .filter((item) => item.type === "folder")
         .map((item) => normalizePrefix(item.key));
-      const sortedFolders = [...folderPrefixes].sort((a, b) => a.length - b.length);
+      const sortedFolders = [...folderPrefixes].sort(
+        (a, b) => a.length - b.length,
+      );
       const uniqueFolders: string[] = [];
       sortedFolders.forEach((prefixKey) => {
-        if (uniqueFolders.some((parent) => prefixKey.startsWith(parent))) return;
+        if (uniqueFolders.some((parent) => prefixKey.startsWith(parent)))
+          return;
         uniqueFolders.push(prefixKey);
       });
 
-      const isFileCoveredByFolder = (key: string) => uniqueFolders.some((prefixKey) => key.startsWith(prefixKey));
+      const isFileCoveredByFolder = (key: string) =>
+        uniqueFolders.some((prefixKey) => key.startsWith(prefixKey));
       let objectCount = 0;
       let totalBytes = 0;
 
-      const fileItems = selectionItems.filter((item) => item.type === "file" && !isFileCoveredByFolder(item.key));
+      const fileItems = selectionItems.filter(
+        (item) => item.type === "file" && !isFileCoveredByFolder(item.key),
+      );
       for (const item of fileItems) {
         const stats = await listVersionStats({ key: item.key });
         if (selectionStatsRequestIdRef.current !== requestId) return;
@@ -5018,14 +6172,25 @@ export default function BrowserPage({
     }
     loadObjects({ prefixOverride: prefix });
     if (showPrefixVersions) {
-      loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
+      loadPrefixVersions({
+        append: false,
+        keyMarker: null,
+        versionIdMarker: null,
+      });
     }
     if (inspectedItem?.type === "file") {
-      loadObjectVersions({ append: false, keyMarker: null, versionIdMarker: null, targetKey: inspectedItem.key });
+      loadObjectVersions({
+        append: false,
+        keyMarker: null,
+        versionIdMarker: null,
+        targetKey: inspectedItem.key,
+      });
     }
   };
 
-  const canLoadMoreObjectResults = Boolean((objectsIsTruncated && objectsNextToken) || deletedObjectsIsTruncated);
+  const canLoadMoreObjectResults = Boolean(
+    (objectsIsTruncated && objectsNextToken) || deletedObjectsIsTruncated,
+  );
 
   const handleLoadMoreObjectResults = () => {
     if (objectsLoadingMore) return;
@@ -5038,19 +6203,25 @@ export default function BrowserPage({
     }
   };
 
-  const loadTreeChildren = async (targetPrefix: string, options?: { expand?: boolean }) => {
+  const loadTreeChildren = async (
+    targetPrefix: string,
+    options?: { expand?: boolean },
+  ) => {
     if (!bucketName || !hasS3AccountContext || currentBucketUnavailable) return;
     const normalized = targetPrefix ? normalizePrefix(targetPrefix) : "";
     const shouldExpand = options?.expand ?? true;
     setTreeNodes((prev) =>
-      updateTreeNodes(prev, targetPrefix, (node) => ({ ...node, isLoading: true }))
+      updateTreeNodes(prev, targetPrefix, (node) => ({
+        ...node,
+        isLoading: true,
+      })),
     );
     try {
       const data = await listTreePrefixes(normalized);
       const children = buildTreeNodes(data.prefixes, normalized);
       if (data.truncated) {
         setWarningMessage(
-          `Folders panel is limited to ${TREE_PREFIXES_HARD_LIMIT.toLocaleString()} prefixes. Narrow the path to continue.`
+          `Folders panel is limited to ${TREE_PREFIXES_HARD_LIMIT.toLocaleString()} prefixes. Narrow the path to continue.`,
         );
       }
       setTreeNodes((prev) =>
@@ -5060,7 +6231,7 @@ export default function BrowserPage({
           isExpanded: shouldExpand ? true : node.isExpanded,
           isLoaded: true,
           isLoading: false,
-        }))
+        })),
       );
     } catch {
       setTreeNodes((prev) =>
@@ -5068,7 +6239,7 @@ export default function BrowserPage({
           ...node,
           isLoaded: true,
           isLoading: false,
-        }))
+        })),
       );
     }
   };
@@ -5076,7 +6247,10 @@ export default function BrowserPage({
   const handleToggleTreeNode = (node: TreeNode) => {
     if (node.isExpanded) {
       setTreeNodes((prev) =>
-        updateTreeNodes(prev, node.prefix, (entry) => ({ ...entry, isExpanded: false }))
+        updateTreeNodes(prev, node.prefix, (entry) => ({
+          ...entry,
+          isExpanded: false,
+        })),
       );
       return;
     }
@@ -5085,7 +6259,10 @@ export default function BrowserPage({
       return;
     }
     setTreeNodes((prev) =>
-      updateTreeNodes(prev, node.prefix, (entry) => ({ ...entry, isExpanded: true }))
+      updateTreeNodes(prev, node.prefix, (entry) => ({
+        ...entry,
+        isExpanded: true,
+      })),
     );
   };
 
@@ -5095,13 +6272,19 @@ export default function BrowserPage({
     setCorsFixError(null);
     setStatusMessage(null);
     try {
-      const status = await ensureBucketCors(accountIdForApi, bucketName, uiOrigin);
+      const status = await ensureBucketCors(
+        accountIdForApi,
+        bucketName,
+        uiOrigin,
+      );
       setCorsStatus(status);
       if (status.enabled) {
         setStatusMessage("CORS rules updated for this bucket.");
         setShowCorsActionPopover(false);
       } else {
-        setCorsFixError(status.error ?? "CORS is still not enabled for this origin.");
+        setCorsFixError(
+          status.error ?? "CORS is still not enabled for this origin.",
+        );
       }
     } catch {
       setCorsFixError("Unable to update bucket CORS configuration.");
@@ -5116,13 +6299,22 @@ export default function BrowserPage({
   };
 
   const addActivity = (action: string, path: string) => {
-    setCompletedOperations((prev) => [
-      { id: makeId(), label: action, path, when: new Date().toLocaleTimeString() },
-      ...prev,
-    ].slice(0, COMPLETED_OPERATIONS_LIMIT));
+    setCompletedOperations((prev) =>
+      [
+        {
+          id: makeId(),
+          label: action,
+          path,
+          when: new Date().toLocaleTimeString(),
+        },
+        ...prev,
+      ].slice(0, COMPLETED_OPERATIONS_LIMIT),
+    );
   };
 
-  const extractErrorDetails = (payload: unknown): { code?: string; message?: string } | null => {
+  const extractErrorDetails = (
+    payload: unknown,
+  ): { code?: string; message?: string } | null => {
     if (!payload) return null;
     if (typeof payload === "string") {
       const trimmed = payload.trim();
@@ -5201,14 +6393,23 @@ export default function BrowserPage({
     return null;
   };
 
-  const formatOperationError = (err: unknown, fallback: string, context?: string) => {
+  const formatOperationError = (
+    err: unknown,
+    fallback: string,
+    context?: string,
+  ) => {
     let detail: string | undefined;
     if (axios.isAxiosError(err)) {
       const status = err.response?.status;
       const statusText = err.response?.statusText;
-      const statusLabel = status ? `HTTP ${status}${statusText ? ` ${statusText}` : ""}` : "";
+      const statusLabel = status
+        ? `HTTP ${status}${statusText ? ` ${statusText}` : ""}`
+        : "";
       const parsed = extractErrorDetails(err.response?.data);
-      const message = parsed?.code && parsed?.message ? `${parsed.code}: ${parsed.message}` : parsed?.message || parsed?.code;
+      const message =
+        parsed?.code && parsed?.message
+          ? `${parsed.code}: ${parsed.message}`
+          : parsed?.message || parsed?.code;
       const parts = [statusLabel, message || err.message].filter(Boolean);
       detail = parts.length > 0 ? parts.join(" - ") : undefined;
     } else if (err instanceof Error && err.message) {
@@ -5308,7 +6509,8 @@ export default function BrowserPage({
   const openBulkRestoreModal = (items: BrowserItem[]) => {
     if (!isVersioningEnabled) return;
     const pathTarget = buildBulkRestorePathTarget();
-    const resolvedItems = items.length > 0 ? items : pathTarget ? [pathTarget] : [];
+    const resolvedItems =
+      items.length > 0 ? items : pathTarget ? [pathTarget] : [];
     if (resolvedItems.length === 0) return;
     setBulkActionItems(resolvedItems);
     resetBulkRestoreDraft();
@@ -5326,7 +6528,13 @@ export default function BrowserPage({
   };
 
   const openObjectVersionsModal = (item: BrowserItem) => {
-    if (!bucketName || !hasS3AccountContext || item.type !== "file" || !isVersioningEnabled) return;
+    if (
+      !bucketName ||
+      !hasS3AccountContext ||
+      item.type !== "file" ||
+      !isVersioningEnabled
+    )
+      return;
     setObjectVersionsModalKey(item.key);
     setObjectVersionsModalPath(`${bucketName}/${item.key}`);
     setObjectVersionsModal([]);
@@ -5335,7 +6543,12 @@ export default function BrowserPage({
     setObjectVersionModalKeyMarker(null);
     setObjectVersionModalIdMarker(null);
     setShowObjectVersionsModal(true);
-    loadObjectVersionsModal({ append: false, keyMarker: null, versionIdMarker: null, targetKey: item.key });
+    loadObjectVersionsModal({
+      append: false,
+      keyMarker: null,
+      versionIdMarker: null,
+      targetKey: item.key,
+    });
   };
 
   const closeObjectVersionsModal = () => {
@@ -5388,9 +6601,13 @@ export default function BrowserPage({
       }
       const currentPrefixValue = prefixRef.current;
       const normalizedCurrentPrefix = normalizePrefix(currentPrefixValue);
-      const bucketKeys = pendingUploadedKeysByBucketRef.current.get(currentBucket);
+      const bucketKeys =
+        pendingUploadedKeysByBucketRef.current.get(currentBucket);
       const shouldRefreshCurrentPath = Boolean(
-        bucketKeys && Array.from(bucketKeys).some((key) => key.startsWith(normalizedCurrentPrefix))
+        bucketKeys &&
+        Array.from(bucketKeys).some((key) =>
+          key.startsWith(normalizedCurrentPrefix),
+        ),
       );
       pendingUploadedKeysByBucketRef.current.clear();
       if (!shouldRefreshCurrentPath) return;
@@ -5426,7 +6643,7 @@ export default function BrowserPage({
       cancelable?: boolean;
       sizeBytes?: number;
     },
-    progress = status === "uploading" || status === "downloading" ? 0 : 20
+    progress = status === "uploading" || status === "downloading" ? 0 : 20,
   ) => {
     const operationId = makeId();
     setOperations((prev) => [
@@ -5452,7 +6669,7 @@ export default function BrowserPage({
   const completeOperation = (
     operationId: string,
     status: OperationCompletionStatus = "done",
-    errorMessage?: string
+    errorMessage?: string,
   ) => {
     const completedAt = new Date().toLocaleTimeString();
     setOperations((prev) =>
@@ -5464,10 +6681,13 @@ export default function BrowserPage({
               cancelable: false,
               completedAt,
               completionStatus: status,
-              errorMessage: status === "failed" ? errorMessage ?? op.errorMessage : undefined,
+              errorMessage:
+                status === "failed"
+                  ? (errorMessage ?? op.errorMessage)
+                  : undefined,
             }
-          : op
-      )
+          : op,
+      ),
     );
   };
 
@@ -5537,11 +6757,15 @@ export default function BrowserPage({
   };
 
   const removeQueuedUpload = (uploadId: string) => {
-    updateUploadQueue(uploadQueueRef.current.filter((item) => item.id !== uploadId));
+    updateUploadQueue(
+      uploadQueueRef.current.filter((item) => item.id !== uploadId),
+    );
   };
 
   const removeQueuedUploadsByGroup = (groupId: string) => {
-    updateUploadQueue(uploadQueueRef.current.filter((item) => item.groupId !== groupId));
+    updateUploadQueue(
+      uploadQueueRef.current.filter((item) => item.groupId !== groupId),
+    );
   };
 
   const cancelUploadOperation = (operationId: string) => {
@@ -5565,7 +6789,7 @@ export default function BrowserPage({
       const nextItems = items.map((item) =>
         item.status === "queued" || item.status === "downloading"
           ? { ...item, status: "cancelled", errorMessage: undefined }
-          : item
+          : item,
       );
       return { ...prev, [operationId]: nextItems };
     });
@@ -5580,7 +6804,7 @@ export default function BrowserPage({
   const cancelUploadGroup = (groupId: string) => {
     removeQueuedUploadsByGroup(groupId);
     const activeGroupOperations = operations.filter(
-      (op) => op.kind === "upload" && op.groupId === groupId && !op.completedAt
+      (op) => op.kind === "upload" && op.groupId === groupId && !op.completedAt,
     );
     activeGroupOperations.forEach((op) => cancelUploadOperation(op.id));
   };
@@ -5607,7 +6831,13 @@ export default function BrowserPage({
   };
 
   const handleUploadFiles = (items: UploadCandidate[]) => {
-    if (!bucketName || !hasS3AccountContext || !accountIdForApi || items.length === 0) return;
+    if (
+      !bucketName ||
+      !hasS3AccountContext ||
+      !accountIdForApi ||
+      items.length === 0
+    )
+      return;
     if (items.length > 1) {
       setShowOperationsModal(true);
     }
@@ -5640,7 +6870,11 @@ export default function BrowserPage({
     updateUploadQueue(uploadQueueRef.current);
     processUploadQueue();
     if (queuedFromBatch > 0) {
-      setStatusMessage(queuedFromBatch === 1 ? "1 upload queued." : `${queuedFromBatch} uploads queued.`);
+      setStatusMessage(
+        queuedFromBatch === 1
+          ? "1 upload queued."
+          : `${queuedFromBatch} uploads queued.`,
+      );
     }
   };
 
@@ -5650,10 +6884,18 @@ export default function BrowserPage({
     file: File,
     key: string,
     onProgress: (event: ProgressEvent) => void,
-    controller?: AbortController
+    controller?: AbortController,
   ) => {
     if (useProxyTransfers) {
-      await proxyUpload(accountId, bucket, key, file, onProgress, controller?.signal, sseCustomerKeyBase64);
+      await proxyUpload(
+        accountId,
+        bucket,
+        key,
+        file,
+        onProgress,
+        controller?.signal,
+        sseCustomerKeyBase64,
+      );
       return;
     }
     const operation = resolveSimpleUploadOperation({ stsAvailable, sseActive });
@@ -5665,7 +6907,9 @@ export default function BrowserPage({
       expires_in: 1800,
     });
     const method = (presign.method || "").toUpperCase();
-    const hasPostFields = Boolean(presign.fields && Object.keys(presign.fields).length > 0);
+    const hasPostFields = Boolean(
+      presign.fields && Object.keys(presign.fields).length > 0,
+    );
     if (operation === "post_object" || (method === "POST" && hasPostFields)) {
       if (!presign.fields) {
         throw new Error("Missing presigned POST fields.");
@@ -5682,7 +6926,10 @@ export default function BrowserPage({
       return;
     }
     await axios.put(presign.url, file, {
-      headers: { ...(presign.headers || {}), "Content-Type": file.type || "application/octet-stream" },
+      headers: {
+        ...(presign.headers || {}),
+        "Content-Type": file.type || "application/octet-stream",
+      },
       onUploadProgress: onProgress,
       signal: controller?.signal,
     });
@@ -5694,19 +6941,32 @@ export default function BrowserPage({
     file: File,
     key: string,
     operationId: string,
-    controller: AbortController
+    controller: AbortController,
   ) => {
     let uploadId: string | null = null;
     const totalParts = Math.ceil(file.size / PART_SIZE);
     const partProgress = new Map<number, number>();
 
     const updateProgress = () => {
-      const loaded = Array.from(partProgress.values()).reduce((sum, value) => sum + value, 0);
-      const percent = file.size ? Math.min(99, Math.round((loaded / file.size) * 100)) : 0;
-      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+      const loaded = Array.from(partProgress.values()).reduce(
+        (sum, value) => sum + value,
+        0,
+      );
+      const percent = file.size
+        ? Math.min(99, Math.round((loaded / file.size) * 100))
+        : 0;
+      setOperations((prev) =>
+        prev.map((op) =>
+          op.id === operationId ? { ...op, progress: percent } : op,
+        ),
+      );
     };
 
-    const recordProgress = (partNumber: number, loadedBytes: number, partSize: number) => {
+    const recordProgress = (
+      partNumber: number,
+      loadedBytes: number,
+      partSize: number,
+    ) => {
       partProgress.set(partNumber, Math.min(loadedBytes, partSize));
       updateProgress();
     };
@@ -5720,7 +6980,12 @@ export default function BrowserPage({
 
     const uploadedParts: { part_number: number; etag: string }[] = [];
 
-    const uploadPart = async (part: { partNumber: number; start: number; end: number; size: number }) => {
+    const uploadPart = async (part: {
+      partNumber: number;
+      start: number;
+      end: number;
+      size: number;
+    }) => {
       if (!uploadId) {
         throw new Error("Missing multipart upload ID.");
       }
@@ -5738,7 +7003,11 @@ export default function BrowserPage({
           recordProgress(part.partNumber, loaded, part.size);
         },
       });
-      const etag = normalizeEtag(response.headers?.etag || response.headers?.ETag || response.headers?.ETAG);
+      const etag = normalizeEtag(
+        response.headers?.etag ||
+          response.headers?.ETag ||
+          response.headers?.ETAG,
+      );
       if (!etag) {
         throw new Error("Missing ETag from multipart upload.");
       }
@@ -5747,11 +7016,20 @@ export default function BrowserPage({
     };
 
     try {
-      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, label: "Multipart upload" } : op)));
-      const init = await initiateMultipartUpload(accountId, bucket, {
-        key,
-        content_type: file.type || undefined,
-      }, sseCustomerKeyBase64);
+      setOperations((prev) =>
+        prev.map((op) =>
+          op.id === operationId ? { ...op, label: "Multipart upload" } : op,
+        ),
+      );
+      const init = await initiateMultipartUpload(
+        accountId,
+        bucket,
+        {
+          key,
+          content_type: file.type || undefined,
+        },
+        sseCustomerKeyBase64,
+      );
       uploadId = init.upload_id;
       let hasError = false;
       const workerCount = Math.min(MULTIPART_CONCURRENCY, partsQueue.length);
@@ -5769,10 +7047,20 @@ export default function BrowserPage({
         }
       });
       await Promise.all(workers);
-      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 95 } : op)));
+      setOperations((prev) =>
+        prev.map((op) =>
+          op.id === operationId ? { ...op, progress: 95 } : op,
+        ),
+      );
       uploadedParts.sort((a, b) => a.part_number - b.part_number);
-      await completeMultipartUpload(accountId, bucket, uploadId, key, { parts: uploadedParts });
-      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 100 } : op)));
+      await completeMultipartUpload(accountId, bucket, uploadId, key, {
+        parts: uploadedParts,
+      });
+      setOperations((prev) =>
+        prev.map((op) =>
+          op.id === operationId ? { ...op, progress: 100 } : op,
+        ),
+      );
     } catch (err) {
       if (uploadId) {
         try {
@@ -5787,7 +7075,17 @@ export default function BrowserPage({
 
   const startQueuedUpload = async (item: UploadQueueItem) => {
     if (!item.bucket || !item.accountId) return;
-    const { file, relativePath, key, bucket, accountId, groupId, groupLabel, groupKind, itemLabel } = item;
+    const {
+      file,
+      relativePath,
+      key,
+      bucket,
+      accountId,
+      groupId,
+      groupLabel,
+      groupKind,
+      itemLabel,
+    } = item;
     const operationId = startOperation(
       "uploading",
       "Uploading",
@@ -5800,20 +7098,38 @@ export default function BrowserPage({
         itemLabel,
         cancelable: true,
         sizeBytes: file.size,
-      }
+      },
     );
     const controller = new AbortController();
     uploadControllersRef.current.set(operationId, controller);
     try {
       if (!useProxyTransfers && file.size >= MULTIPART_THRESHOLD) {
-        await uploadMultipart(accountId, bucket, file, key, operationId, controller);
+        await uploadMultipart(
+          accountId,
+          bucket,
+          file,
+          key,
+          operationId,
+          controller,
+        );
       } else {
         const onProgress = (event: ProgressEvent) => {
           const total = event.total ?? file.size;
           const progress = total ? Math.round((event.loaded / total) * 100) : 0;
-          setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress } : op)));
+          setOperations((prev) =>
+            prev.map((op) =>
+              op.id === operationId ? { ...op, progress } : op,
+            ),
+          );
         };
-        await uploadSimple(accountId, bucket, file, key, onProgress, controller);
+        await uploadSimple(
+          accountId,
+          bucket,
+          file,
+          key,
+          onProgress,
+          controller,
+        );
       }
       completeOperation(operationId, "done");
       setStatusMessage(`Uploaded ${relativePath}`);
@@ -5826,13 +7142,13 @@ export default function BrowserPage({
         const completionError = formatOperationError(
           err,
           `Upload failed for ${relativePath}`,
-          `Upload failed for ${relativePath}`
+          `Upload failed for ${relativePath}`,
         );
         completeOperation(operationId, "failed", completionError);
         setStatusMessage(completionError);
         if (!useProxyTransfers && isLikelyCorsError(err)) {
           setWarningMessage(
-            `Direct transfer failed before S3 returned an HTTP response. Possible causes: network reachability, TLS/certificate issue, CORS policy, or endpoint/proxy configuration.`
+            `Direct transfer failed before S3 returned an HTTP response. Possible causes: network reachability, TLS/certificate issue, CORS policy, or endpoint/proxy configuration.`,
           );
         }
       }
@@ -5860,7 +7176,9 @@ export default function BrowserPage({
   const isFileDrag = (event: DragEvent<HTMLDivElement>) => {
     const types = Array.from(event.dataTransfer?.types || []);
     if (types.includes("Files")) return true;
-    return Array.from(event.dataTransfer?.items || []).some((item) => item.kind === "file");
+    return Array.from(event.dataTransfer?.items || []).some(
+      (item) => item.kind === "file",
+    );
   };
 
   const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
@@ -5905,7 +7223,13 @@ export default function BrowserPage({
       throw new Error("Missing bucket context.");
     }
     if (useProxyTransfers) {
-      return proxyDownload(accountIdForApi, bucketName, key, signal, sseCustomerKeyBase64);
+      return proxyDownload(
+        accountIdForApi,
+        bucketName,
+        key,
+        signal,
+        sseCustomerKeyBase64,
+      );
     }
     const presign = await presignObjectRequest(bucketName, {
       key,
@@ -5928,7 +7252,8 @@ export default function BrowserPage({
         // ignore body parsing failures
       }
       const statusLabel = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
-      const detailLabel = code && detail ? `${code}: ${detail}` : detail || code;
+      const detailLabel =
+        code && detail ? `${code}: ${detail}` : detail || code;
       const parts = [statusLabel, detailLabel].filter(Boolean);
       const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
       throw new Error(`Download failed for ${key}${suffix}`);
@@ -5962,7 +7287,9 @@ export default function BrowserPage({
   };
 
   const buildApiUrl = (path: string, params?: Record<string, unknown>) => {
-    const base = API_BASE_URL.endsWith("/") ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+    const base = API_BASE_URL.endsWith("/")
+      ? API_BASE_URL.slice(0, -1)
+      : API_BASE_URL;
     const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
     const url = new URL(`${base}/${normalizedPath}`);
     if (params) {
@@ -5974,7 +7301,10 @@ export default function BrowserPage({
     return url.toString();
   };
 
-  const downloadObjectStream = async (key: string, signal?: AbortSignal): Promise<ReadableStream<Uint8Array>> => {
+  const downloadObjectStream = async (
+    key: string,
+    signal?: AbortSignal,
+  ): Promise<ReadableStream<Uint8Array>> => {
     if (!bucketName || !hasS3AccountContext) {
       throw new Error("Missing bucket context.");
     }
@@ -5982,7 +7312,7 @@ export default function BrowserPage({
       const params = withS3AccountParam({ key }, accountIdForApi);
       const url = buildApiUrl(
         `/browser/buckets/${encodeURIComponent(bucketName)}/download`,
-        params ?? undefined
+        params ?? undefined,
       );
       const response = await fetch(url, {
         headers: buildAuthHeaders(sseCustomerKeyBase64),
@@ -6001,7 +7331,8 @@ export default function BrowserPage({
           // ignore body parsing failures
         }
         const statusLabel = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
-        const detailLabel = code && detail ? `${code}: ${detail}` : detail || code;
+        const detailLabel =
+          code && detail ? `${code}: ${detail}` : detail || code;
         const parts = [statusLabel, detailLabel].filter(Boolean);
         const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
         throw new Error(`Download failed for ${key}${suffix}`);
@@ -6032,7 +7363,8 @@ export default function BrowserPage({
         // ignore body parsing failures
       }
       const statusLabel = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
-      const detailLabel = code && detail ? `${code}: ${detail}` : detail || code;
+      const detailLabel =
+        code && detail ? `${code}: ${detail}` : detail || code;
       const parts = [statusLabel, detailLabel].filter(Boolean);
       const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
       throw new Error(`Download failed for ${key}${suffix}`);
@@ -6043,7 +7375,10 @@ export default function BrowserPage({
     return response.body;
   };
 
-  const listAllObjectsForPrefix = async (targetPrefix: string, targetBucket?: string) => {
+  const listAllObjectsForPrefix = async (
+    targetPrefix: string,
+    targetBucket?: string,
+  ) => {
     const bucket = targetBucket ?? bucketName;
     if (!bucket || !hasS3AccountContext) return [];
     const collected: BrowserObject[] = [];
@@ -6065,7 +7400,8 @@ export default function BrowserPage({
   };
 
   const listAllVersionsForPrefix = async (targetPrefix: string) => {
-    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return { versions: [], deleteMarkers: [] };
+    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled)
+      return { versions: [], deleteMarkers: [] };
     const versions: BrowserObjectVersion[] = [];
     const deleteMarkers: BrowserObjectVersion[] = [];
     let keyMarker: string | null = null;
@@ -6088,7 +7424,8 @@ export default function BrowserPage({
   };
 
   const listAllVersionsForKey = async (key: string) => {
-    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return { versions: [], deleteMarkers: [] };
+    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled)
+      return { versions: [], deleteMarkers: [] };
     const versions: BrowserObjectVersion[] = [];
     const deleteMarkers: BrowserObjectVersion[] = [];
     let keyMarker: string | null = null;
@@ -6131,9 +7468,14 @@ export default function BrowserPage({
   };
 
   const sortVersionEntriesByDateDesc = (entries: BrowserObjectVersion[]) =>
-    entries.slice().sort((a, b) => getVersionEntryTime(b) - getVersionEntryTime(a));
+    entries
+      .slice()
+      .sort((a, b) => getVersionEntryTime(b) - getVersionEntryTime(a));
 
-  const findVersionForDate = (entries: BrowserObjectVersion[], targetTime: number) => {
+  const findVersionForDate = (
+    entries: BrowserObjectVersion[],
+    targetTime: number,
+  ) => {
     const sorted = sortVersionEntriesByDateDesc(entries);
     return sorted.find((entry) => {
       if (!entry.last_modified) return false;
@@ -6144,8 +7486,12 @@ export default function BrowserPage({
   const findLatestRestorableVersion = (entries: BrowserObjectVersion[]) => {
     const sorted = sortVersionEntriesByDateDesc(entries);
     return (
-      sorted.find((entry) => !entry.is_delete_marker && typeof entry.version_id === "string" && entry.version_id.length > 0) ??
-      null
+      sorted.find(
+        (entry) =>
+          !entry.is_delete_marker &&
+          typeof entry.version_id === "string" &&
+          entry.version_id.length > 0,
+      ) ?? null
     );
   };
 
@@ -6153,7 +7499,7 @@ export default function BrowserPage({
     operationId: string,
     keys: string[],
     status: DeleteDetailStatus,
-    errorMessage?: string
+    errorMessage?: string,
   ) => {
     setDeleteDetails((prev) => {
       const items = prev[operationId];
@@ -6164,7 +7510,10 @@ export default function BrowserPage({
         return {
           ...item,
           status,
-          errorMessage: status === "failed" ? errorMessage ?? item.errorMessage : undefined,
+          errorMessage:
+            status === "failed"
+              ? (errorMessage ?? item.errorMessage)
+              : undefined,
         };
       });
       return { ...prev, [operationId]: nextItems };
@@ -6174,7 +7523,7 @@ export default function BrowserPage({
   const deleteObjectsInBatches = async (
     keys: string[],
     onProgress?: (deleted: number, total: number) => void,
-    detailOperationId?: string
+    detailOperationId?: string,
   ) => {
     if (!bucketName || !hasS3AccountContext || keys.length === 0) return;
     const uniqueKeys = Array.from(new Set(keys));
@@ -6183,7 +7532,10 @@ export default function BrowserPage({
     let deletedCount = 0;
     let hasError: unknown = null;
     const queue = [...chunks];
-    const workerCount = Math.max(1, Math.min(otherOperationsParallelismRef.current, queue.length));
+    const workerCount = Math.max(
+      1,
+      Math.min(otherOperationsParallelismRef.current, queue.length),
+    );
     const workers = Array.from({ length: workerCount }, async () => {
       while (queue.length > 0 && !hasError) {
         const chunk = queue.shift();
@@ -6195,7 +7547,7 @@ export default function BrowserPage({
           await deleteObjects(
             accountIdForApi,
             bucketName,
-            chunk.map((key) => ({ key }))
+            chunk.map((key) => ({ key })),
           );
           if (detailOperationId) {
             updateDeleteDetailsStatus(detailOperationId, chunk, "done");
@@ -6204,7 +7556,12 @@ export default function BrowserPage({
           onProgress?.(deletedCount, total);
         } catch (err) {
           if (detailOperationId) {
-            updateDeleteDetailsStatus(detailOperationId, chunk, "failed", formatOperationError(err, "Delete failed."));
+            updateDeleteDetailsStatus(
+              detailOperationId,
+              chunk,
+              "failed",
+              formatOperationError(err, "Delete failed."),
+            );
           }
           hasError = err;
         }
@@ -6217,7 +7574,8 @@ export default function BrowserPage({
   };
 
   const deleteFolderRecursive = async (folderItem: BrowserItem) => {
-    if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder") return;
+    if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder")
+      return;
     setShowOperationsModal(true);
     const folderPrefix = normalizePrefix(folderItem.key);
     const operationId = startOperation(
@@ -6225,19 +7583,23 @@ export default function BrowserPage({
       "Deleting folder",
       `${bucketName}/${folderPrefix}`,
       { kind: "delete" },
-      0
+      0,
     );
     let completionStatus: OperationCompletionStatus = "done";
     let completionError: string | undefined;
     try {
       const objects = await listAllObjectsForPrefix(folderPrefix);
-      const keys = Array.from(new Set([...objects.map((obj) => obj.key), folderPrefix]));
+      const keys = Array.from(
+        new Set([...objects.map((obj) => obj.key), folderPrefix]),
+      );
       if (keys.length === 0) {
         setStatusMessage("Folder is empty.");
         return;
       }
       const detailItems = objects.map((obj) => {
-        const relativeKey = obj.key.startsWith(folderPrefix) ? obj.key.slice(folderPrefix.length) : obj.key;
+        const relativeKey = obj.key.startsWith(folderPrefix)
+          ? obj.key.slice(folderPrefix.length)
+          : obj.key;
         return {
           id: makeId(),
           key: obj.key,
@@ -6256,14 +7618,27 @@ export default function BrowserPage({
       if (detailItems.length > 0) {
         setDeleteDetails((prev) => ({ ...prev, [operationId]: detailItems }));
       }
-      await deleteObjectsInBatches(keys, (deleted, total) => {
-        const progress = total > 0 ? Math.min(100, Math.round((deleted / total) * 100)) : 0;
-        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress } : op)));
-      }, detailItems.length > 0 ? operationId : undefined);
+      await deleteObjectsInBatches(
+        keys,
+        (deleted, total) => {
+          const progress =
+            total > 0 ? Math.min(100, Math.round((deleted / total) * 100)) : 0;
+          setOperations((prev) =>
+            prev.map((op) =>
+              op.id === operationId ? { ...op, progress } : op,
+            ),
+          );
+        },
+        detailItems.length > 0 ? operationId : undefined,
+      );
       setStatusMessage(`Deleted folder ${folderItem.name}`);
     } catch (err) {
       completionStatus = "failed";
-      completionError = formatOperationError(err, "Unable to delete folder.", "Unable to delete folder.");
+      completionError = formatOperationError(
+        err,
+        "Unable to delete folder.",
+        "Unable to delete folder.",
+      );
       setStatusMessage(completionError);
     } finally {
       completeOperation(operationId, completionStatus, completionError);
@@ -6274,7 +7649,7 @@ export default function BrowserPage({
     operationId: string,
     detailId: string,
     status: DownloadDetailStatus,
-    errorMessage?: string
+    errorMessage?: string,
   ) => {
     setDownloadDetails((prev) => {
       const items = prev[operationId];
@@ -6284,9 +7659,12 @@ export default function BrowserPage({
           ? {
               ...item,
               status,
-              errorMessage: status === "failed" ? errorMessage ?? item.errorMessage : undefined,
+              errorMessage:
+                status === "failed"
+                  ? (errorMessage ?? item.errorMessage)
+                  : undefined,
             }
-          : item
+          : item,
       );
       return { ...prev, [operationId]: nextItems };
     });
@@ -6296,7 +7674,7 @@ export default function BrowserPage({
     operationId: string,
     detailId: string,
     status: CopyDetailStatus,
-    errorMessage?: string
+    errorMessage?: string,
   ) => {
     setCopyDetails((prev) => {
       const items = prev[operationId];
@@ -6306,26 +7684,31 @@ export default function BrowserPage({
           ? {
               ...item,
               status,
-              errorMessage: status === "failed" ? errorMessage ?? item.errorMessage : undefined,
+              errorMessage:
+                status === "failed"
+                  ? (errorMessage ?? item.errorMessage)
+                  : undefined,
             }
-          : item
+          : item,
       );
       return { ...prev, [operationId]: nextItems };
     });
   };
 
   const handleDownloadFolder = async (folderItem: BrowserItem) => {
-    if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder") return;
+    if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder")
+      return;
     setShowOperationsModal(true);
     setWarningMessage(null);
     const folderPrefix = normalizePrefix(folderItem.key);
-    const rawLabel = folderItem.name || folderPrefix.replace(/\/$/, "") || "folder";
+    const rawLabel =
+      folderItem.name || folderPrefix.replace(/\/$/, "") || "folder";
     const folderLabel = rawLabel.replace(/[\\/]/g, "-") || "folder";
     const operationId = startOperation(
       "downloading",
       "Preparing download",
       `${bucketName}/${folderPrefix}`,
-      { kind: "download", cancelable: true }
+      { kind: "download", cancelable: true },
     );
     const controller = new AbortController();
     downloadControllersRef.current.set(operationId, controller);
@@ -6340,7 +7723,9 @@ export default function BrowserPage({
       }
       const downloadTargets = objects
         .map((obj) => {
-          const relativeKey = obj.key.startsWith(folderPrefix) ? obj.key.slice(folderPrefix.length) : obj.key;
+          const relativeKey = obj.key.startsWith(folderPrefix)
+            ? obj.key.slice(folderPrefix.length)
+            : obj.key;
           if (!relativeKey) return null;
           if (relativeKey.endsWith("/") && (obj.size ?? 0) === 0) return null;
           return {
@@ -6349,7 +7734,15 @@ export default function BrowserPage({
             detailId: makeId(),
           };
         })
-        .filter((entry): entry is { obj: BrowserObject; relativeKey: string; detailId: string } => Boolean(entry));
+        .filter(
+          (
+            entry,
+          ): entry is {
+            obj: BrowserObject;
+            relativeKey: string;
+            detailId: string;
+          } => Boolean(entry),
+        );
       if (downloadTargets.length === 0) {
         setStatusMessage("Folder is empty.");
         return;
@@ -6364,9 +7757,16 @@ export default function BrowserPage({
           sizeBytes: target.obj.size,
         })),
       }));
-      const totalBytes = downloadTargets.reduce((sum, target) => sum + (target.obj.size ?? 0), 0);
+      const totalBytes = downloadTargets.reduce(
+        (sum, target) => sum + (target.obj.size ?? 0),
+        0,
+      );
       const streamingZipThresholdBytes =
-        Math.max(0, (browserSettings?.streaming_zip_threshold_mb ?? DEFAULT_STREAMING_ZIP_THRESHOLD_MB)) *
+        Math.max(
+          0,
+          browserSettings?.streaming_zip_threshold_mb ??
+            DEFAULT_STREAMING_ZIP_THRESHOLD_MB,
+        ) *
         1024 *
         1024;
       const totalCount = downloadTargets.length;
@@ -6376,25 +7776,39 @@ export default function BrowserPage({
       const errors: string[] = [];
 
       const updateProgress = () => {
-        const base = totalBytes > 0 ? downloadedBytes / totalBytes : completed / totalCount;
+        const base =
+          totalBytes > 0
+            ? downloadedBytes / totalBytes
+            : completed / totalCount;
         const percent = Math.min(80, Math.round(base * 80));
-        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+        setOperations((prev) =>
+          prev.map((op) =>
+            op.id === operationId ? { ...op, progress: percent } : op,
+          ),
+        );
       };
 
       const saveFilePicker =
         typeof window !== "undefined"
-          ? (window as Window & { showSaveFilePicker?: (options?: unknown) => Promise<unknown> }).showSaveFilePicker
+          ? (
+              window as Window & {
+                showSaveFilePicker?: (options?: unknown) => Promise<unknown>;
+              }
+            ).showSaveFilePicker
           : undefined;
       const supportsStreamingZip = Boolean(
         saveFilePicker &&
-          typeof ReadableStream !== "undefined" &&
-          typeof WritableStream !== "undefined" &&
-          typeof TransformStream !== "undefined"
+        typeof ReadableStream !== "undefined" &&
+        typeof WritableStream !== "undefined" &&
+        typeof TransformStream !== "undefined",
       );
-      const shouldStreamZip = supportsStreamingZip && totalBytes >= streamingZipThresholdBytes;
+      const shouldStreamZip =
+        supportsStreamingZip && totalBytes >= streamingZipThresholdBytes;
 
       if (shouldStreamZip && saveFilePicker) {
-        let fileStream: (WritableStream<Uint8Array> & { abort?: () => Promise<void> }) | null = null;
+        let fileStream:
+          | (WritableStream<Uint8Array> & { abort?: () => Promise<void> })
+          | null = null;
         let zipWriter: ZipWriter | null = null;
         try {
           const handle = (await saveFilePicker({
@@ -6406,7 +7820,10 @@ export default function BrowserPage({
               },
             ],
           })) as { createWritable: () => Promise<WritableStream<Uint8Array>> };
-          fileStream = (await handle.createWritable()) as WritableStream<Uint8Array> & { abort?: () => Promise<void> };
+          fileStream =
+            (await handle.createWritable()) as WritableStream<Uint8Array> & {
+              abort?: () => Promise<void>;
+            };
           zipWriter = new ZipWriter(fileStream);
         } catch (err) {
           if (isAbortError(err)) {
@@ -6418,7 +7835,11 @@ export default function BrowserPage({
           throw err;
         }
 
-        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, label: "Streaming zip" } : op)));
+        setOperations((prev) =>
+          prev.map((op) =>
+            op.id === operationId ? { ...op, label: "Streaming zip" } : op,
+          ),
+        );
 
         for (const target of downloadTargets) {
           if (controller.signal.aborted) {
@@ -6427,7 +7848,10 @@ export default function BrowserPage({
           }
           updateDownloadDetail(operationId, target.detailId, "downloading");
           try {
-            const stream = await downloadObjectStream(target.obj.key, controller.signal);
+            const stream = await downloadObjectStream(
+              target.obj.key,
+              controller.signal,
+            );
             const counter = new TransformStream<Uint8Array, Uint8Array>({
               transform(chunk, streamController) {
                 downloadedBytes += chunk.byteLength;
@@ -6435,7 +7859,10 @@ export default function BrowserPage({
                 streamController.enqueue(chunk);
               },
             });
-            await zipWriter.add(`${folderLabel}/${target.relativeKey}`, stream.pipeThrough(counter));
+            await zipWriter.add(
+              `${folderLabel}/${target.relativeKey}`,
+              stream.pipeThrough(counter),
+            );
             updateDownloadDetail(operationId, target.detailId, "done");
           } catch (err) {
             if (isAbortError(err) || controller.signal.aborted) {
@@ -6445,7 +7872,12 @@ export default function BrowserPage({
               break;
             }
             console.error(err);
-            updateDownloadDetail(operationId, target.detailId, "failed", formatOperationError(err, "Download failed."));
+            updateDownloadDetail(
+              operationId,
+              target.detailId,
+              "failed",
+              formatOperationError(err, "Download failed."),
+            );
             errors.push(target.obj.key);
           } finally {
             completed += 1;
@@ -6468,11 +7900,18 @@ export default function BrowserPage({
         if (zipWriter) {
           await zipWriter.close();
         }
-        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 100 } : op)));
+        setOperations((prev) =>
+          prev.map((op) =>
+            op.id === operationId ? { ...op, progress: 100 } : op,
+          ),
+        );
       } else {
         const zip = new JSZip();
         const queue = [...downloadTargets];
-        const workerCount = Math.max(1, Math.min(downloadParallelismRef.current, queue.length));
+        const workerCount = Math.max(
+          1,
+          Math.min(downloadParallelismRef.current, queue.length),
+        );
         const workers = Array.from({ length: workerCount }, async () => {
           while (queue.length > 0 && !aborted) {
             if (controller.signal.aborted) {
@@ -6483,7 +7922,10 @@ export default function BrowserPage({
             if (!obj) return;
             updateDownloadDetail(operationId, obj.detailId, "downloading");
             try {
-              const blob = await downloadObjectBlob(obj.obj.key, controller.signal);
+              const blob = await downloadObjectBlob(
+                obj.obj.key,
+                controller.signal,
+              );
               zip.file(`${folderLabel}/${obj.relativeKey}`, blob);
               updateDownloadDetail(operationId, obj.detailId, "done");
             } catch (err) {
@@ -6494,7 +7936,12 @@ export default function BrowserPage({
                 return;
               }
               console.error(err);
-              updateDownloadDetail(operationId, obj.detailId, "failed", formatOperationError(err, "Download failed."));
+              updateDownloadDetail(
+                operationId,
+                obj.detailId,
+                "failed",
+                formatOperationError(err, "Download failed."),
+              );
               errors.push(obj.obj.key);
             } finally {
               completed += 1;
@@ -6512,17 +7959,35 @@ export default function BrowserPage({
           return;
         }
 
-        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, label: "Packaging zip" } : op)));
-        const zipBlob = await zip.generateAsync({ type: "blob" }, (metadata) => {
-          const percent = Math.min(99, 80 + Math.round(metadata.percent * 0.2));
-          setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
-        });
+        setOperations((prev) =>
+          prev.map((op) =>
+            op.id === operationId ? { ...op, label: "Packaging zip" } : op,
+          ),
+        );
+        const zipBlob = await zip.generateAsync(
+          { type: "blob" },
+          (metadata) => {
+            const percent = Math.min(
+              99,
+              80 + Math.round(metadata.percent * 0.2),
+            );
+            setOperations((prev) =>
+              prev.map((op) =>
+                op.id === operationId ? { ...op, progress: percent } : op,
+              ),
+            );
+          },
+        );
         if (controller.signal.aborted) {
           setStatusMessage(`Download cancelled for ${folderLabel}`);
           cancelDownloadDetails(operationId);
           return;
         }
-        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 100 } : op)));
+        setOperations((prev) =>
+          prev.map((op) =>
+            op.id === operationId ? { ...op, progress: 100 } : op,
+          ),
+        );
 
         const downloadName = `${folderLabel}.zip`;
         const url = window.URL.createObjectURL(zipBlob);
@@ -6549,7 +8014,11 @@ export default function BrowserPage({
       } else {
         completionStatus = "failed";
         console.error(err);
-        completionError = formatOperationError(err, "Unable to download folder.", "Unable to download folder.");
+        completionError = formatOperationError(
+          err,
+          "Unable to download folder.",
+          "Unable to download folder.",
+        );
         setStatusMessage(completionError);
       }
     } finally {
@@ -6560,7 +8029,9 @@ export default function BrowserPage({
 
   const handleDownloadMultipleFiles = async (targets: BrowserItem[]) => {
     if (!bucketName || !hasS3AccountContext) return;
-    const files = targets.filter((item) => item.type === "file" && !item.isDeleted);
+    const files = targets.filter(
+      (item) => item.type === "file" && !item.isDeleted,
+    );
     if (files.length <= 1) {
       await handleDownloadItems(files);
       return;
@@ -6570,7 +8041,7 @@ export default function BrowserPage({
       "downloading",
       `Downloading ${files.length} files`,
       currentPath || bucketName,
-      { kind: "download", cancelable: true }
+      { kind: "download", cancelable: true },
     );
     const controller = new AbortController();
     downloadControllersRef.current.set(operationId, controller);
@@ -6589,7 +8060,10 @@ export default function BrowserPage({
         sizeBytes: target.item.sizeBytes ?? undefined,
       })),
     }));
-    const totalBytes = downloadTargets.reduce((sum, target) => sum + (target.item.sizeBytes ?? 0), 0);
+    const totalBytes = downloadTargets.reduce(
+      (sum, target) => sum + (target.item.sizeBytes ?? 0),
+      0,
+    );
     const totalCount = downloadTargets.length;
     let downloadedBytes = 0;
     let completed = 0;
@@ -6597,14 +8071,22 @@ export default function BrowserPage({
     let failedCount = 0;
 
     const updateProgress = () => {
-      const base = totalBytes > 0 ? downloadedBytes / totalBytes : completed / totalCount;
+      const base =
+        totalBytes > 0 ? downloadedBytes / totalBytes : completed / totalCount;
       const percent = Math.min(100, Math.round(base * 100));
-      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+      setOperations((prev) =>
+        prev.map((op) =>
+          op.id === operationId ? { ...op, progress: percent } : op,
+        ),
+      );
     };
 
     try {
       const queue = [...downloadTargets];
-      const workerCount = Math.max(1, Math.min(downloadParallelismRef.current, queue.length));
+      const workerCount = Math.max(
+        1,
+        Math.min(downloadParallelismRef.current, queue.length),
+      );
       const workers = Array.from({ length: workerCount }, async () => {
         while (queue.length > 0 && !aborted) {
           if (controller.signal.aborted) {
@@ -6615,7 +8097,10 @@ export default function BrowserPage({
           if (!target) return;
           updateDownloadDetail(operationId, target.detailId, "downloading");
           try {
-            const blob = await downloadObjectBlob(target.item.key, controller.signal);
+            const blob = await downloadObjectBlob(
+              target.item.key,
+              controller.signal,
+            );
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
@@ -6633,7 +8118,12 @@ export default function BrowserPage({
               return;
             }
             console.error(err);
-            updateDownloadDetail(operationId, target.detailId, "failed", formatOperationError(err, "Download failed."));
+            updateDownloadDetail(
+              operationId,
+              target.detailId,
+              "failed",
+              formatOperationError(err, "Download failed."),
+            );
             failedCount += 1;
           } finally {
             completed += 1;
@@ -6649,7 +8139,11 @@ export default function BrowserPage({
         cancelDownloadDetails(operationId);
         return;
       }
-      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 100 } : op)));
+      setOperations((prev) =>
+        prev.map((op) =>
+          op.id === operationId ? { ...op, progress: 100 } : op,
+        ),
+      );
       setStatusMessage(`Downloaded ${files.length} files`);
       if (failedCount > 0) {
         completionStatus = "failed";
@@ -6662,7 +8156,11 @@ export default function BrowserPage({
         setStatusMessage("Download cancelled.");
       } else {
         completionStatus = "failed";
-        completionError = formatOperationError(err, "Unable to download files.", "Unable to download files.");
+        completionError = formatOperationError(
+          err,
+          "Unable to download files.",
+          "Unable to download files.",
+        );
         setStatusMessage(completionError);
       }
     } finally {
@@ -6673,8 +8171,12 @@ export default function BrowserPage({
 
   const handleDownloadItems = async (targets: BrowserItem[]) => {
     if (!bucketName || !hasS3AccountContext || targets.length === 0) return;
-    const files = targets.filter((item) => item.type === "file" && !item.isDeleted);
-    const deletedCount = targets.filter((item) => item.type === "file" && item.isDeleted).length;
+    const files = targets.filter(
+      (item) => item.type === "file" && !item.isDeleted,
+    );
+    const deletedCount = targets.filter(
+      (item) => item.type === "file" && item.isDeleted,
+    ).length;
     if (files.length === 0) {
       if (deletedCount > 0) {
         setWarningMessage("Deleted objects cannot be downloaded directly.");
@@ -6682,7 +8184,9 @@ export default function BrowserPage({
       return;
     }
     if (deletedCount > 0) {
-      setWarningMessage("Deleted objects were skipped. Open versions to restore before download.");
+      setWarningMessage(
+        "Deleted objects were skipped. Open versions to restore before download.",
+      );
     } else {
       setWarningMessage(null);
     }
@@ -6693,7 +8197,13 @@ export default function BrowserPage({
     try {
       for (const item of files) {
         if (useProxyTransfers) {
-          const blob = await proxyDownload(accountIdForApi, bucketName, item.key, undefined, sseCustomerKeyBase64);
+          const blob = await proxyDownload(
+            accountIdForApi,
+            bucketName,
+            item.key,
+            undefined,
+            sseCustomerKeyBase64,
+          );
           const url = window.URL.createObjectURL(blob);
           const link = document.createElement("a");
           link.href = url;
@@ -6724,13 +8234,19 @@ export default function BrowserPage({
         }
       }
     } catch {
-      setStatusMessage(useProxyTransfers || sseActive ? "Unable to download object." : "Unable to generate download URL.");
+      setStatusMessage(
+        useProxyTransfers || sseActive
+          ? "Unable to download object."
+          : "Unable to generate download URL.",
+      );
     }
   };
 
   const handleDownloadTarget = (item: BrowserItem) => {
     if (item.isDeleted) {
-      setWarningMessage("This item is deleted. Open it or use versions to restore content before downloading.");
+      setWarningMessage(
+        "This item is deleted. Open it or use versions to restore content before downloading.",
+      );
       if (item.type === "file" && isVersioningEnabled) {
         openObjectVersionsModal(item);
       }
@@ -6743,13 +8259,22 @@ export default function BrowserPage({
     void handleDownloadItems([item]);
   };
 
-  const handleDeleteItems = async (targets: BrowserItem[], options?: { skipConfirm?: boolean }) => {
+  const handleDeleteItems = async (
+    targets: BrowserItem[],
+    options?: { skipConfirm?: boolean },
+  ) => {
     if (!bucketName || !hasS3AccountContext || targets.length === 0) return;
-    const fileTargets = targets.filter((item) => item.type === "file" && !item.isDeleted);
-    const folderTargets = targets.filter((item) => item.type === "folder" && !item.isDeleted);
+    const fileTargets = targets.filter(
+      (item) => item.type === "file" && !item.isDeleted,
+    );
+    const folderTargets = targets.filter(
+      (item) => item.type === "folder" && !item.isDeleted,
+    );
     const hasDeletedTargets = targets.some((item) => item.isDeleted);
     if (hasDeletedTargets) {
-      setWarningMessage("Deleted items are shown from delete markers. Use versions to restore or remove markers.");
+      setWarningMessage(
+        "Deleted items are shown from delete markers. Use versions to restore or remove markers.",
+      );
     } else {
       setWarningMessage(null);
     }
@@ -6774,11 +8299,21 @@ export default function BrowserPage({
     try {
       if (fileTargets.length > 0) {
         const targetPath =
-          fileTargets.length === 1 ? `${bucketName}/${fileTargets[0].key}` : (currentPath || bucketName);
+          fileTargets.length === 1
+            ? `${bucketName}/${fileTargets[0].key}`
+            : currentPath || bucketName;
         const operationLabel =
-          fileTargets.length === 1 ? "Deleting object" : `Deleting ${fileTargets.length} objects`;
+          fileTargets.length === 1
+            ? "Deleting object"
+            : `Deleting ${fileTargets.length} objects`;
         const operationKind = fileTargets.length > 1 ? "delete" : "other";
-        const operationId = startOperation("deleting", operationLabel, targetPath, { kind: operationKind }, 0);
+        const operationId = startOperation(
+          "deleting",
+          operationLabel,
+          targetPath,
+          { kind: operationKind },
+          0,
+        );
         let completionStatus: OperationCompletionStatus = "done";
         let completionError: string | undefined;
         try {
@@ -6796,10 +8331,17 @@ export default function BrowserPage({
           await deleteObjectsInBatches(
             fileTargets.map((item) => item.key),
             (deleted, total) => {
-              const progress = total > 0 ? Math.min(100, Math.round((deleted / total) * 100)) : 0;
-              setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress } : op)));
+              const progress =
+                total > 0
+                  ? Math.min(100, Math.round((deleted / total) * 100))
+                  : 0;
+              setOperations((prev) =>
+                prev.map((op) =>
+                  op.id === operationId ? { ...op, progress } : op,
+                ),
+              );
             },
-            fileTargets.length > 1 ? operationId : undefined
+            fileTargets.length > 1 ? operationId : undefined,
           );
           setStatusMessage(`Deleted ${fileTargets.length} object(s)`);
         } catch (err) {
@@ -6807,7 +8349,7 @@ export default function BrowserPage({
           completionError = formatOperationError(
             err,
             "Unable to delete selected objects.",
-            "Unable to delete selected objects."
+            "Unable to delete selected objects.",
           );
           setStatusMessage(completionError);
         } finally {
@@ -6819,7 +8361,7 @@ export default function BrowserPage({
       }
       const processedTargets = [...fileTargets, ...folderTargets];
       setSelectedIds((prev) =>
-        prev.filter((id) => !processedTargets.some((item) => item.id === id))
+        prev.filter((id) => !processedTargets.some((item) => item.id === id)),
       );
       await loadObjects({ prefixOverride: prefix });
       loadTreeChildren(prefix);
@@ -6836,14 +8378,23 @@ export default function BrowserPage({
     const shouldApplyAcl = bulkApplyAcl;
     const shouldApplyLegalHold = bulkApplyLegalHold;
     const shouldApplyRetention = bulkApplyRetention;
-    if (!shouldApplyMetadata && !shouldApplyTags && !shouldApplyStorage && !shouldApplyAcl && !shouldApplyLegalHold && !shouldApplyRetention) {
+    if (
+      !shouldApplyMetadata &&
+      !shouldApplyTags &&
+      !shouldApplyStorage &&
+      !shouldApplyAcl &&
+      !shouldApplyLegalHold &&
+      !shouldApplyRetention
+    ) {
       setBulkAttributesError("Select at least one attribute to update.");
       return;
     }
 
     const metadataPairs = parseKeyValueLines(bulkMetadataEntries);
     const tagsPairs = parseKeyValueLines(bulkTagsDraft);
-    const expiresIso = bulkMetadataDraft.expires.trim() ? toIsoString(bulkMetadataDraft.expires) : "";
+    const expiresIso = bulkMetadataDraft.expires.trim()
+      ? toIsoString(bulkMetadataDraft.expires)
+      : "";
     const metadataHasValues =
       Boolean(bulkMetadataDraft.contentType.trim()) ||
       Boolean(bulkMetadataDraft.cacheControl.trim()) ||
@@ -6861,7 +8412,11 @@ export default function BrowserPage({
       setBulkAttributesError("Select a storage class.");
       return;
     }
-    if (shouldApplyMetadata && bulkMetadataDraft.expires.trim() && !expiresIso) {
+    if (
+      shouldApplyMetadata &&
+      bulkMetadataDraft.expires.trim() &&
+      !expiresIso
+    ) {
       setBulkAttributesError("Provide a valid expires date.");
       return;
     }
@@ -6869,8 +8424,13 @@ export default function BrowserPage({
       setBulkAttributesError("Provide at least one tag.");
       return;
     }
-    const retentionIso = bulkRetentionDate ? toIsoString(bulkRetentionDate) : "";
-    if (shouldApplyRetention && (!bulkRetentionMode || !bulkRetentionDate || !retentionIso)) {
+    const retentionIso = bulkRetentionDate
+      ? toIsoString(bulkRetentionDate)
+      : "";
+    if (
+      shouldApplyRetention &&
+      (!bulkRetentionMode || !bulkRetentionDate || !retentionIso)
+    ) {
       setBulkAttributesError("Provide retention mode and date.");
       return;
     }
@@ -6892,7 +8452,7 @@ export default function BrowserPage({
         "Updating attributes",
         currentPath || bucketName,
         { kind: "other" },
-        0
+        0,
       );
       const total = keys.length;
       let completed = 0;
@@ -6900,39 +8460,66 @@ export default function BrowserPage({
 
       const updateProgress = () => {
         const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
-        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+        setOperations((prev) =>
+          prev.map((op) =>
+            op.id === operationId ? { ...op, progress: percent } : op,
+          ),
+        );
       };
 
-      const metadataRecord = metadataPairs.length > 0 ? pairsToRecord(metadataPairs) : undefined;
+      const metadataRecord =
+        metadataPairs.length > 0 ? pairsToRecord(metadataPairs) : undefined;
 
       const applyForKey = async (key: string) => {
         if (shouldApplyMetadata || shouldApplyStorage) {
           const payload = {
             key,
-            content_type: shouldApplyMetadata && bulkMetadataDraft.contentType.trim() ? bulkMetadataDraft.contentType.trim() : undefined,
-            cache_control: shouldApplyMetadata && bulkMetadataDraft.cacheControl.trim() ? bulkMetadataDraft.cacheControl.trim() : undefined,
+            content_type:
+              shouldApplyMetadata && bulkMetadataDraft.contentType.trim()
+                ? bulkMetadataDraft.contentType.trim()
+                : undefined,
+            cache_control:
+              shouldApplyMetadata && bulkMetadataDraft.cacheControl.trim()
+                ? bulkMetadataDraft.cacheControl.trim()
+                : undefined,
             content_disposition:
               shouldApplyMetadata && bulkMetadataDraft.contentDisposition.trim()
                 ? bulkMetadataDraft.contentDisposition.trim()
                 : undefined,
             content_encoding:
-              shouldApplyMetadata && bulkMetadataDraft.contentEncoding.trim() ? bulkMetadataDraft.contentEncoding.trim() : undefined,
+              shouldApplyMetadata && bulkMetadataDraft.contentEncoding.trim()
+                ? bulkMetadataDraft.contentEncoding.trim()
+                : undefined,
             content_language:
-              shouldApplyMetadata && bulkMetadataDraft.contentLanguage.trim() ? bulkMetadataDraft.contentLanguage.trim() : undefined,
+              shouldApplyMetadata && bulkMetadataDraft.contentLanguage.trim()
+                ? bulkMetadataDraft.contentLanguage.trim()
+                : undefined,
             expires: shouldApplyMetadata && expiresIso ? expiresIso : undefined,
-            metadata: shouldApplyMetadata && metadataRecord ? metadataRecord : undefined,
+            metadata:
+              shouldApplyMetadata && metadataRecord
+                ? metadataRecord
+                : undefined,
             storage_class: shouldApplyStorage ? bulkStorageClass : undefined,
           };
           await updateObjectMetadata(accountIdForApi, bucketName, payload);
         }
         if (shouldApplyTags) {
-          await updateObjectTags(accountIdForApi, bucketName, { key, tags: tagsPairs });
+          await updateObjectTags(accountIdForApi, bucketName, {
+            key,
+            tags: tagsPairs,
+          });
         }
         if (shouldApplyAcl) {
-          await updateObjectAcl(accountIdForApi, bucketName, { key, acl: bulkAclValue });
+          await updateObjectAcl(accountIdForApi, bucketName, {
+            key,
+            acl: bulkAclValue,
+          });
         }
         if (shouldApplyLegalHold) {
-          await updateObjectLegalHold(accountIdForApi, bucketName, { key, status: bulkLegalHoldStatus });
+          await updateObjectLegalHold(accountIdForApi, bucketName, {
+            key,
+            status: bulkLegalHoldStatus,
+          });
         }
         if (shouldApplyRetention) {
           await updateObjectRetention(accountIdForApi, bucketName, {
@@ -6945,7 +8532,10 @@ export default function BrowserPage({
       };
 
       const queue = [...keys];
-      const workerCount = Math.max(1, Math.min(otherOperationsParallelismRef.current, queue.length));
+      const workerCount = Math.max(
+        1,
+        Math.min(otherOperationsParallelismRef.current, queue.length),
+      );
       const workers = Array.from({ length: workerCount }, async () => {
         while (queue.length > 0) {
           const key = queue.shift();
@@ -6961,8 +8551,13 @@ export default function BrowserPage({
         }
       });
       await Promise.all(workers);
-      const completionError = failures > 0 ? "Some objects failed to update attributes." : undefined;
-      completeOperation(operationId, failures > 0 ? "failed" : "done", completionError);
+      const completionError =
+        failures > 0 ? "Some objects failed to update attributes." : undefined;
+      completeOperation(
+        operationId,
+        failures > 0 ? "failed" : "done",
+        completionError,
+      );
       const successCount = Math.max(0, total - failures);
       const summary = `Updated ${successCount} of ${total} object(s).`;
       setBulkAttributesSummary(summary);
@@ -6983,8 +8578,13 @@ export default function BrowserPage({
     }
     const isLatestRestoreMode = bulkRestoreRestoreDeleted;
     const allowDeleteMissing = !isLatestRestoreMode && bulkRestoreDeleteMissing;
-    const targetTime = bulkRestoreDate ? new Date(bulkRestoreDate).getTime() : Number.NaN;
-    if (!isLatestRestoreMode && (!bulkRestoreDate || Number.isNaN(targetTime))) {
+    const targetTime = bulkRestoreDate
+      ? new Date(bulkRestoreDate).getTime()
+      : Number.NaN;
+    if (
+      !isLatestRestoreMode &&
+      (!bulkRestoreDate || Number.isNaN(targetTime))
+    ) {
       setBulkRestoreError("Select a valid date.");
       return;
     }
@@ -6994,15 +8594,21 @@ export default function BrowserPage({
     setBulkRestorePreview(null);
     try {
       const buildRestorePlan = async () => {
-        const fileItems = bulkActionItems.filter((item) => item.type === "file");
-        const folderItems = bulkActionItems.filter((item) => item.type === "folder");
+        const fileItems = bulkActionItems.filter(
+          (item) => item.type === "file",
+        );
+        const folderItems = bulkActionItems.filter(
+          (item) => item.type === "folder",
+        );
         const restoreCandidates = new Map<string, string>();
         const presentAtDate = new Set<string>();
         const deleteCandidates = new Set<string>();
         const unchangedKeys = new Set<string>();
 
         for (const item of fileItems) {
-          const { versions, deleteMarkers } = await listAllVersionsForKey(item.key);
+          const { versions, deleteMarkers } = await listAllVersionsForKey(
+            item.key,
+          );
           const allEntries = [...versions, ...deleteMarkers];
           const latest = allEntries.find((entry) => entry.is_latest);
           const latestRestorable = findLatestRestorableVersion(allEntries);
@@ -7016,13 +8622,21 @@ export default function BrowserPage({
 
           const match = findVersionForDate(allEntries, targetTime);
           if (match && !match.is_delete_marker && match.version_id) {
-            if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
+            if (
+              latest &&
+              !latest.is_delete_marker &&
+              latest.version_id === match.version_id
+            ) {
               unchangedKeys.add(item.key);
             } else {
               restoreCandidates.set(item.key, match.version_id);
             }
             presentAtDate.add(item.key);
-          } else if (bulkRestoreRestoreDeleted && latest?.is_delete_marker && latestRestorable?.version_id) {
+          } else if (
+            bulkRestoreRestoreDeleted &&
+            latest?.is_delete_marker &&
+            latestRestorable?.version_id
+          ) {
             restoreCandidates.set(item.key, latestRestorable.version_id);
           } else if (allowDeleteMissing) {
             deleteCandidates.add(item.key);
@@ -7031,7 +8645,8 @@ export default function BrowserPage({
 
         for (const folder of folderItems) {
           const folderPrefix = normalizePrefix(folder.key);
-          const { versions, deleteMarkers } = await listAllVersionsForPrefix(folderPrefix);
+          const { versions, deleteMarkers } =
+            await listAllVersionsForPrefix(folderPrefix);
           const byKey = new Map<string, BrowserObjectVersion[]>();
           [...versions, ...deleteMarkers].forEach((entry) => {
             const list = byKey.get(entry.key) ?? [];
@@ -7051,13 +8666,21 @@ export default function BrowserPage({
 
             const match = findVersionForDate(entries, targetTime);
             if (match && !match.is_delete_marker && match.version_id) {
-              if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
+              if (
+                latest &&
+                !latest.is_delete_marker &&
+                latest.version_id === match.version_id
+              ) {
                 unchangedKeys.add(key);
               } else {
                 restoreCandidates.set(key, match.version_id);
               }
               presentAtDate.add(key);
-            } else if (bulkRestoreRestoreDeleted && latest?.is_delete_marker && latestRestorable?.version_id) {
+            } else if (
+              bulkRestoreRestoreDeleted &&
+              latest?.is_delete_marker &&
+              latestRestorable?.version_id
+            ) {
               restoreCandidates.set(key, latestRestorable.version_id);
             }
           });
@@ -7071,15 +8694,20 @@ export default function BrowserPage({
           }
         }
 
-        const restoreList = Array.from(restoreCandidates.entries()).map(([key, versionId]) => ({
-          key,
-          versionId,
-        }));
-        const deleteList = allowDeleteMissing ? Array.from(deleteCandidates) : [];
+        const restoreList = Array.from(restoreCandidates.entries()).map(
+          ([key, versionId]) => ({
+            key,
+            versionId,
+          }),
+        );
+        const deleteList = allowDeleteMissing
+          ? Array.from(deleteCandidates)
+          : [];
         return { restoreList, deleteList, unchangedKeys };
       };
 
-      const { restoreList, deleteList, unchangedKeys } = await buildRestorePlan();
+      const { restoreList, deleteList, unchangedKeys } =
+        await buildRestorePlan();
       const unchangedCount = unchangedKeys.size;
       const total = restoreList.length + deleteList.length;
       if (total === 0) {
@@ -7103,7 +8731,7 @@ export default function BrowserPage({
           setBulkRestoreError(
             isLatestRestoreMode
               ? "No deleted objects can be restored to their latest version."
-              : "No objects matched the selected date."
+              : "No objects matched the selected date.",
           );
         }
         return;
@@ -7131,7 +8759,7 @@ export default function BrowserPage({
         "Restoring snapshot",
         currentPath || bucketName,
         { kind: "other" },
-        0
+        0,
       );
       let completed = 0;
       let restoreFailures = 0;
@@ -7139,12 +8767,19 @@ export default function BrowserPage({
 
       const updateProgress = (count: number) => {
         const percent = total > 0 ? Math.round((count / total) * 100) : 100;
-        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+        setOperations((prev) =>
+          prev.map((op) =>
+            op.id === operationId ? { ...op, progress: percent } : op,
+          ),
+        );
       };
 
       if (restoreList.length > 0) {
         const queue = [...restoreList];
-        const workerCount = Math.max(1, Math.min(otherOperationsParallelismRef.current, queue.length));
+        const workerCount = Math.max(
+          1,
+          Math.min(otherOperationsParallelismRef.current, queue.length),
+        );
         const workers = Array.from({ length: workerCount }, async () => {
           while (queue.length > 0) {
             const item = queue.shift();
@@ -7179,8 +8814,13 @@ export default function BrowserPage({
       }
 
       const failures = restoreFailures + deleteFailures;
-      const completionError = failures > 0 ? "Some objects failed to restore or delete." : undefined;
-      completeOperation(operationId, failures > 0 ? "failed" : "done", completionError);
+      const completionError =
+        failures > 0 ? "Some objects failed to restore or delete." : undefined;
+      completeOperation(
+        operationId,
+        failures > 0 ? "failed" : "done",
+        completionError,
+      );
       const summary = `Restored ${restoreList.length - restoreFailures} object(s), deleted ${deleteList.length - deleteFailures} object(s), unchanged ${unchangedCount} object(s).`;
       setBulkRestoreSummary(summary);
       setStatusMessage(summary);
@@ -7221,7 +8861,13 @@ export default function BrowserPage({
     setCleanupError(null);
     setCleanupSummary(null);
     setShowOperationsModal(true);
-    const operationId = startOperation("deleting", "Cleaning old versions", currentPath || bucketName, { kind: "other" }, 0);
+    const operationId = startOperation(
+      "deleting",
+      "Cleaning old versions",
+      currentPath || bucketName,
+      { kind: "other" },
+      0,
+    );
     let cleanupCompletionStatus: OperationCompletionStatus = "done";
     let cleanupCompletionError: string | undefined;
     try {
@@ -7240,7 +8886,11 @@ export default function BrowserPage({
       cleanupCompletionError = "Unable to clean old versions for this prefix.";
       setCleanupError("Unable to clean old versions for this prefix.");
     } finally {
-      completeOperation(operationId, cleanupCompletionStatus, cleanupCompletionError);
+      completeOperation(
+        operationId,
+        cleanupCompletionStatus,
+        cleanupCompletionError,
+      );
       setCleanupLoading(false);
     }
   };
@@ -7257,7 +8907,12 @@ export default function BrowserPage({
     } else {
       setWarningMessage(null);
     }
-    setClipboard({ items: eligible, sourceBucket: bucketName, sourceAccountId: accountIdForApi ?? null, mode: "copy" });
+    setClipboard({
+      items: eligible,
+      sourceBucket: bucketName,
+      sourceAccountId: accountIdForApi ?? null,
+      mode: "copy",
+    });
     setStatusMessage("Items copied.");
   };
 
@@ -7273,14 +8928,21 @@ export default function BrowserPage({
     } else {
       setWarningMessage(null);
     }
-    setClipboard({ items: eligible, sourceBucket: bucketName, sourceAccountId: accountIdForApi ?? null, mode: "move" });
+    setClipboard({
+      items: eligible,
+      sourceBucket: bucketName,
+      sourceAccountId: accountIdForApi ?? null,
+      mode: "move",
+    });
     setStatusMessage("Items ready to move.");
   };
 
   const handlePasteItems = async () => {
     if (!clipboard || !bucketName || !hasS3AccountContext) return;
     if (!clipboardMatchesContext) {
-      setWarningMessage("Paste between different accounts is blocked for security. Switch back to the source account.");
+      setWarningMessage(
+        "Paste between different accounts is blocked for security. Switch back to the source account.",
+      );
       return;
     }
     setWarningMessage(null);
@@ -7323,21 +8985,36 @@ export default function BrowserPage({
       } else {
         const sourcePrefix = normalizePrefix(item.key);
         const destFolderPrefix = `${destinationPrefix}${item.name}/`;
-        if (sourceBucket === destinationBucket && destFolderPrefix === sourcePrefix) {
+        if (
+          sourceBucket === destinationBucket &&
+          destFolderPrefix === sourcePrefix
+        ) {
           skipped += 1;
           continue;
         }
         try {
-          await createFolder(accountIdForApi, destinationBucket, destFolderPrefix);
+          await createFolder(
+            accountIdForApi,
+            destinationBucket,
+            destFolderPrefix,
+          );
         } catch {
           // ignore folder creation failures
         }
-        const objects = await listAllObjectsForPrefix(sourcePrefix, sourceBucket);
+        const objects = await listAllObjectsForPrefix(
+          sourcePrefix,
+          sourceBucket,
+        );
         objects.forEach((obj) => {
-          const relativeKey = obj.key.startsWith(sourcePrefix) ? obj.key.slice(sourcePrefix.length) : obj.key;
+          const relativeKey = obj.key.startsWith(sourcePrefix)
+            ? obj.key.slice(sourcePrefix.length)
+            : obj.key;
           if (!relativeKey) return;
           const destinationKey = `${destFolderPrefix}${relativeKey}`;
-          if (sourceBucket === destinationBucket && destinationKey === obj.key) {
+          if (
+            sourceBucket === destinationBucket &&
+            destinationKey === obj.key
+          ) {
             skipped += 1;
             return;
           }
@@ -7352,7 +9029,8 @@ export default function BrowserPage({
           copyDetailItems.push({
             id: detailId,
             key: destinationKey,
-            label: shortName(destinationKey, destinationPrefix) || destinationKey,
+            label:
+              shortName(destinationKey, destinationPrefix) || destinationKey,
             status: "queued",
             sizeBytes: obj.size ?? undefined,
           });
@@ -7361,7 +9039,9 @@ export default function BrowserPage({
     }
 
     if (copyTasks.length === 0) {
-      setStatusMessage(skipped > 0 ? "Nothing new to paste here." : "No items to paste.");
+      setStatusMessage(
+        skipped > 0 ? "Nothing new to paste here." : "No items to paste.",
+      );
       return;
     }
 
@@ -7371,9 +9051,11 @@ export default function BrowserPage({
     const operationId = startOperation(
       "copying",
       isMove ? "Moving items" : "Copying items",
-      destinationPrefix ? `${destinationBucket}/${destinationPrefix}` : destinationBucket,
+      destinationPrefix
+        ? `${destinationBucket}/${destinationPrefix}`
+        : destinationBucket,
       { kind: "copy" },
-      0
+      0,
     );
     if (copyDetailItems.length > 0) {
       setCopyDetails((prev) => ({ ...prev, [operationId]: copyDetailItems }));
@@ -7383,12 +9065,19 @@ export default function BrowserPage({
     let failures = 0;
     const updateProgress = () => {
       const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
-      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+      setOperations((prev) =>
+        prev.map((op) =>
+          op.id === operationId ? { ...op, progress: percent } : op,
+        ),
+      );
     };
 
     try {
       const queue = [...copyTasks];
-      const workerCount = Math.max(1, Math.min(otherOperationsParallelismRef.current, queue.length));
+      const workerCount = Math.max(
+        1,
+        Math.min(otherOperationsParallelismRef.current, queue.length),
+      );
       const workers = Array.from({ length: workerCount }, async () => {
         while (queue.length > 0) {
           const task = queue.shift();
@@ -7403,7 +9092,12 @@ export default function BrowserPage({
             });
             updateCopyDetailStatus(operationId, task.detailId, "done");
           } catch (err) {
-            updateCopyDetailStatus(operationId, task.detailId, "failed", formatOperationError(err, "Copy failed."));
+            updateCopyDetailStatus(
+              operationId,
+              task.detailId,
+              "failed",
+              formatOperationError(err, "Copy failed."),
+            );
             failures += 1;
           } finally {
             completed += 1;
@@ -7413,8 +9107,13 @@ export default function BrowserPage({
       });
       await Promise.all(workers);
 
-      const completionError = failures > 0 ? "Some items failed to copy or move." : undefined;
-      completeOperation(operationId, failures > 0 ? "failed" : "done", completionError);
+      const completionError =
+        failures > 0 ? "Some items failed to copy or move." : undefined;
+      completeOperation(
+        operationId,
+        failures > 0 ? "failed" : "done",
+        completionError,
+      );
       const summary = `${isMove ? "Moved" : "Copied"} ${total - failures} of ${total} item(s).`;
       setStatusMessage(summary);
       requestObjectsRefresh(prefix);
@@ -7422,7 +9121,11 @@ export default function BrowserPage({
         setClipboard(null);
       }
     } catch (err) {
-      const completionError = formatOperationError(err, "Unable to paste items.", "Unable to paste items.");
+      const completionError = formatOperationError(
+        err,
+        "Unable to paste items.",
+        "Unable to paste items.",
+      );
       completeOperation(operationId, "failed", completionError);
       setStatusMessage(completionError);
     }
@@ -7450,8 +9153,8 @@ export default function BrowserPage({
       if (element.isContentEditable) return true;
       return Boolean(
         element.closest(
-          "input, textarea, select, [contenteditable='true'], [contenteditable=''], [role='textbox']"
-        )
+          "input, textarea, select, [contenteditable='true'], [contenteditable=''], [role='textbox']",
+        ),
       );
     };
     const handleShortcut = (event: KeyboardEvent) => {
@@ -7539,7 +9242,13 @@ export default function BrowserPage({
     setMetadataError(null);
     try {
       const [meta, tags] = await Promise.all([
-        fetchObjectMetadata(accountIdForApi, bucketName, targetKey, null, sseCustomerKeyBase64),
+        fetchObjectMetadata(
+          accountIdForApi,
+          bucketName,
+          targetKey,
+          null,
+          sseCustomerKeyBase64,
+        ),
         getObjectTags(accountIdForApi, bucketName, targetKey),
       ]);
       setInspectedMetadata(meta);
@@ -7557,13 +9266,27 @@ export default function BrowserPage({
 
   const refreshVersionsForKey = async (targetKey: string) => {
     if (showPrefixVersions) {
-      await loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
+      await loadPrefixVersions({
+        append: false,
+        keyMarker: null,
+        versionIdMarker: null,
+      });
     }
     if (inspectedItem?.type === "file" && inspectedItem.key === targetKey) {
-      await loadObjectVersions({ append: false, keyMarker: null, versionIdMarker: null, targetKey });
+      await loadObjectVersions({
+        append: false,
+        keyMarker: null,
+        versionIdMarker: null,
+        targetKey,
+      });
     }
     if (showObjectVersionsModal && objectVersionsModalKey === targetKey) {
-      await loadObjectVersionsModal({ append: false, keyMarker: null, versionIdMarker: null, targetKey });
+      await loadObjectVersionsModal({
+        append: false,
+        keyMarker: null,
+        versionIdMarker: null,
+        targetKey,
+      });
     }
   };
 
@@ -7583,7 +9306,11 @@ export default function BrowserPage({
     )
       return;
     setWarningMessage(null);
-    const operationId = startOperation("copying", "Restoring version", `${bucketName}/${item.key}`);
+    const operationId = startOperation(
+      "copying",
+      "Restoring version",
+      `${bucketName}/${item.key}`,
+    );
     let completionStatus: OperationCompletionStatus = "done";
     let completionError: string | undefined;
     try {
@@ -7599,15 +9326,28 @@ export default function BrowserPage({
       await refreshVersionsForKey(item.key);
     } catch (err) {
       completionStatus = "failed";
-      completionError = formatOperationError(err, "Unable to restore version.", "Unable to restore version.");
+      completionError = formatOperationError(
+        err,
+        "Unable to restore version.",
+        "Unable to restore version.",
+      );
       setStatusMessage(completionError);
     } finally {
       completeOperation(operationId, completionStatus, completionError);
     }
   };
 
-  const handleDeleteVersion = async (item: BrowserObjectVersion, options?: { skipConfirm?: boolean }) => {
-    if (!bucketName || !hasS3AccountContext || !item.version_id || !isVersioningEnabled) return;
+  const handleDeleteVersion = async (
+    item: BrowserObjectVersion,
+    options?: { skipConfirm?: boolean },
+  ) => {
+    if (
+      !bucketName ||
+      !hasS3AccountContext ||
+      !item.version_id ||
+      !isVersioningEnabled
+    )
+      return;
     setWarningMessage(null);
     const label = item.is_delete_marker ? "delete marker" : "version";
     if (!options?.skipConfirm) {
@@ -7620,21 +9360,35 @@ export default function BrowserPage({
       });
       return;
     }
-    const operationLabel = item.is_delete_marker ? "Removing delete marker" : "Deleting version";
-    const operationId = startOperation("deleting", operationLabel, `${bucketName}/${item.key}`);
+    const operationLabel = item.is_delete_marker
+      ? "Removing delete marker"
+      : "Deleting version";
+    const operationId = startOperation(
+      "deleting",
+      operationLabel,
+      `${bucketName}/${item.key}`,
+    );
     let completionStatus: OperationCompletionStatus = "done";
     let completionError: string | undefined;
     try {
-      await deleteObjects(accountIdForApi, bucketName, [{ key: item.key, version_id: item.version_id }]);
-      setStatusMessage(item.is_delete_marker ? "Delete marker removed." : "Version deleted.");
+      await deleteObjects(accountIdForApi, bucketName, [
+        { key: item.key, version_id: item.version_id },
+      ]);
+      setStatusMessage(
+        item.is_delete_marker ? "Delete marker removed." : "Version deleted.",
+      );
       await loadObjects({ prefixOverride: prefix });
       await refreshVersionsForKey(item.key);
     } catch (err) {
       completionStatus = "failed";
       completionError = formatOperationError(
         err,
-        item.is_delete_marker ? "Unable to delete marker." : "Unable to delete version.",
-        item.is_delete_marker ? "Unable to delete marker." : "Unable to delete version."
+        item.is_delete_marker
+          ? "Unable to delete marker."
+          : "Unable to delete version.",
+        item.is_delete_marker
+          ? "Unable to delete marker."
+          : "Unable to delete version.",
       );
       setWarningMessage(completionError);
     } finally {
@@ -7643,14 +9397,22 @@ export default function BrowserPage({
   };
 
   const handleCopyUrl = async (item: BrowserItem | null) => {
-    if (!bucketName || !hasS3AccountContext || !item || item.type !== "file" || item.isDeleted) {
+    if (
+      !bucketName ||
+      !hasS3AccountContext ||
+      !item ||
+      item.type !== "file" ||
+      item.isDeleted
+    ) {
       if (item?.isDeleted) {
         setWarningMessage("Deleted objects do not have a direct download URL.");
       }
       return;
     }
     if (sseActive) {
-      setWarningMessage("Copy URL is disabled in SSE-C mode: required encryption headers are missing.");
+      setWarningMessage(
+        "Copy URL is disabled in SSE-C mode: required encryption headers are missing.",
+      );
       return;
     }
     try {
@@ -7728,7 +9490,10 @@ export default function BrowserPage({
   const runSelectionAction = (actionId: string) => {
     switch (actionId) {
       case "download":
-        if (selectionActionStates.download.label === "Download folder" && selectionPrimary) {
+        if (
+          selectionActionStates.download.label === "Download folder" &&
+          selectionPrimary
+        ) {
           handleDownloadFolder(selectionPrimary);
           return;
         }
@@ -7781,7 +9546,10 @@ export default function BrowserPage({
       inspectorAvailable: canUseInspectorPanel,
     });
 
-  const activeOperations = useMemo(() => operations.filter((op) => !op.completedAt), [operations]);
+  const activeOperations = useMemo(
+    () => operations.filter((op) => !op.completedAt),
+    [operations],
+  );
   const uploadGroups = useMemo(() => {
     const groups = new Map<
       string,
@@ -7845,9 +9613,18 @@ export default function BrowserPage({
       }
     });
     return Array.from(groups.values()).map((group) => {
-      const activeBytes = group.activeItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
-      const completedBytes = group.completedItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
-      const queuedBytes = group.queuedItems.reduce((sum, item) => sum + item.file.size, 0);
+      const activeBytes = group.activeItems.reduce(
+        (sum, item) => sum + (item.sizeBytes ?? 0),
+        0,
+      );
+      const completedBytes = group.completedItems.reduce(
+        (sum, item) => sum + (item.sizeBytes ?? 0),
+        0,
+      );
+      const queuedBytes = group.queuedItems.reduce(
+        (sum, item) => sum + item.file.size,
+        0,
+      );
       const totalBytes = activeBytes + completedBytes + queuedBytes;
       const loadedBytes = group.activeItems.reduce((sum, item) => {
         const size = item.sizeBytes ?? 0;
@@ -7856,7 +9633,8 @@ export default function BrowserPage({
       }, 0);
       const completedLoadedBytes = completedBytes;
       const totalLoadedBytes = loadedBytes + completedLoadedBytes;
-      const progress = totalBytes > 0 ? Math.round((totalLoadedBytes / totalBytes) * 100) : 0;
+      const progress =
+        totalBytes > 0 ? Math.round((totalLoadedBytes / totalBytes) * 100) : 0;
       return { ...group, progress, totalBytes };
     });
   }, [operations, uploadQueue]);
@@ -7878,7 +9656,7 @@ export default function BrowserPage({
             done: 0,
             failed: 0,
             cancelled: 0,
-          } as Record<DownloadDetailStatus | "total", number>
+          } as Record<DownloadDetailStatus | "total", number>,
         );
         return { op, items, counts };
       });
@@ -7894,7 +9672,10 @@ export default function BrowserPage({
             acc[item.status] += 1;
             return acc;
           },
-          { total: 0, queued: 0, deleting: 0, done: 0, failed: 0 } as Record<DeleteDetailStatus | "total", number>
+          { total: 0, queued: 0, deleting: 0, done: 0, failed: 0 } as Record<
+            DeleteDetailStatus | "total",
+            number
+          >,
         );
         return { op, items, counts };
       });
@@ -7910,71 +9691,88 @@ export default function BrowserPage({
             acc[item.status] += 1;
             return acc;
           },
-          { total: 0, queued: 0, copying: 0, done: 0, failed: 0 } as Record<CopyDetailStatus | "total", number>
+          { total: 0, queued: 0, copying: 0, done: 0, failed: 0 } as Record<
+            CopyDetailStatus | "total",
+            number
+          >,
         );
         return { op, items, counts };
       });
   }, [copyDetails, operations]);
   const queuedDownloadCount = useMemo(
     () => downloadGroups.reduce((sum, group) => sum + group.counts.queued, 0),
-    [downloadGroups]
+    [downloadGroups],
   );
   const queuedDeleteCount = useMemo(
     () => deleteGroups.reduce((sum, group) => sum + group.counts.queued, 0),
-    [deleteGroups]
+    [deleteGroups],
   );
   const queuedCopyCount = useMemo(
     () => copyGroups.reduce((sum, group) => sum + group.counts.queued, 0),
-    [copyGroups]
+    [copyGroups],
   );
   const hasFailedOperations = useMemo(() => {
     if (operations.some((op) => op.completionStatus === "failed")) {
       return true;
     }
-    const hasFailedDownloadDetails = Object.values(downloadDetails).some((items) =>
-      items.some((item) => item.status === "failed")
+    const hasFailedDownloadDetails = Object.values(downloadDetails).some(
+      (items) => items.some((item) => item.status === "failed"),
     );
     if (hasFailedDownloadDetails) {
       return true;
     }
     const hasFailedDeleteDetails = Object.values(deleteDetails).some((items) =>
-      items.some((item) => item.status === "failed")
+      items.some((item) => item.status === "failed"),
     );
     if (hasFailedDeleteDetails) {
       return true;
     }
-    return Object.values(copyDetails).some((items) => items.some((item) => item.status === "failed"));
+    return Object.values(copyDetails).some((items) =>
+      items.some((item) => item.status === "failed"),
+    );
   }, [operations, downloadDetails, deleteDetails, copyDetails]);
   const failedUploadCount = useMemo(
-    () => operations.filter((op) => op.kind === "upload" && op.completionStatus === "failed").length,
-    [operations]
+    () =>
+      operations.filter(
+        (op) => op.kind === "upload" && op.completionStatus === "failed",
+      ).length,
+    [operations],
   );
   const failedDownloadCount = useMemo(
     () =>
       downloadGroups.reduce((sum, group) => {
-        const failedItems = group.items.filter((item) => item.status === "failed").length;
-        const fallback = failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
+        const failedItems = group.items.filter(
+          (item) => item.status === "failed",
+        ).length;
+        const fallback =
+          failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
         return sum + failedItems + fallback;
       }, 0),
-    [downloadGroups]
+    [downloadGroups],
   );
   const failedDeleteCount = useMemo(
     () =>
       deleteGroups.reduce((sum, group) => {
-        const failedItems = group.items.filter((item) => item.status === "failed").length;
-        const fallback = failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
+        const failedItems = group.items.filter(
+          (item) => item.status === "failed",
+        ).length;
+        const fallback =
+          failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
         return sum + failedItems + fallback;
       }, 0),
-    [deleteGroups]
+    [deleteGroups],
   );
   const failedCopyCount = useMemo(
     () =>
       copyGroups.reduce((sum, group) => {
-        const failedItems = group.items.filter((item) => item.status === "failed").length;
-        const fallback = failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
+        const failedItems = group.items.filter(
+          (item) => item.status === "failed",
+        ).length;
+        const fallback =
+          failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
         return sum + failedItems + fallback;
       }, 0),
-    [copyGroups]
+    [copyGroups],
   );
   const failedOtherOperations = useMemo(
     () =>
@@ -7984,12 +9782,16 @@ export default function BrowserPage({
           op.kind !== "download" &&
           op.kind !== "delete" &&
           op.kind !== "copy" &&
-          op.completionStatus === "failed"
+          op.completionStatus === "failed",
       ),
-    [operations]
+    [operations],
   );
   const totalOperationsCount =
-    activeOperations.length + uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount;
+    activeOperations.length +
+    uploadQueue.length +
+    queuedDownloadCount +
+    queuedDeleteCount +
+    queuedCopyCount;
   const hasPendingOperations = totalOperationsCount > 0;
   const leaveMessage =
     "Operations are in progress (upload, download, copy, delete). Leaving now may interrupt them. Continue?";
@@ -8000,50 +9802,60 @@ export default function BrowserPage({
   const completedUploadCount = useMemo(
     () =>
       operations.filter(
-        (op) => op.kind === "upload" && op.completedAt && op.completionStatus !== "failed"
+        (op) =>
+          op.kind === "upload" &&
+          op.completedAt &&
+          op.completionStatus !== "failed",
       ).length,
-    [operations]
+    [operations],
   );
   const completedDownloadCount = useMemo(
     () =>
-      downloadGroups.reduce(
-        (sum, group) => {
-          const completedItems = group.items.filter(
-            (item) => item.status === "done" || item.status === "cancelled"
-          ).length;
-          const fallback =
-            completedItems === 0 && group.op.completedAt && group.op.completionStatus !== "failed" ? 1 : 0;
-          return sum + completedItems + fallback;
-        },
-        0
-      ),
-    [downloadGroups]
+      downloadGroups.reduce((sum, group) => {
+        const completedItems = group.items.filter(
+          (item) => item.status === "done" || item.status === "cancelled",
+        ).length;
+        const fallback =
+          completedItems === 0 &&
+          group.op.completedAt &&
+          group.op.completionStatus !== "failed"
+            ? 1
+            : 0;
+        return sum + completedItems + fallback;
+      }, 0),
+    [downloadGroups],
   );
   const completedDeleteCount = useMemo(
     () =>
-      deleteGroups.reduce(
-        (sum, group) => {
-          const completedItems = group.items.filter((item) => item.status === "done").length;
-          const fallback =
-            completedItems === 0 && group.op.completedAt && group.op.completionStatus !== "failed" ? 1 : 0;
-          return sum + completedItems + fallback;
-        },
-        0
-      ),
-    [deleteGroups]
+      deleteGroups.reduce((sum, group) => {
+        const completedItems = group.items.filter(
+          (item) => item.status === "done",
+        ).length;
+        const fallback =
+          completedItems === 0 &&
+          group.op.completedAt &&
+          group.op.completionStatus !== "failed"
+            ? 1
+            : 0;
+        return sum + completedItems + fallback;
+      }, 0),
+    [deleteGroups],
   );
   const completedCopyCount = useMemo(
     () =>
-      copyGroups.reduce(
-        (sum, group) => {
-          const completedItems = group.items.filter((item) => item.status === "done").length;
-          const fallback =
-            completedItems === 0 && group.op.completedAt && group.op.completionStatus !== "failed" ? 1 : 0;
-          return sum + completedItems + fallback;
-        },
-        0
-      ),
-    [copyGroups]
+      copyGroups.reduce((sum, group) => {
+        const completedItems = group.items.filter(
+          (item) => item.status === "done",
+        ).length;
+        const fallback =
+          completedItems === 0 &&
+          group.op.completedAt &&
+          group.op.completionStatus !== "failed"
+            ? 1
+            : 0;
+        return sum + completedItems + fallback;
+      }, 0),
+    [copyGroups],
   );
   const completedOtherOperations = useMemo(
     () =>
@@ -8054,9 +9866,9 @@ export default function BrowserPage({
           op.kind !== "delete" &&
           op.kind !== "copy" &&
           op.completedAt &&
-          op.completionStatus !== "failed"
+          op.completionStatus !== "failed",
       ),
-    [operations]
+    [operations],
   );
 
   useEffect(() => {
@@ -8070,16 +9882,24 @@ export default function BrowserPage({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasPendingOperations, leaveMessage]);
   const failedOperationsCount =
-    failedUploadCount + failedDownloadCount + failedDeleteCount + failedCopyCount + failedOtherOperations.length;
+    failedUploadCount +
+    failedDownloadCount +
+    failedDeleteCount +
+    failedCopyCount +
+    failedOtherOperations.length;
   const completedOperationsCount =
     completedUploadCount +
     completedDownloadCount +
     completedDeleteCount +
     completedCopyCount +
     completedOtherOperations.length;
-  const hasFinishedOperations = completedOperationsCount > 0 || failedOperationsCount > 0;
+  const hasFinishedOperations =
+    completedOperationsCount > 0 || failedOperationsCount > 0;
   const filtersAllInactive =
-    !showActiveOperations && !showQueuedOperations && !showCompletedOperations && !showFailedOperations;
+    !showActiveOperations &&
+    !showQueuedOperations &&
+    !showCompletedOperations &&
+    !showFailedOperations;
   const showAllOperations = filtersAllInactive;
   const showActiveFilter = showActiveOperations || showAllOperations;
   const showQueuedFilter = showQueuedOperations || showAllOperations;
@@ -8088,9 +9908,13 @@ export default function BrowserPage({
   const activeOtherOperations = useMemo(
     () =>
       activeOperations.filter(
-        (op) => op.kind !== "upload" && op.kind !== "download" && op.kind !== "delete" && op.kind !== "copy"
+        (op) =>
+          op.kind !== "upload" &&
+          op.kind !== "download" &&
+          op.kind !== "delete" &&
+          op.kind !== "copy",
       ),
-    [activeOperations]
+    [activeOperations],
   );
   const visibleOtherOperations = useMemo(() => {
     return [
@@ -8111,8 +9935,12 @@ export default function BrowserPage({
     return uploadGroups.filter((group) => {
       const hasActive = group.activeItems.length > 0;
       const hasQueued = group.queuedItems.length > 0;
-      const hasCompleted = group.completedItems.some((item) => item.completionStatus !== "failed");
-      const hasFailed = group.completedItems.some((item) => item.completionStatus === "failed");
+      const hasCompleted = group.completedItems.some(
+        (item) => item.completionStatus !== "failed",
+      );
+      const hasFailed = group.completedItems.some(
+        (item) => item.completionStatus === "failed",
+      );
       return (
         (showActiveFilter && hasActive) ||
         (showQueuedFilter && hasQueued) ||
@@ -8120,63 +9948,99 @@ export default function BrowserPage({
         (showFailedFilter && hasFailed)
       );
     });
-  }, [uploadGroups, showActiveOperations, showQueuedOperations, showCompletedOperations, showFailedOperations]);
+  }, [
+    uploadGroups,
+    showActiveOperations,
+    showQueuedOperations,
+    showCompletedOperations,
+    showFailedOperations,
+  ]);
   const visibleDownloadGroups = useMemo(() => {
     return downloadGroups.filter((group) => {
       const hasActive =
         !group.op.completedAt &&
-        (group.op.status === "downloading" || group.items.some((item) => item.status === "downloading"));
+        (group.op.status === "downloading" ||
+          group.items.some((item) => item.status === "downloading"));
       const hasQueued = group.items.some((item) => item.status === "queued");
       const hasCompleted = group.items.some(
-        (item) => item.status === "done" || item.status === "cancelled"
+        (item) => item.status === "done" || item.status === "cancelled",
       );
       const hasFailed =
-        group.items.some((item) => item.status === "failed") || group.op.completionStatus === "failed";
+        group.items.some((item) => item.status === "failed") ||
+        group.op.completionStatus === "failed";
       return (
         (showActiveFilter && hasActive) ||
         (showQueuedFilter && hasQueued) ||
         (showCompletedFilter && hasCompleted) ||
-        (showCompletedFilter && Boolean(group.op.completedAt) && group.op.completionStatus !== "failed") ||
+        (showCompletedFilter &&
+          Boolean(group.op.completedAt) &&
+          group.op.completionStatus !== "failed") ||
         (showFailedFilter && hasFailed)
       );
     });
-  }, [downloadGroups, showActiveOperations, showQueuedOperations, showCompletedOperations, showFailedOperations]);
+  }, [
+    downloadGroups,
+    showActiveOperations,
+    showQueuedOperations,
+    showCompletedOperations,
+    showFailedOperations,
+  ]);
   const visibleDeleteGroups = useMemo(() => {
     return deleteGroups.filter((group) => {
       const hasActive =
         !group.op.completedAt &&
-        (group.op.status === "deleting" || group.items.some((item) => item.status === "deleting"));
+        (group.op.status === "deleting" ||
+          group.items.some((item) => item.status === "deleting"));
       const hasQueued = group.items.some((item) => item.status === "queued");
       const hasCompleted = group.items.some((item) => item.status === "done");
       const hasFailed =
-        group.items.some((item) => item.status === "failed") || group.op.completionStatus === "failed";
+        group.items.some((item) => item.status === "failed") ||
+        group.op.completionStatus === "failed";
       return (
         (showActiveFilter && hasActive) ||
         (showQueuedFilter && hasQueued) ||
         (showCompletedFilter && hasCompleted) ||
-        (showCompletedFilter && Boolean(group.op.completedAt) && group.op.completionStatus !== "failed") ||
+        (showCompletedFilter &&
+          Boolean(group.op.completedAt) &&
+          group.op.completionStatus !== "failed") ||
         (showFailedFilter && hasFailed)
       );
     });
-  }, [deleteGroups, showActiveOperations, showQueuedOperations, showCompletedOperations, showFailedOperations]);
+  }, [
+    deleteGroups,
+    showActiveOperations,
+    showQueuedOperations,
+    showCompletedOperations,
+    showFailedOperations,
+  ]);
   const visibleCopyGroups = useMemo(() => {
     return copyGroups.filter((group) => {
       const hasActive =
         !group.op.completedAt &&
-        (group.op.status === "copying" || group.items.some((item) => item.status === "copying"));
+        (group.op.status === "copying" ||
+          group.items.some((item) => item.status === "copying"));
       const hasQueued = group.items.some((item) => item.status === "queued");
       const hasCompleted = group.items.some((item) => item.status === "done");
       const hasFailed =
-        group.items.some((item) => item.status === "failed") || group.op.completionStatus === "failed";
+        group.items.some((item) => item.status === "failed") ||
+        group.op.completionStatus === "failed";
       return (
         (showActiveFilter && hasActive) ||
         (showQueuedFilter && hasQueued) ||
         (showCompletedFilter && hasCompleted) ||
-        (showCompletedFilter && Boolean(group.op.completedAt) && group.op.completionStatus !== "failed") ||
+        (showCompletedFilter &&
+          Boolean(group.op.completedAt) &&
+          group.op.completionStatus !== "failed") ||
         (showFailedFilter && hasFailed)
       );
     });
-  }, [copyGroups, showActiveOperations, showQueuedOperations, showCompletedOperations, showFailedOperations]);
+  }, [
+    copyGroups,
+    showActiveOperations,
+    showQueuedOperations,
+    showCompletedOperations,
+    showFailedOperations,
+  ]);
   const operationSortIndexById = useMemo(() => {
     const next: Record<string, number> = {};
     operations.forEach((op, index) => {
@@ -8203,34 +10067,61 @@ export default function BrowserPage({
         next[group.id] = Math.min(...opIndices);
         return;
       }
-      next[group.id] = operations.length + (uploadQueueOrderByGroup[group.id] ?? 0);
+      next[group.id] =
+        operations.length + (uploadQueueOrderByGroup[group.id] ?? 0);
     });
     return next;
-  }, [uploadGroups, operationSortIndexById, operations.length, uploadQueueOrderByGroup]);
+  }, [
+    uploadGroups,
+    operationSortIndexById,
+    operations.length,
+    uploadQueueOrderByGroup,
+  ]);
   const operationSortFallback = operations.length + uploadQueue.length + 1000;
-  const isGroupExpanded = (groupId: string) => Boolean(expandedOperationGroups[groupId]);
+  const isGroupExpanded = (groupId: string) =>
+    Boolean(expandedOperationGroups[groupId]);
   const toggleGroupExpanded = (groupId: string) => {
-    setExpandedOperationGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+    setExpandedOperationGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
   };
-  const toggleOperationFilter = (filter: "active" | "queued" | "completed" | "failed") => {
+  const toggleOperationFilter = (
+    filter: "active" | "queued" | "completed" | "failed",
+  ) => {
     setShowActiveOperations((prev) => (filter === "active" ? !prev : false));
     setShowQueuedOperations((prev) => (filter === "queued" ? !prev : false));
-    setShowCompletedOperations((prev) => (filter === "completed" ? !prev : false));
+    setShowCompletedOperations((prev) =>
+      filter === "completed" ? !prev : false,
+    );
     setShowFailedOperations((prev) => (filter === "failed" ? !prev : false));
   };
-  const getSectionVisibleCount = (groupId: string, section: "queued" | "completed" | "failed") =>
-    queuedVisibleCountByGroup[`${groupId}:${section}`] ?? DEFAULT_QUEUED_VISIBLE_COUNT;
-  const showMoreSection = (groupId: string, section: "queued" | "completed" | "failed") => {
+  const getSectionVisibleCount = (
+    groupId: string,
+    section: "queued" | "completed" | "failed",
+  ) =>
+    queuedVisibleCountByGroup[`${groupId}:${section}`] ??
+    DEFAULT_QUEUED_VISIBLE_COUNT;
+  const showMoreSection = (
+    groupId: string,
+    section: "queued" | "completed" | "failed",
+  ) => {
     setQueuedVisibleCountByGroup((prev) => ({
       ...prev,
-      [`${groupId}:${section}`]: getSectionVisibleCount(groupId, section) + DEFAULT_QUEUED_VISIBLE_COUNT,
+      [`${groupId}:${section}`]:
+        getSectionVisibleCount(groupId, section) + DEFAULT_QUEUED_VISIBLE_COUNT,
     }));
   };
   const sanitizeFilename = (value: string) => {
-    const cleaned = value.replace(/[^a-zA-Z0-9-_]+/g, "_").replace(/^_+|_+$/g, "");
+    const cleaned = value
+      .replace(/[^a-zA-Z0-9-_]+/g, "_")
+      .replace(/^_+|_+$/g, "");
     return cleaned || "operation";
   };
-  const downloadOperationDetails = (kind: OperationDetailsKind, operationId: string) => {
+  const downloadOperationDetails = (
+    kind: OperationDetailsKind,
+    operationId: string,
+  ) => {
     if (typeof window === "undefined") return;
     const exportedAt = new Date().toISOString();
     const timestamp = exportedAt.replace(/[:.]/g, "-");
@@ -8348,11 +10239,23 @@ export default function BrowserPage({
         const counts = uploadItems.reduce(
           (acc, item) => {
             acc.total += 1;
-            const key = item.state as "queued" | "uploading" | "done" | "failed" | "cancelled";
+            const key = item.state as
+              | "queued"
+              | "uploading"
+              | "done"
+              | "failed"
+              | "cancelled";
             acc[key] = (acc[key] ?? 0) + 1;
             return acc;
           },
-          { total: 0, queued: 0, uploading: 0, done: 0, failed: 0, cancelled: 0 }
+          {
+            total: 0,
+            queued: 0,
+            uploading: 0,
+            done: 0,
+            failed: 0,
+            cancelled: 0,
+          },
         );
         payload = {
           exportedAt,
@@ -8384,7 +10287,9 @@ export default function BrowserPage({
       return;
     }
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -8403,9 +10308,9 @@ export default function BrowserPage({
             (!op.completionStatus ||
               op.completionStatus === "done" ||
               op.completionStatus === "failed" ||
-              op.completionStatus === "cancelled")
+              op.completionStatus === "cancelled"),
         )
-        .map((op) => op.id)
+        .map((op) => op.id),
     );
     if (finishedIds.size === 0 && completedOperations.length === 0) {
       return;
@@ -8461,10 +10366,19 @@ export default function BrowserPage({
     : totalOperationsCount > 0
       ? "border-emerald-300 bg-emerald-100 text-emerald-800 shadow-sm dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-100"
       : "";
+  const chromeChipButtonClasses = `${filterChipClasses} rounded-xl border-slate-200/80 bg-white/90 px-3 py-2 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75`;
+  const chromeToolbarButtonClasses = `${toolbarButtonClasses} rounded-xl border-slate-200/80 bg-white/90 px-3 py-2 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75`;
+  const chromeToolbarPrimaryClasses = `${toolbarPrimaryClasses} rounded-xl px-3 py-2 shadow-sm shadow-primary/20`;
+  const chromeToolbarIconButtonClasses = `${toolbarIconButtonClasses} rounded-xl border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75`;
+  const chromeBulkActionClasses = `${bulkActionClasses} rounded-xl bg-white/80 px-3 py-2 shadow-sm dark:bg-slate-900/70`;
+  const chromeDangerActionClasses = `${bulkDangerClasses} rounded-xl bg-white/80 px-3 py-2 shadow-sm dark:bg-slate-900/70`;
   const operationsCountBadgeClasses = `${countBadgeClasses} ui-caption ${
-    hasFailedOperations ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100" : ""
+    hasFailedOperations
+      ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100"
+      : ""
   }`;
-  const isCreateBucketNameValid = !createBucketNameValue || isValidS3BucketName(createBucketNameValue);
+  const isCreateBucketNameValid =
+    !createBucketNameValue || isValidS3BucketName(createBucketNameValue);
   const showFolderToggle = showPanelToggles && canUseFoldersPanel;
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
   const isActionBarVisible = isMainBrowserPath && showActionBar;
@@ -8475,25 +10389,40 @@ export default function BrowserPage({
       ? "ui-caption font-semibold text-primary-700 dark:text-primary-100"
       : "ui-caption font-semibold text-slate-500 dark:text-slate-400";
   const toolbarOverflowStatusRowClasses =
-    "flex items-start gap-2 rounded-md px-2.5 py-2 ui-caption text-slate-600 dark:text-slate-300";
+    "flex items-start gap-3 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2.5 ui-caption text-slate-600 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75 dark:text-slate-300";
   const toolbarOverflowSectionTitleClasses =
-    "px-2.5 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-400";
-  const toolbarSelectionSummary = selectedCount > 0 ? `${selectedCount} selected` : "No selection";
+    "px-1 py-1 ui-caption font-semibold uppercase tracking-[0.18em] text-slate-400";
+  const toolbarSelectionSummary =
+    selectedCount > 0 ? `${selectedCount} selected` : "No selection";
   const toolbarCanUploadFiles = pathActionStates.uploadFiles.enabled;
   const toolbarCanUploadFolder = pathActionStates.uploadFolder.enabled;
   const toolbarCanCreateFolder = pathActionStates.newFolder.enabled;
-  const toolbarCanDownload = selectionActionStates.download.visible && selectionActionStates.download.enabled;
-  const toolbarCanOpen = selectionActionStates.open.visible && selectionActionStates.open.enabled;
-  const toolbarCanCopy = selectionActionStates.copy.visible && selectionActionStates.copy.enabled;
-  const toolbarCanDelete = selectionActionStates.delete.visible && selectionActionStates.delete.enabled;
-  const hasToolbarPathActions = !canSelectionActions && toolbarMorePathActions.length > 0;
-  const toolbarSelectionActions = isActionBarVisible ? toolbarMoreSelectionOverflowActions : toolbarMoreSelectionFullActions;
-  const hasToolbarSelectionActions = canSelectionActions && toolbarSelectionActions.length > 0;
+  const toolbarCanDownload =
+    selectionActionStates.download.visible &&
+    selectionActionStates.download.enabled;
+  const toolbarCanOpen =
+    selectionActionStates.open.visible && selectionActionStates.open.enabled;
+  const toolbarCanCopy =
+    selectionActionStates.copy.visible && selectionActionStates.copy.enabled;
+  const toolbarCanDelete =
+    selectionActionStates.delete.visible &&
+    selectionActionStates.delete.enabled;
+  const hasToolbarPathActions =
+    !canSelectionActions && toolbarMorePathActions.length > 0;
+  const toolbarSelectionActions = isActionBarVisible
+    ? toolbarMoreSelectionOverflowActions
+    : toolbarMoreSelectionFullActions;
+  const hasToolbarSelectionActions =
+    canSelectionActions && toolbarSelectionActions.length > 0;
   const hasToolbarStatusSection = isMainBrowserPath || Boolean(accessBadge);
-  const hasToolbarLayoutSection = showFolderToggle || showInspectorToggle || showActionBarToggle;
-  const hasToolbarSecondaryActionsSection = hasToolbarPathActions || hasToolbarSelectionActions || showSseControls;
+  const hasToolbarLayoutSection =
+    showFolderToggle || showInspectorToggle || showActionBarToggle;
+  const hasToolbarSecondaryActionsSection =
+    hasToolbarPathActions || hasToolbarSelectionActions || showSseControls;
   const hasToolbarMoreMenu =
-    hasToolbarStatusSection || hasToolbarLayoutSection || hasToolbarSecondaryActionsSection;
+    hasToolbarStatusSection ||
+    hasToolbarLayoutSection ||
+    hasToolbarSecondaryActionsSection;
   const closeToolbarMoreMenu = () => {
     setShowToolbarMoreMenu(false);
   };
@@ -8534,7 +10463,9 @@ export default function BrowserPage({
     closeUploadQuickMenu();
     folderInputRef.current?.click();
   };
-  const browserActionIconById: Partial<Record<BrowserActionState["id"], ReactNode>> = {
+  const browserActionIconById: Partial<
+    Record<BrowserActionState["id"], ReactNode>
+  > = {
     uploadFiles: <UploadIcon className="h-3.5 w-3.5" />,
     uploadFolder: <FolderIcon className="h-3.5 w-3.5" />,
     newFolder: <FolderPlusIcon className="h-3.5 w-3.5" />,
@@ -8554,7 +10485,10 @@ export default function BrowserPage({
     advanced: <SettingsIcon className="h-3.5 w-3.5" />,
     delete: <TrashIcon className="h-3.5 w-3.5" />,
   };
-  const renderToolbarMoreActionButton = (action: BrowserActionState, onClick: () => void) => (
+  const renderToolbarMoreActionButton = (
+    action: BrowserActionState,
+    onClick: () => void,
+  ) => (
     <button
       key={action.id}
       type="button"
@@ -8573,12 +10507,14 @@ export default function BrowserPage({
   const renderInspectorActionButton = (
     action: BrowserActionState,
     onClick: () => void,
-    options?: { danger?: boolean }
+    options?: { danger?: boolean },
   ) => (
     <button
       key={action.id}
       type="button"
-      className={options?.danger ? bulkDangerClasses : bulkActionClasses}
+      className={
+        options?.danger ? chromeDangerActionClasses : chromeBulkActionClasses
+      }
       onClick={onClick}
       disabled={!action.enabled}
       title={action.disabledReason}
@@ -8594,7 +10530,10 @@ export default function BrowserPage({
     }
   }, [hasToolbarMoreMenu, showToolbarMoreMenu]);
 
-  const renderLazyCellValue = (status: LazyFieldStatus, value: string | number | null) => {
+  const renderLazyCellValue = (
+    status: LazyFieldStatus,
+    value: string | number | null,
+  ) => {
     if (status === "idle") {
       return "—";
     }
@@ -8615,7 +10554,10 @@ export default function BrowserPage({
     );
   };
 
-  const renderColumnCellValue = (item: BrowserItem, columnId: BrowserColumnId) => {
+  const renderColumnCellValue = (
+    item: BrowserItem,
+    columnId: BrowserColumnId,
+  ) => {
     if (columnId === "type") {
       if (item.type === "folder") {
         return item.isDeleted ? "Deleted folder" : "Folder";
@@ -8640,13 +10582,19 @@ export default function BrowserPage({
     }
     const lazyEntry = lazyColumnCache[item.id] ?? createLazyColumnCacheEntry();
     if (columnId === "contentType") {
-      return renderLazyCellValue(lazyEntry.metadataStatus, lazyEntry.contentType);
+      return renderLazyCellValue(
+        lazyEntry.metadataStatus,
+        lazyEntry.contentType,
+      );
     }
     if (columnId === "tagsCount") {
       return renderLazyCellValue(lazyEntry.tagsStatus, lazyEntry.tagsCount);
     }
     if (columnId === "metadataCount") {
-      return renderLazyCellValue(lazyEntry.metadataStatus, lazyEntry.metadataCount);
+      return renderLazyCellValue(
+        lazyEntry.metadataStatus,
+        lazyEntry.metadataCount,
+      );
     }
     return "—";
   };
@@ -8674,19 +10622,22 @@ export default function BrowserPage({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-        <div className="border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
-          <div className="flex flex-col gap-2">
+      <div className={browserShellClasses}>
+        <div className="relative z-20 border-b border-slate-200/80 px-3 py-3 dark:border-slate-800">
+          <div className="flex flex-col gap-2.5">
             <div
               role="toolbar"
               aria-label="Browser context bar"
-              className="flex flex-col gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:flex-row sm:items-center sm:justify-between"
+              className={browserToolbarShellClasses}
             >
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                <div ref={bucketMenuRef} className="relative flex shrink-0 items-center gap-1">
+              <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-stretch lg:items-center">
+                <div
+                  ref={bucketMenuRef}
+                  className="relative flex shrink-0 items-stretch"
+                >
                   <button
                     type="button"
-                    className={bucketButtonClassName}
+                    className={`${bucketButtonClassName} min-h-9`}
                     onClick={() => setShowBucketMenu((prev) => !prev)}
                     disabled={!hasS3AccountContext}
                     aria-haspopup="listbox"
@@ -8695,36 +10646,51 @@ export default function BrowserPage({
                     title="Select bucket"
                   >
                     <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
-                    <span className="max-w-[200px] truncate sm:max-w-[260px]">{bucketButtonLabel}</span>
+                    <span className="max-w-[200px] truncate sm:max-w-[260px]">
+                      {bucketButtonLabel}
+                    </span>
                     <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
                   </button>
                   {showBucketMenu && (
-                    <div className="absolute left-0 top-[calc(100%+6px)] z-[60] w-80 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                      <div className="flex items-center gap-2 px-2 pb-2 pt-1">
+                    <div
+                      className={`absolute left-0 top-[calc(100%+8px)] z-[60] w-80 max-w-[calc(100vw-1rem)] ui-caption ${browserFloatingMenuClasses}`}
+                    >
+                      <div className="flex items-center justify-between gap-3 px-2 pb-2 pt-1">
                         <div className="flex min-w-0 flex-1 items-center gap-2">
-                          <SearchIcon className="h-3.5 w-3.5 text-slate-400" />
-                          <input
-                            ref={bucketMenuFilterRef}
-                            type="text"
-                            value={bucketFilter}
-                            onChange={(event) => setBucketFilter(event.target.value)}
-                            placeholder="Filter buckets"
-                            className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                            spellCheck={false}
-                          />
+                          <div className="min-w-0">
+                            <p className={browserSectionEyebrowClasses}>
+                              Buckets
+                            </p>
+                          </div>
                         </div>
                         {bucketManagementEnabled && (
                           <button
                             type="button"
                             onClick={openCreateBucketDialog}
                             disabled={!hasS3AccountContext}
-                            className="shrink-0 rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                            className={chromeChipButtonClasses}
                             title="Create bucket"
                             aria-label="Create bucket"
                           >
                             + Bucket
                           </button>
                         )}
+                      </div>
+                      <div className="px-2 pb-2">
+                        <div className="relative">
+                          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                          <input
+                            ref={bucketMenuFilterRef}
+                            type="text"
+                            value={bucketFilter}
+                            onChange={(event) =>
+                              setBucketFilter(event.target.value)
+                            }
+                            placeholder="Filter buckets"
+                            className={`${browserInputClasses} pl-9`}
+                            spellCheck={false}
+                          />
+                        </div>
                       </div>
                       <div className="max-h-56 overflow-y-auto px-1 pb-1">
                         {loadingBuckets && bucketOptions.length === 0 ? (
@@ -8734,11 +10700,13 @@ export default function BrowserPage({
                         ) : bucketTotalCount === 0 ? (
                           <div className="space-y-2 px-2 py-2">
                             <div className="ui-caption text-slate-500 dark:text-slate-400">
-                              {bucketError ? "Unable to load buckets." : "No buckets available."}
+                              {bucketError
+                                ? "Unable to load buckets."
+                                : "No buckets available."}
                             </div>
                             <button
                               type="button"
-                              className={filterChipClasses}
+                              className={chromeChipButtonClasses}
                               onClick={() => void refreshBucketList()}
                               disabled={loadingBuckets || !hasS3AccountContext}
                             >
@@ -8757,10 +10725,10 @@ export default function BrowserPage({
                                 key={bucket}
                                 type="button"
                                 onClick={() => handleBucketChange(bucket)}
-                                className={`flex w-full min-w-0 items-center justify-between rounded-md px-2.5 py-2 text-left font-semibold transition ${
+                                className={`flex w-full min-w-0 items-center justify-between rounded-xl border px-3 py-2.5 text-left font-semibold transition ${
                                   isActive
-                                    ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
-                                    : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                    ? "border-primary-200 bg-primary-50 text-primary-800 shadow-sm dark:border-primary-500/40 dark:bg-primary-500/20 dark:text-primary-100"
+                                    : "border-transparent text-slate-700 hover:border-primary-200 hover:bg-primary-50/70 dark:text-slate-200 dark:hover:border-primary-500/40 dark:hover:bg-slate-800/80"
                                 }`}
                               >
                                 <span className="flex min-w-0 items-center gap-2">
@@ -8778,17 +10746,17 @@ export default function BrowserPage({
                         )}
                       </div>
                       {!loadingBuckets && bucketTotalCount > 0 && (
-                        <div className="border-t border-slate-200 px-2 py-1 ui-caption text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                        <div className="border-t border-slate-200/80 px-2.5 py-2 ui-caption text-slate-400 dark:border-slate-700/80 dark:text-slate-500">
                           {`${bucketOptions.length} of ${bucketMenuTotal} bucket${bucketMenuTotal === 1 ? "" : "s"}`}
                         </div>
                       )}
                       {canLoadMoreBucketResults && (
-                        <div className="border-t border-slate-200 px-2 py-1.5 dark:border-slate-700">
+                        <div className="border-t border-slate-200/80 px-2.5 py-2 dark:border-slate-700/80">
                           <button
                             type="button"
                             onClick={handleBucketMenuLoadMore}
                             disabled={bucketMenuLoadingMore}
-                            className={filterChipClasses}
+                            className={chromeChipButtonClasses}
                           >
                             {bucketMenuLoadingMore ? "Loading..." : "Load more"}
                           </button>
@@ -8798,7 +10766,7 @@ export default function BrowserPage({
                   )}
                 </div>
                 <div
-                  className="flex min-w-0 flex-1 items-center gap-1 ui-caption font-semibold text-slate-500 dark:text-slate-400"
+                  className={`${browserToolbarPathStripClasses} ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                   onClick={isEditingPath ? undefined : startEditingPath}
                   onDoubleClick={isEditingPath ? undefined : startEditingPath}
                 >
@@ -8816,22 +10784,29 @@ export default function BrowserPage({
                         role="combobox"
                         aria-autocomplete="list"
                         aria-controls="browser-path-suggestion-list"
-                        aria-expanded={pathSuggestions.length > 0 || pathSuggestionsLoading}
-                        aria-activedescendant={
-                          activePathSuggestion ? `browser-path-suggestion-${pathSuggestionIndex}` : undefined
+                        aria-expanded={
+                          pathSuggestions.length > 0 || pathSuggestionsLoading
                         }
-                        className="min-w-0 w-full rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        aria-activedescendant={
+                          activePathSuggestion
+                            ? `browser-path-suggestion-${pathSuggestionIndex}`
+                            : undefined
+                        }
+                        className={`${browserInputClasses} min-w-0`}
                         disabled={!bucketName}
                         spellCheck={false}
                       />
-                      {(pathSuggestions.length > 0 || pathSuggestionsLoading) && (
+                      {(pathSuggestions.length > 0 ||
+                        pathSuggestionsLoading) && (
                         <div
                           id="browser-path-suggestion-list"
                           role="listbox"
-                          className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                          className={`absolute left-0 right-0 top-[calc(100%+8px)] z-40 overflow-hidden py-1 ui-caption ${browserFloatingMenuClasses}`}
                         >
                           {pathSuggestions.length === 0 ? (
-                            <div className="px-2 py-1.5 text-slate-500 dark:text-slate-300">Searching folders...</div>
+                            <div className="px-2 py-1.5 text-slate-500 dark:text-slate-300">
+                              Searching folders...
+                            </div>
                           ) : (
                             <div className="max-h-56 overflow-y-auto">
                               {pathSuggestions.map((suggestion, idx) => {
@@ -8850,19 +10825,26 @@ export default function BrowserPage({
                                     type="button"
                                     role="option"
                                     aria-selected={isActive}
-                                    onMouseEnter={() => setPathSuggestionIndex(idx)}
+                                    onMouseEnter={() =>
+                                      setPathSuggestionIndex(idx)
+                                    }
                                     onMouseDown={(event) => {
                                       event.preventDefault();
-                                      applyPathSuggestion(suggestion, { commit: true });
+                                      applyPathSuggestion(suggestion, {
+                                        commit: true,
+                                      });
                                     }}
-                                    className={`flex w-full items-start gap-2 px-2 py-1.5 text-left transition ${
+                                    className={`flex w-full items-start gap-2 rounded-xl px-2.5 py-2 text-left transition ${
                                       isActive
                                         ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
-                                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                        : "text-slate-700 hover:bg-primary-50/70 dark:text-slate-200 dark:hover:bg-slate-800"
                                     }`}
                                   >
                                     <span className="min-w-0 flex-1">
-                                      <span className="block truncate font-semibold" title={suggestion.label}>
+                                      <span
+                                        className="block truncate font-semibold"
+                                        title={suggestion.label}
+                                      >
                                         {suggestion.label}
                                       </span>
                                       <span
@@ -8882,11 +10864,12 @@ export default function BrowserPage({
                               })}
                             </div>
                           )}
-                          {pathSuggestionsLoading && pathSuggestions.length > 0 && (
-                            <div className="border-t border-slate-200 px-2 py-1 text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                              Searching more folders...
-                            </div>
-                          )}
+                          {pathSuggestionsLoading &&
+                            pathSuggestions.length > 0 && (
+                              <div className="border-t border-slate-200 px-2 py-1 text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                                Searching more folders...
+                              </div>
+                            )}
                         </div>
                       )}
                     </div>
@@ -8907,7 +10890,9 @@ export default function BrowserPage({
                       </button>
                       <div className="min-w-0 flex flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap py-0.5">
                         {breadcrumbs.length === 0 ? (
-                          <span className="shrink-0 text-slate-400">(root)</span>
+                          <span className="shrink-0 text-slate-400">
+                            (root)
+                          </span>
                         ) : (
                           <button
                             type="button"
@@ -8922,7 +10907,10 @@ export default function BrowserPage({
                           </button>
                         )}
                         {breadcrumbs.map((crumb) => (
-                          <span key={crumb.prefix} className="flex shrink-0 items-center gap-1">
+                          <span
+                            key={crumb.prefix}
+                            className="flex shrink-0 items-center gap-1"
+                          >
                             <span className="text-slate-300">/</span>
                             <button
                               type="button"
@@ -8942,29 +10930,39 @@ export default function BrowserPage({
                   )}
                 </div>
               </div>
-              <div
-                className={`flex shrink-0 items-center ${isCompactToolbarMode ? "gap-1.5 sm:justify-end" : "sm:justify-end"}`}
-              >
+              <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
                   onClick={openOperationsModal}
-                  className={`${filterChipClasses} ${operationsButtonToneClasses}`}
+                  className={`${chromeChipButtonClasses} min-h-8 ${operationsButtonToneClasses}`}
                   aria-label="Operations"
                   title="Operations"
                 >
                   Operations
-                  <span className={operationsCountBadgeClasses}>{formatBadgeCount(totalOperationsCount)}</span>
+                  <span className={operationsCountBadgeClasses}>
+                    {formatBadgeCount(totalOperationsCount)}
+                  </span>
                 </button>
                 {isCompactToolbarMode && (
-                  <>
+                  <div className={browserToolbarControlsGroupClasses}>
                     <button
                       ref={uploadQuickButtonRef}
                       type="button"
-                      className={toolbarIconButtonClasses}
+                      className={chromeToolbarIconButtonClasses}
                       onClick={toggleUploadQuickMenu}
-                      disabled={!toolbarCanUploadFiles && !toolbarCanUploadFolder}
-                      aria-haspopup={toolbarCanUploadFiles || toolbarCanUploadFolder ? "menu" : undefined}
-                      aria-expanded={toolbarCanUploadFiles || toolbarCanUploadFolder ? showUploadQuickMenu : undefined}
+                      disabled={
+                        !toolbarCanUploadFiles && !toolbarCanUploadFolder
+                      }
+                      aria-haspopup={
+                        toolbarCanUploadFiles || toolbarCanUploadFolder
+                          ? "menu"
+                          : undefined
+                      }
+                      aria-expanded={
+                        toolbarCanUploadFiles || toolbarCanUploadFolder
+                          ? showUploadQuickMenu
+                          : undefined
+                      }
                       aria-label="Upload"
                       title="Upload"
                     >
@@ -8976,9 +10974,14 @@ export default function BrowserPage({
                       placement="bottom-end"
                       offset={6}
                       minWidth={224}
-                      className="w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                      className={`w-56 ${browserFloatingMenuClasses}`}
                     >
-                      <div ref={uploadQuickMenuRef} role="menu" aria-label="Upload" className="max-h-[min(70vh,20rem)] overflow-y-auto">
+                      <div
+                        ref={uploadQuickMenuRef}
+                        role="menu"
+                        aria-label="Upload"
+                        className="max-h-[min(70vh,20rem)] overflow-y-auto"
+                      >
                         <button
                           type="button"
                           role="menuitem"
@@ -9003,7 +11006,7 @@ export default function BrowserPage({
                     </AnchoredPortalMenu>
                     <button
                       type="button"
-                      className={toolbarIconButtonClasses}
+                      className={chromeToolbarIconButtonClasses}
                       onClick={handleNewFolder}
                       disabled={!toolbarCanCreateFolder}
                       aria-label="New folder"
@@ -9013,7 +11016,7 @@ export default function BrowserPage({
                     </button>
                     <button
                       type="button"
-                      className={toolbarIconButtonClasses}
+                      className={chromeToolbarIconButtonClasses}
                       onClick={handleRefresh}
                       disabled={!bucketName || objectsLoading}
                       aria-label="Refresh"
@@ -9024,17 +11027,19 @@ export default function BrowserPage({
                     <button
                       ref={toolbarMoreButtonRef}
                       type="button"
-                      className={toolbarIconButtonClasses}
+                      className={chromeToolbarIconButtonClasses}
                       onClick={toggleToolbarMoreMenu}
                       disabled={!hasToolbarMoreMenu}
                       aria-haspopup={hasToolbarMoreMenu ? "menu" : undefined}
-                      aria-expanded={hasToolbarMoreMenu ? showToolbarMoreMenu : undefined}
+                      aria-expanded={
+                        hasToolbarMoreMenu ? showToolbarMoreMenu : undefined
+                      }
                       aria-label="More"
                       title="More"
                     >
                       <MoreIcon className="h-3.5 w-3.5" />
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
             </div>
@@ -9042,15 +11047,19 @@ export default function BrowserPage({
               <div
                 role="toolbar"
                 aria-label="Browser actions bar"
-                className="flex flex-col gap-2 rounded-md border border-slate-200/70 bg-slate-50/70 px-2.5 py-1.5 dark:border-slate-700/70 dark:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.82),rgba(255,255,255,0.88))] px-3 py-3 shadow-sm dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.72),rgba(15,23,42,0.56))] sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0 flex items-center">
-                  <p className={`${toolbarStatusTextClassName} truncate`}>{toolbarSelectionSummary}</p>
+                  <div className="min-w-0 rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75">
+                    <p className={`${toolbarStatusTextClassName} truncate`}>
+                      {toolbarSelectionSummary}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                   <button
                     type="button"
-                    className={toolbarPrimaryClasses}
+                    className={chromeToolbarPrimaryClasses}
                     onClick={() => fileInputRef.current?.click()}
                     disabled={!toolbarCanUploadFiles}
                     aria-label="Upload files"
@@ -9061,7 +11070,7 @@ export default function BrowserPage({
                   </button>
                   <button
                     type="button"
-                    className={toolbarButtonClasses}
+                    className={chromeToolbarButtonClasses}
                     onClick={handleNewFolder}
                     disabled={!toolbarCanCreateFolder}
                     aria-label="New folder"
@@ -9072,7 +11081,7 @@ export default function BrowserPage({
                   </button>
                   <button
                     type="button"
-                    className={toolbarPrimaryClasses}
+                    className={chromeToolbarPrimaryClasses}
                     onClick={handleToolbarDownload}
                     disabled={!toolbarCanDownload}
                   >
@@ -9081,7 +11090,7 @@ export default function BrowserPage({
                   </button>
                   <button
                     type="button"
-                    className={toolbarButtonClasses}
+                    className={chromeToolbarButtonClasses}
                     onClick={handleToolbarOpen}
                     disabled={!toolbarCanOpen}
                   >
@@ -9090,7 +11099,7 @@ export default function BrowserPage({
                   </button>
                   <button
                     type="button"
-                    className={toolbarButtonClasses}
+                    className={chromeToolbarButtonClasses}
                     onClick={() => handleCopyItems(selectionItems)}
                     disabled={!toolbarCanCopy}
                   >
@@ -9099,7 +11108,7 @@ export default function BrowserPage({
                   </button>
                   <button
                     type="button"
-                    className={bulkDangerClasses}
+                    className={chromeDangerActionClasses}
                     onClick={() => handleDeleteItems(selectionItems)}
                     disabled={!toolbarCanDelete}
                   >
@@ -9108,7 +11117,7 @@ export default function BrowserPage({
                   </button>
                   <button
                     type="button"
-                    className={toolbarButtonClasses}
+                    className={chromeToolbarButtonClasses}
                     onClick={handleRefresh}
                     disabled={!bucketName || objectsLoading}
                     aria-label="Refresh"
@@ -9120,11 +11129,13 @@ export default function BrowserPage({
                   <button
                     ref={toolbarMoreButtonRef}
                     type="button"
-                    className={toolbarButtonClasses}
+                    className={chromeToolbarButtonClasses}
                     onClick={toggleToolbarMoreMenu}
                     disabled={!hasToolbarMoreMenu}
                     aria-haspopup={hasToolbarMoreMenu ? "menu" : undefined}
-                    aria-expanded={hasToolbarMoreMenu ? showToolbarMoreMenu : undefined}
+                    aria-expanded={
+                      hasToolbarMoreMenu ? showToolbarMoreMenu : undefined
+                    }
                     aria-label="More"
                     title="More"
                   >
@@ -9141,7 +11152,7 @@ export default function BrowserPage({
                 placement="bottom-end"
                 offset={6}
                 minWidth={288}
-                className="w-80 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                className={`w-80 ${browserFloatingMenuClasses}`}
               >
                 <div
                   ref={toolbarMoreMenuRef}
@@ -9151,21 +11162,32 @@ export default function BrowserPage({
                 >
                   {hasToolbarStatusSection && (
                     <>
-                      <p className={toolbarOverflowSectionTitleClasses}>Status</p>
+                      <p className={toolbarOverflowSectionTitleClasses}>
+                        Status
+                      </p>
                       {accessBadge && (
-                        <div className={toolbarOverflowStatusRowClasses} title={accessBadge.title}>
-                          <span className={`mt-0.5 inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${accessBadge.className}`} />
+                        <div
+                          className={toolbarOverflowStatusRowClasses}
+                          title={accessBadge.title}
+                        >
+                          <span
+                            className={`mt-0.5 inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${accessBadge.className}`}
+                          />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
-                              <p className="font-semibold text-slate-700 dark:text-slate-100">Transfers</p>
+                              <p className="font-semibold text-slate-700 dark:text-slate-100">
+                                Transfers
+                              </p>
                               <span
-                                className={`${filterChipClasses} shrink-0 border-current/10`}
+                                className={`${chromeChipButtonClasses} shrink-0 border-current/10 px-2.5 py-1`}
                                 aria-label={`${accessBadge.label} — ${accessBadge.title}`}
                               >
                                 {accessBadge.label}
                               </span>
                             </div>
-                            <p className="text-slate-500 dark:text-slate-400">{accessBadge.title}</p>
+                            <p className="text-slate-500 dark:text-slate-400">
+                              {accessBadge.title}
+                            </p>
                           </div>
                         </div>
                       )}
@@ -9173,8 +11195,12 @@ export default function BrowserPage({
                         <div className={toolbarOverflowStatusRowClasses}>
                           <EyeIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
                           <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-slate-700 dark:text-slate-100">View</p>
-                            <p className="text-slate-500 dark:text-slate-400">{browserViewLabel}</p>
+                            <p className="font-semibold text-slate-700 dark:text-slate-100">
+                              View
+                            </p>
+                            <p className="text-slate-500 dark:text-slate-400">
+                              {browserViewLabel}
+                            </p>
                           </div>
                         </div>
                       )}
@@ -9182,8 +11208,12 @@ export default function BrowserPage({
                   )}
                   {hasToolbarLayoutSection && (
                     <>
-                      {hasToolbarStatusSection && <div className={contextMenuSeparatorClasses} />}
-                      <p className={toolbarOverflowSectionTitleClasses}>Layout</p>
+                      {hasToolbarStatusSection && (
+                        <div className={contextMenuSeparatorClasses} />
+                      )}
+                      <p className={toolbarOverflowSectionTitleClasses}>
+                        Layout
+                      </p>
                       {showFolderToggle && (
                         <ToolbarToggleMenuItem
                           label="Folders panel"
@@ -9217,46 +11247,73 @@ export default function BrowserPage({
                       )}
                       {hasToolbarPathActions && (
                         <>
-                          <p className={toolbarOverflowSectionTitleClasses}>Current path</p>
+                          <p className={toolbarOverflowSectionTitleClasses}>
+                            Current path
+                          </p>
                           {toolbarMorePathActions.map((action) =>
-                            renderToolbarMoreActionButton(action, () => runPathAction(action.id))
+                            renderToolbarMoreActionButton(action, () =>
+                              runPathAction(action.id),
+                            ),
                           )}
                         </>
                       )}
                       {hasToolbarSelectionActions && (
                         <>
-                          {hasToolbarPathActions && <div className={contextMenuSeparatorClasses} />}
+                          {hasToolbarPathActions && (
+                            <div className={contextMenuSeparatorClasses} />
+                          )}
                           <p className={toolbarOverflowSectionTitleClasses}>
-                            {isActionBarVisible ? "Selection overflow" : "Selection actions"}
+                            {isActionBarVisible
+                              ? "Selection overflow"
+                              : "Selection actions"}
                           </p>
                           {toolbarSelectionActions.map((action) =>
-                            renderToolbarMoreActionButton(action, () => runSelectionAction(action.id))
+                            renderToolbarMoreActionButton(action, () =>
+                              runSelectionAction(action.id),
+                            ),
                           )}
                         </>
                       )}
                       {showSseControls && (
                         <>
-                          {(hasToolbarPathActions || hasToolbarSelectionActions) && (
+                          {(hasToolbarPathActions ||
+                            hasToolbarSelectionActions) && (
                             <div className={contextMenuSeparatorClasses} />
                           )}
-                          <p className={toolbarOverflowSectionTitleClasses}>Security</p>
+                          <p className={toolbarOverflowSectionTitleClasses}>
+                            Security
+                          </p>
                           <button
                             type="button"
                             role="menuitem"
                             className={`${contextMenuItemClasses} ${
-                              !bucketName || !hasS3AccountContext || !sseFeatureEnabled ? contextMenuItemDisabledClasses : ""
+                              !bucketName ||
+                              !hasS3AccountContext ||
+                              !sseFeatureEnabled
+                                ? contextMenuItemDisabledClasses
+                                : ""
                             }`}
                             onClick={() => {
                               runToolbarMoreAction(openSseCustomerModal);
                             }}
-                            disabled={!bucketName || !hasS3AccountContext || !sseFeatureEnabled}
-                            title={sseActive ? "SSE-C enabled for this bucket." : "Configure SSE-C key for this bucket."}
+                            disabled={
+                              !bucketName ||
+                              !hasS3AccountContext ||
+                              !sseFeatureEnabled
+                            }
+                            title={
+                              sseActive
+                                ? "SSE-C enabled for this bucket."
+                                : "Configure SSE-C key for this bucket."
+                            }
                           >
                             <SettingsIcon className="h-3.5 w-3.5" />
                             <span className="min-w-0 flex-1">
                               <span className="block">SSE-C</span>
                               <span className="block text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500">
-                                {sseActive ? "Enabled for this bucket" : "Configure customer key"}
+                                {sseActive
+                                  ? "Enabled for this bucket"
+                                  : "Configure customer key"}
                               </span>
                             </span>
                             <span
@@ -9293,70 +11350,100 @@ export default function BrowserPage({
           </div>
         </div>
 
-        {(bucketError || objectsError || statusMessage || warnings.length > 0) && (
-          <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
-            {bucketError && <p className="font-semibold text-rose-600 dark:text-rose-200">{bucketError}</p>}
-            {!bucketError && objectsError && <p className="font-semibold text-rose-600 dark:text-rose-200">{objectsError}</p>}
-            {statusMessage && <p className="text-slate-500 dark:text-slate-400">{statusMessage}</p>}
-            {warnings.map((warning, index) => (
-              <p key={`${warning}-${index}`} className="font-semibold text-amber-600 dark:text-amber-200">
-                {warning === CORS_DIRECT_TRANSFER_WARNING && hasCorsAction ? (
-                  <span className="inline-flex items-center gap-1">
-                    <span>{warning}</span>
-                    <button
-                      ref={corsActionTriggerRef}
-                      type="button"
-                      className="inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-700 transition hover:text-amber-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700 dark:text-amber-200 dark:hover:text-amber-100 dark:focus-visible:outline-amber-200"
-                      onClick={() => setShowCorsActionPopover((prev) => !prev)}
-                      aria-label="CORS actions"
-                      title="CORS actions"
-                      aria-haspopup="dialog"
-                      aria-expanded={showCorsActionPopover}
-                    >
-                      <InfoIcon className="h-3.5 w-3.5" />
-                    </button>
-                    <AnchoredPortalMenu
-                      open={showCorsActionPopover}
-                      anchorRef={corsActionTriggerRef}
-                      placement="bottom-start"
-                      offset={6}
-                      minWidth={288}
-                      className="w-80 rounded-xl border border-amber-200/70 bg-white p-3 shadow-xl dark:border-amber-400/40 dark:bg-slate-900"
-                    >
-                      <div ref={corsActionPopoverRef}>
-                        <p className="ui-caption text-slate-600 dark:text-slate-300">
-                          {`Allow direct access from ${uiOrigin} by adding CORS rules to this bucket.`}
-                        </p>
-                        <button
-                          type="button"
-                          className={`mt-2 ${filterChipClasses} border-emerald-200 bg-emerald-100 text-emerald-800 hover:border-emerald-300 hover:text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-100 dark:hover:border-emerald-400`}
-                          onClick={handleEnsureCors}
-                          disabled={corsFixing}
-                          title={`Add ${uiOrigin} to bucket CORS rules.`}
-                          aria-label={`Add ${uiOrigin} to CORS`}
-                        >
-                          {corsFixing ? "Adding..." : `Add ${uiOrigin} to CORS`}
-                        </button>
-                      </div>
-                    </AnchoredPortalMenu>
-                  </span>
-                ) : (
-                  warning
-                )}
-              </p>
-            ))}
+        {(bucketError ||
+          objectsError ||
+          statusMessage ||
+          warnings.length > 0) && (
+          <div className="shrink-0 px-3 pb-0 pt-3">
+            <div
+              className={`${browserSubtleSurfaceClasses} px-3 py-2.5 ui-caption text-slate-600 dark:text-slate-300`}
+            >
+              {bucketError && (
+                <p className="font-semibold text-rose-600 dark:text-rose-200">
+                  {bucketError}
+                </p>
+              )}
+              {!bucketError && objectsError && (
+                <p className="font-semibold text-rose-600 dark:text-rose-200">
+                  {objectsError}
+                </p>
+              )}
+              {statusMessage && (
+                <p className="text-slate-500 dark:text-slate-400">
+                  {statusMessage}
+                </p>
+              )}
+              {warnings.map((warning, index) => (
+                <p
+                  key={`${warning}-${index}`}
+                  className="font-semibold text-amber-600 dark:text-amber-200"
+                >
+                  {warning === CORS_DIRECT_TRANSFER_WARNING && hasCorsAction ? (
+                    <span className="inline-flex items-center gap-1">
+                      <span>{warning}</span>
+                      <button
+                        ref={corsActionTriggerRef}
+                        type="button"
+                        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-700 transition hover:text-amber-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700 dark:text-amber-200 dark:hover:text-amber-100 dark:focus-visible:outline-amber-200"
+                        onClick={() =>
+                          setShowCorsActionPopover((prev) => !prev)
+                        }
+                        aria-label="CORS actions"
+                        title="CORS actions"
+                        aria-haspopup="dialog"
+                        aria-expanded={showCorsActionPopover}
+                      >
+                        <InfoIcon className="h-3.5 w-3.5" />
+                      </button>
+                      <AnchoredPortalMenu
+                        open={showCorsActionPopover}
+                        anchorRef={corsActionTriggerRef}
+                        placement="bottom-start"
+                        offset={6}
+                        minWidth={288}
+                        className={`w-80 ${browserFloatingMenuClasses}`}
+                      >
+                        <div ref={corsActionPopoverRef}>
+                          <p className="ui-caption text-slate-600 dark:text-slate-300">
+                            {`Allow direct access from ${uiOrigin} by adding CORS rules to this bucket.`}
+                          </p>
+                          <button
+                            type="button"
+                            className={`mt-2 ${chromeChipButtonClasses} border-emerald-200 bg-emerald-100 text-emerald-800 hover:border-emerald-300 hover:text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-100 dark:hover:border-emerald-400`}
+                            onClick={handleEnsureCors}
+                            disabled={corsFixing}
+                            title={`Add ${uiOrigin} to bucket CORS rules.`}
+                            aria-label={`Add ${uiOrigin} to CORS`}
+                          >
+                            {corsFixing
+                              ? "Adding..."
+                              : `Add ${uiOrigin} to CORS`}
+                          </button>
+                        </div>
+                      </AnchoredPortalMenu>
+                    </span>
+                  ) : (
+                    warning
+                  )}
+                </p>
+              ))}
+            </div>
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
-          <div className={`grid min-h-0 flex-1 grid-rows-1 gap-3 ${layoutClass}`}>
+        <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+          <div
+            className={`grid min-h-0 flex-1 grid-rows-1 gap-3 ${layoutClass}`}
+          >
             {isFoldersPanelVisible && (
               <BrowserBucketsPanel
                 hasS3AccountContext={hasS3AccountContext}
                 currentBucket={currentBucketPanelItem}
                 activePrefix={normalizedPrefix}
                 currentBucketAccess={currentBucketAccess}
-                currentBucketError={currentBucketUnavailable ? objectsError : null}
+                currentBucketError={
+                  currentBucketUnavailable ? objectsError : null
+                }
                 treeRootNode={treeRootNode}
                 bucketFilter={bucketFilter}
                 onBucketFilterChange={setBucketFilter}
@@ -9379,852 +11466,1135 @@ export default function BrowserPage({
               />
             )}
             <div className="flex min-h-0 h-full min-w-0 flex-1 flex-col gap-3">
-                  <div
-                    className={`relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border transition ${
-                      dragging
-                        ? "border-primary/60 bg-primary/5 dark:border-primary-500/60 dark:bg-primary-500/10"
-                        : "border-slate-200 dark:border-slate-800"
-                    }`}
-                    onDragEnter={handleDragEnter}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    onContextMenu={handlePathContextMenu}
-                  >
-                    {dragging && (
-                      <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-50/80 text-center ui-body font-semibold text-slate-600 backdrop-blur-sm dark:bg-slate-900/70 dark:text-slate-200">
-                        <div>
-                          <div>Drop files or folders to upload</div>
-                          <div className="mt-1 ui-caption font-normal text-slate-500 dark:text-slate-400">
-                            {bucketName ? `${bucketName}/${normalizedPrefix}` : "Select a bucket first"}
-                          </div>
-                        </div>
+              <div
+                className={`${browserExplorerShellClasses} ${
+                  dragging
+                    ? "border-primary/60 bg-primary/5 dark:border-primary-500/60 dark:bg-primary-500/10"
+                    : ""
+                }`}
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onContextMenu={handlePathContextMenu}
+              >
+                {dragging && (
+                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/75 text-center ui-body font-semibold text-slate-700 backdrop-blur-sm dark:bg-slate-950/70 dark:text-slate-100">
+                    <div className="rounded-2xl border border-primary/20 bg-white/85 px-5 py-4 shadow-sm dark:border-primary-500/30 dark:bg-slate-900/80">
+                      <div>Drop files or folders to upload</div>
+                      <div className="mt-1 ui-caption font-normal text-slate-500 dark:text-slate-400">
+                        {bucketName
+                          ? `${bucketName}/${normalizedPrefix}`
+                          : "Select a bucket first"}
                       </div>
-                    )}
-                    {bucketName && hasActiveSearchFilters && (
-                      <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-1.5 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
-                        {objectsLoading
-                          ? "Searching..."
-                          : `${listItems.length} result${listItems.length === 1 ? "" : "s"} · ${
-                              hasSearchQuery
-                                ? isSearchingInWholeBucket
-                                  ? "scope: whole bucket"
-                                  : searchRecursive
-                                    ? "scope: current path + subfolders"
-                                    : "scope: current path"
-                                : "filters applied"
-                            }`}
-                      </div>
-                    )}
-                    <div
-                      ref={objectsListViewportRef}
-                      className="relative min-h-0 flex-1 overflow-x-auto overflow-y-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                      onClick={handleListBackgroundClick}
-                      onKeyDown={handleListKeyDown}
-                      tabIndex={0}
-                      aria-label="Objects list"
-                    >
-                        {objectsLoading && listItems.length > 0 && (
-                          <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-white/45 pt-4 ui-caption font-semibold text-slate-600 backdrop-blur-[1px] dark:bg-slate-900/40 dark:text-slate-200">
-                            Refreshing objects...
-                          </div>
-                        )}
-                        <table className="manager-table min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
-                          <thead className="bg-slate-50 dark:bg-slate-900/50" onContextMenu={handleHeaderContextMenu}>
-                            <tr>
-                              <th className={`w-9 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
-                                <input
-                                  type="checkbox"
-                                  checked={allSelected}
-                                  onChange={toggleAllSelection}
-                                  aria-label="Select all"
-                                  className={uiCheckboxClass}
-                                />
-                              </th>
-                              <th
-                                className={`px-4 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}
-                              >
-                                <div className="flex min-w-0 items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSortToggle("name")}
-                                    className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
-                                  >
-                                    <span>Name</span>
-                                    <ChevronDownIcon
-                                      className={`h-3 w-3 transition ${
-                                        sortKey === "name" ? "opacity-100" : "opacity-30"
-                                      } ${sortKey === "name" && sortDirection === "asc" ? "-rotate-180" : ""}`}
-                                    />
-                                  </button>
-                                  <div ref={searchOptionsMenuRef} className="relative w-44 sm:w-52 md:w-60 normal-case">
-                                      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">
-                                        <SearchIcon className="h-3 w-3" />
-                                      </span>
-                                      <input
-                                        type="text"
-                                        value={filter}
-                                        onChange={(event) => setFilter(event.target.value)}
-                                        placeholder="Search objects"
-                                        aria-label="Search objects"
-                                        className="h-6 w-full rounded-md border border-slate-200 bg-white pl-6 pr-7 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 normal-case"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => setShowSearchOptionsMenu((prev) => !prev)}
-                                        className={`absolute right-1 top-1/2 -translate-y-1/2 inline-flex h-5 w-5 items-center justify-center rounded transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
-                                          hasAdvancedSearchOptionsActive
-                                            ? "text-primary-700 hover:bg-primary-100 dark:text-primary-200 dark:hover:bg-primary-500/20"
-                                            : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                                        }`}
-                                        aria-haspopup="menu"
-                                        aria-expanded={showSearchOptionsMenu}
-                                        aria-label="Search options"
-                                        title="Search options"
-                                      >
-                                        <SlidersIcon className="h-3 w-3" />
-                                      </button>
-                                      {showSearchOptionsMenu && (
-                                        <div className="absolute right-0 z-40 mt-1 w-64 space-y-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                                          <label className="block space-y-1">
-                                            <span className="ui-caption font-semibold text-slate-500 dark:text-slate-300">Scope</span>
-                                            <select
-                                              value={searchScope}
-                                              onChange={(event) => {
-                                                const scope = event.target.value as SearchScope;
-                                                setSearchScope(scope);
-                                                if (scope === "bucket") {
-                                                  setSearchRecursive(false);
-                                                }
-                                              }}
-                                              className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                              aria-label="Search scope"
-                                              disabled={!hasSearchQuery}
-                                            >
-                                              <option value="prefix">Current path</option>
-                                              <option value="bucket">Whole bucket</option>
-                                            </select>
-                                          </label>
-                                          <label className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                                            <input
-                                              type="checkbox"
-                                              checked={searchRecursive}
-                                              onChange={(event) => setSearchRecursive(event.target.checked)}
-                                              disabled={!hasSearchQuery || searchScope === "bucket"}
-                                              className={uiCheckboxClass}
-                                              aria-label="Search recursively in subfolders"
-                                            />
-                                            <span>Recursive</span>
-                                          </label>
-                                          <label className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                                            <input
-                                              type="checkbox"
-                                              checked={searchExactMatch}
-                                              onChange={(event) => setSearchExactMatch(event.target.checked)}
-                                              disabled={!hasSearchQuery}
-                                              className={uiCheckboxClass}
-                                              aria-label="Use exact match"
-                                            />
-                                            <span>Exact match</span>
-                                          </label>
-                                          <label className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                                            <input
-                                              type="checkbox"
-                                              checked={searchCaseSensitive}
-                                              onChange={(event) => setSearchCaseSensitive(event.target.checked)}
-                                              disabled={!hasSearchQuery}
-                                              className={uiCheckboxClass}
-                                              aria-label="Case-sensitive search"
-                                            />
-                                            <span>Case-sensitive</span>
-                                          </label>
-                                          <label className="block space-y-1">
-                                            <span className="ui-caption font-semibold text-slate-500 dark:text-slate-300">Type</span>
-                                            <select
-                                              value={typeFilter}
-                                              onChange={(event) =>
-                                                setTypeFilter(event.target.value as "all" | "file" | "folder")
-                                              }
-                                              className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                              aria-label="Object type filter"
-                                            >
-                                              <option value="all">All</option>
-                                              <option value="file">Files</option>
-                                              <option value="folder">Folders</option>
-                                            </select>
-                                          </label>
-                                          <label className="block space-y-1">
-                                            <span className="ui-caption font-semibold text-slate-500 dark:text-slate-300">Storage class</span>
-                                            <select
-                                              value={storageFilter}
-                                              onChange={(event) => setStorageFilter(event.target.value)}
-                                              className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                              aria-label="Storage class filter"
-                                            >
-                                              <option value="all">All classes</option>
-                                              {searchableStorageClasses.map((value) => (
-                                                <option key={value} value={value}>
-                                                  {value}
-                                                </option>
-                                              ))}
-                                            </select>
-                                          </label>
-                                          <div className="flex items-center justify-end gap-1.5 pt-1">
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setFilter("");
-                                                setSearchScope("prefix");
-                                                setSearchRecursive(false);
-                                                setSearchExactMatch(false);
-                                                setSearchCaseSensitive(false);
-                                                setTypeFilter("all");
-                                                setStorageFilter("all");
-                                              }}
-                                              className={filterChipClasses}
-                                              disabled={!canResetSearchFilters}
-                                            >
-                                              Clear
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => setShowSearchOptionsMenu(false)}
-                                              className={filterChipClasses}
-                                            >
-                                              Close
-                                            </button>
-                                          </div>
-                                        </div>
-                                      )}
-                                  </div>
-                                </div>
-                              </th>
-                              {visibleColumnDefinitions.map((column) => (
-                                <th
-                                  key={column.id}
-                                  className={`${column.widthClassName} px-2 ${headerPadding} !align-middle ${
-                                    column.align === "right" ? "text-right" : "text-left"
-                                  } ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}
-                                >
-                                  {renderColumnHeaderContent(column)}
-                                </th>
-                              ))}
-                              <th className={`w-44 px-2 ${headerPadding} !align-middle text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
-                                <span className="inline-flex h-6 items-center">Actions</span>
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                            {canGoUp && bucketName && showFolderItems && !isSearchingInWholeBucket && (
-                              <tr className={`${rowHeightClasses} text-slate-600 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/40`}>
-                                <td className={`w-9 px-2 ${rowCellClasses} !align-middle`} />
-                                <td
-                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} !align-middle ui-body`}
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={handleGoUp}
-                                    className="flex min-w-0 items-center gap-3 text-left font-semibold text-slate-700 hover:text-primary-700 dark:text-slate-200 dark:hover:text-primary-200"
-                                  >
-                                    <span className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200`}>
-                                      <UpIcon className="h-3.5 w-3.5" />
-                                    </span>
-                                    <span className="truncate">Parent folder</span>
-                                  </button>
-                                </td>
-                                {visibleColumnDefinitions.map((column) => (
-                                  <td
-                                    key={column.id}
-                                    className={`${column.widthClassName} px-2 ${rowCellClasses} !align-middle ui-body text-slate-400 whitespace-nowrap overflow-hidden text-ellipsis ${
-                                      column.align === "right" ? "text-right" : ""
-                                    }`}
-                                  >
-                                    -
-                                  </td>
-                                ))}
-                                <td className={`w-44 px-2 ${rowCellClasses} !align-middle text-right ui-caption text-slate-400`} />
-                              </tr>
-                            )}
-                            {objectsLoading && listItems.length === 0 && <TableEmptyState colSpan={objectTableColSpan} message="Loading objects..." />}
-                            {!objectsLoading && !bucketName && (
-                              <TableEmptyState colSpan={objectTableColSpan} message="Select a bucket to browse objects." />
-                            )}
-                            {!objectsLoading && bucketName && objectsError && listItems.length === 0 && (
-                              <TableEmptyState colSpan={objectTableColSpan} message={objectsError} />
-                            )}
-                            {!objectsLoading && bucketName && !objectsError && listItems.length === 0 && (
-                              <TableEmptyState
-                                colSpan={objectTableColSpan}
-                                message={
-                                  hasActiveSearchFilters
-                                    ? "No objects matched this search."
-                                    : "No objects found for this path."
-                                }
-                              />
-                            )}
-                            {listItems.map((item) => {
-                              const isFocused = inspectedItem?.id === item.id;
-                              const isSelected = selectedSet.has(item.id);
-                              const isActiveRow = activeRowId === item.id;
-                              const isDeleted = Boolean(item.isDeleted);
-                              const itemActionStates = resolveItemActionStates(item);
-                              return (
-                              <tr
-                                key={item.id}
-                                data-browser-item
-                                data-lazy-item-id={item.type === "file" && !item.isDeleted ? item.id : undefined}
-                                onClick={(event) => {
-                                  if (isInteractiveTarget(event.target)) {
-                                    return;
-                                  }
-                                  handleItemSelectionClick(event, item.id);
-                                }}
-                                onDoubleClick={(event) => handleItemDoubleClick(event, item)}
-                                onContextMenu={(event) => handleItemContextMenu(event, item)}
-                                className={`${rowHeightClasses} transition-colors ${
-                                  isSelected
-                                    ? "bg-primary-100/80 hover:bg-primary-100 dark:bg-primary-500/30 dark:hover:bg-primary-500/40"
-                                    : isActiveRow
-                                      ? "bg-sky-50/80 hover:bg-sky-100/80 dark:bg-sky-900/20 dark:hover:bg-sky-900/30"
-                                    : isDeleted
-                                      ? "bg-rose-50/60 hover:bg-rose-100/70 dark:bg-rose-900/10 dark:hover:bg-rose-900/20"
-                                    : isFocused
-                                      ? "bg-primary-50/70 hover:bg-primary-50 dark:bg-primary-500/15 dark:hover:bg-primary-500/20"
-                                      : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                                }`}
-                              >
-                                <td className={`w-9 px-2 ${rowCellClasses} !align-middle`}>
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => toggleSelection(item.id)}
-                                    aria-label={`Select ${item.name}`}
-                                    className={uiCheckboxClass}
-                                  />
-                                </td>
-                                <td
-                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} !align-middle ui-body ${
-                                    isDeleted ? "text-rose-700 dark:text-rose-200" : "text-slate-700 dark:text-slate-200"
-                                  }`}
-                                >
-                                  <div className={`flex min-w-0 items-center ${nameGapClasses}`}>
-                                    <span
-                                      className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-lg border ${
-                                        isDeleted
-                                          ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-900/20 dark:text-rose-200"
-                                          : item.type === "folder"
-                                            ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
-                                          : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200"
-                                      }`}
-                                    >
-                                      {item.type === "folder" ? <FolderIcon /> : isDeleted ? <TrashIcon /> : <FileIcon />}
-                                    </span>
-                                    <div className="min-w-0 flex-1">
-                                      <button
-                                        type="button"
-                                        onClick={(event) => handleItemNameClick(event, item)}
-                                        onDoubleClick={() => openItemPrimaryAction(item)}
-                                        className={`flex w-full min-w-0 items-baseline gap-1 text-left font-semibold ${
-                                          isDeleted
-                                            ? "text-rose-700 hover:text-rose-800 dark:text-rose-200 dark:hover:text-rose-100"
-                                            : "text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
-                                        }`}
-                                        title={item.name}
-                                      >
-                                        <span className="truncate">{item.name}</span>
-                                        {isDeleted && (
-                                          <span className="shrink-0 ui-caption font-semibold text-rose-500 dark:text-rose-300">
-                                            (deleted)
-                                          </span>
-                                        )}
-                                      </button>
-                                      {!compactMode && (
-                                        <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden ui-caption text-slate-500 dark:text-slate-400">
-                                          <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
-                                            {item.type === "folder"
-                                              ? isDeleted
-                                                ? "Deleted folder"
-                                                : "Prefix"
-                                              : isDeleted
-                                                ? "Deleted object"
-                                                : "Object"}
-                                          </span>
-                                          {isDeleted && (
-                                            <span className="rounded-full border border-rose-200 px-2 py-0.5 font-semibold text-rose-700 dark:border-rose-500/40 dark:text-rose-200">
-                                              {item.type === "folder" ? "Delete markers" : "Delete marker"}
-                                            </span>
-                                          )}
-                                          {item.storageClass && (
-                                            <span
-                                              className={`rounded-full border px-2 py-0.5 font-semibold ${
-                                                storageClassChipClasses[item.storageClass] ??
-                                                "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                              }`}
-                                            >
-                                              {item.storageClass}
-                                            </span>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
-                                {visibleColumnDefinitions.map((column) => (
-                                  <td
-                                    key={column.id}
-                                    className={`${column.widthClassName} px-2 ${rowCellClasses} !align-middle ui-body text-slate-600 dark:text-slate-300 whitespace-nowrap overflow-hidden text-ellipsis ${
-                                      column.align === "right" ? "text-right" : ""
-                                    }`}
-                                  >
-                                    {renderColumnCellValue(item, column.id)}
-                                  </td>
-                                ))}
-                                <td className={`w-44 px-2 ${rowCellClasses} !align-middle text-right`}>
-                                  <div className="flex flex-nowrap justify-end gap-1.5">
-                                    {item.type === "folder" && (
-                                      <button
-                                        type="button"
-                                        className={rowActionButtonClasses}
-                                        aria-label="Open"
-                                        title="Open"
-                                        onClick={() => handleOpenItem(item)}
-                                        disabled={!itemActionStates.open.enabled}
-                                      >
-                                        <OpenIcon />
-                                      </button>
-                                    )}
-                                    {item.type === "file" && !isDeleted && (
-                                      <button
-                                        type="button"
-                                        className={rowActionButtonClasses}
-                                        aria-label="Preview"
-                                        title="Preview"
-                                        onClick={() => handlePreviewItem(item)}
-                                        disabled={!itemActionStates.preview.enabled}
-                                      >
-                                        <EyeIcon />
-                                      </button>
-                                    )}
-                                    {item.type === "file" && isDeleted && isVersioningEnabled && (
-                                      <button
-                                        type="button"
-                                        className={rowActionButtonClasses}
-                                        aria-label="Versions"
-                                        title="Versions"
-                                        onClick={() => openObjectVersionsModal(item)}
-                                        disabled={!itemActionStates.versions.enabled}
-                                      >
-                                        <HistoryIcon />
-                                      </button>
-                                    )}
-                                    <button
-                                      type="button"
-                                      className={`${rowActionButtonClasses} ${!itemActionStates.download.enabled ? "opacity-50" : ""}`}
-                                      aria-label="Download"
-                                      title={!itemActionStates.download.enabled ? "Restore from versions before download" : "Download"}
-                                      onClick={() => handleDownloadTarget(item)}
-                                      disabled={!itemActionStates.download.enabled}
-                                    >
-                                      <DownloadIcon />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={`${rowActionDangerButtonClasses} ${!itemActionStates.delete.enabled ? "opacity-50" : ""}`}
-                                      aria-label="Delete"
-                                      title={!itemActionStates.delete.enabled ? "Delete marker entries are managed in versions." : "Delete"}
-                                      onClick={() => handleDeleteItems([item])}
-                                      disabled={!itemActionStates.delete.enabled}
-                                    >
-                                      <TrashIcon />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={rowActionButtonClasses}
-                                      aria-label="More actions"
-                                      title="More"
-                                      onClick={(event) => handleItemActionsButtonClick(event, item)}
-                                    >
-                                      <MoreIcon />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    {canLoadMoreObjectResults && (
-                      <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900/60">
-                        <button
-                          type="button"
-                          className={toolbarButtonClasses}
-                          onClick={handleLoadMoreObjectResults}
-                          disabled={objectsLoadingMore}
-                        >
-                          {objectsLoadingMore ? "Loading..." : "Load more"}
-                        </button>
-                      </div>
-                    )}
+                    </div>
                   </div>
-                </div>
-
-                {isInspectorPanelVisible && (
-                  <div className="flex min-h-0 h-full flex-col gap-3">
-                    <div className="flex min-h-0 h-full flex-1 flex-col rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-                      <div className={inspectorTabListClasses} role="tablist" aria-label="Inspector tabs">
-                        <button
-                          type="button"
-                          role="tab"
-                          id="inspector-tab-details"
-                          aria-selected={inspectorTab === "details"}
-                          aria-controls="inspector-panel-details"
-                          onClick={() => setInspectorTab("details")}
-                          className={`${inspectorTabBaseClasses} ${
-                            inspectorTab === "details" ? inspectorTabActiveClasses : inspectorTabInactiveClasses
-                          }`}
-                        >
-                          Details
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          id="inspector-tab-context"
-                          aria-selected={inspectorTab === "context"}
-                          aria-controls="inspector-panel-context"
-                          onClick={() => setInspectorTab("context")}
-                          className={`${inspectorTabBaseClasses} ${
-                            inspectorTab === "context" ? inspectorTabActiveClasses : inspectorTabInactiveClasses
-                          }`}
-                        >
-                          Context
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          id="inspector-tab-bucket"
-                          aria-selected={inspectorTab === "bucket"}
-                          aria-controls="inspector-panel-bucket"
-                          onClick={handleOpenBucketInspector}
-                          className={`${inspectorTabBaseClasses} ${
-                            inspectorTab === "bucket" ? inspectorTabActiveClasses : inspectorTabInactiveClasses
-                          }`}
-                        >
-                          Bucket
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          id="inspector-tab-selection"
-                          aria-selected={inspectorTab === "selection"}
-                          aria-controls="inspector-panel-selection"
-                          onClick={() => setInspectorTab("selection")}
-                          className={`${inspectorTabBaseClasses} ${
-                            inspectorTab === "selection" ? inspectorTabActiveClasses : inspectorTabInactiveClasses
-                          }`}
-                        >
-                          Selection
-                        </button>
+                )}
+                {bucketName && hasActiveSearchFilters && (
+                  <div className="shrink-0 border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.88),rgba(255,255,255,0.84))] px-3 py-2.5 dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.64),rgba(15,23,42,0.48))]">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className={browserSearchLabelClasses}>Search</p>
+                        <p className="mt-1 ui-body font-semibold text-slate-900 dark:text-slate-100">
+                          {objectsLoading
+                            ? "Searching..."
+                            : `${listItems.length} result${listItems.length === 1 ? "" : "s"}`}
+                        </p>
                       </div>
-
-                      <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-2">
-                        {inspectorTab === "context" && (
-                          <div
-                            role="tabpanel"
-                            id="inspector-panel-context"
-                            aria-labelledby="inspector-tab-context"
-                            className={inspectorTabPanelClasses}
+                      <div className="flex flex-wrap gap-1.5">
+                        {activeSearchStatusChips.map((chip) => (
+                          <span
+                            key={`${chip.label}:${chip.value}`}
+                            className={browserSearchStatusChipClasses}
+                            title={`${chip.label}: ${chip.value}`}
                           >
-                            <div className={inspectorSectionCardClasses}>
-                              <p className={inspectorSectionTitleClasses}>Current location</p>
-                              <p className="break-all ui-caption text-slate-500 dark:text-slate-400">
-                                {currentPath || "Select a bucket to get started."}
-                              </p>
-                            </div>
-                            <div className="space-y-3">
-                              <div className={inspectorSectionCardClasses}>
-                                <p className={inspectorSectionTitleClasses}>Actions</p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {inspectorContextActions.map((action) =>
-                                    renderInspectorActionButton(action, () => runPathAction(action.id))
-                                  )}
-                                </div>
-                              </div>
-                              <div className={inspectorSectionCardClasses}>
-                                <p className={inspectorSectionTitleClasses}>Prefix summary</p>
-                                <div className="mt-2 grid gap-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Files</span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.files}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Folders</span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.folders}</span>
-                                  </div>
-                                  {isVersioningEnabled && showDeletedObjects && (
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-slate-500">Deleted shown</span>
-                                      <span className="font-semibold text-rose-700 dark:text-rose-200">
-                                        {pathStats.deletedFiles + pathStats.deletedFolders}
-                                      </span>
-                                    </div>
-                                  )}
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Total size</span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {formatBytes(pathStats.totalBytes)}
+                            <span className="text-slate-400 dark:text-slate-500">
+                              {chip.label}
+                            </span>
+                            <span className="truncate text-slate-700 dark:text-slate-100">
+                              {chip.value}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div
+                  ref={objectsListViewportRef}
+                  className="relative min-h-0 flex-1 overflow-x-auto overflow-y-auto bg-white/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:bg-transparent"
+                  onClick={handleListBackgroundClick}
+                  onKeyDown={handleListKeyDown}
+                  tabIndex={0}
+                  aria-label="Objects list"
+                >
+                  {objectsLoading && listItems.length > 0 && (
+                    <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-white/45 pt-5 ui-caption font-semibold text-slate-600 backdrop-blur-[1px] dark:bg-slate-900/40 dark:text-slate-200">
+                      <span className="rounded-full border border-slate-200/80 bg-white/90 px-3 py-1.5 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/80">
+                        Refreshing objects...
+                      </span>
+                    </div>
+                  )}
+                  <table className="manager-table min-w-[720px] w-full border-separate border-spacing-0 divide-y divide-slate-200 dark:divide-slate-800">
+                    <thead
+                      className="sticky top-0 z-[1] bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.92))] backdrop-blur dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.95),rgba(15,23,42,0.92))]"
+                      onContextMenu={handleHeaderContextMenu}
+                    >
+                      <tr>
+                        <th
+                          className={`w-9 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={toggleAllSelection}
+                            aria-label="Select all"
+                            className={uiCheckboxClass}
+                          />
+                        </th>
+                        <th
+                          className={`px-4 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSortToggle("name")}
+                              className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
+                            >
+                              <span>Name</span>
+                              <ChevronDownIcon
+                                className={`h-3 w-3 transition ${
+                                  sortKey === "name"
+                                    ? "opacity-100"
+                                    : "opacity-30"
+                                } ${sortKey === "name" && sortDirection === "asc" ? "-rotate-180" : ""}`}
+                              />
+                            </button>
+                            <div
+                              ref={searchOptionsMenuRef}
+                              className="relative w-48 sm:w-56 md:w-64 normal-case"
+                            >
+                              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                                <SearchIcon className="h-3 w-3" />
+                              </span>
+                              <input
+                                type="text"
+                                value={filter}
+                                onChange={(event) =>
+                                  setFilter(event.target.value)
+                                }
+                                placeholder="Search objects"
+                                aria-label="Search objects"
+                                className={`${browserSearchInputClasses} pl-9 pr-9 normal-case`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowSearchOptionsMenu((prev) => !prev)
+                                }
+                                className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-6 w-6 items-center justify-center rounded-lg transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
+                                  hasAdvancedSearchOptionsActive
+                                    ? "text-primary-700 hover:bg-primary-100 dark:text-primary-200 dark:hover:bg-primary-500/20"
+                                    : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                                }`}
+                                aria-haspopup="menu"
+                                aria-expanded={showSearchOptionsMenu}
+                                aria-label="Search options"
+                                title="Search options"
+                              >
+                                <SlidersIcon className="h-3 w-3" />
+                              </button>
+                              {showSearchOptionsMenu && (
+                                <div
+                                  className={`absolute right-0 z-40 mt-2 w-72 space-y-3 ${browserFloatingMenuClasses}`}
+                                >
+                                  <label className="block space-y-1">
+                                    <span className={browserSearchLabelClasses}>
+                                      Scope
                                     </span>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className={inspectorSectionCardClasses}>
-                                <div className="flex items-center justify-between gap-2">
-                                  <p className={inspectorSectionTitleClasses}>Counts</p>
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={handleContextCount}
-                                    disabled={
-                                      !bucketName ||
-                                      !hasS3AccountContext ||
-                                      contextCountsLoading
-                                    }
-                                  >
-                                    <RefreshIcon className="h-3.5 w-3.5" />
-                                    {contextCountsLoading ? "Counting..." : contextCounts ? "Recount" : "Count"}
-                                  </button>
-                                </div>
-                                {contextCountsError && (
-                                  <p className="mt-2 ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                                    {contextCountsError}
-                                  </p>
-                                )}
-                                {!isVersioningEnabled && (
-                                  <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                                    Versioning is disabled for this bucket.
-                                  </p>
-                                )}
-                                <div className="mt-2 grid gap-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Current objects</span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {contextCountsLoading ? "..." : contextCounts ? contextCounts.objects : "-"}
+                                    <select
+                                      value={searchScope}
+                                      onChange={(event) => {
+                                        const scope = event.target
+                                          .value as SearchScope;
+                                        setSearchScope(scope);
+                                        if (scope === "bucket") {
+                                          setSearchRecursive(false);
+                                        }
+                                      }}
+                                      className={browserSelectClasses}
+                                      aria-label="Search scope"
+                                      disabled={!hasSearchQuery}
+                                    >
+                                      <option value="prefix">
+                                        Current path
+                                      </option>
+                                      <option value="bucket">
+                                        Whole bucket
+                                      </option>
+                                    </select>
+                                  </label>
+                                  <label className={browserOptionCardClasses}>
+                                    <input
+                                      type="checkbox"
+                                      checked={searchRecursive}
+                                      onChange={(event) =>
+                                        setSearchRecursive(event.target.checked)
+                                      }
+                                      disabled={
+                                        !hasSearchQuery ||
+                                        searchScope === "bucket"
+                                      }
+                                      className={uiCheckboxClass}
+                                      aria-label="Search recursively in subfolders"
+                                    />
+                                    <span>Recursive</span>
+                                  </label>
+                                  <label className={browserOptionCardClasses}>
+                                    <input
+                                      type="checkbox"
+                                      checked={searchExactMatch}
+                                      onChange={(event) =>
+                                        setSearchExactMatch(
+                                          event.target.checked,
+                                        )
+                                      }
+                                      disabled={!hasSearchQuery}
+                                      className={uiCheckboxClass}
+                                      aria-label="Use exact match"
+                                    />
+                                    <span>Exact match</span>
+                                  </label>
+                                  <label className={browserOptionCardClasses}>
+                                    <input
+                                      type="checkbox"
+                                      checked={searchCaseSensitive}
+                                      onChange={(event) =>
+                                        setSearchCaseSensitive(
+                                          event.target.checked,
+                                        )
+                                      }
+                                      disabled={!hasSearchQuery}
+                                      className={uiCheckboxClass}
+                                      aria-label="Case-sensitive search"
+                                    />
+                                    <span>Case-sensitive</span>
+                                  </label>
+                                  <label className="block space-y-1">
+                                    <span className={browserSearchLabelClasses}>
+                                      Type
                                     </span>
-                                  </div>
-                                  {isVersioningEnabled && (
-                                    <>
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-slate-500">Versions</span>
-                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                          {contextCountsLoading ? "..." : contextCounts ? contextCounts.versions : "-"}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-slate-500">Delete markers</span>
-                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                          {contextCountsLoading ? "..." : contextCounts ? contextCounts.deleteMarkers : "-"}
-                                        </span>
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                              <div className={inspectorSectionCardClasses}>
-                                <p className={inspectorSectionTitleClasses}>Storage classes</p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {Object.keys(pathStats.storageCounts).length === 0 ? (
-                                    <span className="ui-caption text-slate-500 dark:text-slate-400">No file data yet.</span>
-                                  ) : (
-                                    Object.entries(pathStats.storageCounts).map(([storage, count]) => (
-                                      <span
-                                        key={storage}
-                                        className={`rounded-full border px-2 py-1 ui-caption font-semibold ${
-                                          storageClassChipClasses[storage] ??
-                                          "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                        }`}
-                                      >
-                                        {storage} ({count})
-                                      </span>
-                                    ))
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {inspectorTab === "bucket" && (
-                          <div
-                            role="tabpanel"
-                            id="inspector-panel-bucket"
-                            aria-labelledby="inspector-tab-bucket"
-                            className={inspectorTabPanelClasses}
-                          >
-                            <div className="space-y-3">
-                              <div className={inspectorSectionCardClasses}>
-                                <p className={inspectorSectionTitleClasses}>Bucket overview</p>
-                                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                                  {bucketName || "Select a bucket to inspect."}
-                                </p>
-                              </div>
-
-                              <div className={inspectorSectionCardClasses}>
-                                <p className={inspectorSectionTitleClasses}>Actions</p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {bucketConfigurationEnabled && (
+                                    <select
+                                      value={typeFilter}
+                                      onChange={(event) =>
+                                        setTypeFilter(
+                                          event.target.value as
+                                            | "all"
+                                            | "file"
+                                            | "folder",
+                                        )
+                                      }
+                                      className={browserSelectClasses}
+                                      aria-label="Object type filter"
+                                    >
+                                      <option value="all">All</option>
+                                      <option value="file">Files</option>
+                                      <option value="folder">Folders</option>
+                                    </select>
+                                  </label>
+                                  <label className="block space-y-1">
+                                    <span className={browserSearchLabelClasses}>
+                                      Storage class
+                                    </span>
+                                    <select
+                                      value={storageFilter}
+                                      onChange={(event) =>
+                                        setStorageFilter(event.target.value)
+                                      }
+                                      className={browserSelectClasses}
+                                      aria-label="Storage class filter"
+                                    >
+                                      <option value="all">All classes</option>
+                                      {searchableStorageClasses.map((value) => (
+                                        <option key={value} value={value}>
+                                          {value}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <div className="flex items-center justify-end gap-1.5 pt-1">
                                     <button
                                       type="button"
-                                      className={bulkActionClasses}
-                                      onClick={() => openBucketConfigurationModal(bucketName)}
-                                      disabled={!bucketName || !hasS3AccountContext}
+                                      onClick={() => {
+                                        setFilter("");
+                                        setSearchScope("prefix");
+                                        setSearchRecursive(false);
+                                        setSearchExactMatch(false);
+                                        setSearchCaseSensitive(false);
+                                        setTypeFilter("all");
+                                        setStorageFilter("all");
+                                      }}
+                                      className={chromeChipButtonClasses}
+                                      disabled={!canResetSearchFilters}
                                     >
-                                      <SettingsIcon className="h-3.5 w-3.5" />
-                                      Configure
+                                      Clear
                                     </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={openMultipartUploadsModal}
-                                    disabled={!bucketName || !hasS3AccountContext}
-                                  >
-                                    <UploadIcon className="h-3.5 w-3.5" />
-                                    Multipart uploads
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={() => void loadBucketInspectorData(true)}
-                                    disabled={!bucketName || !hasS3AccountContext || bucketInspectorLoading}
-                                  >
-                                    <RefreshIcon className="h-3.5 w-3.5" />
-                                    {bucketInspectorLoading ? "Loading..." : "Refresh"}
-                                  </button>
-                                </div>
-                              </div>
-
-                              {!bucketName || !hasS3AccountContext ? (
-                                <div className={inspectorEmptyStateClasses}>
-                                  Select a bucket to load bucket stats and features.
-                                </div>
-                              ) : (
-                                <div className="space-y-3">
-                                  {bucketInspectorLoading && !bucketInspectorData && (
-                                    <p className="ui-caption text-slate-500 dark:text-slate-400">Loading bucket overview...</p>
-                                  )}
-                                  {bucketInspectorError && (
-                                    <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                                      {bucketInspectorError}
-                                    </p>
-                                  )}
-                                  <div className={inspectorSectionCardClasses}>
-                                    <p className={inspectorSectionTitleClasses}>Stats</p>
-                                    <div className="mt-2 grid gap-2">
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="text-slate-500">Created</span>
-                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                          {bucketInspectorData?.creation_date
-                                            ? formatDateTime(bucketInspectorData.creation_date)
-                                            : "-"}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="text-slate-500">Used bytes</span>
-                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                          {formatBytes(bucketInspectorData?.used_bytes ?? null)}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="text-slate-500">Object count</span>
-                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                          {bucketInspectorData?.object_count != null
-                                            ? bucketInspectorData.object_count.toLocaleString()
-                                            : "-"}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {isCephContext && (
-                                    <div className={inspectorSectionCardClasses}>
-                                      <p className={inspectorSectionTitleClasses}>Ceph</p>
-                                      <div className="mt-2 grid gap-2">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="text-slate-500">{cephQuotaScopeLabel} size</span>
-                                          <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                            {cephContextQuotaSizeBytes != null ? formatBytes(cephContextQuotaSizeBytes) : "Not set"}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="text-slate-500">{cephQuotaScopeLabel} objects</span>
-                                          <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                            {cephContextQuotaObjects != null ? cephContextQuotaObjects.toLocaleString() : "Not set"}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="text-slate-500">Bucket quota size</span>
-                                          <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                            {(bucketInspectorData?.quota_max_size_bytes ?? 0) > 0
-                                              ? formatBytes(bucketInspectorData?.quota_max_size_bytes ?? null)
-                                              : "Not set"}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="text-slate-500">Bucket quota objects</span>
-                                          <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                            {(bucketInspectorData?.quota_max_objects ?? 0) > 0
-                                              ? (bucketInspectorData?.quota_max_objects ?? 0).toLocaleString()
-                                              : "Not set"}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  <div className={inspectorSectionCardClasses}>
-                                    <p className={inspectorSectionTitleClasses}>Features</p>
-                                    <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                                      States mirror the Manager bucket overview when available.
-                                    </p>
-                                    <div className="mt-2 space-y-2">
-                                      {bucketInspectorFeatures.length === 0 ? (
-                                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                          No feature data available for this context.
-                                        </p>
-                                      ) : (
-                                        bucketInspectorFeatures.map((feature) => (
-                                          <div key={feature.key} className="flex items-center justify-between gap-2">
-                                            <span className="text-slate-500">{feature.label}</span>
-                                            <span
-                                              className={`rounded-full px-2 py-1 ui-caption font-semibold ${BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES[feature.tone]}`}
-                                            >
-                                              {feature.state}
-                                            </span>
-                                          </div>
-                                        ))
-                                      )}
-                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setShowSearchOptionsMenu(false)
+                                      }
+                                      className={chromeChipButtonClasses}
+                                    >
+                                      Close
+                                    </button>
                                   </div>
                                 </div>
                               )}
                             </div>
                           </div>
-                        )}
-
-                      {inspectorTab === "selection" && (
-                        <div
-                          role="tabpanel"
-                          id="inspector-panel-selection"
-                          aria-labelledby="inspector-tab-selection"
-                          className={inspectorTabPanelClasses}
+                        </th>
+                        {visibleColumnDefinitions.map((column) => (
+                          <th
+                            key={column.id}
+                            className={`${column.widthClassName} px-2 ${headerPadding} !align-middle ${
+                              column.align === "right"
+                                ? "text-right"
+                                : "text-left"
+                            } ui-caption font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400`}
+                          >
+                            {renderColumnHeaderContent(column)}
+                          </th>
+                        ))}
+                        <th
+                          className={`w-44 px-2 ${headerPadding} !align-middle text-right ui-caption font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400`}
                         >
-                          {canSelectionActions ? (
+                          <span className="inline-flex h-6 items-center">
+                            Actions
+                          </span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800">
+                      {canGoUp &&
+                        bucketName &&
+                        showFolderItems &&
+                        !isSearchingInWholeBucket && (
+                          <tr
+                            className={`${rowHeightClasses} text-slate-600 transition-colors hover:bg-slate-50/70 dark:text-slate-300 dark:hover:bg-slate-800/40`}
+                          >
+                            <td
+                              className={`w-9 px-2 ${rowCellClasses} !align-middle`}
+                            />
+                            <td
+                              className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} !align-middle ui-body`}
+                            >
+                              <button
+                                type="button"
+                                onClick={handleGoUp}
+                                className="flex min-w-0 items-center gap-3 text-left font-semibold text-slate-700 hover:text-primary-700 dark:text-slate-200 dark:hover:text-primary-200"
+                              >
+                                <span
+                                  className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-xl border border-slate-200/80 bg-white/85 text-slate-500 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-200`}
+                                >
+                                  <UpIcon className="h-3.5 w-3.5" />
+                                </span>
+                                <span className="truncate">Parent folder</span>
+                              </button>
+                            </td>
+                            {visibleColumnDefinitions.map((column) => (
+                              <td
+                                key={column.id}
+                                className={`${column.widthClassName} px-2 ${rowCellClasses} !align-middle ui-body text-slate-400 whitespace-nowrap overflow-hidden text-ellipsis ${
+                                  column.align === "right" ? "text-right" : ""
+                                }`}
+                              >
+                                -
+                              </td>
+                            ))}
+                            <td
+                              className={`w-44 px-2 ${rowCellClasses} !align-middle text-right ui-caption text-slate-400`}
+                            />
+                          </tr>
+                        )}
+                      {objectsLoading && listItems.length === 0 && (
+                        <TableEmptyState
+                          colSpan={objectTableColSpan}
+                          message="Loading objects..."
+                          className="py-10 text-center"
+                        />
+                      )}
+                      {!objectsLoading && !bucketName && (
+                        <TableEmptyState
+                          colSpan={objectTableColSpan}
+                          message="Select a bucket to browse objects."
+                          className="py-10 text-center"
+                        />
+                      )}
+                      {!objectsLoading &&
+                        bucketName &&
+                        objectsError &&
+                        listItems.length === 0 && (
+                          <TableEmptyState
+                            colSpan={objectTableColSpan}
+                            message={objectsError}
+                            tone="error"
+                            className="py-10 text-center"
+                          />
+                        )}
+                      {!objectsLoading &&
+                        bucketName &&
+                        !objectsError &&
+                        listItems.length === 0 && (
+                          <TableEmptyState
+                            colSpan={objectTableColSpan}
+                            message={
+                              hasActiveSearchFilters
+                                ? "No objects matched this search."
+                                : "No objects found for this path."
+                            }
+                            className="py-10 text-center"
+                          />
+                        )}
+                      {listItems.map((item) => {
+                        const isFocused = inspectedItem?.id === item.id;
+                        const isSelected = selectedSet.has(item.id);
+                        const isActiveRow = activeRowId === item.id;
+                        const isDeleted = Boolean(item.isDeleted);
+                        const itemActionStates = resolveItemActionStates(item);
+                        return (
+                          <tr
+                            key={item.id}
+                            data-browser-item
+                            data-lazy-item-id={
+                              item.type === "file" && !item.isDeleted
+                                ? item.id
+                                : undefined
+                            }
+                            onClick={(event) => {
+                              if (isInteractiveTarget(event.target)) {
+                                return;
+                              }
+                              handleItemSelectionClick(event, item.id);
+                            }}
+                            onDoubleClick={(event) =>
+                              handleItemDoubleClick(event, item)
+                            }
+                            onContextMenu={(event) =>
+                              handleItemContextMenu(event, item)
+                            }
+                            className={`${rowHeightClasses} transition-colors ${
+                              isSelected
+                                ? "bg-primary-100/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] hover:bg-primary-100 dark:bg-primary-500/30 dark:hover:bg-primary-500/40"
+                                : isActiveRow
+                                  ? "bg-sky-50/90 hover:bg-sky-100/80 dark:bg-sky-900/20 dark:hover:bg-sky-900/30"
+                                  : isDeleted
+                                    ? "bg-rose-50/60 hover:bg-rose-100/70 dark:bg-rose-900/10 dark:hover:bg-rose-900/20"
+                                    : isFocused
+                                      ? "bg-primary-50/70 hover:bg-primary-50 dark:bg-primary-500/15 dark:hover:bg-primary-500/20"
+                                      : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                            }`}
+                          >
+                            <td
+                              className={`w-9 px-2 ${rowCellClasses} !align-middle`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSelection(item.id)}
+                                aria-label={`Select ${item.name}`}
+                                className={uiCheckboxClass}
+                              />
+                            </td>
+                            <td
+                              className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} !align-middle ui-body ${
+                                isDeleted
+                                  ? "text-rose-700 dark:text-rose-200"
+                                  : "text-slate-700 dark:text-slate-200"
+                              }`}
+                            >
+                              <div
+                                className={`flex min-w-0 items-center ${nameGapClasses}`}
+                              >
+                                <span
+                                  className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-xl border shadow-sm ${
+                                    isDeleted
+                                      ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-900/20 dark:text-rose-200"
+                                      : item.type === "folder"
+                                        ? "border-amber-200 bg-amber-50/90 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
+                                        : "border-sky-200 bg-sky-50/90 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200"
+                                  }`}
+                                >
+                                  {item.type === "folder" ? (
+                                    <FolderIcon />
+                                  ) : isDeleted ? (
+                                    <TrashIcon />
+                                  ) : (
+                                    <FileIcon />
+                                  )}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <button
+                                    type="button"
+                                    onClick={(event) =>
+                                      handleItemNameClick(event, item)
+                                    }
+                                    onDoubleClick={() =>
+                                      openItemPrimaryAction(item)
+                                    }
+                                    className={`flex w-full min-w-0 items-baseline gap-1 text-left font-semibold ${
+                                      isDeleted
+                                        ? "text-rose-700 hover:text-rose-800 dark:text-rose-200 dark:hover:text-rose-100"
+                                        : "text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
+                                    }`}
+                                    title={item.name}
+                                  >
+                                    <span className="truncate">
+                                      {item.name}
+                                    </span>
+                                    {isDeleted && (
+                                      <span className="shrink-0 ui-caption font-semibold text-rose-500 dark:text-rose-300">
+                                        (deleted)
+                                      </span>
+                                    )}
+                                  </button>
+                                  {!compactMode && (
+                                    <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden ui-caption text-slate-500 dark:text-slate-400">
+                                      <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
+                                        {item.type === "folder"
+                                          ? isDeleted
+                                            ? "Deleted folder"
+                                            : "Prefix"
+                                          : isDeleted
+                                            ? "Deleted object"
+                                            : "Object"}
+                                      </span>
+                                      {isDeleted && (
+                                        <span className="rounded-full border border-rose-200 px-2 py-0.5 font-semibold text-rose-700 dark:border-rose-500/40 dark:text-rose-200">
+                                          {item.type === "folder"
+                                            ? "Delete markers"
+                                            : "Delete marker"}
+                                        </span>
+                                      )}
+                                      {item.storageClass && (
+                                        <span
+                                          className={`rounded-full border px-2 py-0.5 font-semibold ${
+                                            storageClassChipClasses[
+                                              item.storageClass
+                                            ] ??
+                                            "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                          }`}
+                                        >
+                                          {item.storageClass}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            {visibleColumnDefinitions.map((column) => (
+                              <td
+                                key={column.id}
+                                className={`${column.widthClassName} px-2 ${rowCellClasses} !align-middle ui-body text-slate-600 dark:text-slate-300 whitespace-nowrap overflow-hidden text-ellipsis ${
+                                  column.align === "right" ? "text-right" : ""
+                                }`}
+                              >
+                                {renderColumnCellValue(item, column.id)}
+                              </td>
+                            ))}
+                            <td
+                              className={`w-44 px-2 ${rowCellClasses} !align-middle text-right`}
+                            >
+                              <div className="flex flex-nowrap justify-end gap-1.5 rounded-xl border border-slate-200/70 bg-white/70 px-1.5 py-1 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/50">
+                                {item.type === "folder" && (
+                                  <button
+                                    type="button"
+                                    className={rowActionButtonClasses}
+                                    aria-label="Open"
+                                    title="Open"
+                                    onClick={() => handleOpenItem(item)}
+                                    disabled={!itemActionStates.open.enabled}
+                                  >
+                                    <OpenIcon />
+                                  </button>
+                                )}
+                                {item.type === "file" && !isDeleted && (
+                                  <button
+                                    type="button"
+                                    className={rowActionButtonClasses}
+                                    aria-label="Preview"
+                                    title="Preview"
+                                    onClick={() => handlePreviewItem(item)}
+                                    disabled={!itemActionStates.preview.enabled}
+                                  >
+                                    <EyeIcon />
+                                  </button>
+                                )}
+                                {item.type === "file" &&
+                                  isDeleted &&
+                                  isVersioningEnabled && (
+                                    <button
+                                      type="button"
+                                      className={rowActionButtonClasses}
+                                      aria-label="Versions"
+                                      title="Versions"
+                                      onClick={() =>
+                                        openObjectVersionsModal(item)
+                                      }
+                                      disabled={
+                                        !itemActionStates.versions.enabled
+                                      }
+                                    >
+                                      <HistoryIcon />
+                                    </button>
+                                  )}
+                                <button
+                                  type="button"
+                                  className={`${rowActionButtonClasses} ${!itemActionStates.download.enabled ? "opacity-50" : ""}`}
+                                  aria-label="Download"
+                                  title={
+                                    !itemActionStates.download.enabled
+                                      ? "Restore from versions before download"
+                                      : "Download"
+                                  }
+                                  onClick={() => handleDownloadTarget(item)}
+                                  disabled={!itemActionStates.download.enabled}
+                                >
+                                  <DownloadIcon />
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`${rowActionDangerButtonClasses} ${!itemActionStates.delete.enabled ? "opacity-50" : ""}`}
+                                  aria-label="Delete"
+                                  title={
+                                    !itemActionStates.delete.enabled
+                                      ? "Delete marker entries are managed in versions."
+                                      : "Delete"
+                                  }
+                                  onClick={() => handleDeleteItems([item])}
+                                  disabled={!itemActionStates.delete.enabled}
+                                >
+                                  <TrashIcon />
+                                </button>
+                                <button
+                                  type="button"
+                                  className={rowActionButtonClasses}
+                                  aria-label="More actions"
+                                  title="More"
+                                  onClick={(event) =>
+                                    handleItemActionsButtonClick(event, item)
+                                  }
+                                >
+                                  <MoreIcon />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {canLoadMoreObjectResults && (
+                  <div className="border-t border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.84),rgba(255,255,255,0.86))] px-4 py-3 text-right dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.68),rgba(15,23,42,0.5))]">
+                    <button
+                      type="button"
+                      className={chromeToolbarButtonClasses}
+                      onClick={handleLoadMoreObjectResults}
+                      disabled={objectsLoadingMore}
+                    >
+                      {objectsLoadingMore ? "Loading..." : "Load more"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {isInspectorPanelVisible && (
+              <div className="flex min-h-0 h-full flex-col gap-3">
+                <div className="flex min-h-0 h-full flex-1 flex-col rounded-2xl border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(255,255,255,0.9))] px-3 py-3 shadow-sm dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.86),rgba(2,6,23,0.82))]">
+                  <div
+                    className={inspectorTabListClasses}
+                    role="tablist"
+                    aria-label="Inspector tabs"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      id="inspector-tab-details"
+                      aria-selected={inspectorTab === "details"}
+                      aria-controls="inspector-panel-details"
+                      onClick={() => setInspectorTab("details")}
+                      className={`${inspectorTabBaseClasses} ${
+                        inspectorTab === "details"
+                          ? inspectorTabActiveClasses
+                          : inspectorTabInactiveClasses
+                      }`}
+                    >
+                      Details
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      id="inspector-tab-context"
+                      aria-selected={inspectorTab === "context"}
+                      aria-controls="inspector-panel-context"
+                      onClick={() => setInspectorTab("context")}
+                      className={`${inspectorTabBaseClasses} ${
+                        inspectorTab === "context"
+                          ? inspectorTabActiveClasses
+                          : inspectorTabInactiveClasses
+                      }`}
+                    >
+                      Context
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      id="inspector-tab-bucket"
+                      aria-selected={inspectorTab === "bucket"}
+                      aria-controls="inspector-panel-bucket"
+                      onClick={handleOpenBucketInspector}
+                      className={`${inspectorTabBaseClasses} ${
+                        inspectorTab === "bucket"
+                          ? inspectorTabActiveClasses
+                          : inspectorTabInactiveClasses
+                      }`}
+                    >
+                      Bucket
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      id="inspector-tab-selection"
+                      aria-selected={inspectorTab === "selection"}
+                      aria-controls="inspector-panel-selection"
+                      onClick={() => setInspectorTab("selection")}
+                      className={`${inspectorTabBaseClasses} ${
+                        inspectorTab === "selection"
+                          ? inspectorTabActiveClasses
+                          : inspectorTabInactiveClasses
+                      }`}
+                    >
+                      Selection
+                    </button>
+                  </div>
+
+                  <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-2">
+                    {inspectorTab === "context" && (
+                      <div
+                        role="tabpanel"
+                        id="inspector-panel-context"
+                        aria-labelledby="inspector-tab-context"
+                        className={inspectorTabPanelClasses}
+                      >
+                        <div className={inspectorSectionCardClasses}>
+                          <p className={inspectorSectionTitleClasses}>
+                            Current location
+                          </p>
+                          <p className="break-all ui-caption text-slate-500 dark:text-slate-400">
+                            {currentPath || "Select a bucket to get started."}
+                          </p>
+                        </div>
+                        <div className="space-y-3">
+                          <div className={inspectorSectionCardClasses}>
+                            <p className={inspectorSectionTitleClasses}>
+                              Actions
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {inspectorContextActions.map((action) =>
+                                renderInspectorActionButton(action, () =>
+                                  runPathAction(action.id),
+                                ),
+                              )}
+                            </div>
+                          </div>
+                          <div className={inspectorSectionCardClasses}>
+                            <p className={inspectorSectionTitleClasses}>
+                              Prefix summary
+                            </p>
+                            <div className="mt-2 grid gap-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-500">Files</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                  {pathStats.files}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-500">Folders</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                  {pathStats.folders}
+                                </span>
+                              </div>
+                              {isVersioningEnabled && showDeletedObjects && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-500">
+                                    Deleted shown
+                                  </span>
+                                  <span className="font-semibold text-rose-700 dark:text-rose-200">
+                                    {pathStats.deletedFiles +
+                                      pathStats.deletedFolders}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-500">
+                                  Total size
+                                </span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                  {formatBytes(pathStats.totalBytes)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className={inspectorSectionCardClasses}>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className={inspectorSectionTitleClasses}>
+                                Counts
+                              </p>
+                              <button
+                                type="button"
+                                className={chromeBulkActionClasses}
+                                onClick={handleContextCount}
+                                disabled={
+                                  !bucketName ||
+                                  !hasS3AccountContext ||
+                                  contextCountsLoading
+                                }
+                              >
+                                <RefreshIcon className="h-3.5 w-3.5" />
+                                {contextCountsLoading
+                                  ? "Counting..."
+                                  : contextCounts
+                                    ? "Recount"
+                                    : "Count"}
+                              </button>
+                            </div>
+                            {contextCountsError && (
+                              <p className="mt-2 ui-caption font-semibold text-rose-600 dark:text-rose-200">
+                                {contextCountsError}
+                              </p>
+                            )}
+                            {!isVersioningEnabled && (
+                              <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                                Versioning is disabled for this bucket.
+                              </p>
+                            )}
+                            <div className="mt-2 grid gap-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-500">
+                                  Current objects
+                                </span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                  {contextCountsLoading
+                                    ? "..."
+                                    : contextCounts
+                                      ? contextCounts.objects
+                                      : "-"}
+                                </span>
+                              </div>
+                              {isVersioningEnabled && (
+                                <>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">
+                                      Versions
+                                    </span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {contextCountsLoading
+                                        ? "..."
+                                        : contextCounts
+                                          ? contextCounts.versions
+                                          : "-"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">
+                                      Delete markers
+                                    </span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {contextCountsLoading
+                                        ? "..."
+                                        : contextCounts
+                                          ? contextCounts.deleteMarkers
+                                          : "-"}
+                                    </span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className={inspectorSectionCardClasses}>
+                            <p className={inspectorSectionTitleClasses}>
+                              Storage classes
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {Object.keys(pathStats.storageCounts).length ===
+                              0 ? (
+                                <span className="ui-caption text-slate-500 dark:text-slate-400">
+                                  No file data yet.
+                                </span>
+                              ) : (
+                                Object.entries(pathStats.storageCounts).map(
+                                  ([storage, count]) => (
+                                    <span
+                                      key={storage}
+                                      className={`rounded-full border px-2 py-1 ui-caption font-semibold ${
+                                        storageClassChipClasses[storage] ??
+                                        "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                      }`}
+                                    >
+                                      {storage} ({count})
+                                    </span>
+                                  ),
+                                )
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {inspectorTab === "bucket" && (
+                      <div
+                        role="tabpanel"
+                        id="inspector-panel-bucket"
+                        aria-labelledby="inspector-tab-bucket"
+                        className={inspectorTabPanelClasses}
+                      >
+                        <div className="space-y-3">
+                          <div className={inspectorSectionCardClasses}>
+                            <p className={inspectorSectionTitleClasses}>
+                              Bucket overview
+                            </p>
+                            <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                              {bucketName || "Select a bucket to inspect."}
+                            </p>
+                          </div>
+
+                          <div className={inspectorSectionCardClasses}>
+                            <p className={inspectorSectionTitleClasses}>
+                              Actions
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {bucketConfigurationEnabled && (
+                                <button
+                                  type="button"
+                                  className={chromeBulkActionClasses}
+                                  onClick={() =>
+                                    openBucketConfigurationModal(bucketName)
+                                  }
+                                  disabled={!bucketName || !hasS3AccountContext}
+                                >
+                                  <SettingsIcon className="h-3.5 w-3.5" />
+                                  Configure
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className={chromeBulkActionClasses}
+                                onClick={openMultipartUploadsModal}
+                                disabled={!bucketName || !hasS3AccountContext}
+                              >
+                                <UploadIcon className="h-3.5 w-3.5" />
+                                Multipart uploads
+                              </button>
+                              <button
+                                type="button"
+                                className={chromeBulkActionClasses}
+                                onClick={() =>
+                                  void loadBucketInspectorData(true)
+                                }
+                                disabled={
+                                  !bucketName ||
+                                  !hasS3AccountContext ||
+                                  bucketInspectorLoading
+                                }
+                              >
+                                <RefreshIcon className="h-3.5 w-3.5" />
+                                {bucketInspectorLoading
+                                  ? "Loading..."
+                                  : "Refresh"}
+                              </button>
+                            </div>
+                          </div>
+
+                          {!bucketName || !hasS3AccountContext ? (
+                            <div className={inspectorEmptyStateClasses}>
+                              Select a bucket to load bucket stats and features.
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {bucketInspectorLoading &&
+                                !bucketInspectorData && (
+                                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                    Loading bucket overview...
+                                  </p>
+                                )}
+                              {bucketInspectorError && (
+                                <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
+                                  {bucketInspectorError}
+                                </p>
+                              )}
+                              <div className={inspectorSectionCardClasses}>
+                                <p className={inspectorSectionTitleClasses}>
+                                  Stats
+                                </p>
+                                <div className="mt-2 grid gap-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-slate-500">
+                                      Created
+                                    </span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {bucketInspectorData?.creation_date
+                                        ? formatDateTime(
+                                            bucketInspectorData.creation_date,
+                                          )
+                                        : "-"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-slate-500">
+                                      Used bytes
+                                    </span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {formatBytes(
+                                        bucketInspectorData?.used_bytes ?? null,
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-slate-500">
+                                      Object count
+                                    </span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {bucketInspectorData?.object_count != null
+                                        ? bucketInspectorData.object_count.toLocaleString()
+                                        : "-"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {isCephContext && (
+                                <div className={inspectorSectionCardClasses}>
+                                  <p className={inspectorSectionTitleClasses}>
+                                    Ceph
+                                  </p>
+                                  <div className="mt-2 grid gap-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-slate-500">
+                                        {cephQuotaScopeLabel} size
+                                      </span>
+                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                        {cephContextQuotaSizeBytes != null
+                                          ? formatBytes(
+                                              cephContextQuotaSizeBytes,
+                                            )
+                                          : "Not set"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-slate-500">
+                                        {cephQuotaScopeLabel} objects
+                                      </span>
+                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                        {cephContextQuotaObjects != null
+                                          ? cephContextQuotaObjects.toLocaleString()
+                                          : "Not set"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-slate-500">
+                                        Bucket quota size
+                                      </span>
+                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                        {(bucketInspectorData?.quota_max_size_bytes ??
+                                          0) > 0
+                                          ? formatBytes(
+                                              bucketInspectorData?.quota_max_size_bytes ??
+                                                null,
+                                            )
+                                          : "Not set"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-slate-500">
+                                        Bucket quota objects
+                                      </span>
+                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                        {(bucketInspectorData?.quota_max_objects ??
+                                          0) > 0
+                                          ? (
+                                              bucketInspectorData?.quota_max_objects ??
+                                              0
+                                            ).toLocaleString()
+                                          : "Not set"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className={inspectorSectionCardClasses}>
+                                <p className={inspectorSectionTitleClasses}>
+                                  Features
+                                </p>
+                                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                  States mirror the Manager bucket overview when
+                                  available.
+                                </p>
+                                <div className="mt-2 space-y-2">
+                                  {bucketInspectorFeatures.length === 0 ? (
+                                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                      No feature data available for this
+                                      context.
+                                    </p>
+                                  ) : (
+                                    bucketInspectorFeatures.map((feature) => (
+                                      <div
+                                        key={feature.key}
+                                        className="flex items-center justify-between gap-2"
+                                      >
+                                        <span className="text-slate-500">
+                                          {feature.label}
+                                        </span>
+                                        <span
+                                          className={`rounded-full px-2 py-1 ui-caption font-semibold ${BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES[feature.tone]}`}
+                                        >
+                                          {feature.state}
+                                        </span>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {inspectorTab === "selection" && (
+                      <div
+                        role="tabpanel"
+                        id="inspector-panel-selection"
+                        aria-labelledby="inspector-tab-selection"
+                        className={inspectorTabPanelClasses}
+                      >
+                        {canSelectionActions ? (
                           <div className="space-y-3">
-                            <div className={`${inspectorSectionCardClasses} flex items-start justify-between gap-2`}>
+                            <div
+                              className={`${inspectorSectionCardClasses} flex items-start justify-between gap-2`}
+                            >
                               <div>
-                                <p className={inspectorSectionTitleClasses}>Selection</p>
+                                <p className={inspectorSectionTitleClasses}>
+                                  Selection
+                                </p>
                                 <p className="mt-1 ui-caption text-slate-400">
-                                  {selectedCount > 0 ? `${selectedCount} selected` : "No selection"}
+                                  {selectedCount > 0
+                                    ? `${selectedCount} selected`
+                                    : "No selection"}
                                 </p>
                                 {selectedCount > 0 && (
                                   <p className="ui-caption text-slate-400">
@@ -10235,11 +12605,14 @@ export default function BrowserPage({
                                 )}
                                 {selectionHasDeleted && (
                                   <p className="ui-caption font-semibold text-amber-600 dark:text-amber-200">
-                                    Contains deleted items (derived from delete markers).
+                                    Contains deleted items (derived from delete
+                                    markers).
                                   </p>
                                 )}
                                 {selectedCount > 0 && (
-                                  <p className="ui-caption text-slate-400">Total size: {formatBytes(selectedBytes)}</p>
+                                  <p className="ui-caption text-slate-400">
+                                    Total size: {formatBytes(selectedBytes)}
+                                  </p>
                                 )}
                               </div>
                               {selectedCount > 0 && (
@@ -10258,35 +12631,55 @@ export default function BrowserPage({
                             </div>
                             <div className="space-y-3">
                               <div className={inspectorSectionCardClasses}>
-                                <p className={inspectorSectionTitleClasses}>Actions</p>
+                                <p className={inspectorSectionTitleClasses}>
+                                  Actions
+                                </p>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {inspectorSelectionActions.map((action) =>
-                                    renderInspectorActionButton(action, () => runSelectionAction(action.id))
+                                    renderInspectorActionButton(action, () =>
+                                      runSelectionAction(action.id),
+                                    ),
                                   )}
                                 </div>
                               </div>
                               <div className={inspectorSectionCardClasses}>
-                                <p className={inspectorSectionTitleClasses}>Bulk actions</p>
+                                <p className={inspectorSectionTitleClasses}>
+                                  Bulk actions
+                                </p>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {inspectorSelectionBulkActions.map((action) =>
-                                    renderInspectorActionButton(action, () => runSelectionAction(action.id), {
-                                      danger: action.id === "delete",
-                                    })
+                                    renderInspectorActionButton(
+                                      action,
+                                      () => runSelectionAction(action.id),
+                                      {
+                                        danger: action.id === "delete",
+                                      },
+                                    ),
                                   )}
                                 </div>
                               </div>
                             </div>
                             <div className={inspectorSectionCardClasses}>
                               <div className="flex items-center justify-between gap-2">
-                                <p className={inspectorSectionTitleClasses}>Selection stats</p>
+                                <p className={inspectorSectionTitleClasses}>
+                                  Selection stats
+                                </p>
                                 <button
                                   type="button"
-                                  className={bulkActionClasses}
+                                  className={chromeBulkActionClasses}
                                   onClick={calculateSelectionStats}
-                                  disabled={!bucketName || !hasS3AccountContext || selectionStatsLoading}
+                                  disabled={
+                                    !bucketName ||
+                                    !hasS3AccountContext ||
+                                    selectionStatsLoading
+                                  }
                                 >
                                   <RefreshIcon className="h-3.5 w-3.5" />
-                                  {selectionStatsLoading ? "Calculating..." : selectionStats ? "Recalculate" : "Calculate"}
+                                  {selectionStatsLoading
+                                    ? "Calculating..."
+                                    : selectionStats
+                                      ? "Recalculate"
+                                      : "Calculate"}
                                 </button>
                               </div>
                               {selectionStatsError && (
@@ -10294,21 +12687,28 @@ export default function BrowserPage({
                                   {selectionStatsError}
                                 </p>
                               )}
-                              {!selectionStats && !selectionStatsLoading && !selectionStatsError && (
-                                <p className="mt-2 ui-caption text-slate-400">
-                                  Calculates object count and size, including folder contents.
-                                </p>
-                              )}
+                              {!selectionStats &&
+                                !selectionStatsLoading &&
+                                !selectionStatsError && (
+                                  <p className="mt-2 ui-caption text-slate-400">
+                                    Calculates object count and size, including
+                                    folder contents.
+                                  </p>
+                                )}
                               {selectionStats && (
                                 <div className="mt-2 grid gap-2">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Objects</span>
+                                    <span className="text-slate-500">
+                                      Objects
+                                    </span>
                                     <span className="font-semibold text-slate-700 dark:text-slate-100">
                                       {selectionStats.objectCount.toLocaleString()}
                                     </span>
                                   </div>
                                   <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Total size</span>
+                                    <span className="text-slate-500">
+                                      Total size
+                                    </span>
                                     <span className="font-semibold text-slate-700 dark:text-slate-100">
                                       {formatBytes(selectionStats.totalBytes)}
                                     </span>
@@ -10334,8 +12734,12 @@ export default function BrowserPage({
                       >
                         {inspectedItem ? (
                           <div className="space-y-3">
-                            <div className={`${inspectorSectionCardClasses} flex items-center justify-between gap-2`}>
-                              <p className={inspectorSectionTitleClasses}>Object details</p>
+                            <div
+                              className={`${inspectorSectionCardClasses} flex items-center justify-between gap-2`}
+                            >
+                              <p className={inspectorSectionTitleClasses}>
+                                Object details
+                              </p>
                               <button
                                 type="button"
                                 onClick={() => setActiveItem(null)}
@@ -10373,12 +12777,18 @@ export default function BrowserPage({
                               </div>
                             </div>
                             <div className={inspectorSectionCardClasses}>
-                              <p className={inspectorSectionTitleClasses}>Metadata</p>
+                              <p className={inspectorSectionTitleClasses}>
+                                Metadata
+                              </p>
                               {metadataLoading && (
-                                <p className="ui-caption text-slate-500 dark:text-slate-400">Loading metadata...</p>
+                                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                  Loading metadata...
+                                </p>
                               )}
                               {metadataError && (
-                                <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{metadataError}</p>
+                                <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
+                                  {metadataError}
+                                </p>
                               )}
                               <div className="grid gap-2 ui-caption text-slate-600 dark:text-slate-300">
                                 <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
@@ -10389,16 +12799,25 @@ export default function BrowserPage({
                                 </div>
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="text-slate-500">Owner</span>
-                                  <span className="font-semibold text-slate-700 dark:text-slate-100">{inspectedItem.owner}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-slate-500">Last modified</span>
-                                  <span className="font-semibold text-slate-700 dark:text-slate-100">{inspectedItem.modified}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-slate-500">Content type</span>
                                   <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedMetadata?.content_type ?? "unknown"}
+                                    {inspectedItem.owner}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-slate-500">
+                                    Last modified
+                                  </span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedItem.modified}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-slate-500">
+                                    Content type
+                                  </span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedMetadata?.content_type ??
+                                      "unknown"}
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between gap-2">
@@ -10408,44 +12827,59 @@ export default function BrowserPage({
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="text-slate-500">Storage class</span>
+                                  <span className="text-slate-500">
+                                    Storage class
+                                  </span>
                                   <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedMetadata?.storage_class ?? inspectedItem.storageClass ?? "-"}
+                                    {inspectedMetadata?.storage_class ??
+                                      inspectedItem.storageClass ??
+                                      "-"}
                                   </span>
                                 </div>
                               </div>
                             </div>
                             <div className={inspectorSectionCardClasses}>
-                              <p className={inspectorSectionTitleClasses}>Tags</p>
+                              <p className={inspectorSectionTitleClasses}>
+                                Tags
+                              </p>
                               <div className="flex flex-wrap gap-2">
                                 {inspectedTags.length ? (
                                   inspectedTags.map((tag) => (
                                     <span
                                       key={`${tag.key}:${tag.value}`}
-                                      className={`${filterChipClasses} border-slate-200 dark:border-slate-700`}
+                                      className={chromeChipButtonClasses}
                                     >
                                       {tag.key}
                                       {tag.value ? `=${tag.value}` : ""}
                                     </span>
                                   ))
                                 ) : (
-                                  <span className="ui-caption text-slate-500 dark:text-slate-400">No tags defined.</span>
+                                  <span className="ui-caption text-slate-500 dark:text-slate-400">
+                                    No tags defined.
+                                  </span>
                                 )}
                               </div>
                             </div>
-                            {isVersioningEnabled && inspectedItem.type === "file" && (
-                              <BrowserObjectVersionsList
-                                versions={objectVersionRows}
-                                loading={objectVersionsLoading}
-                                error={objectVersionsError}
-                                canLoadMore={Boolean(objectVersionKeyMarker || objectVersionIdMarker)}
-                                onLoadMore={() =>
-                                  loadObjectVersions({ append: true, targetKey: inspectedItem.key })
-                                }
-                                onRestoreVersion={handleRestoreVersion}
-                                onDeleteVersion={handleDeleteVersion}
-                              />
-                            )}
+                            {isVersioningEnabled &&
+                              inspectedItem.type === "file" && (
+                                <BrowserObjectVersionsList
+                                  versions={objectVersionRows}
+                                  loading={objectVersionsLoading}
+                                  error={objectVersionsError}
+                                  canLoadMore={Boolean(
+                                    objectVersionKeyMarker ||
+                                    objectVersionIdMarker,
+                                  )}
+                                  onLoadMore={() =>
+                                    loadObjectVersions({
+                                      append: true,
+                                      targetKey: inspectedItem.key,
+                                    })
+                                  }
+                                  onRestoreVersion={handleRestoreVersion}
+                                  onDeleteVersion={handleDeleteVersion}
+                                />
+                              )}
                           </div>
                         ) : (
                           <div className={inspectorEmptyStateClasses}>
@@ -10454,70 +12888,73 @@ export default function BrowserPage({
                         )}
                       </div>
                     )}
-                      </div>
-                    </div>
                   </div>
-                )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
-        <BrowserContextMenu
-          contextMenu={contextMenu}
-          contextMenuRef={contextMenuRef}
-          bucketName={bucketName}
-          currentPath={currentPath}
-          hasS3AccountContext={hasS3AccountContext}
-          versioningEnabled={isVersioningEnabled}
-          showFolderItems={showFolderItems}
-          showDeletedObjects={showDeletedObjects}
-          allowInspectorPanel={canUseInspectorPanel}
-          canPaste={canPaste}
-          copyUrlDisabled={sseActive}
-          copyUrlDisabledReason={copyUrlDisabledReason}
-          clipboard={clipboard}
-          fileInputRef={fileInputRef}
-          folderInputRef={folderInputRef}
-          onClose={closeContextMenu}
-          onNewFolder={handleNewFolder}
-          onPasteItems={handlePasteItems}
-          onOpenPrefixVersions={() => setShowPrefixVersions(true)}
-          onOpenCleanupVersions={openCleanupModal}
-          onDownloadTarget={handleDownloadTarget}
-          onPreviewItem={handlePreviewItem}
-          onCopyUrl={handleCopyUrl}
-          onCopyPath={(path) => {
-            void handleCopyPath(path);
-          }}
-          onCopyItems={handleCopyItems}
-          onCutItems={handleCutItems}
-          onOpenBulkAttributes={openBulkAttributesModal}
-          onOpenBulkRestore={openBulkRestoreModal}
-          onOpenObjectVersions={openObjectVersionsModal}
-          onOpenAdvanced={openAdvancedForItem}
-          onDeleteItems={handleDeleteItems}
-          onDownloadFolder={handleDownloadFolder}
-          onDownloadItems={handleDownloadItems}
-          onOpenItem={handleOpenItem}
-          onOpenDetails={openItemDetails}
-          onToggleShowFolders={() => setShowFolderItems((prev) => !prev)}
-          onToggleShowDeleted={() => setShowDeletedObjects((prev) => !prev)}
-          isMainBrowserPath={isMainBrowserPath}
-          compactMode={compactMode}
-          onSetCompactMode={(value) => {
-            if (!isMainBrowserPath) return;
-            setCompactMode(value);
-          }}
-          columnOptions={COLUMN_DEFINITIONS.map((column) => ({ id: column.id, label: column.label }))}
-          visibleColumns={visibleColumnSet}
-          onToggleVisibleColumn={(columnId) => {
-            if (!isMainBrowserPath) return;
-            handleToggleVisibleColumn(columnId as BrowserColumnId);
-          }}
-          onResetVisibleColumns={() => {
-            if (!isMainBrowserPath) return;
-            handleResetVisibleColumns();
-          }}
-        />
+      <BrowserContextMenu
+        contextMenu={contextMenu}
+        contextMenuRef={contextMenuRef}
+        bucketName={bucketName}
+        currentPath={currentPath}
+        hasS3AccountContext={hasS3AccountContext}
+        versioningEnabled={isVersioningEnabled}
+        showFolderItems={showFolderItems}
+        showDeletedObjects={showDeletedObjects}
+        allowInspectorPanel={canUseInspectorPanel}
+        canPaste={canPaste}
+        copyUrlDisabled={sseActive}
+        copyUrlDisabledReason={copyUrlDisabledReason}
+        clipboard={clipboard}
+        fileInputRef={fileInputRef}
+        folderInputRef={folderInputRef}
+        onClose={closeContextMenu}
+        onNewFolder={handleNewFolder}
+        onPasteItems={handlePasteItems}
+        onOpenPrefixVersions={() => setShowPrefixVersions(true)}
+        onOpenCleanupVersions={openCleanupModal}
+        onDownloadTarget={handleDownloadTarget}
+        onPreviewItem={handlePreviewItem}
+        onCopyUrl={handleCopyUrl}
+        onCopyPath={(path) => {
+          void handleCopyPath(path);
+        }}
+        onCopyItems={handleCopyItems}
+        onCutItems={handleCutItems}
+        onOpenBulkAttributes={openBulkAttributesModal}
+        onOpenBulkRestore={openBulkRestoreModal}
+        onOpenObjectVersions={openObjectVersionsModal}
+        onOpenAdvanced={openAdvancedForItem}
+        onDeleteItems={handleDeleteItems}
+        onDownloadFolder={handleDownloadFolder}
+        onDownloadItems={handleDownloadItems}
+        onOpenItem={handleOpenItem}
+        onOpenDetails={openItemDetails}
+        onToggleShowFolders={() => setShowFolderItems((prev) => !prev)}
+        onToggleShowDeleted={() => setShowDeletedObjects((prev) => !prev)}
+        isMainBrowserPath={isMainBrowserPath}
+        compactMode={compactMode}
+        onSetCompactMode={(value) => {
+          if (!isMainBrowserPath) return;
+          setCompactMode(value);
+        }}
+        columnOptions={COLUMN_DEFINITIONS.map((column) => ({
+          id: column.id,
+          label: column.label,
+        }))}
+        visibleColumns={visibleColumnSet}
+        onToggleVisibleColumn={(columnId) => {
+          if (!isMainBrowserPath) return;
+          handleToggleVisibleColumn(columnId as BrowserColumnId);
+        }}
+        onResetVisibleColumns={() => {
+          if (!isMainBrowserPath) return;
+          handleResetVisibleColumns();
+        }}
+      />
       <BrowserPreviewModal
         previewItem={previewItem}
         previewUrl={previewUrl}
@@ -10536,12 +12973,20 @@ export default function BrowserPage({
           maxBodyHeightClass="max-h-[85vh]"
         >
           <S3AccountProvider scope={bucketConfigContextScope}>
-            <BucketDetailPage bucketNameOverride={configBucketName} embedded hideObjectsTab />
+            <BucketDetailPage
+              bucketNameOverride={configBucketName}
+              embedded
+              hideObjectsTab
+            />
           </S3AccountProvider>
         </Modal>
       )}
       {showCreateBucketModal && (
-        <Modal title="Create bucket" onClose={closeCreateBucketDialog} maxWidthClass="max-w-lg">
+        <Modal
+          title="Create bucket"
+          onClose={closeCreateBucketDialog}
+          maxWidthClass="max-w-lg"
+        >
           <form
             className="space-y-4"
             onSubmit={(event) => {
@@ -10555,14 +13000,20 @@ export default function BrowserPage({
                 type="text"
                 value={createBucketNameValue}
                 onChange={(event) => {
-                  setCreateBucketNameValue(normalizeS3BucketNameInput(event.target.value));
+                  setCreateBucketNameValue(
+                    normalizeS3BucketNameInput(event.target.value),
+                  );
                   if (createBucketError) {
                     setCreateBucketError(null);
                   }
                 }}
                 placeholder="my-bucket"
                 maxLength={S3_BUCKET_NAME_MAX_LENGTH}
-                title={!createBucketNameValue || isCreateBucketNameValid ? undefined : invalidBucketNameMessage}
+                title={
+                  !createBucketNameValue || isCreateBucketNameValid
+                    ? undefined
+                    : invalidBucketNameMessage
+                }
                 className={`mt-1 w-full rounded-md border bg-white px-3 py-2 ui-body font-semibold shadow-sm focus:outline-none focus:ring-2 ${
                   !createBucketNameValue || isCreateBucketNameValid
                     ? "border-slate-300 text-slate-700 focus:border-primary focus:ring-primary/30 dark:border-slate-700 dark:text-slate-100"
@@ -10574,20 +13025,26 @@ export default function BrowserPage({
               />
             </label>
             {createBucketNameValue && !isCreateBucketNameValid && (
-              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">{invalidBucketNameMessage}</p>
+              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">
+                {invalidBucketNameMessage}
+              </p>
             )}
             <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={createBucketVersioning}
-                onChange={(event) => setCreateBucketVersioning(event.target.checked)}
+                onChange={(event) =>
+                  setCreateBucketVersioning(event.target.checked)
+                }
                 disabled={createBucketLoading}
                 className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/40 dark:border-slate-600 dark:bg-slate-800"
               />
               Enable versioning
             </label>
             {createBucketError && (
-              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">{createBucketError}</p>
+              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">
+                {createBucketError}
+              </p>
             )}
             <div className="flex items-center justify-end gap-2">
               <button
@@ -10601,7 +13058,12 @@ export default function BrowserPage({
               <button
                 type="submit"
                 className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!hasS3AccountContext || createBucketLoading || !createBucketNameValue.trim() || !isCreateBucketNameValid}
+                disabled={
+                  !hasS3AccountContext ||
+                  createBucketLoading ||
+                  !createBucketNameValue.trim() ||
+                  !isCreateBucketNameValid
+                }
               >
                 {createBucketLoading ? "Creating..." : "Create bucket"}
               </button>
@@ -10610,7 +13072,11 @@ export default function BrowserPage({
         </Modal>
       )}
       {showSseCustomerModal && (
-        <Modal title="SSE-C key" onClose={() => setShowSseCustomerModal(false)} maxWidthClass="max-w-lg">
+        <Modal
+          title="SSE-C key"
+          onClose={() => setShowSseCustomerModal(false)}
+          maxWidthClass="max-w-lg"
+        >
           <form
             className="space-y-3"
             onSubmit={(event) => {
@@ -10619,8 +13085,8 @@ export default function BrowserPage({
             }}
           >
             <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Enter a base64 key that decodes to exactly 32 bytes. The key is stored in memory only for this browser
-              session and this bucket.
+              Enter a base64 key that decodes to exactly 32 bytes. The key is
+              stored in memory only for this browser session and this bucket.
             </p>
             <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
               <span>Customer key (base64, 32 bytes)</span>
@@ -10652,10 +13118,14 @@ export default function BrowserPage({
               </div>
             </label>
             {sseCustomerKeyError && (
-              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">{sseCustomerKeyError}</p>
+              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">
+                {sseCustomerKeyError}
+              </p>
             )}
             {sseCustomerKeyNotice && (
-              <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">{sseCustomerKeyNotice}</p>
+              <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">
+                {sseCustomerKeyNotice}
+              </p>
             )}
             {sseActive && (
               <p className="ui-caption font-semibold text-emerald-700 dark:text-emerald-200">
@@ -10716,7 +13186,10 @@ export default function BrowserPage({
           loading={multipartUploadsLoading}
           loadingMore={multipartUploadsLoadingMore}
           error={multipartUploadsError}
-          canLoadMore={multipartUploadsIsTruncated && Boolean(multipartUploadsNextKey || multipartUploadsNextUploadId)}
+          canLoadMore={
+            multipartUploadsIsTruncated &&
+            Boolean(multipartUploadsNextKey || multipartUploadsNextUploadId)
+          }
           abortingUploadIds={abortingMultipartUploadIds}
           onRefresh={refreshMultipartUploads}
           onLoadMore={loadMoreMultipartUploads}
@@ -10734,36 +13207,50 @@ export default function BrowserPage({
           prefixVersionKeyMarker={prefixVersionKeyMarker}
           prefixVersionIdMarker={prefixVersionIdMarker}
           onClose={() => setShowPrefixVersions(false)}
-          onRefresh={() => loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null })}
+          onRefresh={() =>
+            loadPrefixVersions({
+              append: false,
+              keyMarker: null,
+              versionIdMarker: null,
+            })
+          }
           onLoadMore={() => loadPrefixVersions({ append: true })}
           onRestoreVersion={handleRestoreVersion}
           onDeleteVersion={handleDeleteVersion}
         />
       )}
-      {showObjectVersionsModal && isVersioningEnabled && objectVersionsModalKey && objectVersionsModalPath && (
-        <BrowserObjectVersionsModal
-          bucketName={bucketName}
-          objectKey={objectVersionsModalKey}
-          objectPath={objectVersionsModalPath}
-          objectVersionsLoading={objectVersionsModalLoading}
-          objectVersionsError={objectVersionsModalError}
-          objectVersionRows={objectVersionModalRows}
-          objectVersionKeyMarker={objectVersionModalKeyMarker}
-          objectVersionIdMarker={objectVersionModalIdMarker}
-          onClose={closeObjectVersionsModal}
-          onRefresh={() =>
-            loadObjectVersionsModal({
-              append: false,
-              keyMarker: null,
-              versionIdMarker: null,
-              targetKey: objectVersionsModalKey,
-            })
-          }
-          onLoadMore={() => loadObjectVersionsModal({ append: true, targetKey: objectVersionsModalKey })}
-          onRestoreVersion={handleRestoreVersion}
-          onDeleteVersion={handleDeleteVersion}
-        />
-      )}
+      {showObjectVersionsModal &&
+        isVersioningEnabled &&
+        objectVersionsModalKey &&
+        objectVersionsModalPath && (
+          <BrowserObjectVersionsModal
+            bucketName={bucketName}
+            objectKey={objectVersionsModalKey}
+            objectPath={objectVersionsModalPath}
+            objectVersionsLoading={objectVersionsModalLoading}
+            objectVersionsError={objectVersionsModalError}
+            objectVersionRows={objectVersionModalRows}
+            objectVersionKeyMarker={objectVersionModalKeyMarker}
+            objectVersionIdMarker={objectVersionModalIdMarker}
+            onClose={closeObjectVersionsModal}
+            onRefresh={() =>
+              loadObjectVersionsModal({
+                append: false,
+                keyMarker: null,
+                versionIdMarker: null,
+                targetKey: objectVersionsModalKey,
+              })
+            }
+            onLoadMore={() =>
+              loadObjectVersionsModal({
+                append: true,
+                targetKey: objectVersionsModalKey,
+              })
+            }
+            onRestoreVersion={handleRestoreVersion}
+            onDeleteVersion={handleDeleteVersion}
+          />
+        )}
       {showBulkAttributesModal && (
         <BrowserBulkAttributesModal
           bulkActionFileCount={bulkActionFileCount}
@@ -10858,7 +13345,10 @@ export default function BrowserPage({
             }}
           >
             <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Destination: <span className="font-semibold">{currentPath || `${bucketName}/`}</span>
+              Destination:{" "}
+              <span className="font-semibold">
+                {currentPath || `${bucketName}/`}
+              </span>
             </p>
             <label className="block ui-caption font-semibold text-slate-600 dark:text-slate-300">
               Folder name
@@ -10873,7 +13363,11 @@ export default function BrowserPage({
                 spellCheck={false}
               />
             </label>
-            {newFolderError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">{newFolderError}</p>}
+            {newFolderError && (
+              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">
+                {newFolderError}
+              </p>
+            )}
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
@@ -10886,7 +13380,9 @@ export default function BrowserPage({
               <button
                 type="submit"
                 className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!bucketName || !hasS3AccountContext || newFolderLoading}
+                disabled={
+                  !bucketName || !hasS3AccountContext || newFolderLoading
+                }
               >
                 {newFolderLoading ? "Creating..." : "Create"}
               </button>
@@ -10922,7 +13418,12 @@ export default function BrowserPage({
         <BrowserOperationsModal
           totalOperationsCount={totalOperationsCount}
           activeOperationsCount={activeOperations.length}
-          queuedOperationsCount={uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount}
+          queuedOperationsCount={
+            uploadQueue.length +
+            queuedDownloadCount +
+            queuedDeleteCount +
+            queuedCopyCount
+          }
           completedOperationsCount={completedOperationsCount}
           failedOperationsCount={failedOperationsCount}
           showActiveOperations={showActiveOperations}

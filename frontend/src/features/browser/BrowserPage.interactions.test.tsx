@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,7 +29,10 @@ const getBucketLoggingMock = vi.fn();
 const getBucketWebsiteMock = vi.fn();
 
 vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
   return {
     ...actual,
     unstable_usePrompt: () => {},
@@ -44,26 +54,38 @@ vi.mock("./BrowserContext", () => ({
 }));
 
 vi.mock("../../api/browser", async () => {
-  const actual = await vi.importActual<typeof import("../../api/browser")>("../../api/browser");
+  const actual =
+    await vi.importActual<typeof import("../../api/browser")>(
+      "../../api/browser",
+    );
   return {
     ...actual,
-    searchBrowserBuckets: (...args: unknown[]) => searchBrowserBucketsMock(...args),
-    fetchBrowserSettings: (...args: unknown[]) => fetchBrowserSettingsMock(...args),
+    searchBrowserBuckets: (...args: unknown[]) =>
+      searchBrowserBucketsMock(...args),
+    fetchBrowserSettings: (...args: unknown[]) =>
+      fetchBrowserSettingsMock(...args),
     listBrowserObjects: (...args: unknown[]) => listBrowserObjectsMock(...args),
-    getBucketVersioning: (...args: unknown[]) => getBucketVersioningMock(...args),
-    getBucketCorsStatus: (...args: unknown[]) => getBucketCorsStatusMock(...args),
+    getBucketVersioning: (...args: unknown[]) =>
+      getBucketVersioningMock(...args),
+    getBucketCorsStatus: (...args: unknown[]) =>
+      getBucketCorsStatusMock(...args),
     ensureBucketCors: (...args: unknown[]) => ensureBucketCorsMock(...args),
-    fetchObjectMetadata: (...args: unknown[]) => fetchObjectMetadataMock(...args),
+    fetchObjectMetadata: (...args: unknown[]) =>
+      fetchObjectMetadataMock(...args),
     getObjectTags: (...args: unknown[]) => getObjectTagsMock(...args),
   };
 });
 
 vi.mock("../../api/buckets", async () => {
-  const actual = await vi.importActual<typeof import("../../api/buckets")>("../../api/buckets");
+  const actual =
+    await vi.importActual<typeof import("../../api/buckets")>(
+      "../../api/buckets",
+    );
   return {
     ...actual,
     getBucketStats: (...args: unknown[]) => getBucketStatsMock(...args),
-    getBucketProperties: (...args: unknown[]) => getBucketPropertiesMock(...args),
+    getBucketProperties: (...args: unknown[]) =>
+      getBucketPropertiesMock(...args),
     getBucketPolicy: (...args: unknown[]) => getBucketPolicyMock(...args),
     getBucketLogging: (...args: unknown[]) => getBucketLoggingMock(...args),
     getBucketWebsite: (...args: unknown[]) => getBucketWebsiteMock(...args),
@@ -94,7 +116,7 @@ function renderPage({
         allowInspectorPanel={allowInspectorPanel}
         allowFoldersPanel={allowFoldersPanel}
       />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
@@ -105,7 +127,7 @@ function renderEmbeddedPage({
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <BrowserEmbed accountIdForApi={accountIdForApi} hasContext />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
@@ -146,19 +168,28 @@ function getOtherBucketsPanel() {
 }
 
 function seedBrowserRootUiState(value: unknown) {
-  window.localStorage.setItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY, JSON.stringify(value));
+  window.localStorage.setItem(
+    BROWSER_ROOT_UI_STATE_STORAGE_KEY,
+    JSON.stringify(value),
+  );
 }
 
 async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(within(getContextToolbar()).getByRole("button", { name: "More" }));
+  await user.click(
+    within(getContextToolbar()).getByRole("button", { name: "More" }),
+  );
   return await screen.findByRole("menu", { name: "More" });
 }
 
 async function enableActionBar(user: ReturnType<typeof userEvent.setup>) {
   const menu = await openContextMoreMenu(user);
-  await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }));
+  await user.click(
+    within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }),
+  );
   await waitFor(() => {
-    expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("toolbar", { name: "Browser actions bar" }),
+    ).toBeInTheDocument();
   });
 }
 
@@ -185,57 +216,66 @@ describe("BrowserPage interactions", () => {
       has_next: false,
     });
 
-    listBrowserObjectsMock.mockImplementation((_accountId: string, _bucketName: string, payload?: { prefix?: string }) => {
-      const prefix = payload?.prefix ?? "";
-      if (prefix === "docs/") {
+    listBrowserObjectsMock.mockImplementation(
+      (
+        _accountId: string,
+        _bucketName: string,
+        payload?: { prefix?: string },
+      ) => {
+        const prefix = payload?.prefix ?? "";
+        if (prefix === "docs/") {
+          return Promise.resolve({
+            prefix: "docs/",
+            objects: [
+              {
+                key: "docs/readme.txt",
+                size: 42,
+                last_modified: "2026-03-10T10:45:00Z",
+                storage_class: "STANDARD",
+                etag: '"etag-docs"',
+              },
+            ],
+            prefixes: [],
+            is_truncated: false,
+            next_continuation_token: null,
+          });
+        }
         return Promise.resolve({
-          prefix: "docs/",
+          prefix: "",
           objects: [
             {
-              key: "docs/readme.txt",
-              size: 42,
-              last_modified: "2026-03-10T10:45:00Z",
+              key: "a.txt",
+              size: 10,
+              last_modified: "2026-03-10T10:15:00Z",
               storage_class: "STANDARD",
-              etag: "\"etag-docs\"",
+              etag: '"etag-a"',
+            },
+            {
+              key: "b.txt",
+              size: 20,
+              last_modified: "2026-03-10T10:16:00Z",
+              storage_class: "STANDARD",
+              etag: '"etag-b"',
+            },
+            {
+              key: "c.txt",
+              size: 30,
+              last_modified: "2026-03-10T10:17:00Z",
+              storage_class: "STANDARD",
+              etag: '"etag-c"',
             },
           ],
-          prefixes: [],
+          prefixes: ["docs/"],
           is_truncated: false,
           next_continuation_token: null,
         });
-      }
-      return Promise.resolve({
-        prefix: "",
-        objects: [
-          {
-            key: "a.txt",
-            size: 10,
-            last_modified: "2026-03-10T10:15:00Z",
-            storage_class: "STANDARD",
-            etag: "\"etag-a\"",
-          },
-          {
-            key: "b.txt",
-            size: 20,
-            last_modified: "2026-03-10T10:16:00Z",
-            storage_class: "STANDARD",
-            etag: "\"etag-b\"",
-          },
-          {
-            key: "c.txt",
-            size: 30,
-            last_modified: "2026-03-10T10:17:00Z",
-            storage_class: "STANDARD",
-            etag: "\"etag-c\"",
-          },
-        ],
-        prefixes: ["docs/"],
-        is_truncated: false,
-        next_continuation_token: null,
-      });
-    });
+      },
+    );
 
-    getBucketVersioningMock.mockResolvedValue({ enabled: false, status: "Disabled" });
+    getBucketVersioningMock.mockResolvedValue({
+      enabled: false,
+      status: "Disabled",
+    });
     getBucketCorsStatusMock.mockResolvedValue({ enabled: true, rules: [] });
     ensureBucketCorsMock.mockResolvedValue({ enabled: true, rules: [] });
     fetchObjectMetadataMock.mockResolvedValue({
@@ -244,7 +284,11 @@ describe("BrowserPage interactions", () => {
       metadata: {},
       content_type: "text/plain",
     });
-    getObjectTagsMock.mockResolvedValue({ key: "a.txt", tags: [], version_id: null });
+    getObjectTagsMock.mockResolvedValue({
+      key: "a.txt",
+      tags: [],
+      version_id: null,
+    });
 
     getBucketStatsMock.mockResolvedValue({
       name: "bucket-1",
@@ -262,7 +306,10 @@ describe("BrowserPage interactions", () => {
       cors_rules: [],
     });
     getBucketPolicyMock.mockResolvedValue({ policy: null });
-    getBucketLoggingMock.mockResolvedValue({ enabled: false, target_bucket: null });
+    getBucketLoggingMock.mockResolvedValue({
+      enabled: false,
+      target_bucket: null,
+    });
     getBucketWebsiteMock.mockResolvedValue({});
   });
 
@@ -272,16 +319,26 @@ describe("BrowserPage interactions", () => {
 
     const rowA = await findRowByLabel("a.txt");
     await user.click(rowA);
-    expect(screen.getByRole("checkbox", { name: "Select a.txt" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select a.txt" }),
+    ).toBeChecked();
 
     await user.click(rowA);
-    expect(screen.getByRole("checkbox", { name: "Select a.txt" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select a.txt" }),
+    ).toBeChecked();
 
     await user.click(screen.getByRole("button", { name: "b.txt" }));
-    expect(screen.getByRole("checkbox", { name: "Select b.txt" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Select a.txt" })).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select b.txt" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select a.txt" }),
+    ).not.toBeChecked();
 
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows header config menu only on /browser", async () => {
@@ -308,11 +365,21 @@ describe("BrowserPage interactions", () => {
     renderPage();
     await findRowByLabel("a.txt");
 
-    expect(screen.getByRole("columnheader", { name: "Size" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Modified" })).toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Type" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Storage class" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "ETag" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Size" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Modified" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Type" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Storage class" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "ETag" }),
+    ).not.toBeInTheDocument();
   });
 
   it("toggles non-lazy columns and updates table headers/cells", async () => {
@@ -324,8 +391,12 @@ describe("BrowserPage interactions", () => {
     await user.click(within(menu).getByRole("button", { name: "Type" }));
     await user.click(within(menu).getByRole("button", { name: "ETag" }));
 
-    expect(screen.getByRole("columnheader", { name: "Type" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "ETag" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Type" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "ETag" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("etag-a")).toBeInTheDocument();
   });
 
@@ -339,40 +410,58 @@ describe("BrowserPage interactions", () => {
 
     const rowCDesc = await findRowByLabel("c.txt");
     const rowADesc = await findRowByLabel("a.txt");
-    expect(Boolean(rowCDesc.compareDocumentPosition(rowADesc) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(
+      Boolean(
+        rowCDesc.compareDocumentPosition(rowADesc) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
 
     const menu = openHeaderConfigMenu();
     await user.click(within(menu).getByRole("button", { name: /Size/ }));
 
-    expect(screen.queryByRole("columnheader", { name: "Size" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Size" }),
+    ).not.toBeInTheDocument();
     const rowAReset = await findRowByLabel("a.txt");
     const rowCReset = await findRowByLabel("c.txt");
-    expect(Boolean(rowAReset.compareDocumentPosition(rowCReset) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(
+      Boolean(
+        rowAReset.compareDocumentPosition(rowCReset) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
   });
 
   it("loads lazy metadata columns without blocking the listing", async () => {
     const user = userEvent.setup();
     const metadataResolvers: Array<() => void> = [];
-    fetchObjectMetadataMock.mockImplementation((_accountId: string, _bucketName: string, key: string) => {
-      return new Promise((resolve) => {
-        metadataResolvers.push(() =>
-          resolve({
-            key,
-            size: 10,
-            metadata: { alpha: "1", beta: "2" },
-            content_type: key === "b.txt" ? "text/csv" : "text/plain",
-          })
-        );
-      });
-    });
+    fetchObjectMetadataMock.mockImplementation(
+      (_accountId: string, _bucketName: string, key: string) => {
+        return new Promise((resolve) => {
+          metadataResolvers.push(() =>
+            resolve({
+              key,
+              size: 10,
+              metadata: { alpha: "1", beta: "2" },
+              content_type: key === "b.txt" ? "text/csv" : "text/plain",
+            }),
+          );
+        });
+      },
+    );
 
     renderPage();
     await findRowByLabel("a.txt");
 
     const menu = openHeaderConfigMenu();
-    await user.click(within(menu).getByRole("button", { name: "Content-Type" }));
+    await user.click(
+      within(menu).getByRole("button", { name: "Content-Type" }),
+    );
 
-    expect(screen.getByRole("columnheader", { name: "Content-Type" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Content-Type" }),
+    ).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getAllByText("Loading...").length).toBeGreaterThan(0);
     });
@@ -385,8 +474,12 @@ describe("BrowserPage interactions", () => {
       expect(plainCount + csvCount).toBeGreaterThan(0);
     });
     expect(fetchObjectMetadataMock.mock.calls.length).toBeGreaterThan(0);
-    const metadataKeys = fetchObjectMetadataMock.mock.calls.map((call) => call[2] as string);
-    expect(metadataKeys.every((key) => ["a.txt", "b.txt", "c.txt"].includes(key))).toBe(true);
+    const metadataKeys = fetchObjectMetadataMock.mock.calls.map(
+      (call) => call[2] as string,
+    );
+    expect(
+      metadataKeys.every((key) => ["a.txt", "b.txt", "c.txt"].includes(key)),
+    ).toBe(true);
     expect(getObjectTagsMock).not.toHaveBeenCalled();
   });
 
@@ -411,8 +504,12 @@ describe("BrowserPage interactions", () => {
     await waitFor(() => {
       expect(getObjectTagsMock.mock.calls.length).toBeGreaterThan(0);
     });
-    const tagKeys = getObjectTagsMock.mock.calls.map((call) => call[2] as string);
-    expect(tagKeys.every((key) => ["a.txt", "b.txt", "c.txt"].includes(key))).toBe(true);
+    const tagKeys = getObjectTagsMock.mock.calls.map(
+      (call) => call[2] as string,
+    );
+    expect(
+      tagKeys.every((key) => ["a.txt", "b.txt", "c.txt"].includes(key)),
+    ).toBe(true);
     expect(fetchObjectMetadataMock).not.toHaveBeenCalled();
     expect(within(docsRow).getByText("—")).toBeInTheDocument();
   });
@@ -425,11 +522,15 @@ describe("BrowserPage interactions", () => {
     let rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-9");
     expect(actionsHeader).toHaveClass("!py-1");
-    const compactNameCell = within(rowA).getByRole("button", { name: "a.txt" }).closest("td");
+    const compactNameCell = within(rowA)
+      .getByRole("button", { name: "a.txt" })
+      .closest("td");
     expect(compactNameCell).not.toBeNull();
     expect(compactNameCell).toHaveClass("!py-0.5");
     expect(compactNameCell).toHaveClass("!align-middle");
-    const compactPreviewButton = within(rowA).getByRole("button", { name: "Preview" });
+    const compactPreviewButton = within(rowA).getByRole("button", {
+      name: "Preview",
+    });
     expect(compactPreviewButton).toHaveClass("!h-6", "!w-6");
     expect(within(rowA).queryByText("Object")).not.toBeInTheDocument();
 
@@ -439,22 +540,30 @@ describe("BrowserPage interactions", () => {
     rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-16");
     expect(actionsHeader).toHaveClass("py-3");
-    const listNameCell = within(rowA).getByRole("button", { name: "a.txt" }).closest("td");
+    const listNameCell = within(rowA)
+      .getByRole("button", { name: "a.txt" })
+      .closest("td");
     expect(listNameCell).not.toBeNull();
     expect(listNameCell).toHaveClass("py-2.5");
     expect(listNameCell).toHaveClass("!align-middle");
-    const listPreviewButton = within(rowA).getByRole("button", { name: "Preview" });
+    const listPreviewButton = within(rowA).getByRole("button", {
+      name: "Preview",
+    });
     expect(listPreviewButton).toHaveClass("h-7", "w-7");
     expect(listPreviewButton).not.toHaveClass("!h-6", "!w-6");
     expect(within(rowA).getByText("Object")).toBeInTheDocument();
 
     menu = openHeaderConfigMenu();
-    await user.click(within(menu).getByRole("button", { name: "Compact view" }));
+    await user.click(
+      within(menu).getByRole("button", { name: "Compact view" }),
+    );
     actionsHeader = screen.getByRole("columnheader", { name: "Actions" });
     rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-9");
     expect(actionsHeader).toHaveClass("!py-1");
-    const compactPreviewButtonAgain = within(rowA).getByRole("button", { name: "Preview" });
+    const compactPreviewButtonAgain = within(rowA).getByRole("button", {
+      name: "Preview",
+    });
     expect(compactPreviewButtonAgain).toHaveClass("!h-6", "!w-6");
     expect(within(rowA).queryByText("Object")).not.toBeInTheDocument();
   });
@@ -465,44 +574,134 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     const contextToolbar = getContextToolbar();
-    const uploadButton = within(contextToolbar).getByRole("button", { name: "Upload" });
-    const newFolderButton = within(contextToolbar).getByRole("button", { name: "New folder" });
-    const refreshButton = within(contextToolbar).getByRole("button", { name: "Refresh" });
-    const moreButton = within(contextToolbar).getByRole("button", { name: "More" });
-    const operationsButton = within(contextToolbar).getByRole("button", { name: "Operations" });
+    const uploadButton = within(contextToolbar).getByRole("button", {
+      name: "Upload",
+    });
+    const newFolderButton = within(contextToolbar).getByRole("button", {
+      name: "New folder",
+    });
+    const refreshButton = within(contextToolbar).getByRole("button", {
+      name: "Refresh",
+    });
+    const moreButton = within(contextToolbar).getByRole("button", {
+      name: "More",
+    });
+    const operationsButton = within(contextToolbar).getByRole("button", {
+      name: "Operations",
+    });
 
     expect(screen.getAllByRole("toolbar")).toHaveLength(1);
-    expect(within(contextToolbar).getByRole("button", { name: "Select bucket" })).toBeInTheDocument();
-    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
-    expect(within(contextToolbar).queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
+    expect(
+      within(contextToolbar).getByRole("button", { name: "Select bucket" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("toolbar", { name: "Browser actions bar" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(contextToolbar).queryByRole("button", { name: "Download" }),
+    ).not.toBeInTheDocument();
     expect(uploadButton).toHaveClass("h-7", "w-7", "rounded-md");
     expect(uploadButton).not.toHaveClass("h-9", "w-9", "rounded-xl");
     expect(newFolderButton).toHaveClass("h-7", "w-7", "rounded-md");
     expect(refreshButton).toHaveClass("h-7", "w-7", "rounded-md");
     expect(moreButton).toHaveClass("h-7", "w-7", "rounded-md");
-    expect(Boolean(operationsButton.compareDocumentPosition(uploadButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(uploadButton.compareDocumentPosition(newFolderButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(newFolderButton.compareDocumentPosition(refreshButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(refreshButton.compareDocumentPosition(moreButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(
+      Boolean(
+        operationsButton.compareDocumentPosition(uploadButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        uploadButton.compareDocumentPosition(newFolderButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        newFolderButton.compareDocumentPosition(refreshButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        refreshButton.compareDocumentPosition(moreButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
 
     await user.click(uploadButton);
     const uploadMenu = await screen.findByRole("menu", { name: "Upload" });
-    expect(within(uploadMenu).getByRole("menuitem", { name: "Upload files" })).toBeInTheDocument();
-    expect(within(uploadMenu).getByRole("menuitem", { name: "Upload folder" })).toBeInTheDocument();
+    expect(
+      within(uploadMenu).getByRole("menuitem", { name: "Upload files" }),
+    ).toBeInTheDocument();
+    expect(
+      within(uploadMenu).getByRole("menuitem", { name: "Upload folder" }),
+    ).toBeInTheDocument();
 
     const menu = await openContextMoreMenu(user);
     expect(within(menu).getByText("Compact view")).toBeInTheDocument();
     expect(within(menu).getByText("Transfers")).toBeInTheDocument();
     expect(within(menu).getByText("Current path")).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Paste" })).toBeDisabled();
-    expect(within(menu).getByRole("menuitem", { name: "Copy path" })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitemcheckbox", { name: /Folders panel/i })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i })).toHaveAttribute("aria-checked", "false");
+    expect(
+      within(menu).getByRole("menuitem", { name: "Paste" }),
+    ).toBeDisabled();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Copy path" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitemcheckbox", { name: /Folders panel/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }),
+    ).toHaveAttribute("aria-checked", "false");
 
-    await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }));
+    await user.click(
+      within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }),
+    );
     await waitFor(() => {
-      expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("toolbar", { name: "Browser actions bar" }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("keeps advanced search controls available after the explorer chrome refresh", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    await user.click(screen.getByRole("button", { name: "Search options" }));
+
+    expect(
+      await screen.findByRole("combobox", { name: "Search scope" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Object type filter" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Storage class filter" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Search recursively in subfolders",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "Use exact match" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "Case-sensitive search" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("combobox", { name: "Search scope" }),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -513,16 +712,26 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     const menu = await openContextMoreMenu(user);
-    await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Folders panel/i }));
-    await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i }));
+    await user.click(
+      within(menu).getByRole("menuitemcheckbox", { name: /Folders panel/i }),
+    );
+    await user.click(
+      within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i }),
+    );
 
-    expect(await screen.findByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("tablist", { name: "Inspector tabs" }),
+    ).toBeInTheDocument();
 
-    await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }));
+    await user.click(
+      within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }),
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Scope: root")).toBeInTheDocument();
-      expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("toolbar", { name: "Browser actions bar" }),
+      ).toBeInTheDocument();
     });
 
     firstRender.unmount();
@@ -531,8 +740,12 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     expect(screen.getByText("Scope: root")).toBeInTheDocument();
-    expect(screen.getByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
-    expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tablist", { name: "Inspector tabs" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("toolbar", { name: "Browser actions bar" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps a stored inspector preference when the workspace temporarily disallows it", async () => {
@@ -542,26 +755,38 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     const menu = await openContextMoreMenu(user);
-    await user.click(within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i }));
+    await user.click(
+      within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i }),
+    );
 
-    expect(await screen.findByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("tablist", { name: "Inspector tabs" }),
+    ).toBeInTheDocument();
 
     firstRender.unmount();
 
     const blockedRender = renderPage({ allowInspectorPanel: false });
     await findRowByLabel("a.txt");
 
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+    ).not.toBeInTheDocument();
 
     const blockedMenu = await openContextMoreMenu(user);
-    expect(within(blockedMenu).queryByRole("menuitemcheckbox", { name: /Inspector panel/i })).not.toBeInTheDocument();
+    expect(
+      within(blockedMenu).queryByRole("menuitemcheckbox", {
+        name: /Inspector panel/i,
+      }),
+    ).not.toBeInTheDocument();
 
     blockedRender.unmount();
 
     renderPage();
     await findRowByLabel("a.txt");
 
-    expect(screen.getByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tablist", { name: "Inspector tabs" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps /browser preferences isolated from embedded browser surfaces", async () => {
@@ -574,8 +799,12 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     expect(screen.getByText("Scope: root")).toBeInTheDocument();
-    expect(screen.getByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
-    expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tablist", { name: "Inspector tabs" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("toolbar", { name: "Browser actions bar" }),
+    ).toBeInTheDocument();
 
     rootRender.unmount();
 
@@ -583,8 +812,12 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     expect(screen.queryByText("Scope: root")).not.toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("toolbar", { name: "Browser actions bar" }),
+    ).not.toBeInTheDocument();
 
     managerRender.unmount();
 
@@ -595,8 +828,12 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     expect(screen.queryByText("Scope: root")).not.toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("toolbar", { name: "Browser actions bar" }),
+    ).not.toBeInTheDocument();
 
     cephAdminRender.unmount();
 
@@ -604,35 +841,55 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     expect(screen.getByText("Scope: root")).toBeInTheDocument();
-    expect(screen.getByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
-    expect(screen.getByRole("toolbar", { name: "Browser actions bar" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tablist", { name: "Inspector tabs" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("toolbar", { name: "Browser actions bar" }),
+    ).toBeInTheDocument();
   });
 
   it("restores the last bucket and path for the same execution context", async () => {
     const user = userEvent.setup();
-    searchBrowserBucketsMock.mockImplementation((accountId: string, options?: { search?: string; exact?: boolean }) => {
-      const allBuckets = accountId === "acc-2" ? [{ name: "bucket-a" }] : [{ name: "bucket-1" }, { name: "bucket-2" }];
-      const search = options?.search?.trim() ?? "";
-      const filtered = search
-        ? allBuckets.filter((bucket) => (options?.exact ? bucket.name === search : bucket.name.includes(search)))
-        : allBuckets;
-      return Promise.resolve({
-        items: filtered,
-        total: filtered.length,
-        page: 1,
-        page_size: 50,
-        has_next: false,
-      });
-    });
+    searchBrowserBucketsMock.mockImplementation(
+      (accountId: string, options?: { search?: string; exact?: boolean }) => {
+        const allBuckets =
+          accountId === "acc-2"
+            ? [{ name: "bucket-a" }]
+            : [{ name: "bucket-1" }, { name: "bucket-2" }];
+        const search = options?.search?.trim() ?? "";
+        const filtered = search
+          ? allBuckets.filter((bucket) =>
+              options?.exact
+                ? bucket.name === search
+                : bucket.name.includes(search),
+            )
+          : allBuckets;
+        return Promise.resolve({
+          items: filtered,
+          total: filtered.length,
+          page: 1,
+          page_size: 50,
+          has_next: false,
+        });
+      },
+    );
 
-    const firstRender = renderPage({ accountIdForApi: "acc-1", defaultShowInspector: true });
-    await user.click(within(getContextToolbar()).getByRole("button", { name: "Select bucket" }));
+    const firstRender = renderPage({
+      accountIdForApi: "acc-1",
+      defaultShowInspector: true,
+    });
+    await user.click(
+      within(getContextToolbar()).getByRole("button", {
+        name: "Select bucket",
+      }),
+    );
     await user.click(await screen.findByRole("button", { name: "bucket-2" }));
     await waitFor(() => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
         "acc-1",
         "bucket-2",
-        expect.objectContaining({ prefix: "" })
+        expect.objectContaining({ prefix: "" }),
       );
     });
     await findRowByLabel("docs");
@@ -642,18 +899,25 @@ describe("BrowserPage interactions", () => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
         "acc-1",
         "bucket-2",
-        expect.objectContaining({ prefix: "docs/" })
+        expect.objectContaining({ prefix: "docs/" }),
       );
     });
-    expect(within(getContextPanel()).getByText("bucket-2/docs")).toBeInTheDocument();
+    expect(
+      within(getContextPanel()).getByText("bucket-2/docs"),
+    ).toBeInTheDocument();
 
     firstRender.unmount();
 
-    const secondRender = renderPage({ accountIdForApi: "acc-2", defaultShowInspector: true });
+    const secondRender = renderPage({
+      accountIdForApi: "acc-2",
+      defaultShowInspector: true,
+    });
     await findRowByLabel("a.txt");
 
     expect(within(getContextPanel()).getByText("bucket-a")).toBeInTheDocument();
-    expect(within(getContextPanel()).queryByText("bucket-2/docs")).not.toBeInTheDocument();
+    expect(
+      within(getContextPanel()).queryByText("bucket-2/docs"),
+    ).not.toBeInTheDocument();
 
     secondRender.unmount();
 
@@ -664,27 +928,35 @@ describe("BrowserPage interactions", () => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
         "acc-1",
         "bucket-2",
-        expect.objectContaining({ prefix: "docs/" })
+        expect.objectContaining({ prefix: "docs/" }),
       );
     });
-    expect(within(getContextPanel()).getByText("bucket-2/docs")).toBeInTheDocument();
+    expect(
+      within(getContextPanel()).getByText("bucket-2/docs"),
+    ).toBeInTheDocument();
   });
 
   it("falls back cleanly when a stored bucket is no longer available", async () => {
-    searchBrowserBucketsMock.mockImplementation((_accountId: string, options?: { search?: string; exact?: boolean }) => {
-      const allBuckets = [{ name: "bucket-1" }];
-      const search = options?.search?.trim() ?? "";
-      const filtered = search
-        ? allBuckets.filter((bucket) => (options?.exact ? bucket.name === search : bucket.name.includes(search)))
-        : allBuckets;
-      return Promise.resolve({
-        items: filtered,
-        total: filtered.length,
-        page: 1,
-        page_size: 50,
-        has_next: false,
-      });
-    });
+    searchBrowserBucketsMock.mockImplementation(
+      (_accountId: string, options?: { search?: string; exact?: boolean }) => {
+        const allBuckets = [{ name: "bucket-1" }];
+        const search = options?.search?.trim() ?? "";
+        const filtered = search
+          ? allBuckets.filter((bucket) =>
+              options?.exact
+                ? bucket.name === search
+                : bucket.name.includes(search),
+            )
+          : allBuckets;
+        return Promise.resolve({
+          items: filtered,
+          total: filtered.length,
+          page: 1,
+          page_size: 50,
+          has_next: false,
+        });
+      },
+    );
     seedBrowserRootUiState({
       layout: { showFolders: false, showInspector: true, showActionBar: false },
       contextSelections: {
@@ -698,28 +970,36 @@ describe("BrowserPage interactions", () => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
         "acc-1",
         "bucket-1",
-        expect.objectContaining({ prefix: "" })
+        expect.objectContaining({ prefix: "" }),
       );
     });
     expect(within(getContextPanel()).getByText("bucket-1")).toBeInTheDocument();
-    expect(within(getContextPanel()).queryByText("bucket-1/docs")).not.toBeInTheDocument();
+    expect(
+      within(getContextPanel()).queryByText("bucket-1/docs"),
+    ).not.toBeInTheDocument();
   });
 
   it("lets an explicit ?bucket override reset the restored path to the bucket root", async () => {
-    searchBrowserBucketsMock.mockImplementation((_accountId: string, options?: { search?: string; exact?: boolean }) => {
-      const allBuckets = [{ name: "bucket-1" }, { name: "bucket-2" }];
-      const search = options?.search?.trim() ?? "";
-      const filtered = search
-        ? allBuckets.filter((bucket) => (options?.exact ? bucket.name === search : bucket.name.includes(search)))
-        : allBuckets;
-      return Promise.resolve({
-        items: filtered,
-        total: filtered.length,
-        page: 1,
-        page_size: 50,
-        has_next: false,
-      });
-    });
+    searchBrowserBucketsMock.mockImplementation(
+      (_accountId: string, options?: { search?: string; exact?: boolean }) => {
+        const allBuckets = [{ name: "bucket-1" }, { name: "bucket-2" }];
+        const search = options?.search?.trim() ?? "";
+        const filtered = search
+          ? allBuckets.filter((bucket) =>
+              options?.exact
+                ? bucket.name === search
+                : bucket.name.includes(search),
+            )
+          : allBuckets;
+        return Promise.resolve({
+          items: filtered,
+          total: filtered.length,
+          page: 1,
+          page_size: 50,
+          has_next: false,
+        });
+      },
+    );
     seedBrowserRootUiState({
       layout: { showFolders: false, showInspector: true, showActionBar: false },
       contextSelections: {
@@ -738,11 +1018,13 @@ describe("BrowserPage interactions", () => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
         "acc-1",
         "bucket-1",
-        expect.objectContaining({ prefix: "" })
+        expect.objectContaining({ prefix: "" }),
       );
     });
     expect(within(getContextPanel()).getByText("bucket-1")).toBeInTheDocument();
-    expect(within(getContextPanel()).queryByText("bucket-1/docs")).not.toBeInTheDocument();
+    expect(
+      within(getContextPanel()).queryByText("bucket-1/docs"),
+    ).not.toBeInTheDocument();
   });
 
   it("pins the current bucket above the list and only exposes folders for the active bucket", async () => {
@@ -754,66 +1036,93 @@ describe("BrowserPage interactions", () => {
       page_size: 50,
       has_next: false,
     });
-    listBrowserObjectsMock.mockImplementation((_accountId: string, bucket: string, payload?: { prefix?: string }) => {
-      const prefix = payload?.prefix ?? "";
-      if (bucket === "bucket-2") {
+    listBrowserObjectsMock.mockImplementation(
+      (_accountId: string, bucket: string, payload?: { prefix?: string }) => {
+        const prefix = payload?.prefix ?? "";
+        if (bucket === "bucket-2") {
+          return Promise.resolve({
+            prefix,
+            objects: [],
+            prefixes: prefix ? [] : ["images/"],
+            is_truncated: false,
+            next_continuation_token: null,
+          });
+        }
         return Promise.resolve({
           prefix,
           objects: [],
-          prefixes: prefix ? [] : ["images/"],
+          prefixes: prefix ? [] : ["docs/"],
           is_truncated: false,
           next_continuation_token: null,
         });
-      }
-      return Promise.resolve({
-        prefix,
-        objects: [],
-        prefixes: prefix ? [] : ["docs/"],
-        is_truncated: false,
-        next_continuation_token: null,
-      });
-    });
+      },
+    );
 
-    renderPage({ defaultShowFolders: true, initialEntry: "/browser?bucket=bucket-1" });
+    renderPage({
+      defaultShowFolders: true,
+      initialEntry: "/browser?bucket=bucket-1",
+    });
     await waitFor(() => {
       expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
     });
 
-    expect(getCurrentBucketPanel().getByRole("button", { name: "docs" })).toBeInTheDocument();
-    expect(getOtherBucketsPanel().getByRole("button", { name: /bucket-2/i })).toBeInTheDocument();
-    expect(getOtherBucketsPanel().queryByRole("button", { name: "docs" })).not.toBeInTheDocument();
+    expect(
+      getCurrentBucketPanel().getByRole("button", { name: "docs" }),
+    ).toBeInTheDocument();
+    expect(
+      getOtherBucketsPanel().getByRole("button", { name: /bucket-2/i }),
+    ).toBeInTheDocument();
+    expect(
+      getOtherBucketsPanel().queryByRole("button", { name: "docs" }),
+    ).not.toBeInTheDocument();
 
-    await user.click(getOtherBucketsPanel().getByRole("button", { name: /bucket-2/i }));
+    await user.click(
+      getOtherBucketsPanel().getByRole("button", { name: /bucket-2/i }),
+    );
     await waitFor(() => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
         "acc-1",
         "bucket-2",
-        expect.objectContaining({ prefix: "" })
+        expect.objectContaining({ prefix: "" }),
       );
     });
 
     expect(getCurrentBucketPanel().getByText("bucket-2")).toBeInTheDocument();
-    expect(getCurrentBucketPanel().getByRole("button", { name: "images" })).toBeInTheDocument();
-    expect(getCurrentBucketPanel().queryByRole("button", { name: "docs" })).not.toBeInTheDocument();
-    expect(within(getContextToolbar()).getByRole("button", { name: "Select bucket" })).toHaveTextContent("bucket-2");
+    expect(
+      getCurrentBucketPanel().getByRole("button", { name: "images" }),
+    ).toBeInTheDocument();
+    expect(
+      getCurrentBucketPanel().queryByRole("button", { name: "docs" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(getContextToolbar()).getByRole("button", {
+        name: "Select bucket",
+      }),
+    ).toHaveTextContent("bucket-2");
   });
 
   it("keeps the active bucket pinned when the bucket filter no longer matches it", async () => {
     const user = userEvent.setup();
-    searchBrowserBucketsMock.mockImplementation((_accountId: string, options?: { search?: string; exact?: boolean }) => {
-      const allBuckets = [{ name: "bucket-1" }, { name: "bucket-2" }];
-      const search = options?.search?.trim() ?? "";
-      const filtered = search
-        ? allBuckets.filter((bucket) => (options?.exact ? bucket.name === search : bucket.name.includes(search)))
-        : allBuckets;
-      return Promise.resolve({
-        items: filtered,
-        total: filtered.length,
-        page: 1,
-        page_size: 50,
-        has_next: false,
-      });
-    });
+    searchBrowserBucketsMock.mockImplementation(
+      (_accountId: string, options?: { search?: string; exact?: boolean }) => {
+        const allBuckets = [{ name: "bucket-1" }, { name: "bucket-2" }];
+        const search = options?.search?.trim() ?? "";
+        const filtered = search
+          ? allBuckets.filter((bucket) =>
+              options?.exact
+                ? bucket.name === search
+                : bucket.name.includes(search),
+            )
+          : allBuckets;
+        return Promise.resolve({
+          items: filtered,
+          total: filtered.length,
+          page: 1,
+          page_size: 50,
+          has_next: false,
+        });
+      },
+    );
 
     renderPage({
       accountIdForApi: "acc-1",
@@ -826,7 +1135,9 @@ describe("BrowserPage interactions", () => {
     });
 
     await user.type(screen.getByPlaceholderText("Filter buckets"), "zzz");
-    expect(await screen.findByText("No other buckets match this filter.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("No other buckets match this filter."),
+    ).toBeInTheDocument();
     expect(getCurrentBucketPanel().getByText("bucket-2")).toBeInTheDocument();
   });
 
@@ -839,66 +1150,93 @@ describe("BrowserPage interactions", () => {
       page_size: 50,
       has_next: false,
     });
-    listBrowserObjectsMock.mockImplementation((_accountId: string, bucket: string, _options?: { maxKeys?: number }) => {
-      if (bucket === "locked-bucket") {
-        return Promise.reject({
-          isAxiosError: true,
-          response: { data: { detail: "Forbidden by policy" } },
-          message: "Request failed with status code 403",
+    listBrowserObjectsMock.mockImplementation(
+      (_accountId: string, bucket: string, _options?: { maxKeys?: number }) => {
+        if (bucket === "locked-bucket") {
+          return Promise.reject({
+            isAxiosError: true,
+            response: { data: { detail: "Forbidden by policy" } },
+            message: "Request failed with status code 403",
+          });
+        }
+        return Promise.resolve({
+          prefix: "",
+          objects: [],
+          prefixes: ["docs/"],
+          is_truncated: false,
+          next_continuation_token: null,
         });
-      }
-      return Promise.resolve({
-        prefix: "",
-        objects: [],
-        prefixes: ["docs/"],
-        is_truncated: false,
-        next_continuation_token: null,
-      });
+      },
+    );
+
+    renderPage({
+      defaultShowFolders: true,
+      initialEntry: "/browser?bucket=bucket-1",
     });
 
-    renderPage({ defaultShowFolders: true, initialEntry: "/browser?bucket=bucket-1" });
-
-    const inaccessibleBucketButton = await screen.findByRole("button", { name: /locked-bucket/i });
+    const inaccessibleBucketButton = await screen.findByRole("button", {
+      name: /locked-bucket/i,
+    });
     await waitFor(() => {
-      expect(getOtherBucketsPanel().getByText("No list access")).toBeInTheDocument();
+      expect(
+        getOtherBucketsPanel().getByText("No list access"),
+      ).toBeInTheDocument();
     });
-    expect(inaccessibleBucketButton).toHaveAttribute("title", "Forbidden by policy");
+    expect(inaccessibleBucketButton).toHaveAttribute(
+      "title",
+      "Forbidden by policy",
+    );
 
     await user.click(inaccessibleBucketButton);
-    expect(await screen.findByText("Simple listing is not available for this bucket.")).toBeInTheDocument();
-    expect(await screen.findAllByText("Forbidden by policy")).not.toHaveLength(0);
+    expect(
+      await screen.findByText(
+        "Simple listing is not available for this bucket.",
+      ),
+    ).toBeInTheDocument();
+    expect(await screen.findAllByText("Forbidden by policy")).not.toHaveLength(
+      0,
+    );
   });
 
   it("loads more buckets from the panel without dropping the pinned current bucket", async () => {
     const user = userEvent.setup();
-    searchBrowserBucketsMock.mockImplementation((_accountId: string, options?: { page?: number }) => {
-      const page = options?.page ?? 1;
-      if (page === 1) {
+    searchBrowserBucketsMock.mockImplementation(
+      (_accountId: string, options?: { page?: number }) => {
+        const page = options?.page ?? 1;
+        if (page === 1) {
+          return Promise.resolve({
+            items: [{ name: "bucket-1" }, { name: "bucket-2" }],
+            total: 4,
+            page: 1,
+            page_size: 2,
+            has_next: true,
+          });
+        }
         return Promise.resolve({
-          items: [{ name: "bucket-1" }, { name: "bucket-2" }],
+          items: [{ name: "bucket-3" }, { name: "bucket-4" }],
           total: 4,
-          page: 1,
+          page: 2,
           page_size: 2,
-          has_next: true,
+          has_next: false,
         });
-      }
-      return Promise.resolve({
-        items: [{ name: "bucket-3" }, { name: "bucket-4" }],
-        total: 4,
-        page: 2,
-        page_size: 2,
-        has_next: false,
-      });
-    });
+      },
+    );
 
-    renderPage({ defaultShowFolders: true, initialEntry: "/browser?bucket=bucket-1" });
+    renderPage({
+      defaultShowFolders: true,
+      initialEntry: "/browser?bucket=bucket-1",
+    });
     await waitFor(() => {
       expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
     });
 
-    await user.click(getOtherBucketsPanel().getByRole("button", { name: "Load more" }));
+    await user.click(
+      getOtherBucketsPanel().getByRole("button", { name: "Load more" }),
+    );
     await waitFor(() => {
-      expect(getOtherBucketsPanel().getByRole("button", { name: /bucket-4/i })).toBeInTheDocument();
+      expect(
+        getOtherBucketsPanel().getByRole("button", { name: /bucket-4/i }),
+      ).toBeInTheDocument();
     });
     expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
   });
@@ -918,13 +1256,18 @@ describe("BrowserPage interactions", () => {
       has_next: false,
     });
 
-    renderPage({ defaultShowFolders: true, initialEntry: "/browser?bucket=bucket-1" });
+    renderPage({
+      defaultShowFolders: true,
+      initialEntry: "/browser?bucket=bucket-1",
+    });
     await waitFor(() => {
       expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
     });
 
     scrollToMock.mockClear();
-    await user.click(getOtherBucketsPanel().getByRole("button", { name: /bucket-2/i }));
+    await user.click(
+      getOtherBucketsPanel().getByRole("button", { name: /bucket-2/i }),
+    );
 
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: "auto" });
@@ -941,22 +1284,48 @@ describe("BrowserPage interactions", () => {
     const actionsToolbar = getActionsToolbar();
 
     expect(within(actionsToolbar).getByText("1 selected")).toBeInTheDocument();
-    expect(within(actionsToolbar).getByRole("button", { name: "Upload files" })).toBeInTheDocument();
-    expect(within(actionsToolbar).getByRole("button", { name: "New folder" })).toBeInTheDocument();
-    expect(within(actionsToolbar).getByRole("button", { name: "Download" })).toBeInTheDocument();
-    expect(within(actionsToolbar).getByRole("button", { name: "Open" })).toBeDisabled();
-    expect(within(actionsToolbar).getByRole("button", { name: "Copy" })).toBeInTheDocument();
-    expect(within(actionsToolbar).getByRole("button", { name: "Delete" })).toBeInTheDocument();
-    expect(within(actionsToolbar).queryByRole("button", { name: "Cut" })).not.toBeInTheDocument();
-    expect(within(actionsToolbar).queryByRole("button", { name: "Copy URL" })).not.toBeInTheDocument();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Upload files" }),
+    ).toBeInTheDocument();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "New folder" }),
+    ).toBeInTheDocument();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Open" }),
+    ).toBeDisabled();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Copy" }),
+    ).toBeInTheDocument();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Delete" }),
+    ).toBeInTheDocument();
+    expect(
+      within(actionsToolbar).queryByRole("button", { name: "Cut" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(actionsToolbar).queryByRole("button", { name: "Copy URL" }),
+    ).not.toBeInTheDocument();
 
-    await user.click(within(actionsToolbar).getByRole("button", { name: "More" }));
+    await user.click(
+      within(actionsToolbar).getByRole("button", { name: "More" }),
+    );
     const menu = await screen.findByRole("menu", { name: "More" });
 
-    expect(within(menu).getByRole("menuitem", { name: "Copy URL" })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Cut" })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Bulk attributes" })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Advanced" })).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Copy URL" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Cut" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Bulk attributes" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Advanced" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps a single folder selection downloadable with a stable toolbar label", async () => {
@@ -969,9 +1338,15 @@ describe("BrowserPage interactions", () => {
     const actionsToolbar = getActionsToolbar();
 
     expect(within(actionsToolbar).getByText("1 selected")).toBeInTheDocument();
-    expect(within(actionsToolbar).getByRole("button", { name: "Download" })).toBeEnabled();
-    expect(within(actionsToolbar).queryByRole("button", { name: "Download folder" })).not.toBeInTheDocument();
-    expect(within(actionsToolbar).getByRole("button", { name: "Open" })).toBeEnabled();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Download" }),
+    ).toBeEnabled();
+    expect(
+      within(actionsToolbar).queryByRole("button", { name: "Download folder" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Open" }),
+    ).toBeEnabled();
   });
 
   it("preserves refresh behavior from the compact toolbar", async () => {
@@ -980,7 +1355,9 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     const initialCalls = listBrowserObjectsMock.mock.calls.length;
-    await user.click(within(getContextToolbar()).getByRole("button", { name: "Refresh" }));
+    await user.click(
+      within(getContextToolbar()).getByRole("button", { name: "Refresh" }),
+    );
 
     await waitFor(() => {
       expect(listBrowserObjectsMock.mock.calls.length).toBe(initialCalls + 1);
@@ -998,27 +1375,51 @@ describe("BrowserPage interactions", () => {
     fireEvent.click(rowB, { ctrlKey: true });
 
     const contextToolbar = getContextToolbar();
-    expect(within(contextToolbar).queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
-    expect(within(contextToolbar).queryByRole("button", { name: "Copy" })).not.toBeInTheDocument();
-    expect(within(contextToolbar).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    expect(
+      within(contextToolbar).queryByRole("button", { name: "Download" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(contextToolbar).queryByRole("button", { name: "Copy" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(contextToolbar).queryByRole("button", { name: "Delete" }),
+    ).not.toBeInTheDocument();
 
-    await user.click(within(contextToolbar).getByRole("button", { name: "More" }));
+    await user.click(
+      within(contextToolbar).getByRole("button", { name: "More" }),
+    );
     const moreMenu = await screen.findByRole("menu", { name: "More" });
 
     expect(within(moreMenu).getByText("Selection actions")).toBeInTheDocument();
-    expect(within(moreMenu).getByRole("menuitem", { name: "Download" })).toBeInTheDocument();
-    expect(within(moreMenu).getByRole("menuitem", { name: "Copy" })).toBeInTheDocument();
-    expect(within(moreMenu).getByRole("menuitem", { name: "Cut" })).toBeInTheDocument();
-    expect(within(moreMenu).getByRole("menuitem", { name: "Bulk attributes" })).toBeInTheDocument();
-    expect(within(moreMenu).getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+    expect(
+      within(moreMenu).getByRole("menuitem", { name: "Download" }),
+    ).toBeInTheDocument();
+    expect(
+      within(moreMenu).getByRole("menuitem", { name: "Copy" }),
+    ).toBeInTheDocument();
+    expect(
+      within(moreMenu).getByRole("menuitem", { name: "Cut" }),
+    ).toBeInTheDocument();
+    expect(
+      within(moreMenu).getByRole("menuitem", { name: "Bulk attributes" }),
+    ).toBeInTheDocument();
+    expect(
+      within(moreMenu).getByRole("menuitem", { name: "Delete" }),
+    ).toBeInTheDocument();
     await user.click(document.body);
 
     fireEvent.contextMenu(rowB);
     const menu = await screen.findByRole("menu");
 
-    expect(within(menu).getByRole("button", { name: "Download" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Copy" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Copy" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Delete" }),
+    ).toBeInTheDocument();
   });
 
   it("hides main-browser-only status and panel controls from More in embedded mode", async () => {
@@ -1027,20 +1428,40 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("a.txt");
 
     expect(screen.getAllByRole("toolbar")).toHaveLength(1);
-    expect(within(getContextToolbar()).getByRole("button", { name: "Operations" })).toBeInTheDocument();
-    expect(within(getContextToolbar()).getByRole("button", { name: "Upload" })).toBeInTheDocument();
-    expect(screen.queryByRole("toolbar", { name: "Browser actions bar" })).not.toBeInTheDocument();
+    expect(
+      within(getContextToolbar()).getByRole("button", { name: "Operations" }),
+    ).toBeInTheDocument();
+    expect(
+      within(getContextToolbar()).getByRole("button", { name: "Upload" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("toolbar", { name: "Browser actions bar" }),
+    ).not.toBeInTheDocument();
 
-    await user.click(within(getContextToolbar()).getByRole("button", { name: "More" }));
+    await user.click(
+      within(getContextToolbar()).getByRole("button", { name: "More" }),
+    );
     const menu = await screen.findByRole("menu", { name: "More" });
 
     expect(within(menu).queryByText("Compact view")).not.toBeInTheDocument();
     expect(within(menu).getByText("Current path")).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Copy path" })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Paste" })).toBeDisabled();
-    expect(within(menu).queryByRole("menuitemcheckbox", { name: /Folders panel/i })).not.toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitemcheckbox", { name: /Inspector panel/i })).not.toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitemcheckbox", { name: /Action bar/i })).not.toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Copy path" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Paste" }),
+    ).toBeDisabled();
+    expect(
+      within(menu).queryByRole("menuitemcheckbox", { name: /Folders panel/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(menu).queryByRole("menuitemcheckbox", {
+        name: /Inspector panel/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(menu).queryByRole("menuitemcheckbox", { name: /Action bar/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("supports Cmd/Ctrl click toggle selection", async () => {
@@ -1050,13 +1471,21 @@ describe("BrowserPage interactions", () => {
     await user.click(await findRowByLabel("a.txt"));
     fireEvent.click(await findRowByLabel("b.txt"), { ctrlKey: true });
 
-    expect(screen.getByRole("checkbox", { name: "Select a.txt" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Select b.txt" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select a.txt" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select b.txt" }),
+    ).toBeChecked();
 
     fireEvent.click(await findRowByLabel("b.txt"), { ctrlKey: true });
 
-    expect(screen.getByRole("checkbox", { name: "Select a.txt" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Select b.txt" })).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select a.txt" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select b.txt" }),
+    ).not.toBeChecked();
   });
 
   it("supports Shift click range selection", async () => {
@@ -1066,64 +1495,78 @@ describe("BrowserPage interactions", () => {
     await user.click(await findRowByLabel("a.txt"));
     fireEvent.click(await findRowByLabel("c.txt"), { shiftKey: true });
 
-    expect(screen.getByRole("checkbox", { name: "Select a.txt" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Select b.txt" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Select c.txt" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select a.txt" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select b.txt" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select c.txt" }),
+    ).toBeChecked();
   });
 
   it("navigates into a folder on double-click without leaving the previous listing visible", async () => {
     const user = userEvent.setup();
-    let resolveDocsListing: ((value: {
-      prefix: string;
-      objects: Array<{
-        key: string;
-        size: number;
-        last_modified: string;
-        storage_class: string;
-        etag: string;
-      }>;
-      prefixes: string[];
-      is_truncated: boolean;
-      next_continuation_token: null;
-    }) => void) | null = null;
+    let resolveDocsListing:
+      | ((value: {
+          prefix: string;
+          objects: Array<{
+            key: string;
+            size: number;
+            last_modified: string;
+            storage_class: string;
+            etag: string;
+          }>;
+          prefixes: string[];
+          is_truncated: boolean;
+          next_continuation_token: null;
+        }) => void)
+      | null = null;
 
-    listBrowserObjectsMock.mockImplementation((_accountId: string, _bucketName: string, payload?: { prefix?: string }) => {
-      const nextPrefix = payload?.prefix ?? "";
-      if (nextPrefix === "docs/") {
-        return new Promise((resolve) => {
-          resolveDocsListing = resolve;
+    listBrowserObjectsMock.mockImplementation(
+      (
+        _accountId: string,
+        _bucketName: string,
+        payload?: { prefix?: string },
+      ) => {
+        const nextPrefix = payload?.prefix ?? "";
+        if (nextPrefix === "docs/") {
+          return new Promise((resolve) => {
+            resolveDocsListing = resolve;
+          });
+        }
+        return Promise.resolve({
+          prefix: "",
+          objects: [
+            {
+              key: "a.txt",
+              size: 10,
+              last_modified: "2026-03-10T10:15:00Z",
+              storage_class: "STANDARD",
+              etag: '"etag-a"',
+            },
+            {
+              key: "b.txt",
+              size: 20,
+              last_modified: "2026-03-10T10:16:00Z",
+              storage_class: "STANDARD",
+              etag: '"etag-b"',
+            },
+            {
+              key: "c.txt",
+              size: 30,
+              last_modified: "2026-03-10T10:17:00Z",
+              storage_class: "STANDARD",
+              etag: '"etag-c"',
+            },
+          ],
+          prefixes: ["docs/"],
+          is_truncated: false,
+          next_continuation_token: null,
         });
-      }
-      return Promise.resolve({
-        prefix: "",
-        objects: [
-          {
-            key: "a.txt",
-            size: 10,
-            last_modified: "2026-03-10T10:15:00Z",
-            storage_class: "STANDARD",
-            etag: "\"etag-a\"",
-          },
-          {
-            key: "b.txt",
-            size: 20,
-            last_modified: "2026-03-10T10:16:00Z",
-            storage_class: "STANDARD",
-            etag: "\"etag-b\"",
-          },
-          {
-            key: "c.txt",
-            size: 30,
-            last_modified: "2026-03-10T10:17:00Z",
-            storage_class: "STANDARD",
-            etag: "\"etag-c\"",
-          },
-        ],
-        prefixes: ["docs/"],
-        is_truncated: false,
-        next_continuation_token: null,
-      });
-    });
+      },
+    );
 
     renderPage();
 
@@ -1133,12 +1576,14 @@ describe("BrowserPage interactions", () => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
         "acc-1",
         "bucket-1",
-        expect.objectContaining({ prefix: "docs/" })
+        expect.objectContaining({ prefix: "docs/" }),
       );
     });
 
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: "a.txt" })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "a.txt" }),
+      ).not.toBeInTheDocument();
     });
     expect(screen.getByText("Loading objects...")).toBeInTheDocument();
 
@@ -1151,7 +1596,7 @@ describe("BrowserPage interactions", () => {
             size: 42,
             last_modified: "2026-03-10T10:45:00Z",
             storage_class: "STANDARD",
-            etag: "\"etag-docs\"",
+            etag: '"etag-docs"',
           },
         ],
         prefixes: [],
@@ -1166,34 +1611,75 @@ describe("BrowserPage interactions", () => {
     renderPage({ defaultShowInspector: false });
 
     await user.click(await findRowByLabel("a.txt"));
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+    ).not.toBeInTheDocument();
 
-    await user.click(within(await findRowByLabel("a.txt")).getByRole("button", { name: "More actions" }));
+    await user.click(
+      within(await findRowByLabel("a.txt")).getByRole("button", {
+        name: "More actions",
+      }),
+    );
     const menu = await screen.findByRole("menu");
 
-    expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Download" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Copy URL" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Copy" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Cut" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Advanced" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Delete" })).toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Details" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Preview" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Copy URL" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Copy" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Cut" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Advanced" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Delete" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+    ).not.toBeInTheDocument();
 
     await user.click(within(menu).getByRole("button", { name: "Details" }));
 
-    expect(await screen.findByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
-    expect(within(screen.getByRole("tabpanel", { name: "Details" })).getByText("a.txt")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("tablist", { name: "Inspector tabs" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      within(screen.getByRole("tabpanel", { name: "Details" })).getByText(
+        "a.txt",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("does not show a focused fallback in Selection tab when no object is selected", async () => {
     const user = userEvent.setup();
     renderPage({ defaultShowInspector: true });
 
-    await user.click(within(await findRowByLabel("a.txt")).getByRole("button", { name: "More actions" }));
-    await user.click(within(await screen.findByRole("menu")).getByRole("button", { name: "Details" }));
+    await user.click(
+      within(await findRowByLabel("a.txt")).getByRole("button", {
+        name: "More actions",
+      }),
+    );
+    await user.click(
+      within(await screen.findByRole("menu")).getByRole("button", {
+        name: "Details",
+      }),
+    );
     const objectsList = screen.getByLabelText("Objects list");
     (objectsList as HTMLDivElement).focus();
     fireEvent.keyDown(objectsList, { key: "Escape" });
@@ -1201,22 +1687,40 @@ describe("BrowserPage interactions", () => {
     await user.click(screen.getByRole("tab", { name: "Selection" }));
 
     expect(screen.queryByText(/^Focused:/)).not.toBeInTheDocument();
-    expect(screen.getByText("Select one or more objects to see selection actions.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Select one or more objects to see selection actions."),
+    ).toBeInTheDocument();
   });
 
   it("shows folder row actions from More actions with the same single-item menu content", async () => {
     const user = userEvent.setup();
     renderPage({ defaultShowInspector: false });
 
-    await user.click(within(await findRowByLabel("docs")).getByRole("button", { name: "More actions" }));
+    await user.click(
+      within(await findRowByLabel("docs")).getByRole("button", {
+        name: "More actions",
+      }),
+    );
     const menu = await screen.findByRole("menu");
 
-    expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Open" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Download folder" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Copy" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Cut" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Details" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Open" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Download folder" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Copy" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Cut" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Delete" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps More actions available when the inspector panel is disabled and omits Details", async () => {
@@ -1224,16 +1728,26 @@ describe("BrowserPage interactions", () => {
     renderPage({ defaultShowInspector: false, allowInspectorPanel: false });
 
     const row = await findRowByLabel("a.txt");
-    const moreButton = within(row).getByRole("button", { name: "More actions" });
+    const moreButton = within(row).getByRole("button", {
+      name: "More actions",
+    });
     expect(moreButton).toBeInTheDocument();
 
     await user.click(moreButton);
     const menu = await screen.findByRole("menu");
 
-    expect(within(menu).queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
-    expect(within(menu).getByRole("button", { name: "Download" })).toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(
+      within(menu).queryByRole("button", { name: "Details" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Preview" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps inspector tabs on one line and removes the counter from the Selection tab", async () => {
@@ -1244,7 +1758,9 @@ describe("BrowserPage interactions", () => {
 
     const tablist = screen.getByRole("tablist", { name: "Inspector tabs" });
     const tabs = within(tablist).getAllByRole("tab");
-    const selectionTab = within(tablist).getByRole("tab", { name: "Selection" });
+    const selectionTab = within(tablist).getByRole("tab", {
+      name: "Selection",
+    });
 
     expect(tablist).toHaveClass("flex-nowrap");
     expect(tabs).toHaveLength(4);
@@ -1252,26 +1768,47 @@ describe("BrowserPage interactions", () => {
 
     await user.click(selectionTab);
 
-    expect(within(screen.getByRole("tabpanel", { name: "Selection" })).getByText("1 selected")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("tabpanel", { name: "Selection" })).getByText(
+        "1 selected",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("aligns inspector context actions with path actions including restore and copy path", async () => {
     const user = userEvent.setup();
-    getBucketVersioningMock.mockResolvedValue({ enabled: true, status: "Enabled" });
+    getBucketVersioningMock.mockResolvedValue({
+      enabled: true,
+      status: "Enabled",
+    });
     renderPage({ defaultShowInspector: true });
 
     await findRowByLabel("a.txt");
     await user.click(screen.getByRole("tab", { name: "Context" }));
 
     const panel = screen.getByRole("tabpanel", { name: "Context" });
-    expect(within(panel).getByRole("button", { name: "Upload files" })).toBeInTheDocument();
-    expect(within(panel).getByRole("button", { name: "Upload folder" })).toBeInTheDocument();
-    expect(within(panel).getByRole("button", { name: "New folder" })).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Upload files" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Upload folder" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "New folder" }),
+    ).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Paste" })).toBeDisabled();
-    expect(within(panel).getByRole("button", { name: "Versions" })).toBeInTheDocument();
-    expect(within(panel).getByRole("button", { name: "Restore to date" })).toBeInTheDocument();
-    expect(within(panel).getByRole("button", { name: "Clean old versions" })).toBeInTheDocument();
-    expect(within(panel).getByRole("button", { name: "Copy path" })).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Versions" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Restore to date" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Clean old versions" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Copy path" }),
+    ).toBeInTheDocument();
   });
 
   it("removes selection-only copy path from inspector to match More and context menu rules", async () => {
@@ -1282,10 +1819,18 @@ describe("BrowserPage interactions", () => {
     await user.click(screen.getByRole("tab", { name: "Selection" }));
 
     const panel = screen.getByRole("tabpanel", { name: "Selection" });
-    expect(within(panel).getByRole("button", { name: "Download" })).toBeInTheDocument();
-    expect(within(panel).getByRole("button", { name: "Copy URL" })).toBeInTheDocument();
-    expect(within(panel).getByRole("button", { name: "Copy" })).toBeInTheDocument();
-    expect(within(panel).queryByRole("button", { name: "Copy path" })).not.toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Copy URL" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Copy" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("button", { name: "Copy path" }),
+    ).not.toBeInTheDocument();
   });
 
   it("updates Details on simple row click when Details tab is active", async () => {
@@ -1295,14 +1840,25 @@ describe("BrowserPage interactions", () => {
     await user.click(await findRowByLabel("a.txt"));
     await user.click(screen.getByRole("tab", { name: "Details" }));
     await waitFor(() => {
-      expect(within(screen.getByRole("tabpanel", { name: "Details" })).getByText("a.txt")).toBeInTheDocument();
+      expect(
+        within(screen.getByRole("tabpanel", { name: "Details" })).getByText(
+          "a.txt",
+        ),
+      ).toBeInTheDocument();
     });
 
     await user.click(await findRowByLabel("b.txt"));
 
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await waitFor(() => {
-      expect(within(screen.getByRole("tabpanel", { name: "Details" })).getByText("b.txt")).toBeInTheDocument();
+      expect(
+        within(screen.getByRole("tabpanel", { name: "Details" })).getByText(
+          "b.txt",
+        ),
+      ).toBeInTheDocument();
     });
   });
 
@@ -1314,9 +1870,14 @@ describe("BrowserPage interactions", () => {
     await user.click(screen.getByRole("tab", { name: "Details" }));
     fireEvent.click(await findRowByLabel("b.txt"), { ctrlKey: true });
 
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await waitFor(() => {
-      expect(screen.getByText("Select a single object to view details.")).toBeInTheDocument();
+      expect(
+        screen.getByText("Select a single object to view details."),
+      ).toBeInTheDocument();
     });
   });
 
@@ -1331,10 +1892,17 @@ describe("BrowserPage interactions", () => {
     (objectsList as HTMLDivElement).focus();
     fireEvent.keyDown(objectsList, { key: "Escape" });
 
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("checkbox", { name: "Select a.txt" })).not.toBeChecked();
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Select a.txt" }),
+    ).not.toBeChecked();
     await waitFor(() => {
-      expect(screen.getByText("Select a single object to view details.")).toBeInTheDocument();
+      expect(
+        screen.getByText("Select a single object to view details."),
+      ).toBeInTheDocument();
     });
   });
 
@@ -1350,27 +1918,37 @@ describe("BrowserPage interactions", () => {
 
     fireEvent.keyDown(objectsList, { key: "ArrowDown", shiftKey: true });
     expect(screen.getByRole("checkbox", { name: "Select docs" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Select a.txt" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select a.txt" }),
+    ).toBeChecked();
 
     fireEvent.keyDown(objectsList, { key: "End" });
-    expect(screen.getByRole("checkbox", { name: "Select c.txt" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Select docs" })).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select c.txt" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select docs" }),
+    ).not.toBeChecked();
 
     fireEvent.keyDown(objectsList, { key: " " });
-    expect(screen.getByRole("checkbox", { name: "Select c.txt" })).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select c.txt" }),
+    ).not.toBeChecked();
 
     fireEvent.keyDown(objectsList, { key: "Home" });
     expect(screen.getByRole("checkbox", { name: "Select docs" })).toBeChecked();
 
     fireEvent.keyDown(objectsList, { key: "Escape" });
-    expect(screen.getByRole("checkbox", { name: "Select docs" })).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select docs" }),
+    ).not.toBeChecked();
 
     fireEvent.keyDown(objectsList, { key: "Enter" });
     await waitFor(() => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
         "acc-1",
         "bucket-1",
-        expect.objectContaining({ prefix: "docs/" })
+        expect.objectContaining({ prefix: "docs/" }),
       );
     });
   });
@@ -1385,16 +1963,28 @@ describe("BrowserPage interactions", () => {
 
     const warningLine = screen.getByText(warningText).closest("p");
     expect(warningLine).not.toBeNull();
-    const infoButton = within(warningLine as HTMLElement).getByRole("button", { name: "CORS actions" });
+    const infoButton = within(warningLine as HTMLElement).getByRole("button", {
+      name: "CORS actions",
+    });
     expect(infoButton).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: `Add ${window.location.origin} to CORS` })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: `Add ${window.location.origin} to CORS`,
+      }),
+    ).not.toBeInTheDocument();
 
     await user.click(infoButton);
 
     expect(
-      await screen.findByText(`Allow direct access from ${window.location.origin} by adding CORS rules to this bucket.`)
+      await screen.findByText(
+        `Allow direct access from ${window.location.origin} by adding CORS rules to this bucket.`,
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: `Add ${window.location.origin} to CORS` })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: `Add ${window.location.origin} to CORS`,
+      }),
+    ).toBeInTheDocument();
   });
 
   it("applies CORS from popover and closes popover on Escape/outside click", async () => {
@@ -1403,32 +1993,68 @@ describe("BrowserPage interactions", () => {
     ensureBucketCorsMock.mockResolvedValue({ enabled: true, rules: [] });
     renderPage();
 
-    const warningLine = (await screen.findByText("Direct download/upload is not allowed on this bucket.")).closest("p");
+    const warningLine = (
+      await screen.findByText(
+        "Direct download/upload is not allowed on this bucket.",
+      )
+    ).closest("p");
     if (!warningLine) {
       throw new Error("CORS warning line not found");
     }
-    await user.click(within(warningLine).getByRole("button", { name: "CORS actions" }));
-    expect(screen.getByRole("button", { name: `Add ${window.location.origin} to CORS` })).toBeInTheDocument();
+    await user.click(
+      within(warningLine).getByRole("button", { name: "CORS actions" }),
+    );
+    expect(
+      screen.getByRole("button", {
+        name: `Add ${window.location.origin} to CORS`,
+      }),
+    ).toBeInTheDocument();
 
     fireEvent.keyDown(document.body, { key: "Escape" });
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: `Add ${window.location.origin} to CORS` })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: `Add ${window.location.origin} to CORS`,
+        }),
+      ).not.toBeInTheDocument();
     });
 
-    await user.click(within(warningLine).getByRole("button", { name: "CORS actions" }));
-    expect(screen.getByRole("button", { name: `Add ${window.location.origin} to CORS` })).toBeInTheDocument();
+    await user.click(
+      within(warningLine).getByRole("button", { name: "CORS actions" }),
+    );
+    expect(
+      screen.getByRole("button", {
+        name: `Add ${window.location.origin} to CORS`,
+      }),
+    ).toBeInTheDocument();
 
     fireEvent.mouseDown(document.body);
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: `Add ${window.location.origin} to CORS` })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: `Add ${window.location.origin} to CORS`,
+        }),
+      ).not.toBeInTheDocument();
     });
 
-    await user.click(within(warningLine).getByRole("button", { name: "CORS actions" }));
-    await user.click(screen.getByRole("button", { name: `Add ${window.location.origin} to CORS` }));
+    await user.click(
+      within(warningLine).getByRole("button", { name: "CORS actions" }),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: `Add ${window.location.origin} to CORS`,
+      }),
+    );
 
     await waitFor(() => {
-      expect(ensureBucketCorsMock).toHaveBeenCalledWith("acc-1", "bucket-1", window.location.origin);
+      expect(ensureBucketCorsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        window.location.origin,
+      );
     });
-    expect(await screen.findByText("CORS rules updated for this bucket.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("CORS rules updated for this bucket."),
+    ).toBeInTheDocument();
   });
 });
