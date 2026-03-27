@@ -135,6 +135,16 @@ function getContextPanel() {
   return screen.getByRole("tabpanel", { name: "Context" });
 }
 
+function getCurrentBucketPanel() {
+  const section = screen.getByRole("region", { name: "Current bucket" });
+  return within(section);
+}
+
+function getOtherBucketsPanel() {
+  const section = screen.getByRole("region", { name: "Other buckets" });
+  return within(section);
+}
+
 function seedBrowserRootUiState(value: unknown) {
   window.localStorage.setItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY, JSON.stringify(value));
 }
@@ -733,6 +743,192 @@ describe("BrowserPage interactions", () => {
     });
     expect(within(getContextPanel()).getByText("bucket-1")).toBeInTheDocument();
     expect(within(getContextPanel()).queryByText("bucket-1/docs")).not.toBeInTheDocument();
+  });
+
+  it("pins the current bucket above the list and only exposes folders for the active bucket", async () => {
+    const user = userEvent.setup();
+    searchBrowserBucketsMock.mockResolvedValue({
+      items: [{ name: "bucket-1" }, { name: "bucket-2" }],
+      total: 2,
+      page: 1,
+      page_size: 50,
+      has_next: false,
+    });
+    listBrowserObjectsMock.mockImplementation((_accountId: string, bucket: string, payload?: { prefix?: string }) => {
+      const prefix = payload?.prefix ?? "";
+      if (bucket === "bucket-2") {
+        return Promise.resolve({
+          prefix,
+          objects: [],
+          prefixes: prefix ? [] : ["images/"],
+          is_truncated: false,
+          next_continuation_token: null,
+        });
+      }
+      return Promise.resolve({
+        prefix,
+        objects: [],
+        prefixes: prefix ? [] : ["docs/"],
+        is_truncated: false,
+        next_continuation_token: null,
+      });
+    });
+
+    renderPage({ defaultShowFolders: true, initialEntry: "/browser?bucket=bucket-1" });
+    await waitFor(() => {
+      expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
+    });
+
+    expect(getCurrentBucketPanel().getByRole("button", { name: "docs" })).toBeInTheDocument();
+    expect(getOtherBucketsPanel().getByRole("button", { name: /bucket-2/i })).toBeInTheDocument();
+    expect(getOtherBucketsPanel().queryByRole("button", { name: "docs" })).not.toBeInTheDocument();
+
+    await user.click(getOtherBucketsPanel().getByRole("button", { name: /bucket-2/i }));
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-2",
+        expect.objectContaining({ prefix: "" })
+      );
+    });
+
+    expect(getCurrentBucketPanel().getByText("bucket-2")).toBeInTheDocument();
+    expect(getCurrentBucketPanel().getByRole("button", { name: "images" })).toBeInTheDocument();
+    expect(getCurrentBucketPanel().queryByRole("button", { name: "docs" })).not.toBeInTheDocument();
+    expect(within(getContextToolbar()).getByRole("button", { name: "Select bucket" })).toHaveTextContent("bucket-2");
+  });
+
+  it("keeps the active bucket pinned when the bucket filter no longer matches it", async () => {
+    const user = userEvent.setup();
+    searchBrowserBucketsMock.mockImplementation((_accountId: string, options?: { search?: string; exact?: boolean }) => {
+      const allBuckets = [{ name: "bucket-1" }, { name: "bucket-2" }];
+      const search = options?.search?.trim() ?? "";
+      const filtered = search
+        ? allBuckets.filter((bucket) => (options?.exact ? bucket.name === search : bucket.name.includes(search)))
+        : allBuckets;
+      return Promise.resolve({
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        page_size: 50,
+        has_next: false,
+      });
+    });
+
+    renderPage({
+      accountIdForApi: "acc-1",
+      defaultShowFolders: true,
+      initialEntry: "/browser?bucket=bucket-2",
+    });
+
+    await waitFor(() => {
+      expect(getCurrentBucketPanel().getByText("bucket-2")).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByPlaceholderText("Filter buckets"), "zzz");
+    expect(await screen.findByText("No other buckets match this filter.")).toBeInTheDocument();
+    expect(getCurrentBucketPanel().getByText("bucket-2")).toBeInTheDocument();
+  });
+
+  it("marks inaccessible buckets from the visible panel list and keeps them selectable", async () => {
+    const user = userEvent.setup();
+    searchBrowserBucketsMock.mockResolvedValue({
+      items: [{ name: "bucket-1" }, { name: "locked-bucket" }],
+      total: 2,
+      page: 1,
+      page_size: 50,
+      has_next: false,
+    });
+    listBrowserObjectsMock.mockImplementation((_accountId: string, bucket: string, _options?: { maxKeys?: number }) => {
+      if (bucket === "locked-bucket") {
+        return Promise.reject({
+          isAxiosError: true,
+          response: { data: { detail: "Forbidden by policy" } },
+          message: "Request failed with status code 403",
+        });
+      }
+      return Promise.resolve({
+        prefix: "",
+        objects: [],
+        prefixes: ["docs/"],
+        is_truncated: false,
+        next_continuation_token: null,
+      });
+    });
+
+    renderPage({ defaultShowFolders: true, initialEntry: "/browser?bucket=bucket-1" });
+
+    const inaccessibleBucketButton = await screen.findByRole("button", { name: /locked-bucket/i });
+    await waitFor(() => {
+      expect(getOtherBucketsPanel().getByText("No list access")).toBeInTheDocument();
+    });
+    expect(inaccessibleBucketButton).toHaveAttribute("title", "Forbidden by policy");
+
+    await user.click(inaccessibleBucketButton);
+    expect(await screen.findByText("Simple listing is not available for this bucket.")).toBeInTheDocument();
+    expect(await screen.findAllByText("Forbidden by policy")).not.toHaveLength(0);
+  });
+
+  it("loads more buckets from the panel without dropping the pinned current bucket", async () => {
+    const user = userEvent.setup();
+    searchBrowserBucketsMock.mockImplementation((_accountId: string, options?: { page?: number }) => {
+      const page = options?.page ?? 1;
+      if (page === 1) {
+        return Promise.resolve({
+          items: [{ name: "bucket-1" }, { name: "bucket-2" }],
+          total: 4,
+          page: 1,
+          page_size: 2,
+          has_next: true,
+        });
+      }
+      return Promise.resolve({
+        items: [{ name: "bucket-3" }, { name: "bucket-4" }],
+        total: 4,
+        page: 2,
+        page_size: 2,
+        has_next: false,
+      });
+    });
+
+    renderPage({ defaultShowFolders: true, initialEntry: "/browser?bucket=bucket-1" });
+    await waitFor(() => {
+      expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
+    });
+
+    await user.click(getOtherBucketsPanel().getByRole("button", { name: "Load more" }));
+    await waitFor(() => {
+      expect(getOtherBucketsPanel().getByRole("button", { name: /bucket-4/i })).toBeInTheDocument();
+    });
+    expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
+  });
+
+  it("scrolls the buckets panel back to the top when the active bucket changes", async () => {
+    const user = userEvent.setup();
+    const scrollToMock = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollToMock,
+    });
+    searchBrowserBucketsMock.mockResolvedValue({
+      items: [{ name: "bucket-1" }, { name: "bucket-2" }],
+      total: 2,
+      page: 1,
+      page_size: 50,
+      has_next: false,
+    });
+
+    renderPage({ defaultShowFolders: true, initialEntry: "/browser?bucket=bucket-1" });
+    await waitFor(() => {
+      expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
+    });
+
+    scrollToMock.mockClear();
+    await user.click(getOtherBucketsPanel().getByRole("button", { name: /bucket-2/i }));
+
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: "auto" });
+    });
   });
 
   it("shows selection actions inline and secondary actions in More when the action bar is enabled", async () => {

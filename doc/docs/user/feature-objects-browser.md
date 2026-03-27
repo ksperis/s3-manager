@@ -13,6 +13,8 @@ Use this guide for object-level actions in Browser surfaces.
 
 1. Open a browser surface and choose context/account.
 2. Navigate to the target bucket and prefix.
+   - On `/browser`, use the left buckets panel to switch bucket directly and inspect folders for the active bucket.
+   - Non-active buckets stay collapsed; inaccessible buckets are dimmed until selected.
 3. Use actions as needed:
    - Use the context menu for the full action set on the current path, object, or selection.
    - Use the toolbar `More` menu when right-click is not available or when the action bar is compact.

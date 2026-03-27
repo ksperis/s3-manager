@@ -67,6 +67,7 @@ import {
 } from "../../api/browser";
 import { useBrowserContext } from "./BrowserContext";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
+import BrowserBucketsPanel from "./BrowserBucketsPanel";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import {
@@ -92,7 +93,6 @@ import ObjectAdvancedModal from "./ObjectAdvancedModal";
 import {
   readBrowserRootContextSelection,
   readStoredBrowserRootUiState,
-  readBrowserRootUiState,
   writeBrowserRootContextSelection,
   writeBrowserRootUiLayout,
 } from "./browserRootUiState";
@@ -168,10 +168,6 @@ import {
   toolbarButtonClasses,
   toolbarIconButtonClasses,
   toolbarPrimaryClasses,
-  treeItemActiveClasses,
-  treeItemBaseClasses,
-  treeItemInactiveClasses,
-  treeToggleButtonClasses,
 } from "./browserConstants";
 import {
   buildTreeNodes,
@@ -207,6 +203,12 @@ import {
   mergeBucketSearchItems,
   prepareLatestRequest,
 } from "./browserSearchHelpers";
+import {
+  resolveBucketAccessEntry,
+  sanitizeBucketAccessEntries,
+  splitBucketPanelBuckets,
+  type BucketAccessEntry,
+} from "./browserBucketsPanelHelpers";
 import type {
   BrowserItem,
   BulkMetadataDraft,
@@ -369,6 +371,8 @@ const PATH_SUGGESTION_SOURCE_WEIGHT: Record<PathSuggestionSource, number> = {
   local: 200,
   remote: 100,
 };
+const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
+const BUCKET_ACCESS_ROOT_MARGIN = "120px";
 const LAZY_COLUMN_CONCURRENCY = 4;
 const LAZY_COLUMN_ROOT_MARGIN = "200px";
 const COLUMN_DEFINITIONS: ColumnDefinition[] = [
@@ -631,6 +635,7 @@ export default function BrowserPage({
     [isMainBrowserPath]
   );
   const browserRootContextId = accountIdForApi == null ? null : String(accountIdForApi);
+  const bucketAccessContextKey = accountIdForApi == null ? null : String(accountIdForApi);
   // /browser is credential-first.
   const accessMode = null;
   const [bucketName, setBucketName] = useState("");
@@ -642,6 +647,7 @@ export default function BrowserPage({
   const [bucketMenuTotal, setBucketMenuTotal] = useState(0);
   const [bucketTotalCount, setBucketTotalCount] = useState(0);
   const [bucketMenuLoadingMore, setBucketMenuLoadingMore] = useState(false);
+  const [bucketAccessByName, setBucketAccessByName] = useState<Record<string, BucketAccessEntry>>({});
   const [searchParams] = useSearchParams();
   const requestedBucket = useMemo(() => searchParams.get("bucket")?.trim() ?? "", [searchParams]);
   const [prefix, setPrefix] = useState("");
@@ -872,13 +878,22 @@ export default function BrowserPage({
   const corsActionTriggerRef = useRef<HTMLButtonElement | null>(null);
   const corsActionPopoverRef = useRef<HTMLDivElement | null>(null);
   const objectsListViewportRef = useRef<HTMLDivElement | null>(null);
-  const bucketFilterRef = useRef<HTMLInputElement | null>(null);
+  const bucketMenuFilterRef = useRef<HTMLInputElement | null>(null);
+  const bucketPanelOtherBucketsRef = useRef<HTMLDivElement | null>(null);
+  const bucketPanelLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
   const newFolderInputRef = useRef<HTMLInputElement | null>(null);
   const pathSuggestionsDebounceRef = useRef<number | null>(null);
   const bucketSearchDebounceRef = useRef<number | null>(null);
+  const bucketSearchValueRef = useRef("");
   const bucketSearchRequestIdRef = useRef(0);
+  const bucketAccessCacheRef = useRef<Map<string, Record<string, BucketAccessEntry>>>(new Map());
+  const bucketAccessQueueRef = useRef<string[]>([]);
+  const bucketAccessQueuedRef = useRef(new Set<string>());
+  const bucketAccessInFlightRef = useRef(0);
+  const bucketAccessAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const bucketAccessSessionRef = useRef(0);
   const objectsRequestSeqRef = useRef(0);
   const objectsAbortControllerRef = useRef<AbortController | null>(null);
   const objectsSearchDebounceRef = useRef<number | null>(null);
@@ -1018,6 +1033,146 @@ export default function BrowserPage({
     if (!canUseInspectorPanel) return;
     setShowInspector((prev) => !prev);
   }, [canUseInspectorPanel]);
+
+  const updateBucketAccessEntry = useCallback(
+    (targetBucketName: string, nextEntry: BucketAccessEntry) => {
+      if (!targetBucketName) return;
+      setBucketAccessByName((prev) => {
+        const normalizedNext = {
+          status: nextEntry.status,
+          detail: nextEntry.detail ?? null,
+        } satisfies BucketAccessEntry;
+        const previousEntry = prev[targetBucketName];
+        if (
+          previousEntry?.status === normalizedNext.status &&
+          previousEntry?.detail === normalizedNext.detail
+        ) {
+          return prev;
+        }
+        const next = {
+          ...prev,
+          [targetBucketName]: normalizedNext,
+        };
+        if (bucketAccessContextKey) {
+          bucketAccessCacheRef.current.set(bucketAccessContextKey, next);
+        }
+        return next;
+      });
+    },
+    [bucketAccessContextKey]
+  );
+
+  const resetBucketAccessQueue = useCallback(() => {
+    bucketAccessSessionRef.current += 1;
+    bucketAccessQueueRef.current = [];
+    bucketAccessQueuedRef.current.clear();
+    bucketAccessAbortControllersRef.current.forEach((controller) => controller.abort());
+    bucketAccessAbortControllersRef.current.clear();
+    bucketAccessInFlightRef.current = 0;
+    setBucketAccessByName((prev) => {
+      const sanitized = sanitizeBucketAccessEntries(prev);
+      const sameShape =
+        Object.keys(prev).length === Object.keys(sanitized).length &&
+        Object.entries(prev).every(([bucket, entry]) => {
+          const nextEntry = sanitized[bucket];
+          return nextEntry?.status === entry.status && nextEntry?.detail === entry.detail;
+        });
+      if (sameShape) {
+        return prev;
+      }
+      if (bucketAccessContextKey) {
+        bucketAccessCacheRef.current.set(bucketAccessContextKey, sanitized);
+      }
+      return sanitized;
+    });
+  }, [bucketAccessContextKey]);
+
+  const drainBucketAccessQueue = useCallback(() => {
+    if (!hasS3AccountContext || !accountIdForApi) {
+      return;
+    }
+    const requestSession = bucketAccessSessionRef.current;
+    while (
+      bucketAccessInFlightRef.current < BUCKET_ACCESS_PROBE_CONCURRENCY &&
+      bucketAccessQueueRef.current.length > 0
+    ) {
+      const targetBucketName = bucketAccessQueueRef.current.shift();
+      if (!targetBucketName) {
+        continue;
+      }
+      bucketAccessQueuedRef.current.delete(targetBucketName);
+      bucketAccessInFlightRef.current += 1;
+      const controller = new AbortController();
+      bucketAccessAbortControllersRef.current.set(targetBucketName, controller);
+      void listBrowserObjects(accountIdForApi, targetBucketName, {
+        maxKeys: 1,
+        signal: controller.signal,
+      })
+        .then(() => {
+          if (requestSession !== bucketAccessSessionRef.current) {
+            return;
+          }
+          updateBucketAccessEntry(targetBucketName, {
+            status: "available",
+            detail: null,
+          });
+        })
+        .catch((error) => {
+          if (isAbortError(error) || requestSession !== bucketAccessSessionRef.current) {
+            return;
+          }
+          updateBucketAccessEntry(targetBucketName, {
+            status: "unavailable",
+            detail: extractApiError(error, "Unable to list bucket."),
+          });
+        })
+        .finally(() => {
+          bucketAccessAbortControllersRef.current.delete(targetBucketName);
+          bucketAccessInFlightRef.current = Math.max(0, bucketAccessInFlightRef.current - 1);
+          if (requestSession === bucketAccessSessionRef.current) {
+            drainBucketAccessQueue();
+          }
+        });
+    }
+  }, [accountIdForApi, hasS3AccountContext, updateBucketAccessEntry]);
+
+  const scheduleBucketAccessProbe = useCallback(
+    (targetBucketName: string) => {
+      if (!targetBucketName || !hasS3AccountContext || !accountIdForApi || targetBucketName === bucketName) {
+        return;
+      }
+      const currentAccess = resolveBucketAccessEntry(targetBucketName, bucketAccessByName);
+      if (currentAccess.status !== "unknown") {
+        return;
+      }
+      if (
+        bucketAccessQueuedRef.current.has(targetBucketName) ||
+        bucketAccessAbortControllersRef.current.has(targetBucketName)
+      ) {
+        return;
+      }
+      bucketAccessQueuedRef.current.add(targetBucketName);
+      bucketAccessQueueRef.current.push(targetBucketName);
+      updateBucketAccessEntry(targetBucketName, {
+        status: "checking",
+        detail: null,
+      });
+      drainBucketAccessQueue();
+    },
+    [accountIdForApi, bucketAccessByName, bucketName, drainBucketAccessQueue, hasS3AccountContext, updateBucketAccessEntry]
+  );
+
+  useEffect(() => {
+    resetBucketAccessQueue();
+    if (!bucketAccessContextKey || !hasS3AccountContext) {
+      setBucketAccessByName({});
+      return;
+    }
+    const cached = sanitizeBucketAccessEntries(bucketAccessCacheRef.current.get(bucketAccessContextKey) ?? {});
+    bucketAccessCacheRef.current.set(bucketAccessContextKey, cached);
+    setBucketAccessByName(cached);
+  }, [bucketAccessContextKey, hasS3AccountContext, resetBucketAccessQueue]);
+
   const openSseCustomerModal = useCallback(() => {
     if (!sseFeatureEnabled || !sseCustomerScopeKey) return;
     setSseCustomerKeyInput(sseCustomerKeyBase64 ?? "");
@@ -1496,12 +1651,18 @@ export default function BrowserPage({
 
   useEffect(() => {
     if (showBucketMenu) {
-      bucketFilterRef.current?.focus();
+      bucketMenuFilterRef.current?.focus();
     }
   }, [showBucketMenu]);
 
   useEffect(() => {
     return () => {
+      bucketAccessSessionRef.current += 1;
+      bucketAccessQueueRef.current = [];
+      bucketAccessQueuedRef.current.clear();
+      bucketAccessAbortControllersRef.current.forEach((controller) => controller.abort());
+      bucketAccessAbortControllersRef.current.clear();
+      bucketAccessInFlightRef.current = 0;
       if (bucketSearchDebounceRef.current !== null) {
         window.clearTimeout(bucketSearchDebounceRef.current);
         bucketSearchDebounceRef.current = null;
@@ -1674,6 +1835,7 @@ export default function BrowserPage({
 
   const refreshBucketList = useCallback(
     async (options?: { preferredBucket?: string | null }) => {
+      resetBucketAccessQueue();
       if (isMainBrowserPath) {
         browserRootSelectionPersistenceReadyRef.current = false;
         browserRootSelectionContextIdRef.current = browserRootContextId;
@@ -1684,6 +1846,8 @@ export default function BrowserPage({
         setBucketMenuHasNext(false);
         setBucketMenuTotal(0);
         setBucketTotalCount(0);
+        bucketSearchValueRef.current = "";
+        setBucketAccessByName({});
         setBucketName("");
         setPrefix("");
         setDeletedObjects([]);
@@ -1701,6 +1865,7 @@ export default function BrowserPage({
           page: 1,
           pageSize: BUCKET_MENU_LIMIT,
         });
+        bucketSearchValueRef.current = "";
         setBucketMenuItems(firstPage.items);
         setBucketMenuPage(firstPage.page);
         setBucketMenuHasNext(firstPage.has_next);
@@ -1774,6 +1939,7 @@ export default function BrowserPage({
           browserRootSelectionPersistenceReadyRef.current = true;
         }
       } catch (err) {
+        bucketSearchValueRef.current = "";
         setBucketError(extractApiError(err, "Unable to list buckets for this account."));
         setBucketMenuItems([]);
         setBucketMenuPage(1);
@@ -1796,7 +1962,15 @@ export default function BrowserPage({
         setLoadingBuckets(false);
       }
     },
-    [accountIdForApi, browserRootContextId, hasS3AccountContext, isCephAdminContext, isMainBrowserPath, requestedBucket]
+    [
+      accountIdForApi,
+      browserRootContextId,
+      hasS3AccountContext,
+      isCephAdminContext,
+      isMainBrowserPath,
+      requestedBucket,
+      resetBucketAccessQueue,
+    ]
   );
 
   useEffect(() => {
@@ -1815,6 +1989,9 @@ export default function BrowserPage({
       const searchValue = (options?.search ?? "").trim();
       const targetPage = Math.max(1, options?.page ?? 1);
       const append = Boolean(options?.append && targetPage > 1);
+      if (!append) {
+        resetBucketAccessQueue();
+      }
       const requestId = bucketSearchRequestIdRef.current + 1;
       bucketSearchRequestIdRef.current = requestId;
       if (append) {
@@ -1832,6 +2009,7 @@ export default function BrowserPage({
         if (requestId !== bucketSearchRequestIdRef.current) {
           return;
         }
+        bucketSearchValueRef.current = searchValue;
         setBucketMenuItems((prev) => {
           return mergeBucketSearchItems(prev, data.items, append);
         });
@@ -1863,17 +2041,23 @@ export default function BrowserPage({
         }
       }
     },
-    [accountIdForApi, hasS3AccountContext]
+    [accountIdForApi, hasS3AccountContext, resetBucketAccessQueue]
   );
 
+  const bucketSearchUiActive = showBucketMenu || (isMainBrowserPath && isFoldersPanelVisible);
+
   useEffect(() => {
-    if (!showBucketMenu) return;
+    if (!bucketSearchUiActive) return;
+    const nextSearchValue = bucketFilter.trim();
+    if (nextSearchValue === bucketSearchValueRef.current) {
+      return;
+    }
     if (bucketSearchDebounceRef.current !== null) {
       window.clearTimeout(bucketSearchDebounceRef.current);
       bucketSearchDebounceRef.current = null;
     }
     bucketSearchDebounceRef.current = window.setTimeout(() => {
-      void loadBucketSearchPage({ search: bucketFilter, page: 1, append: false });
+      void loadBucketSearchPage({ search: nextSearchValue, page: 1, append: false });
     }, BROWSER_QUERY_DEBOUNCE_MS);
     return () => {
       if (bucketSearchDebounceRef.current !== null) {
@@ -1881,7 +2065,7 @@ export default function BrowserPage({
         bucketSearchDebounceRef.current = null;
       }
     };
-  }, [bucketFilter, loadBucketSearchPage, showBucketMenu]);
+  }, [bucketFilter, bucketSearchUiActive, isFoldersPanelVisible, isMainBrowserPath, loadBucketSearchPage]);
 
   useEffect(() => {
     if (!hasS3AccountContext || !accountIdForApi) {
@@ -2086,6 +2270,10 @@ export default function BrowserPage({
         loadedPrefixes = data.prefixes;
         loadedObjectsNextToken = data.next_continuation_token ?? null;
         loadedObjectsTruncated = Boolean(data.is_truncated);
+        updateBucketAccessEntry(bucketName, {
+          status: "available",
+          detail: null,
+        });
       }
 
       const mergedObjects = isAppend ? [...objects, ...loadedObjects] : loadedObjects;
@@ -2196,7 +2384,12 @@ export default function BrowserPage({
       if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
         return;
       }
-      setObjectsError(extractApiError(err, "Unable to list objects for this prefix."));
+      const errorDetail = extractApiError(err, "Unable to list objects for this prefix.");
+      updateBucketAccessEntry(bucketName, {
+        status: "unavailable",
+        detail: errorDetail,
+      });
+      setObjectsError(errorDetail);
     } finally {
       if (objectsAbortControllerRef.current === controller) {
         objectsAbortControllerRef.current = null;
@@ -2519,6 +2712,18 @@ export default function BrowserPage({
     setDeletedObjectsIsTruncated(false);
   }, [showDeletedObjects]);
 
+  const currentBucketAccess = useMemo<BucketAccessEntry>(
+    () =>
+      bucketName
+        ? resolveBucketAccessEntry(bucketName, bucketAccessByName)
+        : {
+            status: "unknown",
+            detail: null,
+          },
+    [bucketAccessByName, bucketName]
+  );
+  const currentBucketUnavailable = bucketName ? currentBucketAccess.status === "unavailable" : false;
+
   const listTreePrefixes = useCallback(
     async (targetPrefix: string) => {
       if (!bucketName || !hasS3AccountContext) {
@@ -2559,7 +2764,7 @@ export default function BrowserPage({
   );
 
   useEffect(() => {
-    if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
+    if (accountSwitchInFlight || !bucketName || !hasS3AccountContext || currentBucketUnavailable) {
       setTreeNodes([]);
       return;
     }
@@ -2602,10 +2807,10 @@ export default function BrowserPage({
     return () => {
       isMounted = false;
     };
-  }, [accessMode, accountSwitchInFlight, bucketName, hasS3AccountContext, listTreePrefixes]);
+  }, [accessMode, accountSwitchInFlight, bucketName, currentBucketUnavailable, hasS3AccountContext, listTreePrefixes]);
 
   useEffect(() => {
-    if (!bucketName || !hasS3AccountContext || treeNodes.length === 0) return;
+    if (!bucketName || !hasS3AccountContext || currentBucketUnavailable || treeNodes.length === 0) return;
     const rootNode = treeNodes.find((node) => node.prefix === "");
     if (!rootNode || rootNode.isLoading) return;
     const targetPrefix = prefix ? normalizePrefix(prefix) : "";
@@ -2646,7 +2851,7 @@ export default function BrowserPage({
       });
       return next;
     });
-  }, [accessMode, bucketName, hasS3AccountContext, prefix, treeNodes]);
+  }, [accessMode, bucketName, currentBucketUnavailable, hasS3AccountContext, prefix, treeNodes]);
 
   useEffect(() => {
     if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
@@ -2866,11 +3071,46 @@ export default function BrowserPage({
       ? "rounded-md border border-amber-300 bg-amber-50/80 text-amber-800 shadow-sm ring-2 ring-amber-200/70 dark:border-amber-400/60 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/30"
       : ""
   }`;
+  const useBucketsPanel = isMainBrowserPath && isFoldersPanelVisible;
+  const { currentBucket: currentBucketPanelItem, otherBuckets: otherBucketPanelItems } = useMemo(
+    () => splitBucketPanelBuckets(bucketName, bucketMenuItems),
+    [bucketMenuItems, bucketName]
+  );
+  const otherBucketPanelRows = useMemo(
+    () =>
+      otherBucketPanelItems.map((bucket) => ({
+        bucket,
+        access: resolveBucketAccessEntry(bucket.name, bucketAccessByName),
+      })),
+    [bucketAccessByName, otherBucketPanelItems]
+  );
+  const treeRootNode = useMemo(() => treeNodes.find((node) => node.prefix === "") ?? null, [treeNodes]);
   const canLoadMoreBucketResults = bucketMenuHasNext && !loadingBuckets && !bucketMenuLoadingMore;
   const sortKey = sortId.split("-")[0] as "name" | "size" | "modified";
   const sortDirection = sortId.endsWith("asc") ? "asc" : "desc";
   const activePathSuggestion =
     pathSuggestionIndex >= 0 && pathSuggestionIndex < pathSuggestions.length ? pathSuggestions[pathSuggestionIndex] : null;
+  const handleBucketMenuLoadMore = useCallback(() => {
+    if (loadingBuckets || bucketMenuLoadingMore || !bucketMenuHasNext) {
+      return;
+    }
+    void loadBucketSearchPage({
+      search: bucketFilter,
+      page: bucketMenuPage + 1,
+      append: true,
+    });
+  }, [bucketFilter, bucketMenuHasNext, bucketMenuLoadingMore, bucketMenuPage, loadBucketSearchPage, loadingBuckets]);
+  const handleBucketChange = useCallback(
+    (value: string) => {
+      setShowBucketMenu(false);
+      setBucketFilter("");
+      if (!value || value === bucketName) return;
+      setBucketName(value);
+      setPrefix("");
+      setActiveItem(null);
+    },
+    [bucketName]
+  );
 
   useEffect(() => {
     if (!isMainBrowserPath) return;
@@ -2882,6 +3122,110 @@ export default function BrowserPage({
       setSortId("name-asc");
     }
   }, [isMainBrowserPath, sortKey, visibleColumnSet]);
+
+  useLayoutEffect(() => {
+    if (!useBucketsPanel) {
+      return;
+    }
+    const scroller = bucketPanelOtherBucketsRef.current;
+    if (!scroller) {
+      return;
+    }
+    if (typeof scroller.scrollTo === "function") {
+      scroller.scrollTo({ top: 0, behavior: "auto" });
+      return;
+    }
+    scroller.scrollTop = 0;
+  }, [bucketName, useBucketsPanel]);
+
+  useEffect(() => {
+    if (!useBucketsPanel) {
+      return;
+    }
+    const root = bucketPanelOtherBucketsRef.current;
+    if (!root) {
+      return;
+    }
+    const rowNodes = Array.from(root.querySelectorAll<HTMLElement>("[data-bucket-panel-name]"));
+    if (rowNodes.length === 0) {
+      return;
+    }
+
+    const rootRect = root.getBoundingClientRect();
+    const rootMarginPx = Number.parseInt(BUCKET_ACCESS_ROOT_MARGIN, 10) || 0;
+    const viewportTop = rootRect.top - rootMarginPx;
+    const viewportBottom = rootRect.bottom + rootMarginPx;
+    rowNodes.forEach((node) => {
+      const targetBucketName = node.dataset.bucketPanelName;
+      if (!targetBucketName) {
+        return;
+      }
+      if (rootRect.height <= 0 || rootRect.width <= 0) {
+        scheduleBucketAccessProbe(targetBucketName);
+        return;
+      }
+      const rowRect = node.getBoundingClientRect();
+      const intersectsViewport = rowRect.bottom >= viewportTop && rowRect.top <= viewportBottom;
+      if (intersectsViewport) {
+        scheduleBucketAccessProbe(targetBucketName);
+      }
+    });
+
+    if (typeof window === "undefined" || !("IntersectionObserver" in window)) {
+      rowNodes.forEach((node) => {
+        const targetBucketName = node.dataset.bucketPanelName;
+        if (targetBucketName) {
+          scheduleBucketAccessProbe(targetBucketName);
+        }
+      });
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) {
+            return;
+          }
+          const targetBucketName = (entry.target as HTMLElement).dataset.bucketPanelName;
+          if (targetBucketName) {
+            scheduleBucketAccessProbe(targetBucketName);
+          }
+          observer.unobserve(entry.target);
+        });
+      },
+      { root, rootMargin: BUCKET_ACCESS_ROOT_MARGIN }
+    );
+    rowNodes.forEach((node) => observer.observe(node));
+    return () => {
+      observer.disconnect();
+    };
+  }, [otherBucketPanelRows, scheduleBucketAccessProbe, useBucketsPanel]);
+
+  useEffect(() => {
+    if (!useBucketsPanel || !canLoadMoreBucketResults) {
+      return;
+    }
+    const root = bucketPanelOtherBucketsRef.current;
+    const sentinel = bucketPanelLoadMoreSentinelRef.current;
+    if (!root || !sentinel || typeof window === "undefined" || !("IntersectionObserver" in window)) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            handleBucketMenuLoadMore();
+          }
+        });
+      },
+      { root, rootMargin: "160px" }
+    );
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+    };
+  }, [canLoadMoreBucketResults, handleBucketMenuLoadMore, useBucketsPanel]);
 
   const breadcrumbs = useMemo(() => {
     let current = "";
@@ -3019,12 +3363,6 @@ export default function BrowserPage({
   const canSelectionDownloadFiles = selectionInfo.canDownloadFiles;
   const canSelectionDownloadFolder = selectionInfo.canDownloadFolder;
   const canSelectionOpen = selectionInfo.canOpen;
-  const canSelectionCopyUrl = selectionInfo.canCopyUrl && !sseActive;
-  const canSelectionAdvanced = selectionInfo.canAdvanced;
-  const canSelectionCopyItems = selectionInfo.canCopyItems;
-  const canSelectionCutItems = selectionInfo.canCutItems;
-  const canSelectionBulkAttributes = selectionInfo.canBulkAttributes;
-  const canSelectionDelete = selectionInfo.canDelete;
   const selectionHasDeleted = selectionInfo.hasDeleted;
   const canSelectionActions = selectionInfo.items.length > 0;
 
@@ -3034,9 +3372,9 @@ export default function BrowserPage({
   }, [previewContentType, previewItem]);
 
   const layoutClass = isFoldersPanelVisible && isInspectorPanelVisible
-    ? "lg:grid-cols-[200px_minmax(0,1fr)_320px]"
+    ? "lg:grid-cols-[280px_minmax(0,1fr)_320px]"
     : isFoldersPanelVisible
-      ? "lg:grid-cols-[200px_minmax(0,1fr)]"
+      ? "lg:grid-cols-[280px_minmax(0,1fr)]"
       : isInspectorPanelVisible
         ? "lg:grid-cols-[minmax(0,1fr)_320px]"
         : "lg:grid-cols-[minmax(0,1fr)]";
@@ -4077,26 +4415,6 @@ export default function BrowserPage({
     syncInspectorTabWithSelection(0);
   };
 
-  const handleBucketMenuLoadMore = () => {
-    if (loadingBuckets || bucketMenuLoadingMore || !bucketMenuHasNext) {
-      return;
-    }
-    void loadBucketSearchPage({
-      search: bucketFilter,
-      page: bucketMenuPage + 1,
-      append: true,
-    });
-  };
-
-  const handleBucketChange = (value: string) => {
-    setShowBucketMenu(false);
-    setBucketFilter("");
-    if (!value || value === bucketName) return;
-    setBucketName(value);
-    setPrefix("");
-    setActiveItem(null);
-  };
-
   const openBucketConfigurationModal = (targetBucket: string) => {
     if (!bucketConfigurationEnabled) return;
     const normalized = targetBucket.trim();
@@ -4721,7 +5039,7 @@ export default function BrowserPage({
   };
 
   const loadTreeChildren = async (targetPrefix: string, options?: { expand?: boolean }) => {
-    if (!bucketName || !hasS3AccountContext) return;
+    if (!bucketName || !hasS3AccountContext || currentBucketUnavailable) return;
     const normalized = targetPrefix ? normalizePrefix(targetPrefix) : "";
     const shouldExpand = options?.expand ?? true;
     setTreeNodes((prev) =>
@@ -4770,50 +5088,6 @@ export default function BrowserPage({
       updateTreeNodes(prev, node.prefix, (entry) => ({ ...entry, isExpanded: true }))
     );
   };
-
-  const renderTreeNodes = (nodes: TreeNode[], depth = 0) => (
-    <ul className="w-full min-w-0 space-y-1">
-      {nodes.map((node) => {
-        const isActive = prefix === node.prefix;
-        const canToggle = node.isLoaded ? node.children.length > 0 : true;
-        const labelClasses = `${treeItemBaseClasses} ${isActive ? treeItemActiveClasses : treeItemInactiveClasses}`;
-        return (
-          <li key={node.id}>
-            <div className="flex w-full min-w-0 items-center gap-1" style={{ paddingLeft: depth * 12 }}>
-              <button
-                type="button"
-                className={treeToggleButtonClasses}
-                onClick={() => handleToggleTreeNode(node)}
-                disabled={!canToggle}
-                aria-label={node.isExpanded ? "Collapse" : "Expand"}
-                title={node.isExpanded ? "Collapse" : "Expand"}
-              >
-                {canToggle ? (node.isExpanded ? "-" : "+") : ""}
-              </button>
-              <button
-                type="button"
-                className={labelClasses}
-                onClick={() => handleSelectPrefix(node.prefix)}
-                title={node.name}
-              >
-                {node.prefix === "" ? <BucketIcon className="h-3.5 w-3.5" /> : <FolderIcon className="h-3.5 w-3.5" />}
-                <span className="truncate">{node.name}</span>
-              </button>
-            </div>
-            {node.isExpanded && (node.isLoading || node.children.length > 0) && (
-              <div className="mt-1">
-                {node.isLoading ? (
-                  <div className="pl-6 ui-caption text-slate-400 dark:text-slate-500">Loading...</div>
-                ) : (
-                  renderTreeNodes(node.children, depth + 1)
-                )}
-              </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
 
   const handleEnsureCors = async () => {
     if (!bucketName || !hasS3AccountContext || !uiOrigin) return;
@@ -8430,7 +8704,7 @@ export default function BrowserPage({
                         <div className="flex min-w-0 flex-1 items-center gap-2">
                           <SearchIcon className="h-3.5 w-3.5 text-slate-400" />
                           <input
-                            ref={bucketFilterRef}
+                            ref={bucketMenuFilterRef}
                             type="text"
                             value={bucketFilter}
                             onChange={(event) => setBucketFilter(event.target.value)}
@@ -9077,21 +9351,32 @@ export default function BrowserPage({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
           <div className={`grid min-h-0 flex-1 grid-rows-1 gap-3 ${layoutClass}`}>
             {isFoldersPanelVisible && (
-              <div className="flex min-h-0 h-full min-w-0 flex-col rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-                <div>
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Folders</p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    {bucketName ? `Scope: ${normalizedPrefix || "root"}` : "Select a bucket to load prefixes."}
-                  </p>
-                </div>
-                <div className="mt-3 min-h-0 flex-1 overflow-hidden overflow-y-auto pr-1">
-                  {!bucketName ? (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
-                  ) : (
-                    renderTreeNodes(treeNodes)
-                  )}
-                </div>
-              </div>
+              <BrowserBucketsPanel
+                hasS3AccountContext={hasS3AccountContext}
+                currentBucket={currentBucketPanelItem}
+                activePrefix={normalizedPrefix}
+                currentBucketAccess={currentBucketAccess}
+                currentBucketError={currentBucketUnavailable ? objectsError : null}
+                treeRootNode={treeRootNode}
+                bucketFilter={bucketFilter}
+                onBucketFilterChange={setBucketFilter}
+                otherBuckets={otherBucketPanelRows}
+                loadingBuckets={loadingBuckets}
+                bucketError={bucketError}
+                onRetryBuckets={() => void refreshBucketList()}
+                bucketManagementEnabled={bucketManagementEnabled}
+                onCreateBucket={openCreateBucketDialog}
+                onSelectBucket={handleBucketChange}
+                onSelectPrefix={handleSelectPrefix}
+                onToggleTreeNode={handleToggleTreeNode}
+                canLoadMore={canLoadMoreBucketResults}
+                onLoadMore={handleBucketMenuLoadMore}
+                bucketMenuLoadingMore={bucketMenuLoadingMore}
+                bucketMenuTotal={bucketMenuTotal}
+                bucketTotalCount={bucketTotalCount}
+                otherBucketsViewportRef={bucketPanelOtherBucketsRef}
+                loadMoreSentinelRef={bucketPanelLoadMoreSentinelRef}
+              />
             )}
             <div className="flex min-h-0 h-full min-w-0 flex-1 flex-col gap-3">
                   <div
