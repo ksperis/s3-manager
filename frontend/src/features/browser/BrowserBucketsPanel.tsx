@@ -3,6 +3,11 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { RefObject } from "react";
+import {
+  toolbarCompactButtonClasses,
+  toolbarCompactInputClasses,
+} from "../../components/toolbarControlClasses";
+import { cx, uiCardClass, uiCardMutedClass } from "../../components/ui/styles";
 import type { BrowserBucket } from "../../api/browser";
 import {
   BucketIcon,
@@ -11,7 +16,6 @@ import {
   SearchIcon,
 } from "./browserIcons";
 import {
-  filterChipClasses,
   treeItemActiveClasses,
   treeItemBaseClasses,
   treeItemInactiveClasses,
@@ -53,20 +57,19 @@ type BrowserBucketsPanelProps = {
 };
 
 const currentBucketCardClasses =
-  "rounded-2xl border border-primary-200/70 bg-gradient-to-br from-primary-50 via-white to-sky-50 p-3 shadow-sm dark:border-primary-500/40 dark:from-primary-500/15 dark:via-slate-900 dark:to-slate-900";
-const bucketSectionTitleClasses = "ui-caption font-semibold uppercase tracking-[0.18em] text-slate-400";
+  "rounded-xl border border-primary-200 bg-primary-50/70 p-3 shadow-sm dark:border-primary-500/40 dark:bg-primary-500/10";
+const bucketSectionTitleClasses = "ui-caption font-semibold text-slate-500 dark:text-slate-400";
 const bucketFilterInputClasses =
-  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
+  cx(toolbarCompactInputClasses, "w-full py-2 font-medium");
 const bucketRowBaseClasses =
-  "flex w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition";
+  "flex w-full min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2 text-left ui-caption transition";
 const bucketRowIdleClasses =
-  "border-slate-200/80 bg-white/90 text-slate-700 hover:border-primary-200 hover:bg-primary-50/60 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:hover:border-primary-500/50 dark:hover:bg-slate-900";
+  "border-slate-200 bg-white text-slate-700 shadow-sm hover:border-primary/40 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-primary-500/40 dark:hover:bg-slate-800";
 const bucketRowUnavailableClasses =
-  "border-slate-200/60 bg-slate-50 text-slate-400 hover:border-amber-200 hover:bg-amber-50/70 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-500 dark:hover:border-amber-500/40 dark:hover:bg-amber-500/10";
+  "border-slate-200 bg-slate-50 text-slate-400 shadow-sm hover:border-amber-200 hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-500 dark:hover:border-amber-500/40 dark:hover:bg-amber-500/10";
 const bucketSubtleCardClasses =
-  "rounded-2xl border border-slate-200/80 bg-white/80 p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/50";
-const currentBucketRootButtonClasses =
-  `${treeItemBaseClasses} min-h-9 rounded-xl border border-slate-200/80 bg-white/80 px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900/70`;
+  cx(uiCardMutedClass, "rounded-xl p-3 shadow-none");
+const panelButtonClasses = `${toolbarCompactButtonClasses} inline-flex items-center whitespace-nowrap`;
 
 const bucketAccessBadgeClasses: Record<BucketAccessStatus, string> = {
   unknown: "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
@@ -88,7 +91,7 @@ const bucketAccessLabel: Record<BucketAccessStatus, string> = {
 function BucketAccessBadge({ status }: { status: BucketAccessStatus }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${bucketAccessBadgeClasses[status]}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${bucketAccessBadgeClasses[status]}`}
     >
       {status === "checking" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" aria-hidden="true" />}
       <span>{bucketAccessLabel[status]}</span>
@@ -108,7 +111,7 @@ function renderTreeNodes(
       {nodes.map((node) => {
         const isActive = activePrefix === node.prefix;
         const canToggle = node.isLoaded ? node.children.length > 0 : true;
-        const labelClasses = `${treeItemBaseClasses} min-h-8 rounded-xl px-2 py-1 ${isActive ? treeItemActiveClasses : treeItemInactiveClasses}`;
+        const labelClasses = `${treeItemBaseClasses} min-h-8 rounded-md px-2 py-1 ${isActive ? treeItemActiveClasses : treeItemInactiveClasses}`;
         return (
           <li key={node.id}>
             <div className="flex min-w-0 items-start gap-1" style={{ paddingLeft: depth * 12 }}>
@@ -182,7 +185,12 @@ export default function BrowserBucketsPanel({
   const showingFilteredBuckets = bucketFilter.trim().length > 0;
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.92))] p-3 shadow-sm dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.92),rgba(2,6,23,0.88))]">
+    <div
+      className={cx(
+        uiCardClass,
+        "flex h-full min-h-0 min-w-0 flex-col rounded-xl bg-gradient-to-r from-white via-white to-slate-50/80 p-3 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70",
+      )}
+    >
       <div className="shrink-0">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -190,11 +198,11 @@ export default function BrowserBucketsPanel({
           </div>
           <div className="flex items-center gap-1">
             {bucketManagementEnabled && (
-              <button type="button" className={filterChipClasses} onClick={onCreateBucket}>
+              <button type="button" className={panelButtonClasses} onClick={onCreateBucket}>
                 + Bucket
               </button>
             )}
-            <button type="button" className={filterChipClasses} onClick={onRetryBuckets} disabled={loadingBuckets}>
+            <button type="button" className={panelButtonClasses} onClick={onRetryBuckets} disabled={loadingBuckets}>
               <RefreshIcon className="h-3.5 w-3.5" />
               {loadingBuckets ? "Refreshing" : "Refresh"}
             </button>
@@ -230,9 +238,6 @@ export default function BrowserBucketsPanel({
                 ) : (
                   <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">Select a bucket to browse folders.</p>
                 )}
-                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                  {currentBucket ? `Scope: ${activePrefix || "root"}` : "No bucket selected"}
-                </p>
               </div>
               {currentBucket && (
                 <div title={currentBucketAccess.detail ?? undefined}>
@@ -247,30 +252,20 @@ export default function BrowserBucketsPanel({
               ) : !currentBucket ? (
                 <p className="ui-caption text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
               ) : currentBucketUnavailable ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-3 ui-caption text-amber-900 dark:border-amber-500/40 dark:bg-amber-900/30 dark:text-amber-100">
+                <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 ui-caption text-amber-900 dark:border-amber-500/40 dark:bg-amber-900/30 dark:text-amber-100">
                   <p className="font-semibold">Simple listing is not available for this bucket.</p>
                   <p className="mt-1 break-words">{currentBucketDetail}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <button
-                    type="button"
-                    className={`${currentBucketRootButtonClasses} ${
-                      activePrefix === "" ? treeItemActiveClasses : treeItemInactiveClasses
-                    }`}
-                    onClick={() => onSelectPrefix("")}
-                  >
-                    <BucketIcon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">Bucket root</span>
-                  </button>
                   {currentBucketLoading ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200/80 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
                       Loading folders...
                     </div>
                   ) : currentBucketHasFolders ? (
                     renderTreeNodes(currentBucketChildren, activePrefix, 0, onSelectPrefix, onToggleTreeNode)
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-slate-200/80 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
                       No folders found under this prefix.
                     </div>
                   )}
@@ -295,14 +290,14 @@ export default function BrowserBucketsPanel({
               ) : loadingBuckets && otherBuckets.length === 0 ? (
                 <p className="ui-caption text-slate-500 dark:text-slate-400">Loading buckets...</p>
               ) : bucketError && bucketTotalCount === 0 && otherBuckets.length === 0 ? (
-                <div className="space-y-2 rounded-2xl border border-rose-200 bg-rose-50/80 p-3 dark:border-rose-500/30 dark:bg-rose-900/20">
+                <div className="space-y-2 rounded-xl border border-rose-200 bg-rose-50/80 p-3 dark:border-rose-500/30 dark:bg-rose-900/20">
                   <p className="ui-caption font-semibold text-rose-700 dark:text-rose-100">{bucketError}</p>
-                  <button type="button" className={filterChipClasses} onClick={onRetryBuckets}>
+                  <button type="button" className={panelButtonClasses} onClick={onRetryBuckets}>
                     Retry
                   </button>
                 </div>
               ) : otherBuckets.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200/80 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
                   {showingFilteredBuckets ? "No other buckets match this filter." : "No other buckets available."}
                 </div>
               ) : (
@@ -335,8 +330,8 @@ export default function BrowserBucketsPanel({
             </div>
 
             {canLoadMore && (
-              <div className="mt-3 border-t border-slate-200/80 pt-3 dark:border-slate-700">
-                <button type="button" className={filterChipClasses} onClick={onLoadMore} disabled={bucketMenuLoadingMore}>
+              <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+                <button type="button" className={panelButtonClasses} onClick={onLoadMore} disabled={bucketMenuLoadingMore}>
                   {bucketMenuLoadingMore ? "Loading..." : "Load more"}
                 </button>
               </div>

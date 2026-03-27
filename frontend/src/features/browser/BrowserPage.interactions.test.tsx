@@ -705,6 +705,28 @@ describe("BrowserPage interactions", () => {
     });
   });
 
+  it("keeps the default root browser actions in the compact context bar", async () => {
+    renderPage({ initialEntry: "/browser" });
+    await findRowByLabel("a.txt");
+
+    const contextToolbar = getContextToolbar();
+    expect(
+      within(contextToolbar).getByRole("button", { name: "Select bucket" }),
+    ).toBeInTheDocument();
+    expect(
+      within(contextToolbar).getByRole("button", { name: "Operations" }),
+    ).toBeInTheDocument();
+    expect(
+      within(contextToolbar).getByRole("button", { name: "Upload" }),
+    ).toBeInTheDocument();
+    expect(
+      within(contextToolbar).getByRole("button", { name: "More" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("toolbar", { name: "Browser actions bar" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("restores folders, inspector, and action bar on /browser after remount", async () => {
     const user = userEvent.setup();
     const firstRender = renderPage();
@@ -728,7 +750,9 @@ describe("BrowserPage interactions", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Scope: root")).toBeInTheDocument();
+      expect(
+        screen.getByRole("region", { name: "Current bucket" }),
+      ).toBeInTheDocument();
       expect(
         screen.getByRole("toolbar", { name: "Browser actions bar" }),
       ).toBeInTheDocument();
@@ -739,7 +763,7 @@ describe("BrowserPage interactions", () => {
     renderPage();
     await findRowByLabel("a.txt");
 
-    expect(screen.getByText("Scope: root")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
     expect(
       screen.getByRole("tablist", { name: "Inspector tabs" }),
     ).toBeInTheDocument();
@@ -798,7 +822,7 @@ describe("BrowserPage interactions", () => {
     const rootRender = renderPage();
     await findRowByLabel("a.txt");
 
-    expect(screen.getByText("Scope: root")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
     expect(
       screen.getByRole("tablist", { name: "Inspector tabs" }),
     ).toBeInTheDocument();
@@ -811,7 +835,9 @@ describe("BrowserPage interactions", () => {
     const managerRender = renderEmbeddedPage();
     await findRowByLabel("a.txt");
 
-    expect(screen.queryByText("Scope: root")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Current bucket" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("tablist", { name: "Inspector tabs" }),
     ).not.toBeInTheDocument();
@@ -827,7 +853,9 @@ describe("BrowserPage interactions", () => {
     });
     await findRowByLabel("a.txt");
 
-    expect(screen.queryByText("Scope: root")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Current bucket" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("tablist", { name: "Inspector tabs" }),
     ).not.toBeInTheDocument();
@@ -840,7 +868,7 @@ describe("BrowserPage interactions", () => {
     renderPage();
     await findRowByLabel("a.txt");
 
-    expect(screen.getByText("Scope: root")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
     expect(
       screen.getByRole("tablist", { name: "Inspector tabs" }),
     ).toBeInTheDocument();

@@ -25,8 +25,17 @@ import { ZipWriter } from "@zip.js/zip.js";
 import axios from "axios";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
+import {
+  toolbarCompactInputClasses,
+  toolbarCompactSelectClasses,
+} from "../../components/toolbarControlClasses";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
-import { uiCheckboxClass } from "../../components/ui/styles";
+import {
+  cx,
+  uiCardClass,
+  uiCardMutedClass,
+  uiCheckboxClass,
+} from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
 import {
@@ -542,49 +551,58 @@ const BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES: Record<
   unknown: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
 };
 const browserSectionEyebrowClasses =
-  "ui-caption font-semibold uppercase tracking-[0.18em] text-slate-400";
+  "ui-caption font-semibold text-slate-500 dark:text-slate-400";
 const browserShellClasses =
-  "flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.92))] shadow-sm dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.92),rgba(2,6,23,0.88))]";
+  cx(
+    uiCardClass,
+    "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-gradient-to-r from-white via-white to-slate-50/80 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70",
+  );
 const browserSubtleSurfaceClasses =
-  "rounded-2xl border border-slate-200/80 bg-white/80 shadow-sm dark:border-slate-800 dark:bg-slate-900/55";
+  cx(uiCardMutedClass, "rounded-xl shadow-none");
 const browserToolbarShellClasses =
-  "flex flex-col gap-2 rounded-2xl border border-slate-200/80 bg-white/85 p-2 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/70 lg:flex-row lg:items-center lg:justify-between";
+  "flex flex-col gap-2 rounded-xl border border-slate-200/90 bg-slate-50/80 p-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 lg:flex-row lg:items-center lg:justify-between";
 const browserToolbarPathStripClasses =
-  "flex min-w-0 flex-1 items-center gap-1 rounded-2xl border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.9),rgba(255,255,255,0.92))] px-2.5 py-1.5 shadow-sm dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.84),rgba(15,23,42,0.68))]";
+  "flex min-w-0 flex-1 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm dark:border-slate-700 dark:bg-slate-900";
 const browserToolbarControlsGroupClasses =
-  "flex shrink-0 items-center gap-1.5 rounded-2xl border border-slate-200/80 bg-white/80 px-1.5 py-0.5 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/70";
+  "flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-1.5 py-0.5 shadow-sm dark:border-slate-700 dark:bg-slate-900";
 const browserFloatingMenuClasses =
-  "rounded-2xl border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,0.96))] p-2 shadow-xl backdrop-blur dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(15,23,42,0.94))]";
+  "overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900";
 const browserInputClasses =
-  "w-full rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100";
+  cx(toolbarCompactInputClasses, "w-full py-2 font-medium");
 const browserSearchInputClasses =
-  "h-8 w-full rounded-xl border border-slate-200/80 bg-white/92 px-3 ui-body font-medium tracking-normal text-slate-700 shadow-sm transition placeholder:font-normal placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700/80 dark:bg-slate-900/82 dark:text-slate-100 dark:placeholder:text-slate-500";
+  cx(
+    toolbarCompactInputClasses,
+    "h-8 w-full py-1.5 text-sm font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500",
+  );
 const browserSelectClasses =
-  "h-9 w-full rounded-xl border border-slate-200/80 bg-white/90 px-3 ui-caption font-medium text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100";
+  cx(toolbarCompactSelectClasses, "h-9 w-full");
 const browserOptionCardClasses =
-  "inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-2.5 py-2 ui-caption font-medium text-slate-700 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100";
+  "inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 ui-caption font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
 const browserSearchLabelClasses =
-  "ui-caption font-medium tracking-normal text-slate-500 dark:text-slate-300";
+  "ui-caption font-medium text-slate-500 dark:text-slate-400";
 const browserSearchStatusChipClasses =
-  "inline-flex max-w-full items-center gap-1 rounded-full border border-slate-200/80 bg-white/90 px-2.5 py-1 ui-caption font-medium text-slate-600 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75 dark:text-slate-200";
+  "inline-flex max-w-full items-center gap-1 rounded-md border border-slate-200 bg-slate-50/90 px-2 py-1 ui-caption text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200";
 const browserExplorerShellClasses =
-  "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.9),rgba(255,255,255,0.94))] shadow-sm dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.88),rgba(2,6,23,0.84))]";
+  cx(
+    uiCardClass,
+    "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-gradient-to-b from-white via-white to-slate-50/70 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/65",
+  );
 const inspectorTabListClasses =
-  "flex flex-nowrap gap-1 rounded-2xl border border-slate-200/90 bg-slate-100/80 p-1 shadow-sm dark:border-slate-700/90 dark:bg-slate-900/70";
+  "flex flex-nowrap gap-1 rounded-xl border border-slate-200 bg-slate-50/80 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/50";
 const inspectorTabBaseClasses =
-  "inline-flex min-w-0 flex-1 items-center justify-center rounded-xl border px-2.5 py-2 text-center ui-caption font-semibold whitespace-nowrap transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+  "inline-flex min-w-0 flex-1 items-center justify-center rounded-md border px-2.5 py-1.5 text-center ui-caption font-semibold whitespace-nowrap transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const inspectorTabInactiveClasses =
-  "border-transparent bg-transparent text-slate-600 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800/70 dark:hover:text-slate-100";
+  "border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-100";
 const inspectorTabActiveClasses =
-  "border-slate-300/90 bg-white text-slate-900 shadow-sm dark:border-slate-500 dark:bg-slate-800 dark:text-slate-100";
+  "border-slate-200 bg-white text-slate-900 shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100";
 const inspectorTabPanelClasses =
   "space-y-4 ui-caption text-slate-600 dark:text-slate-300";
 const inspectorSectionCardClasses =
-  "rounded-2xl border border-slate-200/80 bg-white/80 px-3.5 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/55";
+  cx(browserSubtleSurfaceClasses, "px-3.5 py-3");
 const inspectorSectionTitleClasses =
-  "ui-caption font-semibold uppercase tracking-[0.18em] text-slate-400";
+  "ui-caption font-semibold text-slate-500 dark:text-slate-400";
 const inspectorEmptyStateClasses =
-  "rounded-2xl border border-dashed border-slate-200/80 bg-white/60 px-3 py-4 ui-caption text-slate-500 dark:border-slate-800 dark:bg-slate-900/35 dark:text-slate-400";
+  "rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400";
 const inspectorInlineActionClasses =
   "ui-caption font-semibold text-slate-500 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200 dark:disabled:text-slate-500";
 const getMultipartUploadEntryId = (
@@ -3866,11 +3884,12 @@ export default function BrowserPage({
   }, [bucketName, bucketTotalCount, loadingBuckets]);
   const bucketSelectorNeedsAttention =
     hasS3AccountContext && !bucketName && bucketTotalCount > 0;
-  const bucketButtonClassName = `${bucketButtonClasses} ${
+  const bucketButtonClassName = cx(
+    bucketButtonClasses,
     bucketSelectorNeedsAttention
-      ? "rounded-2xl border border-amber-300 bg-amber-50/85 px-3 py-2 text-amber-800 shadow-sm ring-2 ring-amber-200/70 dark:border-amber-400/60 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/30"
-      : "rounded-2xl border border-slate-200/80 bg-white/90 px-3 py-2 text-slate-700 shadow-sm hover:border-primary-200 hover:bg-primary-50/60 dark:border-slate-700/80 dark:bg-slate-900/75 dark:text-slate-100 dark:hover:border-primary-500/50 dark:hover:bg-slate-900"
-  }`;
+      ? "border-amber-300 bg-amber-50 text-amber-800 ring-2 ring-amber-200/70 dark:border-amber-400/60 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/30"
+      : "border-slate-200 bg-white text-slate-700 hover:border-primary/60 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:bg-slate-800",
+  );
   const useBucketsPanel = isMainBrowserPath && isFoldersPanelVisible;
   const {
     currentBucket: currentBucketPanelItem,
@@ -10366,12 +10385,12 @@ export default function BrowserPage({
     : totalOperationsCount > 0
       ? "border-emerald-300 bg-emerald-100 text-emerald-800 shadow-sm dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-100"
       : "";
-  const chromeChipButtonClasses = `${filterChipClasses} rounded-xl border-slate-200/80 bg-white/90 px-3 py-2 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75`;
-  const chromeToolbarButtonClasses = `${toolbarButtonClasses} rounded-xl border-slate-200/80 bg-white/90 px-3 py-2 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75`;
-  const chromeToolbarPrimaryClasses = `${toolbarPrimaryClasses} rounded-xl px-3 py-2 shadow-sm shadow-primary/20`;
-  const chromeToolbarIconButtonClasses = `${toolbarIconButtonClasses} rounded-xl border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75`;
-  const chromeBulkActionClasses = `${bulkActionClasses} rounded-xl bg-white/80 px-3 py-2 shadow-sm dark:bg-slate-900/70`;
-  const chromeDangerActionClasses = `${bulkDangerClasses} rounded-xl bg-white/80 px-3 py-2 shadow-sm dark:bg-slate-900/70`;
+  const chromeChipButtonClasses = filterChipClasses;
+  const chromeToolbarButtonClasses = toolbarButtonClasses;
+  const chromeToolbarPrimaryClasses = toolbarPrimaryClasses;
+  const chromeToolbarIconButtonClasses = toolbarIconButtonClasses;
+  const chromeBulkActionClasses = bulkActionClasses;
+  const chromeDangerActionClasses = bulkDangerClasses;
   const operationsCountBadgeClasses = `${countBadgeClasses} ui-caption ${
     hasFailedOperations
       ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100"
@@ -10389,9 +10408,9 @@ export default function BrowserPage({
       ? "ui-caption font-semibold text-primary-700 dark:text-primary-100"
       : "ui-caption font-semibold text-slate-500 dark:text-slate-400";
   const toolbarOverflowStatusRowClasses =
-    "flex items-start gap-3 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2.5 ui-caption text-slate-600 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75 dark:text-slate-300";
+    "flex items-start gap-3 px-1 py-1 ui-caption text-slate-600 dark:text-slate-300";
   const toolbarOverflowSectionTitleClasses =
-    "px-1 py-1 ui-caption font-semibold uppercase tracking-[0.18em] text-slate-400";
+    "px-1 py-1 ui-caption font-semibold text-slate-500 dark:text-slate-400";
   const toolbarSelectionSummary =
     selectedCount > 0 ? `${selectedCount} selected` : "No selection";
   const toolbarCanUploadFiles = pathActionStates.uploadFiles.enabled;
@@ -10725,10 +10744,10 @@ export default function BrowserPage({
                                 key={bucket}
                                 type="button"
                                 onClick={() => handleBucketChange(bucket)}
-                                className={`flex w-full min-w-0 items-center justify-between rounded-xl border px-3 py-2.5 text-left font-semibold transition ${
+                                className={`flex w-full min-w-0 items-center justify-between rounded-md border px-3 py-2 text-left font-semibold transition ${
                                   isActive
                                     ? "border-primary-200 bg-primary-50 text-primary-800 shadow-sm dark:border-primary-500/40 dark:bg-primary-500/20 dark:text-primary-100"
-                                    : "border-transparent text-slate-700 hover:border-primary-200 hover:bg-primary-50/70 dark:text-slate-200 dark:hover:border-primary-500/40 dark:hover:bg-slate-800/80"
+                                    : "border-transparent text-slate-700 hover:border-primary-200 hover:bg-slate-50 dark:text-slate-200 dark:hover:border-primary-500/40 dark:hover:bg-slate-800"
                                 }`}
                               >
                                 <span className="flex min-w-0 items-center gap-2">
@@ -10736,7 +10755,7 @@ export default function BrowserPage({
                                   <span className="truncate">{bucket}</span>
                                 </span>
                                 {isActive && (
-                                  <span className="ui-caption font-semibold uppercase text-primary-600 dark:text-primary-200">
+                                  <span className="ui-caption font-semibold text-primary-600 dark:text-primary-200">
                                     Active
                                   </span>
                                 )}
@@ -10746,12 +10765,12 @@ export default function BrowserPage({
                         )}
                       </div>
                       {!loadingBuckets && bucketTotalCount > 0 && (
-                        <div className="border-t border-slate-200/80 px-2.5 py-2 ui-caption text-slate-400 dark:border-slate-700/80 dark:text-slate-500">
+                        <div className="border-t border-slate-200 px-2.5 py-2 ui-caption text-slate-400 dark:border-slate-700 dark:text-slate-500">
                           {`${bucketOptions.length} of ${bucketMenuTotal} bucket${bucketMenuTotal === 1 ? "" : "s"}`}
                         </div>
                       )}
                       {canLoadMoreBucketResults && (
-                        <div className="border-t border-slate-200/80 px-2.5 py-2 dark:border-slate-700/80">
+                        <div className="border-t border-slate-200 px-2.5 py-2 dark:border-slate-700">
                           <button
                             type="button"
                             onClick={handleBucketMenuLoadMore}
@@ -11047,10 +11066,10 @@ export default function BrowserPage({
               <div
                 role="toolbar"
                 aria-label="Browser actions bar"
-                className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.82),rgba(255,255,255,0.88))] px-3 py-3 shadow-sm dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.72),rgba(15,23,42,0.56))] sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0 flex items-center">
-                  <div className="min-w-0 rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/75">
+                  <div className="min-w-0 rounded-md border border-slate-200 bg-white px-3 py-1.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
                     <p className={`${toolbarStatusTextClassName} truncate`}>
                       {toolbarSelectionSummary}
                     </p>
@@ -11479,8 +11498,8 @@ export default function BrowserPage({
                 onContextMenu={handlePathContextMenu}
               >
                 {dragging && (
-                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/75 text-center ui-body font-semibold text-slate-700 backdrop-blur-sm dark:bg-slate-950/70 dark:text-slate-100">
-                    <div className="rounded-2xl border border-primary/20 bg-white/85 px-5 py-4 shadow-sm dark:border-primary-500/30 dark:bg-slate-900/80">
+                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/75 text-center ui-body font-semibold text-slate-700 backdrop-blur-sm dark:bg-slate-950/70 dark:text-slate-100">
+                    <div className="rounded-xl border border-primary/20 bg-white/90 px-5 py-4 shadow-sm dark:border-primary-500/30 dark:bg-slate-900/85">
                       <div>Drop files or folders to upload</div>
                       <div className="mt-1 ui-caption font-normal text-slate-500 dark:text-slate-400">
                         {bucketName
@@ -11491,7 +11510,7 @@ export default function BrowserPage({
                   </div>
                 )}
                 {bucketName && hasActiveSearchFilters && (
-                  <div className="shrink-0 border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.88),rgba(255,255,255,0.84))] px-3 py-2.5 dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.64),rgba(15,23,42,0.48))]">
+                  <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/40">
                     <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <p className={browserSearchLabelClasses}>Search</p>
@@ -11522,7 +11541,7 @@ export default function BrowserPage({
                 )}
                 <div
                   ref={objectsListViewportRef}
-                  className="relative min-h-0 flex-1 overflow-x-auto overflow-y-auto bg-white/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:bg-transparent"
+                  className="relative min-h-0 flex-1 overflow-x-auto overflow-y-auto bg-white/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:bg-transparent"
                   onClick={handleListBackgroundClick}
                   onKeyDown={handleListKeyDown}
                   tabIndex={0}
@@ -11530,19 +11549,19 @@ export default function BrowserPage({
                 >
                   {objectsLoading && listItems.length > 0 && (
                     <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-white/45 pt-5 ui-caption font-semibold text-slate-600 backdrop-blur-[1px] dark:bg-slate-900/40 dark:text-slate-200">
-                      <span className="rounded-full border border-slate-200/80 bg-white/90 px-3 py-1.5 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/80">
+                      <span className="rounded-md border border-slate-200 bg-white/90 px-3 py-1.5 shadow-sm dark:border-slate-700 dark:bg-slate-900/80">
                         Refreshing objects...
                       </span>
                     </div>
                   )}
                   <table className="manager-table min-w-[720px] w-full border-separate border-spacing-0 divide-y divide-slate-200 dark:divide-slate-800">
                     <thead
-                      className="sticky top-0 z-[1] bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.92))] backdrop-blur dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.95),rgba(15,23,42,0.92))]"
+                      className="sticky top-0 z-[1] border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"
                       onContextMenu={handleHeaderContextMenu}
                     >
                       <tr>
                         <th
-                          className={`w-9 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400`}
+                          className={`w-9 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                         >
                           <input
                             type="checkbox"
@@ -11553,13 +11572,13 @@ export default function BrowserPage({
                           />
                         </th>
                         <th
-                          className={`px-4 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400`}
+                          className={`px-4 ${headerPadding} !align-middle text-left ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                         >
                           <div className="flex min-w-0 items-center gap-2">
                             <button
                               type="button"
                               onClick={() => handleSortToggle("name")}
-                              className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
+                              className="group inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
                             >
                               <span>Name</span>
                               <ChevronDownIcon
@@ -11761,13 +11780,13 @@ export default function BrowserPage({
                               column.align === "right"
                                 ? "text-right"
                                 : "text-left"
-                            } ui-caption font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400`}
+                            } ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                           >
                             {renderColumnHeaderContent(column)}
                           </th>
                         ))}
                         <th
-                          className={`w-44 px-2 ${headerPadding} !align-middle text-right ui-caption font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400`}
+                          className={`w-44 px-2 ${headerPadding} !align-middle text-right ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                         >
                           <span className="inline-flex h-6 items-center">
                             Actions
@@ -11795,7 +11814,7 @@ export default function BrowserPage({
                                 className="flex min-w-0 items-center gap-3 text-left font-semibold text-slate-700 hover:text-primary-700 dark:text-slate-200 dark:hover:text-primary-200"
                               >
                                 <span
-                                  className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-xl border border-slate-200/80 bg-white/85 text-slate-500 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-200`}
+                                  className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200`}
                                 >
                                   <UpIcon className="h-3.5 w-3.5" />
                                 </span>
@@ -11917,7 +11936,7 @@ export default function BrowserPage({
                                 className={`flex min-w-0 items-center ${nameGapClasses}`}
                               >
                                 <span
-                                  className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-xl border shadow-sm ${
+                                  className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-md border shadow-sm ${
                                     isDeleted
                                       ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-900/20 dark:text-rose-200"
                                       : item.type === "folder"
@@ -11960,7 +11979,7 @@ export default function BrowserPage({
                                   </button>
                                   {!compactMode && (
                                     <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden ui-caption text-slate-500 dark:text-slate-400">
-                                      <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
+                                      <span className="rounded-md border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
                                         {item.type === "folder"
                                           ? isDeleted
                                             ? "Deleted folder"
@@ -11970,7 +11989,7 @@ export default function BrowserPage({
                                             : "Object"}
                                       </span>
                                       {isDeleted && (
-                                        <span className="rounded-full border border-rose-200 px-2 py-0.5 font-semibold text-rose-700 dark:border-rose-500/40 dark:text-rose-200">
+                                        <span className="rounded-md border border-rose-200 px-2 py-0.5 font-semibold text-rose-700 dark:border-rose-500/40 dark:text-rose-200">
                                           {item.type === "folder"
                                             ? "Delete markers"
                                             : "Delete marker"}
@@ -11978,7 +11997,7 @@ export default function BrowserPage({
                                       )}
                                       {item.storageClass && (
                                         <span
-                                          className={`rounded-full border px-2 py-0.5 font-semibold ${
+                                          className={`rounded-md border px-2 py-0.5 font-semibold ${
                                             storageClassChipClasses[
                                               item.storageClass
                                             ] ??
@@ -12006,7 +12025,7 @@ export default function BrowserPage({
                             <td
                               className={`w-44 px-2 ${rowCellClasses} !align-middle text-right`}
                             >
-                              <div className="flex flex-nowrap justify-end gap-1.5 rounded-xl border border-slate-200/70 bg-white/70 px-1.5 py-1 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/50">
+                              <div className="flex flex-nowrap justify-end gap-1.5">
                                 {item.type === "folder" && (
                                   <button
                                     type="button"
@@ -12097,7 +12116,7 @@ export default function BrowserPage({
                   </table>
                 </div>
                 {canLoadMoreObjectResults && (
-                  <div className="border-t border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.84),rgba(255,255,255,0.86))] px-4 py-3 text-right dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.68),rgba(15,23,42,0.5))]">
+                  <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-3 text-right dark:border-slate-700 dark:bg-slate-900/40">
                     <button
                       type="button"
                       className={chromeToolbarButtonClasses}
@@ -12113,7 +12132,7 @@ export default function BrowserPage({
 
             {isInspectorPanelVisible && (
               <div className="flex min-h-0 h-full flex-col gap-3">
-                <div className="flex min-h-0 h-full flex-1 flex-col rounded-2xl border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(255,255,255,0.9))] px-3 py-3 shadow-sm dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.86),rgba(2,6,23,0.82))]">
+                <div className="ui-surface-card flex min-h-0 h-full flex-1 flex-col rounded-xl bg-gradient-to-r from-white via-white to-slate-50/80 px-3 py-3 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70">
                   <div
                     className={inspectorTabListClasses}
                     role="tablist"
@@ -12791,46 +12810,46 @@ export default function BrowserPage({
                                 </p>
                               )}
                               <div className="grid gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
+                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
                                   <span className="text-slate-500">Path</span>
-                                  <span className="truncate font-semibold text-slate-700 dark:text-slate-100">
+                                  <span className="min-w-0 break-all text-right font-semibold text-slate-700 dark:text-slate-100">
                                     {inspectedPath}
                                   </span>
                                 </div>
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
                                   <span className="text-slate-500">Owner</span>
-                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
                                     {inspectedItem.owner}
                                   </span>
                                 </div>
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
                                   <span className="text-slate-500">
                                     Last modified
                                   </span>
-                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                  <span className="min-w-0 text-right font-semibold text-slate-700 dark:text-slate-100">
                                     {inspectedItem.modified}
                                   </span>
                                 </div>
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
                                   <span className="text-slate-500">
                                     Content type
                                   </span>
-                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                  <span className="min-w-0 break-all text-right font-semibold text-slate-700 dark:text-slate-100">
                                     {inspectedMetadata?.content_type ??
                                       "unknown"}
                                   </span>
                                 </div>
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
                                   <span className="text-slate-500">ETag</span>
-                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                  <span className="min-w-0 break-all text-right font-semibold text-slate-700 dark:text-slate-100">
                                     {inspectedMetadata?.etag ?? "-"}
                                   </span>
                                 </div>
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
                                   <span className="text-slate-500">
                                     Storage class
                                   </span>
-                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
                                     {inspectedMetadata?.storage_class ??
                                       inspectedItem.storageClass ??
                                       "-"}
