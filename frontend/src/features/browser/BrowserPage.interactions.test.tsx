@@ -1129,7 +1129,7 @@ describe("BrowserPage interactions", () => {
     ).toHaveTextContent("bucket-2");
   });
 
-  it("keeps the active bucket pinned when the bucket filter no longer matches it", async () => {
+  it("hides the current bucket card when the bucket filter no longer matches it", async () => {
     const user = userEvent.setup();
     searchBrowserBucketsMock.mockImplementation(
       (_accountId: string, options?: { search?: string; exact?: boolean }) => {
@@ -1166,14 +1166,15 @@ describe("BrowserPage interactions", () => {
     expect(
       await screen.findByText("No other buckets match this filter."),
     ).toBeInTheDocument();
-    expect(getCurrentBucketPanel().getByText("bucket-2")).toBeInTheDocument();
-    expect(getCurrentBucketPanel().getByText("Outside filter")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Current bucket" }),
+    ).not.toBeInTheDocument();
 
     await user.clear(screen.getByPlaceholderText("Filter buckets"));
     await waitFor(() => {
       expect(
-        getCurrentBucketPanel().queryByText("Outside filter"),
-      ).not.toBeInTheDocument();
+        screen.getByRole("region", { name: "Current bucket" }),
+      ).toBeInTheDocument();
     });
   });
 

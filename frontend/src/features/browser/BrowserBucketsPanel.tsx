@@ -32,7 +32,6 @@ type BucketRow = {
 type BrowserBucketsPanelProps = {
   hasS3AccountContext: boolean;
   currentBucket: BrowserBucket | null;
-  currentBucketMatchesFilter: boolean;
   activePrefix: string;
   currentBucketAccess: BucketAccessEntry;
   currentBucketError: string | null;
@@ -59,8 +58,6 @@ type BrowserBucketsPanelProps = {
 
 const currentBucketCardClasses =
   "rounded-xl border border-primary-200 bg-primary-50/70 p-3 shadow-sm dark:border-primary-500/40 dark:bg-primary-500/10";
-const currentBucketFilteredCardClasses =
-  "rounded-xl border border-slate-200 bg-slate-50/85 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900/60";
 const bucketSectionTitleClasses = "ui-caption font-semibold text-slate-500 dark:text-slate-400";
 const bucketFilterInputClasses =
   cx(toolbarCompactInputClasses, "w-full py-2 font-medium");
@@ -97,8 +94,6 @@ const bucketAccessLabel: Record<BucketAccessStatus, string> = {
   available: "Ready",
   unavailable: "No list access",
 };
-const currentBucketFilterBadgeClasses =
-  "inline-flex shrink-0 items-center rounded-md border border-slate-200 bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300";
 
 type BucketAccessStatusProps = {
   status: BucketAccessStatus;
@@ -184,7 +179,6 @@ function renderTreeNodes(
 export default function BrowserBucketsPanel({
   hasS3AccountContext,
   currentBucket,
-  currentBucketMatchesFilter,
   activePrefix,
   currentBucketAccess,
   currentBucketError,
@@ -214,6 +208,10 @@ export default function BrowserBucketsPanel({
   const currentBucketLoading = Boolean(currentBucket && treeRootNode?.isLoading);
   const currentBucketHasFolders = currentBucketChildren.length > 0;
   const showingFilteredBuckets = bucketFilter.trim().length > 0;
+  const currentBucketMatchesFilter =
+    !currentBucket ||
+    bucketFilter.trim().length === 0 ||
+    currentBucket.name.toLowerCase().includes(bucketFilter.trim().toLowerCase());
 
   return (
     <div
@@ -260,73 +258,55 @@ export default function BrowserBucketsPanel({
         className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1"
       >
         <div className="space-y-3">
-          <section
-            className={
-              currentBucketMatchesFilter
-                ? currentBucketCardClasses
-                : currentBucketFilteredCardClasses
-            }
-            aria-label="Current bucket"
-          >
-            <div className="flex min-w-0 items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className={bucketSectionTitleClasses}>Current bucket</p>
-                {currentBucket ? (
-                  <div className="mt-1 flex min-w-0 items-center gap-2">
-                    <BucketIcon
-                      className={`h-4 w-4 shrink-0 ${
-                        currentBucketMatchesFilter
-                          ? "text-primary-700 dark:text-primary-200"
-                          : "text-slate-500 dark:text-slate-300"
-                      }`}
-                    />
-                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">{currentBucket.name}</p>
-                  </div>
-                ) : (
-                  <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">Select a bucket to browse folders.</p>
-                )}
-              </div>
-              {currentBucket && (
-                <div className="flex flex-col items-end gap-1">
-                  {!currentBucketMatchesFilter && (
-                    <span className={currentBucketFilterBadgeClasses}>
-                      Outside filter
-                    </span>
+          {currentBucketMatchesFilter && (
+            <section className={currentBucketCardClasses} aria-label="Current bucket">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className={bucketSectionTitleClasses}>Current bucket</p>
+                  {currentBucket ? (
+                    <div className="mt-1 flex min-w-0 items-center gap-2">
+                      <BucketIcon className="h-4 w-4 shrink-0 text-primary-700 dark:text-primary-200" />
+                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">{currentBucket.name}</p>
+                    </div>
+                  ) : (
+                    <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">Select a bucket to browse folders.</p>
                   )}
+                </div>
+                {currentBucket && (
                   <div title={currentBucketAccess.detail ?? undefined}>
                     <BucketAccessStatus status={currentBucketAccess.status} variant="compact" />
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <div className="mt-3 min-h-[6rem]">
-              {!hasS3AccountContext ? (
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Select a context to load buckets.</p>
-              ) : !currentBucket ? (
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
-              ) : currentBucketUnavailable ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 ui-caption text-amber-900 dark:border-amber-500/40 dark:bg-amber-900/30 dark:text-amber-100">
-                  <p className="font-semibold">Simple listing is not available for this bucket.</p>
-                  <p className="mt-1 break-words">{currentBucketDetail}</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {currentBucketLoading ? (
-                    <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                      Loading folders...
-                    </div>
-                  ) : currentBucketHasFolders ? (
-                    renderTreeNodes(currentBucketChildren, activePrefix, 0, onSelectPrefix, onToggleTreeNode)
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                      No folders found under this prefix.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
+              <div className="mt-3 min-h-[6rem]">
+                {!hasS3AccountContext ? (
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">Select a context to load buckets.</p>
+                ) : !currentBucket ? (
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
+                ) : currentBucketUnavailable ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 ui-caption text-amber-900 dark:border-amber-500/40 dark:bg-amber-900/30 dark:text-amber-100">
+                    <p className="font-semibold">Simple listing is not available for this bucket.</p>
+                    <p className="mt-1 break-words">{currentBucketDetail}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {currentBucketLoading ? (
+                      <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                        Loading folders...
+                      </div>
+                    ) : currentBucketHasFolders ? (
+                      renderTreeNodes(currentBucketChildren, activePrefix, 0, onSelectPrefix, onToggleTreeNode)
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                        No folders found under this prefix.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
           <section className={bucketSubtleCardClasses} aria-label="Other buckets">
             <div className="flex items-center justify-between gap-3">

@@ -3906,13 +3906,6 @@ export default function BrowserPage({
       })),
     [bucketAccessByName, otherBucketPanelItems],
   );
-  const currentBucketMatchesFilter = useMemo(() => {
-    const searchValue = bucketFilter.trim().toLowerCase();
-    if (!searchValue || !currentBucketPanelItem) {
-      return true;
-    }
-    return currentBucketPanelItem.name.toLowerCase().includes(searchValue);
-  }, [bucketFilter, currentBucketPanelItem]);
   const treeRootNode = useMemo(
     () => treeNodes.find((node) => node.prefix === "") ?? null,
     [treeNodes],
@@ -11465,7 +11458,6 @@ export default function BrowserPage({
               <BrowserBucketsPanel
                 hasS3AccountContext={hasS3AccountContext}
                 currentBucket={currentBucketPanelItem}
-                currentBucketMatchesFilter={currentBucketMatchesFilter}
                 activePrefix={normalizedPrefix}
                 currentBucketAccess={currentBucketAccess}
                 currentBucketError={
