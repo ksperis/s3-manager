@@ -48,8 +48,7 @@ const credentialOwnerTypeOptions = [
   { value: "account_user", label: "Account user" },
   { value: "s3_user", label: "S3 user" },
 ];
-type CreateTab = "general" | "tags";
-type EditTab = "general" | "tags" | "users";
+type EditTab = "general" | "users";
 
 export default function S3ConnectionsPage() {
   const [items, setItems] = useState<S3ConnectionAdminItem[]>([]);
@@ -65,7 +64,6 @@ export default function S3ConnectionsPage() {
   const [portalUsers, setPortalUsers] = useState<UserSummary[]>([]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createTab, setCreateTab] = useState<CreateTab>("general");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createEndpointPresetId, setCreateEndpointPresetId] = useState("");
@@ -127,10 +125,7 @@ export default function S3ConnectionsPage() {
   const selectionHeaderRef = useRef<HTMLInputElement | null>(null);
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const showCreateGeneralTab = createTab === "general";
-  const showCreateTagsTab = createTab === "tags";
   const showEditGeneralTab = editTab === "general";
-  const showEditTagsTab = editTab === "tags";
   const showEditUsersTab = editTab === "users";
   const {
     catalog: adminTagCatalog,
@@ -182,7 +177,6 @@ export default function S3ConnectionsPage() {
 
   const openCreateModal = () => {
     resetCreateForm();
-    setCreateTab("general");
     setShowCreateModal(true);
   };
 
@@ -532,7 +526,6 @@ export default function S3ConnectionsPage() {
         ...endpointPayload,
       });
       setShowCreateModal(false);
-      setCreateTab("general");
       resetCreateForm();
       setActionMessage("Connection created.");
       await fetchItems();
@@ -944,48 +937,6 @@ export default function S3ConnectionsPage() {
             </div>
           )}
           <form className="space-y-4" onSubmit={submitCreate}>
-            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
-              <button
-                type="button"
-                onClick={() => setCreateTab("general")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  createTab === "general"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                General
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreateTab("tags")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  createTab === "tags"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                Tags
-              </button>
-            </div>
-            {showCreateTagsTab && (
-              <>
-                {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
-                <UiTagEditor
-                  label="Tags"
-                  tags={createForm.tags}
-                  catalog={adminTagCatalog}
-                  onChange={(tags) => setCreateForm((current) => ({ ...current, tags }))}
-                  placeholder="Add a tag for this shared connection"
-                  hint={
-                    adminTagCatalogLoading
-                      ? "Loading existing tag catalog..."
-                      : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-                  }
-                />
-              </>
-            )}
-            {showCreateGeneralTab && (
               <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1">
@@ -1020,6 +971,21 @@ export default function S3ConnectionsPage() {
                 <p className="ui-caption text-slate-500 dark:text-slate-300">
                   Admin connections are always shared with linked UI users.
                 </p>
+              </div>
+              <div className="space-y-3 sm:col-span-2">
+                {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                <UiTagEditor
+                  label="Tags"
+                  tags={createForm.tags}
+                  catalog={adminTagCatalog}
+                  onChange={(tags) => setCreateForm((current) => ({ ...current, tags }))}
+                  placeholder="Add a tag for this shared connection"
+                  hint={
+                    adminTagCatalogLoading
+                      ? "Loading existing tag catalog..."
+                      : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
+                  }
+                />
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <div className="ui-body font-medium text-slate-700 dark:text-slate-200">Workspace access</div>
@@ -1154,7 +1120,6 @@ export default function S3ConnectionsPage() {
               </div>
             )}
               </>
-            )}
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
@@ -1198,17 +1163,6 @@ export default function S3ConnectionsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setEditTab("tags")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  editTab === "tags"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                Tags
-              </button>
-              <button
-                type="button"
                 onClick={() => setEditTab("users")}
                 className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
                   editTab === "users"
@@ -1229,6 +1183,22 @@ export default function S3ConnectionsPage() {
                   <div className="ui-caption text-slate-500 dark:text-slate-300">
                     {`Created by: ${editing.created_by_email || editing.created_by_user_id}`}
                   </div>
+                </div>
+
+                <div className="space-y-3">
+                  {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                  <UiTagEditor
+                    label="Tags"
+                    tags={editForm.tags}
+                    catalog={adminTagCatalog}
+                    onChange={(tags) => setEditForm((current) => ({ ...current, tags }))}
+                    placeholder="Add a tag for this shared connection"
+                    hint={
+                      adminTagCatalogLoading
+                        ? "Loading existing tag catalog..."
+                        : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
+                    }
+                  />
                 </div>
 
                 <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
@@ -1410,24 +1380,6 @@ export default function S3ConnectionsPage() {
                   </div>
                 </div>
               </>
-            )}
-
-            {showEditTagsTab && (
-              <div className="space-y-3">
-                {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
-                <UiTagEditor
-                  label="Tags"
-                  tags={editForm.tags}
-                  catalog={adminTagCatalog}
-                  onChange={(tags) => setEditForm((current) => ({ ...current, tags }))}
-                  placeholder="Add a tag for this shared connection"
-                  hint={
-                    adminTagCatalogLoading
-                      ? "Loading existing tag catalog..."
-                      : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-                  }
-                />
-              </div>
             )}
 
             {showEditUsersTab && (

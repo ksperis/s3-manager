@@ -58,7 +58,6 @@ const defaultCreateConnectionForm = {
 };
 
 type CreateConnectionEndpointMode = "preset" | "custom";
-type ConnectionModalTab = "general" | "tags";
 
 type ConnectionDraft = {
   name: string;
@@ -176,7 +175,6 @@ export default function ProfilePage({
   const [connectionsError, setConnectionsError] = useState<string | null>(null);
   const [connectionsMessage, setConnectionsMessage] = useState<string | null>(null);
   const [showCreateConnectionModal, setShowCreateConnectionModal] = useState(false);
-  const [createConnectionTab, setCreateConnectionTab] = useState<ConnectionModalTab>("general");
   const [creatingConnection, setCreatingConnection] = useState(false);
   const [savingConnectionBusyId, setSavingConnectionBusyId] = useState<number | null>(null);
   const [deletingConnectionBusyId, setDeletingConnectionBusyId] = useState<number | null>(null);
@@ -186,7 +184,6 @@ export default function ProfilePage({
   const [bulkDisablingConnections, setBulkDisablingConnections] = useState(false);
   const [bulkDeletingConnections, setBulkDeletingConnections] = useState(false);
   const [editingConnectionId, setEditingConnectionId] = useState<number | null>(null);
-  const [editConnectionTab, setEditConnectionTab] = useState<ConnectionModalTab>("general");
   const [createConnectionForm, setCreateConnectionForm] = useState(defaultCreateConnectionForm);
   const [createConnectionEndpointMode, setCreateConnectionEndpointMode] = useState<CreateConnectionEndpointMode>("custom");
   const [createConnectionEndpointId, setCreateConnectionEndpointId] = useState("");
@@ -554,7 +551,6 @@ export default function ProfilePage({
     setConnectionsError(null);
     setConnectionsMessage(null);
     setCreateConnectionForm(defaultCreateConnectionForm);
-    setCreateConnectionTab("general");
     if (availableStorageEndpoints.length > 0) {
       const preferred = availableStorageEndpoints.find((item) => item.is_default) ?? availableStorageEndpoints[0];
       setCreateConnectionEndpointMode("preset");
@@ -573,7 +569,6 @@ export default function ProfilePage({
       ...prev,
       [connection.id]: prev[connection.id] ?? buildConnectionDraft(connection),
     }));
-    setEditConnectionTab("general");
     if (connection.storage_endpoint_id != null) {
       setEditConnectionEndpointMode("preset");
       setEditConnectionEndpointId(String(connection.storage_endpoint_id));
@@ -1512,7 +1507,6 @@ export default function ProfilePage({
           title="Add private S3 connection"
           onClose={() => {
             if (creatingConnection) return null;
-            setCreateConnectionTab("general");
             setShowCreateConnectionModal(false);
             return null;
           }}
@@ -1524,32 +1518,7 @@ export default function ProfilePage({
             </div>
           )}
           <form onSubmit={handleCreatePrivateConnection} className="space-y-4">
-            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
-              <button
-                type="button"
-                onClick={() => setCreateConnectionTab("general")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  createConnectionTab === "general"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                General
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreateConnectionTab("tags")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  createConnectionTab === "tags"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                Tags
-              </button>
-            </div>
-            {createConnectionTab === "general" && (
-              <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
                   <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Name
@@ -1693,6 +1662,22 @@ export default function ProfilePage({
                     </p>
                   )}
                 </div>
+                <div className="sm:col-span-2 space-y-3">
+                  {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
+                  <UiTagEditor
+                    label="Tags"
+                    tags={createConnectionForm.tags}
+                    catalog={privateTagCatalog}
+                    onChange={(tags) => setCreateConnectionForm((prev) => ({ ...prev, tags }))}
+                    catalogMode="private"
+                    placeholder="Add a tag for this private connection"
+                    hint={
+                      privateTagCatalogLoading
+                        ? "Loading existing private tags..."
+                        : "Private tags are used for filtering and optional selector display."
+                    }
+                  />
+                </div>
                 <label className="block">
                   <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Access Key
@@ -1770,31 +1755,11 @@ export default function ProfilePage({
                   <p className="ui-caption text-slate-500 dark:text-slate-400">At least one access must be enabled.</p>
                 </div>
               </div>
-            )}
-            {createConnectionTab === "tags" && (
-              <div className="space-y-3">
-                {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
-                <UiTagEditor
-                  label="Tags"
-                  tags={createConnectionForm.tags}
-                  catalog={privateTagCatalog}
-                  onChange={(tags) => setCreateConnectionForm((prev) => ({ ...prev, tags }))}
-                  catalogMode="private"
-                  placeholder="Add a tag for this private connection"
-                  hint={
-                    privateTagCatalogLoading
-                      ? "Loading existing private tags..."
-                      : "Private tags are used for filtering and optional selector display."
-                  }
-                />
-              </div>
-            )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 className={secondaryButtonClasses}
                 onClick={() => {
-                  setCreateConnectionTab("general");
                   setShowCreateConnectionModal(false);
                 }}
                 disabled={creatingConnection}
@@ -1814,7 +1779,6 @@ export default function ProfilePage({
           title={`Edit connection - ${editingConnection.name}`}
           onClose={() => {
             if (savingConnectionBusyId === editingConnection.id) return null;
-            setEditConnectionTab("general");
             setEditingConnectionId(null);
             return null;
           }}
@@ -1841,33 +1805,6 @@ export default function ProfilePage({
               };
               return (
                 <>
-                  <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
-                    <button
-                      type="button"
-                      onClick={() => setEditConnectionTab("general")}
-                      className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                        editConnectionTab === "general"
-                          ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                          : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                      }`}
-                    >
-                      General
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditConnectionTab("tags")}
-                      className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                        editConnectionTab === "tags"
-                          ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                          : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                      }`}
-                    >
-                      Tags
-                    </button>
-                  </div>
-
-                  {editConnectionTab === "general" && (
-                    <>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <label className="block">
                           <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1880,6 +1817,23 @@ export default function ProfilePage({
                             className={inputClasses}
                           />
                         </label>
+                      </div>
+
+                      <div className="space-y-3">
+                        {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
+                        <UiTagEditor
+                          label="Tags"
+                          tags={draft.tags}
+                          catalog={privateTagCatalog}
+                          onChange={(tags) => handleUpdateConnectionDraft(editingConnection.id, "tags", tags)}
+                          catalogMode="private"
+                          placeholder="Add a tag for this private connection"
+                          hint={
+                            privateTagCatalogLoading
+                              ? "Loading existing private tags..."
+                              : "Private tags are used for filtering and optional selector display."
+                          }
+                        />
                       </div>
 
                       <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
@@ -2112,27 +2066,6 @@ export default function ProfilePage({
                         </div>
                         <p className="ui-caption text-slate-500 dark:text-slate-400">At least one access must be enabled.</p>
                       </div>
-                    </>
-                  )}
-
-                  {editConnectionTab === "tags" && (
-                    <div className="space-y-3">
-                      {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
-                      <UiTagEditor
-                        label="Tags"
-                        tags={draft.tags}
-                        catalog={privateTagCatalog}
-                        onChange={(tags) => handleUpdateConnectionDraft(editingConnection.id, "tags", tags)}
-                        catalogMode="private"
-                        placeholder="Add a tag for this private connection"
-                        hint={
-                          privateTagCatalogLoading
-                            ? "Loading existing private tags..."
-                            : "Private tags are used for filtering and optional selector display."
-                        }
-                      />
-                    </div>
-                  )}
                 </>
               );
             })()}
@@ -2141,7 +2074,6 @@ export default function ProfilePage({
                 type="button"
                 className={secondaryButtonClasses}
                 onClick={() => {
-                  setEditConnectionTab("general");
                   setEditingConnectionId(null);
                 }}
                 disabled={savingConnectionBusyId === editingConnection.id}

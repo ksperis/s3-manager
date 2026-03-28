@@ -18,7 +18,7 @@ Use this page when you need to adjust personal UI preferences or manage your own
    - enable **Show tags in top selectors** if you want compact color-coded tags in the topbar context and endpoint selectors on this browser.
 3. In **Private S3 connections**:
    - create or edit your own private connection,
-   - use the dedicated **Tags** tab to add, recolor, or change the `Standard` / `Administrative` scope of tags from your private tag catalog,
+   - manage tags directly from the main form: add them inline, remove them with `×`, and click a tag badge to open its compact settings popover for color and `Standard` / `Administrative` scope,
    - search by name, endpoint, provider, or tag,
    - enable or disable access for `Manager` and `Browser`.
 

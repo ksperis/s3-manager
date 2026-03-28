@@ -34,8 +34,7 @@ import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinit
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
 type TextMatchMode = "contains" | "exact";
-type CreateTab = "general" | "tags";
-type EditTab = "general" | "tags" | "users";
+type EditTab = "general" | "users";
 
 export default function S3UsersPage() {
   const resolveQuotaForEdit = (quotaGb?: number | null) => {
@@ -67,7 +66,6 @@ export default function S3UsersPage() {
   const [endpointPermissionErrors, setEndpointPermissionErrors] = useState<Record<number, string | null>>({});
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createTab, setCreateTab] = useState<CreateTab>("general");
   const [createForm, setCreateForm] = useState({
     name: "",
     uid: "",
@@ -142,10 +140,7 @@ export default function S3UsersPage() {
     loading: editingUsageLoading,
     error: editingUsageError,
   } = useAdminS3UserStats(editingUserId, Boolean(editingUserId));
-  const showCreateGeneralTab = createTab === "general";
-  const showCreateTagsTab = createTab === "tags";
   const showEditGeneralTab = editTab === "general";
-  const showEditTagsTab = editTab === "tags";
   const showEditUsersTab = editTab === "users";
   const {
     catalog: adminTagCatalog,
@@ -465,7 +460,6 @@ export default function S3UsersPage() {
         storage_endpoint_id: createForm.storage_endpoint_id ? Number(createForm.storage_endpoint_id) : undefined,
       });
       setShowCreateModal(false);
-      setCreateTab("general");
       setCreateForm((prev) => ({
         ...prev,
         name: "",
@@ -606,7 +600,6 @@ export default function S3UsersPage() {
             label: "Create user",
             onClick: () => {
               setShowCreateModal(true);
-              setCreateTab("general");
               void loadEndpointsIfNeeded();
             },
           },
@@ -775,32 +768,6 @@ export default function S3UsersPage() {
             </div>
           )}
           <form onSubmit={submitCreate} className="space-y-4">
-            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
-              <button
-                type="button"
-                onClick={() => setCreateTab("general")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  createTab === "general"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                General
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreateTab("tags")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  createTab === "tags"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                Tags
-              </button>
-            </div>
-            {showCreateGeneralTab && (
-              <>
                 <div className="flex flex-col gap-1">
                   <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Display name *</label>
                   <input
@@ -907,25 +874,19 @@ export default function S3UsersPage() {
                     />
                   </div>
                 </div>
-              </>
-            )}
-            {showCreateTagsTab && (
-              <>
-                {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
-                <UiTagEditor
-                  label="Tags"
-                  tags={createForm.tags}
-                  catalog={adminTagCatalog}
-                  onChange={(tags) => setCreateForm((prev) => ({ ...prev, tags }))}
-                  placeholder="Add a tag for this RGW user"
-                  hint={
-                    adminTagCatalogLoading
-                      ? "Loading existing tag catalog..."
-                      : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-                  }
-                />
-              </>
-            )}
+            {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+            <UiTagEditor
+              label="Tags"
+              tags={createForm.tags}
+              catalog={adminTagCatalog}
+              onChange={(tags) => setCreateForm((prev) => ({ ...prev, tags }))}
+              placeholder="Add a tag for this RGW user"
+              hint={
+                adminTagCatalogLoading
+                  ? "Loading existing tag catalog..."
+                  : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
+              }
+            />
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
@@ -1057,17 +1018,6 @@ export default function S3UsersPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setEditTab("tags")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  editTab === "tags"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                Tags
-              </button>
-              <button
-                type="button"
                 onClick={() => {
                   void loadPortalUsersIfNeeded();
                   setEditTab("users");
@@ -1100,6 +1050,21 @@ export default function S3UsersPage() {
                   metricsDisabled={false}
                   errorMessage={editingUsageError}
                 />
+                <div className="space-y-3">
+                  {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                  <UiTagEditor
+                    label="Tags"
+                    tags={editForm.tags}
+                    catalog={adminTagCatalog}
+                    onChange={(tags) => setEditForm((prev) => ({ ...prev, tags }))}
+                    placeholder="Add a tag for this RGW user"
+                    hint={
+                      adminTagCatalogLoading
+                        ? "Loading existing tag catalog..."
+                        : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
+                    }
+                  />
+                </div>
                 <div className="flex flex-col gap-1">
                   <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Display name</label>
                   <input
@@ -1179,24 +1144,6 @@ export default function S3UsersPage() {
                   </div>
                 </div>
               </>
-            )}
-
-            {showEditTagsTab && (
-              <div className="space-y-3">
-                {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
-                <UiTagEditor
-                  label="Tags"
-                  tags={editForm.tags}
-                  catalog={adminTagCatalog}
-                  onChange={(tags) => setEditForm((prev) => ({ ...prev, tags }))}
-                  placeholder="Add a tag for this RGW user"
-                  hint={
-                    adminTagCatalogLoading
-                      ? "Loading existing tag catalog..."
-                      : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-                  }
-                />
-              </div>
             )}
 
             {showEditUsersTab && (

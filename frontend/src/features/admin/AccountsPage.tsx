@@ -36,8 +36,7 @@ import { isAdminLikeRole } from "../../utils/workspaces";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 
 type SortField = "name" | "rgw_account_id";
-type CreateTab = "general" | "tags";
-type EditTab = "general" | "tags" | "users";
+type EditTab = "general" | "users";
 type TextMatchMode = "contains" | "exact";
 
 export default function S3AccountsPage() {
@@ -62,7 +61,6 @@ export default function S3AccountsPage() {
   const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [createTab, setCreateTab] = useState<CreateTab>("general");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -126,10 +124,7 @@ export default function S3AccountsPage() {
     adminEnabled &&
     editingEndpointCanWrite &&
     Boolean(editingS3Account?.rgw_account_id);
-  const showCreateGeneralTab = createTab === "general";
-  const showCreateTagsTab = createTab === "tags";
   const showGeneralTab = editTab === "general";
-  const showTagsTab = editTab === "tags";
   const showUsersTab = editTab === "users";
   const {
     catalog: adminTagCatalog,
@@ -503,7 +498,6 @@ export default function S3AccountsPage() {
         storage_endpoint_id: defaultCeph ? String(defaultCeph.id) : "",
       });
       await fetchS3Accounts();
-      setCreateTab("general");
       setShowCreateModal(false);
     } catch (err) {
       setActionError(extractError(err));
@@ -678,7 +672,6 @@ export default function S3AccountsPage() {
                   label: "Create account",
                   onClick: () => {
                     setShowCreateModal(true);
-                    setCreateTab("general");
                     void loadEndpointsIfNeeded();
                   },
                 },
@@ -705,32 +698,7 @@ export default function S3AccountsPage() {
             </PageBanner>
           )}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
-              <button
-                type="button"
-                onClick={() => setCreateTab("general")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  createTab === "general"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                General
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreateTab("tags")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  createTab === "tags"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                Tags
-              </button>
-            </div>
-            {showCreateGeneralTab && (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="flex flex-col gap-1">
                   <label className="ui-body font-medium text-slate-700 dark:text-slate-200">S3Account name *</label>
                   <input
@@ -818,25 +786,22 @@ export default function S3AccountsPage() {
                     ) : null}
                   </div>
                 )}
+                <div className="md:col-span-2 space-y-3">
+                  {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                  <UiTagEditor
+                    label="Tags"
+                    tags={form.tags}
+                    catalog={adminTagCatalog}
+                    onChange={(tags) => setForm((current) => ({ ...current, tags }))}
+                    placeholder="Add a tag for this account"
+                    hint={
+                      adminTagCatalogLoading
+                        ? "Loading existing tag catalog..."
+                        : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
+                    }
+                  />
+                </div>
               </div>
-            )}
-            {showCreateTagsTab && (
-              <div className="space-y-3">
-                {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
-                <UiTagEditor
-                  label="Tags"
-                  tags={form.tags}
-                  catalog={adminTagCatalog}
-                  onChange={(tags) => setForm((current) => ({ ...current, tags }))}
-                  placeholder="Add a tag for this account"
-                  hint={
-                    adminTagCatalogLoading
-                      ? "Loading existing tag catalog..."
-                      : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-                  }
-                />
-              </div>
-            )}
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
@@ -1098,17 +1063,6 @@ export default function S3AccountsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setEditTab("tags")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  editTab === "tags"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                Tags
-              </button>
-              <button
-                type="button"
                 onClick={() => {
                   void loadUsersIfNeeded();
                   setEditTab("users");
@@ -1143,6 +1097,21 @@ export default function S3AccountsPage() {
             <form onSubmit={submitEditS3Account} className="space-y-4">
               {showGeneralTab && (
                 <>
+                  <div className="space-y-3">
+                    {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                    <UiTagEditor
+                      label="Tags"
+                      tags={editForm.tags}
+                      catalog={adminTagCatalog}
+                      onChange={(tags) => setEditForm((prev) => ({ ...prev, tags }))}
+                      placeholder="Add a tag for this account"
+                      hint={
+                        adminTagCatalogLoading
+                          ? "Loading existing tag catalog..."
+                          : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
+                      }
+                    />
+                  </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="flex flex-col gap-1">
                       <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Max quota</label>
@@ -1183,23 +1152,6 @@ export default function S3AccountsPage() {
                     </div>
                   </div>
                 </>
-              )}
-              {showTagsTab && (
-                <div className="space-y-3">
-                  {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
-                  <UiTagEditor
-                    label="Tags"
-                    tags={editForm.tags}
-                    catalog={adminTagCatalog}
-                    onChange={(tags) => setEditForm((prev) => ({ ...prev, tags }))}
-                    placeholder="Add a tag for this account"
-                    hint={
-                      adminTagCatalogLoading
-                        ? "Loading existing tag catalog..."
-                        : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-                    }
-                  />
-                </div>
               )}
               {showUsersTab && (
                 <div className="space-y-3">

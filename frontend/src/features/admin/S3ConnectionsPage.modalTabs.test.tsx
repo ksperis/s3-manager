@@ -114,6 +114,8 @@ describe("S3ConnectionsPage modal tabs", () => {
 
     const generalTab = await screen.findByRole("button", { name: "General" });
     const usersTab = screen.getByRole("button", { name: "Linked UI users" });
+    expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Add a tag for this shared connection" })).toBeInTheDocument();
 
     fireEvent.click(usersTab);
 
@@ -202,12 +204,11 @@ describe("S3ConnectionsPage modal tabs", () => {
     }
 
     fireEvent.change(nameInput, { target: { value: "tagged-shared-connection" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Tags" }));
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "New tag label" }), {
+    const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this shared connection" });
+    fireEvent.change(tagInput, {
       target: { value: "finance" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create and add tag" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "General" }));
+    fireEvent.keyDown(tagInput, { key: "Enter", code: "Enter" });
     fireEvent.change(within(dialog).getByPlaceholderText("https://s3.amazonaws.com"), {
       target: { value: "https://tagged.example.test" },
     });

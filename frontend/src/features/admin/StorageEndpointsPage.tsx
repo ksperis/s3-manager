@@ -34,6 +34,7 @@ type FormState = {
   region: string;
   verify_tls: boolean;
   provider: StorageProvider;
+  tags: UiTagDefinition[];
   admin_access_key: string;
   admin_secret_key: string;
   supervision_access_key: string;
@@ -176,6 +177,7 @@ function createEmptyForm(): FormState {
     region: "",
     verify_tls: true,
     provider: "ceph",
+    tags: [],
     admin_access_key: "",
     admin_secret_key: "",
     supervision_access_key: "",
@@ -189,6 +191,26 @@ function createEmptyForm(): FormState {
 }
 
 const EMPTY_FORM: FormState = createEmptyForm();
+
+function createFormFromEndpoint(endpoint: StorageEndpoint): FormState {
+  return {
+    name: endpoint.name ?? "",
+    endpoint_url: endpoint.endpoint_url ?? "",
+    region: endpoint.region ?? "",
+    verify_tls: endpoint.verify_tls !== false,
+    provider: endpoint.provider,
+    tags: normalizeUiTags(endpoint.tags),
+    admin_access_key: endpoint.admin_access_key ?? "",
+    admin_secret_key: "",
+    supervision_access_key: endpoint.supervision_access_key ?? "",
+    supervision_secret_key: "",
+    ceph_admin_access_key: endpoint.ceph_admin_access_key ?? "",
+    ceph_admin_secret_key: "",
+    has_admin_secret: Boolean(endpoint.has_admin_secret),
+    has_supervision_secret: Boolean(endpoint.has_supervision_secret),
+    features: resolveFeatureState(endpoint, endpoint.provider),
+  };
+}
 
 function extractError(err: unknown): string {
   return extractApiError(err, "An error occurred.");
@@ -308,6 +330,7 @@ export default function StorageEndpointsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [formMode, setFormMode] = useState<"full" | "tags_only">("full");
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [showOpsHelp, setShowOpsHelp] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -322,18 +345,15 @@ export default function StorageEndpointsPage() {
   const [featureDetectBusy, setFeatureDetectBusy] = useState(false);
   const [featureDetectError, setFeatureDetectError] = useState<string | null>(null);
   const [featureDetectWarnings, setFeatureDetectWarnings] = useState<string[]>([]);
-  const [tagEditTarget, setTagEditTarget] = useState<StorageEndpoint | null>(null);
-  const [tagEditValues, setTagEditValues] = useState<UiTagDefinition[]>([]);
   const {
     catalog: endpointTagCatalog,
     loading: endpointTagCatalogLoading,
     error: endpointTagCatalogError,
-  } = useTagCatalog({ kind: "admin", domain: "endpoint" }, Boolean(tagEditTarget));
-  const [tagEditBusy, setTagEditBusy] = useState(false);
-  const [tagEditError, setTagEditError] = useState<string | null>(null);
+  } = useTagCatalog({ kind: "admin", domain: "endpoint" }, Boolean(showForm && canEditEndpoints));
 
   const resetForm = useCallback(() => {
     setForm(createEmptyForm());
+    setFormMode("full");
     setShowOpsHelp(false);
     setFormError(null);
     setFeatureDetectBusy(false);
@@ -543,29 +563,24 @@ export default function StorageEndpointsPage() {
   const startCreate = () => {
     if (envManaged || !canEditEndpoints) return;
     resetForm();
+    setFormMode("full");
     setShowForm(true);
   };
 
   const startEdit = (endpoint: StorageEndpoint) => {
     if (envManaged || !canEditEndpoints) return;
-    const features = resolveFeatureState(endpoint, endpoint.provider);
     setEditingId(endpoint.id);
-    setForm({
-      name: endpoint.name ?? "",
-      endpoint_url: endpoint.endpoint_url ?? "",
-      region: endpoint.region ?? "",
-      verify_tls: endpoint.verify_tls !== false,
-      provider: endpoint.provider,
-      admin_access_key: endpoint.admin_access_key ?? "",
-      admin_secret_key: "",
-      supervision_access_key: endpoint.supervision_access_key ?? "",
-      supervision_secret_key: "",
-      ceph_admin_access_key: endpoint.ceph_admin_access_key ?? "",
-      ceph_admin_secret_key: "",
-      has_admin_secret: Boolean(endpoint.has_admin_secret),
-      has_supervision_secret: Boolean(endpoint.has_supervision_secret),
-      features,
-    });
+    setFormMode("full");
+    setForm(createFormFromEndpoint(endpoint));
+    setFormError(null);
+    setShowForm(true);
+  };
+
+  const openTagsOnly = (endpoint: StorageEndpoint) => {
+    if (!canEditEndpoints) return;
+    setEditingId(endpoint.id);
+    setFormMode("tags_only");
+    setForm(createFormFromEndpoint(endpoint));
     setFormError(null);
     setShowForm(true);
   };
@@ -573,38 +588,6 @@ export default function StorageEndpointsPage() {
   const onCloseForm = () => {
     setShowForm(false);
     resetForm();
-  };
-
-  const openTagEditor = (endpoint: StorageEndpoint) => {
-    if (!canEditEndpoints) return;
-    setTagEditTarget(endpoint);
-    setTagEditValues(normalizeUiTags(endpoint.tags));
-    setTagEditError(null);
-  };
-
-  const closeTagEditor = () => {
-    if (tagEditBusy) return;
-    setTagEditTarget(null);
-    setTagEditValues([]);
-    setTagEditError(null);
-  };
-
-  const handleSaveTags = async () => {
-    if (!tagEditTarget || !canEditEndpoints) return;
-    setTagEditBusy(true);
-    setTagEditError(null);
-    try {
-      await updateStorageEndpointTags(tagEditTarget.id, { tags: normalizeUiTags(tagEditValues) });
-      setActionMessage("Endpoint tags updated.");
-      setTagEditTarget(null);
-      setTagEditValues([]);
-      setTagEditError(null);
-      await loadEndpoints();
-    } catch (err) {
-      setTagEditError(extractError(err));
-    } finally {
-      setTagEditBusy(false);
-    }
   };
 
   const handleDelete = async () => {
@@ -727,22 +710,38 @@ export default function StorageEndpointsPage() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (envManaged || !canEditEndpoints) return;
+    if (!canEditEndpoints) return;
     setFormError(null);
-    const payload = buildPayload();
-    if (!payload) return;
     setSaving(true);
     try {
+      const normalizedTags = normalizeUiTags(form.tags);
       if (editingId) {
-        await updateStorageEndpoint(editingId, payload);
-        setActionMessage("Endpoint updated.");
+        if (formMode === "full") {
+          const payload = buildPayload();
+          if (!payload) {
+            setSaving(false);
+            return;
+          }
+          await updateStorageEndpoint(editingId, payload);
+        }
+        await updateStorageEndpointTags(editingId, { tags: normalizedTags });
+        setActionMessage(formMode === "tags_only" ? "Endpoint tags updated." : "Endpoint updated.");
       } else {
-        await createStorageEndpoint(payload);
+        if (envManaged) return;
+        const payload = buildPayload();
+        if (!payload) {
+          setSaving(false);
+          return;
+        }
+        const created = await createStorageEndpoint(payload);
+        if (normalizedTags.length > 0) {
+          await updateStorageEndpointTags(created.id, { tags: normalizedTags });
+        }
         setActionMessage("Endpoint added.");
       }
       setShowForm(false);
       resetForm();
-      loadEndpoints();
+      await loadEndpoints();
     } catch (err) {
       setFormError(extractError(err));
     } finally {
@@ -850,15 +849,6 @@ export default function StorageEndpointsPage() {
                 {settingDefault ? "Setting..." : "Set as default"}
               </button>
             )}
-            {canEditEndpoints && (
-              <button
-                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
-                onClick={() => openTagEditor(endpoint)}
-                type="button"
-              >
-                Edit tags
-              </button>
-            )}
             {!readOnly ? (
               <>
                 <button
@@ -880,9 +870,20 @@ export default function StorageEndpointsPage() {
                 </button>
               </>
             ) : (
-              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                {canEditEndpoints ? "Config read-only" : "Read-only"}
-              </span>
+              <>
+                {canEditEndpoints && (
+                  <button
+                    className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                    onClick={() => openTagsOnly(endpoint)}
+                    type="button"
+                  >
+                    Edit tags
+                  </button>
+                )}
+                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  {canEditEndpoints ? "Config read-only" : "Read-only"}
+                </span>
+              </>
             )}
           </div>
         </div>
@@ -1042,6 +1043,7 @@ export default function StorageEndpointsPage() {
   const hasSupervisionCredentialsForSignedProbe = Boolean(
     form.supervision_access_key.trim() && (form.supervision_secret_key.trim() || form.has_supervision_secret)
   );
+  const tagsOnlyMode = formMode === "tags_only";
   const signedProbeBlockedReason = !cephMode
     ? "S3 signed probe is available only for Ceph endpoints."
     : !hasSupervisionCredentialsForSignedProbe
@@ -1101,16 +1103,21 @@ export default function StorageEndpointsPage() {
         <div className="grid gap-4">{endpoints.map((ep) => renderEndpointCard(ep))}</div>
       )}
 
-      {tagEditTarget && (
-        <Modal title={`Edit tags: ${tagEditTarget.name}`} onClose={closeTagEditor}>
-          <div className="space-y-4">
-            {tagEditError && <PageBanner tone="error">{tagEditError}</PageBanner>}
+      {showForm && (
+        <Modal title={editingId ? (tagsOnlyMode ? "Edit endpoint tags" : "Edit endpoint") : "New endpoint"} onClose={onCloseForm}>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {formError && <PageBanner tone="error">{formError}</PageBanner>}
+            {tagsOnlyMode && (
+              <PageBanner tone="info">
+                Endpoint configuration is read-only in this view. You can still update the tags associated with this endpoint.
+              </PageBanner>
+            )}
             {endpointTagCatalogError && <PageBanner tone="warning">{endpointTagCatalogError}</PageBanner>}
             <UiTagEditor
               label="Endpoint tags"
-              tags={tagEditValues}
+              tags={form.tags}
               catalog={endpointTagCatalog}
-              onChange={setTagEditValues}
+              onChange={(tags) => setForm((prev) => ({ ...prev, tags }))}
               placeholder="Add a tag for this endpoint"
               hint={
                 endpointTagCatalogLoading
@@ -1118,32 +1125,7 @@ export default function StorageEndpointsPage() {
                   : "Endpoint tags can be shown in endpoint and context selectors when users enable the preference."
               }
             />
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={closeTagEditor}
-                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                disabled={tagEditBusy}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSaveTags()}
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                disabled={tagEditBusy}
-              >
-                {tagEditBusy ? "Saving..." : "Save tags"}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {showForm && (
-        <Modal title={editingId ? "Edit endpoint" : "New endpoint"} onClose={onCloseForm}>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {formError && <PageBanner tone="error">{formError}</PageBanner>}
+            <fieldset disabled={tagsOnlyMode} className={tagsOnlyMode ? "space-y-4 opacity-70" : "space-y-4"}>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
                 Storage name
@@ -1614,6 +1596,7 @@ export default function StorageEndpointsPage() {
               </div>
 
             </div>
+            </fieldset>
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
@@ -1629,7 +1612,7 @@ export default function StorageEndpointsPage() {
                 title={saving ? "Save in progress." : undefined}
                 className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? "Saving..." : editingId ? "Update" : "Create"}
+                {saving ? "Saving..." : editingId ? (tagsOnlyMode ? "Save tags" : "Update") : "Create"}
               </button>
             </div>
           </form>

@@ -148,16 +148,14 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
 
     const generalTab = await screen.findByRole("button", { name: "General" });
-    const tagsTab = screen.getByRole("button", { name: "Tags" });
     const usersTab = screen.getByRole("button", { name: "Linked UI users" });
 
     const tabLabels = Array.from(generalTab.parentElement?.querySelectorAll("button") ?? []).map((button) =>
       button.textContent?.trim()
     );
-    expect(tabLabels.slice(0, 3)).toEqual(["General", "Tags", "Linked UI users"]);
-
-    fireEvent.click(tagsTab);
-    expect(screen.getByText("Selected tags")).toBeInTheDocument();
+    expect(tabLabels.slice(0, 2)).toEqual(["General", "Linked UI users"]);
+    expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Add a tag for this account" })).toBeInTheDocument();
 
     fireEvent.click(usersTab);
 
@@ -185,33 +183,28 @@ describe("AccountsPage modal tabs", () => {
     );
   });
 
-  it("separates selected, existing and new-tag flows in the tags tab", async () => {
+  it("edits tags inline from the general tab", async () => {
     render(<AccountsPage />);
 
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Tags" }));
 
-    expect(screen.getByText("Selected tags")).toBeInTheDocument();
-    expect(screen.getByText("Add existing tag")).toBeInTheDocument();
-    expect(screen.getByText("Create new tag")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Edit shared settings for gold" }));
-    expect(
-      screen.getByText("This updates the shared tag definition for all objects in this domain.")
-    ).toBeInTheDocument();
-
-    fireEvent.change(screen.getByRole("textbox", { name: "Search existing tags" }), {
+    const input = await screen.findByRole("textbox", { name: "Add a tag for this account" });
+    fireEvent.focus(input);
+    fireEvent.change(input, {
       target: { value: "prod" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add prod" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add tag prod" }));
     expect(screen.getAllByText("prod").length).toBeGreaterThan(0);
 
-    fireEvent.change(screen.getByRole("textbox", { name: "New tag label" }), {
+    fireEvent.change(input, {
       target: { value: "finance" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create and add tag" }));
+    fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
     expect(screen.getAllByText("finance").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit tag gold" }));
+    expect(screen.getByRole("group", { name: "Tag settings for gold" })).toBeInTheDocument();
   });
 
   it("does not auto-enable admin when adding a linked user", async () => {
@@ -262,11 +255,11 @@ describe("AccountsPage modal tabs", () => {
     }
 
     fireEvent.change(nameInput, { target: { value: "account-with-tags" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Tags" }));
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "New tag label" }), {
+    const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this account" });
+    fireEvent.change(tagInput, {
       target: { value: "finance" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create and add tag" }));
+    fireEvent.keyDown(tagInput, { key: "Enter", code: "Enter" });
     await waitFor(() => {
       expect(within(dialog).getByRole("button", { name: "Create account" })).toBeEnabled();
     });

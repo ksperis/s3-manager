@@ -90,7 +90,8 @@ describe("StorageEndpointsPage tags", () => {
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "Edit tags" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add rgw-a" }));
+    fireEvent.focus(await screen.findByRole("textbox", { name: "Add a tag for this endpoint" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add tag rgw-a" }));
     fireEvent.click(screen.getByRole("button", { name: "Save tags" }));
 
     await waitFor(() => {

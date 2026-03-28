@@ -391,7 +391,7 @@ describe("ProfilePage live validation", () => {
     expect(screen.queryByText("connection-b")).not.toBeInTheDocument();
   });
 
-  it("uses the explicit private tag flows in the create modal", async () => {
+  it("uses the inline private tag editor in the create modal", async () => {
     render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
     await screen.findByText("Private S3 connections");
 
@@ -399,37 +399,23 @@ describe("ProfilePage live validation", () => {
     await screen.findByText("Add private S3 connection");
 
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Tags" }));
+    const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this private connection" });
 
-    expect(within(dialog).getByText("Add existing tag")).toBeInTheDocument();
-    expect(within(dialog).getByText("Create new tag")).toBeInTheDocument();
-    expect(
-      within(dialog).getByText("Reuse a private tag from your private-connection tag catalog.")
-    ).toBeInTheDocument();
-
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "New tag label" }), {
+    fireEvent.focus(tagInput);
+    fireEvent.change(tagInput, {
       target: { value: "ops" },
     });
-    expect(
-      within(dialog).getByText("This tag already exists. Add it from Add existing tag.")
-    ).toBeInTheDocument();
-
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search existing tags" }), {
-      target: { value: "ops" },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Add ops" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Edit shared settings for ops" }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Add tag ops" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Edit tag ops" }));
 
     expect(
-      within(dialog).getByText(
-        "This updates the private tag definition for your private-connection tag catalog."
-      )
+      within(document.body).getByText("This tag belongs to your private-connection tag catalog.")
     ).toBeInTheDocument();
 
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "New tag label" }), {
+    fireEvent.change(tagInput, {
       target: { value: "team-a" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create and add tag" }));
+    fireEvent.keyDown(tagInput, { key: "Enter", code: "Enter" });
 
     expect(within(dialog).getAllByText("team-a").length).toBeGreaterThan(0);
   });

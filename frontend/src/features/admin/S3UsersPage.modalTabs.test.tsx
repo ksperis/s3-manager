@@ -136,6 +136,9 @@ describe("S3UsersPage modal tabs", () => {
     await screen.findByText("rgw-user-1");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
+    expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Add a tag for this RGW user" })).toBeInTheDocument();
+
     fireEvent.click(await screen.findByRole("button", { name: "Linked UI users" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Add UI users" }));
@@ -177,11 +180,11 @@ describe("S3UsersPage modal tabs", () => {
       throw new Error("User name input not found");
     }
     fireEvent.change(nameInput, { target: { value: "tagged-user" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Tags" }));
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "New tag label" }), {
+    const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this RGW user" });
+    fireEvent.change(tagInput, {
       target: { value: "finance" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create and add tag" }));
+    fireEvent.keyDown(tagInput, { key: "Enter", code: "Enter" });
     await waitFor(() => {
       expect(within(dialog).getByRole("button", { name: "Create user" })).toBeEnabled();
     });
