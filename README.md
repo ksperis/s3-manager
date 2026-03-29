@@ -1,7 +1,7 @@
 # s3-manager
 
 [![Docs](https://img.shields.io/badge/docs-github%20pages-0A66C2)](https://ksperis.github.io/s3-manager/)
-[![Release](https://img.shields.io/github/v/release/ksperis/s3-manager)](https://github.com/ksperis/s3-manager/releases)
+[![Tag](https://img.shields.io/github/v/tag/ksperis/s3-manager?sort=semver)](https://github.com/ksperis/s3-manager/tags)
 [![License](https://img.shields.io/github/license/ksperis/s3-manager)](./LICENSE)
 ![Status](https://img.shields.io/badge/status-early--stage%20%2F%20PoC-F28C28)
 
