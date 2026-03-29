@@ -4,7 +4,7 @@ This page groups representative UI captures by workspace.
 
 Each carousel uses synthetic documentation data and focuses on the screens that matter most to day-to-day operators.
 
-## Admin
+## Admin { #admin }
 
 <div class="docs-screenshot-carousel" data-docs-carousel data-carousel-title="Admin workspace">
   <figure data-thumb-label="Overview">
@@ -21,7 +21,7 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
   </figure>
 </div>
 
-## Manager
+## Manager { #manager }
 
 <div class="docs-screenshot-carousel" data-docs-carousel data-carousel-title="Manager workspace">
   <figure data-thumb-label="Overview">
@@ -46,7 +46,7 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
   </figure>
 </div>
 
-## Browser
+## Browser { #browser }
 
 <div class="docs-screenshot-carousel" data-docs-carousel data-carousel-title="Browser workspace">
   <figure data-thumb-label="Overview">
@@ -63,7 +63,7 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
   </figure>
 </div>
 
-## Ceph Admin
+## Ceph Admin { #ceph-admin }
 
 <div class="docs-screenshot-carousel" data-docs-carousel data-carousel-title="Ceph Admin workspace">
   <figure data-thumb-label="Overview">
@@ -80,7 +80,7 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
   </figure>
 </div>
 
-## Storage Ops
+## Storage Ops { #storage-ops }
 
 <div class="docs-screenshot-carousel" data-docs-carousel data-carousel-title="Storage Ops workspace">
   <figure data-thumb-label="Overview">
@@ -94,5 +94,14 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
   <figure data-thumb-label="UI tags">
     <img src="../../assets/screenshots/user/storage-ops-ui-tags.png" alt="Storage Ops bucket list with UI tags workflow on selected buckets" loading="lazy">
     <figcaption><strong>UI tags.</strong> Tagging selected buckets helps operators isolate remediation or migration campaigns across large inventories.</figcaption>
+  </figure>
+</div>
+
+## Portal { #portal }
+
+<div class="docs-screenshot-carousel" data-docs-carousel data-carousel-title="Portal workspace">
+  <figure data-thumb-label="Historical">
+    <img src="../../assets/screenshots/user/workspace-portal.png" alt="Historical Portal workspace screenshot with guided self-service flow" loading="lazy">
+    <figcaption><strong>Historical view.</strong> Portal is currently removed from the active product surface, but this capture is kept as reference for the earlier guided self-service experience.</figcaption>
   </figure>
 </div>

@@ -20,7 +20,9 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 ### Admin
 
-<img src="doc/docs/assets/screenshots/user/user-overview.png" alt="Admin dashboard" width="760">
+<a href="https://ksperis.github.io/s3-manager/user/screenshots-gallery/#admin">
+  <img src="doc/docs/assets/screenshots/user/user-overview.png" alt="Admin dashboard" width="560">
+</a>
 
 - Manage UI users, roles, and workspace entitlements.
 - Administer RGW accounts, S3 users, and S3 connections.
@@ -29,7 +31,9 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 ### Manager
 
-<img src="doc/docs/assets/screenshots/user/workspace-manager.png" alt="Manager buckets" width="760">
+<a href="https://ksperis.github.io/s3-manager/user/screenshots-gallery/#manager">
+  <img src="doc/docs/assets/screenshots/user/workspace-manager.png" alt="Manager buckets" width="560">
+</a>
 
 - Create and configure buckets with versioning, lifecycle, quotas, CORS, and access controls.
 - Manage IAM users, groups, roles, policies, and access keys.
@@ -38,7 +42,9 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 ### Browser
 
-<img src="doc/docs/assets/screenshots/user/workspace-browser.png" alt="S3 browser" width="760">
+<a href="https://ksperis.github.io/s3-manager/user/screenshots-gallery/#browser">
+  <img src="doc/docs/assets/screenshots/user/workspace-browser.png" alt="S3 browser" width="560">
+</a>
 
 - Browse buckets, prefixes, and objects from the selected context.
 - Upload, download, preview, delete, and restore objects and versions.
@@ -47,7 +53,9 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 ### Ceph-admin
 
-<img src="doc/docs/assets/screenshots/user/workspace-ceph-admin.png" alt="Ceph Admin" width="760">
+<a href="https://ksperis.github.io/s3-manager/user/screenshots-gallery/#ceph-admin">
+  <img src="doc/docs/assets/screenshots/user/workspace-ceph-admin.png" alt="Ceph Admin" width="560">
+</a>
 
 - Manage Ceph RGW accounts and users at cluster scope.
 - Inspect bucket inventory and apply bucket-level configuration centrally.
@@ -58,7 +66,9 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 > Note: the Portal feature is temporarily removed; this screenshot is kept as historical documentation.
 
-<img src="doc/docs/assets/screenshots/user/workspace-portal.png" alt="Portal" width="760">
+<a href="https://ksperis.github.io/s3-manager/user/screenshots-gallery/#portal">
+  <img src="doc/docs/assets/screenshots/user/workspace-portal.png" alt="Portal" width="560">
+</a>
 
 - Historical workspace for guided self-service workflows.
 - Temporarily removed from the active product surface.
