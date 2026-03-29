@@ -15,8 +15,9 @@ Use **Admin** for platform governance and global configuration.
 3. Use **Managed Tenants** to manage RGW accounts and users.
 4. Use **Connections** for S3 connections.
 5. Use **Storage Backends** for endpoints and endpoint status.
-6. Use **Governance** for audit trail.
-7. If superadmin, use **Settings** pages for global behavior.
+6. Use **Billing** to review monthly usage and estimated cost when the feature is enabled.
+7. Use **Governance** for audit trail.
+8. If superadmin, use **Settings** pages for global behavior.
 
 ## Expected result
 
@@ -41,6 +42,8 @@ Platform and tenant-entry resources are configured and auditable.
 
 ## Related pages
 
+- [Feature: Endpoint Status in Admin](feature-endpoint-status-admin.md)
+- [Feature: Billing in Admin](feature-billing-admin.md)
 - [Workspace: Manager](workspace-manager.md)
 - [Ops / Configuration](../ops/configuration.md)
 - [Ops / Security](../ops/operations-security.md)

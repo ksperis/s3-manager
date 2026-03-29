@@ -279,6 +279,336 @@ const storageOpsEnabledGeneralSettingsRule: MockRule = {
   },
 };
 
+const billingEnabledGeneralSettingsRule: MockRule = {
+  id: "settings-general-billing-enabled",
+  path: /^\/settings\/general$/,
+  body: {
+    manager_enabled: true,
+    ceph_admin_enabled: true,
+    browser_enabled: true,
+    browser_root_enabled: true,
+    browser_manager_enabled: true,
+    browser_ceph_admin_enabled: true,
+    billing_enabled: true,
+    endpoint_status_enabled: true,
+    bucket_migration_enabled: true,
+    bucket_compare_enabled: true,
+    allow_ui_user_bucket_migration: true,
+    allow_login_access_keys: false,
+    allow_login_endpoint_list: true,
+    allow_login_custom_endpoint: false,
+    allow_user_private_connections: true,
+  },
+};
+
+const endpointStatusLatencyOverviewRule: MockRule = {
+  id: "admin-endpoint-status-latency-overview",
+  path: /^\/admin\/health\/latency-overview$/,
+  body: ({ url }) => ({
+    generated_at: "2026-03-08T09:00:00Z",
+    window: url.searchParams.get("window") ?? "day",
+    start: "2026-03-07T09:00:00Z",
+    end: "2026-03-08T09:00:00Z",
+    endpoints: [
+      {
+        endpoint_id: 11,
+        name: "Default",
+        endpoint_url: "https://s3-default.docs.example.com",
+        status: "up",
+        checked_at: "2026-03-08T09:00:00Z",
+        latency_ms: 82,
+        check_mode: "http",
+        check_target_url: "https://s3-default.docs.example.com/health",
+        min_latency_ms: 71,
+        avg_latency_ms: 79,
+        max_latency_ms: 96,
+        sample_count: 24,
+      },
+      {
+        endpoint_id: 12,
+        name: "Archive",
+        endpoint_url: "https://s3-archive.docs.example.com",
+        status: "degraded",
+        checked_at: "2026-03-08T09:00:00Z",
+        latency_ms: 390,
+        check_mode: "http",
+        check_target_url: "https://s3-archive.docs.example.com/health",
+        min_latency_ms: 280,
+        avg_latency_ms: 356,
+        max_latency_ms: 420,
+        sample_count: 24,
+      },
+    ],
+  }),
+};
+
+const endpointStatusOverviewRule: MockRule = {
+  id: "admin-endpoint-status-overview",
+  path: /^\/admin\/health\/overview$/,
+  body: ({ url }) => ({
+    generated_at: "2026-03-08T09:00:00Z",
+    window: url.searchParams.get("window") ?? "week",
+    start: "2026-03-01T00:00:00Z",
+    end: "2026-03-08T09:00:00Z",
+    endpoints: [
+      {
+        endpoint_id: 11,
+        name: "Default",
+        endpoint_url: "https://s3-default.docs.example.com",
+        status: "up",
+        checked_at: "2026-03-08T09:00:00Z",
+        latency_ms: 82,
+        check_mode: "http",
+        check_target_url: "https://s3-default.docs.example.com/health",
+        availability_pct: 99.8,
+        baseline_latency_ms: 78,
+        timeline: [
+          { timestamp: "2026-03-01T00:00:00Z", end_timestamp: "2026-03-02T00:00:00Z", status: "up", latency_ms: 77 },
+          { timestamp: "2026-03-02T00:00:00Z", end_timestamp: "2026-03-03T00:00:00Z", status: "up", latency_ms: 79 },
+          { timestamp: "2026-03-03T00:00:00Z", end_timestamp: "2026-03-04T00:00:00Z", status: "up", latency_ms: 75 },
+          { timestamp: "2026-03-04T00:00:00Z", end_timestamp: "2026-03-05T00:00:00Z", status: "up", latency_ms: 81 },
+          { timestamp: "2026-03-05T00:00:00Z", end_timestamp: "2026-03-06T00:00:00Z", status: "up", latency_ms: 84 },
+          { timestamp: "2026-03-06T00:00:00Z", end_timestamp: "2026-03-07T00:00:00Z", status: "up", latency_ms: 80 },
+          { timestamp: "2026-03-07T00:00:00Z", end_timestamp: "2026-03-08T09:00:00Z", status: "up", latency_ms: 82 },
+        ],
+      },
+      {
+        endpoint_id: 12,
+        name: "Archive",
+        endpoint_url: "https://s3-archive.docs.example.com",
+        status: "degraded",
+        checked_at: "2026-03-08T09:00:00Z",
+        latency_ms: 390,
+        check_mode: "http",
+        check_target_url: "https://s3-archive.docs.example.com/health",
+        availability_pct: 94.1,
+        baseline_latency_ms: 310,
+        timeline: [
+          { timestamp: "2026-03-01T00:00:00Z", end_timestamp: "2026-03-02T00:00:00Z", status: "up", latency_ms: 305 },
+          { timestamp: "2026-03-02T00:00:00Z", end_timestamp: "2026-03-03T00:00:00Z", status: "up", latency_ms: 298 },
+          { timestamp: "2026-03-03T00:00:00Z", end_timestamp: "2026-03-04T00:00:00Z", status: "degraded", latency_ms: 352, reason: "Latency spike" },
+          { timestamp: "2026-03-04T00:00:00Z", end_timestamp: "2026-03-05T00:00:00Z", status: "up", latency_ms: 312 },
+          { timestamp: "2026-03-05T00:00:00Z", end_timestamp: "2026-03-06T00:00:00Z", status: "down", latency_ms: null, reason: "Gateway timeout" },
+          { timestamp: "2026-03-06T00:00:00Z", end_timestamp: "2026-03-07T00:00:00Z", status: "up", latency_ms: 301 },
+          { timestamp: "2026-03-07T00:00:00Z", end_timestamp: "2026-03-08T09:00:00Z", status: "degraded", latency_ms: 390, reason: "High latency" },
+        ],
+      },
+    ],
+  }),
+};
+
+const endpointStatusGlobalIncidentsRule: MockRule = {
+  id: "admin-endpoint-status-incidents-global",
+  path: /^\/admin\/health\/incidents-global$/,
+  body: ({ url }) => ({
+    window: url.searchParams.get("window") ?? "half_year",
+    start: "2025-09-08T00:00:00Z",
+    end: "2026-03-08T09:00:00Z",
+    total: 2,
+    incidents: [
+      {
+        endpoint_id: 12,
+        endpoint_name: "Archive",
+        endpoint_url: "https://s3-archive.docs.example.com",
+        status: "degraded",
+        start: "2026-03-08T08:42:00Z",
+        end: null,
+        duration_minutes: 18,
+        check_mode: "http",
+      },
+      {
+        endpoint_id: 12,
+        endpoint_name: "Archive",
+        endpoint_url: "https://s3-archive.docs.example.com",
+        status: "down",
+        start: "2026-03-05T10:00:00Z",
+        end: "2026-03-05T11:30:00Z",
+        duration_minutes: 90,
+        check_mode: "http",
+      },
+    ],
+  }),
+};
+
+const billingSummaryRule: MockRule = {
+  id: "admin-billing-summary",
+  path: /^\/admin\/billing\/summary$/,
+  body: {
+    month: "2026-03",
+    storage_endpoint_id: 11,
+    usage: {
+      bytes_in: 912_000_000,
+      bytes_out: 3_420_000_000,
+      ops_total: 18_450_000,
+    },
+    storage: {
+      avg_bytes: 2_950_000_000,
+      avg_gb_month: 91.4,
+      total_objects: 1_540_000,
+    },
+    coverage: {
+      days_collected: 27,
+      days_in_month: 31,
+      coverage_ratio: 27 / 31,
+    },
+    cost: {
+      currency: "EUR",
+      storage_cost: 92.5,
+      egress_cost: 41.2,
+      ingress_cost: 5.3,
+      requests_cost: 18.6,
+      total_cost: 157.6,
+      rate_card_name: "Ops rate card",
+    },
+  },
+};
+
+const billingSubjectsRule: MockRule = {
+  id: "admin-billing-subjects",
+  path: /^\/admin\/billing\/subjects$/,
+  body: {
+    items: [
+      {
+        subject_type: "account",
+        subject_id: 101,
+        name: "Helios Retail",
+        rgw_identifier: "RGW-HELIOS",
+        storage: {
+          avg_bytes: 2_350_000_000,
+          avg_gb_month: 72.8,
+          total_objects: 1_284_000,
+        },
+        usage: {
+          bytes_in: 620_000_000,
+          bytes_out: 2_100_000_000,
+          ops_total: 12_450_000,
+        },
+        cost: {
+          currency: "EUR",
+          total_cost: 96.4,
+        },
+      },
+    ],
+    total: 1,
+    page: 1,
+    page_size: 200,
+    has_next: false,
+  },
+};
+
+const billingSubjectDetailRule: MockRule = {
+  id: "admin-billing-subject-detail",
+  path: /^\/admin\/billing\/subject\/account\/\d+$/,
+  body: ({ url }) => {
+    const subjectId = Number(url.pathname.split("/").at(-1) ?? "101");
+    const detailById = {
+      101: {
+        month: "2026-03",
+        subject_type: "account",
+        subject_id: 101,
+        name: "Helios Retail",
+        rgw_identifier: "RGW-HELIOS",
+        daily: [
+          { day: "2026-03-01", storage_bytes: 2_180_000_000, bytes_in: 21_000_000, bytes_out: 78_000_000, ops_total: 430_000 },
+          { day: "2026-03-05", storage_bytes: 2_260_000_000, bytes_in: 24_000_000, bytes_out: 82_000_000, ops_total: 455_000 },
+          { day: "2026-03-10", storage_bytes: 2_320_000_000, bytes_in: 26_000_000, bytes_out: 84_000_000, ops_total: 468_000 },
+          { day: "2026-03-15", storage_bytes: 2_380_000_000, bytes_in: 22_000_000, bytes_out: 79_000_000, ops_total: 447_000 },
+          { day: "2026-03-20", storage_bytes: 2_440_000_000, bytes_in: 25_000_000, bytes_out: 88_000_000, ops_total: 479_000 },
+          { day: "2026-03-25", storage_bytes: 2_510_000_000, bytes_in: 27_000_000, bytes_out: 92_000_000, ops_total: 498_000 },
+          { day: "2026-03-27", storage_bytes: 2_550_000_000, bytes_in: 28_000_000, bytes_out: 94_000_000, ops_total: 505_000 },
+        ],
+        usage: {
+          bytes_in: 620_000_000,
+          bytes_out: 2_100_000_000,
+          ops_total: 12_450_000,
+        },
+        storage: {
+          avg_bytes: 2_350_000_000,
+          avg_gb_month: 72.8,
+          total_objects: 1_284_000,
+        },
+        coverage: {
+          days_collected: 27,
+          days_in_month: 31,
+          coverage_ratio: 27 / 31,
+        },
+        cost: {
+          currency: "EUR",
+          total_cost: 96.4,
+          rate_card_name: "Ops rate card",
+        },
+      },
+      102: {
+        month: "2026-03",
+        subject_type: "account",
+        subject_id: 102,
+        name: "Northwind Ops",
+        rgw_identifier: "RGW-NORTHWIND",
+        daily: [
+          { day: "2026-03-01", storage_bytes: 380_000_000, bytes_in: 6_000_000, bytes_out: 21_000_000, ops_total: 110_000 },
+          { day: "2026-03-10", storage_bytes: 405_000_000, bytes_in: 5_000_000, bytes_out: 24_000_000, ops_total: 118_000 },
+          { day: "2026-03-20", storage_bytes: 430_000_000, bytes_in: 4_000_000, bytes_out: 27_000_000, ops_total: 124_000 },
+          { day: "2026-03-27", storage_bytes: 445_000_000, bytes_in: 7_000_000, bytes_out: 29_000_000, ops_total: 131_000 },
+        ],
+        usage: {
+          bytes_in: 142_000_000,
+          bytes_out: 680_000_000,
+          ops_total: 3_120_000,
+        },
+        storage: {
+          avg_bytes: 420_000_000,
+          avg_gb_month: 13.0,
+          total_objects: 212_000,
+        },
+        coverage: {
+          days_collected: 27,
+          days_in_month: 31,
+          coverage_ratio: 27 / 31,
+        },
+        cost: {
+          currency: "EUR",
+          total_cost: 31.8,
+          rate_card_name: "Ops rate card",
+        },
+      },
+      103: {
+        month: "2026-03",
+        subject_type: "account",
+        subject_id: 103,
+        name: "BlueHarbor Data",
+        rgw_identifier: "RGW-BLUEHARBOR",
+        daily: [
+          { day: "2026-03-01", storage_bytes: 160_000_000, bytes_in: 3_000_000, bytes_out: 18_000_000, ops_total: 92_000 },
+          { day: "2026-03-10", storage_bytes: 172_000_000, bytes_in: 4_000_000, bytes_out: 20_000_000, ops_total: 95_000 },
+          { day: "2026-03-20", storage_bytes: 184_000_000, bytes_in: 5_000_000, bytes_out: 23_000_000, ops_total: 99_000 },
+          { day: "2026-03-27", storage_bytes: 196_000_000, bytes_in: 6_000_000, bytes_out: 24_000_000, ops_total: 101_000 },
+        ],
+        usage: {
+          bytes_in: 150_000_000,
+          bytes_out: 640_000_000,
+          ops_total: 2_880_000,
+        },
+        storage: {
+          avg_bytes: 180_000_000,
+          avg_gb_month: 5.6,
+          total_objects: 44_000,
+        },
+        coverage: {
+          days_collected: 27,
+          days_in_month: 31,
+          coverage_ratio: 27 / 31,
+        },
+        cost: {
+          currency: "EUR",
+          total_cost: 22.5,
+          rate_card_name: "Ops rate card",
+        },
+      },
+    } as const;
+    return detailById[subjectId as keyof typeof detailById] ?? detailById[101];
+  },
+};
+
 const storageOpsBucketsPayload = {
   items: [
     {
@@ -356,7 +686,7 @@ export const scenarios: DocScreenshotScenario[] = [
     outputFile: "start-here.png",
     waitFor: "h1:has-text('Admin overview')",
     storage: { ...baseStorage(superAdminUser), selectedWorkspace: "admin" },
-    actions: [{ type: "click", selector: "button[aria-label='Changer de workspace']" }],
+    actions: [{ type: "click", selector: "button[aria-label='Switch workspace']" }],
     mockRules: withBaseRules(),
   },
   {
@@ -397,6 +727,45 @@ export const scenarios: DocScreenshotScenario[] = [
     waitFor: "h1:has-text('Admin overview')",
     storage: { ...baseStorage(superAdminUser), selectedWorkspace: "admin" },
     mockRules: withBaseRules(),
+  },
+  {
+    id: "feature-endpoint-status-admin",
+    docPage: "user/feature-endpoint-status-admin.md",
+    route: "/admin/endpoint-status",
+    outputFile: "admin-endpoint-status.png",
+    waitFor: "h1:has-text('Endpoint Status')",
+    storage: { ...baseStorage(superAdminUser), selectedWorkspace: "admin" },
+    actions: [
+      { type: "wait", selector: "text=Endpoint Latency" },
+      { type: "wait", selector: "text=Endpoint Timelines" },
+      { type: "wait", selector: "text=Incidents" },
+      { type: "click", selector: "button:has-text('Degraded')" },
+    ],
+    mockRules: withBaseRules(
+      endpointStatusLatencyOverviewRule,
+      endpointStatusOverviewRule,
+      endpointStatusGlobalIncidentsRule,
+    ),
+  },
+  {
+    id: "feature-billing-admin",
+    docPage: "user/feature-billing-admin.md",
+    route: "/admin/billing",
+    outputFile: "admin-billing.png",
+    waitFor: "h1:has-text('Billing')",
+    storage: { ...baseStorage(superAdminUser), selectedWorkspace: "admin" },
+    actions: [
+      { type: "wait", selector: "text=Estimated cost" },
+      { type: "wait", selector: "tr:has-text('Helios Retail')" },
+      { type: "click", selector: "tr:has-text('Helios Retail')" },
+      { type: "wait", selector: "text=Coverage: 87% (27/31 days)" },
+    ],
+    mockRules: withBaseRules(
+      billingEnabledGeneralSettingsRule,
+      billingSummaryRule,
+      billingSubjectsRule,
+      billingSubjectDetailRule,
+    ),
   },
   {
     id: "gallery-admin-ui-users",

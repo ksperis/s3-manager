@@ -11,9 +11,9 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/admin/s3-users` + keys page | `user/workspace-admin.md` | Covered |
 | `/admin/s3-connections` | `user/workspace-admin.md` | Covered |
 | `/admin/storage-endpoints` | `user/workspace-admin.md` + `ops/configuration.md` | Covered |
-| `/admin/endpoint-status` | `user/workspace-admin.md` + `ops/operations-healthchecks.md` | Covered |
+| `/admin/endpoint-status` | `user/feature-endpoint-status-admin.md` + `ops/operations-healthchecks.md` | Covered |
 | `/admin/audit` | `user/workspace-admin.md` + `ops/operations-observability.md` | Covered |
-| `/admin/billing` | `user/workspace-admin.md` + `ops/operations-billing.md` | Covered |
+| `/admin/billing` | `user/feature-billing-admin.md` + `ops/operations-billing.md` | Covered |
 | API tokens (account menu modal) | `ops/operations-api-tokens.md` | Covered |
 | `/admin/*-settings` | `ops/configuration.md` | Covered |
 | `/ceph-admin` and children | `user/workspace-ceph-admin.md` | Covered |

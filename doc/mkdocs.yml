@@ -67,6 +67,8 @@ nav:
       - Use cases (storage admin): user/use-cases-storage-admin.md
       - Use cases (storage user): user/use-cases-storage-user.md
       - "Workspace: Admin": user/workspace-admin.md
+      - "Feature: Endpoint Status in Admin": user/feature-endpoint-status-admin.md
+      - "Feature: Billing in Admin": user/feature-billing-admin.md
       - "Workspace: Manager": user/workspace-manager.md
       - "Workspace: Browser": user/workspace-browser.md
       - "Workspace: Ceph Admin": user/workspace-ceph-admin.md

@@ -19,6 +19,14 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
     <img src="../../assets/screenshots/user/admin-storage-endpoints.png" alt="Admin Storage endpoints page showing endpoint capabilities and credentials state" loading="lazy">
     <figcaption><strong>Storage endpoints.</strong> Endpoint cards surface provider capabilities, credential posture, and feature toggles before tenant resources are attached to them.</figcaption>
   </figure>
+  <figure data-thumb-label="Endpoint Status">
+    <img src="../../assets/screenshots/user/admin-endpoint-status.png" alt="Admin Endpoint Status page with latency overview, health timelines, and recent incidents" loading="lazy">
+    <figcaption><strong>Endpoint Status.</strong> Global healthcheck views combine current latency, timeline trends, and incident history across storage backends.</figcaption>
+  </figure>
+  <figure data-thumb-label="Billing">
+    <img src="../../assets/screenshots/user/admin-billing.png" alt="Admin Billing page with monthly summary, subject totals, and selected account detail charts" loading="lazy">
+    <figcaption><strong>Billing.</strong> Billing analytics summarize monthly usage and estimated cost per account or user on billing-enabled Ceph endpoints.</figcaption>
+  </figure>
 </div>
 
 ## Manager { #manager }
