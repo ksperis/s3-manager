@@ -34,6 +34,16 @@ const adminUser: SessionUser = {
 };
 
 describe("resolveAvailableWorkspacesWithFlags", () => {
+  it("returns English workspace labels", () => {
+    const workspaces = resolveAvailableWorkspacesWithFlags(adminUser, {
+      ...baseSettings,
+      storage_ops_enabled: true,
+    });
+
+    expect(workspaces.find((workspace) => workspace.id === "admin")?.label).toBe("Admin (platform)");
+    expect(workspaces.find((workspace) => workspace.id === "browser")?.label).toBe("Browser (objects)");
+  });
+
   it("hides Storage Ops for admin-like users when feature flag is disabled", () => {
     const workspaces = resolveAvailableWorkspacesWithFlags(adminUser, {
       ...baseSettings,

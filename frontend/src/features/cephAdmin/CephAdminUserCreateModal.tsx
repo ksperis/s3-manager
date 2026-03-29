@@ -233,7 +233,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
                 onClick={() => setShowAddConnectionModal(true)}
                 className="rounded-md border border-amber-300 bg-white/70 px-3 py-1.5 ui-caption font-semibold text-amber-700 hover:bg-amber-100/70 disabled:opacity-60 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40"
               >
-                Ajouter comme S3 Connection
+                Add as S3 Connection
               </button>
             </div>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -452,7 +452,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
       {showAddConnectionModal && generatedKey && addConnectionDefaults && (
         <AddS3ConnectionFromKeyModal
           isOpen={showAddConnectionModal}
-          title="Ajouter cette clé comme S3 Connection"
+          title="Add this key as S3 Connection"
           zIndexClass="z-[60]"
           lockEndpoint
           accessKeyId={generatedKey.access_key}

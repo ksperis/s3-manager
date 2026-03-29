@@ -44,11 +44,11 @@ export type SessionUser = {
 };
 
 const ALL_WORKSPACES: WorkspaceOption[] = [
-  { id: "admin", label: "Admin (plateforme)", path: "/admin" },
+  { id: "admin", label: "Admin (platform)", path: "/admin" },
   { id: "ceph-admin", label: "Ceph Admin (RGW)", path: "/ceph-admin" },
   { id: "storage-ops", label: "Storage Ops", path: "/storage-ops" },
   { id: "manager", label: "Manager (admin tenant)", path: "/manager" },
-  { id: "browser", label: "Browser (objets)", path: "/browser" },
+  { id: "browser", label: "Browser (objects)", path: "/browser" },
 ];
 
 export function isSuperAdminRole(role?: string | null): boolean {

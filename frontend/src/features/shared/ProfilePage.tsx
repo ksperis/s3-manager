@@ -1550,7 +1550,7 @@ export default function ProfilePage({
                         disabled={availableStorageEndpoints.length === 0}
                         className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
                       />
-                      Endpoint UI existant
+                      Configured endpoint
                     </label>
                     <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
                       <input
@@ -1560,7 +1560,7 @@ export default function ProfilePage({
                         onChange={() => setCreateConnectionEndpointMode("custom")}
                         className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                       />
-                      Endpoint custom
+                      Custom endpoint
                     </label>
                   </div>
                   {createConnectionEndpointMode === "preset" ? (
@@ -1855,7 +1855,7 @@ export default function ProfilePage({
                               disabled={availableStorageEndpoints.length === 0}
                               className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
                             />
-                            Endpoint UI existant
+                            Configured endpoint
                           </label>
                           <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
                             <input
@@ -1865,7 +1865,7 @@ export default function ProfilePage({
                               onChange={() => setEditConnectionEndpointMode("custom")}
                               className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                             />
-                            Endpoint custom
+                            Custom endpoint
                           </label>
                         </div>
                         {editConnectionEndpointMode === "preset" ? (
@@ -2085,7 +2085,7 @@ export default function ProfilePage({
                 className={primaryButtonClasses}
                 disabled={savingConnectionBusyId === editingConnection.id}
               >
-                {savingConnectionBusyId === editingConnection.id ? "Sauvegarde..." : "Sauvegarder"}
+                {savingConnectionBusyId === editingConnection.id ? "Saving..." : "Save"}
               </button>
             </div>
           </form>

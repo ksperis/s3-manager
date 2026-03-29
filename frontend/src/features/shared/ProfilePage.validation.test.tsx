@@ -167,11 +167,11 @@ describe("ProfilePage live validation", () => {
     await screen.findByText("Edit connection - managed-connection");
 
     const dialog = screen.getByRole("dialog");
-    const presetRadio = within(dialog).getByLabelText("Endpoint UI existant") as HTMLInputElement;
+    const presetRadio = within(dialog).getByRole("radio", { name: "Configured endpoint" }) as HTMLInputElement;
     expect(presetRadio.checked).toBe(true);
 
-    fireEvent.change(within(dialog).getByLabelText("Configured endpoint"), { target: { value: "3" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Sauvegarder" }));
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Configured endpoint" }), { target: { value: "3" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       expect(updateConnectionMock).toHaveBeenCalledTimes(1);
@@ -203,7 +203,7 @@ describe("ProfilePage live validation", () => {
     await screen.findByText("Edit connection - managed-connection");
 
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByLabelText("Endpoint custom"));
+    fireEvent.click(within(dialog).getByLabelText("Custom endpoint"));
     fireEvent.change(within(dialog).getByLabelText("Endpoint URL"), { target: { value: "https://custom.example.test" } });
     fireEvent.change(within(dialog).getByLabelText("Access key ID"), { target: { value: "AKIA-NEW" } });
     fireEvent.change(within(dialog).getByLabelText("Secret access key"), { target: { value: "SECRET-NEW" } });
@@ -213,7 +213,7 @@ describe("ProfilePage live validation", () => {
     }, { timeout: 3000 });
     expect(await within(dialog).findByText("Invalid S3 credentials.")).toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Sauvegarder" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       expect(updateConnectionMock).toHaveBeenCalledTimes(1);
@@ -240,9 +240,9 @@ describe("ProfilePage live validation", () => {
     await screen.findByText("Edit connection - managed-connection");
 
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByLabelText("Endpoint custom"));
+    fireEvent.click(within(dialog).getByLabelText("Custom endpoint"));
     fireEvent.change(within(dialog).getByLabelText("Access key ID"), { target: { value: "AKIA-ONLY" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Sauvegarder" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       expect(

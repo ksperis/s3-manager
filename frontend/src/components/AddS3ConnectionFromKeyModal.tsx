@@ -58,7 +58,7 @@ const extractError = (err: unknown): string => {
 
 export default function AddS3ConnectionFromKeyModal({
   isOpen,
-  title = "Ajouter comme S3 Connection",
+  title = "Add as S3 Connection",
   zIndexClass,
   lockEndpoint = false,
   accessKeyId,
@@ -309,7 +309,7 @@ export default function AddS3ConnectionFromKeyModal({
                   disabled={endpoints.length === 0}
                   className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50"
                 />
-                Endpoint UI existant
+                Configured endpoint
               </label>
               <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                 <input
@@ -319,7 +319,7 @@ export default function AddS3ConnectionFromKeyModal({
                   onChange={() => setEndpointMode("custom")}
                   className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
                 />
-                Endpoint custom
+                Custom endpoint
               </label>
             </div>
 

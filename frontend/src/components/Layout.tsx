@@ -167,7 +167,7 @@ export default function Layout({
           <button
             type="button"
             tabIndex={mobileSidebarOpen ? 0 : -1}
-            aria-label="Fermer la navigation mobile"
+            aria-label="Close mobile navigation"
             onClick={() => setMobileSidebarOpen(false)}
             className={`absolute inset-0 bg-slate-950/45 transition-opacity duration-200 ${
               mobileSidebarOpen ? "opacity-100" : "opacity-0"

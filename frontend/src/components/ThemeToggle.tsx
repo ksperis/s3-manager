@@ -13,8 +13,8 @@ export default function ThemeToggle() {
       type="button"
       onClick={toggle}
       className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-2.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary/60 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-200 dark:focus-visible:ring-offset-slate-900"
-      aria-label="Changer le theme"
-      title="Changer le theme"
+      aria-label="Toggle theme"
+      title="Toggle theme"
     >
       {isDark ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
       <span className="hidden sm:inline">Theme</span>

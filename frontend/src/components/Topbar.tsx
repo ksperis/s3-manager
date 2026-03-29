@@ -385,7 +385,7 @@ export default function Topbar({
               <button
                 type="button"
                 onClick={onMobileMenuToggle}
-                aria-label={mobileMenuOpen ? "Fermer la navigation" : "Ouvrir la navigation"}
+                aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"}
                 aria-controls="mobile-navigation-panel"
                 aria-expanded={mobileMenuOpen}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-primary-500 dark:focus-visible:ring-offset-slate-900 md:hidden"
@@ -400,7 +400,7 @@ export default function Topbar({
                   ref={workspaceTriggerRef}
                   type="button"
                   onClick={() => setWorkspaceMenuOpen((open) => !open)}
-                  aria-label="Changer de workspace"
+                  aria-label="Switch workspace"
                   aria-haspopup="listbox"
                   aria-expanded={workspaceMenuOpen}
                   aria-controls={workspaceMenuOpen ? workspaceListboxId : undefined}
@@ -446,7 +446,7 @@ export default function Topbar({
                         className="max-h-72 overflow-y-auto focus:outline-none"
                         role="listbox"
                         tabIndex={0}
-                        aria-label="Changer de workspace"
+                        aria-label="Switch workspace"
                         aria-activedescendant={
                           workspaceActiveIndex >= 0 ? `${workspaceListboxId}-option-${workspaceActiveIndex}` : undefined
                         }

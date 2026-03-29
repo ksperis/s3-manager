@@ -135,9 +135,9 @@ export default function EnvironmentSwitcher({
       value={model.currentWorkspaceId}
       options={model.options}
       onChange={model.onChange}
-      ariaLabel="Changer de workspace"
+      ariaLabel="Switch workspace"
       triggerLabel="Workspace"
-      title="Changer de workspace"
+      title="Switch workspace"
       align="right"
       widthClassName={widthClassName ?? (iconOnly ? "w-9" : "w-44 xl:w-56")}
       menuMinWidthClassName={menuMinWidthClassName}

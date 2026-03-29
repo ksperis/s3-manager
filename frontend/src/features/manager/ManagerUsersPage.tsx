@@ -399,7 +399,7 @@ export default function ManagerUsersPage() {
                 disabled={!createdKey.secret_access_key}
                 className="rounded-md border border-amber-300 bg-white/70 px-3 py-1.5 ui-caption font-semibold text-amber-700 hover:bg-amber-100/70 disabled:opacity-60 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40"
               >
-                Ajouter comme S3 Connection
+                Add as S3 Connection
               </button>
               <Link
                 to={`/manager/users/${encodeURIComponent(createdForUser)}/keys`}

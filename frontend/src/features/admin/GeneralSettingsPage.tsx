@@ -674,7 +674,7 @@ export default function GeneralSettingsPage() {
                           className="inline-block h-3.5 w-3.5 rounded-full border border-slate-300 dark:border-slate-600"
                           style={{ backgroundColor: settings.branding.primary_color }}
                         />
-                        Couleur personnalisée
+                        Custom color
                       </label>
                       <input
                         id="branding-primary-picker"

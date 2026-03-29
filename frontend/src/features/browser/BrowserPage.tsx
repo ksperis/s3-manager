@@ -13216,7 +13216,7 @@ export default function BrowserPage({
                 onClick={() => void handleGenerateSseCustomerKey()}
                 disabled={!sseCustomerScopeKey}
               >
-                Générer
+                Generate
               </button>
               <button
                 type="button"
@@ -13224,13 +13224,13 @@ export default function BrowserPage({
                 onClick={handleClearSseCustomerKey}
                 disabled={!sseActive}
               >
-                Effacer
+                Clear
               </button>
               <button
                 type="submit"
                 className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary/90"
               >
-                Activer
+                Enable
               </button>
             </div>
           </form>
