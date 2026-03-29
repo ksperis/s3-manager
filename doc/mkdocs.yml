@@ -52,6 +52,12 @@ plugins:
   - git-revision-date-localized:
       enable_creation_date: true
 
+extra_css:
+  - assets/stylesheets/screenshots-gallery.css
+
+extra_javascript:
+  - assets/javascripts/screenshots-gallery.js
+
 nav:
   - Home: index.md
   - User Guide:
@@ -65,6 +71,7 @@ nav:
       - "Workspace: Browser": user/workspace-browser.md
       - "Workspace: Ceph Admin": user/workspace-ceph-admin.md
       - "Workspace: Storage Ops": user/workspace-storage-ops.md
+      - "Screenshots by workspace": user/screenshots-gallery.md
       - "Feature: Buckets": user/feature-buckets.md
       - "How-to: Configure a bucket from Manager": user/howto-manager-bucket-configuration.md
       - "Feature: IAM": user/feature-iam.md

@@ -6,10 +6,19 @@ const repoRoot = path.resolve(fileURLToPath(new URL("../../..", import.meta.url)
 const userDocsDir = path.join(repoRoot, "doc", "docs", "user");
 const screenshotsDir = path.join(repoRoot, "doc", "docs", "assets", "screenshots", "user");
 const ALLOWED_EXTRA_SCREENSHOTS = new Set(["workspace-portal.png"]);
+const MULTI_SCREENSHOT_PAGE_RULES = new Map([
+  ["screenshots-gallery.md", { min: 2 }],
+]);
 
 const markdownFiles = (await fs.readdir(userDocsDir)).filter((name) => name.endsWith(".md")).sort();
 const errors = [];
 const referencedScreenshots = new Set();
+
+const extractScreenshotReferences = (content) => {
+  const markdownMatches = [...content.matchAll(/!\[[^\]]*\]\((?:\.\.\/)+assets\/screenshots\/user\/([^)]+\.png)\)/g)].map((match) => match[1]);
+  const htmlMatches = [...content.matchAll(/<img[^>]+src=["'](?:\.\.\/)+assets\/screenshots\/user\/([^"']+\.png)["'][^>]*>/g)].map((match) => match[1]);
+  return [...markdownMatches, ...htmlMatches];
+};
 
 const pngSize = async (filePath) => {
   const buffer = await fs.readFile(filePath);
@@ -26,31 +35,38 @@ const pngSize = async (filePath) => {
 for (const fileName of markdownFiles) {
   const filePath = path.join(userDocsDir, fileName);
   const content = await fs.readFile(filePath, "utf8");
-  const matches = [...content.matchAll(/!\[[^\]]*\]\(\.\.\/assets\/screenshots\/user\/([^)]+\.png)\)/g)];
+  const matches = extractScreenshotReferences(content);
+  const pageRule = MULTI_SCREENSHOT_PAGE_RULES.get(fileName);
 
-  if (matches.length !== 1) {
+  if (pageRule?.min != null) {
+    if (matches.length < pageRule.min) {
+      errors.push(`${fileName}: expected at least ${pageRule.min} screenshot references, found ${matches.length}`);
+      continue;
+    }
+  } else if (matches.length !== 1) {
     errors.push(`${fileName}: expected exactly 1 screenshot reference, found ${matches.length}`);
     continue;
   }
 
-  const imageName = matches[0][1];
-  referencedScreenshots.add(imageName);
-  const imagePath = path.join(screenshotsDir, imageName);
+  for (const imageName of new Set(matches)) {
+    referencedScreenshots.add(imageName);
+    const imagePath = path.join(screenshotsDir, imageName);
 
-  try {
-    await fs.access(imagePath);
-  } catch {
-    errors.push(`${fileName}: missing screenshot file ${imageName}`);
-    continue;
-  }
-
-  try {
-    const { width, height } = await pngSize(imagePath);
-    if (width !== 1728 || height !== 972) {
-      errors.push(`${fileName}: screenshot ${imageName} has ${width}x${height}, expected 1728x972`);
+    try {
+      await fs.access(imagePath);
+    } catch {
+      errors.push(`${fileName}: missing screenshot file ${imageName}`);
+      continue;
     }
-  } catch (error) {
-    errors.push(`${fileName}: unable to validate ${imageName} (${error instanceof Error ? error.message : String(error)})`);
+
+    try {
+      const { width, height } = await pngSize(imagePath);
+      if (width !== 1728 || height !== 972) {
+        errors.push(`${fileName}: screenshot ${imageName} has ${width}x${height}, expected 1728x972`);
+      }
+    } catch (error) {
+      errors.push(`${fileName}: unable to validate ${imageName} (${error instanceof Error ? error.message : String(error)})`);
+    }
   }
 }
 

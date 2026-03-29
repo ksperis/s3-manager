@@ -42,9 +42,13 @@ When adding or changing routes/features:
 
 ## User screenshot workflow
 
-User pages in `doc/docs/user/*.md` must include exactly one screenshot reference:
+User pages in `doc/docs/user/*.md` normally include exactly one screenshot reference:
 
 `![...](../assets/screenshots/user/<page-screenshot>.png)`
+
+Exception:
+
+- `user/screenshots-gallery.md` is a curated gallery page and may include multiple screenshot references via HTML `<img>` tags.
 
 The screenshots are generated with synthetic/mock data using Playwright:
 
@@ -58,9 +62,16 @@ Validate references and dimensions (1728x972) before merging:
 npm --prefix frontend run docs:screenshots:check
 ```
 
-If you add a new user page:
+If you add a new standard user page:
 
 1. Add a scenario in `frontend/scripts/docs-screenshots/scenarios.ts` with route, storage seed, mocks, and output file.
 2. Generate screenshots.
 3. Add one screenshot reference to the new markdown page.
+4. Run the screenshot check script.
+
+If you update the gallery page:
+
+1. Add or update the required screenshot scenarios in `frontend/scripts/docs-screenshots/scenarios.ts`.
+2. Generate screenshots.
+3. Reference the curated screenshots from `user/screenshots-gallery.md`.
 4. Run the screenshot check script.
