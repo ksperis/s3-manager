@@ -85,7 +85,7 @@ Use prebuilt images:
 ```bash
 mkdir s3-manager && cd s3-manager
 wget https://raw.githubusercontent.com/ksperis/s3-manager/refs/heads/main/docker-compose.yml
-S3_MANAGER_TAG=latest docker compose up
+S3_MANAGER_TAG=latest docker compose up -d frontend backend
 ```
 
 Default endpoints:
