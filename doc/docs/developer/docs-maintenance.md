@@ -46,6 +46,8 @@ User pages in `doc/docs/user/*.md` normally include exactly one screenshot refer
 
 `![...](../assets/screenshots/user/<page-screenshot>.png)`
 
+Published docs automatically enhance screenshots under `assets/screenshots/` so a click opens them in a fullscreen viewer.
+
 Exception:
 
 - `user/screenshots-gallery.md` is a curated gallery page and may include multiple screenshot references via HTML `<img>` tags.
@@ -66,7 +68,7 @@ If you add a new standard user page:
 
 1. Add a scenario in `frontend/scripts/docs-screenshots/scenarios.ts` with route, storage seed, mocks, and output file.
 2. Generate screenshots.
-3. Add one screenshot reference to the new markdown page.
+3. Add one screenshot reference to the new markdown page using normal Markdown image syntax.
 4. Run the screenshot check script.
 
 If you update the gallery page:
