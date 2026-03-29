@@ -94,12 +94,9 @@ Default endpoints:
 
 ## Full Documentation
 
-See `doc/` (MkDocs) for:
+See the published documentation on GitHub Pages:
 
-- user workflows
-- ops/sysadmin deployment and runbooks
-- developer architecture and principles
-- AI assistant and contribution guardrails in the developer guide
+- https://ksperis.github.io/s3-manager/
 
 ## License
 
