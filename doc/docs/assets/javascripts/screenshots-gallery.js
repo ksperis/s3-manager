@@ -168,23 +168,31 @@
     const titleId = "docs-screenshot-lightbox-title";
     dialog.setAttribute("aria-labelledby", titleId);
 
-    const header = document.createElement("div");
-    header.className = "docs-screenshot-lightbox__header";
-
     const title = document.createElement("h2");
     title.className = "docs-screenshot-lightbox__title";
     title.id = titleId;
 
+    const counter = document.createElement("div");
+    counter.className = "docs-screenshot-lightbox__counter";
+    counter.setAttribute("aria-live", "polite");
+
     const closeButton = createButton("Close", "docs-screenshot-lightbox__close");
     closeButton.setAttribute("aria-label", "Close fullscreen screenshot viewer");
-
-    header.append(title, closeButton);
 
     const figure = document.createElement("figure");
     figure.className = "docs-screenshot-lightbox__figure";
 
     const media = document.createElement("div");
     media.className = "docs-screenshot-lightbox__media";
+
+    const topbar = document.createElement("div");
+    topbar.className = "docs-screenshot-lightbox__topbar";
+
+    const meta = document.createElement("div");
+    meta.className = "docs-screenshot-lightbox__meta";
+    meta.append(title, counter);
+
+    topbar.append(meta, closeButton);
 
     const previousButton = createIconButton(
       "Show previous screenshot",
@@ -201,25 +209,25 @@
     image.className = "docs-screenshot-lightbox__image";
     image.decoding = "async";
 
-    media.append(previousButton, image, nextButton);
+    const captionWrap = document.createElement("div");
+    captionWrap.className = "docs-screenshot-lightbox__caption-wrap";
 
-    const caption = document.createElement("figcaption");
+    const caption = document.createElement("div");
     caption.className = "docs-screenshot-lightbox__caption";
 
-    figure.append(media, caption);
+    captionWrap.appendChild(caption);
+    media.append(image, previousButton, nextButton, topbar, captionWrap);
+
+    figure.appendChild(media);
 
     const footer = document.createElement("div");
     footer.className = "docs-screenshot-lightbox__footer";
 
-    const counter = document.createElement("div");
-    counter.className = "docs-screenshot-lightbox__counter";
-    counter.setAttribute("aria-live", "polite");
-
     const thumbnails = document.createElement("div");
     thumbnails.className = "docs-screenshot-lightbox__thumbnails";
 
-    footer.append(counter, thumbnails);
-    dialog.append(header, figure, footer);
+    footer.appendChild(thumbnails);
+    dialog.append(figure, footer);
     root.appendChild(dialog);
     document.body.appendChild(root);
 
@@ -304,6 +312,7 @@
 
     lightbox.previousButton.disabled = collection.currentIndex === 0;
     lightbox.nextButton.disabled = collection.currentIndex === collection.slides.length - 1;
+    lightbox.counter.hidden = hideChrome;
     lightbox.previousButton.hidden = hideChrome;
     lightbox.nextButton.hidden = hideChrome;
     lightbox.footer.hidden = hideChrome;
