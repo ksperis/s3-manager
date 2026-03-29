@@ -5,8 +5,8 @@ Use Docker Compose for quick local or validation deployments.
 ## Prebuilt images
 
 ```bash
-mkdir s3-manager && cd s3-manager
-wget https://raw.githubusercontent.com/ksperis/s3-manager/refs/heads/main/docker-compose.yml
+git clone https://github.com/ksperis/s3-manager.git
+cd s3-manager
 S3_MANAGER_TAG=latest docker compose up
 ```
 
