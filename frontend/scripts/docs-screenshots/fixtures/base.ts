@@ -502,7 +502,7 @@ const BROWSER_BUCKETS = [
 
 const BROWSER_OBJECTS_BY_BUCKET: Record<string, { prefixes: string[]; objects: Array<Record<string, unknown>> }> = {
   "helios-retail-logs": {
-    prefixes: ["2026/", "2025/"],
+    prefixes: ["daily/", "monthly/"],
     objects: [
       {
         key: "daily/report-2026-03-08.json",
@@ -540,6 +540,54 @@ const BROWSER_OBJECTS_BY_BUCKET: Record<string, { prefixes: string[]; objects: A
     ],
   },
 };
+
+function normalizeBrowserPrefix(value: string | null): string {
+  if (!value) return "";
+  return value.endsWith("/") ? value : `${value}/`;
+}
+
+function listBrowserObjectsForPrefix(
+  value: { prefixes: string[]; objects: Array<Record<string, unknown>> },
+  rawPrefix: string | null,
+) {
+  const prefix = normalizeBrowserPrefix(rawPrefix);
+  if (!prefix) {
+    return {
+      prefixes: value.prefixes,
+      objects: value.objects,
+    };
+  }
+
+  const childPrefixes = new Set<string>();
+  const objects = value.objects.filter((item) => {
+    const key = typeof item.key === "string" ? item.key : "";
+    if (!key.startsWith(prefix)) return false;
+    const relative = key.slice(prefix.length);
+    if (!relative) return false;
+    if (relative.includes("/")) {
+      const [segment] = relative.split("/");
+      if (segment) {
+        childPrefixes.add(`${prefix}${segment}/`);
+      }
+      return false;
+    }
+    return true;
+  });
+
+  const prefixes = value.prefixes
+    .filter((candidate) => candidate.startsWith(prefix) && candidate !== prefix)
+    .filter((candidate) => {
+      const relative = candidate.slice(prefix.length).replace(/\/$/, "");
+      return Boolean(relative) && !relative.includes("/");
+    });
+
+  childPrefixes.forEach((candidate) => prefixes.push(candidate));
+
+  return {
+    prefixes: Array.from(new Set(prefixes)).sort(),
+    objects,
+  };
+}
 
 const CEPH_ENDPOINTS = [
   {
@@ -859,10 +907,14 @@ export function buildBaseRules(): MockRule[] {
       body: ({ url }) => {
         const bucketName = parseBucketName(url.pathname);
         const value = BROWSER_OBJECTS_BY_BUCKET[bucketName] ?? BROWSER_OBJECTS_BY_BUCKET["helios-retail-logs"];
+        const filtered = listBrowserObjectsForPrefix(
+          value,
+          url.searchParams.get("prefix"),
+        );
         return {
           prefix: url.searchParams.get("prefix") ?? "",
-          objects: value.objects,
-          prefixes: value.prefixes,
+          objects: filtered.objects,
+          prefixes: filtered.prefixes,
           is_truncated: false,
           next_continuation_token: null,
         };
@@ -888,7 +940,7 @@ export function buildBaseRules(): MockRule[] {
     },
     {
       id: "browser-object-metadata",
-      path: /^\/browser\/buckets\/[^/]+\/metadata$/,
+      path: /^\/browser\/buckets\/[^/]+\/object-meta$/,
       body: {
         key: "daily/report-2026-03-08.json",
         size: 84_251,
@@ -900,7 +952,7 @@ export function buildBaseRules(): MockRule[] {
     },
     {
       id: "browser-object-tags",
-      path: /^\/browser\/buckets\/[^/]+\/tags$/,
+      path: /^\/browser\/buckets\/[^/]+\/object-tags$/,
       body: {
         key: "daily/report-2026-03-08.json",
         tags: [

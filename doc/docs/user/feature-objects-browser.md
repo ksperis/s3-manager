@@ -30,6 +30,7 @@ Use this guide for object-level actions in Browser surfaces.
 
 - Path actions include upload, folder creation, paste, versions, restore, cleanup, and copy path.
 - Selection actions include download, open, copy URL, copy, cut, bulk attributes, advanced actions, restore, and delete when the current selection allows them.
+- Long-running bulk actions surface in **Operations overview**, where queued, active, completed, and failed work stays visible without leaving Browser.
 - The toolbar `More` menu remains available in `/manager/browser` and `/ceph-admin/browser`, where the inspector is not shown.
 - Actions can be disabled for the current state. For example, `Copy URL` is disabled when SSE-C is active, and deleted items must be restored from versions before direct download or delete operations.
 
@@ -46,8 +47,9 @@ Object-level operations are executed with current context credentials and reflec
 
 - [Workspace: Browser](workspace-browser.md)
 - [Workspace: Manager](workspace-manager.md)
+- [Feature: Object versions in Browser](feature-object-versions-browser.md)
 - [Troubleshooting](troubleshooting.md)
 
 ## Visual example
 
-![Object browser page with upload and operations panel](../assets/screenshots/user/feature-objects-browser.png)
+![Browser operations overview showing a running delete on selected objects](../assets/screenshots/user/feature-objects-browser.png)

@@ -13,6 +13,7 @@ Use this page when your main goal is object access, limited bucket actions, or d
 
 1. For object work, open **Browser**:
    - Browse buckets and prefixes.
+   - Keep folders, the action bar, and the inspector visible on `/browser` when you want faster day-to-day object workflows.
    - Upload, download, preview, delete, restore versions.
 2. For advanced bucket/IAM operations with delegated rights, open **Manager**.
 3. If an action is unavailable, verify selected context and request additional permissions.
@@ -33,4 +34,4 @@ You can complete daily storage tasks without navigating admin-only areas.
 
 ## Visual example
 
-![Browser workspace showing bucket selector and object tools](../assets/screenshots/user/use-cases-storage-user.png)
+![Browser workspace with folders, action bar, and inspector open for a daily object workflow](../assets/screenshots/user/use-cases-storage-user.png)

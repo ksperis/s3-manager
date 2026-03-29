@@ -53,13 +53,17 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
     <img src="../../assets/screenshots/user/workspace-browser.png" alt="Browser workspace with bucket panel, object list, and operations toolbar" loading="lazy">
     <figcaption><strong>Overview.</strong> Browser keeps buckets, prefixes, and object actions in one place for direct day-to-day storage work.</figcaption>
   </figure>
-  <figure data-thumb-label="Operations">
-    <img src="../../assets/screenshots/user/feature-objects-browser.png" alt="Browser object operations page with upload controls and details panel" loading="lazy">
-    <figcaption><strong>Object operations.</strong> Upload, download, preview, restore, metadata, and bulk actions stay available from the same browsing surface.</figcaption>
+  <figure data-thumb-label="Panels">
+    <img src="../../assets/screenshots/user/use-cases-storage-user.png" alt="Browser workspace with folders panel, action bar, and details inspector open on a daily report object" loading="lazy">
+    <figcaption><strong>Panels.</strong> On the main `/browser` workspace, folders, selection actions, and inspector details can stay visible together for faster daily work.</figcaption>
   </figure>
-  <figure data-thumb-label="User flow">
-    <img src="../../assets/screenshots/user/use-cases-storage-user.png" alt="Browser workspace showing a storage user workflow with object tools" loading="lazy">
-    <figcaption><strong>Daily user flow.</strong> This example shows the Browser surface in a realistic object-management workflow for storage users.</figcaption>
+  <figure data-thumb-label="Operations">
+    <img src="../../assets/screenshots/user/feature-objects-browser.png" alt="Browser operations overview modal showing an in-progress delete across selected objects" loading="lazy">
+    <figcaption><strong>Operations overview.</strong> Long-running Browser actions stay visible in one modal so users can track queued, active, and completed work.</figcaption>
+  </figure>
+  <figure data-thumb-label="Versions">
+    <img src="../../assets/screenshots/user/feature-object-versions-browser.png" alt="Browser object versions modal listing prior versions and a delete marker for a report object" loading="lazy">
+    <figcaption><strong>Object history.</strong> The versions modal exposes prior object states and delete markers before you restore or remove entries.</figcaption>
   </figure>
 </div>
 

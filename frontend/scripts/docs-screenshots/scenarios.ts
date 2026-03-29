@@ -66,6 +66,116 @@ function withBaseRules(...extraRules: MockRule[]): MockRule[] {
   return [...extraRules, ...buildBaseRules()];
 }
 
+const BROWSER_ROOT_UI_STATE_STORAGE_KEY = "browser:root-ui-state:v1";
+const BROWSER_FOCUSED_BUCKET = "helios-retail-logs";
+const BROWSER_FOCUSED_PREFIX = "daily/";
+const BROWSER_FOCUSED_OBJECT_KEY = "daily/report-2026-03-08.json";
+
+function buildBrowserRootUiStateEntry(layout: {
+  showFolders: boolean;
+  showInspector: boolean;
+  showActionBar: boolean;
+}) {
+  return JSON.stringify({
+    layout,
+    contextSelections: {
+      "acc-helios": {
+        bucketName: BROWSER_FOCUSED_BUCKET,
+        prefix: BROWSER_FOCUSED_PREFIX,
+      },
+    },
+  });
+}
+
+const browserAllPanelsStateEntry = buildBrowserRootUiStateEntry({
+  showFolders: true,
+  showInspector: true,
+  showActionBar: true,
+});
+
+const browserVersioningEnabledRule: MockRule = {
+  id: "browser-versioning-enabled",
+  path: /^\/browser\/buckets\/[^/]+\/versioning$/,
+  body: {
+    status: "Enabled",
+    enabled: true,
+  },
+};
+
+const browserObjectVersionsRule: MockRule = {
+  id: "browser-object-versions-with-history",
+  path: /^\/browser\/buckets\/[^/]+\/versions$/,
+  body: ({ url }) => {
+    const key = url.searchParams.get("key") ?? "";
+    if (key !== BROWSER_FOCUSED_OBJECT_KEY) {
+      return {
+        prefix: url.searchParams.get("prefix") ?? "",
+        versions: [],
+        delete_markers: [],
+        is_truncated: false,
+      };
+    }
+    return {
+      prefix: BROWSER_FOCUSED_PREFIX,
+      versions: [
+        {
+          key,
+          version_id: "v-2026-03-08-0900",
+          is_latest: true,
+          is_delete_marker: false,
+          last_modified: "2026-03-08T09:00:00Z",
+          size: 84251,
+          etag: "\"3d4f1a\"",
+          storage_class: "STANDARD",
+        },
+        {
+          key,
+          version_id: "v-2026-03-08-0715",
+          is_latest: false,
+          is_delete_marker: false,
+          last_modified: "2026-03-08T07:15:00Z",
+          size: 83890,
+          etag: "\"1c0af9\"",
+          storage_class: "STANDARD",
+        },
+      ],
+      delete_markers: [
+        {
+          key,
+          version_id: "m-2026-03-07-2210",
+          is_latest: false,
+          is_delete_marker: true,
+          last_modified: "2026-03-07T22:10:00Z",
+          size: null,
+          etag: null,
+          storage_class: "STANDARD",
+        },
+      ],
+      is_truncated: false,
+    };
+  },
+};
+
+const browserDelayedDeleteRule: MockRule = {
+  id: "browser-delete-with-progress",
+  method: "POST",
+  path: /^\/browser\/buckets\/[^/]+\/delete$/,
+  delayMs: 800,
+  body: ({ requestBodyText }) => {
+    let payload: { objects?: Array<{ key?: string }> } = {};
+    try {
+      payload = JSON.parse(requestBodyText || "{}") as {
+        objects?: Array<{ key?: string }>;
+      };
+    } catch {
+      payload = {};
+    }
+    return {
+      deleted: payload.objects?.length ?? 0,
+    };
+  },
+};
+
 const noManagerContextsRule: MockRule = {
   id: "no-manager-contexts",
   path: /^\/me\/execution-contexts$/,
@@ -261,11 +371,22 @@ export const scenarios: DocScreenshotScenario[] = [
   {
     id: "use-cases-storage-user",
     docPage: "user/use-cases-storage-user.md",
-    route: "/browser?bucket=helios-retail-logs",
+    route: "/browser",
     outputFile: "use-cases-storage-user.png",
     waitFor: "button[aria-label='Upload'], button[aria-label='Upload files']",
-    storage: { ...baseStorage(storageUser), selectedWorkspace: "browser" },
-    actions: [{ type: "wait", selector: "text=daily/report-2026-03-08.json" }],
+    storage: {
+      ...baseStorage(storageUser),
+      selectedWorkspace: "browser",
+      extraEntries: {
+        [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserAllPanelsStateEntry,
+      },
+    },
+    actions: [
+      { type: "wait", selector: "text=report-2026-03-08.json" },
+      { type: "click", selector: "button:has-text('report-2026-03-08.json')" },
+      { type: "click", selector: "button[role='tab']:has-text('Details')" },
+      { type: "wait", selector: "text=source=docs" },
+    ],
     mockRules: withBaseRules(),
   },
   {
@@ -373,12 +494,56 @@ export const scenarios: DocScreenshotScenario[] = [
   {
     id: "feature-objects-browser",
     docPage: "user/feature-objects-browser.md",
-    route: "/browser?bucket=helios-retail-logs",
+    route: "/browser",
     outputFile: "feature-objects-browser.png",
     waitFor: "button[aria-label='Upload'], button[aria-label='Upload files']",
-    storage: { ...baseStorage(storageUser), selectedWorkspace: "browser" },
-    actions: [{ type: "wait", selector: "text=daily/report-2026-03-08.json" }],
-    mockRules: withBaseRules(),
+    storage: {
+      ...baseStorage(storageUser),
+      selectedWorkspace: "browser",
+      extraEntries: {
+        [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserAllPanelsStateEntry,
+      },
+    },
+    actions: [
+      { type: "wait", selector: "text=report-2026-03-08.json" },
+      { type: "click", selector: "input[aria-label='Select all']" },
+      { type: "click", selector: "[aria-label='Browser actions bar'] button:has-text('Delete')" },
+      { type: "wait", selector: "text=Delete objects" },
+      { type: "click", selector: "[role='dialog'] button:has-text('Delete')" },
+      { type: "wait", selector: "text=Operations overview" },
+      { type: "click", selector: "button:has-text('Show files')" },
+      { type: "wait", selector: "text=errors-2026-03-08.log" },
+    ],
+    mockRules: withBaseRules(browserDelayedDeleteRule),
+    postScreenshotWaitMs: 2500,
+    postScreenshotActions: [
+      { type: "click", selector: "[role='dialog'] button:has-text('Close')" },
+    ],
+  },
+  {
+    id: "feature-object-versions-browser",
+    docPage: "user/feature-object-versions-browser.md",
+    route: "/browser",
+    outputFile: "feature-object-versions-browser.png",
+    waitFor: "button[aria-label='Upload'], button[aria-label='Upload files']",
+    storage: {
+      ...baseStorage(storageUser),
+      selectedWorkspace: "browser",
+      extraEntries: {
+        [BROWSER_ROOT_UI_STATE_STORAGE_KEY]: browserAllPanelsStateEntry,
+      },
+    },
+    actions: [
+      { type: "wait", selector: "text=report-2026-03-08.json" },
+      { type: "click", selector: "tr:has-text('report-2026-03-08.json') button[aria-label='More actions']" },
+      { type: "click", selector: "[role='menu'] button:has-text('Versions')" },
+      { type: "wait", selector: "text=Object versions · daily/report-2026-03-08.json" },
+      { type: "wait", selector: "text=v: v-2026-03-08-0715" },
+    ],
+    mockRules: withBaseRules(
+      browserVersioningEnabledRule,
+      browserObjectVersionsRule,
+    ),
   },
   {
     id: "feature-topics",

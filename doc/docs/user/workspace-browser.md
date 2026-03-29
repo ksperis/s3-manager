@@ -42,6 +42,7 @@ You can perform day-to-day object operations directly from the UI.
 ## Related pages
 
 - [Feature: Object operations in Browser](feature-objects-browser.md)
+- [Feature: Object versions in Browser](feature-object-versions-browser.md)
 - [User profile](profile.md)
 - [Troubleshooting](troubleshooting.md)
 

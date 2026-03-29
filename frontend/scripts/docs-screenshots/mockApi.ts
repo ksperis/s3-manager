@@ -53,6 +53,10 @@ export async function registerApiMocks(page: Page, rules: MockRule[], scenarioId
         ? rule.body({ url, method, requestBodyText })
         : rule.body;
 
+    if (rule.delayMs && rule.delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, rule.delayMs));
+    }
+
     const status = rule.status ?? 200;
     if (payload === undefined || status === 204) {
       await route.fulfill({ status: status === 200 ? 204 : status });

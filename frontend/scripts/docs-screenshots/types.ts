@@ -7,6 +7,7 @@ export type LocalStorageSeed = {
   selectedExecutionContextId?: string;
   selectedCephAdminEndpointId?: string;
   theme?: "light" | "dark";
+  extraEntries?: Record<string, string>;
 };
 
 export type MockRule = {
@@ -14,6 +15,7 @@ export type MockRule = {
   method?: HttpMethod;
   path: RegExp;
   status?: number;
+  delayMs?: number;
   body:
     | unknown
     | ((ctx: {
@@ -38,4 +40,6 @@ export type DocScreenshotScenario = {
   storage: LocalStorageSeed;
   actions?: ScenarioAction[];
   mockRules: MockRule[];
+  postScreenshotWaitMs?: number;
+  postScreenshotActions?: ScenarioAction[];
 };

@@ -28,6 +28,7 @@ async function seedLocalStorage(page: Page, storage: {
   selectedExecutionContextId?: string;
   selectedCephAdminEndpointId?: string;
   theme?: "light" | "dark";
+  extraEntries?: Record<string, string>;
 }) {
   await page.addInitScript((value) => {
     localStorage.clear();
@@ -43,6 +44,9 @@ async function seedLocalStorage(page: Page, storage: {
       localStorage.setItem("selectedCephAdminEndpointId", value.selectedCephAdminEndpointId);
     }
     localStorage.setItem("theme", value.theme ?? "dark");
+    Object.entries(value.extraEntries ?? {}).forEach(([key, entryValue]) => {
+      localStorage.setItem(key, entryValue);
+    });
   }, storage);
 }
 
@@ -82,6 +86,10 @@ for (const scenario of scenarios) {
         runtimeErrors.push(`[console.error] ${message.text()}`);
       }
     });
+    page.on("dialog", (dialog) => {
+      runtimeErrors.push(`[dialog ${dialog.type()}] ${dialog.message()}`);
+      void dialog.accept();
+    });
     page.on("response", (response) => {
       if (response.status() >= 400) {
         runtimeErrors.push(`[http ${response.status()}] ${response.request().method()} ${response.url()}`);
@@ -108,6 +116,12 @@ for (const scenario of scenarios) {
 
       const outputPath = path.join(SCREENSHOT_DIR, scenario.outputFile);
       await page.screenshot({ path: outputPath, fullPage: false });
+      if (scenario.postScreenshotWaitMs && scenario.postScreenshotWaitMs > 0) {
+        await page.waitForTimeout(scenario.postScreenshotWaitMs);
+      }
+      for (const action of scenario.postScreenshotActions ?? []) {
+        await runAction(page, action);
+      }
 
       mockRegistry.assertNoUnmatched();
     } catch (error) {
