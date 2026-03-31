@@ -292,3 +292,28 @@ def test_list_accounts_and_minimal_are_sorted_case_insensitive(db_session):
 
     assert [entry.name for entry in listed] == ["alpha", "Beta", "Same", "same", "Zulu"]
     assert [entry.name for entry in minimal] == ["alpha", "Beta", "Same", "same", "Zulu"]
+
+
+def test_list_accounts_and_minimal_keep_legacy_accounts_without_endpoint(db_session):
+    legacy = _seed_account(db_session, None, name="legacy", rgw_account_id="RGW-LEGACY-01")
+
+    service = S3AccountsService(db_session, allow_missing_admin=True)
+    listed = service.list_accounts(
+        include_usage_stats=False,
+        include_quota=False,
+        include_rgw_details=False,
+    )
+    minimal = service.list_accounts_minimal()
+
+    assert len(listed) == 1
+    assert listed[0].db_id == legacy.id
+    assert listed[0].storage_endpoint_id is None
+    assert listed[0].storage_endpoint_name is None
+    assert listed[0].storage_endpoint_url is None
+    assert listed[0].storage_endpoint_capabilities is None
+
+    assert len(minimal) == 1
+    assert minimal[0].db_id == legacy.id
+    assert minimal[0].storage_endpoint_id is None
+    assert minimal[0].storage_endpoint_name is None
+    assert minimal[0].storage_endpoint_capabilities is None

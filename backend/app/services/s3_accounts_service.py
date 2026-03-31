@@ -111,6 +111,11 @@ class S3AccountsService:
             raise ValueError("No Ceph endpoint available.")
         return endpoint
 
+    def _get_linked_storage_endpoint(self, storage_endpoint_id: Optional[int]) -> Optional[StorageEndpoint]:
+        if not storage_endpoint_id:
+            return None
+        return self.db.query(StorageEndpoint).filter(StorageEndpoint.id == storage_endpoint_id).first()
+
     def _admin_for_endpoint(self, endpoint: StorageEndpoint, allow_missing: bool = False) -> Optional[RGWAdminClient]:
         if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
             if allow_missing:
@@ -177,7 +182,7 @@ class S3AccountsService:
 
     def _account_usage(self, acc: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
         try:
-            endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
+            endpoint = self._get_linked_storage_endpoint(acc.storage_endpoint_id)
             if not resolve_feature_flags(endpoint).metrics_enabled:
                 return None, None, None
         except Exception:
@@ -515,7 +520,7 @@ class S3AccountsService:
             if include_rgw_details and admin:
                 rgw_user_count, rgw_user_uids = self._account_rgw_users(account_identifier, None, admin)
                 rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
-            endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
+            endpoint = self._get_linked_storage_endpoint(acc.storage_endpoint_id)
             results.append(
                 S3AccountSchema(
                     id=str(account_identifier),
@@ -552,7 +557,7 @@ class S3AccountsService:
         user_ids_by_account, user_links_by_account = self._load_non_root_user_links(account_ids)
         summaries: list[S3AccountSummary] = []
         for acc in db_accounts:
-            endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
+            endpoint = self._get_linked_storage_endpoint(acc.storage_endpoint_id)
             summaries.append(
                 S3AccountSummary(
                     id=acc.rgw_account_id or str(acc.id),
@@ -594,7 +599,7 @@ class S3AccountsService:
         if admin:
             rgw_user_count, rgw_user_uids = self._account_rgw_users(account_identifier, None, admin)
             rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
-        endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
+        endpoint = self._get_linked_storage_endpoint(account.storage_endpoint_id)
         return S3AccountSchema(
             id=account_identifier,
             db_id=account.id,
@@ -900,7 +905,7 @@ class S3AccountsService:
         user_ids_by_account, user_links_by_account = self._load_non_root_user_links([account.id])
         user_ids = user_ids_by_account.get(account.id) or []
         user_links = user_links_by_account.get(account.id) or []
-        endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
+        endpoint = self._get_linked_storage_endpoint(account.storage_endpoint_id)
         quota_max_size_gb, quota_max_objects = self._account_quota(account)
 
         return S3AccountSchema(
