@@ -13,7 +13,10 @@ vi.mock("./hooks", () => ({
 }));
 
 vi.mock("../S3AccountContext", () => ({
-  useS3AccountContext: () => ({ selectedS3AccountId: "src-ctx" }),
+  useS3AccountContext: () => ({
+    selectedS3AccountId: "src-ctx",
+    requiresS3AccountSelection: true,
+  }),
 }));
 
 function buildMigration(id: number, status: string) {

@@ -1210,12 +1210,31 @@ export default function BrowserPage({
   const pendingUploadedKeysByBucketRef = useRef<Map<string, Set<string>>>(
     new Map(),
   );
+  const objectsRef = useRef(objects);
+  const prefixesRef = useRef(prefixes);
+  const deletedObjectsRef = useRef(deletedObjects);
+  const deletedPrefixesRef = useRef(deletedPrefixes);
+  const deletedObjectsNextKeyMarkerRef = useRef(deletedObjectsNextKeyMarker);
+  const deletedObjectsNextVersionIdMarkerRef = useRef(
+    deletedObjectsNextVersionIdMarker,
+  );
+  const deletedObjectsIsTruncatedRef = useRef(deletedObjectsIsTruncated);
+  const prefixVersionsRef = useRef(prefixVersions);
+  const prefixDeleteMarkersRef = useRef(prefixDeleteMarkers);
+  const prefixVersionKeyMarkerRef = useRef(prefixVersionKeyMarker);
+  const prefixVersionIdMarkerRef = useRef(prefixVersionIdMarker);
+  const objectVersionsRef = useRef(objectVersions);
+  const objectDeleteMarkersRef = useRef(objectDeleteMarkers);
+  const objectVersionKeyMarkerRef = useRef(objectVersionKeyMarker);
+  const objectVersionIdMarkerRef = useRef(objectVersionIdMarker);
   const lazyColumnCacheRef = useRef<Record<string, LazyColumnCacheEntry>>({});
   const lazyListItemsByIdRef = useRef<Map<string, BrowserItem>>(new Map());
   const lazyQueueRef = useRef<string[]>([]);
   const lazyQueuedIdsRef = useRef(new Set<string>());
   const lazyInFlightRef = useRef(0);
   const accountIdForApiRef = useRef(accountIdForApi);
+  const bucketAccessByNameRef = useRef(bucketAccessByName);
+  const inspectedItemRef = useRef<BrowserItem | null>(null);
   const previewObjectUrlRef = useRef<string | null>(null);
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
   const contextCountIdRef = useRef(0);
@@ -1315,6 +1334,11 @@ export default function BrowserPage({
   const isLegacyContext = isLegacyS3UserContext || isLegacyConnectionContext;
   const stsEnabled = Boolean(effectiveCaps?.sts) && !isLegacyContext;
   const sseFeatureEnabled = Boolean(effectiveCaps?.sse);
+  const bucketInspectorUsageEnabled = effectiveCaps
+    ? effectiveCaps.metrics !== false
+    : true;
+  const bucketInspectorStaticWebsiteEnabled =
+    effectiveCaps?.static_website ?? true;
   const normalizeAccountId = useCallback(
     (value: S3AccountSelector | null | undefined) => {
       if (value == null) return null;
@@ -1902,11 +1926,8 @@ export default function BrowserPage({
   }, [
     corsFixError,
     corsStatus,
-    isLegacyConnectionContext,
-    isLegacyContext,
     proxyAllowed,
     stsCredentialsError,
-    useProxyTransfers,
     warningMessage,
   ]);
   const hasCorsAction = Boolean(corsStatus && !corsStatus.enabled && uiOrigin);
@@ -2181,14 +2202,14 @@ export default function BrowserPage({
   }, [showBucketMenu]);
 
   useEffect(() => {
+    const queuedBuckets = bucketAccessQueuedRef.current;
+    const abortControllers = bucketAccessAbortControllersRef.current;
     return () => {
       bucketAccessSessionRef.current += 1;
       bucketAccessQueueRef.current = [];
-      bucketAccessQueuedRef.current.clear();
-      bucketAccessAbortControllersRef.current.forEach((controller) =>
-        controller.abort(),
-      );
-      bucketAccessAbortControllersRef.current.clear();
+      queuedBuckets.clear();
+      abortControllers.forEach((controller) => controller.abort());
+      abortControllers.clear();
       bucketAccessInFlightRef.current = 0;
       if (bucketSearchDebounceRef.current !== null) {
         window.clearTimeout(bucketSearchDebounceRef.current);
@@ -2642,511 +2663,566 @@ export default function BrowserPage({
     };
   }, [accountIdForApi, accessMode, hasS3AccountContext]);
 
-  const listDeletedObjectsForPrefix = async (
-    targetPrefix: string,
-    existingObjects: BrowserObject[],
-    existingPrefixes: string[],
-    queryValue: string,
-    opts?: {
-      recursive?: boolean;
-      exactMatch?: boolean;
-      caseSensitive?: boolean;
-      keyMarker?: string | null;
-      versionIdMarker?: string | null;
-    },
-  ) => {
-    if (
-      !bucketName ||
-      !hasS3AccountContext ||
-      !isVersioningEnabled ||
-      !showDeletedObjects
-    ) {
-      return {
-        deletedObjects: [] as BrowserObject[],
-        deletedPrefixes: [] as string[],
-        nextKeyMarker: null as string | null,
-        nextVersionIdMarker: null as string | null,
-        isTruncated: false,
-      };
-    }
-    if (storageFilter !== "all") {
-      return {
-        deletedObjects: [] as BrowserObject[],
-        deletedPrefixes: [] as string[],
-        nextKeyMarker: null as string | null,
-        nextVersionIdMarker: null as string | null,
-        isTruncated: false,
-      };
-    }
-    const activeKeys = new Set(existingObjects.map((item) => item.key));
-    const activePrefixes = new Set(existingPrefixes);
-    const latestMarkersByKey = new Map<string, BrowserObjectVersion>();
-    const markerPrefixes = new Set<string>();
-    const isRecursiveSearch = Boolean(opts?.recursive);
-    const exactMatch = Boolean(opts?.exactMatch);
-    const caseSensitive = Boolean(opts?.caseSensitive);
-    const normalizedQuery = caseSensitive
-      ? queryValue
-      : queryValue.toLowerCase();
+  const listDeletedObjectsForPrefix = useCallback(
+    async (
+      targetPrefix: string,
+      existingObjects: BrowserObject[],
+      existingPrefixes: string[],
+      queryValue: string,
+      opts?: {
+        recursive?: boolean;
+        exactMatch?: boolean;
+        caseSensitive?: boolean;
+        keyMarker?: string | null;
+        versionIdMarker?: string | null;
+      },
+    ) => {
+      if (
+        !bucketName ||
+        !hasS3AccountContext ||
+        !isVersioningEnabled ||
+        !showDeletedObjects
+      ) {
+        return {
+          deletedObjects: [] as BrowserObject[],
+          deletedPrefixes: [] as string[],
+          nextKeyMarker: null as string | null,
+          nextVersionIdMarker: null as string | null,
+          isTruncated: false,
+        };
+      }
+      if (storageFilter !== "all") {
+        return {
+          deletedObjects: [] as BrowserObject[],
+          deletedPrefixes: [] as string[],
+          nextKeyMarker: null as string | null,
+          nextVersionIdMarker: null as string | null,
+          isTruncated: false,
+        };
+      }
+      const activeKeys = new Set(existingObjects.map((item) => item.key));
+      const activePrefixes = new Set(existingPrefixes);
+      const latestMarkersByKey = new Map<string, BrowserObjectVersion>();
+      const markerPrefixes = new Set<string>();
+      const isRecursiveSearch = Boolean(opts?.recursive);
+      const exactMatch = Boolean(opts?.exactMatch);
+      const caseSensitive = Boolean(opts?.caseSensitive);
+      const normalizedQuery = caseSensitive
+        ? queryValue
+        : queryValue.toLowerCase();
 
-    const matchesQuery = (key: string) => {
-      if (!normalizedQuery) return true;
-      let relative = key;
-      if (targetPrefix && relative.startsWith(targetPrefix)) {
-        relative = relative.slice(targetPrefix.length);
-      }
-      if (relative.endsWith("/")) {
-        relative = relative.slice(0, -1);
-      }
-      const comparable = caseSensitive ? relative : relative.toLowerCase();
-      if (exactMatch) {
-        return comparable === normalizedQuery;
-      }
-      return comparable.includes(normalizedQuery);
-    };
-
-    const data = await listObjectVersions(accountIdForApi, bucketName, {
-      prefix: targetPrefix,
-      keyMarker: opts?.keyMarker ?? undefined,
-      versionIdMarker: opts?.versionIdMarker ?? undefined,
-      maxKeys: VERSIONS_PAGE_SIZE,
-    });
-    data.delete_markers.forEach((marker) => {
-      if (!marker.is_latest) return;
-      if (!marker.key || !marker.key.startsWith(targetPrefix)) return;
-      const relative = marker.key.slice(targetPrefix.length);
-      if (!relative) return;
-      const isFolderMarker = marker.key.endsWith("/");
-      if (relative.includes("/") && !isRecursiveSearch) {
-        if (typeFilter === "file") return;
-        const child = relative.split("/")[0];
-        if (!child) return;
-        const childPrefix = `${targetPrefix}${child}/`;
-        if (activePrefixes.has(childPrefix)) return;
-        if (!matchesQuery(childPrefix)) return;
-        markerPrefixes.add(childPrefix);
-        return;
-      }
-      if (typeFilter !== "file") {
-        if (isRecursiveSearch) {
-          const segments = relative.split("/").filter(Boolean);
-          if (segments.length > 1) {
-            let running = targetPrefix;
-            for (const segment of segments.slice(0, -1)) {
-              running = `${running}${segment}/`;
-              if (activePrefixes.has(running)) continue;
-              if (!matchesQuery(running)) continue;
-              markerPrefixes.add(running);
-            }
-          }
-          if (isFolderMarker) {
-            if (!activePrefixes.has(marker.key) && matchesQuery(marker.key)) {
-              markerPrefixes.add(marker.key);
-            }
-          }
+      const matchesQuery = (key: string) => {
+        if (!normalizedQuery) return true;
+        let relative = key;
+        if (targetPrefix && relative.startsWith(targetPrefix)) {
+          relative = relative.slice(targetPrefix.length);
         }
-      }
-      if (typeFilter === "folder") return;
-      if (isFolderMarker) return;
-      if (activeKeys.has(marker.key)) return;
-      if (!matchesQuery(marker.key)) return;
-      latestMarkersByKey.set(marker.key, marker);
-    });
+        if (relative.endsWith("/")) {
+          relative = relative.slice(0, -1);
+        }
+        const comparable = caseSensitive ? relative : relative.toLowerCase();
+        if (exactMatch) {
+          return comparable === normalizedQuery;
+        }
+        return comparable.includes(normalizedQuery);
+      };
 
-    const deletedObjectRows = Array.from(latestMarkersByKey.values())
-      .sort((a, b) => a.key.localeCompare(b.key))
-      .map((marker) => ({
-        key: marker.key,
-        size: 0,
-        last_modified: marker.last_modified ?? null,
-        etag: null,
-        storage_class: null,
-        is_delete_marker: true,
-        version_id: marker.version_id ?? null,
-      }));
-    const deletedFolderRows = Array.from(markerPrefixes.values()).sort((a, b) =>
-      a.localeCompare(b),
-    );
-    const nextKeyMarker = data.next_key_marker ?? null;
-    const nextVersionIdMarker = data.next_version_id_marker ?? null;
-    return {
-      deletedObjects: deletedObjectRows,
-      deletedPrefixes: deletedFolderRows,
-      nextKeyMarker,
-      nextVersionIdMarker,
-      isTruncated: Boolean(
-        data.is_truncated && (nextKeyMarker || nextVersionIdMarker),
-      ),
-    };
-  };
-
-  const loadObjects = async (opts?: {
-    append?: boolean;
-    continuationToken?: string | null;
-    prefixOverride?: string;
-    silent?: boolean;
-    loadDeletedOnly?: boolean;
-  }) => {
-    if (!bucketName || !hasS3AccountContext) return;
-    const targetPrefix = normalizePrefix(opts?.prefixOverride ?? prefix);
-    const isAppend = Boolean(opts?.append);
-    const isSilent = Boolean(opts?.silent);
-    const loadDeletedOnly = Boolean(opts?.loadDeletedOnly);
-    const { requestSeq, controller } = prepareLatestRequest(
-      objectsAbortControllerRef.current,
-      objectsRequestSeqRef.current,
-    );
-    objectsRequestSeqRef.current = requestSeq;
-    objectsAbortControllerRef.current = controller;
-    if (!isAppend) {
-      if (!isSilent) {
-        setObjectsLoading(true);
-        setObjectsLoadingMore(false);
-        setObjectsIssue(null);
-        setShowObjectsIssueTechnicalDetails(false);
-      }
-    } else {
-      setObjectsLoadingMore(true);
-    }
-    const query = filter.trim();
-    const searchFromBucket = searchScope === "bucket" && Boolean(query);
-    const requestPrefix = searchFromBucket ? "" : targetPrefix;
-    const requestRecursive =
-      Boolean(query) && (searchFromBucket || searchRecursive);
-    try {
-      let loadedObjects: BrowserObject[] = [];
-      let loadedPrefixes: string[] = [];
-      let loadedObjectsNextToken: string | null = null;
-      let loadedObjectsTruncated = false;
-
-      if (!loadDeletedOnly) {
-        const data = await listBrowserObjects(accountIdForApi, bucketName, {
-          prefix: requestPrefix,
-          continuationToken: opts?.continuationToken ?? undefined,
-          maxKeys: OBJECTS_PAGE_SIZE,
-          query: query || undefined,
-          exactMatch: searchExactMatch,
-          caseSensitive: searchCaseSensitive,
-          type: typeFilter,
-          storageClass: storageFilter,
-          recursive: requestRecursive,
-          signal: controller.signal,
-        });
-        if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
+      const data = await listObjectVersions(accountIdForApi, bucketName, {
+        prefix: targetPrefix,
+        keyMarker: opts?.keyMarker ?? undefined,
+        versionIdMarker: opts?.versionIdMarker ?? undefined,
+        maxKeys: VERSIONS_PAGE_SIZE,
+      });
+      data.delete_markers.forEach((marker) => {
+        if (!marker.is_latest) return;
+        if (!marker.key || !marker.key.startsWith(targetPrefix)) return;
+        const relative = marker.key.slice(targetPrefix.length);
+        if (!relative) return;
+        const isFolderMarker = marker.key.endsWith("/");
+        if (relative.includes("/") && !isRecursiveSearch) {
+          if (typeFilter === "file") return;
+          const child = relative.split("/")[0];
+          if (!child) return;
+          const childPrefix = `${targetPrefix}${child}/`;
+          if (activePrefixes.has(childPrefix)) return;
+          if (!matchesQuery(childPrefix)) return;
+          markerPrefixes.add(childPrefix);
           return;
         }
-        loadedObjects = data.objects;
-        loadedPrefixes = data.prefixes;
-        loadedObjectsNextToken = data.next_continuation_token ?? null;
-        loadedObjectsTruncated = Boolean(data.is_truncated);
-        setObjectsIssue(null);
-        setShowObjectsIssueTechnicalDetails(false);
-        updateBucketAccessEntry(bucketName, {
-          status: "available",
-          detail: null,
-        });
-      }
+        if (typeFilter !== "file") {
+          if (isRecursiveSearch) {
+            const segments = relative.split("/").filter(Boolean);
+            if (segments.length > 1) {
+              let running = targetPrefix;
+              for (const segment of segments.slice(0, -1)) {
+                running = `${running}${segment}/`;
+                if (activePrefixes.has(running)) continue;
+                if (!matchesQuery(running)) continue;
+                markerPrefixes.add(running);
+              }
+            }
+            if (isFolderMarker) {
+              if (!activePrefixes.has(marker.key) && matchesQuery(marker.key)) {
+                markerPrefixes.add(marker.key);
+              }
+            }
+          }
+        }
+        if (typeFilter === "folder") return;
+        if (isFolderMarker) return;
+        if (activeKeys.has(marker.key)) return;
+        if (!matchesQuery(marker.key)) return;
+        latestMarkersByKey.set(marker.key, marker);
+      });
 
-      const mergedObjects = isAppend
-        ? [...objects, ...loadedObjects]
-        : loadedObjects;
-      const mergedPrefixesRaw = isAppend
-        ? Array.from(new Set([...prefixes, ...loadedPrefixes]))
-        : loadedPrefixes;
-      const objectsLimitReached =
-        mergedObjects.length > OBJECTS_LIST_HARD_LIMIT;
-      const prefixesLimitReached =
-        mergedPrefixesRaw.length > OBJECTS_LIST_HARD_LIMIT;
-      const boundedObjects = mergedObjects.slice(0, OBJECTS_LIST_HARD_LIMIT);
-      const boundedPrefixes = mergedPrefixesRaw.slice(
-        0,
-        OBJECTS_LIST_HARD_LIMIT,
+      const deletedObjectRows = Array.from(latestMarkersByKey.values())
+        .sort((a, b) => a.key.localeCompare(b.key))
+        .map((marker) => ({
+          key: marker.key,
+          size: 0,
+          last_modified: marker.last_modified ?? null,
+          etag: null,
+          storage_class: null,
+          is_delete_marker: true,
+          version_id: marker.version_id ?? null,
+        }));
+      const deletedFolderRows = Array.from(markerPrefixes.values()).sort((a, b) =>
+        a.localeCompare(b),
       );
+      const nextKeyMarker = data.next_key_marker ?? null;
+      const nextVersionIdMarker = data.next_version_id_marker ?? null;
+      return {
+        deletedObjects: deletedObjectRows,
+        deletedPrefixes: deletedFolderRows,
+        nextKeyMarker,
+        nextVersionIdMarker,
+        isTruncated: Boolean(
+          data.is_truncated && (nextKeyMarker || nextVersionIdMarker),
+        ),
+      };
+    },
+    [
+      accountIdForApi,
+      bucketName,
+      hasS3AccountContext,
+      isVersioningEnabled,
+      showDeletedObjects,
+      storageFilter,
+      typeFilter,
+    ],
+  );
 
-      const shouldLoadDeleted =
-        showDeletedObjects && isVersioningEnabled && storageFilter === "all";
-      let nextDeletedObjects = isAppend ? deletedObjects : [];
-      let nextDeletedPrefixes = isAppend ? deletedPrefixes : [];
-      let nextDeletedKeyMarker = isAppend ? deletedObjectsNextKeyMarker : null;
-      let nextDeletedVersionIdMarker = isAppend
-        ? deletedObjectsNextVersionIdMarker
-        : null;
-      let nextDeletedTruncated = isAppend ? deletedObjectsIsTruncated : false;
-      let deletedLimitReached = false;
+  const loadObjects = useCallback(
+    async (opts?: {
+      append?: boolean;
+      continuationToken?: string | null;
+      prefixOverride?: string;
+      silent?: boolean;
+      loadDeletedOnly?: boolean;
+    }) => {
+      if (!bucketName || !hasS3AccountContext) return;
+      const targetPrefix = normalizePrefix(opts?.prefixOverride ?? prefix);
+      const isAppend = Boolean(opts?.append);
+      const isSilent = Boolean(opts?.silent);
+      const loadDeletedOnly = Boolean(opts?.loadDeletedOnly);
+      const { requestSeq, controller } = prepareLatestRequest(
+        objectsAbortControllerRef.current,
+        objectsRequestSeqRef.current,
+      );
+      objectsRequestSeqRef.current = requestSeq;
+      objectsAbortControllerRef.current = controller;
+      if (!isAppend) {
+        if (!isSilent) {
+          setObjectsLoading(true);
+          setObjectsLoadingMore(false);
+          setObjectsIssue(null);
+          setShowObjectsIssueTechnicalDetails(false);
+        }
+      } else {
+        setObjectsLoadingMore(true);
+      }
+      const query = filter.trim();
+      const searchFromBucket = searchScope === "bucket" && Boolean(query);
+      const requestPrefix = searchFromBucket ? "" : targetPrefix;
+      const requestRecursive =
+        Boolean(query) && (searchFromBucket || searchRecursive);
+      try {
+        let loadedObjects: BrowserObject[] = [];
+        let loadedPrefixes: string[] = [];
+        let loadedObjectsNextToken: string | null = null;
+        let loadedObjectsTruncated = false;
 
-      if (shouldLoadDeleted) {
-        try {
-          const deletedResult = await listDeletedObjectsForPrefix(
-            requestPrefix,
-            boundedObjects,
-            boundedPrefixes,
-            query,
-            {
-              recursive: requestRecursive,
-              exactMatch: searchExactMatch,
-              caseSensitive: searchCaseSensitive,
-              keyMarker: isAppend ? deletedObjectsNextKeyMarker : null,
-              versionIdMarker: isAppend
-                ? deletedObjectsNextVersionIdMarker
-                : null,
-            },
-          );
+        if (!loadDeletedOnly) {
+          const data = await listBrowserObjects(accountIdForApi, bucketName, {
+            prefix: requestPrefix,
+            continuationToken: opts?.continuationToken ?? undefined,
+            maxKeys: OBJECTS_PAGE_SIZE,
+            query: query || undefined,
+            exactMatch: searchExactMatch,
+            caseSensitive: searchCaseSensitive,
+            type: typeFilter,
+            storageClass: storageFilter,
+            recursive: requestRecursive,
+            signal: controller.signal,
+          });
           if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
             return;
           }
-          const deletedObjectsMerged = isAppend
-            ? mergeDeletedObjectsWithLimit(
-                deletedObjects,
-                deletedResult.deletedObjects,
-                OBJECTS_LIST_HARD_LIMIT,
-              )
-            : {
-                items: deletedResult.deletedObjects.slice(
-                  0,
-                  OBJECTS_LIST_HARD_LIMIT,
-                ),
-                limitReached:
-                  deletedResult.deletedObjects.length > OBJECTS_LIST_HARD_LIMIT,
-              };
-          const deletedPrefixesMerged = isAppend
-            ? mergeUniqueStringsWithLimit(
-                deletedPrefixes,
-                deletedResult.deletedPrefixes,
-                OBJECTS_LIST_HARD_LIMIT,
-              )
-            : {
-                items: deletedResult.deletedPrefixes.slice(
-                  0,
-                  OBJECTS_LIST_HARD_LIMIT,
-                ),
-                limitReached:
-                  deletedResult.deletedPrefixes.length >
-                  OBJECTS_LIST_HARD_LIMIT,
-              };
-          deletedLimitReached =
-            deletedObjectsMerged.limitReached ||
-            deletedPrefixesMerged.limitReached;
-          nextDeletedObjects = deletedObjectsMerged.items;
-          nextDeletedPrefixes = deletedPrefixesMerged.items;
-          if (deletedLimitReached) {
-            nextDeletedKeyMarker = null;
-            nextDeletedVersionIdMarker = null;
-            nextDeletedTruncated = false;
-          } else {
-            nextDeletedKeyMarker = deletedResult.nextKeyMarker;
-            nextDeletedVersionIdMarker = deletedResult.nextVersionIdMarker;
-            nextDeletedTruncated = deletedResult.isTruncated;
-          }
-        } catch {
-          if (!isAppend) {
-            nextDeletedObjects = [];
-            nextDeletedPrefixes = [];
-            nextDeletedKeyMarker = null;
-            nextDeletedVersionIdMarker = null;
-            nextDeletedTruncated = false;
-          }
+          loadedObjects = data.objects;
+          loadedPrefixes = data.prefixes;
+          loadedObjectsNextToken = data.next_continuation_token ?? null;
+          loadedObjectsTruncated = Boolean(data.is_truncated);
+          setObjectsIssue(null);
+          setShowObjectsIssueTechnicalDetails(false);
+          updateBucketAccessEntry(bucketName, {
+            status: "available",
+            detail: null,
+          });
         }
-      } else {
-        nextDeletedObjects = [];
-        nextDeletedPrefixes = [];
-        nextDeletedKeyMarker = null;
-        nextDeletedVersionIdMarker = null;
-        nextDeletedTruncated = false;
-      }
 
-      if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
-        return;
-      }
-
-      setObjects(boundedObjects);
-      setPrefixes(boundedPrefixes);
-      setDeletedObjects(nextDeletedObjects);
-      setDeletedPrefixes(nextDeletedPrefixes);
-      setDeletedObjectsNextKeyMarker(nextDeletedKeyMarker);
-      setDeletedObjectsNextVersionIdMarker(nextDeletedVersionIdMarker);
-      setDeletedObjectsIsTruncated(nextDeletedTruncated);
-
-      if (objectsLimitReached || prefixesLimitReached) {
-        setObjectsNextToken(null);
-        setObjectsIsTruncated(false);
-        setWarningMessage(
-          `Object listing is limited to ${OBJECTS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path or search to continue.`,
+        const currentObjects = objectsRef.current;
+        const currentPrefixes = prefixesRef.current;
+        const currentDeletedObjects = deletedObjectsRef.current;
+        const currentDeletedPrefixes = deletedPrefixesRef.current;
+        const currentDeletedKeyMarker = deletedObjectsNextKeyMarkerRef.current;
+        const currentDeletedVersionIdMarker =
+          deletedObjectsNextVersionIdMarkerRef.current;
+        const currentDeletedTruncated = deletedObjectsIsTruncatedRef.current;
+        const mergedObjects = isAppend
+          ? [...currentObjects, ...loadedObjects]
+          : loadedObjects;
+        const mergedPrefixesRaw = isAppend
+          ? Array.from(new Set([...currentPrefixes, ...loadedPrefixes]))
+          : loadedPrefixes;
+        const objectsLimitReached =
+          mergedObjects.length > OBJECTS_LIST_HARD_LIMIT;
+        const prefixesLimitReached =
+          mergedPrefixesRaw.length > OBJECTS_LIST_HARD_LIMIT;
+        const boundedObjects = mergedObjects.slice(0, OBJECTS_LIST_HARD_LIMIT);
+        const boundedPrefixes = mergedPrefixesRaw.slice(
+          0,
+          OBJECTS_LIST_HARD_LIMIT,
         );
-      } else {
-        setObjectsNextToken(loadedObjectsNextToken);
-        setObjectsIsTruncated(!loadDeletedOnly && loadedObjectsTruncated);
-      }
-      if (deletedLimitReached) {
-        setWarningMessage(
-          `Deleted markers listing is limited to ${OBJECTS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path or search to continue.`,
-        );
-      }
-    } catch (err) {
-      if (isAbortError(err)) {
-        return;
-      }
-      if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
-        return;
-      }
-      const issue = normalizeBrowserListingIssue(
-        err,
-        "Unable to list objects for this prefix.",
-      );
-      const previousAccess = resolveBucketAccessEntry(bucketName, bucketAccessByName);
-      if (issue.kind === "access_denied") {
-        updateBucketAccessEntry(bucketName, {
-          status: "unavailable",
-          detail: issue.technicalDetail,
-        });
-      } else if (previousAccess.status === "unavailable" || previousAccess.status === "checking") {
-        updateBucketAccessEntry(bucketName, UNKNOWN_BUCKET_ACCESS);
-      }
-      setObjectsIssue(issue);
-      setShowObjectsIssueTechnicalDetails(false);
-    } finally {
-      if (objectsAbortControllerRef.current === controller) {
-        objectsAbortControllerRef.current = null;
-      }
-      const isLatestRequest = !isStaleRequest(
-        requestSeq,
-        objectsRequestSeqRef.current,
-      );
-      if (isLatestRequest) {
-        if (!isAppend) {
-          if (!isSilent) {
-            setObjectsLoading(false);
+
+        const shouldLoadDeleted =
+          showDeletedObjects && isVersioningEnabled && storageFilter === "all";
+        let nextDeletedObjects = isAppend ? currentDeletedObjects : [];
+        let nextDeletedPrefixes = isAppend ? currentDeletedPrefixes : [];
+        let nextDeletedKeyMarker = isAppend ? currentDeletedKeyMarker : null;
+        let nextDeletedVersionIdMarker = isAppend
+          ? currentDeletedVersionIdMarker
+          : null;
+        let nextDeletedTruncated = isAppend ? currentDeletedTruncated : false;
+        let deletedLimitReached = false;
+
+        if (shouldLoadDeleted) {
+          try {
+            const deletedResult = await listDeletedObjectsForPrefix(
+              requestPrefix,
+              boundedObjects,
+              boundedPrefixes,
+              query,
+              {
+                recursive: requestRecursive,
+                exactMatch: searchExactMatch,
+                caseSensitive: searchCaseSensitive,
+                keyMarker: isAppend ? currentDeletedKeyMarker : null,
+                versionIdMarker: isAppend
+                  ? currentDeletedVersionIdMarker
+                  : null,
+              },
+            );
+            if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
+              return;
+            }
+            const deletedObjectsMerged = isAppend
+              ? mergeDeletedObjectsWithLimit(
+                  currentDeletedObjects,
+                  deletedResult.deletedObjects,
+                  OBJECTS_LIST_HARD_LIMIT,
+                )
+              : {
+                  items: deletedResult.deletedObjects.slice(
+                    0,
+                    OBJECTS_LIST_HARD_LIMIT,
+                  ),
+                  limitReached:
+                    deletedResult.deletedObjects.length >
+                    OBJECTS_LIST_HARD_LIMIT,
+                };
+            const deletedPrefixesMerged = isAppend
+              ? mergeUniqueStringsWithLimit(
+                  currentDeletedPrefixes,
+                  deletedResult.deletedPrefixes,
+                  OBJECTS_LIST_HARD_LIMIT,
+                )
+              : {
+                  items: deletedResult.deletedPrefixes.slice(
+                    0,
+                    OBJECTS_LIST_HARD_LIMIT,
+                  ),
+                  limitReached:
+                    deletedResult.deletedPrefixes.length >
+                    OBJECTS_LIST_HARD_LIMIT,
+                };
+            deletedLimitReached =
+              deletedObjectsMerged.limitReached ||
+              deletedPrefixesMerged.limitReached;
+            nextDeletedObjects = deletedObjectsMerged.items;
+            nextDeletedPrefixes = deletedPrefixesMerged.items;
+            if (deletedLimitReached) {
+              nextDeletedKeyMarker = null;
+              nextDeletedVersionIdMarker = null;
+              nextDeletedTruncated = false;
+            } else {
+              nextDeletedKeyMarker = deletedResult.nextKeyMarker;
+              nextDeletedVersionIdMarker = deletedResult.nextVersionIdMarker;
+              nextDeletedTruncated = deletedResult.isTruncated;
+            }
+          } catch {
+            if (!isAppend) {
+              nextDeletedObjects = [];
+              nextDeletedPrefixes = [];
+              nextDeletedKeyMarker = null;
+              nextDeletedVersionIdMarker = null;
+              nextDeletedTruncated = false;
+            }
           }
         } else {
-          setObjectsLoadingMore(false);
+          nextDeletedObjects = [];
+          nextDeletedPrefixes = [];
+          nextDeletedKeyMarker = null;
+          nextDeletedVersionIdMarker = null;
+          nextDeletedTruncated = false;
+        }
+
+        if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
+          return;
+        }
+
+        setObjects(boundedObjects);
+        setPrefixes(boundedPrefixes);
+        setDeletedObjects(nextDeletedObjects);
+        setDeletedPrefixes(nextDeletedPrefixes);
+        setDeletedObjectsNextKeyMarker(nextDeletedKeyMarker);
+        setDeletedObjectsNextVersionIdMarker(nextDeletedVersionIdMarker);
+        setDeletedObjectsIsTruncated(nextDeletedTruncated);
+
+        if (objectsLimitReached || prefixesLimitReached) {
+          setObjectsNextToken(null);
+          setObjectsIsTruncated(false);
+          setWarningMessage(
+            `Object listing is limited to ${OBJECTS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path or search to continue.`,
+          );
+        } else {
+          setObjectsNextToken(loadedObjectsNextToken);
+          setObjectsIsTruncated(!loadDeletedOnly && loadedObjectsTruncated);
+        }
+        if (deletedLimitReached) {
+          setWarningMessage(
+            `Deleted markers listing is limited to ${OBJECTS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path or search to continue.`,
+          );
+        }
+      } catch (err) {
+        if (isAbortError(err)) {
+          return;
+        }
+        if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
+          return;
+        }
+        const issue = normalizeBrowserListingIssue(
+          err,
+          "Unable to list objects for this prefix.",
+        );
+        const previousAccess = resolveBucketAccessEntry(
+          bucketName,
+          bucketAccessByNameRef.current,
+        );
+        if (issue.kind === "access_denied") {
+          updateBucketAccessEntry(bucketName, {
+            status: "unavailable",
+            detail: issue.technicalDetail,
+          });
+        } else if (
+          previousAccess.status === "unavailable" ||
+          previousAccess.status === "checking"
+        ) {
+          updateBucketAccessEntry(bucketName, UNKNOWN_BUCKET_ACCESS);
+        }
+        setObjectsIssue(issue);
+        setShowObjectsIssueTechnicalDetails(false);
+      } finally {
+        if (objectsAbortControllerRef.current === controller) {
+          objectsAbortControllerRef.current = null;
+        }
+        const isLatestRequest = !isStaleRequest(
+          requestSeq,
+          objectsRequestSeqRef.current,
+        );
+        if (isLatestRequest) {
+          if (!isAppend) {
+            if (!isSilent) {
+              setObjectsLoading(false);
+            }
+          } else {
+            setObjectsLoadingMore(false);
+          }
         }
       }
-    }
-  };
+    },
+    [
+      accountIdForApi,
+      bucketName,
+      filter,
+      hasS3AccountContext,
+      isVersioningEnabled,
+      listDeletedObjectsForPrefix,
+      prefix,
+      searchCaseSensitive,
+      searchExactMatch,
+      searchRecursive,
+      searchScope,
+      showDeletedObjects,
+      storageFilter,
+      typeFilter,
+      updateBucketAccessEntry,
+    ],
+  );
 
-  const loadPrefixVersions = async (opts?: {
-    append?: boolean;
-    keyMarker?: string | null;
-    versionIdMarker?: string | null;
-  }) => {
-    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
-    if (!opts?.append) {
-      setPrefixVersionsLoading(true);
-      setPrefixVersionsError(null);
-    } else {
-      setPrefixVersionsLoading(true);
-    }
-    const resolvedKeyMarker =
-      opts?.keyMarker !== undefined ? opts.keyMarker : prefixVersionKeyMarker;
-    const resolvedVersionIdMarker =
-      opts?.versionIdMarker !== undefined
-        ? opts.versionIdMarker
-        : prefixVersionIdMarker;
-    try {
-      const data = await listObjectVersions(accountIdForApi, bucketName, {
-        prefix: normalizedPrefix,
-        keyMarker: resolvedKeyMarker ?? undefined,
-        versionIdMarker: resolvedVersionIdMarker ?? undefined,
-        maxKeys: VERSIONS_PAGE_SIZE,
-      });
-      const mergedVersions = opts?.append
-        ? [...prefixVersions, ...data.versions]
-        : data.versions;
-      const mergedDeleteMarkers = opts?.append
-        ? [...prefixDeleteMarkers, ...data.delete_markers]
-        : data.delete_markers;
-      const versionsLimitReached =
-        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT ||
-        mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
-      setPrefixVersions(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
-      setPrefixDeleteMarkers(
-        mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT),
-      );
-      if (versionsLimitReached) {
-        setPrefixVersionKeyMarker(null);
-        setPrefixVersionIdMarker(null);
-        setWarningMessage(
-          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
-        );
-      } else {
-        setPrefixVersionKeyMarker(data.next_key_marker ?? null);
-        setPrefixVersionIdMarker(data.next_version_id_marker ?? null);
-      }
-    } catch (err) {
-      setPrefixVersionsError(
-        extractApiError(err, "Unable to list versions for this prefix."),
-      );
+  const loadPrefixVersions = useCallback(
+    async (opts?: {
+      append?: boolean;
+      keyMarker?: string | null;
+      versionIdMarker?: string | null;
+    }) => {
+      if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
       if (!opts?.append) {
-        setPrefixVersions([]);
-        setPrefixDeleteMarkers([]);
+        setPrefixVersionsLoading(true);
+        setPrefixVersionsError(null);
+      } else {
+        setPrefixVersionsLoading(true);
       }
-    } finally {
-      setPrefixVersionsLoading(false);
-    }
-  };
+      const resolvedKeyMarker =
+        opts?.keyMarker !== undefined
+          ? opts.keyMarker
+          : prefixVersionKeyMarkerRef.current;
+      const resolvedVersionIdMarker =
+        opts?.versionIdMarker !== undefined
+          ? opts.versionIdMarker
+          : prefixVersionIdMarkerRef.current;
+      try {
+        const data = await listObjectVersions(accountIdForApi, bucketName, {
+          prefix: normalizedPrefix,
+          keyMarker: resolvedKeyMarker ?? undefined,
+          versionIdMarker: resolvedVersionIdMarker ?? undefined,
+          maxKeys: VERSIONS_PAGE_SIZE,
+        });
+        const mergedVersions = opts?.append
+          ? [...prefixVersionsRef.current, ...data.versions]
+          : data.versions;
+        const mergedDeleteMarkers = opts?.append
+          ? [...prefixDeleteMarkersRef.current, ...data.delete_markers]
+          : data.delete_markers;
+        const versionsLimitReached =
+          mergedVersions.length > VERSIONS_LIST_HARD_LIMIT ||
+          mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
+        setPrefixVersions(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
+        setPrefixDeleteMarkers(
+          mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT),
+        );
+        if (versionsLimitReached) {
+          setPrefixVersionKeyMarker(null);
+          setPrefixVersionIdMarker(null);
+          setWarningMessage(
+            `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
+          );
+        } else {
+          setPrefixVersionKeyMarker(data.next_key_marker ?? null);
+          setPrefixVersionIdMarker(data.next_version_id_marker ?? null);
+        }
+      } catch (err) {
+        setPrefixVersionsError(
+          extractApiError(err, "Unable to list versions for this prefix."),
+        );
+        if (!opts?.append) {
+          setPrefixVersions([]);
+          setPrefixDeleteMarkers([]);
+        }
+      } finally {
+        setPrefixVersionsLoading(false);
+      }
+    },
+    [accountIdForApi, bucketName, hasS3AccountContext, isVersioningEnabled, normalizedPrefix],
+  );
 
-  const loadObjectVersions = async (opts?: {
-    append?: boolean;
-    keyMarker?: string | null;
-    versionIdMarker?: string | null;
-    targetKey?: string | null;
-  }) => {
-    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
-    const targetKey = opts?.targetKey ?? inspectedItem?.key ?? null;
-    if (!targetKey) return;
-    if (!opts?.append) {
-      setObjectVersionsLoading(true);
-      setObjectVersionsError(null);
-    } else {
-      setObjectVersionsLoading(true);
-    }
-    const resolvedKeyMarker =
-      opts?.keyMarker !== undefined ? opts.keyMarker : objectVersionKeyMarker;
-    const resolvedVersionIdMarker =
-      opts?.versionIdMarker !== undefined
-        ? opts.versionIdMarker
-        : objectVersionIdMarker;
-    try {
-      const data = await listObjectVersions(accountIdForApi, bucketName, {
-        key: targetKey,
-        keyMarker: resolvedKeyMarker ?? undefined,
-        versionIdMarker: resolvedVersionIdMarker ?? undefined,
-        maxKeys: VERSIONS_PAGE_SIZE,
-      });
-      const mergedVersions = opts?.append
-        ? [...objectVersions, ...data.versions]
-        : data.versions;
-      const mergedDeleteMarkers = opts?.append
-        ? [...objectDeleteMarkers, ...data.delete_markers]
-        : data.delete_markers;
-      const versionsLimitReached =
-        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT ||
-        mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
-      setObjectVersions(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
-      setObjectDeleteMarkers(
-        mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT),
-      );
-      if (versionsLimitReached) {
-        setObjectVersionKeyMarker(null);
-        setObjectVersionIdMarker(null);
-        setWarningMessage(
-          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
-        );
-      } else {
-        setObjectVersionKeyMarker(data.next_key_marker ?? null);
-        setObjectVersionIdMarker(data.next_version_id_marker ?? null);
-      }
-    } catch (err) {
-      setObjectVersionsError(
-        extractApiError(err, "Unable to list versions for this object."),
-      );
+  const loadObjectVersions = useCallback(
+    async (opts?: {
+      append?: boolean;
+      keyMarker?: string | null;
+      versionIdMarker?: string | null;
+      targetKey?: string | null;
+    }) => {
+      if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
+      const targetKey = opts?.targetKey ?? inspectedItemRef.current?.key ?? null;
+      if (!targetKey) return;
       if (!opts?.append) {
-        setObjectVersions([]);
-        setObjectDeleteMarkers([]);
+        setObjectVersionsLoading(true);
+        setObjectVersionsError(null);
+      } else {
+        setObjectVersionsLoading(true);
       }
-    } finally {
-      setObjectVersionsLoading(false);
-    }
-  };
+      const resolvedKeyMarker =
+        opts?.keyMarker !== undefined
+          ? opts.keyMarker
+          : objectVersionKeyMarkerRef.current;
+      const resolvedVersionIdMarker =
+        opts?.versionIdMarker !== undefined
+          ? opts.versionIdMarker
+          : objectVersionIdMarkerRef.current;
+      try {
+        const data = await listObjectVersions(accountIdForApi, bucketName, {
+          key: targetKey,
+          keyMarker: resolvedKeyMarker ?? undefined,
+          versionIdMarker: resolvedVersionIdMarker ?? undefined,
+          maxKeys: VERSIONS_PAGE_SIZE,
+        });
+        const mergedVersions = opts?.append
+          ? [...objectVersionsRef.current, ...data.versions]
+          : data.versions;
+        const mergedDeleteMarkers = opts?.append
+          ? [...objectDeleteMarkersRef.current, ...data.delete_markers]
+          : data.delete_markers;
+        const versionsLimitReached =
+          mergedVersions.length > VERSIONS_LIST_HARD_LIMIT ||
+          mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
+        setObjectVersions(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
+        setObjectDeleteMarkers(
+          mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT),
+        );
+        if (versionsLimitReached) {
+          setObjectVersionKeyMarker(null);
+          setObjectVersionIdMarker(null);
+          setWarningMessage(
+            `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
+          );
+        } else {
+          setObjectVersionKeyMarker(data.next_key_marker ?? null);
+          setObjectVersionIdMarker(data.next_version_id_marker ?? null);
+        }
+      } catch (err) {
+        setObjectVersionsError(
+          extractApiError(err, "Unable to list versions for this object."),
+        );
+        if (!opts?.append) {
+          setObjectVersions([]);
+          setObjectDeleteMarkers([]);
+        }
+      } finally {
+        setObjectVersionsLoading(false);
+      }
+    },
+    [accountIdForApi, bucketName, hasS3AccountContext, isVersioningEnabled],
+  );
 
   const loadObjectVersionsModal = async (opts?: {
     append?: boolean;
@@ -3304,7 +3380,8 @@ export default function BrowserPage({
     showDeletedObjects,
     storageFilter,
     typeFilter,
-  ]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadObjects,
+  ]);
 
   useEffect(() => {
     if (filter.trim()) return;
@@ -3354,9 +3431,11 @@ export default function BrowserPage({
     accessMode,
     bucketName,
     hasS3AccountContext,
+    isVersioningEnabled,
+    loadPrefixVersions,
     normalizedPrefix,
     showPrefixVersions,
-  ]); // eslint-disable-line react-hooks/exhaustive-deps
+  ]);
 
   useEffect(() => {
     if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
@@ -3488,6 +3567,47 @@ export default function BrowserPage({
     [accountIdForApi, bucketName, hasS3AccountContext],
   );
 
+  const loadTreeChildren = useCallback(
+    async (targetPrefix: string, options?: { expand?: boolean }) => {
+      if (!bucketName || !hasS3AccountContext || currentBucketUnavailable) return;
+      const normalized = targetPrefix ? normalizePrefix(targetPrefix) : "";
+      const shouldExpand = options?.expand ?? true;
+      setTreeNodes((prev) =>
+        updateTreeNodes(prev, targetPrefix, (node) => ({
+          ...node,
+          isLoading: true,
+        })),
+      );
+      try {
+        const data = await listTreePrefixes(normalized);
+        const children = buildTreeNodes(data.prefixes, normalized);
+        if (data.truncated) {
+          setWarningMessage(
+            `Folders panel is limited to ${TREE_PREFIXES_HARD_LIMIT.toLocaleString()} prefixes. Narrow the path to continue.`,
+          );
+        }
+        setTreeNodes((prev) =>
+          updateTreeNodes(prev, targetPrefix, (node) => ({
+            ...node,
+            children,
+            isExpanded: shouldExpand ? true : node.isExpanded,
+            isLoaded: true,
+            isLoading: false,
+          })),
+        );
+      } catch {
+        setTreeNodes((prev) =>
+          updateTreeNodes(prev, targetPrefix, (node) => ({
+            ...node,
+            isLoaded: true,
+            isLoading: false,
+          })),
+        );
+      }
+    },
+    [bucketName, currentBucketUnavailable, hasS3AccountContext, listTreePrefixes],
+  );
+
   useEffect(() => {
     if (
       accountSwitchInFlight ||
@@ -3607,6 +3727,7 @@ export default function BrowserPage({
     bucketName,
     currentBucketUnavailable,
     hasS3AccountContext,
+    loadTreeChildren,
     prefix,
     treeNodes,
   ]);
@@ -4500,12 +4621,12 @@ export default function BrowserPage({
     }
   };
 
-  const startEditingPath = () => {
+  const startEditingPath = useCallback(() => {
     if (!bucketName) return;
     setPathDraft(prefix);
     setPathSuggestionIndex(-1);
     setIsEditingPath(true);
-  };
+  }, [bucketName, prefix]);
 
   const commitPathDraft = () => {
     const trimmed = normalizePathDraftValue(pathDraft);
@@ -4621,8 +4742,59 @@ export default function BrowserPage({
   }, [lazyColumnCache]);
 
   useEffect(() => {
+    objectsRef.current = objects;
+    prefixesRef.current = prefixes;
+    deletedObjectsRef.current = deletedObjects;
+    deletedPrefixesRef.current = deletedPrefixes;
+    deletedObjectsNextKeyMarkerRef.current = deletedObjectsNextKeyMarker;
+    deletedObjectsNextVersionIdMarkerRef.current =
+      deletedObjectsNextVersionIdMarker;
+    deletedObjectsIsTruncatedRef.current = deletedObjectsIsTruncated;
+  }, [
+    deletedObjects,
+    deletedObjectsIsTruncated,
+    deletedObjectsNextKeyMarker,
+    deletedObjectsNextVersionIdMarker,
+    deletedPrefixes,
+    objects,
+    prefixes,
+  ]);
+
+  useEffect(() => {
+    prefixVersionsRef.current = prefixVersions;
+    prefixDeleteMarkersRef.current = prefixDeleteMarkers;
+    prefixVersionKeyMarkerRef.current = prefixVersionKeyMarker;
+    prefixVersionIdMarkerRef.current = prefixVersionIdMarker;
+  }, [
+    prefixDeleteMarkers,
+    prefixVersionIdMarker,
+    prefixVersionKeyMarker,
+    prefixVersions,
+  ]);
+
+  useEffect(() => {
+    objectVersionsRef.current = objectVersions;
+    objectDeleteMarkersRef.current = objectDeleteMarkers;
+    objectVersionKeyMarkerRef.current = objectVersionKeyMarker;
+    objectVersionIdMarkerRef.current = objectVersionIdMarker;
+  }, [
+    objectDeleteMarkers,
+    objectVersionIdMarker,
+    objectVersionKeyMarker,
+    objectVersions,
+  ]);
+
+  useEffect(() => {
     accountIdForApiRef.current = accountIdForApi;
   }, [accountIdForApi]);
+
+  useEffect(() => {
+    bucketAccessByNameRef.current = bucketAccessByName;
+  }, [bucketAccessByName]);
+
+  useEffect(() => {
+    inspectedItemRef.current = inspectedItem;
+  }, [inspectedItem]);
 
   useEffect(() => {
     lazyListItemsByIdRef.current = listItemById;
@@ -4890,15 +5062,7 @@ export default function BrowserPage({
     return () => {
       isMounted = false;
     };
-  }, [
-    accountIdForApi,
-    bucketName,
-    hasS3AccountContext,
-    inspectedItem?.isDeleted,
-    inspectedItem?.key,
-    inspectedItem?.type,
-    sseCustomerKeyBase64,
-  ]);
+  }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem, sseCustomerKeyBase64]);
 
   useEffect(() => {
     if (
@@ -5016,7 +5180,7 @@ export default function BrowserPage({
     if (!inspectedItem || inspectedItem.type !== "file") {
       setShowAdvancedModal(false);
     }
-  }, [inspectedItem?.key, inspectedItem?.type, showAdvancedModal]);
+  }, [inspectedItem, showAdvancedModal]);
 
   useEffect(() => {
     if (
@@ -5042,12 +5206,12 @@ export default function BrowserPage({
       targetKey: inspectedItem.key,
     });
   }, [
-    accountIdForApi,
     bucketName,
     hasS3AccountContext,
-    inspectedItem?.key,
-    inspectedItem?.type,
-  ]); // eslint-disable-line react-hooks/exhaustive-deps
+    inspectedItem,
+    isVersioningEnabled,
+    loadObjectVersions,
+  ]);
 
   const loadBucketInspectorData = useCallback(
     async (force = false) => {
@@ -5061,18 +5225,14 @@ export default function BrowserPage({
       setBucketInspectorLoading(true);
       setBucketInspectorError(null);
       try {
-        const usageFeatureEnabled = effectiveCaps
-          ? effectiveCaps.metrics !== false
-          : true;
-        const staticWebsiteEnabled = effectiveCaps?.static_website ?? true;
         const results = await Promise.allSettled([
           getBucketStats(accountIdForApi, bucketName, {
-            with_stats: usageFeatureEnabled,
+            with_stats: bucketInspectorUsageEnabled,
           }),
           getBucketProperties(accountIdForApi, bucketName),
           getBucketPolicy(accountIdForApi, bucketName),
           getBucketLogging(accountIdForApi, bucketName),
-          staticWebsiteEnabled
+          bucketInspectorStaticWebsiteEnabled
             ? getBucketWebsite(accountIdForApi, bucketName)
             : Promise.resolve(null),
         ]);
@@ -5184,7 +5344,7 @@ export default function BrowserPage({
           features.access_logging = unavailableFeature();
         }
 
-        if (!staticWebsiteEnabled) {
+        if (!bucketInspectorStaticWebsiteEnabled) {
           features.static_website = unavailableFeature();
         } else if (websiteResult.status === "fulfilled") {
           const website = websiteResult.value;
@@ -5241,8 +5401,8 @@ export default function BrowserPage({
       accountIdForApi,
       bucketInspectorByName,
       bucketName,
-      effectiveCaps?.metrics,
-      effectiveCaps?.static_website,
+      bucketInspectorStaticWebsiteEnabled,
+      bucketInspectorUsageEnabled,
       hasS3AccountContext,
     ],
   );
@@ -6267,47 +6427,6 @@ export default function BrowserPage({
     }
   };
 
-  const loadTreeChildren = async (
-    targetPrefix: string,
-    options?: { expand?: boolean },
-  ) => {
-    if (!bucketName || !hasS3AccountContext || currentBucketUnavailable) return;
-    const normalized = targetPrefix ? normalizePrefix(targetPrefix) : "";
-    const shouldExpand = options?.expand ?? true;
-    setTreeNodes((prev) =>
-      updateTreeNodes(prev, targetPrefix, (node) => ({
-        ...node,
-        isLoading: true,
-      })),
-    );
-    try {
-      const data = await listTreePrefixes(normalized);
-      const children = buildTreeNodes(data.prefixes, normalized);
-      if (data.truncated) {
-        setWarningMessage(
-          `Folders panel is limited to ${TREE_PREFIXES_HARD_LIMIT.toLocaleString()} prefixes. Narrow the path to continue.`,
-        );
-      }
-      setTreeNodes((prev) =>
-        updateTreeNodes(prev, targetPrefix, (node) => ({
-          ...node,
-          children,
-          isExpanded: shouldExpand ? true : node.isExpanded,
-          isLoaded: true,
-          isLoading: false,
-        })),
-      );
-    } catch {
-      setTreeNodes((prev) =>
-        updateTreeNodes(prev, targetPrefix, (node) => ({
-          ...node,
-          isLoaded: true,
-          isLoading: false,
-        })),
-      );
-    }
-  };
-
   const handleToggleTreeNode = (node: TreeNode) => {
     if (node.isExpanded) {
       setTreeNodes((prev) =>
@@ -6376,127 +6495,128 @@ export default function BrowserPage({
     );
   };
 
-  const extractErrorDetails = (
-    payload: unknown,
-  ): { code?: string; message?: string } | null => {
-    if (!payload) return null;
-    if (typeof payload === "string") {
-      const trimmed = payload.trim();
-      if (!trimmed) return null;
-      if (trimmed.startsWith("{")) {
-        try {
-          const parsed = JSON.parse(trimmed) as {
-            code?: unknown;
-            errorCode?: unknown;
-            error_code?: unknown;
-            message?: unknown;
-            detail?: unknown;
-            error?: unknown;
-          };
-          const code =
-            typeof parsed.code === "string"
-              ? parsed.code
-              : typeof parsed.errorCode === "string"
-                ? parsed.errorCode
-                : typeof parsed.error_code === "string"
-                  ? parsed.error_code
-                  : undefined;
-          const message =
-            typeof parsed.message === "string"
-              ? parsed.message
-              : typeof parsed.detail === "string"
-                ? parsed.detail
-                : typeof parsed.error === "string"
-                  ? parsed.error
-                  : undefined;
-          if (code || message) {
-            return { code, message };
+  const extractErrorDetails = useCallback(
+    (payload: unknown): { code?: string; message?: string } | null => {
+      if (!payload) return null;
+      if (typeof payload === "string") {
+        const trimmed = payload.trim();
+        if (!trimmed) return null;
+        if (trimmed.startsWith("{")) {
+          try {
+            const parsed = JSON.parse(trimmed) as {
+              code?: unknown;
+              errorCode?: unknown;
+              error_code?: unknown;
+              message?: unknown;
+              detail?: unknown;
+              error?: unknown;
+            };
+            const code =
+              typeof parsed.code === "string"
+                ? parsed.code
+                : typeof parsed.errorCode === "string"
+                  ? parsed.errorCode
+                  : typeof parsed.error_code === "string"
+                    ? parsed.error_code
+                    : undefined;
+            const message =
+              typeof parsed.message === "string"
+                ? parsed.message
+                : typeof parsed.detail === "string"
+                  ? parsed.detail
+                  : typeof parsed.error === "string"
+                    ? parsed.error
+                    : undefined;
+            if (code || message) {
+              return { code, message };
+            }
+          } catch {
+            // fall through to XML/inline parsing
           }
-        } catch {
-          // fall through to XML/inline parsing
+        }
+        const codeMatch = trimmed.match(/<Code>([^<]+)<\/Code>/);
+        const messageMatch = trimmed.match(/<Message>([^<]+)<\/Message>/);
+        const code = codeMatch?.[1];
+        const message = messageMatch?.[1];
+        if (code || message) {
+          return { code, message };
+        }
+        return { message: trimmed.slice(0, 300) };
+      }
+      if (typeof payload === "object") {
+        const candidate = payload as {
+          code?: unknown;
+          errorCode?: unknown;
+          error_code?: unknown;
+          message?: unknown;
+          detail?: unknown;
+          error?: unknown;
+        };
+        const code =
+          typeof candidate.code === "string"
+            ? candidate.code
+            : typeof candidate.errorCode === "string"
+              ? candidate.errorCode
+              : typeof candidate.error_code === "string"
+                ? candidate.error_code
+                : undefined;
+        const message =
+          typeof candidate.message === "string"
+            ? candidate.message
+            : typeof candidate.detail === "string"
+              ? candidate.detail
+              : typeof candidate.error === "string"
+                ? candidate.error
+                : undefined;
+        if (code || message) {
+          return { code, message };
         }
       }
-      const codeMatch = trimmed.match(/<Code>([^<]+)<\/Code>/);
-      const messageMatch = trimmed.match(/<Message>([^<]+)<\/Message>/);
-      const code = codeMatch?.[1];
-      const message = messageMatch?.[1];
-      if (code || message) {
-        return { code, message };
-      }
-      return { message: trimmed.slice(0, 300) };
-    }
-    if (typeof payload === "object") {
-      const candidate = payload as {
-        code?: unknown;
-        errorCode?: unknown;
-        error_code?: unknown;
-        message?: unknown;
-        detail?: unknown;
-        error?: unknown;
-      };
-      const code =
-        typeof candidate.code === "string"
-          ? candidate.code
-          : typeof candidate.errorCode === "string"
-            ? candidate.errorCode
-            : typeof candidate.error_code === "string"
-              ? candidate.error_code
-              : undefined;
-      const message =
-        typeof candidate.message === "string"
-          ? candidate.message
-          : typeof candidate.detail === "string"
-            ? candidate.detail
-            : typeof candidate.error === "string"
-              ? candidate.error
-              : undefined;
-      if (code || message) {
-        return { code, message };
-      }
-    }
-    return null;
-  };
+      return null;
+    },
+    [],
+  );
 
-  const formatOperationError = (
-    err: unknown,
-    fallback: string,
-    context?: string,
-  ) => {
-    let detail: string | undefined;
-    if (axios.isAxiosError(err)) {
-      const status = err.response?.status;
-      const statusText = err.response?.statusText;
-      const statusLabel = status
-        ? `HTTP ${status}${statusText ? ` ${statusText}` : ""}`
-        : "";
-      const parsed = extractErrorDetails(err.response?.data);
-      const message =
-        parsed?.code && parsed?.message
-          ? `${parsed.code}: ${parsed.message}`
-          : parsed?.message || parsed?.code;
-      const parts = [statusLabel, message || err.message].filter(Boolean);
-      detail = parts.length > 0 ? parts.join(" - ") : undefined;
-    } else if (err instanceof Error && err.message) {
-      detail = err.message;
-    } else if (typeof err === "string" && err.trim()) {
-      detail = err;
-    } else if (err && typeof err === "object" && "message" in err) {
-      const message = (err as { message?: unknown }).message;
-      if (typeof message === "string" && message.trim()) {
-        detail = message;
+  const formatOperationError = useCallback(
+    (err: unknown, fallback: string, context?: string) => {
+      let detail: string | undefined;
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        const statusText = err.response?.statusText;
+        const statusLabel = status
+          ? `HTTP ${status}${statusText ? ` ${statusText}` : ""}`
+          : "";
+        const parsed = extractErrorDetails(err.response?.data);
+        const message =
+          parsed?.code && parsed?.message
+            ? `${parsed.code}: ${parsed.message}`
+            : parsed?.message || parsed?.code;
+        const parts = [statusLabel, message || err.message].filter(Boolean);
+        detail = parts.length > 0 ? parts.join(" - ") : undefined;
+      } else if (err instanceof Error && err.message) {
+        detail = err.message;
+      } else if (typeof err === "string" && err.trim()) {
+        detail = err;
+      } else if (err && typeof err === "object" && "message" in err) {
+        const message = (err as { message?: unknown }).message;
+        if (typeof message === "string" && message.trim()) {
+          detail = message;
+        }
       }
-    }
-    const message = detail ?? fallback;
-    if (context) {
-      const normalize = (value: string) => value.trim().replace(/[.:]\s*$/, "");
-      const normalizedContext = normalize(context);
-      if (!detail && normalizedContext === normalize(fallback)) {
-        return fallback;
+      const message = detail ?? fallback;
+      if (context) {
+        const normalize = (value: string) =>
+          value.trim().replace(/[.:]\s*$/, "");
+        const normalizedContext = normalize(context);
+        if (!detail && normalizedContext === normalize(fallback)) {
+          return fallback;
+        }
+        return `${normalizedContext}: ${message}`;
       }
-      return `${normalizedContext}: ${message}`;
-    }
-    return message;
-  };
+      return message;
+    },
+    [extractErrorDetails],
+  );
 
   const resetBulkAttributesDraft = () => {
     setBulkApplyMetadata(false);
@@ -6627,15 +6747,18 @@ export default function BrowserPage({
     setObjectVersionModalIdMarker(null);
   };
 
-  const requestObjectsRefresh = (prefixOverride: string) => {
-    if (typeof window === "undefined") return;
-    if (objectsRefreshTimeoutRef.current !== null) return;
-    objectsRefreshTimeoutRef.current = window.setTimeout(() => {
-      objectsRefreshTimeoutRef.current = null;
-      void loadObjects({ prefixOverride, silent: true });
-      loadTreeChildren(prefixOverride, { expand: false });
-    }, 400);
-  };
+  const requestObjectsRefresh = useCallback(
+    (prefixOverride: string) => {
+      if (typeof window === "undefined") return;
+      if (objectsRefreshTimeoutRef.current !== null) return;
+      objectsRefreshTimeoutRef.current = window.setTimeout(() => {
+        objectsRefreshTimeoutRef.current = null;
+        void loadObjects({ prefixOverride, silent: true });
+        loadTreeChildren(prefixOverride, { expand: false });
+      }, 400);
+    },
+    [loadObjects, loadTreeChildren],
+  );
 
   const recordUploadedKey = (bucket: string, key: string) => {
     if (!bucket || !key) return;
@@ -6681,6 +6804,7 @@ export default function BrowserPage({
   };
 
   useEffect(() => {
+    const pendingUploadedKeysByBucket = pendingUploadedKeysByBucketRef.current;
     return () => {
       if (objectsRefreshTimeoutRef.current !== null) {
         window.clearTimeout(objectsRefreshTimeoutRef.current);
@@ -6690,70 +6814,76 @@ export default function BrowserPage({
         window.clearTimeout(uploadRefreshTimeoutRef.current);
         uploadRefreshTimeoutRef.current = null;
       }
-      pendingUploadedKeysByBucketRef.current.clear();
+      pendingUploadedKeysByBucket.clear();
     };
   }, []);
 
-  const startOperation = (
-    status: OperationItem["status"],
-    label: string,
-    path: string,
-    options?: {
-      kind?: OperationItem["kind"];
-      groupId?: string;
-      groupLabel?: string;
-      groupKind?: OperationItem["groupKind"];
-      itemLabel?: string;
-      cancelable?: boolean;
-      sizeBytes?: number;
-    },
-    progress = status === "uploading" || status === "downloading" ? 0 : 20,
-  ) => {
-    const operationId = makeId();
-    setOperations((prev) => [
-      {
-        id: operationId,
-        status,
-        label,
-        path,
-        progress,
-        sizeBytes: options?.sizeBytes,
-        kind: options?.kind ?? "other",
-        groupId: options?.groupId,
-        groupLabel: options?.groupLabel,
-        groupKind: options?.groupKind,
-        itemLabel: options?.itemLabel,
-        cancelable: options?.cancelable ?? false,
+  const startOperation = useCallback(
+    (
+      status: OperationItem["status"],
+      label: string,
+      path: string,
+      options?: {
+        kind?: OperationItem["kind"];
+        groupId?: string;
+        groupLabel?: string;
+        groupKind?: OperationItem["groupKind"];
+        itemLabel?: string;
+        cancelable?: boolean;
+        sizeBytes?: number;
       },
-      ...prev,
-    ]);
-    return operationId;
-  };
+      progress = status === "uploading" || status === "downloading" ? 0 : 20,
+    ) => {
+      const operationId = makeId();
+      setOperations((prev) => [
+        {
+          id: operationId,
+          status,
+          label,
+          path,
+          progress,
+          sizeBytes: options?.sizeBytes,
+          kind: options?.kind ?? "other",
+          groupId: options?.groupId,
+          groupLabel: options?.groupLabel,
+          groupKind: options?.groupKind,
+          itemLabel: options?.itemLabel,
+          cancelable: options?.cancelable ?? false,
+        },
+        ...prev,
+      ]);
+      return operationId;
+    },
+    [],
+  );
 
-  const completeOperation = (
-    operationId: string,
-    status: OperationCompletionStatus = "done",
-    errorMessage?: string,
-  ) => {
-    const completedAt = new Date().toLocaleTimeString();
-    setOperations((prev) =>
-      prev.map((op) =>
-        op.id === operationId
-          ? {
-              ...op,
-              progress: 100,
-              cancelable: false,
-              completedAt,
-              completionStatus: status,
-              errorMessage:
-                status === "failed"
-                  ? (errorMessage ?? op.errorMessage)
-                  : undefined,
-            }
-          : op,
-      ),
-    );
-  };
+  const completeOperation = useCallback(
+    (
+      operationId: string,
+      status: OperationCompletionStatus = "done",
+      errorMessage?: string,
+    ) => {
+      const completedAt = new Date().toLocaleTimeString();
+      setOperations((prev) =>
+        prev.map((op) =>
+          op.id === operationId
+            ? {
+                ...op,
+                progress: 100,
+                cancelable: false,
+                completedAt,
+                completionStatus: status,
+                errorMessage:
+                  status === "failed"
+                    ? (errorMessage ?? op.errorMessage)
+                    : undefined,
+              }
+            : op,
+        ),
+      );
+    },
+    [],
+  );
 
   const openConfirmDialog = (dialog: BrowserConfirmDialogState) => {
     setConfirmDialog(dialog);
@@ -7439,29 +7569,29 @@ export default function BrowserPage({
     return response.body;
   };
 
-  const listAllObjectsForPrefix = async (
-    targetPrefix: string,
-    targetBucket?: string,
-  ) => {
-    const bucket = targetBucket ?? bucketName;
-    if (!bucket || !hasS3AccountContext) return [];
-    const collected: BrowserObject[] = [];
-    let continuation: string | null = null;
-    let hasMore = true;
-    while (hasMore) {
-      const data = await listBrowserObjects(accountIdForApi, bucket, {
-        prefix: targetPrefix,
-        continuationToken: continuation,
-        maxKeys: 1000,
-        type: "file",
-        recursive: true,
-      });
-      collected.push(...data.objects);
-      continuation = data.next_continuation_token ?? null;
-      hasMore = Boolean(data.is_truncated && continuation);
-    }
-    return collected;
-  };
+  const listAllObjectsForPrefix = useCallback(
+    async (targetPrefix: string, targetBucket?: string) => {
+      const bucket = targetBucket ?? bucketName;
+      if (!bucket || !hasS3AccountContext) return [];
+      const collected: BrowserObject[] = [];
+      let continuation: string | null = null;
+      let hasMore = true;
+      while (hasMore) {
+        const data = await listBrowserObjects(accountIdForApi, bucket, {
+          prefix: targetPrefix,
+          continuationToken: continuation,
+          maxKeys: 1000,
+          type: "file",
+          recursive: true,
+        });
+        collected.push(...data.objects);
+        continuation = data.next_continuation_token ?? null;
+        hasMore = Boolean(data.is_truncated && continuation);
+      }
+      return collected;
+    },
+    [accountIdForApi, bucketName, hasS3AccountContext],
+  );
 
   const listAllVersionsForPrefix = async (targetPrefix: string) => {
     if (!bucketName || !hasS3AccountContext || !isVersioningEnabled)
@@ -7734,30 +7864,33 @@ export default function BrowserPage({
     });
   };
 
-  const updateCopyDetailStatus = (
-    operationId: string,
-    detailId: string,
-    status: CopyDetailStatus,
-    errorMessage?: string,
-  ) => {
-    setCopyDetails((prev) => {
-      const items = prev[operationId];
-      if (!items) return prev;
-      const nextItems = items.map((item) =>
-        item.id === detailId
-          ? {
-              ...item,
-              status,
-              errorMessage:
-                status === "failed"
-                  ? (errorMessage ?? item.errorMessage)
-                  : undefined,
-            }
-          : item,
-      );
-      return { ...prev, [operationId]: nextItems };
-    });
-  };
+  const updateCopyDetailStatus = useCallback(
+    (
+      operationId: string,
+      detailId: string,
+      status: CopyDetailStatus,
+      errorMessage?: string,
+    ) => {
+      setCopyDetails((prev) => {
+        const items = prev[operationId];
+        if (!items) return prev;
+        const nextItems = items.map((item) =>
+          item.id === detailId
+            ? {
+                ...item,
+                status,
+                errorMessage:
+                  status === "failed"
+                    ? (errorMessage ?? item.errorMessage)
+                    : undefined,
+              }
+            : item,
+        );
+        return { ...prev, [operationId]: nextItems };
+      });
+    },
+    [],
+  );
 
   const handleDownloadFolder = async (folderItem: BrowserItem) => {
     if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder")
@@ -8959,49 +9092,55 @@ export default function BrowserPage({
     }
   };
 
-  const handleCopyItems = (items: BrowserItem[]) => {
-    if (!bucketName || items.length === 0) return;
-    const eligible = items.filter((item) => !item.isDeleted);
-    if (eligible.length === 0) {
-      setWarningMessage("Deleted objects cannot be copied directly.");
-      return;
-    }
-    if (eligible.length !== items.length) {
-      setWarningMessage("Deleted objects were skipped.");
-    } else {
-      setWarningMessage(null);
-    }
-    setClipboard({
-      items: eligible,
-      sourceBucket: bucketName,
-      sourceAccountId: accountIdForApi ?? null,
-      mode: "copy",
-    });
-    setStatusMessage("Items copied.");
-  };
+  const handleCopyItems = useCallback(
+    (items: BrowserItem[]) => {
+      if (!bucketName || items.length === 0) return;
+      const eligible = items.filter((item) => !item.isDeleted);
+      if (eligible.length === 0) {
+        setWarningMessage("Deleted objects cannot be copied directly.");
+        return;
+      }
+      if (eligible.length !== items.length) {
+        setWarningMessage("Deleted objects were skipped.");
+      } else {
+        setWarningMessage(null);
+      }
+      setClipboard({
+        items: eligible,
+        sourceBucket: bucketName,
+        sourceAccountId: accountIdForApi ?? null,
+        mode: "copy",
+      });
+      setStatusMessage("Items copied.");
+    },
+    [accountIdForApi, bucketName],
+  );
 
-  const handleCutItems = (items: BrowserItem[]) => {
-    if (!bucketName || items.length === 0) return;
-    const eligible = items.filter((item) => !item.isDeleted);
-    if (eligible.length === 0) {
-      setWarningMessage("Deleted objects cannot be moved directly.");
-      return;
-    }
-    if (eligible.length !== items.length) {
-      setWarningMessage("Deleted objects were skipped.");
-    } else {
-      setWarningMessage(null);
-    }
-    setClipboard({
-      items: eligible,
-      sourceBucket: bucketName,
-      sourceAccountId: accountIdForApi ?? null,
-      mode: "move",
-    });
-    setStatusMessage("Items ready to move.");
-  };
+  const handleCutItems = useCallback(
+    (items: BrowserItem[]) => {
+      if (!bucketName || items.length === 0) return;
+      const eligible = items.filter((item) => !item.isDeleted);
+      if (eligible.length === 0) {
+        setWarningMessage("Deleted objects cannot be moved directly.");
+        return;
+      }
+      if (eligible.length !== items.length) {
+        setWarningMessage("Deleted objects were skipped.");
+      } else {
+        setWarningMessage(null);
+      }
+      setClipboard({
+        items: eligible,
+        sourceBucket: bucketName,
+        sourceAccountId: accountIdForApi ?? null,
+        mode: "move",
+      });
+      setStatusMessage("Items ready to move.");
+    },
+    [accountIdForApi, bucketName],
+  );
 
-  const handlePasteItems = async () => {
+  const handlePasteItems = useCallback(async () => {
     if (!clipboard || !bucketName || !hasS3AccountContext) return;
     if (!clipboardMatchesContext) {
       setWarningMessage(
@@ -9193,7 +9332,21 @@ export default function BrowserPage({
       completeOperation(operationId, "failed", completionError);
       setStatusMessage(completionError);
     }
-  };
+  }, [
+    accountIdForApi,
+    bucketName,
+    clipboard,
+    clipboardMatchesContext,
+    completeOperation,
+    formatOperationError,
+    hasS3AccountContext,
+    listAllObjectsForPrefix,
+    normalizedPrefix,
+    prefix,
+    requestObjectsRefresh,
+    startOperation,
+    updateCopyDetailStatus,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -9990,10 +10143,9 @@ export default function BrowserPage({
     activeOtherOperations,
     completedOtherOperations,
     failedOtherOperations,
-    showActiveOperations,
-    showQueuedOperations,
-    showCompletedOperations,
-    showFailedOperations,
+    showActiveFilter,
+    showCompletedFilter,
+    showFailedFilter,
   ]);
   const visibleUploadGroups = useMemo(() => {
     return uploadGroups.filter((group) => {
@@ -10014,10 +10166,10 @@ export default function BrowserPage({
     });
   }, [
     uploadGroups,
-    showActiveOperations,
-    showQueuedOperations,
-    showCompletedOperations,
-    showFailedOperations,
+    showActiveFilter,
+    showCompletedFilter,
+    showFailedFilter,
+    showQueuedFilter,
   ]);
   const visibleDownloadGroups = useMemo(() => {
     return downloadGroups.filter((group) => {
@@ -10044,10 +10196,10 @@ export default function BrowserPage({
     });
   }, [
     downloadGroups,
-    showActiveOperations,
-    showQueuedOperations,
-    showCompletedOperations,
-    showFailedOperations,
+    showActiveFilter,
+    showCompletedFilter,
+    showFailedFilter,
+    showQueuedFilter,
   ]);
   const visibleDeleteGroups = useMemo(() => {
     return deleteGroups.filter((group) => {
@@ -10072,10 +10224,10 @@ export default function BrowserPage({
     });
   }, [
     deleteGroups,
-    showActiveOperations,
-    showQueuedOperations,
-    showCompletedOperations,
-    showFailedOperations,
+    showActiveFilter,
+    showCompletedFilter,
+    showFailedFilter,
+    showQueuedFilter,
   ]);
   const visibleCopyGroups = useMemo(() => {
     return copyGroups.filter((group) => {
@@ -10100,10 +10252,10 @@ export default function BrowserPage({
     });
   }, [
     copyGroups,
-    showActiveOperations,
-    showQueuedOperations,
-    showCompletedOperations,
-    showFailedOperations,
+    showActiveFilter,
+    showCompletedFilter,
+    showFailedFilter,
+    showQueuedFilter,
   ]);
   const operationSortIndexById = useMemo(() => {
     const next: Record<string, number> = {};

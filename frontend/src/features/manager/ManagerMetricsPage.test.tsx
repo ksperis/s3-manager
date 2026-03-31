@@ -96,8 +96,8 @@ describe("ManagerMetricsPage", () => {
     );
 
     expect(
-      screen.getAllByText("Metrics are unavailable: unable to resolve RGW identity for this connection.")
-    ).toHaveLength(2);
+      screen.getByText("Metrics are unavailable: unable to resolve RGW identity for this connection.")
+    ).toBeInTheDocument();
     expect(screen.getByText("Metrics are unavailable for this context")).toBeInTheDocument();
     expect(screen.queryByText("Bucket breakdown (storage)")).not.toBeInTheDocument();
     expect(screen.queryByTestId("traffic-analytics")).not.toBeInTheDocument();
