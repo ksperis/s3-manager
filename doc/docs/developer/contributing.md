@@ -30,3 +30,16 @@ Useful local commands:
 
 - backend: `cd backend && PYTHONPATH=. ./.venv/bin/pytest tests -q`
 - frontend: `cd frontend && npm test`
+
+## Container publishing
+
+GitLab CI is the single source of truth for official container images.
+It builds once, scans the immutable `$CI_COMMIT_SHA` image, then promotes that exact artifact to the public tags in both GitLab Container Registry and GHCR.
+
+Current public tags:
+
+- `dev` and `dev-<short-sha>` from branch `dev`
+- `latest` from the default branch
+- exact Git tags for releases
+
+If a separate GitHub-side workflow still publishes images, disable it or restrict it to release metadata only. Do not rebuild official images in two CI systems.

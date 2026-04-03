@@ -12,12 +12,18 @@ variables:
   DOCKER_TLS_CERTDIR: ""
   VITE_API_URL: "/api"
   TRIVY_IMAGE: "aquasec/trivy:0.69.3"
+  SKOPEO_IMAGE: "quay.io/skopeo/stable:latest"
   TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/.trivycache"
   TRIVY_SEVERITY: "HIGH,CRITICAL"
   TRIVY_TIMEOUT: "20m0s"
   TRIVY_NO_PROGRESS: "--no-progress"
   TRIVY_USERNAME: "$CI_REGISTRY_USER"
   TRIVY_PASSWORD: "$CI_REGISTRY_PASSWORD"
+  DEV_BRANCH: "dev"
+  GHCR_REGISTRY: "ghcr.io"
+  GHCR_NAMESPACE: "ksperis"
+  GHCR_BACKEND_IMAGE: "ghcr.io/ksperis/s3-manager-backend"
+  GHCR_FRONTEND_IMAGE: "ghcr.io/ksperis/s3-manager-frontend"
 
 .trivy-job:
   image:
@@ -33,6 +39,61 @@ variables:
   artifacts:
     when: always
     expire_in: 1 week
+
+.promote-image:
+  stage: promote
+  image:
+    name: $SKOPEO_IMAGE
+    entrypoint: [""]
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
+  script:
+    - test -n "$SOURCE_IMAGE"
+    - test -n "$TARGET_GITLAB_IMAGE"
+    - test -n "$TARGET_GHCR_IMAGE"
+    - test -n "$GHCR_USERNAME"
+    - test -n "$GHCR_TOKEN"
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        promotion_tags="$CI_COMMIT_TAG"
+      elif [ "$CI_COMMIT_BRANCH" = "$DEV_BRANCH" ]; then
+        promotion_tags="dev dev-$CI_COMMIT_SHORT_SHA"
+      elif [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        promotion_tags="latest"
+      else
+        echo "No public tags to promote for this ref"
+        exit 0
+      fi
+    - |
+      source_digest=$(skopeo inspect --creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" --format '{{.Digest}}' "docker://$SOURCE_IMAGE")
+      for tag in $promotion_tags; do
+        gitlab_target="docker://$TARGET_GITLAB_IMAGE:$tag"
+        ghcr_target="docker://$TARGET_GHCR_IMAGE:$tag"
+
+        skopeo copy \
+          --src-creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" \
+          --dest-creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" \
+          "docker://$SOURCE_IMAGE" \
+          "$gitlab_target"
+        skopeo copy \
+          --src-creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" \
+          --dest-creds "$GHCR_USERNAME:$GHCR_TOKEN" \
+          "docker://$SOURCE_IMAGE" \
+          "$ghcr_target"
+
+        gitlab_digest=$(skopeo inspect --creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" --format '{{.Digest}}' "$gitlab_target")
+        ghcr_digest=$(skopeo inspect --creds "$GHCR_USERNAME:$GHCR_TOKEN" --format '{{.Digest}}' "$ghcr_target")
+        test "$gitlab_digest" = "$source_digest"
+        test "$ghcr_digest" = "$source_digest"
+      done
 
 backend-tests:
   stage: test
@@ -340,51 +401,15 @@ frontend-image-vuln-scan:
       - gl-security-reports/frontend-image-trivy.json
 
 promote-backend:
-  stage: promote
-  image: docker:24
-  services:
-    - docker:24-dind
-  rules:
-    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
-      when: never
-    - if: '$CI_COMMIT_TAG'
-      when: on_success
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: on_success
-    - when: never
-  script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - docker pull "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
-    - |
-      if [ -n "$CI_COMMIT_TAG" ]; then
-        docker tag "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_TAG"
-        docker push "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_TAG"
-      elif [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        docker tag "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/backend:latest"
-        docker push "$CI_REGISTRY_IMAGE/backend:latest"
-      fi
+  extends: .promote-image
+  variables:
+    SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
+    TARGET_GITLAB_IMAGE: "$CI_REGISTRY_IMAGE/backend"
+    TARGET_GHCR_IMAGE: "$GHCR_BACKEND_IMAGE"
 
 promote-frontend:
-  stage: promote
-  image: docker:24
-  services:
-    - docker:24-dind
-  rules:
-    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
-      when: never
-    - if: '$CI_COMMIT_TAG'
-      when: on_success
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: on_success
-    - when: never
-  script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - docker pull "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
-    - |
-      if [ -n "$CI_COMMIT_TAG" ]; then
-        docker tag "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_TAG"
-        docker push "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_TAG"
-      elif [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        docker tag "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/frontend:latest"
-        docker push "$CI_REGISTRY_IMAGE/frontend:latest"
-      fi
+  extends: .promote-image
+  variables:
+    SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
+    TARGET_GITLAB_IMAGE: "$CI_REGISTRY_IMAGE/frontend"
+    TARGET_GHCR_IMAGE: "$GHCR_FRONTEND_IMAGE"
