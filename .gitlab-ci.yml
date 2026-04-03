@@ -37,7 +37,6 @@ variables:
 backend-tests:
   stage: test
   image: python:3.12-slim
-  allow_failure: true
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
