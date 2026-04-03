@@ -20,7 +20,9 @@ variables:
   TRIVY_PASSWORD: "$CI_REGISTRY_PASSWORD"
 
 .trivy-job:
-  image: $TRIVY_IMAGE
+  image:
+    name: $TRIVY_IMAGE
+    entrypoint: [""]
   cache:
     key: trivy-cache
     paths:
