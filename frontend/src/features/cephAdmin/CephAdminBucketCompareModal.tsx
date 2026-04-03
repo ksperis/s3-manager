@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
+import UiDetails from "../../components/ui/UiDetails";
 import { uiCheckboxClass, uiInputClass, uiLabelClass } from "../../components/ui/styles";
 import {
   CephAdminBucketCompareResult,
@@ -930,7 +931,7 @@ export default function CephAdminBucketCompareModal({
               const bucketHasDifferences = Boolean(item.result?.has_differences);
               const progressValue = item.status === "running" ? 45 : item.status === "pending" ? 0 : 100;
               return (
-                <details
+                <UiDetails
                   key={`${item.sourceBucket}->${item.targetBucket}:${item.status}:${bucketHasDifferences ? "diff" : "same"}`}
                   defaultOpen={item.status === "failed" || bucketHasDifferences}
                   className="rounded-lg border border-slate-200 dark:border-slate-800"
@@ -957,7 +958,7 @@ export default function CephAdminBucketCompareModal({
                   <div className="space-y-3 border-t border-slate-200 px-3 py-3 dark:border-slate-800">
                     {item.error && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{item.error}</p>}
                     {content && (
-                      <details
+                      <UiDetails
                         defaultOpen={contentHasDifferences}
                         className="rounded-md border border-slate-200 dark:border-slate-800"
                       >
@@ -973,7 +974,7 @@ export default function CephAdminBucketCompareModal({
                         </summary>
                         <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
                           {contentSections.map((section) => (
-                            <details
+                            <UiDetails
                               key={`${item.sourceBucket}:${item.targetBucket}:content:${section.key}`}
                               defaultOpen={section.changed}
                               className="rounded-md border border-slate-200 dark:border-slate-800"
@@ -1000,13 +1001,13 @@ export default function CephAdminBucketCompareModal({
                                   {renderDiffLines(section.after)}
                                 </div>
                               </div>
-                            </details>
+                            </UiDetails>
                           ))}
                         </div>
-                      </details>
+                      </UiDetails>
                     )}
                     {item.result?.config_diff && (
-                      <details
+                      <UiDetails
                         defaultOpen={configHasDifferences}
                         className="rounded-md border border-slate-200 dark:border-slate-800"
                       >
@@ -1020,7 +1021,7 @@ export default function CephAdminBucketCompareModal({
                         </summary>
                         <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
                           {configSections.map((section) => (
-                            <details
+                            <UiDetails
                               key={`${item.sourceBucket}:${item.targetBucket}:config:${section.key}`}
                               defaultOpen={section.changed}
                               className="rounded-md border border-slate-200 dark:border-slate-800"
@@ -1047,13 +1048,13 @@ export default function CephAdminBucketCompareModal({
                                   {renderDiffLines(section.after)}
                                 </div>
                               </div>
-                            </details>
+                            </UiDetails>
                           ))}
                         </div>
-                      </details>
+                      </UiDetails>
                     )}
                   </div>
-                </details>
+                </UiDetails>
               );
             })}
             {filteredItems.length === 0 && (

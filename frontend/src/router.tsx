@@ -501,7 +501,7 @@ export function createAppRoutes() {
 export default function AppRouter() {
   const router = useMemo(() => {
     return createBrowserRouter(createAppRoutes(), {
-      future: { v7_relativeSplatPath: true },
+      future: { v7_relativeSplatPath: true, v7_startTransition: true },
     });
   }, []);
   return (

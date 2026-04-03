@@ -17,7 +17,7 @@ if (typeof window !== "undefined" && !window.matchMedia) {
     }) as MediaQueryList;
 }
 
-if (typeof window !== "undefined" && typeof window.localStorage?.setItem !== "function") {
+if (typeof window !== "undefined") {
   const store = new Map<string, string>();
   const memoryStorage: Storage = {
     get length() {

@@ -872,7 +872,7 @@ class S3AccountsService:
                         UserS3Account.user_id.in_(to_remove),
                         UserS3Account.is_root.is_(False),
                     )
-                    .delete(synchronize_session=False)
+                    .delete(synchronize_session="fetch")
                 )
 
             for link in desired_links:

@@ -16,6 +16,7 @@ import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiDetails from "../../components/ui/UiDetails";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import {
   uiCheckboxClass,
@@ -8910,7 +8911,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                   const sections = buildPreviewSections(item);
                   const changedSections = sections.filter((section) => section.changed).length;
                   return (
-                    <details
+                    <UiDetails
                       key={item.bucket}
                       defaultOpen={Boolean(item.error || item.changed)}
                       className="rounded-lg border border-slate-200 dark:border-slate-800"
@@ -8930,7 +8931,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                       </summary>
                       <div className="space-y-2 border-t border-slate-200 px-3 py-3 dark:border-slate-800">
                         {sections.map((section) => (
-                          <details
+                          <UiDetails
                             key={`${item.bucket}:${section.key}`}
                             defaultOpen={Boolean(section.error || section.changed)}
                             className="rounded-md border border-slate-200 dark:border-slate-800"
@@ -8967,10 +8968,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                 </div>
                               )}
                             </div>
-                          </details>
+                          </UiDetails>
                         ))}
                       </div>
-                    </details>
+                    </UiDetails>
                   );
                 })}
               </div>

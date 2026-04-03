@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -8,6 +9,14 @@ import type {
   EndpointHealthSummaryResponse,
 } from "../../api/healthchecks";
 import EndpointStatusDetailPage from "./EndpointStatusDetailPage";
+
+vi.mock("recharts", async () => {
+  const actual = await vi.importActual<typeof import("recharts")>("recharts");
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: ReactNode }) => <div className="h-64 w-full">{children}</div>,
+  };
+});
 
 const fetchHealthSummaryMock = vi.fn<() => Promise<EndpointHealthSummaryResponse>>();
 const fetchHealthSeriesMock = vi.fn<(endpointId: number, window: string) => Promise<EndpointHealthSeries>>();
