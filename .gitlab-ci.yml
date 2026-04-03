@@ -1,16 +1,45 @@
+include:
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+
 stages:
   - test
   - build
+  - security
+  - promote
 
 variables:
   DOCKER_HOST: "tcp://docker:2375"
   DOCKER_TLS_CERTDIR: ""
   VITE_API_URL: "/api"
+  TRIVY_IMAGE: "aquasec/trivy:0.69.3"
+  TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/.trivycache"
+  TRIVY_SEVERITY: "HIGH,CRITICAL"
+  TRIVY_TIMEOUT: "20m0s"
+  TRIVY_NO_PROGRESS: "--no-progress"
+  TRIVY_USERNAME: "$CI_REGISTRY_USER"
+  TRIVY_PASSWORD: "$CI_REGISTRY_PASSWORD"
+
+.trivy-job:
+  image: $TRIVY_IMAGE
+  cache:
+    key: trivy-cache
+    paths:
+      - .trivycache/
+  before_script:
+    - trivy --version
+    - mkdir -p gl-security-reports
+  artifacts:
+    when: always
+    expire_in: 1 week
 
 backend-tests:
   stage: test
   image: python:3.12-slim
   allow_failure: true
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - when: on_success
   before_script:
     - python -m pip install --upgrade pip
     - pip install -r backend/requirements-test.txt
@@ -25,6 +54,10 @@ backend-deadcode:
   stage: test
   image: python:3.12-slim
   needs: []
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - when: on_success
   before_script:
     - python -m pip install --upgrade pip
     - pip install -r backend/requirements-test.txt
@@ -32,11 +65,100 @@ backend-deadcode:
     - cd backend
     - python scripts/check_vulture.py
 
+backend-vuln-scan:
+  extends: .trivy-job
+  stage: test
+  needs: []
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - when: on_success
+  script:
+    - |
+      trivy fs \
+        --scanners vuln \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --format json \
+        --output gl-security-reports/backend-dependencies-trivy.json \
+        backend || scan_exit=$?
+    - |
+      trivy fs \
+        --scanners vuln \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --format table \
+        backend
+    - test -z "${scan_exit:-}"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gl-security-reports/backend-dependencies-trivy.json
+
+frontend-quality:
+  stage: test
+  image: node:20
+  needs: []
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - when: on_success
+  script:
+    - cd frontend
+    - npm ci
+    - npm run check
+
+frontend-vuln-scan:
+  extends: .trivy-job
+  stage: test
+  needs: []
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - when: on_success
+  script:
+    - |
+      trivy fs \
+        --scanners vuln \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --format json \
+        --output gl-security-reports/frontend-dependencies-trivy.json \
+        frontend || scan_exit=$?
+    - |
+      trivy fs \
+        --scanners vuln \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --format table \
+        frontend
+    - test -z "${scan_exit:-}"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gl-security-reports/frontend-dependencies-trivy.json
+
 ceph-functional-tests:
   stage: test
   image: python:3.12-slim
   needs: []
   rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
     - if: '$CEPH_TEST_BACKEND_BASE_URL && $CEPH_TEST_SUPERADMIN_EMAIL && $CEPH_TEST_SUPERADMIN_PASSWORD'
       when: on_success
     - when: never
@@ -47,25 +169,153 @@ ceph-functional-tests:
     - cd backend
     - PYTHONPATH=. python tests_ceph_functional/run.py -q
 
-frontend-quality:
-  stage: test
-  image: node:20
-  needs: []
-  script:
-    - cd frontend
-    - npm ci
-    - npm run check
-
 build-backend:
   stage: build
-  needs: []
   image: docker:24
   services:
     - docker:24-dind
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - when: on_success
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - docker build -t "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" backend
     - docker push "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
+
+build-frontend:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - when: on_success
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build --build-arg VITE_API_URL="$VITE_API_URL" -t "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" frontend
+    - docker push "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
+
+secret_detection:
+  stage: security
+  allow_failure: false
+  needs: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: on_success
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: manual
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
+
+backend-image-vuln-scan:
+  extends: .trivy-job
+  stage: security
+  needs:
+    - build-backend
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - when: on_success
+  script:
+    - |
+      trivy image \
+        --scanners vuln \
+        --vuln-type os,library \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format json \
+        --output gl-security-reports/backend-image-trivy.json \
+        "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" || scan_exit=$?
+    - |
+      trivy image \
+        --scanners vuln \
+        --vuln-type os,library \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format table \
+        "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
+    - test -z "${scan_exit:-}"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gl-security-reports/backend-image-trivy.json
+
+frontend-image-vuln-scan:
+  extends: .trivy-job
+  stage: security
+  needs:
+    - build-frontend
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - when: on_success
+  script:
+    - |
+      trivy image \
+        --scanners vuln \
+        --vuln-type os,library \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format json \
+        --output gl-security-reports/frontend-image-trivy.json \
+        "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" || scan_exit=$?
+    - |
+      trivy image \
+        --scanners vuln \
+        --vuln-type os,library \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format table \
+        "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
+    - test -z "${scan_exit:-}"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gl-security-reports/frontend-image-trivy.json
+
+promote-backend:
+  stage: promote
+  image: docker:24
+  services:
+    - docker:24-dind
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker pull "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
     - |
       if [ -n "$CI_COMMIT_TAG" ]; then
         docker tag "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_TAG"
@@ -75,16 +325,22 @@ build-backend:
         docker push "$CI_REGISTRY_IMAGE/backend:latest"
       fi
 
-build-frontend:
-  stage: build
-  needs: []
+promote-frontend:
+  stage: promote
   image: docker:24
   services:
     - docker:24-dind
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - docker build --build-arg VITE_API_URL="$VITE_API_URL" -t "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" frontend
-    - docker push "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
+    - docker pull "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
     - |
       if [ -n "$CI_COMMIT_TAG" ]; then
         docker tag "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_TAG"

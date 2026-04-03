@@ -1,0 +1,10 @@
+# Temporary Trivy exception list.
+#
+# Rules:
+# - one vulnerability identifier per line (for example: CVE-2026-12345)
+# - keep exceptions short-lived
+# - add the justification, owner, and expiry date in the commit or MR description
+# - remove the entry as soon as the dependency or base image is remediated
+#
+# Example:
+# CVE-2026-12345
