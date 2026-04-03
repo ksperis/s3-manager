@@ -252,6 +252,7 @@ def test_ceph_admin_endpoint_selector_hides_administrative_tags(client: TestClie
     db_session.commit()
 
     app.dependency_overrides[dependencies.get_current_ceph_admin] = lambda: admin
+    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     response = client.get("/api/ceph-admin/endpoints")
     assert response.status_code == 200, response.text
     payload = response.json()
