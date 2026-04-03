@@ -45,11 +45,19 @@ backend-tests:
     - python -m pip install --upgrade pip
     - pip install -r backend/requirements-test.txt
     - rm -f backend/.env
+    - mkdir -p gl-test-reports
     - for var in $(env | cut -d= -f1 | grep '^OIDC_PROVIDERS__' || true); do unset "$var"; done
     - export OIDC_PROVIDERS="{}"
   script:
     - cd backend
-    - PYTHONPATH=. python -m pytest tests -q
+    - PYTHONPATH=. python -m pytest tests -q --junit-xml=../gl-test-reports/backend-junit.xml
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gl-test-reports/backend-junit.xml
+    reports:
+      junit: gl-test-reports/backend-junit.xml
 
 backend-deadcode:
   stage: test
@@ -114,7 +122,29 @@ frontend-quality:
   script:
     - cd frontend
     - npm ci
-    - npm run check
+    - npm run check:ci
+
+frontend-tests:
+  stage: test
+  image: node:20
+  needs: []
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - when: on_success
+  before_script:
+    - mkdir -p gl-test-reports
+  script:
+    - cd frontend
+    - npm ci
+    - npm run test:ci
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gl-test-reports/frontend-junit.xml
+    reports:
+      junit: gl-test-reports/frontend-junit.xml
 
 frontend-vuln-scan:
   extends: .trivy-job
@@ -166,9 +196,17 @@ ceph-functional-tests:
   before_script:
     - python -m pip install --upgrade pip
     - pip install -r backend/requirements-test.txt
+    - mkdir -p gl-test-reports
   script:
     - cd backend
-    - PYTHONPATH=. python tests_ceph_functional/run.py -q
+    - PYTHONPATH=. python tests_ceph_functional/run.py -q --junit-xml=../gl-test-reports/ceph-functional-junit.xml
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gl-test-reports/ceph-functional-junit.xml
+    reports:
+      junit: gl-test-reports/ceph-functional-junit.xml
 
 build-backend:
   stage: build
