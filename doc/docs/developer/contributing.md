@@ -34,12 +34,14 @@ Useful local commands:
 ## Container publishing
 
 GitLab CI is the single source of truth for official container images.
-It builds once, scans the immutable `$CI_COMMIT_SHA` image, then promotes that exact artifact to the public tags in both GitLab Container Registry and GHCR.
+It builds once, scans the immutable `$CI_COMMIT_SHA` image, then promotes that exact artifact to the appropriate target registry.
 
-Current public tags:
+Registry/tag policy:
 
-- `dev` and `dev-<short-sha>` from branch `dev`
-- `latest` from the default branch
-- exact Git tags for releases, plus a plain semver alias when the release tag starts with `v`
+- GitLab Container Registry:
+  - `dev` and `dev-<short-sha>` from branch `dev`
+- GHCR:
+  - `latest` from the default branch
+  - `X.Y.Z` from Git tags `vX.Y.Z`
 
 If a separate GitHub-side workflow still publishes images, disable it or restrict it to release metadata only. Do not rebuild official images in two CI systems.

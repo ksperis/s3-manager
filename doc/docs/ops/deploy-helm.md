@@ -42,29 +42,45 @@ These images are built, tested, scanned, and published by GitLab CI.
 GitHub is treated as a code mirror and release metadata surface, not as a
 second image build pipeline.
 
+Registry roles:
+
+- GitLab Container Registry: internal lab/dev images only
+- GHCR: promoted stable/public images only
+
 Tag conventions:
 
-- shared dev and rolling lab: `dev`
-- pinned lab or validation build: `dev-<short-sha>`
+- lab and rolling internal validation: `dev`
+- pinned lab validation build: `dev-<short-sha>`
 - default-branch rolling release: `latest`
-- stable release: Git tag such as `v0.2.0`, also published as plain semver `0.2.0` for Helm defaults
+- stable image release: plain semver such as `0.2.0`
+- Git release tag: `v0.2.0`
 
-Examples:
+Stable/public examples:
 
 ```bash
 helm upgrade --install s3-manager helm/s3-manager \
   --set image.backend.repository=ghcr.io/ksperis/s3-manager-backend \
-  --set image.backend.tag=dev \
+  --set image.backend.tag=latest \
   --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend \
-  --set image.frontend.tag=dev
+  --set image.frontend.tag=latest
 ```
 
 ```bash
 helm upgrade --install s3-manager helm/s3-manager \
   --set image.backend.repository=ghcr.io/ksperis/s3-manager-backend \
-  --set image.backend.tag=dev-a1b2c3d \
+  --set image.backend.tag=0.1.5 \
   --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend \
-  --set image.frontend.tag=dev-a1b2c3d
+  --set image.frontend.tag=0.1.5
+```
+
+Lab/dev example with GitLab Container Registry:
+
+```bash
+helm upgrade --install s3-manager helm/s3-manager \
+  --set image.backend.repository=<gitlab-registry>/<project>/backend \
+  --set image.backend.tag=dev \
+  --set image.frontend.repository=<gitlab-registry>/<project>/frontend \
+  --set image.frontend.tag=dev
 ```
 
 ## Related pages

@@ -1,6 +1,10 @@
+# Defaults target promoted GHCR images.
+# For lab/dev, override S3_MANAGER_BACKEND_IMAGE and S3_MANAGER_FRONTEND_IMAGE
+# with GitLab Container Registry image names and set S3_MANAGER_TAG to dev or
+# dev-<short-sha>.
 services:
   backend:
-    image: ghcr.io/ksperis/s3-manager-backend:${S3_MANAGER_TAG:-latest}
+    image: ${S3_MANAGER_BACKEND_IMAGE:-ghcr.io/ksperis/s3-manager-backend}:${S3_MANAGER_TAG:-latest}
     environment:
       CORS_ORIGINS: '["http://127.0.0.1:8080", "http://localhost:8080"]'
       DATABASE_URL: sqlite:////data/app.db
@@ -15,7 +19,7 @@ services:
     ports:
       - "8000:8000"
   frontend:
-    image: ghcr.io/ksperis/s3-manager-frontend:${S3_MANAGER_TAG:-latest}
+    image: ${S3_MANAGER_FRONTEND_IMAGE:-ghcr.io/ksperis/s3-manager-frontend}:${S3_MANAGER_TAG:-latest}
     ports:
       - "8080:80"
     depends_on:

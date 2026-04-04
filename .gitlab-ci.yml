@@ -40,62 +40,65 @@ variables:
     when: always
     expire_in: 1 week
 
-.promote-image:
+.promote-internal-image:
   stage: promote
   image:
     name: $SKOPEO_IMAGE
     entrypoint: [""]
-  rules:
-    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
-      when: never
-    - if: '$CI_COMMIT_TAG'
-      when: on_success
-    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH'
-      when: on_success
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: on_success
-    - when: never
   script:
     - test -n "$SOURCE_IMAGE"
     - test -n "$TARGET_GITLAB_IMAGE"
-    - test -n "$TARGET_GHCR_IMAGE"
-    - test -n "$GHCR_USERNAME"
-    - test -n "$GHCR_TOKEN"
-    - |
-      if [ -n "$CI_COMMIT_TAG" ]; then
-        promotion_tags="$CI_COMMIT_TAG"
-        normalized_release_tag="${CI_COMMIT_TAG#v}"
-        if [ "$normalized_release_tag" != "$CI_COMMIT_TAG" ]; then
-          promotion_tags="$promotion_tags $normalized_release_tag"
-        fi
-      elif [ "$CI_COMMIT_BRANCH" = "$DEV_BRANCH" ]; then
-        promotion_tags="dev dev-$CI_COMMIT_SHORT_SHA"
-      elif [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        promotion_tags="latest"
-      else
-        echo "No public tags to promote for this ref"
-        exit 0
-      fi
     - |
       source_digest=$(skopeo inspect --creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" --format '{{.Digest}}' "docker://$SOURCE_IMAGE")
-      for tag in $promotion_tags; do
+      for tag in dev "dev-$CI_COMMIT_SHORT_SHA"; do
         gitlab_target="docker://$TARGET_GITLAB_IMAGE:$tag"
-        ghcr_target="docker://$TARGET_GHCR_IMAGE:$tag"
 
         skopeo copy \
           --src-creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" \
           --dest-creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" \
           "docker://$SOURCE_IMAGE" \
           "$gitlab_target"
+
+        gitlab_digest=$(skopeo inspect --creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" --format '{{.Digest}}' "$gitlab_target")
+        test "$gitlab_digest" = "$source_digest"
+      done
+
+.promote-public-image:
+  stage: promote
+  image:
+    name: $SKOPEO_IMAGE
+    entrypoint: [""]
+  script:
+    - test -n "$SOURCE_IMAGE"
+    - test -n "$TARGET_GHCR_IMAGE"
+    - test -n "$GHCR_USERNAME"
+    - test -n "$GHCR_TOKEN"
+    - |
+      if [ "$PROMOTION_KIND" = "main" ]; then
+        promotion_tags="latest"
+      elif [ "$PROMOTION_KIND" = "release" ]; then
+        normalized_release_tag="${CI_COMMIT_TAG#v}"
+        if [ -z "$CI_COMMIT_TAG" ] || [ "$normalized_release_tag" = "$CI_COMMIT_TAG" ]; then
+          echo "Release promotion requires a Git tag matching v*"
+          exit 1
+        fi
+        promotion_tags="$normalized_release_tag"
+      else
+        echo "Unsupported PROMOTION_KIND: $PROMOTION_KIND"
+        exit 1
+      fi
+    - |
+      source_digest=$(skopeo inspect --creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" --format '{{.Digest}}' "docker://$SOURCE_IMAGE")
+      for tag in $promotion_tags; do
+        ghcr_target="docker://$TARGET_GHCR_IMAGE:$tag"
+
         skopeo copy \
           --src-creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" \
           --dest-creds "$GHCR_USERNAME:$GHCR_TOKEN" \
           "docker://$SOURCE_IMAGE" \
           "$ghcr_target"
 
-        gitlab_digest=$(skopeo inspect --creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" --format '{{.Digest}}' "$gitlab_target")
         ghcr_digest=$(skopeo inspect --creds "$GHCR_USERNAME:$GHCR_TOKEN" --format '{{.Digest}}' "$ghcr_target")
-        test "$gitlab_digest" = "$source_digest"
         test "$ghcr_digest" = "$source_digest"
       done
 
@@ -404,16 +407,78 @@ frontend-image-vuln-scan:
     paths:
       - gl-security-reports/frontend-image-trivy.json
 
-promote-backend:
-  extends: .promote-image
+promote-backend-dev:
+  extends: .promote-internal-image
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH'
+      when: on_success
+    - when: never
   variables:
     SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
     TARGET_GITLAB_IMAGE: "$CI_REGISTRY_IMAGE/backend"
-    TARGET_GHCR_IMAGE: "$GHCR_BACKEND_IMAGE"
 
-promote-frontend:
-  extends: .promote-image
+promote-frontend-dev:
+  extends: .promote-internal-image
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH'
+      when: on_success
+    - when: never
   variables:
     SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
     TARGET_GITLAB_IMAGE: "$CI_REGISTRY_IMAGE/frontend"
+ 
+promote-backend-main:
+  extends: .promote-public-image
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
+  variables:
+    PROMOTION_KIND: "main"
+    SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
+    TARGET_GHCR_IMAGE: "$GHCR_BACKEND_IMAGE"
+
+promote-frontend-main:
+  extends: .promote-public-image
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
+  variables:
+    PROMOTION_KIND: "main"
+    SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
+    TARGET_GHCR_IMAGE: "$GHCR_FRONTEND_IMAGE"
+
+promote-backend-release:
+  extends: .promote-public-image
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v.+$/'
+      when: on_success
+    - when: never
+  variables:
+    PROMOTION_KIND: "release"
+    SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
+    TARGET_GHCR_IMAGE: "$GHCR_BACKEND_IMAGE"
+
+promote-frontend-release:
+  extends: .promote-public-image
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v.+$/'
+      when: on_success
+    - when: never
+  variables:
+    PROMOTION_KIND: "release"
+    SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
     TARGET_GHCR_IMAGE: "$GHCR_FRONTEND_IMAGE"

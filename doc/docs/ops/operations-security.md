@@ -37,13 +37,13 @@ Current CI baseline:
 Promotion rules:
 
 - `build-*` jobs publish immutable images tagged with `$CI_COMMIT_SHA`.
-- `promote-*` jobs copy the validated `$CI_COMMIT_SHA` image to public tags only after the security stage succeeds.
+- `promote-*` jobs copy the validated `$CI_COMMIT_SHA` image only after the security stage succeeds.
 - GitLab CI is the single image publisher; GitHub must not rebuild official images.
 - Public tag policy:
-  - branch `dev`: `dev` and `dev-$CI_COMMIT_SHORT_SHA`
-  - default branch: `latest`
-  - Git tags: exact `$CI_COMMIT_TAG`, plus a plain semver alias without the leading `v` when the tag matches `v*`
-- Promotion copies images to both the GitLab Container Registry and GHCR without rebuilding them.
+  - branch `dev`: GitLab Container Registry only, tags `dev` and `dev-$CI_COMMIT_SHORT_SHA`
+  - default branch: GHCR only, tag `latest`
+  - Git tags matching `v*`: GHCR only, image tag normalized to plain semver without the leading `v`
+- Promotion never rebuilds images; it copies the validated digest to the target registry.
 
 Required CI variables for GHCR publication:
 
@@ -52,6 +52,7 @@ Required CI variables for GHCR publication:
 
 Store them in GitLab CI/CD variables as protected and masked values.
 The token should have `write:packages`, and `read:packages` if your GHCR access policy requires it.
+The `dev` branch no longer depends on these variables.
 
 ## Local replay
 
@@ -68,7 +69,7 @@ Examples:
 - backend image: `trivy image ... "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"`
 - frontend image: `trivy image ... "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"`
 
-Promotion validation should confirm that the promoted GHCR digest matches the validated GitLab registry digest for the same commit SHA.
+Promotion validation should confirm that the promoted digest matches the validated GitLab registry digest for the same commit SHA.
 
 Secret detection is managed by the GitLab analyzer template in CI. To validate it safely, use a dedicated branch or a scheduled/manual pipeline with `SECRET_DETECTION_HISTORIC_SCAN=true`.
 
