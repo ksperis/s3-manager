@@ -329,7 +329,7 @@ backend-image-vuln-scan:
     - |
       trivy image \
         --scanners vuln \
-        --vuln-type os,library \
+        --pkg-types os,library \
         --severity "$TRIVY_SEVERITY" \
         --ignore-unfixed \
         --ignorefile .trivyignore \
@@ -343,7 +343,7 @@ backend-image-vuln-scan:
     - |
       trivy image \
         --scanners vuln \
-        --vuln-type os,library \
+        --pkg-types os,library \
         --severity "$TRIVY_SEVERITY" \
         --ignore-unfixed \
         --ignorefile .trivyignore \
@@ -373,7 +373,7 @@ frontend-image-vuln-scan:
     - |
       trivy image \
         --scanners vuln \
-        --vuln-type os,library \
+        --pkg-types os,library \
         --severity "$TRIVY_SEVERITY" \
         --ignore-unfixed \
         --ignorefile .trivyignore \
@@ -387,7 +387,7 @@ frontend-image-vuln-scan:
     - |
       trivy image \
         --scanners vuln \
-        --vuln-type os,library \
+        --pkg-types os,library \
         --severity "$TRIVY_SEVERITY" \
         --ignore-unfixed \
         --ignorefile .trivyignore \

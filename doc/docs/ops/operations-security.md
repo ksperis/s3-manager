@@ -60,7 +60,7 @@ Install Trivy locally, then run:
 ```bash
 trivy fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore backend
 trivy fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore frontend
-trivy image --scanners vuln --vuln-type os,library --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore <image-ref>
+trivy image --scanners vuln --pkg-types os,library --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore <image-ref>
 ```
 
 Examples:
