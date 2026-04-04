@@ -40,6 +40,6 @@ Current public tags:
 
 - `dev` and `dev-<short-sha>` from branch `dev`
 - `latest` from the default branch
-- exact Git tags for releases
+- exact Git tags for releases, plus a plain semver alias when the release tag starts with `v`
 
 If a separate GitHub-side workflow still publishes images, disable it or restrict it to release metadata only. Do not rebuild official images in two CI systems.

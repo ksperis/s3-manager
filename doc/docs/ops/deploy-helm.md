@@ -47,7 +47,7 @@ Tag conventions:
 - shared dev and rolling lab: `dev`
 - pinned lab or validation build: `dev-<short-sha>`
 - default-branch rolling release: `latest`
-- stable release: Git tag such as `v0.2.0`
+- stable release: Git tag such as `v0.2.0`, also published as plain semver `0.2.0` for Helm defaults
 
 Examples:
 

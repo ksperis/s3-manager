@@ -42,7 +42,7 @@ Promotion rules:
 - Public tag policy:
   - branch `dev`: `dev` and `dev-$CI_COMMIT_SHORT_SHA`
   - default branch: `latest`
-  - Git tags: exact `$CI_COMMIT_TAG`
+  - Git tags: exact `$CI_COMMIT_TAG`, plus a plain semver alias without the leading `v` when the tag matches `v*`
 - Promotion copies images to both the GitLab Container Registry and GHCR without rebuilding them.
 
 Required CI variables for GHCR publication:

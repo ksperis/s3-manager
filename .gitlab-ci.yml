@@ -64,6 +64,10 @@ variables:
     - |
       if [ -n "$CI_COMMIT_TAG" ]; then
         promotion_tags="$CI_COMMIT_TAG"
+        normalized_release_tag="${CI_COMMIT_TAG#v}"
+        if [ "$normalized_release_tag" != "$CI_COMMIT_TAG" ]; then
+          promotion_tags="$promotion_tags $normalized_release_tag"
+        fi
       elif [ "$CI_COMMIT_BRANCH" = "$DEV_BRANCH" ]; then
         promotion_tags="dev dev-$CI_COMMIT_SHORT_SHA"
       elif [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
