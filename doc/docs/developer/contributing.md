@@ -42,6 +42,8 @@ Registry/tag policy:
   - `dev` and `dev-<short-sha>` from branch `dev`
 - GHCR:
   - `latest` from the default branch
-  - `X.Y.Z` from Git tags `vX.Y.Z`
+  - `X.Y.Z` and `X.Y` from Git tags `vX.Y.Z`
+
+Use `X.Y.Z` when you need an immutable release, `X.Y` when you want the latest patch in a minor series, and `latest` when you want the current validated build from `main`.
 
 If a separate GitHub-side workflow still publishes images, disable it or restrict it to release metadata only. Do not rebuild official images in two CI systems.

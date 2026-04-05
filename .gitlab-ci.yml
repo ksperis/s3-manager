@@ -79,10 +79,22 @@ variables:
       elif [ "$PROMOTION_KIND" = "release" ]; then
         normalized_release_tag="${CI_COMMIT_TAG#v}"
         if [ -z "$CI_COMMIT_TAG" ] || [ "$normalized_release_tag" = "$CI_COMMIT_TAG" ]; then
-          echo "Release promotion requires a Git tag matching v*"
+          echo "Release promotion requires a Git tag matching vX.Y.Z"
           exit 1
         fi
-        promotion_tags="$normalized_release_tag"
+        case "$normalized_release_tag" in
+          *.*.*) ;;
+          *)
+            echo "Release promotion requires a semver tag matching vX.Y.Z"
+            exit 1
+            ;;
+        esac
+        release_major_minor="${normalized_release_tag%.*}"
+        if [ -z "$release_major_minor" ] || [ "$release_major_minor" = "$normalized_release_tag" ]; then
+          echo "Unable to derive X.Y alias from release tag $CI_COMMIT_TAG"
+          exit 1
+        fi
+        promotion_tags="$normalized_release_tag $release_major_minor"
       else
         echo "Unsupported PROMOTION_KIND: $PROMOTION_KIND"
         exit 1

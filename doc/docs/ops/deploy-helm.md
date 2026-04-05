@@ -53,6 +53,7 @@ Tag conventions:
 - pinned lab validation build: `dev-<short-sha>`
 - default-branch rolling release: `latest`
 - stable image release: plain semver such as `0.2.0`
+- stable minor series alias: `0.2` for the latest `0.2.x` release
 - Git release tag: `v0.2.0`
 
 Stable/public examples:
@@ -71,6 +72,14 @@ helm upgrade --install s3-manager helm/s3-manager \
   --set image.backend.tag=0.1.5 \
   --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend \
   --set image.frontend.tag=0.1.5
+```
+
+```bash
+helm upgrade --install s3-manager helm/s3-manager \
+  --set image.backend.repository=ghcr.io/ksperis/s3-manager-backend \
+  --set image.backend.tag=0.1 \
+  --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend \
+  --set image.frontend.tag=0.1
 ```
 
 Lab/dev example with GitLab Container Registry:
