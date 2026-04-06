@@ -5,12 +5,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler as fastapi_http_exception_handler
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from botocore.exceptions import ClientError
+from sqlalchemy.exc import DatabaseError
 
 from app.core.config import collect_secret_warnings, get_settings, has_non_local_cors_origins
-from app.core.database import engine, SessionLocal
+from app.core.database import SessionLocal, engine, is_sqlite_malformed_database_error, is_sqlite_url
 from app.core.db_init import init_db
 from app.routers import auth, users, settings as public_settings, browser as user_browser
 from app.routers import execution_contexts
@@ -76,6 +78,12 @@ def _startup_security_warnings() -> list[str]:
         warnings.append(
             "REFRESH_TOKEN_COOKIE_SECURE=false while non-local CORS origins are configured. "
             "Production deployments should enable secure refresh cookies."
+        )
+    if is_sqlite_url(settings.database_url) and settings.bucket_migration_worker_enabled:
+        warnings.append(
+            "SQLite is configured while the bucket migration worker is enabled. "
+            "Prefer PostgreSQL for long-running migrations; if you stay on SQLite, "
+            "back up the .db, -wal and -shm files regularly."
         )
     return warnings
 
@@ -241,3 +249,31 @@ async def log_http_exceptions(request: Request, exc: StarletteHTTPException):
                 exc_info=exc.__cause__ or exc,
             )
     return await fastapi_http_exception_handler(request, exc)
+
+
+@app.exception_handler(DatabaseError)
+async def handle_database_errors(request: Request, exc: DatabaseError):
+    if is_sqlite_malformed_database_error(exc):
+        logger.error(
+            "Request %s %s failed because the SQLite database appears corrupted",
+            request.method,
+            request.url.path,
+            exc_info=exc,
+        )
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": (
+                    "SQLite database corruption detected. Stop the backend, back up the database files, "
+                    "run `sqlite3 <db> 'PRAGMA integrity_check;'`, then restore from backup or rebuild "
+                    "the database before retrying the migration."
+                )
+            },
+        )
+    logger.error(
+        "Request %s %s failed with a database error",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal database error."})

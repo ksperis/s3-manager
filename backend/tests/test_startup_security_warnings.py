@@ -37,3 +37,17 @@ def test_startup_security_warnings_do_not_include_cookie_notice_for_local_origin
 
     warnings = main._startup_security_warnings()
     assert not any("REFRESH_TOKEN_COOKIE_SECURE=false" in item for item in warnings)
+
+
+def test_startup_security_warnings_include_sqlite_bucket_migration_notice(monkeypatch):
+    monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
+    monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])
+    monkeypatch.setattr(main.settings, "seed_super_admin_password", "very-strong-password")
+    monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", True)
+    monkeypatch.setattr(main.settings, "cors_origins", ["http://localhost:5173"])
+    monkeypatch.setattr(main.settings, "database_url", "sqlite:////tmp/test.db")
+    monkeypatch.setattr(main.settings, "bucket_migration_worker_enabled", True)
+
+    warnings = main._startup_security_warnings()
+
+    assert any("SQLite is configured while the bucket migration worker is enabled" in item for item in warnings)

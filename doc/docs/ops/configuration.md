@@ -9,7 +9,7 @@ Primary source of truth: `backend/app/core/config.py`.
 Key areas:
 
 - Security and auth: JWT keys, credential keys, refresh cookie settings.
-- Database: `DATABASE_URL`.
+- Database: `DATABASE_URL` (SQLite defaults to `backend/app.db`; relative SQLite paths are normalized against `backend/`).
 - CORS: `CORS_ORIGINS`.
 - Feature force-locks: `FEATURE_MANAGER_ENABLED`, `FEATURE_BROWSER_ENABLED`, `FEATURE_CEPH_ADMIN_ENABLED`, `FEATURE_STORAGE_OPS_ENABLED`, `FEATURE_BILLING_ENABLED`, `FEATURE_ENDPOINT_STATUS_ENABLED`.
 - Internal scheduler auth: `INTERNAL_CRON_TOKEN`.

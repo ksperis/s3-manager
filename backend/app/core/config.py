@@ -44,6 +44,7 @@ class OIDCProviderSettings(BaseModel):
 SuperAdminSeedMode = Literal["if_empty", "if_missing", "disabled"]
 
 ENV_FILE_PATH = Path(__file__).resolve().parents[2] / ".env"
+DEFAULT_SQLITE_DB_PATH = ENV_FILE_PATH.parent / "app.db"
 MIN_SECRET_LENGTH = 32
 DEFAULT_INSECURE_SECRET_VALUES = {
     "",
@@ -53,6 +54,27 @@ DEFAULT_INSECURE_SECRET_VALUES = {
     "password",
     "secret",
 }
+
+
+def _default_sqlite_database_url() -> str:
+    return f"sqlite:///{DEFAULT_SQLITE_DB_PATH.resolve().as_posix()}"
+
+
+def _normalize_sqlite_database_url(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return text
+    for prefix in ("sqlite:///", "sqlite+pysqlite:///"):
+        if not text.startswith(prefix):
+            continue
+        remainder = text[len(prefix) :]
+        if not remainder or remainder.startswith(":memory:") or remainder.startswith("/") or remainder.startswith("file:"):
+            return text
+        path_part, separator, suffix = remainder.partition("?")
+        resolved = (ENV_FILE_PATH.parent / Path(path_part)).resolve()
+        normalized = f"{prefix}{resolved.as_posix()}"
+        return f"{normalized}?{suffix}" if separator else normalized
+    return text
 
 class Settings(BaseSettings):
     model_config = ConfigDict(
@@ -104,7 +126,7 @@ class Settings(BaseSettings):
     refresh_token_cookie_samesite: str = Field("lax", description="SameSite policy for refresh cookie")
 
     database_url: str = Field(
-        "sqlite:///./app.db",
+        _default_sqlite_database_url(),
         description="Database connection string (default sqlite)",
     )
     app_settings_path: Optional[str] = Field(
@@ -372,6 +394,11 @@ class Settings(BaseSettings):
                     raise ValueError("Unable to parse keys JSON") from exc
             return [item.strip() for item in text.split(",") if item.strip()]
         return value
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value):
+        return _normalize_sqlite_database_url(value)
 
     @field_validator("seed_super_admin_mode", mode="before")
     @classmethod

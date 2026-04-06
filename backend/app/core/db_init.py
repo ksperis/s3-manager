@@ -11,6 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.database import is_sqlite_url, sqlite_integrity_status
 from app.core.security import get_password_hash
 from app.db import User, UserRole
 from app.services.storage_endpoints_service import StorageEndpointsService
@@ -87,7 +88,21 @@ def _seed_super_admin_if_needed(db: Session) -> bool:
 
 
 def init_db(engine, session_factory) -> None:
+    integrity_ok, integrity_details = sqlite_integrity_status(engine)
+    if is_sqlite_url(settings.database_url) and not integrity_ok:
+        raise RuntimeError(
+            "SQLite database integrity check failed before startup. "
+            "Stop the backend, back up the database files, run `sqlite3 <db> 'PRAGMA integrity_check;'`, "
+            f"then restore or rebuild the database before retrying. Details: {integrity_details}"
+        )
     command.upgrade(_alembic_config(), "head")
+    integrity_ok, integrity_details = sqlite_integrity_status(engine)
+    if is_sqlite_url(settings.database_url) and not integrity_ok:
+        raise RuntimeError(
+            "SQLite database integrity check failed after migrations. "
+            "Stop the backend, back up the database files, run `sqlite3 <db> 'PRAGMA integrity_check;'`, "
+            f"then restore or rebuild the database before retrying. Details: {integrity_details}"
+        )
     if (settings.seed_super_admin_password or "").strip().lower() in {"changeme", "change-me", "admin", "password"}:
         logger.warning(
             "SEED_SUPER_ADMIN_PASSWORD is using a default/weak value. "
