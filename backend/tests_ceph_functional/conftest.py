@@ -15,7 +15,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from .clients import BackendAuthenticator, BackendSession, CephVerifier  # noqa: E402
+from .clients import BackendAPIError, BackendAuthenticator, BackendSession, CephVerifier  # noqa: E402
 from .config import CephTestSettings, load_settings  # noqa: E402
 from .resources import ResourceTracker  # noqa: E402
 from .summary import RunSummary  # noqa: E402
@@ -141,7 +141,17 @@ def ceph_admin_endpoint(
     super_admin_session: BackendSession,
     ceph_test_settings: CephTestSettings,
 ) -> CephAdminEndpointTestContext:
-    endpoints = super_admin_session.get("/ceph-admin/endpoints")
+    try:
+        endpoints = super_admin_session.get("/ceph-admin/endpoints")
+    except BackendAPIError as exc:
+        detail = ""
+        if isinstance(exc.payload, dict):
+            detail = str(exc.payload.get("detail") or "")
+        elif exc.payload is not None:
+            detail = str(exc.payload)
+        if exc.status_code == 403 and "ceph admin feature is disabled" in detail.lower():
+            pytest.skip("Ceph Admin tests skipped: ceph-admin feature is disabled in this environment")
+        raise
     if not isinstance(endpoints, list) or not endpoints:
         pytest.skip("Ceph Admin tests skipped: no Ceph endpoint exposed by /ceph-admin/endpoints")
 

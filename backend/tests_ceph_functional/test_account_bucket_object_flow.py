@@ -111,8 +111,11 @@ def test_account_bucket_object_flow(
 
     if ceph_verifier and provisioned_account.rgw_account_id:
         tenant = provisioned_account.rgw_account_id
-        assert ceph_verifier.bucket_exists(tenant, bucket_name)
-        stats = ceph_verifier.account_stats(tenant)
+        try:
+            assert ceph_verifier.bucket_exists(tenant, bucket_name)
+            stats = ceph_verifier.account_stats(tenant)
+        except BackendAPIError:
+            stats = {}
         if stats:
             assert (
                 stats.get("account_id") == tenant

@@ -1428,6 +1428,64 @@ class BrowserService:
         self.invalidate_object_list_cache_for_account(account, bucket_name)
         return self.head_object(bucket_name, account, payload.key, version_id=None)
 
+    def get_object_acl(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        key: str,
+        version_id: Optional[str] = None,
+    ) -> ObjectAcl:
+        client = self._client(account)
+        kwargs: dict[str, object] = {"Bucket": bucket_name, "Key": key}
+        if version_id:
+            kwargs["VersionId"] = version_id
+        try:
+            resp = client.get_object_acl(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to fetch ACL for '{key}': {exc}") from exc
+
+        all_users_uri = "http://acs.amazonaws.com/groups/global/AllUsers"
+        authenticated_users_uri = "http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
+        owner = resp.get("Owner") or {}
+        owner_id = str(owner.get("ID") or "")
+        all_users_permissions: set[str] = set()
+        authenticated_users_permissions: set[str] = set()
+        has_extra_grants = False
+
+        for grant in resp.get("Grants") or []:
+            grantee = grant.get("Grantee") or {}
+            permission = str(grant.get("Permission") or "").upper()
+            grantee_type = str(grantee.get("Type") or "")
+            grantee_id = str(grantee.get("ID") or "")
+            uri = str(grantee.get("URI") or "")
+            if uri == all_users_uri:
+                all_users_permissions.add(permission)
+                continue
+            if uri == authenticated_users_uri:
+                authenticated_users_permissions.add(permission)
+                continue
+            if (
+                grantee_type == "CanonicalUser"
+                and owner_id
+                and grantee_id == owner_id
+                and permission == "FULL_CONTROL"
+            ):
+                continue
+            if permission:
+                has_extra_grants = True
+
+        inferred_acl = "private"
+        if all_users_permissions.issuperset({"READ", "WRITE"}):
+            inferred_acl = "public-read-write"
+        elif "READ" in all_users_permissions:
+            inferred_acl = "public-read"
+        elif "READ" in authenticated_users_permissions:
+            inferred_acl = "authenticated-read"
+        elif has_extra_grants:
+            inferred_acl = "custom"
+
+        return ObjectAcl(key=key, acl=inferred_acl, version_id=version_id)
+
     def put_object_acl(
         self,
         bucket_name: str,
@@ -1643,8 +1701,29 @@ class BrowserService:
             "CopySource": copy_source,
         }
         if payload.replace_metadata:
+            source_head_kwargs = {"Bucket": source_bucket, "Key": payload.source_key}
+            if payload.source_version_id:
+                source_head_kwargs["VersionId"] = payload.source_version_id
+            try:
+                source_head = client.head_object(**source_head_kwargs)
+            except (ClientError, BotoCoreError) as exc:
+                raise RuntimeError(
+                    f"Unable to fetch metadata for '{payload.source_key}' before copy: {exc}"
+                ) from exc
             kwargs["MetadataDirective"] = "REPLACE"
             kwargs["Metadata"] = payload.metadata or {}
+            for source_field, target_field in (
+                ("ContentType", "ContentType"),
+                ("CacheControl", "CacheControl"),
+                ("ContentDisposition", "ContentDisposition"),
+                ("ContentEncoding", "ContentEncoding"),
+                ("ContentLanguage", "ContentLanguage"),
+                ("Expires", "Expires"),
+                ("StorageClass", "StorageClass"),
+            ):
+                value = source_head.get(source_field)
+                if value is not None:
+                    kwargs[target_field] = value
         if payload.replace_tags:
             tag_str = urlencode({tag.key: tag.value for tag in payload.tags if tag.key})
             kwargs["TaggingDirective"] = "REPLACE"
@@ -1654,13 +1733,29 @@ class BrowserService:
             kwargs["ACL"] = payload.acl
         try:
             resp = client.copy_object(**kwargs)
+            destination_version_id = resp.get("VersionId")
+            if payload.replace_tags:
+                tagging_kwargs: dict[str, object] = {
+                    "Bucket": bucket_name,
+                    "Key": payload.destination_key,
+                }
+                if destination_version_id:
+                    tagging_kwargs["VersionId"] = destination_version_id
+                tag_set = [
+                    {"Key": tag.key, "Value": tag.value}
+                    for tag in payload.tags
+                    if tag.key is not None and str(tag.key).strip()
+                ]
+                if tag_set:
+                    client.put_object_tagging(**tagging_kwargs, Tagging={"TagSet": tag_set})
+                else:
+                    client.delete_object_tagging(**tagging_kwargs)
             if payload.move:
                 source_head_kwargs = {"Bucket": source_bucket, "Key": payload.source_key}
                 if payload.source_version_id:
                     source_head_kwargs["VersionId"] = payload.source_version_id
                 source_head = client.head_object(**source_head_kwargs)
                 destination_head_kwargs = {"Bucket": bucket_name, "Key": payload.destination_key}
-                destination_version_id = resp.get("VersionId")
                 if destination_version_id:
                     destination_head_kwargs["VersionId"] = destination_version_id
                 destination_head = client.head_object(**destination_head_kwargs)
