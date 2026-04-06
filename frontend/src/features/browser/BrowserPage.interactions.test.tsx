@@ -21,12 +21,23 @@ const getBucketCorsStatusMock = vi.fn();
 const ensureBucketCorsMock = vi.fn();
 const fetchObjectMetadataMock = vi.fn();
 const getObjectTagsMock = vi.fn();
+const copyObjectMock = vi.fn();
+const deleteObjectsMock = vi.fn();
+const createFolderMock = vi.fn();
+const presignObjectMock = vi.fn();
+const proxyDownloadMock = vi.fn();
+const proxyUploadMock = vi.fn();
+const initiateMultipartUploadMock = vi.fn();
+const presignPartMock = vi.fn();
+const completeMultipartUploadMock = vi.fn();
+const abortMultipartUploadMock = vi.fn();
 
 const getBucketStatsMock = vi.fn();
 const getBucketPropertiesMock = vi.fn();
 const getBucketPolicyMock = vi.fn();
 const getBucketLoggingMock = vi.fn();
 const getBucketWebsiteMock = vi.fn();
+const fetchMock = vi.fn();
 
 vi.mock("react-router-dom", async () => {
   const actual =
@@ -73,6 +84,19 @@ vi.mock("../../api/browser", async () => {
     fetchObjectMetadata: (...args: unknown[]) =>
       fetchObjectMetadataMock(...args),
     getObjectTags: (...args: unknown[]) => getObjectTagsMock(...args),
+    copyObject: (...args: unknown[]) => copyObjectMock(...args),
+    deleteObjects: (...args: unknown[]) => deleteObjectsMock(...args),
+    createFolder: (...args: unknown[]) => createFolderMock(...args),
+    presignObject: (...args: unknown[]) => presignObjectMock(...args),
+    proxyDownload: (...args: unknown[]) => proxyDownloadMock(...args),
+    proxyUpload: (...args: unknown[]) => proxyUploadMock(...args),
+    initiateMultipartUpload: (...args: unknown[]) =>
+      initiateMultipartUploadMock(...args),
+    presignPart: (...args: unknown[]) => presignPartMock(...args),
+    completeMultipartUpload: (...args: unknown[]) =>
+      completeMultipartUploadMock(...args),
+    abortMultipartUpload: (...args: unknown[]) =>
+      abortMultipartUploadMock(...args),
   };
 });
 
@@ -193,10 +217,39 @@ async function enableActionBar(user: ReturnType<typeof userEvent.setup>) {
   });
 }
 
+async function copyOrCutItem(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+  action: "Copy" | "Cut" = "Copy",
+) {
+  const row = await findRowByLabel(label);
+  fireEvent.contextMenu(row);
+  const menu = await screen.findByRole("menu");
+  await user.click(within(menu).getByRole("button", { name: action }));
+}
+
+async function pasteFromCurrentPath(user: ReturnType<typeof userEvent.setup>) {
+  const menu = await openContextMoreMenu(user);
+  await user.click(within(menu).getByRole("menuitem", { name: /^Paste/ }));
+}
+
 describe("BrowserPage interactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockImplementation(
+      async (_input?: RequestInfo | URL, init?: RequestInit) => {
+        const method = (init?.method || "GET").toUpperCase();
+        if (method === "PUT" || method === "POST" || method === "DELETE") {
+          return new Response(null, { status: 200 });
+        }
+        return new Response("direct-bytes", {
+          status: 200,
+          headers: { "Content-Type": "text/plain" },
+        });
+      },
+    );
 
     fetchBrowserSettingsMock.mockResolvedValue({
       allow_proxy_transfers: false,
@@ -289,6 +342,33 @@ describe("BrowserPage interactions", () => {
       tags: [],
       version_id: null,
     });
+    copyObjectMock.mockResolvedValue(undefined);
+    deleteObjectsMock.mockResolvedValue(1);
+    createFolderMock.mockResolvedValue(undefined);
+    presignObjectMock.mockImplementation(
+      async (_accountId: string, _bucketName: string, payload?: { key?: string }) => ({
+        url: `https://example.test/${payload?.key ?? "object"}`,
+        method: "PUT",
+        expires_in: 1800,
+        headers: {},
+      }),
+    );
+    proxyDownloadMock.mockResolvedValue(
+      new Blob(["proxy-bytes"], { type: "text/plain" }),
+    );
+    proxyUploadMock.mockResolvedValue(undefined);
+    initiateMultipartUploadMock.mockResolvedValue({
+      key: "large.bin",
+      upload_id: "upload-1",
+    });
+    presignPartMock.mockResolvedValue({
+      url: "https://example.test/upload-part",
+      method: "PUT",
+      expires_in: 1800,
+      headers: {},
+    });
+    completeMultipartUploadMock.mockResolvedValue(undefined);
+    abortMultipartUploadMock.mockResolvedValue(undefined);
 
     getBucketStatsMock.mockResolvedValue({
       name: "bucket-1",
@@ -2067,6 +2147,290 @@ describe("BrowserPage interactions", () => {
         expect.objectContaining({ prefix: "docs/" }),
       );
     });
+  });
+
+  it("keeps paste enabled after switching execution context when clipboard exists", async () => {
+    const user = userEvent.setup();
+    const view = renderPage({ accountIdForApi: "acc-1" });
+
+    await copyOrCutItem(user, "a.txt", "Copy");
+
+    view.rerender(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <BrowserPage accountIdForApi="acc-2" />
+      </MemoryRouter>,
+    );
+
+    await findRowByLabel("a.txt");
+    const menu = await openContextMoreMenu(user);
+    expect(within(menu).getByRole("menuitem", { name: "Paste" })).toBeEnabled();
+  });
+
+  it("keeps same-context paste on the existing server-side copy path", async () => {
+    const user = userEvent.setup();
+    renderPage({ accountIdForApi: "acc-1" });
+
+    await copyOrCutItem(user, "a.txt", "Copy");
+    await user.dblClick(await findRowByLabel("docs"));
+    await findRowByLabel("readme.txt");
+    await pasteFromCurrentPath(user);
+
+    await waitFor(() => {
+      expect(copyObjectMock).toHaveBeenCalledWith("acc-1", "bucket-1", {
+        source_bucket: "bucket-1",
+        source_key: "a.txt",
+        destination_key: "docs/a.txt",
+        move: false,
+      });
+    });
+    expect(presignObjectMock).not.toHaveBeenCalled();
+  });
+
+  it("copies across execution contexts through frontend-directed transfers", async () => {
+    const user = userEvent.setup();
+    const view = renderPage({ accountIdForApi: "acc-1" });
+
+    fetchObjectMetadataMock.mockImplementation(
+      async (selector: string, _bucket: string, key: string) => ({
+        key,
+        size: 10,
+        metadata: {},
+        content_type: selector === "acc-1" ? "text/plain" : "text/plain",
+      }),
+    );
+
+    await copyOrCutItem(user, "a.txt", "Copy");
+
+    view.rerender(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <BrowserPage accountIdForApi="acc-2" />
+      </MemoryRouter>,
+    );
+
+    await findRowByLabel("a.txt");
+    await pasteFromCurrentPath(user);
+
+    await waitFor(() => {
+      expect(copyObjectMock).not.toHaveBeenCalled();
+      expect(fetchObjectMetadataMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        "a.txt",
+        null,
+        null,
+      );
+      expect(presignObjectMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({
+          key: "a.txt",
+          operation: "get_object",
+        }),
+        null,
+      );
+      expect(presignObjectMock).toHaveBeenCalledWith(
+        "acc-2",
+        "bucket-1",
+        expect.objectContaining({
+          key: "a.txt",
+          operation: "put_object",
+        }),
+        null,
+      );
+    });
+  });
+
+  it("verifies the destination before deleting the source on cross-context move", async () => {
+    const user = userEvent.setup();
+    const view = renderPage({ accountIdForApi: "acc-1" });
+    const callOrder: string[] = [];
+
+    fetchObjectMetadataMock.mockImplementation(
+      async (selector: string, _bucket: string, key: string) => {
+        callOrder.push(selector === "acc-1" ? "source-meta" : "dest-meta");
+        return {
+          key,
+          size: 10,
+          metadata: {},
+          content_type: "text/plain",
+        };
+      },
+    );
+    presignObjectMock.mockImplementation(
+      async (
+        selector: string,
+        _bucket: string,
+        payload?: { operation?: string },
+      ) => {
+        callOrder.push(`${selector}:${payload?.operation}`);
+        return {
+          url: `https://example.test/${selector}/${payload?.operation ?? "put_object"}`,
+          method: payload?.operation === "get_object" ? "GET" : "PUT",
+          expires_in: 1800,
+          headers: {},
+        };
+      },
+    );
+    deleteObjectsMock.mockImplementation(async (selector: string) => {
+      callOrder.push(`delete:${selector}`);
+      return 1;
+    });
+
+    await copyOrCutItem(user, "a.txt", "Cut");
+
+    view.rerender(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <BrowserPage accountIdForApi="acc-2" />
+      </MemoryRouter>,
+    );
+
+    await findRowByLabel("a.txt");
+    await pasteFromCurrentPath(user);
+
+    await waitFor(() => {
+      expect(deleteObjectsMock).toHaveBeenCalledWith("acc-1", "bucket-1", [
+        { key: "a.txt" },
+      ]);
+    });
+    expect(callOrder.indexOf("dest-meta")).toBeGreaterThan(
+      callOrder.indexOf("acc-2:put_object"),
+    );
+    expect(callOrder.indexOf("delete:acc-1")).toBeGreaterThan(
+      callOrder.indexOf("dest-meta"),
+    );
+  });
+
+  it("keeps the source when cross-context move verification fails", async () => {
+    const user = userEvent.setup();
+    const view = renderPage({ accountIdForApi: "acc-1" });
+
+    fetchObjectMetadataMock.mockImplementation(
+      async (selector: string, _bucket: string, key: string) => ({
+        key,
+        size: selector === "acc-1" ? 10 : 11,
+        metadata: {},
+        content_type: "text/plain",
+      }),
+    );
+
+    await copyOrCutItem(user, "a.txt", "Cut");
+
+    view.rerender(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <BrowserPage accountIdForApi="acc-2" />
+      </MemoryRouter>,
+    );
+
+    await findRowByLabel("a.txt");
+    await pasteFromCurrentPath(user);
+
+    await waitFor(() => {
+      expect(fetchObjectMetadataMock).toHaveBeenCalledTimes(2);
+    });
+    expect(deleteObjectsMock).not.toHaveBeenCalled();
+
+    const menu = await openContextMoreMenu(user);
+    expect(
+      within(menu).getByRole("menuitem", { name: /^Paste/ }),
+    ).toBeEnabled();
+  });
+
+  it("lists folder contents from the source context and recreates the destination folder", async () => {
+    const user = userEvent.setup();
+    const view = renderPage({ accountIdForApi: "acc-1" });
+
+    fetchObjectMetadataMock.mockImplementation(
+      async (_selector: string, _bucket: string, key: string) => ({
+        key,
+        size: 42,
+        metadata: {},
+        content_type: "text/plain",
+      }),
+    );
+
+    await copyOrCutItem(user, "docs", "Copy");
+
+    view.rerender(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <BrowserPage accountIdForApi="acc-2" />
+      </MemoryRouter>,
+    );
+
+    await findRowByLabel("a.txt");
+    await pasteFromCurrentPath(user);
+
+    await waitFor(() => {
+      expect(createFolderMock).toHaveBeenCalledWith(
+        "acc-2",
+        "bucket-1",
+        "docs/",
+      );
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({
+          prefix: "docs/",
+          recursive: true,
+          type: "file",
+        }),
+      );
+      expect(presignObjectMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({
+          key: "docs/readme.txt",
+          operation: "get_object",
+        }),
+        null,
+      );
+    });
+  });
+
+  it("falls back to proxy transfers for cross-context paste when direct access is unavailable", async () => {
+    const user = userEvent.setup();
+    fetchBrowserSettingsMock.mockResolvedValue({
+      allow_proxy_transfers: true,
+      direct_upload_parallelism: 3,
+      proxy_upload_parallelism: 2,
+      direct_download_parallelism: 3,
+      proxy_download_parallelism: 2,
+      other_operations_parallelism: 2,
+      streaming_zip_threshold_mb: 200,
+    });
+    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    const view = renderPage({ accountIdForApi: "acc-1" });
+
+    await copyOrCutItem(user, "a.txt", "Copy");
+
+    view.rerender(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <BrowserPage accountIdForApi="acc-2" />
+      </MemoryRouter>,
+    );
+
+    await findRowByLabel("a.txt");
+    await pasteFromCurrentPath(user);
+
+    await waitFor(() => {
+      expect(proxyDownloadMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        "a.txt",
+        undefined,
+        null,
+      );
+      expect(proxyUploadMock).toHaveBeenCalledWith(
+        "acc-2",
+        "bucket-1",
+        "a.txt",
+        expect.any(Blob),
+        undefined,
+        undefined,
+        null,
+        "a.txt",
+      );
+    });
+    expect(copyObjectMock).not.toHaveBeenCalled();
   });
 
   it("renders CORS warning with inline info action and moves CORS button into popover", async () => {

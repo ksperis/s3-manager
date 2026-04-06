@@ -2,6 +2,8 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import type { S3AccountSelector } from "../../api/accountParams";
+
 export type BrowserItem = {
   id: string;
   key: string;
@@ -134,7 +136,7 @@ export type ContextMenuState = {
 export type ClipboardState = {
   items: BrowserItem[];
   sourceBucket: string;
-  sourceAccountId: string | number | null;
+  sourceSelector: S3AccountSelector;
   mode: "copy" | "move";
 };
 

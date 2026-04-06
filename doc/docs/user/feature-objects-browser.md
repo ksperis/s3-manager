@@ -25,6 +25,10 @@ Use this guide for object-level actions in Browser surfaces.
    - Delete objects or delete markers
    - Manage versions, restores, and advanced object operations
 4. Use bulk actions when handling many objects.
+5. You can copy or cut items, switch to another Browser execution context, and paste into the target bucket or prefix.
+   - Same-context paste keeps the existing storage-side copy path.
+   - Cross-context paste is frontend-driven and transfers items one by one.
+   - Cross-context move deletes the source only after the destination copy is verified.
 
 ## Action access
 

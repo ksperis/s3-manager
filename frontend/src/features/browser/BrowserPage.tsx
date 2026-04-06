@@ -128,6 +128,10 @@ import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
 import BrowserPreviewModal from "./BrowserPreviewModal";
 import ObjectAdvancedModal from "./ObjectAdvancedModal";
 import {
+  transferClipboardObjectBetweenContexts,
+  type ClipboardTransferMode,
+} from "./browserClipboardTransfer";
+import {
   readBrowserRootContextSelection,
   readStoredBrowserRootUiState,
   writeBrowserRootContextSelection,
@@ -1339,14 +1343,14 @@ export default function BrowserPage({
     : true;
   const bucketInspectorStaticWebsiteEnabled =
     effectiveCaps?.static_website ?? true;
-  const normalizeAccountId = useCallback(
+  const normalizeSelectorId = useCallback(
     (value: S3AccountSelector | null | undefined) => {
       if (value == null) return null;
       return String(value);
     },
     [],
   );
-  const currentAccountId = normalizeAccountId(accountIdForApi);
+  const currentAccountId = normalizeSelectorId(accountIdForApi);
   const accountSwitchInFlight =
     previousAccountIdRef.current !== accountIdForApi;
   const sseCustomerScopeKey = useMemo(() => {
@@ -1360,18 +1364,26 @@ export default function BrowserPage({
   const sseCustomerKeyBase64 = sseFeatureEnabled
     ? sseCustomerKeyBase64Raw
     : null;
+  const getSseCustomerKeyForScope = useCallback(
+    (selector: S3AccountSelector | null | undefined, bucket: string) => {
+      const normalizedSelector = normalizeSelectorId(selector);
+      if (!normalizedSelector || !bucket) return null;
+      return sseCustomerKeysByScope[`${normalizedSelector}::${bucket}`] ?? null;
+    },
+    [normalizeSelectorId, sseCustomerKeysByScope],
+  );
   const sseActive = Boolean(sseCustomerKeyBase64);
   const showSseControls = Boolean(
     sseFeatureEnabled && hasS3AccountContext && bucketName,
   );
-  const clipboardAccountId = normalizeAccountId(
-    clipboard?.sourceAccountId ?? null,
+  const clipboardAccountId = normalizeSelectorId(
+    clipboard?.sourceSelector ?? null,
   );
   const clipboardMatchesContext = Boolean(
     clipboard && clipboardAccountId === currentAccountId,
   );
   const canPaste = Boolean(
-    clipboard && bucketName && hasS3AccountContext && clipboardMatchesContext,
+    clipboard && bucketName && hasS3AccountContext,
   );
   const {
     canUseFoldersPanel,
@@ -7455,7 +7467,7 @@ export default function BrowserPage({
     return response.blob();
   }
 
-  const buildAuthHeaders = (sseKeyBase64?: string | null) => {
+  const buildAuthHeaders = useCallback((sseKeyBase64?: string | null) => {
     const headers: Record<string, string> = {};
     if (typeof window === "undefined") return headers;
     const token = localStorage.getItem("token");
@@ -7478,22 +7490,25 @@ export default function BrowserPage({
     }
     Object.assign(headers, buildSseCustomerBackendHeaders(sseKeyBase64));
     return headers;
-  };
+  }, []);
 
-  const buildApiUrl = (path: string, params?: Record<string, unknown>) => {
-    const base = API_BASE_URL.endsWith("/")
-      ? API_BASE_URL.slice(0, -1)
-      : API_BASE_URL;
-    const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
-    const url = new URL(`${base}/${normalizedPath}`);
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value === undefined || value === null) return;
-        url.searchParams.set(key, String(value));
-      });
-    }
-    return url.toString();
-  };
+  const buildApiUrl = useCallback(
+    (path: string, params?: Record<string, unknown>) => {
+      const base = API_BASE_URL.endsWith("/")
+        ? API_BASE_URL.slice(0, -1)
+        : API_BASE_URL;
+      const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
+      const url = new URL(`${base}/${normalizedPath}`);
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value === undefined || value === null) return;
+          url.searchParams.set(key, String(value));
+        });
+      }
+      return url.toString();
+    },
+    [],
+  );
 
   const downloadObjectStream = async (
     key: string,
@@ -7569,21 +7584,387 @@ export default function BrowserPage({
     return response.body;
   };
 
+  const formatFetchTransferError = useCallback(
+    async (response: Response, fallback: string) => {
+      let detail: string | undefined;
+      let code: string | undefined;
+      try {
+        const text = await response.text();
+        const parsed = extractErrorDetails(text);
+        code = parsed?.code;
+        detail = parsed?.message;
+      } catch {
+        // ignore body parsing failures
+      }
+      const statusLabel = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+      const detailLabel = code && detail ? `${code}: ${detail}` : detail || code;
+      const parts = [statusLabel, detailLabel].filter(Boolean);
+      const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
+      return `${fallback}${suffix}`;
+    },
+    [extractErrorDetails],
+  );
+
+  const resolveClipboardTransferMode = useCallback(
+    async (
+      selector: S3AccountSelector,
+      targetBucket: string,
+    ): Promise<ClipboardTransferMode> => {
+      try {
+        const status = await getBucketCorsStatus(selector, targetBucket, uiOrigin);
+        if (status.enabled) {
+          return "direct";
+        }
+      } catch {
+        if (!proxyAllowed) {
+          throw new Error(
+            `Direct transfer is unavailable for ${targetBucket} and proxy transfers are disabled.`,
+          );
+        }
+        return "proxy";
+      }
+      if (proxyAllowed) {
+        return "proxy";
+      }
+      throw new Error(
+        `Direct transfer is unavailable for ${targetBucket} and proxy transfers are disabled.`,
+      );
+    },
+    [proxyAllowed, uiOrigin],
+  );
+
+  const downloadObjectBlobForTransfer = useCallback(
+    async ({
+      selector,
+      bucket,
+      key,
+      mode,
+      sseCustomerKeyBase64: sseKeyBase64,
+      signal,
+    }: {
+      selector: S3AccountSelector;
+      bucket: string;
+      key: string;
+      mode: ClipboardTransferMode;
+      sseCustomerKeyBase64?: string | null;
+      signal?: AbortSignal;
+    }) => {
+      if (mode === "proxy") {
+        return proxyDownload(selector, bucket, key, signal, sseKeyBase64);
+      }
+      const presign = await presignObject(
+        selector,
+        bucket,
+        {
+          key,
+          operation: "get_object",
+          expires_in: 900,
+        },
+        sseKeyBase64,
+      );
+      const response = await fetch(presign.url, {
+        headers: presign.headers || undefined,
+        signal,
+      });
+      if (!response.ok) {
+        throw new Error(
+          await formatFetchTransferError(response, `Download failed for ${key}`),
+        );
+      }
+      return response.blob();
+    },
+    [formatFetchTransferError],
+  );
+
+  const downloadObjectStreamForTransfer = useCallback(
+    async ({
+      selector,
+      bucket,
+      key,
+      mode,
+      sseCustomerKeyBase64: sseKeyBase64,
+      signal,
+    }: {
+      selector: S3AccountSelector;
+      bucket: string;
+      key: string;
+      mode: ClipboardTransferMode;
+      sseCustomerKeyBase64?: string | null;
+      signal?: AbortSignal;
+    }): Promise<ReadableStream<Uint8Array>> => {
+      if (mode === "proxy") {
+        const params = withS3AccountParam({ key }, selector);
+        const url = buildApiUrl(
+          `/browser/buckets/${encodeURIComponent(bucket)}/download`,
+          params ?? undefined,
+        );
+        const response = await fetch(url, {
+          headers: buildAuthHeaders(sseKeyBase64),
+          credentials: "include",
+          signal,
+        });
+        if (!response.ok) {
+          throw new Error(
+            await formatFetchTransferError(
+              response,
+              `Download failed for ${key}`,
+            ),
+          );
+        }
+        if (!response.body) {
+          throw new Error(
+            "Streaming download is not supported in this browser.",
+          );
+        }
+        return response.body;
+      }
+      const presign = await presignObject(
+        selector,
+        bucket,
+        {
+          key,
+          operation: "get_object",
+          expires_in: 900,
+        },
+        sseKeyBase64,
+      );
+      const response = await fetch(presign.url, {
+        headers: presign.headers || undefined,
+        signal,
+      });
+      if (!response.ok) {
+        throw new Error(
+          await formatFetchTransferError(response, `Download failed for ${key}`),
+        );
+      }
+      if (!response.body) {
+        throw new Error("Streaming download is not supported in this browser.");
+      }
+      return response.body;
+    },
+    [buildApiUrl, buildAuthHeaders, formatFetchTransferError],
+  );
+
+  const uploadBlobForTransfer = useCallback(
+    async ({
+      selector,
+      bucket,
+      key,
+      mode,
+      blob,
+      contentType,
+      sseCustomerKeyBase64: sseKeyBase64,
+      signal,
+    }: {
+      selector: S3AccountSelector;
+      bucket: string;
+      key: string;
+      mode: ClipboardTransferMode;
+      blob: Blob;
+      contentType?: string | null;
+      sseCustomerKeyBase64?: string | null;
+      signal?: AbortSignal;
+    }) => {
+      if (mode === "proxy") {
+        await proxyUpload(
+          selector,
+          bucket,
+          key,
+          blob,
+          undefined,
+          signal,
+          sseKeyBase64,
+          key.split("/").pop() || "upload.bin",
+        );
+        return;
+      }
+      const presign = await presignObject(
+        selector,
+        bucket,
+        {
+          key,
+          operation: "put_object",
+          content_type: contentType ?? undefined,
+          content_length: blob.size,
+          expires_in: 1800,
+        },
+        sseKeyBase64,
+      );
+      const response = await fetch(presign.url, {
+        method: (presign.method || "PUT").toUpperCase(),
+        headers: {
+          ...(presign.headers || {}),
+          ...(contentType ? { "Content-Type": contentType } : {}),
+        },
+        body: blob,
+        signal,
+      });
+      if (!response.ok) {
+        throw new Error(
+          await formatFetchTransferError(response, `Upload failed for ${key}`),
+        );
+      }
+    },
+    [formatFetchTransferError],
+  );
+
+  const uploadMultipartStreamForTransfer = useCallback(
+    async ({
+      selector,
+      bucket,
+      key,
+      stream,
+      sizeBytes,
+      contentType,
+      sseCustomerKeyBase64: sseKeyBase64,
+      signal,
+    }: {
+      selector: S3AccountSelector;
+      bucket: string;
+      key: string;
+      stream: ReadableStream<Uint8Array>;
+      sizeBytes: number;
+      contentType?: string | null;
+      sseCustomerKeyBase64?: string | null;
+      signal?: AbortSignal;
+    }) => {
+      let uploadId: string | null = null;
+      const completedParts: { part_number: number; etag: string }[] = [];
+      const reader = stream.getReader();
+      let pending = new Uint8Array(0);
+      let partNumber = 1;
+
+      const uploadPartBlob = async (blob: Blob, currentPartNumber: number) => {
+        if (!uploadId) {
+          throw new Error("Missing multipart upload ID.");
+        }
+        const presignedPart = await presignPart(
+          selector,
+          bucket,
+          uploadId,
+          {
+            key,
+            part_number: currentPartNumber,
+            expires_in: 1800,
+          },
+          sseKeyBase64,
+        );
+        const response = await axios.put(presignedPart.url, blob, {
+          headers: presignedPart.headers || {},
+          signal,
+        });
+        const etag = normalizeEtag(
+          response.headers?.etag ||
+            response.headers?.ETag ||
+            response.headers?.ETAG,
+        );
+        if (!etag) {
+          throw new Error("Missing ETag from multipart upload.");
+        }
+        completedParts.push({ part_number: currentPartNumber, etag });
+      };
+
+      const flushPart = async (partBytes: Uint8Array) => {
+        await uploadPartBlob(
+          new Blob([partBytes], {
+            type: contentType || "application/octet-stream",
+          }),
+          partNumber,
+        );
+        partNumber += 1;
+      };
+
+      try {
+        const init = await initiateMultipartUpload(
+          selector,
+          bucket,
+          {
+            key,
+            content_type: contentType ?? undefined,
+          },
+          sseKeyBase64,
+        );
+        uploadId = init.upload_id;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value || value.byteLength === 0) {
+            continue;
+          }
+          const combined = new Uint8Array(pending.byteLength + value.byteLength);
+          combined.set(pending, 0);
+          combined.set(value, pending.byteLength);
+          pending = combined;
+
+          while (pending.byteLength >= PART_SIZE) {
+            await flushPart(pending.slice(0, PART_SIZE));
+            pending = pending.slice(PART_SIZE);
+          }
+        }
+
+        if (pending.byteLength > 0 || sizeBytes === 0) {
+          await flushPart(pending);
+        }
+
+        completedParts.sort((a, b) => a.part_number - b.part_number);
+        await completeMultipartUpload(selector, bucket, uploadId, key, {
+          parts: completedParts,
+        });
+      } catch (err) {
+        if (uploadId) {
+          try {
+            await abortMultipartUpload(selector, bucket, uploadId, key);
+          } catch {
+            // ignore cleanup failures
+          }
+        }
+        throw err;
+      } finally {
+        reader.releaseLock();
+      }
+    },
+    [],
+  );
+
+  const deleteObjectForTransfer = useCallback(
+    async ({
+      selector,
+      bucket,
+      key,
+    }: {
+      selector: S3AccountSelector;
+      bucket: string;
+      key: string;
+    }) => {
+      await deleteObjects(selector, bucket, [{ key }]);
+    },
+    [],
+  );
+
   const listAllObjectsForPrefix = useCallback(
-    async (targetPrefix: string, targetBucket?: string) => {
+    async (
+      targetPrefix: string,
+      targetBucket?: string,
+      targetSelector?: S3AccountSelector,
+    ) => {
       const bucket = targetBucket ?? bucketName;
       if (!bucket || !hasS3AccountContext) return [];
       const collected: BrowserObject[] = [];
       let continuation: string | null = null;
       let hasMore = true;
       while (hasMore) {
-        const data = await listBrowserObjects(accountIdForApi, bucket, {
+        const data = await listBrowserObjects(
+          targetSelector ?? accountIdForApi,
+          bucket,
+          {
           prefix: targetPrefix,
           continuationToken: continuation,
           maxKeys: 1000,
           type: "file",
           recursive: true,
-        });
+          },
+        );
         collected.push(...data.objects);
         continuation = data.next_continuation_token ?? null;
         hasMore = Boolean(data.is_truncated && continuation);
@@ -9108,7 +9489,7 @@ export default function BrowserPage({
       setClipboard({
         items: eligible,
         sourceBucket: bucketName,
-        sourceAccountId: accountIdForApi ?? null,
+        sourceSelector: accountIdForApi ?? null,
         mode: "copy",
       });
       setStatusMessage("Items copied.");
@@ -9132,7 +9513,7 @@ export default function BrowserPage({
       setClipboard({
         items: eligible,
         sourceBucket: bucketName,
-        sourceAccountId: accountIdForApi ?? null,
+        sourceSelector: accountIdForApi ?? null,
         mode: "move",
       });
       setStatusMessage("Items ready to move.");
@@ -9142,18 +9523,14 @@ export default function BrowserPage({
 
   const handlePasteItems = useCallback(async () => {
     if (!clipboard || !bucketName || !hasS3AccountContext) return;
-    if (!clipboardMatchesContext) {
-      setWarningMessage(
-        "Paste between different accounts is blocked for security. Switch back to the source account.",
-      );
-      return;
-    }
     setWarningMessage(null);
     const destinationBucket = bucketName;
     const destinationPrefix = normalizedPrefix;
-    const { items, sourceBucket, mode } = clipboard;
+    const { items, sourceBucket, sourceSelector, mode } = clipboard;
     const isMove = mode === "move";
+    const useServerSideCopy = clipboardMatchesContext;
     const copyTasks: Array<{
+      sourceSelector: S3AccountSelector;
       sourceBucket: string;
       sourceKey: string;
       destinationBucket: string;
@@ -9166,12 +9543,17 @@ export default function BrowserPage({
     for (const item of items) {
       if (item.type === "file") {
         const destinationKey = `${destinationPrefix}${item.name}`;
-        if (sourceBucket === destinationBucket && destinationKey === item.key) {
+        if (
+          useServerSideCopy &&
+          sourceBucket === destinationBucket &&
+          destinationKey === item.key
+        ) {
           skipped += 1;
           continue;
         }
         const detailId = makeId();
         copyTasks.push({
+          sourceSelector,
           sourceBucket,
           sourceKey: item.key,
           destinationBucket,
@@ -9189,6 +9571,7 @@ export default function BrowserPage({
         const sourcePrefix = normalizePrefix(item.key);
         const destFolderPrefix = `${destinationPrefix}${item.name}/`;
         if (
+          useServerSideCopy &&
           sourceBucket === destinationBucket &&
           destFolderPrefix === sourcePrefix
         ) {
@@ -9207,6 +9590,7 @@ export default function BrowserPage({
         const objects = await listAllObjectsForPrefix(
           sourcePrefix,
           sourceBucket,
+          sourceSelector,
         );
         objects.forEach((obj) => {
           const relativeKey = obj.key.startsWith(sourcePrefix)
@@ -9215,6 +9599,7 @@ export default function BrowserPage({
           if (!relativeKey) return;
           const destinationKey = `${destFolderPrefix}${relativeKey}`;
           if (
+            useServerSideCopy &&
             sourceBucket === destinationBucket &&
             destinationKey === obj.key
           ) {
@@ -9223,6 +9608,7 @@ export default function BrowserPage({
           }
           const detailId = makeId();
           copyTasks.push({
+            sourceSelector,
             sourceBucket,
             sourceKey: obj.key,
             destinationBucket,
@@ -9277,6 +9663,23 @@ export default function BrowserPage({
 
     try {
       const queue = [...copyTasks];
+      const transferModeCache = new Map<
+        string,
+        Promise<ClipboardTransferMode>
+      >();
+      const resolveTransferModeCached = (
+        selector: S3AccountSelector,
+        targetBucket: string,
+      ) => {
+        const cacheKey = `${normalizeSelectorId(selector) ?? ""}::${targetBucket}`;
+        const cached = transferModeCache.get(cacheKey);
+        if (cached) {
+          return cached;
+        }
+        const request = resolveClipboardTransferMode(selector, targetBucket);
+        transferModeCache.set(cacheKey, request);
+        return request;
+      };
       const workerCount = Math.max(
         1,
         Math.min(otherOperationsParallelismRef.current, queue.length),
@@ -9287,12 +9690,68 @@ export default function BrowserPage({
           if (!task) return;
           try {
             updateCopyDetailStatus(operationId, task.detailId, "copying");
-            await copyObject(accountIdForApi, destinationBucket, {
-              source_bucket: task.sourceBucket,
-              source_key: task.sourceKey,
-              destination_key: task.destinationKey,
-              move: isMove,
-            });
+            if (useServerSideCopy) {
+              await copyObject(accountIdForApi, destinationBucket, {
+                source_bucket: task.sourceBucket,
+                source_key: task.sourceKey,
+                destination_key: task.destinationKey,
+                move: isMove,
+              });
+            } else {
+              const sourceSseKeyBase64 = getSseCustomerKeyForScope(
+                task.sourceSelector,
+                task.sourceBucket,
+              );
+              const destinationSseKeyBase64 = getSseCustomerKeyForScope(
+                accountIdForApi,
+                destinationBucket,
+              );
+              const sourceMeta = await fetchObjectMetadata(
+                task.sourceSelector,
+                task.sourceBucket,
+                task.sourceKey,
+                null,
+                sourceSseKeyBase64,
+              );
+              await transferClipboardObjectBetweenContexts({
+                source: {
+                  selector: task.sourceSelector,
+                  bucket: task.sourceBucket,
+                  key: task.sourceKey,
+                  sseCustomerKeyBase64: sourceSseKeyBase64,
+                },
+                destination: {
+                  selector: accountIdForApi,
+                  bucket: destinationBucket,
+                  key: task.destinationKey,
+                  sseCustomerKeyBase64: destinationSseKeyBase64,
+                },
+                sizeBytes: sourceMeta.size,
+                contentType: sourceMeta.content_type ?? undefined,
+                move: isMove,
+                resolveMode: resolveTransferModeCached,
+                downloadBlob: downloadObjectBlobForTransfer,
+                downloadStream: downloadObjectStreamForTransfer,
+                uploadBlob: uploadBlobForTransfer,
+                uploadMultipartStream: uploadMultipartStreamForTransfer,
+                verifyObject: async ({
+                  selector,
+                  bucket,
+                  key,
+                  sseCustomerKeyBase64,
+                }) => {
+                  const metadata = await fetchObjectMetadata(
+                    selector,
+                    bucket,
+                    key,
+                    null,
+                    sseCustomerKeyBase64,
+                  );
+                  return { sizeBytes: metadata.size };
+                },
+                deleteObject: deleteObjectForTransfer,
+              });
+            }
             updateCopyDetailStatus(operationId, task.detailId, "done");
           } catch (err) {
             updateCopyDetailStatus(
@@ -9338,13 +9797,21 @@ export default function BrowserPage({
     clipboard,
     clipboardMatchesContext,
     completeOperation,
+    deleteObjectForTransfer,
+    downloadObjectBlobForTransfer,
+    downloadObjectStreamForTransfer,
     formatOperationError,
+    getSseCustomerKeyForScope,
     hasS3AccountContext,
     listAllObjectsForPrefix,
     normalizedPrefix,
     prefix,
     requestObjectsRefresh,
+    resolveClipboardTransferMode,
+    normalizeSelectorId,
     startOperation,
+    uploadBlobForTransfer,
+    uploadMultipartStreamForTransfer,
     updateCopyDetailStatus,
   ]);
 

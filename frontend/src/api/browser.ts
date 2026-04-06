@@ -720,14 +720,20 @@ export async function proxyUpload(
   accountId: S3AccountSelector,
   bucketName: string,
   key: string,
-  file: File,
+  file: Blob,
   onUploadProgress?: (event: ProgressEvent) => void,
   signal?: AbortSignal,
-  sseCustomerKeyBase64?: string | null
+  sseCustomerKeyBase64?: string | null,
+  fileName?: string
 ): Promise<void> {
   const form = new FormData();
   form.append("key", key);
-  form.append("file", file);
+  const inferredName =
+    fileName ??
+    ("name" in file && typeof file.name === "string" && file.name
+      ? file.name
+      : "upload.bin");
+  form.append("file", file, inferredName);
   await client.post(`/browser/buckets/${encodeURIComponent(bucketName)}/proxy-upload`, form, {
     params: withS3AccountParam(undefined, accountId),
     headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),

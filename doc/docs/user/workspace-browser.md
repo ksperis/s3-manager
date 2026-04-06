@@ -22,6 +22,8 @@ Use **Browser** for direct bucket/object operations.
    - Use the toolbar `More` menu as the non-context fallback, especially in compact layouts.
    - Use the inspector on `/browser` for the same context and selection actions without leaving the current view.
 5. Perform uploads, downloads, previews, deletes, restores, and metadata/tag actions from those surfaces.
+   - Copy and cut selections can be pasted into another Browser context.
+   - Cross-context moves remove the source only after the destination copy is verified.
 6. Use bucket dialogs for bucket creation or configuration if your effective permissions allow it.
 
 ## Notes
