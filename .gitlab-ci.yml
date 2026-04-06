@@ -278,6 +278,8 @@ ceph-functional-tests:
     - pip install -r backend/requirements-test.txt
     - rm -f backend/.env
     - mkdir -p gl-test-reports
+    - for var in $(env | cut -d= -f1 | grep '^OIDC_PROVIDERS__' || true); do unset "$var"; done
+    - export OIDC_PROVIDERS="{}"
     - >
       for var in
       SEED_SUPER_ADMIN_EMAIL
