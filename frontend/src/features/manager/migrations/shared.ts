@@ -6,19 +6,29 @@ import axios from "axios";
 
 import type {
   BucketMigrationDetail,
+  BucketMigrationPrecheckReport,
   BucketMigrationPrecheckStatus,
   BucketMigrationStatus,
 } from "../../../api/managerMigrations";
 
 export type ReviewItemMessage = {
+  code?: string;
   level: string;
+  blocking: boolean;
+  scope?: string;
   message: string;
+  details?: Record<string, unknown> | null;
 };
 
 export type ReviewItemSummary = {
   itemId: number;
   sourceBucket: string;
   targetBucket: string;
+  strategy: string;
+  blocking: boolean;
+  deleteSourceSafe: boolean;
+  rollbackSafe: boolean;
+  sameEndpointCopySafe: boolean;
   targetExists: boolean;
   targetExistsUnknown: boolean;
   messages: ReviewItemMessage[];
@@ -120,20 +130,64 @@ export function parseReviewItemMessages(value: unknown): ReviewItemMessage[] {
   for (const entry of value) {
     if (!entry || typeof entry !== "object") continue;
     const row = entry as Record<string, unknown>;
-    const level = typeof row.level === "string" ? row.level : "info";
+    const code = typeof row.code === "string" ? row.code : undefined;
+    const level =
+      typeof row.level === "string" ? row.level : typeof row.severity === "string" ? row.severity : "info";
+    const blocking = Boolean(row.blocking);
+    const scope = typeof row.scope === "string" ? row.scope : undefined;
     const message = typeof row.message === "string" ? row.message : "";
+    const details = row.details && typeof row.details === "object" ? (row.details as Record<string, unknown>) : null;
     if (!message) continue;
-    messages.push({ level, message });
+    messages.push({ code, level, blocking, scope, message, details });
   }
   return messages;
 }
 
 export function inferTargetExists(messages: ReviewItemMessage[]): boolean {
-  return messages.some((entry) => entry.message.toLowerCase().includes("target bucket already exists"));
+  return messages.some(
+    (entry) => entry.code === "target_exists" || entry.message.toLowerCase().includes("target bucket already exists")
+  );
 }
 
 export function inferTargetExistsUnknown(messages: ReviewItemMessage[]): boolean {
-  return messages.some((entry) => entry.message.toLowerCase().includes("unable to verify whether target bucket exists"));
+  return messages.some(
+    (entry) =>
+      entry.code === "target_existence_unknown" ||
+      entry.code === "target_existence_failed" ||
+      entry.message.toLowerCase().includes("unable to verify whether target bucket exists")
+  );
+}
+
+export function isMigrationPrecheckPassed(detail: {
+  precheck_status?: string;
+  precheck_report?: BucketMigrationPrecheckReport | unknown;
+}): boolean {
+  if (detail.precheck_status !== "passed") return false;
+  if (!detail.precheck_report || typeof detail.precheck_report !== "object") return true;
+
+  const report = detail.precheck_report as BucketMigrationPrecheckReport;
+  if (typeof report.status === "string" && report.status.toLowerCase() !== "passed") return false;
+  if (typeof report.errors === "number" && report.errors > 0) return false;
+
+  const summary = report.summary;
+  if (summary && typeof summary === "object") {
+    const blockingErrors = Number((summary as Record<string, unknown>).blocking_errors ?? 0);
+    if (Number.isFinite(blockingErrors) && blockingErrors > 0) return false;
+  }
+
+  const globalChecks = parseReviewItemMessages((report as Record<string, unknown>).checks);
+  if (globalChecks.some((entry) => entry.blocking || entry.level.toLowerCase() === "error")) return false;
+
+  const reportItems = Array.isArray(report.items) ? report.items : [];
+  for (const item of reportItems) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    if (row.blocking === true) return false;
+    if (typeof row.errors === "number" && row.errors > 0) return false;
+    const checks = parseReviewItemMessages(row.checks ?? row.messages);
+    if (checks.some((entry) => entry.blocking || entry.level.toLowerCase() === "error")) return false;
+  }
+  return true;
 }
 
 export function buildPlannedSteps(
@@ -153,7 +207,7 @@ export function buildPlannedSteps(
   }
   const steps = ["Create destination bucket."];
   if (options.lockTargetWrites) {
-    steps.push("Try to apply temporary write-lock on destination bucket (best effort guard rail).");
+    steps.push("Apply a temporary write-lock on destination bucket and fail if validation or enforcement cannot be completed.");
   }
   if (options.copyBucketSettings) {
     steps.push("Copy bucket settings.");

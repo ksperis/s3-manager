@@ -107,6 +107,10 @@ class BucketMigrationItem(Base):
     only_target_count = Column(Integer, nullable=True)
     diff_sample_json = Column(Text, nullable=True)
 
+    source_snapshot_json = Column(Text, nullable=True)
+    target_snapshot_json = Column(Text, nullable=True)
+    execution_plan_json = Column(Text, nullable=True)
+
     source_policy_backup_json = Column(Text, nullable=True)
     target_policy_backup_json = Column(Text, nullable=True)
     error_message = Column(String, nullable=True)

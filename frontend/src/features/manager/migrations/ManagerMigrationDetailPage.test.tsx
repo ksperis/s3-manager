@@ -33,20 +33,37 @@ function buildDetail() {
     cancel_requested: false,
     precheck_status: "passed",
     precheck_report: {
+      report_version: 2,
+      status: "failed",
       errors: 1,
       warnings: 1,
+      summary: {
+        blocking_errors: 1,
+        warnings: 1,
+        infos: 2,
+      },
       items: [
         {
           item_id: 101,
           errors: 0,
           warnings: 1,
-          messages: [{ level: "warning", message: "Target bucket already exists; this item will be skipped." }],
+          strategy: "skip_existing",
+          blocking: false,
+          delete_source_safe: true,
+          rollback_safe: true,
+          same_endpoint_copy_safe: true,
+          messages: [{ code: "target_exists", level: "warning", blocking: false, message: "Target bucket already exists; this item will be skipped." }],
         },
         {
           item_id: 103,
           errors: 1,
           warnings: 0,
-          messages: [{ level: "error", message: "Source bucket read/list check failed: access denied." }],
+          strategy: "current_only",
+          blocking: true,
+          delete_source_safe: false,
+          rollback_safe: false,
+          same_endpoint_copy_safe: true,
+          messages: [{ code: "source_access_failed", level: "error", blocking: true, message: "Source bucket read/list check failed: access denied." }],
         },
       ],
     },
@@ -211,8 +228,11 @@ describe("ManagerMigrationDetailPage", () => {
     expect(screen.queryByText(/bucket-running/)).not.toBeInTheDocument();
 
     expect(screen.getByText("Precheck: 1 error(s), 0 warning(s)")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Show precheck details" }));
+    expect(screen.getByText("Precheck report v2")).toBeInTheDocument();
+    expect(screen.getByText(/1 blocking error\(s\), 1 warning\(s\), 2 info/)).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Show precheck details" })[0]);
     expect(screen.getByText(/Source bucket read\/list check failed: access denied\./)).toBeInTheDocument();
+    expect(screen.getByText(/strategy: current_only/)).toBeInTheDocument();
     expect(screen.queryByText("Precheck result:")).not.toBeInTheDocument();
 
     const hasLegacyBucketListScroll = Array.from(container.querySelectorAll("div")).some((node) =>

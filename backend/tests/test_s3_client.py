@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from botocore.exceptions import ClientError, ParamValidationError
+from botocore.parsers import ResponseParserError
 
 from app.services import s3_client
 
@@ -180,3 +181,71 @@ def test_delete_bucket_replication_is_idempotent_when_missing(monkeypatch):
     monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: MissingReplicationClient())
 
     s3_client.delete_bucket_replication("bucket-repl")
+
+
+def test_delete_objects_falls_back_to_individual_delete_on_invalid_xml_response():
+    class InvalidXmlDeleteClient:
+        def __init__(self):
+            self.batch_calls = []
+            self.single_calls = []
+
+        def delete_objects(self, **kwargs):
+            self.batch_calls.append(kwargs)
+            raise ResponseParserError("Unable to parse response, invalid XML received")
+
+        def delete_object(self, **kwargs):
+            self.single_calls.append(kwargs)
+            return {}
+
+    client = InvalidXmlDeleteClient()
+
+    deleted = s3_client._delete_objects_count(
+        client,
+        "bucket-delete",
+        [
+            {"Key": "a.txt"},
+            {"Key": "b.txt", "VersionId": "ver-1"},
+        ],
+    )
+
+    assert deleted == 2
+    assert len(client.batch_calls) == 1
+    assert client.single_calls == [
+        {"Bucket": "bucket-delete", "Key": "a.txt"},
+        {"Bucket": "bucket-delete", "Key": "b.txt", "VersionId": "ver-1"},
+    ]
+
+
+def test_delete_objects_fallback_tolerates_missing_version_after_ambiguous_batch_delete():
+    class PartialDeleteClient:
+        def __init__(self):
+            self.single_calls = []
+
+        def delete_objects(self, **kwargs):
+            raise ResponseParserError("Unable to parse response, invalid XML received")
+
+        def delete_object(self, **kwargs):
+            self.single_calls.append(kwargs)
+            if kwargs.get("VersionId") == "gone-version":
+                raise ClientError(
+                    {"Error": {"Code": "NoSuchVersion", "Message": "missing"}},
+                    "DeleteObject",
+                )
+            return {}
+
+    client = PartialDeleteClient()
+
+    deleted = s3_client._delete_objects_count(
+        client,
+        "bucket-delete",
+        [
+            {"Key": "versioned.txt", "VersionId": "gone-version"},
+            {"Key": "other.txt", "VersionId": "live-version"},
+        ],
+    )
+
+    assert deleted == 2
+    assert client.single_calls == [
+        {"Bucket": "bucket-delete", "Key": "versioned.txt", "VersionId": "gone-version"},
+        {"Bucket": "bucket-delete", "Key": "other.txt", "VersionId": "live-version"},
+    ]

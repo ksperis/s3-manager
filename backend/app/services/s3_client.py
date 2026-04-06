@@ -5,6 +5,7 @@ import json
 import boto3
 from botocore.client import Config
 from botocore.exceptions import BotoCoreError, ClientError, ParamValidationError
+from botocore.parsers import ResponseParserError
 from typing import Iterable, Callable, Any, Optional
 import logging
 from time import perf_counter
@@ -1224,18 +1225,85 @@ def delete_bucket_policy(
 
 
 def _delete_objects(client, bucket_name: str, items: Iterable[dict]) -> None:
+    _delete_objects_count(client, bucket_name, items)
+
+
+def _delete_objects_count(client, bucket_name: str, items: Iterable[dict]) -> int:
     chunk = []
+    deleted = 0
     for item in items:
         chunk.append(item)
         if len(chunk) == 1000:
-            _delete_objects_chunk(client, bucket_name, chunk)
+            deleted += _delete_objects_chunk(client, bucket_name, chunk)
             chunk = []
     if chunk:
-        _delete_objects_chunk(client, bucket_name, chunk)
+        deleted += _delete_objects_chunk(client, bucket_name, chunk)
+    return deleted
 
 
-def _delete_objects_chunk(client, bucket_name: str, chunk: list[dict]) -> None:
-    resp = client.delete_objects(Bucket=bucket_name, Delete={"Objects": chunk})
+def _is_delete_objects_parse_error(exc: Exception) -> bool:
+    if isinstance(exc, ResponseParserError):
+        return True
+    text = str(exc).strip().lower()
+    return "unable to parse response" in text or "invalid xml received" in text
+
+
+def _delete_object_kwargs(bucket_name: str, item: dict) -> dict[str, str]:
+    kwargs = {"Bucket": bucket_name, "Key": str(item.get("Key") or "")}
+    version_id = str(item.get("VersionId") or "").strip()
+    if version_id:
+        kwargs["VersionId"] = version_id
+    return kwargs
+
+
+def _delete_objects_individually(client, bucket_name: str, chunk: list[dict]) -> int:
+    failures: list[str] = []
+    for item in chunk:
+        kwargs = _delete_object_kwargs(bucket_name, item)
+        key = kwargs["Key"]
+        version_id = kwargs.get("VersionId")
+        try:
+            client.delete_object(**kwargs)
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", "")).strip().lower() if hasattr(exc, "response") else ""
+            if code in {"nosuchkey", "nosuchversion", "notfound"}:
+                continue
+            label = f"{key} (version {version_id})" if version_id else key
+            failures.append(f"{label}: {exc}")
+        except (BotoCoreError, ResponseParserError) as exc:
+            label = f"{key} (version {version_id})" if version_id else key
+            failures.append(f"{label}: {exc}")
+    if failures:
+        sample = failures[:3]
+        extra = f" (+{len(failures) - 3} more)" if len(failures) > 3 else ""
+        raise RuntimeError(
+            f"Unable to delete {len(failures)} object(s) in bucket '{bucket_name}' after batch fallback: "
+            f"{', '.join(sample)}{extra}"
+        )
+    return len(chunk)
+
+
+def _delete_objects_chunk(client, bucket_name: str, chunk: list[dict]) -> int:
+    try:
+        resp = client.delete_objects(Bucket=bucket_name, Delete={"Objects": chunk})
+    except ResponseParserError as exc:
+        logger.warning(
+            "DeleteObjects returned invalid XML for bucket %s; retrying %s object(s) individually: %s",
+            bucket_name,
+            len(chunk),
+            exc,
+        )
+        return _delete_objects_individually(client, bucket_name, chunk)
+    except (ClientError, BotoCoreError) as exc:
+        if _is_delete_objects_parse_error(exc):
+            logger.warning(
+                "DeleteObjects returned an unparseable response for bucket %s; retrying %s object(s) individually: %s",
+                bucket_name,
+                len(chunk),
+                exc,
+            )
+            return _delete_objects_individually(client, bucket_name, chunk)
+        raise
     errors = resp.get("Errors", []) if isinstance(resp, dict) else []
     if errors:
         sample = []
@@ -1253,6 +1321,7 @@ def _delete_objects_chunk(client, bucket_name: str, chunk: list[dict]) -> None:
         raise RuntimeError(
             f"Unable to delete {len(errors)} object(s) in bucket '{bucket_name}': {', '.join(sample)}{extra}"
         )
+    return len(chunk)
 
 
 def _delete_versions(client, bucket_name: str) -> None:

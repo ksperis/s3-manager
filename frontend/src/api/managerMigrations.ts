@@ -19,6 +19,50 @@ export type BucketMigrationStatus =
   | "failed"
   | "rolled_back";
 export type BucketMigrationPrecheckStatus = "pending" | "passed" | "failed";
+export type BucketMigrationPrecheckEntry = {
+  code?: string;
+  severity?: string;
+  level?: string;
+  blocking?: boolean;
+  scope?: string;
+  message: string;
+  details?: Record<string, unknown> | null;
+};
+
+export type BucketMigrationPrecheckItemReport = {
+  item_id: number;
+  source_bucket?: string;
+  target_bucket?: string;
+  strategy?: string;
+  blocking?: boolean;
+  delete_source_safe?: boolean;
+  rollback_safe?: boolean;
+  same_endpoint_copy_safe?: boolean;
+  source_object_count?: number | null;
+  target_object_count?: number | null;
+  source_profile?: Record<string, unknown> | null;
+  target_profile?: Record<string, unknown> | null;
+  checks?: BucketMigrationPrecheckEntry[];
+  messages?: BucketMigrationPrecheckEntry[];
+  errors?: number;
+  warnings?: number;
+};
+
+export type BucketMigrationPrecheckReport = {
+  report_version?: number;
+  status?: string;
+  checked_at?: string;
+  checks?: BucketMigrationPrecheckEntry[];
+  items?: BucketMigrationPrecheckItemReport[];
+  errors?: number;
+  warnings?: number;
+  summary?: Record<string, unknown> | null;
+  capabilities?: Record<string, unknown> | null;
+  unsupported_features?: string[] | null;
+  delete_source_safe?: boolean;
+  rollback_safe?: boolean;
+  same_endpoint_copy_safe?: boolean;
+};
 
 export type BucketMigrationItemStatus =
   | "pending"
@@ -105,7 +149,7 @@ export type BucketMigrationView = {
   pause_requested: boolean;
   cancel_requested: boolean;
   precheck_status: BucketMigrationPrecheckStatus;
-  precheck_report?: Record<string, unknown> | null;
+  precheck_report?: BucketMigrationPrecheckReport | null;
   precheck_checked_at?: string | null;
   parallelism_max: number;
   total_items: number;

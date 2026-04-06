@@ -20,6 +20,7 @@ import {
   startManagerMigration,
   stopManagerMigration,
   type BucketMigrationItemView,
+  type BucketMigrationPrecheckReport,
 } from "../../../api/managerMigrations";
 import { useManagerContexts, useManagerMigrationDetail } from "./hooks";
 import {
@@ -33,6 +34,7 @@ import {
   inferTargetExists,
   inferTargetExistsUnknown,
   isFinalMigrationStatus,
+  isMigrationPrecheckPassed,
   operatorCardClasses,
   parseReviewItemMessages,
   precheckChipClasses,
@@ -102,28 +104,52 @@ export default function ManagerMigrationDetailPage() {
     };
   }, [migrationDetail]);
 
+  const precheckReport = useMemo<BucketMigrationPrecheckReport | null>(() => {
+    if (!migrationDetail?.precheck_report || typeof migrationDetail.precheck_report !== "object") return null;
+    return migrationDetail.precheck_report as BucketMigrationPrecheckReport;
+  }, [migrationDetail]);
+
+  const globalPrecheckMessages = useMemo(() => parseReviewItemMessages(precheckReport?.checks), [precheckReport]);
+  const precheckSummary = useMemo(() => {
+    const summaryRaw = precheckReport?.summary;
+    const summary = summaryRaw && typeof summaryRaw === "object" ? (summaryRaw as Record<string, unknown>) : {};
+    return {
+      blockingErrors: Number(summary.blocking_errors ?? precheckReport?.errors ?? 0) || 0,
+      warnings: Number(summary.warnings ?? precheckReport?.warnings ?? 0) || 0,
+      infos: Number(summary.infos ?? 0) || 0,
+    };
+  }, [precheckReport]);
+
+  const unsupportedFeatures = useMemo(() => {
+    const features = precheckReport?.unsupported_features;
+    if (!Array.isArray(features)) return [];
+    return features.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+  }, [precheckReport]);
+
   const reviewItems = useMemo<ReviewItemSummary[]>(() => {
     if (!migrationDetail) return [];
     const reportItemsById = new Map<number, Record<string, unknown>>();
-    if (migrationDetail.precheck_report && typeof migrationDetail.precheck_report === "object") {
-      const report = migrationDetail.precheck_report as Record<string, unknown>;
-      if (Array.isArray(report.items)) {
-        for (const row of report.items) {
-          if (!row || typeof row !== "object") continue;
-          const item = row as Record<string, unknown>;
-          const itemId = Number(item.item_id);
-          if (Number.isFinite(itemId)) reportItemsById.set(itemId, item);
-        }
+    if (precheckReport && Array.isArray(precheckReport.items)) {
+      for (const row of precheckReport.items) {
+        if (!row || typeof row !== "object") continue;
+        const item = row as Record<string, unknown>;
+        const itemId = Number(item.item_id);
+        if (Number.isFinite(itemId)) reportItemsById.set(itemId, item);
       }
     }
 
     return migrationDetail.items.map((item) => {
       const reportItem = reportItemsById.get(item.id);
-      const messages = parseReviewItemMessages(reportItem?.messages);
+      const messages = parseReviewItemMessages(reportItem?.checks ?? reportItem?.messages);
       return {
         itemId: item.id,
         sourceBucket: item.source_bucket,
         targetBucket: item.target_bucket,
+        strategy: typeof reportItem?.strategy === "string" ? reportItem.strategy : "current_only",
+        blocking: Boolean(reportItem?.blocking),
+        deleteSourceSafe: reportItem?.delete_source_safe !== false,
+        rollbackSafe: reportItem?.rollback_safe !== false,
+        sameEndpointCopySafe: reportItem?.same_endpoint_copy_safe !== false,
         targetExists: inferTargetExists(messages),
         targetExistsUnknown: inferTargetExistsUnknown(messages),
         messages,
@@ -131,7 +157,7 @@ export default function ManagerMigrationDetailPage() {
         warnings: Number(reportItem?.warnings ?? 0) || 0,
       };
     });
-  }, [migrationDetail]);
+  }, [migrationDetail, precheckReport]);
   const reviewItemsById = useMemo(() => new Map(reviewItems.map((item) => [item.itemId, item])), [reviewItems]);
 
   const sortedItems = useMemo(() => {
@@ -146,9 +172,7 @@ export default function ManagerMigrationDetailPage() {
 
   const visibleItems = useMemo(() => sortedItems.filter((item) => isInFocus(item, bucketFocus)), [bucketFocus, sortedItems]);
 
-  const canLaunchFromDraft = Boolean(
-    migrationDetail && migrationDetail.status === "draft" && migrationDetail.precheck_status === "passed"
-  );
+  const canLaunchFromDraft = Boolean(migrationDetail && migrationDetail.status === "draft" && isMigrationPrecheckPassed(migrationDetail));
   const nextAction = useMemo(() => {
     if (!migrationDetail) return null;
     return getNextAction(migrationDetail, canLaunchFromDraft);
@@ -368,6 +392,56 @@ export default function ManagerMigrationDetailPage() {
               </div>
             )}
 
+            {precheckReport && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
+                    Precheck report
+                    {typeof precheckReport.report_version === "number" ? ` v${precheckReport.report_version}` : ""}
+                  </p>
+                  <p className="ui-caption text-slate-600 dark:text-slate-300">
+                    {precheckSummary.blockingErrors} blocking error(s), {precheckSummary.warnings} warning(s), {precheckSummary.infos} info
+                  </p>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {!precheckReport.same_endpoint_copy_safe && (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                      same-endpoint copy unsafe
+                    </span>
+                  )}
+                  {!precheckReport.delete_source_safe && (
+                    <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+                      delete_source blocked
+                    </span>
+                  )}
+                  {!precheckReport.rollback_safe && (
+                    <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+                      rollback unsafe
+                    </span>
+                  )}
+                  {unsupportedFeatures.length > 0 && (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                      unsupported: {unsupportedFeatures.join(", ")}
+                    </span>
+                  )}
+                </div>
+                {globalPrecheckMessages.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {globalPrecheckMessages.map((message, index) => (
+                      <span
+                        key={`global-precheck-${message.code ?? message.level}-${index}`}
+                        className={`rounded-md border px-2 py-1 text-[11px] ${precheckMessageClasses(message.level)}`}
+                      >
+                        {message.level.toUpperCase()}
+                        {message.blocking ? " BLOCKING" : ""}
+                        {message.code ? ` [${message.code}]` : ""}: {message.message}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2">
               {migrationDetail.status === "draft" && (
                 <button
@@ -549,7 +623,13 @@ export default function ManagerMigrationDetailPage() {
                   reviewItem &&
                     (reviewItem.errors > 0 ||
                       reviewItem.warnings > 0 ||
-                      reviewItem.targetExistsUnknown)
+                      reviewItem.targetExists ||
+                      reviewItem.targetExistsUnknown ||
+                      reviewItem.strategy !== "current_only" ||
+                      reviewItem.blocking ||
+                      !reviewItem.deleteSourceSafe ||
+                      !reviewItem.rollbackSafe ||
+                      !reviewItem.sameEndpointCopySafe)
                 );
                 return (
                   <div key={item.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
@@ -580,7 +660,7 @@ export default function ManagerMigrationDetailPage() {
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span
                             className={`ui-caption rounded-full border px-2 py-0.5 font-semibold ${
-                              reviewItem.errors > 0
+                              reviewItem.blocking || reviewItem.errors > 0
                                 ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200"
                                 : reviewItem.warnings > 0
                                   ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200"
@@ -599,6 +679,31 @@ export default function ManagerMigrationDetailPage() {
                             </button>
                           )}
                         </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                            strategy: {reviewItem.strategy}
+                          </span>
+                          {reviewItem.blocking && (
+                            <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+                              blocked
+                            </span>
+                          )}
+                          {!reviewItem.deleteSourceSafe && (
+                            <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+                              delete_source unsafe
+                            </span>
+                          )}
+                          {!reviewItem.rollbackSafe && (
+                            <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+                              rollback unsafe
+                            </span>
+                          )}
+                          {!reviewItem.sameEndpointCopySafe && (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                              same-endpoint copy unsafe
+                            </span>
+                          )}
+                        </div>
                         {reviewItem.targetExistsUnknown && (
                           <p className="mt-2 ui-caption text-amber-700 dark:text-amber-300">
                             Target bucket existence could not be fully verified during precheck.
@@ -608,10 +713,13 @@ export default function ManagerMigrationDetailPage() {
                           <div className="mt-2 flex flex-wrap gap-2">
                             {reviewItem.messages.map((message, index) => (
                               <span
-                                key={`${reviewItem.itemId}-${message.level}-${index}`}
+                                key={`${reviewItem.itemId}-${message.code ?? message.level}-${index}`}
                                 className={`rounded-md border px-2 py-1 text-[11px] ${precheckMessageClasses(message.level)}`}
                               >
-                                {message.level.toUpperCase()}: {message.message}
+                                {message.level.toUpperCase()}
+                                {message.blocking ? " BLOCKING" : ""}
+                                {message.code ? ` [${message.code}]` : ""}
+                                {message.scope ? ` (${message.scope})` : ""}: {message.message}
                               </span>
                             ))}
                           </div>

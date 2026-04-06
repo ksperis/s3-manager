@@ -15,29 +15,9 @@ import {
 } from "../../../api/managerMigrations";
 import { useS3AccountContext } from "../S3AccountContext";
 import { useCrossEndpointSelection, useManagerContexts, useManagerSourceBuckets } from "./hooks";
-import { buildPlannedSteps, extractError } from "./shared";
+import { buildPlannedSteps, extractError, isMigrationPrecheckPassed } from "./shared";
 
 type WizardStep = 0 | 1 | 2 | 3;
-
-function isPrecheckPassed(detail: { precheck_status?: string; precheck_report?: unknown }): boolean {
-  if (detail.precheck_status !== "passed") return false;
-  if (!detail.precheck_report || typeof detail.precheck_report !== "object") return true;
-  const report = detail.precheck_report as Record<string, unknown>;
-  if (typeof report.errors === "number" && report.errors > 0) return false;
-  const reportItems = Array.isArray(report.items) ? report.items : [];
-  for (const row of reportItems) {
-    if (!row || typeof row !== "object") continue;
-    const item = row as Record<string, unknown>;
-    if (typeof item.errors === "number" && item.errors > 0) return false;
-    const messages = Array.isArray(item.messages) ? item.messages : [];
-    for (const messageRow of messages) {
-      if (!messageRow || typeof messageRow !== "object") continue;
-      const message = messageRow as Record<string, unknown>;
-      if (typeof message.level === "string" && message.level.toLowerCase() === "error") return false;
-    }
-  }
-  return true;
-}
 
 export default function ManagerMigrationWizardPage() {
   const navigate = useNavigate();
@@ -112,6 +92,11 @@ export default function ManagerMigrationWizardPage() {
         itemId: 1,
         sourceBucket: probe.sourceBucket,
         targetBucket: probe.targetBucket,
+        strategy: "current_only",
+        blocking: false,
+        deleteSourceSafe: true,
+        rollbackSafe: true,
+        sameEndpointCopySafe: true,
         targetExists: false,
         targetExistsUnknown: false,
         messages: [],
@@ -331,7 +316,7 @@ export default function ManagerMigrationWizardPage() {
           ? await createManagerMigration(payload)
           : await updateManagerMigration(editMigrationId, payload);
       const precheckDetail = await runManagerMigrationPrecheck(detail.id).catch(() => null);
-      if (precheckDetail && isPrecheckPassed(precheckDetail)) {
+      if (precheckDetail && isMigrationPrecheckPassed(precheckDetail)) {
         await startManagerMigration(detail.id).catch(() => {});
       }
       navigate(`/manager/migrations/${detail.id}`);

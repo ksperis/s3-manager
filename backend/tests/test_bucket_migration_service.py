@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
+from botocore.parsers import ResponseParserError
 from sqlalchemy.orm import sessionmaker
 
 from app.db import BucketMigration, BucketMigrationEvent, BucketMigrationItem, S3Account, S3User, StorageEndpoint, User, UserRole
@@ -89,6 +90,153 @@ def _app_settings_stub(
             bucket_migration_max_active_per_endpoint=max_active_per_endpoint,
         )
     )
+
+
+def _bucket_profile_stub(
+    bucket_name: str,
+    *,
+    versioning_status: str | None = None,
+    has_noncurrent_versions: bool = False,
+    has_delete_markers: bool = False,
+    object_lock_enabled: bool = False,
+    object_lock_mode: str | None = None,
+    object_lock_days: int | None = None,
+    object_lock_years: int | None = None,
+    encryption_enabled: bool = False,
+    encryption_supported: bool = True,
+    encryption_algorithms: list[str] | None = None,
+    kms_key_ids: list[str] | None = None,
+    unsupported_reason: str | None = None,
+    unsupported_settings: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "bucket_name": bucket_name,
+        "versioning": {
+            "status": versioning_status,
+            "enabled": str(versioning_status or "").strip().lower() == "enabled",
+            "suspended": str(versioning_status or "").strip().lower() == "suspended",
+        },
+        "version_scan": {
+            "current_version_count": 1,
+            "noncurrent_version_count": 1 if has_noncurrent_versions else 0,
+            "delete_marker_count": 1 if has_delete_markers else 0,
+            "has_noncurrent_versions": has_noncurrent_versions,
+            "has_delete_markers": has_delete_markers,
+            "current_version_sample": ["sample-current"],
+            "noncurrent_version_sample": ["sample-noncurrent"] if has_noncurrent_versions else [],
+            "delete_marker_sample": ["sample-delete-marker"] if has_delete_markers else [],
+        },
+        "object_lock": {
+            "enabled": object_lock_enabled,
+            "mode": object_lock_mode,
+            "days": object_lock_days,
+            "years": object_lock_years,
+        },
+        "encryption": {
+            "enabled": encryption_enabled,
+            "supported": encryption_supported,
+            "algorithms": encryption_algorithms or (["AES256"] if encryption_enabled and encryption_supported else []),
+            "kms_key_ids": kms_key_ids or [],
+            "unsupported_reason": unsupported_reason,
+            "rule_count": 1 if encryption_enabled else 0,
+        },
+        "supported_settings": {
+            "versioning": str(versioning_status or "").strip().lower() == "enabled",
+            "object_lock": object_lock_enabled,
+            "encryption": encryption_enabled,
+            "public_access_block": False,
+            "lifecycle": False,
+            "cors": False,
+            "tags": False,
+            "access_logging": False,
+            "bucket_policy": False,
+        },
+        "feature_availability": {},
+        "skipped_features": [],
+        "unsupported_settings": list(unsupported_settings or []),
+    }
+
+
+def _current_only_execution_plan() -> str:
+    return json.dumps(
+        {
+            "report_version": 2,
+            "strategy": "current_only",
+            "supported": True,
+            "blocked": False,
+            "delete_source_safe": True,
+            "rollback_safe": True,
+            "same_endpoint_copy_safe": True,
+            "blocking_codes": [],
+        }
+    )
+
+
+def _make_bucket_feature_probe_stub(
+    *,
+    get_bucket_website=None,
+    get_bucket_notifications=None,
+    get_bucket_replication=None,
+    get_policy=None,
+):
+    website_calls = {"count": 0}
+    notification_calls = {"count": 0}
+    replication_calls = {"count": 0}
+    policy_calls = {"count": 0}
+
+    class _BucketsStub:
+        def get_bucket_properties(self, *_args, **_kwargs):
+            return SimpleNamespace(versioning_status=None)
+
+        def get_bucket_object_lock(self, *_args, **_kwargs):
+            return SimpleNamespace(enabled=False, mode=None, days=None, years=None)
+
+        def get_bucket_encryption(self, *_args, **_kwargs):
+            return SimpleNamespace(rules=[])
+
+        def get_policy(self, *_args, **_kwargs):
+            policy_calls["count"] += 1
+            if get_policy is not None:
+                return get_policy()
+            return None
+
+        def get_bucket_logging(self, *_args, **_kwargs):
+            return SimpleNamespace(enabled=False, target_bucket=None)
+
+        def get_bucket_tags(self, *_args, **_kwargs):
+            return []
+
+        def get_lifecycle(self, *_args, **_kwargs):
+            return SimpleNamespace(rules=[])
+
+        def get_bucket_cors(self, *_args, **_kwargs):
+            return []
+
+        def get_public_access_block(self, *_args, **_kwargs):
+            return None
+
+        def get_bucket_website(self, *_args, **_kwargs):
+            website_calls["count"] += 1
+            if get_bucket_website is not None:
+                return get_bucket_website()
+            return SimpleNamespace(index_document=None, error_document=None, redirect_all_requests_to=None, routing_rules=[])
+
+        def get_bucket_notifications(self, *_args, **_kwargs):
+            notification_calls["count"] += 1
+            if get_bucket_notifications is not None:
+                return get_bucket_notifications()
+            return SimpleNamespace(configuration={})
+
+        def get_bucket_replication(self, *_args, **_kwargs):
+            replication_calls["count"] += 1
+            if get_bucket_replication is not None:
+                return get_bucket_replication()
+            return SimpleNamespace(configuration={})
+
+        def get_bucket_acl(self, *_args, **_kwargs):
+            return SimpleNamespace(owner=None, grants=[])
+
+    return _BucketsStub(), website_calls, notification_calls, replication_calls, policy_calls
 
 
 def test_create_migration_creates_items_and_defaults(db_session):
@@ -376,6 +524,9 @@ def test_update_draft_migration_replaces_configuration_and_resets_precheck(db_se
     assert all(item.objects_copied == 0 for item in by_source.values())
     assert all(item.objects_deleted == 0 for item in by_source.values())
     assert all(item.error_message is None for item in by_source.values())
+    assert all(item.source_snapshot_json is None for item in by_source.values())
+    assert all(item.target_snapshot_json is None for item in by_source.values())
+    assert all(item.execution_plan_json is None for item in by_source.values())
     assert any(event.message == "Migration configuration updated." for event in updated.events)
 
 
@@ -1042,6 +1193,7 @@ def test_verify_blocks_delete_source_when_strong_verification_fails(db_session):
     item = migration.items[0]
     item.status = "running"
     item.step = "verify"
+    item.execution_plan_json = _current_only_execution_plan()
     db_session.commit()
 
     service._compare_buckets_streamed = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
@@ -1090,6 +1242,7 @@ def test_verify_allows_delete_source_when_strong_verification_succeeds(db_sessio
     item = migration.items[0]
     item.status = "running"
     item.step = "verify"
+    item.execution_plan_json = _current_only_execution_plan()
     db_session.commit()
 
     service._compare_buckets_streamed = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
@@ -1140,6 +1293,7 @@ def test_verify_delete_source_skips_strong_verification_when_disabled(db_session
     item = migration.items[0]
     item.status = "running"
     item.step = "verify"
+    item.execution_plan_json = _current_only_execution_plan()
     db_session.commit()
 
     service._compare_buckets_streamed = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
@@ -1250,6 +1404,7 @@ def test_run_precheck_passed_then_start_allowed(db_session):
     service._precheck_same_endpoint_copy_source_access = lambda *_args, **_kwargs: "validated"  # type: ignore[method-assign]
     service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._precheck_target_lock_with_probe_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.inspect_bucket_state = lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a")  # type: ignore[method-assign]
 
     migration = service.run_precheck(migration.id)
 
@@ -1257,6 +1412,9 @@ def test_run_precheck_passed_then_start_allowed(db_session):
     assert migration.items[0].source_count == 12
     report = json.loads(migration.precheck_report_json or "{}")
     assert report.get("errors") == 0
+    assert report.get("report_version") == 2
+    assert report.get("status") == "passed"
+    assert migration.items[0].execution_plan_json is not None
     queued = service.start_migration(migration.id)
     assert queued.status == "queued"
 
@@ -1295,6 +1453,7 @@ def test_run_precheck_failed_blocks_start(db_session):
     service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
     service._precheck_same_endpoint_copy_source_access = lambda *_args, **_kwargs: "validated"  # type: ignore[method-assign]
     service._precheck_policy_roundtrip = _fail_policy  # type: ignore[method-assign]
+    service._inspector.inspect_bucket_state = lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a")  # type: ignore[method-assign]
 
     migration = service.run_precheck(migration.id)
     assert migration.precheck_status == "failed"
@@ -1329,6 +1488,7 @@ def test_run_precheck_skips_same_endpoint_copy_source_access_when_option_disable
     service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
     service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._precheck_target_lock_with_probe_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.inspect_bucket_state = lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a")  # type: ignore[method-assign]
 
     def _unexpected_same_endpoint_copy(*_args, **_kwargs):
         raise AssertionError("same-endpoint x-amz-copy-source precheck should be skipped when option is disabled")
@@ -1366,6 +1526,8 @@ def test_run_precheck_fails_when_same_endpoint_copy_source_access_is_missing(db_
     service._count_bucket_objects = lambda *_args, **_kwargs: 5  # type: ignore[method-assign]
     service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
     service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._precheck_target_lock_with_probe_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.inspect_bucket_state = lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a")  # type: ignore[method-assign]
 
     def _deny_same_endpoint_copy(*_args, **_kwargs):
         raise RuntimeError("missing s3:GetObject on source")
@@ -1381,6 +1543,414 @@ def test_run_precheck_fails_when_same_endpoint_copy_source_access_is_missing(db_
         for message in item_messages
         if isinstance(message, dict)
     )
+
+
+def test_run_precheck_skips_disabled_endpoint_website_probe_when_copy_bucket_settings_enabled(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    source.storage_endpoint.features_config = "features:\n  static_website:\n    enabled: false\n  sse:\n    enabled: true\n"
+    target.storage_endpoint.features_config = "features:\n  static_website:\n    enabled: false\n  sse:\n    enabled: true\n"
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    migration = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            copy_bucket_settings=True,
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+        ),
+        user,
+    )
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(
+            context_id=context_id,
+            account=source if context_id == str(source.id) else target,
+            endpoint="https://s3.example.test",
+            region="us-east-1",
+            force_path_style=False,
+            verify_tls=True,
+        )
+
+    buckets_stub, website_calls, _notification_calls, _replication_calls, _policy_calls = _make_bucket_feature_probe_stub()
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._buckets = buckets_stub  # type: ignore[assignment]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._count_bucket_objects = lambda *_args, **_kwargs: 1  # type: ignore[method-assign]
+    service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
+    service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._precheck_target_lock_with_probe_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.scan_bucket_versions = lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a")["version_scan"]  # type: ignore[method-assign]
+
+    checked = service.run_precheck(migration.id)
+
+    assert checked.precheck_status == "passed"
+    assert website_calls["count"] == 0
+    report = json.loads(checked.precheck_report_json or "{}")
+    messages = report.get("items", [])[0].get("messages", [])
+    assert not any(
+        str(message.get("code", "")) == "source_profile_inspection_failed"
+        for message in messages
+        if isinstance(message, dict)
+    )
+    assert any(
+        str(message.get("code", "")) == "source_feature_disabled_on_endpoint"
+        and str((message.get("details") or {}).get("feature", "")) == "website"
+        for message in messages
+        if isinstance(message, dict)
+    )
+
+
+def test_run_precheck_skips_non_required_bucket_setting_probes_when_copy_bucket_settings_disabled(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    source.storage_endpoint.features_config = "features:\n  static_website:\n    enabled: true\n  sse:\n    enabled: true\n"
+    target.storage_endpoint.features_config = "features:\n  static_website:\n    enabled: true\n  sse:\n    enabled: true\n"
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    migration = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            copy_bucket_settings=False,
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+        ),
+        user,
+    )
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(
+            context_id=context_id,
+            account=source if context_id == str(source.id) else target,
+            endpoint="https://s3.example.test",
+            region="us-east-1",
+            force_path_style=False,
+            verify_tls=True,
+        )
+
+    def _unexpected_website():
+        raise AssertionError("Website probe must be skipped when copy_bucket_settings is disabled")
+
+    def _unexpected_policy():
+        raise AssertionError("Bucket policy probe must be skipped when copy_bucket_settings is disabled")
+
+    buckets_stub, website_calls, _notification_calls, _replication_calls, policy_calls = _make_bucket_feature_probe_stub(
+        get_bucket_website=_unexpected_website,
+        get_policy=_unexpected_policy,
+    )
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._buckets = buckets_stub  # type: ignore[assignment]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._count_bucket_objects = lambda *_args, **_kwargs: 1  # type: ignore[method-assign]
+    service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
+    service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._precheck_target_lock_with_probe_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.scan_bucket_versions = lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a")["version_scan"]  # type: ignore[method-assign]
+
+    checked = service.run_precheck(migration.id)
+
+    assert checked.precheck_status == "passed"
+    assert website_calls["count"] == 0
+    assert policy_calls["count"] == 0
+    report = json.loads(checked.precheck_report_json or "{}")
+    messages = report.get("items", [])[0].get("messages", [])
+    assert any(
+        str(message.get("code", "")) == "source_feature_skipped_not_required"
+        and str((message.get("details") or {}).get("feature", "")) == "website"
+        for message in messages
+        if isinstance(message, dict)
+    )
+    assert any(
+        str(message.get("code", "")) == "source_feature_skipped_not_required"
+        and str((message.get("details") or {}).get("feature", "")) == "bucket_policy"
+        for message in messages
+        if isinstance(message, dict)
+    )
+
+
+def test_run_precheck_warns_when_website_probe_is_method_not_allowed_but_not_blocking(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    source.storage_endpoint.features_config = "features:\n  static_website:\n    enabled: true\n  sse:\n    enabled: true\n"
+    target.storage_endpoint.features_config = "features:\n  static_website:\n    enabled: true\n  sse:\n    enabled: true\n"
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    migration = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            copy_bucket_settings=True,
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+        ),
+        user,
+    )
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(
+            context_id=context_id,
+            account=source if context_id == str(source.id) else target,
+            endpoint="https://s3.example.test",
+            region="us-east-1",
+            force_path_style=False,
+            verify_tls=True,
+        )
+
+    def _website_method_not_allowed():
+        raise RuntimeError(
+            "Unable to fetch bucket website for 'bucket-a': "
+            "An error occurred (MethodNotAllowed) when calling the GetBucketWebsite operation: None"
+        )
+
+    buckets_stub, website_calls, _notification_calls, _replication_calls, _policy_calls = _make_bucket_feature_probe_stub(
+        get_bucket_website=_website_method_not_allowed,
+    )
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._buckets = buckets_stub  # type: ignore[assignment]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._count_bucket_objects = lambda *_args, **_kwargs: 1  # type: ignore[method-assign]
+    service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
+    service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._precheck_target_lock_with_probe_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.scan_bucket_versions = lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a")["version_scan"]  # type: ignore[method-assign]
+
+    checked = service.run_precheck(migration.id)
+
+    assert checked.precheck_status == "passed"
+    assert website_calls["count"] == 1
+    report = json.loads(checked.precheck_report_json or "{}")
+    messages = report.get("items", [])[0].get("messages", [])
+    assert not any(
+        str(message.get("code", "")) == "source_profile_inspection_failed"
+        for message in messages
+        if isinstance(message, dict)
+    )
+    assert any(
+        str(message.get("code", "")) == "source_feature_probe_unavailable"
+        and str((message.get("details") or {}).get("feature", "")) == "website"
+        for message in messages
+        if isinstance(message, dict)
+    )
+
+
+def test_start_migration_requires_execution_plan_when_precheck_is_legacy(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    migration = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+        ),
+        user,
+    )
+    migration.precheck_status = "passed"
+    migration.precheck_report_json = json.dumps({"status": "passed", "errors": 0})
+    db_session.commit()
+
+    try:
+        service.start_migration(migration.id)
+        assert False, "Expected start_migration to reject legacy precheck reports without execution plans"
+    except ValueError as exc:
+        assert "Precheck must be re-run before start" in str(exc)
+
+
+def test_run_precheck_fails_when_source_bucket_requires_version_aware_strategy(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    migration = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+        ),
+        user,
+    )
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(
+            context_id=context_id,
+            account=source if context_id == str(source.id) else target,
+            endpoint="https://s3.example.test",
+            region="us-east-1",
+            force_path_style=False,
+            verify_tls=True,
+        )
+
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._count_bucket_objects = lambda *_args, **_kwargs: 5  # type: ignore[method-assign]
+    service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
+    service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._precheck_target_lock_with_probe_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.inspect_bucket_state = (  # type: ignore[method-assign]
+        lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a", versioning_status="Enabled", has_noncurrent_versions=True)
+    )
+
+    checked = service.run_precheck(migration.id)
+
+    assert checked.precheck_status == "failed"
+    report = json.loads(checked.precheck_report_json or "{}")
+    item_report = report.get("items", [])[0]
+    assert item_report.get("strategy") == "version_aware"
+    assert item_report.get("blocking") is True
+    assert any(
+        str(message.get("code", "")) == "version_aware_required"
+        for message in item_report.get("messages", [])
+        if isinstance(message, dict)
+    )
+
+
+def test_run_precheck_fails_when_source_bucket_uses_unsupported_default_encryption(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    migration = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+        ),
+        user,
+    )
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(
+            context_id=context_id,
+            account=source if context_id == str(source.id) else target,
+            endpoint="https://s3.example.test",
+            region="us-east-1",
+            force_path_style=False,
+            verify_tls=True,
+        )
+
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._count_bucket_objects = lambda *_args, **_kwargs: 5  # type: ignore[method-assign]
+    service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
+    service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._precheck_target_lock_with_probe_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.inspect_bucket_state = (  # type: ignore[method-assign]
+        lambda *_args, **_kwargs: _bucket_profile_stub(
+            "bucket-a",
+            encryption_enabled=True,
+            encryption_supported=False,
+            encryption_algorithms=["aws:kms"],
+            kms_key_ids=["arn:aws:kms:eu-west-1:123:key/abc"],
+            unsupported_reason="default SSE-KMS encryption is not supported",
+        )
+    )
+
+    checked = service.run_precheck(migration.id)
+
+    assert checked.precheck_status == "failed"
+    report = json.loads(checked.precheck_report_json or "{}")
+    messages = report.get("items", [])[0].get("messages", [])
+    assert any(
+        str(message.get("code", "")) == "unsupported_default_encryption"
+        for message in messages
+        if isinstance(message, dict)
+    )
+
+
+def test_run_precheck_fails_when_copy_bucket_settings_hits_unsupported_source_settings(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    migration = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            copy_bucket_settings=True,
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+        ),
+        user,
+    )
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(
+            context_id=context_id,
+            account=source if context_id == str(source.id) else target,
+            endpoint="https://s3.example.test",
+            region="us-east-1",
+            force_path_style=False,
+            verify_tls=True,
+        )
+
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._count_bucket_objects = lambda *_args, **_kwargs: 5  # type: ignore[method-assign]
+    service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
+    service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._precheck_target_lock_with_probe_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.inspect_bucket_state = (  # type: ignore[method-assign]
+        lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a", unsupported_settings=["website", "replication"])
+    )
+
+    checked = service.run_precheck(migration.id)
+
+    assert checked.precheck_status == "failed"
+    report = json.loads(checked.precheck_report_json or "{}")
+    messages = report.get("items", [])[0].get("messages", [])
+    assert any(
+        str(message.get("code", "")) == "unsupported_bucket_settings_configured"
+        for message in messages
+        if isinstance(message, dict)
+    )
+
+
+def test_delete_objects_batch_falls_back_to_individual_deletes_on_invalid_xml_response(db_session):
+    service = BucketMigrationService(db_session)
+
+    class InvalidXmlDeleteClient:
+        def __init__(self):
+            self.batch_calls = []
+            self.single_calls = []
+
+        def delete_objects(self, **kwargs):
+            self.batch_calls.append(kwargs)
+            raise ResponseParserError("Unable to parse response, invalid XML received")
+
+        def delete_object(self, **kwargs):
+            self.single_calls.append(kwargs)
+            return {}
+
+    client = InvalidXmlDeleteClient()
+
+    deleted = service._delete_objects_batch(
+        client,
+        "bucket-a",
+        [
+            {"Key": "one.txt"},
+            {"Key": "two.txt", "VersionId": "v2"},
+        ],
+    )
+
+    assert deleted == 2
+    assert len(client.batch_calls) == 1
+    assert client.single_calls == [
+        {"Bucket": "bucket-a", "Key": "one.txt"},
+        {"Bucket": "bucket-a", "Key": "two.txt", "VersionId": "v2"},
+    ]
 
 
 def test_sync_bucket_uses_stream_copy_when_same_endpoint_copy_option_is_disabled(db_session):
@@ -2552,6 +3122,7 @@ def test_run_precheck_executes_target_lock_probe_once_when_required(db_session):
     service._count_bucket_objects = lambda *_args, **_kwargs: 3  # type: ignore[method-assign]
     service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
     service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.inspect_bucket_state = lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a")  # type: ignore[method-assign]
 
     def _probe(_target_ctx, *, migration_id: int):
         assert migration_id == migration.id
@@ -2565,7 +3136,7 @@ def test_run_precheck_executes_target_lock_probe_once_when_required(db_session):
 
 
 
-def test_run_precheck_warns_when_target_lock_probe_fails_in_best_effort_mode(db_session):
+def test_run_precheck_fails_when_target_lock_probe_fails_in_fail_closed_mode(db_session):
     user = _create_user(db_session)
     source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
     target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
@@ -2587,21 +3158,25 @@ def test_run_precheck_warns_when_target_lock_probe_fails_in_best_effort_mode(db_
     service._count_bucket_objects = lambda *_args, **_kwargs: 3  # type: ignore[method-assign]
     service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
     service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.inspect_bucket_state = lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a")  # type: ignore[method-assign]
     service._precheck_target_lock_with_probe_bucket = (  # type: ignore[method-assign]
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("lock probe denied"))
     )
 
     checked = service.run_precheck(migration.id)
-    assert checked.precheck_status == "passed"
+    assert checked.precheck_status == "failed"
     report = json.loads(checked.precheck_report_json or "{}")
-    assert int(report.get("errors") or 0) == 0
-    assert int(report.get("warnings") or 0) >= 1
+    assert int(report.get("errors") or 0) >= 1
     messages = report.get("items", [])[0].get("messages", [])
-    assert any("best effort mode" in str(message.get("message", "")).lower() for message in messages)
+    assert any(
+        str(message.get("code", "")) == "target_write_lock_failed"
+        for message in messages
+        if isinstance(message, dict)
+    )
 
 
 
-def test_run_precheck_warns_when_target_lock_probe_cleanup_fails_in_best_effort_mode(db_session):
+def test_run_precheck_fails_when_target_lock_probe_cleanup_fails_in_fail_closed_mode(db_session):
     user = _create_user(db_session)
     source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
     target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
@@ -2623,21 +3198,25 @@ def test_run_precheck_warns_when_target_lock_probe_cleanup_fails_in_best_effort_
     service._count_bucket_objects = lambda *_args, **_kwargs: 3  # type: ignore[method-assign]
     service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
     service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._inspector.inspect_bucket_state = lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a")  # type: ignore[method-assign]
     service._precheck_target_lock_with_probe_bucket = (  # type: ignore[method-assign]
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("Target write-lock precheck cleanup failed"))
     )
 
     checked = service.run_precheck(migration.id)
-    assert checked.precheck_status == "passed"
+    assert checked.precheck_status == "failed"
     report = json.loads(checked.precheck_report_json or "{}")
-    assert int(report.get("errors") or 0) == 0
-    assert int(report.get("warnings") or 0) >= 1
+    assert int(report.get("errors") or 0) >= 1
     messages = report.get("items", [])[0].get("messages", [])
-    assert any("cleanup failed" in str(message.get("message", "")).lower() for message in messages)
+    assert any(
+        "cleanup failed" in str(message.get("message", "")).lower()
+        for message in messages
+        if isinstance(message, dict)
+    )
 
 
 
-def test_apply_target_lock_continues_when_lock_fails_in_best_effort_mode(db_session):
+def test_apply_target_lock_fails_when_lock_cannot_be_applied(db_session):
     user = _create_user(db_session)
     source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
     target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
@@ -2657,6 +3236,7 @@ def test_apply_target_lock_continues_when_lock_fails_in_best_effort_mode(db_sess
     item = migration.items[0]
     item.status = "running"
     item.step = "apply_target_lock"
+    item.execution_plan_json = _current_only_execution_plan()
     db_session.commit()
 
     service._apply_target_write_lock_policy = (  # type: ignore[method-assign]
@@ -2685,11 +3265,15 @@ def test_apply_target_lock_continues_when_lock_fails_in_best_effort_mode(db_sess
         control_calls["count"] += 1
         return "run" if control_calls["count"] == 1 else "pause"
 
-    service._run_item(migration, item, source_ctx, target_ctx, control_check=_control_check)
+    try:
+        service._run_item(migration, item, source_ctx, target_ctx, control_check=_control_check)
+        assert False, "Expected target write-lock application failure to stop the item"
+    except RuntimeError as exc:
+        assert "Target write-lock policy could not be applied" in str(exc)
 
     db_session.refresh(item)
-    assert item.status == "paused"
-    assert item.step == "pre_sync"
+    assert item.status == "running"
+    assert item.step == "apply_target_lock"
     assert item.target_lock_applied is False
 
     warning_event = (
@@ -2702,8 +3286,7 @@ def test_apply_target_lock_continues_when_lock_fails_in_best_effort_mode(db_sess
         .order_by(BucketMigrationEvent.id.desc())
         .first()
     )
-    assert warning_event is not None
-    assert "best-effort mode" in warning_event.message.lower()
+    assert warning_event is None
 
 
 def test_fail_migration_fatal_marks_failed_and_releases_lease(db_session):

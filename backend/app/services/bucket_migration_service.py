@@ -39,8 +39,14 @@ from app.db import (
 from app.models.bucket_migration import BucketMigrationCreateRequest
 from app.services.app_settings_service import load_app_settings
 from app.services.buckets_service import BucketsService
+from app.services.bucket_migration_runtime import (
+    BucketMigrationExecutor,
+    BucketMigrationInspector,
+    BucketMigrationPrecheckPlanner,
+    BucketMigrationVerifier,
+)
 from app.services.object_diff_common import compare_object_entries
-from app.services.s3_client import get_s3_client
+from app.services.s3_client import _delete_objects_count, get_s3_client
 from app.utils.rgw import resolve_admin_uid
 from app.utils.s3_connection_endpoint import resolve_connection_endpoint
 from app.utils.s3_endpoint import normalize_s3_endpoint, resolve_s3_client_options
@@ -297,6 +303,10 @@ class BucketMigrationService:
     ) -> None:
         self.db = db
         self._buckets = BucketsService()
+        self._inspector = BucketMigrationInspector(self)
+        self._precheck_planner = BucketMigrationPrecheckPlanner(self, self._inspector)
+        self._verifier = BucketMigrationVerifier(self)
+        self._executor = BucketMigrationExecutor(self)
         self._authorized_context_ids: Optional[set[str]]
         self._admin_account_context_ids: Optional[set[str]]
         if authorized_context_ids is None:
@@ -312,6 +322,11 @@ class BucketMigrationService:
 
     def _commit(self) -> None:
         self.db.commit()
+
+    def _json_dumps_safe(self, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        return _json_dumps(value)
 
     def _is_context_authorized(self, context_id: str) -> bool:
         if self._authorized_context_ids is None:
@@ -467,6 +482,9 @@ class BucketMigrationService:
                     target_bucket=target_bucket,
                     status="pending",
                     step="create_bucket",
+                    source_snapshot_json=None,
+                    target_snapshot_json=None,
+                    execution_plan_json=None,
                     created_at=utcnow(),
                     updated_at=utcnow(),
                 )
@@ -581,6 +599,9 @@ class BucketMigrationService:
                         target_bucket=target_bucket,
                         status="pending",
                         step="create_bucket",
+                        source_snapshot_json=None,
+                        target_snapshot_json=None,
+                        execution_plan_json=None,
                         created_at=now,
                         updated_at=now,
                     )
@@ -603,6 +624,9 @@ class BucketMigrationService:
             item.only_source_count = None
             item.only_target_count = None
             item.diff_sample_json = None
+            item.source_snapshot_json = None
+            item.target_snapshot_json = None
+            item.execution_plan_json = None
             item.source_policy_backup_json = None
             item.target_policy_backup_json = None
             item.error_message = None
@@ -707,211 +731,9 @@ class BucketMigrationService:
             raise ValueError("Precheck cannot run while migration is active")
 
         checked_at = utcnow()
-        report: dict[str, Any] = {
-            "status": "passed",
-            "checked_at": checked_at.isoformat(),
-            "contexts": {},
-            "items": [],
-            "errors": 0,
-            "warnings": 0,
-        }
-        errors = 0
-        warnings = 0
-
-        source_ctx: Optional[_ResolvedContext] = None
-        target_ctx: Optional[_ResolvedContext] = None
-        try:
-            source_ctx = self._resolve_context(migration.source_context_id)
-            target_ctx = self._resolve_context(migration.target_context_id)
-            report["contexts"] = {
-                "source": {
-                    "context_id": source_ctx.context_id,
-                    "endpoint": source_ctx.endpoint,
-                    "region": source_ctx.region,
-                },
-                "target": {
-                    "context_id": target_ctx.context_id,
-                    "endpoint": target_ctx.endpoint,
-                    "region": target_ctx.region,
-                },
-            }
-            if not source_ctx.endpoint:
-                raise ValueError("Source context endpoint is not configured")
-            if not target_ctx.endpoint:
-                raise ValueError("Target context endpoint is not configured")
-        except Exception as exc:  # noqa: BLE001
-            errors += 1
-            report["contexts_error"] = str(exc)
-            source_ctx = None
-            target_ctx = None
-
-        if source_ctx and target_ctx:
-            same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
-            report["same_endpoint"] = bool(same_endpoint)
-            report["use_same_endpoint_copy"] = bool(migration.use_same_endpoint_copy)
-            report["strong_integrity_check"] = bool(getattr(migration, "strong_integrity_check", False))
-            same_endpoint_copy_enabled = bool(same_endpoint and migration.use_same_endpoint_copy)
-            target_lock_probe_item_ids: set[int] = set()
-            item_results_by_id: dict[int, dict[str, Any]] = {}
-
-            for item in sorted(migration.items, key=lambda entry: entry.id):
-                item_result: dict[str, Any] = {
-                    "item_id": item.id,
-                    "source_bucket": item.source_bucket,
-                    "target_bucket": item.target_bucket,
-                    "messages": [],
-                }
-                item_errors = 0
-                item_warnings = 0
-                source_access_ok = False
-                source_object_count: Optional[int] = None
-                target_object_count: Optional[int] = None
-
-                def add_msg(level: str, message: str) -> None:
-                    nonlocal item_errors, item_warnings
-                    if level == "error":
-                        item_errors += 1
-                    elif level == "warning":
-                        item_warnings += 1
-                    item_result["messages"].append({"level": level, "message": message})
-
-                try:
-                    self._precheck_can_list_bucket(source_ctx, item.source_bucket)
-                    source_access_ok = True
-                    add_msg("info", "Source bucket is reachable for list/read operations.")
-                except Exception as exc:  # noqa: BLE001
-                    add_msg("error", f"Source bucket read/list check failed: {exc}")
-
-                if source_access_ok:
-                    try:
-                        source_object_count = self._count_bucket_objects(source_ctx, item.source_bucket)
-                        item.source_count = int(source_object_count)
-                        add_msg("info", f"Source bucket object count: {source_object_count}.")
-                    except Exception as exc:  # noqa: BLE001
-                        item.source_count = None
-                        add_msg("warning", f"Unable to count source bucket objects: {exc}")
-                else:
-                    item.source_count = None
-
-                target_exists: Optional[bool] = None
-                try:
-                    target_exists = self._precheck_bucket_exists(target_ctx, item.target_bucket)
-                    if target_exists is True:
-                        add_msg("warning", "Target bucket already exists; this item will be skipped.")
-                    elif target_exists is False:
-                        add_msg("info", "Target bucket does not exist.")
-                    else:
-                        add_msg(
-                            "warning",
-                            "Unable to verify whether target bucket exists (insufficient head/list rights).",
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    add_msg("error", f"Target bucket existence check failed: {exc}")
-
-                if target_exists is True:
-                    try:
-                        target_object_count = self._count_bucket_objects(target_ctx, item.target_bucket)
-                        item.target_count = int(target_object_count)
-                        add_msg("info", f"Target bucket object count: {target_object_count}.")
-                    except Exception as exc:  # noqa: BLE001
-                        item.target_count = None
-                        add_msg("warning", f"Unable to count target bucket objects: {exc}")
-                elif target_exists is False:
-                    item.target_count = 0
-                else:
-                    item.target_count = None
-
-                if same_endpoint_copy_enabled and target_exists is not True and source_access_ok:
-                    try:
-                        probe = self._precheck_same_endpoint_copy_source_access(
-                            source_ctx,
-                            target_ctx,
-                            item.source_bucket,
-                            auto_grant=bool(migration.auto_grant_source_read_for_copy),
-                        )
-                        if probe == "source_empty":
-                            add_msg(
-                                "warning",
-                                "Source bucket is currently empty; same-endpoint x-amz-copy-source permissions "
-                                "cannot be fully validated.",
-                            )
-                        elif probe == "validated_with_temporary_grant":
-                            add_msg(
-                                "info",
-                                "Same-endpoint x-amz-copy-source permissions were validated by applying "
-                                "a temporary source-read grant for the target context.",
-                            )
-                        else:
-                            add_msg(
-                                "info",
-                                "Same-endpoint x-amz-copy-source permissions are valid with the target context.",
-                            )
-                    except Exception as exc:  # noqa: BLE001
-                        add_msg("error", f"Same-endpoint x-amz-copy-source precheck failed: {exc}")
-
-                requires_cutover = bool(target_exists is not True)
-                if requires_cutover:
-                    try:
-                        self._precheck_policy_roundtrip(source_ctx.account, item.source_bucket)
-                        add_msg("info", "Read-only cutover policy can be applied on source bucket.")
-                    except Exception as exc:  # noqa: BLE001
-                        add_msg("error", f"Read-only policy precheck failed: {exc}")
-
-                item_result["errors"] = item_errors
-                item_result["warnings"] = item_warnings
-                item_result["source_object_count"] = source_object_count
-                item_result["target_object_count"] = target_object_count
-                item.source_count = source_object_count
-                item.target_count = target_object_count if target_exists is True else item.target_count
-                item.updated_at = checked_at
-                item_results_by_id[item.id] = item_result
-
-                if migration.lock_target_writes and target_exists is not True:
-                    target_lock_probe_item_ids.add(item.id)
-                    item_result["messages"].append(
-                        {
-                            "level": "info",
-                            "message": "Target write-lock validation is scheduled on a temporary destination bucket.",
-                        }
-                    )
-
-                errors += item_errors
-                warnings += item_warnings
-                report["items"].append(item_result)
-
-            if migration.lock_target_writes and target_lock_probe_item_ids:
-                try:
-                    self._precheck_target_lock_with_probe_bucket(target_ctx, migration_id=migration.id)
-                    for item_id in sorted(target_lock_probe_item_ids):
-                        item_result = item_results_by_id.get(item_id)
-                        if not item_result:
-                            continue
-                        item_result["messages"].append(
-                            {
-                                "level": "info",
-                                "message": "Target write-lock policy roundtrip is validated for migration worker access.",
-                            }
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    for item_id in sorted(target_lock_probe_item_ids):
-                        item_result = item_results_by_id.get(item_id)
-                        if not item_result:
-                            continue
-                        item_result["messages"].append(
-                            {
-                                "level": "warning",
-                                "message": (
-                                    "Target write-lock precheck failed (best effort mode): "
-                                    f"{exc}. Migration can continue without destination lock."
-                                ),
-                            }
-                        )
-                        item_result["warnings"] = int(item_result.get("warnings") or 0) + 1
-                        warnings += 1
-
-        report["errors"] = errors
-        report["warnings"] = warnings
-        report["status"] = "failed" if errors > 0 else "passed"
+        report = self._precheck_planner.run(migration, checked_at=checked_at)
+        errors = int(report.get("errors") or 0)
+        warnings = int(report.get("warnings") or 0)
 
         migration.precheck_status = "failed" if errors > 0 else "passed"
         migration.precheck_report_json = _json_dumps(report)
@@ -942,6 +764,14 @@ class BucketMigrationService:
             raise ValueError("Migration cannot be started from current status")
         if migration.precheck_status != "passed":
             raise ValueError("Precheck must pass before start. Run /precheck first.")
+        for item in migration.items:
+            try:
+                self._assert_item_execution_plan_supported(item)
+            except RuntimeError as exc:
+                raise ValueError(
+                    "Precheck must be re-run before start. "
+                    f"Item '{item.source_bucket}' -> '{item.target_bucket}' is not runnable: {exc}"
+                ) from exc
         migration.status = "queued"
         migration.pause_requested = False
         migration.cancel_requested = False
@@ -1464,6 +1294,50 @@ class BucketMigrationService:
         *,
         control_check: Callable[[], str],
     ) -> None:
+        self._executor.run_item(
+            migration,
+            item,
+            source_ctx,
+            target_ctx,
+            control_check=control_check,
+        )
+
+    def _load_item_execution_plan(self, item: BucketMigrationItem) -> dict[str, Any]:
+        parsed = _json_loads(item.execution_plan_json)
+        return parsed if isinstance(parsed, dict) else {}
+
+    def _assert_item_execution_plan_supported(self, item: BucketMigrationItem) -> None:
+        plan = self._load_item_execution_plan(item)
+        strategy = str(plan.get("strategy") or "current_only").strip() or "current_only"
+        supported = bool(plan.get("supported")) if plan else False
+        if not plan:
+            raise RuntimeError(
+                "Missing execution plan for migration item. Re-run precheck before starting the migration."
+            )
+        if strategy not in {"current_only", "skip_existing"}:
+            raise RuntimeError(
+                f"Execution strategy '{strategy}' is not implemented by the migration worker."
+            )
+        if not supported:
+            blocking_codes = plan.get("blocking_codes")
+            if isinstance(blocking_codes, list) and blocking_codes:
+                codes = ", ".join(str(code) for code in blocking_codes[:5])
+                raise RuntimeError(
+                    "Migration item is blocked by precheck findings and cannot run. "
+                    f"Blocking checks: {codes}"
+                )
+            raise RuntimeError("Migration item is blocked by precheck findings and cannot run.")
+
+    def _run_item_impl(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        control_check: Callable[[], str],
+    ) -> None:
+        self._assert_item_execution_plan_supported(item)
         last_heartbeat_persist = 0.0
         while True:
             now_mono = time.monotonic()
@@ -1541,38 +1415,32 @@ class BucketMigrationService:
                 continue
 
             if item.step == "apply_target_lock":
-                lock_warning: Optional[str] = None
                 try:
                     self._apply_target_write_lock_policy(target_ctx, item.target_bucket, item)
                     item.target_lock_applied = True
                 except Exception as exc:  # noqa: BLE001
-                    lock_warning = str(exc)
+                    lock_error = str(exc)
                     try:
                         if item.target_policy_backup_json:
                             self._restore_target_write_lock_policy(target_ctx.account, item.target_bucket, item)
                         else:
                             self._remove_managed_target_write_lock_statement(item.target_bucket, target_ctx.account)
                     except Exception as restore_exc:  # noqa: BLE001
-                        lock_warning = f"{lock_warning}; restore attempt failed: {restore_exc}"
+                        lock_error = f"{lock_error}; restore attempt failed: {restore_exc}"
                     item.target_lock_applied = False
                     item.target_policy_backup_json = None
+                    raise RuntimeError(
+                        "Target write-lock policy could not be applied: "
+                        f"{lock_error}"
+                    ) from exc
                 item.step = "pre_sync" if migration.mode == "pre_sync" and not item.pre_sync_done else "apply_read_only"
                 item.updated_at = utcnow()
-                if lock_warning:
-                    self._add_event(
-                        migration,
-                        item=item,
-                        level="warning",
-                        message="Target write-lock policy could not be applied; continuing in best-effort mode.",
-                        metadata={"error": lock_warning},
-                    )
-                else:
-                    self._add_event(
-                        migration,
-                        item=item,
-                        level="info",
-                        message="Target write-lock policy applied.",
-                    )
+                self._add_event(
+                    migration,
+                    item=item,
+                    level="info",
+                    message="Target write-lock policy applied.",
+                )
                 self._commit()
                 continue
 
@@ -1842,15 +1710,35 @@ class BucketMigrationService:
         migration: BucketMigration,
         item: BucketMigrationItem,
     ) -> None:
-        # Best-effort copy. Unsupported settings are logged and ignored.
-        try:
-            src_props = self._buckets.get_bucket_properties(source_bucket, source_account)
-            versioning_enabled = str(src_props.versioning_status or "").strip().lower() == "enabled"
-            self._buckets.set_versioning(target_bucket, target_account, enabled=versioning_enabled)
-        except Exception as exc:  # noqa: BLE001
-            self._add_event(migration, item=item, level="warning", message="Versioning copy failed.", metadata={"error": str(exc)})
+        failures: list[str] = []
 
-        try:
+        def run_copy_step(step_name: str, action: Callable[[], None], *, message: str) -> None:
+            try:
+                action()
+            except Exception as exc:  # noqa: BLE001
+                failures.append(f"{step_name}: {exc}")
+                self._add_event(
+                    migration,
+                    item=item,
+                    level="error",
+                    message=message,
+                    metadata={"error": str(exc), "setting": step_name},
+                )
+
+        run_copy_step(
+            "versioning",
+            lambda: self._buckets.set_versioning(
+                target_bucket,
+                target_account,
+                enabled=str(
+                    self._buckets.get_bucket_properties(source_bucket, source_account).versioning_status or ""
+                ).strip().lower()
+                == "enabled",
+            ),
+            message="Versioning copy failed.",
+        )
+
+        def _copy_object_lock() -> None:
             src_object_lock = self._buckets.get_bucket_object_lock(source_bucket, source_account)
             if src_object_lock and (
                 src_object_lock.enabled is not None
@@ -1859,44 +1747,57 @@ class BucketMigrationService:
                 or src_object_lock.years is not None
             ):
                 self._buckets.set_object_lock(target_bucket, target_account, src_object_lock)
-        except Exception as exc:  # noqa: BLE001
-            self._add_event(migration, item=item, level="warning", message="Object lock copy failed.", metadata={"error": str(exc)})
 
-        try:
-            pab = self._buckets.get_public_access_block(source_bucket, source_account)
-            self._buckets.set_public_access_block(target_bucket, target_account, pab)
-        except Exception as exc:  # noqa: BLE001
-            self._add_event(migration, item=item, level="warning", message="Public access block copy failed.", metadata={"error": str(exc)})
+        run_copy_step("object_lock", _copy_object_lock, message="Object lock copy failed.")
 
-        try:
+        def _copy_encryption() -> None:
+            encryption = self._buckets.get_bucket_encryption(source_bucket, source_account)
+            rules = list(encryption.rules or [])
+            if rules:
+                self._buckets.set_bucket_encryption(target_bucket, target_account, rules)
+            else:
+                self._buckets.delete_bucket_encryption(target_bucket, target_account)
+
+        run_copy_step("encryption", _copy_encryption, message="Default bucket encryption copy failed.")
+        run_copy_step(
+            "public_access_block",
+            lambda: self._buckets.set_public_access_block(
+                target_bucket,
+                target_account,
+                self._buckets.get_public_access_block(source_bucket, source_account),
+            ),
+            message="Public access block copy failed.",
+        )
+
+        def _copy_lifecycle() -> None:
             lifecycle = self._buckets.get_lifecycle(source_bucket, source_account)
             rules = lifecycle.rules or []
             if rules:
                 self._buckets.set_lifecycle(target_bucket, target_account, rules)
             else:
                 self._buckets.delete_lifecycle(target_bucket, target_account)
-        except Exception as exc:  # noqa: BLE001
-            self._add_event(migration, item=item, level="warning", message="Lifecycle copy failed.", metadata={"error": str(exc)})
 
-        try:
+        run_copy_step("lifecycle", _copy_lifecycle, message="Lifecycle copy failed.")
+
+        def _copy_cors() -> None:
             cors = self._buckets.get_bucket_cors(source_bucket, source_account)
             if cors:
                 self._buckets.set_cors(target_bucket, target_account, cors)
             else:
                 self._buckets.delete_cors(target_bucket, target_account)
-        except Exception as exc:  # noqa: BLE001
-            self._add_event(migration, item=item, level="warning", message="CORS copy failed.", metadata={"error": str(exc)})
 
-        try:
+        run_copy_step("cors", _copy_cors, message="CORS copy failed.")
+
+        def _copy_policy() -> None:
             policy = self._buckets.get_policy(source_bucket, source_account)
             if policy:
                 self._buckets.put_policy(target_bucket, target_account, policy)
             else:
                 self._buckets.delete_policy(target_bucket, target_account)
-        except Exception as exc:  # noqa: BLE001
-            self._add_event(migration, item=item, level="warning", message="Policy copy failed.", metadata={"error": str(exc)})
 
-        try:
+        run_copy_step("bucket_policy", _copy_policy, message="Policy copy failed.")
+
+        def _copy_tags() -> None:
             tags = self._buckets.get_bucket_tags(source_bucket, source_account)
             if tags:
                 self._buckets.set_bucket_tags(
@@ -1906,16 +1807,25 @@ class BucketMigrationService:
                 )
             else:
                 self._buckets.delete_bucket_tags(target_bucket, target_account)
-        except Exception as exc:  # noqa: BLE001
-            self._add_event(migration, item=item, level="warning", message="Tags copy failed.", metadata={"error": str(exc)})
 
-        try:
-            logging_cfg = self._buckets.get_bucket_logging(source_bucket, source_account)
-            self._buckets.set_bucket_logging(target_bucket, target_account, logging_cfg)
-        except Exception as exc:  # noqa: BLE001
-            self._add_event(migration, item=item, level="warning", message="Access logging copy failed.", metadata={"error": str(exc)})
+        run_copy_step("tags", _copy_tags, message="Tags copy failed.")
+        run_copy_step(
+            "access_logging",
+            lambda: self._buckets.set_bucket_logging(
+                target_bucket,
+                target_account,
+                self._buckets.get_bucket_logging(source_bucket, source_account),
+            ),
+            message="Access logging copy failed.",
+        )
 
-        self._add_event(migration, item=item, level="info", message="Bucket settings copied (best-effort).")
+        if failures:
+            raise RuntimeError(
+                "Bucket settings copy failed for supported settings: "
+                + "; ".join(failures[:8])
+            )
+
+        self._add_event(migration, item=item, level="info", message="Bucket settings copied.")
 
     def _precheck_can_list_bucket(self, source_ctx: _ResolvedContext, source_bucket: str) -> None:
         client = self._context_client(source_ctx)
@@ -3076,6 +2986,23 @@ class BucketMigrationService:
         target_bucket: str,
         control_check: Callable[[], str],
     ) -> Optional[_SyncDiff]:
+        return self._verifier.compare_buckets_streamed(
+            source_ctx,
+            target_ctx,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
+            control_check=control_check,
+        )
+
+    def _compare_buckets_streamed_impl(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        control_check: Callable[[], str],
+    ) -> Optional[_SyncDiff]:
         source_client = self._context_client(source_ctx)
         target_client = self._context_client(target_ctx)
         diff = self._new_empty_sync_diff()
@@ -3134,6 +3061,25 @@ class BucketMigrationService:
         return diff
 
     def _strong_verify_size_only_candidates_streamed(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        parallelism_max: int,
+        control_check: Callable[[], str],
+    ) -> tuple[int, int, list[str], dict[str, int]]:
+        return self._verifier.strong_verify_size_only_candidates_streamed(
+            source_ctx,
+            target_ctx,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
+            parallelism_max=parallelism_max,
+            control_check=control_check,
+        )
+
+    def _strong_verify_size_only_candidates_streamed_impl(
         self,
         source_ctx: _ResolvedContext,
         target_ctx: _ResolvedContext,
@@ -3516,27 +3462,12 @@ class BucketMigrationService:
     def _delete_objects_batch(self, client: Any, bucket_name: str, objects: list[dict[str, str]]) -> int:
         if not objects:
             return 0
-        deleted = 0
-        for index in range(0, len(objects), 1000):
-            chunk = objects[index : index + 1000]
-            try:
-                response = client.delete_objects(Bucket=bucket_name, Delete={"Objects": chunk})
-            except (ClientError, BotoCoreError) as exc:
-                raise RuntimeError(f"Unable to delete objects in bucket '{bucket_name}': {exc}") from exc
-            errors = response.get("Errors", []) if isinstance(response, dict) else []
-            if errors:
-                sample = []
-                for err in errors[:3]:
-                    key = err.get("Key", "unknown")
-                    code = err.get("Code", "Error")
-                    message = err.get("Message", "")
-                    sample.append(f"{code} for {key}{f' ({message})' if message else ''}")
-                extra = f" (+{len(errors) - 3} more)" if len(errors) > 3 else ""
-                raise RuntimeError(
-                    f"Unable to delete {len(errors)} object(s) in bucket '{bucket_name}': {', '.join(sample)}{extra}"
-                )
-            deleted += len(chunk)
-        return deleted
+        try:
+            return _delete_objects_count(client, bucket_name, objects)
+        except RuntimeError:
+            raise
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to delete objects in bucket '{bucket_name}': {exc}") from exc
 
     def _purge_target_bucket(self, target_ctx: _ResolvedContext, target_bucket: str) -> tuple[int, int]:
         client = self._context_client(target_ctx)
