@@ -270,38 +270,22 @@ ceph-functional-tests:
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
-    - if: '$CEPH_TEST_BACKEND_BASE_URL && $CEPH_TEST_SUPERADMIN_EMAIL && $CEPH_TEST_SUPERADMIN_PASSWORD'
+    - if: '$CEPH_TEST_LAB_S3_ENDPOINT && $CEPH_TEST_RGW_ADMIN_ENDPOINT && $CEPH_TEST_RGW_ADMIN_ACCESS_KEY && $CEPH_TEST_RGW_ADMIN_SECRET_KEY && $CEPH_TEST_SUPERVISION_ACCESS_KEY && $CEPH_TEST_SUPERVISION_SECRET_KEY && $CEPH_TEST_CEPH_ADMIN_ACCESS_KEY && $CEPH_TEST_CEPH_ADMIN_SECRET_KEY'
       when: on_success
     - when: never
   before_script:
     - python -m pip install --upgrade pip
     - pip install -r backend/requirements-test.txt
-    - rm -f backend/.env
     - mkdir -p gl-test-reports
-    - for var in $(env | cut -d= -f1 | grep '^OIDC_PROVIDERS__' || true); do unset "$var"; done
-    - export OIDC_PROVIDERS="{}"
-    - >
-      for var in
-      SEED_SUPER_ADMIN_EMAIL
-      SEED_SUPER_ADMIN_PASSWORD
-      SEED_RGW_ADMIN_ENDPOINT
-      SEED_RGW_ADMIN_ACCESS_KEY
-      SEED_RGW_ADMIN_SECRET_KEY
-      SEED_CEPH_ADMIN_ACCESS_KEY
-      SEED_CEPH_ADMIN_SECRET_KEY
-      SEED_S3_ENDPOINT
-      SEED_S3_ACCESS_KEY
-      SEED_S3_SECRET_KEY
-      SEED_S3_REGION
-      ; do unset "$var"; done
   script:
     - cd backend
-    - PYTHONPATH=. python tests_ceph_functional/run.py -q -ra --junit-xml=../gl-test-reports/ceph-functional-junit.xml
+    - PYTHONPATH=. python tests_ceph_functional/run_ci.py -q -ra --junit-xml=../gl-test-reports/ceph-functional-junit.xml
   artifacts:
     when: always
     expire_in: 1 week
     paths:
       - gl-test-reports/ceph-functional-junit.xml
+      - gl-test-reports/ceph-functional-backend.log
     reports:
       junit: gl-test-reports/ceph-functional-junit.xml
 

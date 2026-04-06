@@ -3,8 +3,8 @@
 This suite exercises the FastAPI backend against a *real* Ceph RGW cluster to validate
 critical account, bucket, IAM and object workflows after Ceph upgrades. The tests are
 marked `ceph_functional` and excluded from the default `pytest` run (`-m "not ceph_functional"`).
-In GitLab CI they run against an already deployed backend when the required Ceph test
-variables are defined.
+In GitLab CI the suite starts an ephemeral backend inside the job and points it at the
+lab RGW endpoint via `ENV_STORAGE_ENDPOINTS`.
 
 ## Prerequisites
 
@@ -34,47 +34,50 @@ For local one-shot runs, `backend/.env` is loaded automatically and seed variabl
 
 ## GitLab CI variables
 
-The `ceph-functional-tests` job is designed for an external backend target. It does not
-start the API or provision a Ceph cluster inside the pipeline. The GitLab runner must be
-able to reach both the backend API and, when RGW verification is enabled, the RGW admin
-endpoint.
+The `ceph-functional-tests` job now starts a local backend inside the GitLab job, using
+SQLite plus `ENV_STORAGE_ENDPOINTS` to register the lab Ceph endpoint as the default
+endpoint. This avoids the current limitation of the seed-based default endpoint flow,
+which always creates the endpoint with `verify_tls=true`.
 
-In CI, `backend/.env` is deleted before the job runs and local `SEED_*` fallbacks are
-unset so the suite depends only on GitLab CI/CD variables.
+The GitLab runner must be able to reach:
+
+- the lab S3 endpoint
+- the RGW admin endpoint
 
 Required GitLab variables:
 
-- `CEPH_TEST_BACKEND_BASE_URL`
-- `CEPH_TEST_SUPERADMIN_EMAIL`
-- `CEPH_TEST_SUPERADMIN_PASSWORD`
-
-Recommended GitLab variables for broader coverage and fewer skips:
-
-- `CEPH_TEST_VERIFY_TLS=true`
-- `CEPH_TEST_BACKEND_CA_BUNDLE`
+- `CEPH_TEST_LAB_S3_ENDPOINT`
 - `CEPH_TEST_RGW_ADMIN_ENDPOINT`
 - `CEPH_TEST_RGW_ADMIN_ACCESS_KEY`
 - `CEPH_TEST_RGW_ADMIN_SECRET_KEY`
-- `CEPH_TEST_RGW_REGION`
+- `CEPH_TEST_SUPERVISION_ACCESS_KEY`
+- `CEPH_TEST_SUPERVISION_SECRET_KEY`
+- `CEPH_TEST_CEPH_ADMIN_ACCESS_KEY`
+- `CEPH_TEST_CEPH_ADMIN_SECRET_KEY`
+
+Recommended GitLab variables:
+
+- `CEPH_TEST_RGW_REGION` (defaults to `us-east-1`)
+- `CEPH_TEST_LAB_VERIFY_TLS=true`
 - `CEPH_TEST_RGW_VERIFY_TLS=true`
 - `CEPH_TEST_RGW_CA_BUNDLE`
-
-Optional GitLab variables:
-
 - `CEPH_TEST_RESOURCE_PREFIX`
 - `CEPH_TEST_HTTP_TIMEOUT`
 - `CEPH_TEST_LOGIN_RETRIES`
 - `CEPH_TEST_LOGIN_RETRY_DELAY`
-- `CEPH_TEST_DELETE_RGW_TENANT=false`
-- `CEPH_TEST_CEPH_ADMIN_ENDPOINT_NAME`
-- `CEPH_TEST_CEPH_ADMIN_REQUIRE_DEFAULT_ENDPOINT=true`
 
 GitLab variable handling:
 
-- mark `CEPH_TEST_SUPERADMIN_PASSWORD`, `CEPH_TEST_RGW_ADMIN_ACCESS_KEY`, and
-  `CEPH_TEST_RGW_ADMIN_SECRET_KEY` as `masked` and `protected`
-- define `CEPH_TEST_BACKEND_CA_BUNDLE` and `CEPH_TEST_RGW_CA_BUNDLE` as GitLab
-  file variables when a custom PKI is required
+- mark the RGW, supervision, and ceph-admin credentials as `masked` and `protected`
+- if direct RGW verification needs a custom PKI, define `CEPH_TEST_RGW_CA_BUNDLE` as a
+  GitLab file variable
+
+For manual or exceptional runs against an already deployed backend, `tests_ceph_functional/run.py`
+still supports the original external-backend mode with:
+
+- `CEPH_TEST_BACKEND_BASE_URL`
+- `CEPH_TEST_SUPERADMIN_EMAIL`
+- `CEPH_TEST_SUPERADMIN_PASSWORD`
 
 ## Running the tests
 

@@ -206,6 +206,7 @@ async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
 }
 
 async function enableActionBar(user: ReturnType<typeof userEvent.setup>) {
+  await findRowByLabel("a.txt");
   const menu = await openContextMoreMenu(user);
   await user.click(
     within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }),

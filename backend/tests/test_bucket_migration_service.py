@@ -1085,7 +1085,11 @@ def test_copy_single_object_falls_back_to_stream_copy_on_copy_source_access_deni
     service = BucketMigrationService(db_session)
     source_ctx = SimpleNamespace()
     target_ctx = SimpleNamespace()
-    source_client = SimpleNamespace(get_object=lambda **_kwargs: {"Body": io.BytesIO(b"payload")})
+    source_client = SimpleNamespace(
+        head_object=lambda **_kwargs: {},
+        get_object_tagging=lambda **_kwargs: {"TagSet": []},
+        get_object=lambda **_kwargs: {"Body": io.BytesIO(b"payload")},
+    )
 
     copied: list[tuple[str, str]] = []
 
