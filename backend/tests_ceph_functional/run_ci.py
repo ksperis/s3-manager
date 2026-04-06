@@ -87,6 +87,33 @@ def _build_endpoint_payload() -> str:
     return json.dumps(payload)
 
 
+def _build_app_settings_payload() -> str:
+    payload = {
+        "general": {
+            "manager_enabled": True,
+            "ceph_admin_enabled": True,
+            "storage_ops_enabled": True,
+            "browser_enabled": True,
+            "browser_root_enabled": True,
+            "browser_manager_enabled": True,
+            "browser_ceph_admin_enabled": True,
+            "billing_enabled": False,
+            "endpoint_status_enabled": True,
+            "quota_alerts_enabled": False,
+            "usage_history_enabled": False,
+            "bucket_migration_enabled": True,
+            "bucket_compare_enabled": True,
+            "manager_ceph_s3_user_keys_enabled": True,
+            "allow_ui_user_bucket_migration": False,
+            "allow_login_access_keys": False,
+            "allow_login_endpoint_list": False,
+            "allow_login_custom_endpoint": False,
+            "allow_user_private_connections": False,
+        }
+    }
+    return json.dumps(payload)
+
+
 def _prepare_environment(backend_root: Path) -> dict[str, str]:
     env = os.environ.copy()
 
@@ -116,16 +143,20 @@ def _prepare_environment(backend_root: Path) -> dict[str, str]:
         "SEED_CEPH_ADMIN_ACCESS_KEY",
         "SEED_CEPH_ADMIN_SECRET_KEY",
         "ENV_STORAGE_ENDPOINTS",
+        "APP_SETTINGS_PATH",
     ):
         env.pop(key, None)
 
     runtime_dir = backend_root / ".ci-runtime"
     runtime_dir.mkdir(exist_ok=True)
     database_path = runtime_dir / "ceph-functional-ci.db"
+    app_settings_path = runtime_dir / "app_settings.json"
     for suffix in ("", "-shm", "-wal"):
         candidate = Path(f"{database_path}{suffix}")
         if candidate.exists():
             candidate.unlink()
+    if app_settings_path.exists():
+        app_settings_path.unlink()
 
     super_admin_email = _env_str("SEED_SUPER_ADMIN_EMAIL", "ci-ceph-functional-admin@example.com")
     super_admin_password = _env_str("SEED_SUPER_ADMIN_PASSWORD", _generate_secret())
@@ -143,11 +174,14 @@ def _prepare_environment(backend_root: Path) -> dict[str, str]:
     )
     env["SEED_SUPER_ADMIN_MODE"] = "if_empty"
     env["ENV_STORAGE_ENDPOINTS"] = _build_endpoint_payload()
+    app_settings_path.write_text(_build_app_settings_payload(), encoding="utf-8")
+    env["APP_SETTINGS_PATH"] = app_settings_path.resolve().as_posix()
 
     env["FEATURE_MANAGER_ENABLED"] = "true"
     env["FEATURE_BROWSER_ENABLED"] = "true"
     env["FEATURE_CEPH_ADMIN_ENABLED"] = "true"
     env["FEATURE_STORAGE_OPS_ENABLED"] = "true"
+    env["FEATURE_ENDPOINT_STATUS_ENABLED"] = "true"
     env["BUCKET_MIGRATION_WORKER_ENABLED"] = "true"
 
     env["CEPH_TEST_BACKEND_BASE_URL"] = BACKEND_BASE_URL
