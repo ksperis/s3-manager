@@ -5,10 +5,15 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.db import BucketMigration, BucketMigrationItem, User, UserRole
+from app.db import BucketMigration, BucketMigrationItem, S3Account, User, UserRole
 from app.main import app
 from app.routers import dependencies
-from app.routers.dependencies import BucketMigrationAccessScope, _ensure_bucket_migration_allowed
+from app.routers.dependencies import (
+    BucketMigrationAccessScope,
+    _build_bucket_migration_admin_account_context_ids,
+    _build_bucket_migration_allowed_context_ids,
+    _ensure_bucket_migration_allowed,
+)
 
 
 def _user(role: str) -> User:
@@ -208,3 +213,24 @@ def test_manager_migration_precheck_and_start_reject_cross_account_non_admin_sco
         assert start_response.status_code == 403
     finally:
         app.dependency_overrides.pop(dependencies.get_current_bucket_migration_scope, None)
+
+
+def test_bucket_migration_scope_allows_superadmin_for_all_account_contexts(db_session):
+    user = User(
+        email="super-migration@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_SUPERADMIN.value,
+    )
+    account_a = S3Account(name="scope-account-a")
+    account_b = S3Account(name="scope-account-b")
+    db_session.add_all([user, account_a, account_b])
+    db_session.commit()
+
+    allowed = _build_bucket_migration_allowed_context_ids(db_session, user)
+    admin_contexts = _build_bucket_migration_admin_account_context_ids(db_session, user)
+
+    assert str(account_a.id) in allowed
+    assert str(account_b.id) in allowed
+    assert str(account_a.id) in admin_contexts
+    assert str(account_b.id) in admin_contexts

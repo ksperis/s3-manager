@@ -232,7 +232,7 @@ describe("ManagerMigrationDetailPage", () => {
     expect(screen.getByText(/1 blocking error\(s\), 1 warning\(s\), 2 info/)).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Show precheck details" })[0]);
     expect(screen.getByText(/Source bucket read\/list check failed: access denied\./)).toBeInTheDocument();
-    expect(screen.getByText(/strategy: current_only/)).toBeInTheDocument();
+    expect(screen.getByText(/strategy: current_only \(current objects only\)/)).toBeInTheDocument();
     expect(screen.queryByText("Precheck result:")).not.toBeInTheDocument();
 
     const hasLegacyBucketListScroll = Array.from(container.querySelectorAll("div")).some((node) =>

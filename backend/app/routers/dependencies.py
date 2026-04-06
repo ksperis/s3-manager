@@ -780,6 +780,24 @@ def _manager_link_allows_bucket_migration(
 def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[str]:
     allowed_context_ids: set[str] = set()
 
+    if is_superadmin_ui_role(user.role):
+        allowed_context_ids.update(str(row[0]) for row in db.query(S3Account.id).all())
+        allowed_context_ids.update(f"s3u-{row[0]}" for row in db.query(S3User.id).all())
+        now = utcnow()
+        connections = (
+            db.query(S3Connection.id)
+            .filter(S3Connection.is_active.is_(True))
+            .filter(S3Connection.access_manager.is_(True))
+            .filter(
+                (S3Connection.is_temporary.is_(False))
+                | (S3Connection.expires_at.is_(None))
+                | (S3Connection.expires_at > now)
+            )
+            .all()
+        )
+        allowed_context_ids.update(f"conn-{row[0]}" for row in connections)
+        return allowed_context_ids
+
     account_links = db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
     for link in account_links:
         if _manager_link_allows_bucket_migration(link):
@@ -816,6 +834,8 @@ def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[
 
 
 def _build_bucket_migration_admin_account_context_ids(db: Session, user: User) -> set[str]:
+    if is_superadmin_ui_role(user.role):
+        return {str(row[0]) for row in db.query(S3Account.id).all()}
     admin_account_context_ids: set[str] = set()
     account_links = db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
     for link in account_links:

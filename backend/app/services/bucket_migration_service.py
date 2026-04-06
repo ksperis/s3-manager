@@ -17,8 +17,8 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import ExitStack, contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import timedelta
-from urllib.parse import urlparse
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode, urlparse
 from typing import Any, Callable, Optional
 
 import requests
@@ -133,6 +133,77 @@ class _BucketDiffEntry:
     source_etag: Optional[str]
     target_etag: Optional[str]
     compare_by: str
+
+
+@dataclass(frozen=True)
+class _BucketVersionEntry:
+    key: str
+    version_id: str
+    is_delete_marker: bool
+    is_latest: bool
+    last_modified: Optional[datetime]
+    size: int
+    etag: Optional[str]
+    storage_class: Optional[str]
+    order_index: int
+
+
+@dataclass(frozen=True)
+class _VersionedObjectDetails:
+    size: int
+    etag: Optional[str]
+    compare_by: str
+    checksums: dict[str, str]
+    content_type: Optional[str]
+    cache_control: Optional[str]
+    content_disposition: Optional[str]
+    content_encoding: Optional[str]
+    content_language: Optional[str]
+    expires: Optional[str]
+    storage_class: Optional[str]
+    metadata: dict[str, str]
+    tags: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class _VersionTimelineDiffKey:
+    key: str
+    source_version_id: Optional[str]
+    target_version_id: Optional[str]
+
+
+@dataclass(frozen=True)
+class _VersionTimelineDiffEntry:
+    key: str
+    kind: str
+    compare_by: str
+    source_version_id: Optional[str]
+    target_version_id: Optional[str]
+    source_size: int
+    target_size: int
+    source_etag: Optional[str]
+    target_etag: Optional[str]
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class _VersionAwareDiff:
+    source_count: int
+    target_count: int
+    matched_count: int
+    different_count: int
+    only_source_count: int
+    only_target_count: int
+    sample: dict[str, Any]
+    size_only_pairs: tuple[_VersionTimelineDiffKey, ...] = ()
+
+
+_VERSION_CHECKSUM_FIELDS = (
+    "ChecksumSHA256",
+    "ChecksumCRC32C",
+    "ChecksumCRC32",
+    "ChecksumSHA1",
+)
 
 
 @dataclass(frozen=True)
@@ -485,6 +556,7 @@ class BucketMigrationService:
                     source_snapshot_json=None,
                     target_snapshot_json=None,
                     execution_plan_json=None,
+                    replication_state_json=None,
                     created_at=utcnow(),
                     updated_at=utcnow(),
                 )
@@ -602,6 +674,7 @@ class BucketMigrationService:
                         source_snapshot_json=None,
                         target_snapshot_json=None,
                         execution_plan_json=None,
+                        replication_state_json=None,
                         created_at=now,
                         updated_at=now,
                     )
@@ -627,6 +700,7 @@ class BucketMigrationService:
             item.source_snapshot_json = None
             item.target_snapshot_json = None
             item.execution_plan_json = None
+            item.replication_state_json = None
             item.source_policy_backup_json = None
             item.target_policy_backup_json = None
             item.error_message = None
@@ -719,8 +793,8 @@ class BucketMigrationService:
 
     def delete_migration(self, migration_id: int) -> None:
         migration = self.get_migration(migration_id)
-        if migration.status not in _FINAL_MIGRATION_STATUSES:
-            raise ValueError("Migration can only be deleted from a final status")
+        if migration.status not in {*_FINAL_MIGRATION_STATUSES, "draft"}:
+            raise ValueError("Migration can only be deleted from a final status or from draft")
         self.db.delete(migration)
         self._commit()
 
@@ -1003,6 +1077,7 @@ class BucketMigrationService:
                     purged_count = purged_current + purged_versions
                     total_purged_objects += purged_count
                     item.objects_deleted = int(item.objects_deleted or 0) + purged_count
+                    item.replication_state_json = None
                 except Exception as exc:  # noqa: BLE001
                     rollback_issues.append(
                         _truncate_db_text(
@@ -1303,18 +1378,33 @@ class BucketMigrationService:
         )
 
     def _load_item_execution_plan(self, item: BucketMigrationItem) -> dict[str, Any]:
-        parsed = _json_loads(item.execution_plan_json)
+        parsed = _json_loads(getattr(item, "execution_plan_json", None))
         return parsed if isinstance(parsed, dict) else {}
+
+    def _item_execution_strategy(self, item: BucketMigrationItem) -> str:
+        plan = self._load_item_execution_plan(item)
+        strategy = str(plan.get("strategy") or "current_only").strip() or "current_only"
+        return strategy
+
+    def _load_item_replication_state(self, item: BucketMigrationItem) -> dict[str, Any]:
+        parsed = _json_loads(getattr(item, "replication_state_json", None))
+        return parsed if isinstance(parsed, dict) else {}
+
+    def _store_item_replication_state(self, item: BucketMigrationItem, state: dict[str, Any]) -> None:
+        item.replication_state_json = self._json_dumps_safe(state)
+
+    def _clear_item_replication_state(self, item: BucketMigrationItem) -> None:
+        item.replication_state_json = None
 
     def _assert_item_execution_plan_supported(self, item: BucketMigrationItem) -> None:
         plan = self._load_item_execution_plan(item)
-        strategy = str(plan.get("strategy") or "current_only").strip() or "current_only"
+        strategy = self._item_execution_strategy(item)
         supported = bool(plan.get("supported")) if plan else False
         if not plan:
             raise RuntimeError(
                 "Missing execution plan for migration item. Re-run precheck before starting the migration."
             )
-        if strategy not in {"current_only", "skip_existing"}:
+        if strategy not in {"current_only", "version_aware", "skip_existing"}:
             raise RuntimeError(
                 f"Execution strategy '{strategy}' is not implemented by the migration worker."
             )
@@ -1364,6 +1454,8 @@ class BucketMigrationService:
                 self._commit()
                 return
 
+            strategy = self._item_execution_strategy(item)
+
             if item.step == "create_bucket":
                 object_lock_enabled = False
                 if migration.copy_bucket_settings:
@@ -1373,7 +1465,7 @@ class BucketMigrationService:
                     self._buckets.create_bucket(
                         item.target_bucket,
                         target_ctx.account,
-                        versioning=False,
+                        versioning=(strategy == "version_aware"),
                         location_constraint=target_ctx.region,
                         object_lock_enabled=object_lock_enabled,
                     )
@@ -1546,6 +1638,7 @@ class BucketMigrationService:
                     target_ctx,
                     source_bucket=item.source_bucket,
                     target_bucket=item.target_bucket,
+                    strategy=strategy,
                     control_check=control_check,
                 )
                 if diff is None:
@@ -1605,6 +1698,7 @@ class BucketMigrationService:
                             target_ctx,
                             source_bucket=item.source_bucket,
                             target_bucket=item.target_bucket,
+                            strategy=strategy,
                             parallelism_max=max(1, min(int(migration.parallelism_max), 4)),
                             control_check=control_check,
                         )
@@ -1671,6 +1765,12 @@ class BucketMigrationService:
                     self._commit()
                     continue
 
+                self._finalize_target_versioning_state(
+                    target_ctx.account,
+                    item.target_bucket,
+                    migration,
+                    item,
+                )
                 item.status = "completed"
                 item.step = "completed"
                 item.finished_at = utcnow()
@@ -1682,6 +1782,12 @@ class BucketMigrationService:
             if item.step == "delete_source":
                 self._set_managed_block_policy(item.source_bucket, source_ctx.account, deny_delete=False)
                 self._delete_source_bucket_with_retry(item.source_bucket, source_ctx.account)
+                self._finalize_target_versioning_state(
+                    target_ctx.account,
+                    item.target_bucket,
+                    migration,
+                    item,
+                )
                 item.status = "completed"
                 item.step = "completed"
                 item.finished_at = utcnow()
@@ -1711,6 +1817,7 @@ class BucketMigrationService:
         item: BucketMigrationItem,
     ) -> None:
         failures: list[str] = []
+        strategy = self._item_execution_strategy(item)
 
         def run_copy_step(step_name: str, action: Callable[[], None], *, message: str) -> None:
             try:
@@ -1730,10 +1837,14 @@ class BucketMigrationService:
             lambda: self._buckets.set_versioning(
                 target_bucket,
                 target_account,
-                enabled=str(
-                    self._buckets.get_bucket_properties(source_bucket, source_account).versioning_status or ""
-                ).strip().lower()
-                == "enabled",
+                enabled=(
+                    True
+                    if strategy == "version_aware"
+                    else str(
+                        self._buckets.get_bucket_properties(source_bucket, source_account).versioning_status or ""
+                    ).strip().lower()
+                    == "enabled"
+                ),
             ),
             message="Versioning copy failed.",
         )
@@ -1845,6 +1956,74 @@ class BucketMigrationService:
                 f"Unable to read sample object '{sample_key}' in source bucket '{source_bucket}': {exc}"
             ) from exc
 
+    def _sample_version_probe_candidate(
+        self,
+        source_bucket: str,
+        *,
+        source_profile: Optional[dict[str, Any]] = None,
+    ) -> Optional[tuple[str, str]]:
+        if not isinstance(source_profile, dict):
+            return None
+        version_scan = source_profile.get("version_scan")
+        if not isinstance(version_scan, dict):
+            return None
+        sample_version = version_scan.get("sample_version")
+        if not isinstance(sample_version, dict):
+            return None
+        key = str(sample_version.get("key") or "").strip()
+        version_id = str(sample_version.get("version_id") or "").strip()
+        if not key or not version_id:
+            return None
+        return key, version_id
+
+    def _precheck_version_aware_source_access(
+        self,
+        source_ctx: _ResolvedContext,
+        source_bucket: str,
+        source_profile: Optional[dict[str, Any]],
+    ) -> None:
+        candidate = self._sample_version_probe_candidate(
+            source_bucket,
+            source_profile=source_profile,
+        )
+        if candidate is None:
+            return
+        sample_key, sample_version_id = candidate
+        client = self._context_client(source_ctx)
+        try:
+            client.head_object(Bucket=source_bucket, Key=sample_key, VersionId=sample_version_id)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(
+                f"Unable to read sample version '{sample_version_id}' for '{sample_key}' in source bucket "
+                f"'{source_bucket}': {exc}"
+            ) from exc
+
+        body = None
+        try:
+            response = client.get_object(Bucket=source_bucket, Key=sample_key, VersionId=sample_version_id)
+            body = response.get("Body")
+            if body is not None:
+                body.read(1)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(
+                f"Unable to stream sample version '{sample_version_id}' for '{sample_key}' in source bucket "
+                f"'{source_bucket}': {exc}"
+            ) from exc
+        finally:
+            if body is not None:
+                try:
+                    body.close()
+                except Exception:  # noqa: BLE001
+                    pass
+
+        try:
+            client.get_object_tagging(Bucket=source_bucket, Key=sample_key, VersionId=sample_version_id)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(
+                f"Unable to read tags for sample version '{sample_version_id}' of '{sample_key}' in source bucket "
+                f"'{source_bucket}': {exc}"
+            ) from exc
+
     def _count_bucket_objects(self, ctx: _ResolvedContext, bucket_name: str) -> int:
         client = self._context_client(ctx)
         continuation_token: Optional[str] = None
@@ -1872,31 +2051,55 @@ class BucketMigrationService:
         source_bucket: str,
         *,
         auto_grant: bool,
+        strategy: str = "current_only",
+        source_profile: Optional[dict[str, Any]] = None,
     ) -> str:
         source_client = self._context_client(source_ctx)
         target_client = self._context_client(target_ctx)
 
-        try:
-            page = source_client.list_objects_v2(Bucket=source_bucket, MaxKeys=1)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(
-                f"Unable to list source bucket '{source_bucket}' to validate x-amz-copy-source access: {exc}"
-            ) from exc
+        sample_key: Optional[str] = None
+        sample_version_id: Optional[str] = None
+        if strategy == "version_aware":
+            candidate = self._sample_version_probe_candidate(source_bucket, source_profile=source_profile)
+            if candidate is not None:
+                sample_key, sample_version_id = candidate
 
-        contents = page.get("Contents", []) if isinstance(page, dict) else []
-        sample_key = contents[0].get("Key") if contents and isinstance(contents[0], dict) else None
-        if not isinstance(sample_key, str) or not sample_key:
-            return "source_empty"
+        if not sample_key:
+            try:
+                page = source_client.list_objects_v2(Bucket=source_bucket, MaxKeys=1)
+            except (ClientError, BotoCoreError) as exc:
+                raise RuntimeError(
+                    f"Unable to list source bucket '{source_bucket}' to validate x-amz-copy-source access: {exc}"
+                ) from exc
+
+            contents = page.get("Contents", []) if isinstance(page, dict) else []
+            sample_key = contents[0].get("Key") if contents and isinstance(contents[0], dict) else None
+            if not isinstance(sample_key, str) or not sample_key:
+                version_scan = source_profile.get("version_scan") if isinstance(source_profile, dict) else None
+                if (
+                    strategy == "version_aware"
+                    and isinstance(version_scan, dict)
+                    and int(version_scan.get("current_version_count") or 0) == 0
+                    and int(version_scan.get("noncurrent_version_count") or 0) == 0
+                    and int(version_scan.get("delete_marker_count") or 0) > 0
+                ):
+                    return "validated"
+                return "source_empty"
+
+        head_kwargs: dict[str, Any] = {"Bucket": source_bucket, "Key": sample_key}
+        if sample_version_id:
+            head_kwargs["VersionId"] = sample_version_id
 
         try:
-            target_client.head_object(Bucket=source_bucket, Key=sample_key)
+            target_client.head_object(**head_kwargs)
             return "validated"
         except (ClientError, BotoCoreError) as exc:
             if self._is_access_denied_error(exc):
                 if not auto_grant:
+                    permission_hint = "s3:GetObjectVersion" if sample_version_id else "s3:GetObject"
                     raise RuntimeError(
                         "Target context cannot read source objects required for x-amz-copy-source. "
-                        f"Grant s3:GetObject on source bucket '{source_bucket}'."
+                        f"Grant {permission_hint} on source bucket '{source_bucket}'."
                     ) from exc
                 try:
                     with self._temporary_source_copy_grant(
@@ -1904,8 +2107,9 @@ class BucketMigrationService:
                         target_ctx,
                         source_bucket=source_bucket,
                         sample_key=sample_key,
+                        sample_version_id=sample_version_id,
                     ):
-                        target_client.head_object(Bucket=source_bucket, Key=sample_key)
+                        target_client.head_object(**head_kwargs)
                 except Exception as grant_exc:  # noqa: BLE001
                     raise RuntimeError(
                         "Unable to validate temporary same-endpoint source-read grant for x-amz-copy-source: "
@@ -2031,6 +2235,7 @@ class BucketMigrationService:
         *,
         source_bucket: str,
         sample_key: Optional[str] = None,
+        sample_version_id: Optional[str] = None,
     ):
         source_account = source_ctx.account
         target_client = self._context_client(target_ctx)
@@ -2071,7 +2276,10 @@ class BucketMigrationService:
                 selected_principal = candidate
                 break
             try:
-                target_client.head_object(Bucket=source_bucket, Key=sample_key)
+                head_kwargs: dict[str, Any] = {"Bucket": source_bucket, "Key": sample_key}
+                if sample_version_id:
+                    head_kwargs["VersionId"] = sample_version_id
+                target_client.head_object(**head_kwargs)
                 selected_principal = candidate
                 break
             except (ClientError, BotoCoreError) as exc:
@@ -2479,14 +2687,26 @@ class BucketMigrationService:
         target_bucket: str,
         key: str,
         *,
+        source_version_id: Optional[str] = None,
+        target_version_id: Optional[str] = None,
         source_client: Any | None = None,
         target_client: Any | None = None,
     ) -> tuple[bool, str]:
         resolved_source_client = source_client or self._context_client(source_ctx)
         resolved_target_client = target_client or self._context_client(target_ctx)
 
-        source_checksums = self._head_object_checksums(resolved_source_client, source_bucket, key)
-        target_checksums = self._head_object_checksums(resolved_target_client, target_bucket, key)
+        source_checksums = self._head_object_checksums(
+            resolved_source_client,
+            source_bucket,
+            key,
+            version_id=source_version_id,
+        )
+        target_checksums = self._head_object_checksums(
+            resolved_target_client,
+            target_bucket,
+            key,
+            version_id=target_version_id,
+        )
         shared_checksum_fields = (
             "ChecksumSHA256",
             "ChecksumCRC32C",
@@ -2499,13 +2719,33 @@ class BucketMigrationService:
             if source_value and target_value:
                 return source_value == target_value, "head_checksum"
 
-        source_sha256 = self._stream_object_sha256(resolved_source_client, source_bucket, key)
-        target_sha256 = self._stream_object_sha256(resolved_target_client, target_bucket, key)
+        source_sha256 = self._stream_object_sha256(
+            resolved_source_client,
+            source_bucket,
+            key,
+            version_id=source_version_id,
+        )
+        target_sha256 = self._stream_object_sha256(
+            resolved_target_client,
+            target_bucket,
+            key,
+            version_id=target_version_id,
+        )
         return source_sha256 == target_sha256, "stream_sha256"
 
-    def _head_object_checksums(self, client: Any, bucket_name: str, key: str) -> dict[str, str]:
+    def _head_object_checksums(
+        self,
+        client: Any,
+        bucket_name: str,
+        key: str,
+        *,
+        version_id: Optional[str] = None,
+    ) -> dict[str, str]:
+        kwargs: dict[str, Any] = {"Bucket": bucket_name, "Key": key}
+        if version_id:
+            kwargs["VersionId"] = version_id
         try:
-            response = client.head_object(Bucket=bucket_name, Key=key)
+            response = client.head_object(**kwargs)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to read object metadata for '{key}' in bucket '{bucket_name}': {exc}") from exc
 
@@ -2516,11 +2756,21 @@ class BucketMigrationService:
                 result[field] = value.strip()
         return result
 
-    def _stream_object_sha256(self, client: Any, bucket_name: str, key: str) -> str:
+    def _stream_object_sha256(
+        self,
+        client: Any,
+        bucket_name: str,
+        key: str,
+        *,
+        version_id: Optional[str] = None,
+    ) -> str:
         body = None
         hasher = hashlib.sha256()
+        kwargs: dict[str, Any] = {"Bucket": bucket_name, "Key": key}
+        if version_id:
+            kwargs["VersionId"] = version_id
         try:
-            response = client.get_object(Bucket=bucket_name, Key=key)
+            response = client.get_object(**kwargs)
             body = response.get("Body")
             if body is None:
                 raise RuntimeError("response body is empty")
@@ -2752,6 +3002,19 @@ class BucketMigrationService:
         item: BucketMigrationItem,
         control_check: Callable[[], str],
     ) -> tuple[int, int, _SyncDiff]:
+        if self._item_execution_strategy(item) == "version_aware":
+            return self._sync_bucket_version_aware(
+                source_ctx,
+                target_ctx,
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                allow_delete=allow_delete,
+                parallelism_max=parallelism_max,
+                migration=migration,
+                item=item,
+                control_check=control_check,
+            )
+
         diff = self._new_empty_sync_diff()
         same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
         same_endpoint_copy = bool(same_endpoint and migration.use_same_endpoint_copy)
@@ -2960,6 +3223,242 @@ class BucketMigrationService:
         self._commit()
         return copied, deleted, diff
 
+    def _sync_bucket_version_aware(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        allow_delete: bool,
+        parallelism_max: int,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        control_check: Callable[[], str],
+    ) -> tuple[int, int, _SyncDiff]:
+        del allow_delete, parallelism_max
+        same_endpoint_copy = bool(self._is_same_endpoint(source_ctx, target_ctx) and migration.use_same_endpoint_copy)
+        pending_copied = 0
+        pending_deleted = 0
+        last_progress_flush = time.monotonic()
+
+        def flush_progress(*, force: bool = False) -> None:
+            nonlocal pending_copied, pending_deleted, last_progress_flush
+            now = time.monotonic()
+            total_pending = pending_copied + pending_deleted
+            if total_pending <= 0:
+                return
+            should_flush = force
+            if not should_flush:
+                if total_pending >= _SYNC_PROGRESS_FLUSH_OBJECTS_THRESHOLD:
+                    should_flush = True
+                elif (now - last_progress_flush) >= _SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS:
+                    should_flush = True
+            if not should_flush:
+                return
+            item.objects_copied = int(item.objects_copied or 0) + int(pending_copied)
+            item.objects_deleted = int(item.objects_deleted or 0) + int(pending_deleted)
+            heartbeat_at = utcnow()
+            item.updated_at = heartbeat_at
+            migration.updated_at = heartbeat_at
+            migration.last_heartbeat_at = heartbeat_at
+            self._commit()
+            pending_copied = 0
+            pending_deleted = 0
+            last_progress_flush = now
+
+        def on_object_progress(*, copied_inc: int = 0, deleted_inc: int = 0, force: bool = False) -> None:
+            nonlocal pending_copied, pending_deleted
+            if copied_inc > 0:
+                pending_copied += int(copied_inc)
+            if deleted_inc > 0:
+                pending_deleted += int(deleted_inc)
+            flush_progress(force=force)
+
+        replication_state = self._load_item_replication_state(item)
+        watermark = replication_state.get("pre_sync_watermark") if isinstance(replication_state.get("pre_sync_watermark"), dict) else None
+        purge_before_replay = False
+        replay_mode = "one_shot_full"
+
+        if migration.mode == "pre_sync" and not item.pre_sync_done:
+            purge_before_replay = True
+            replay_mode = "pre_sync_full"
+            replication_state.pop("cutover_attempted", None)
+        elif migration.mode == "pre_sync" and item.pre_sync_done and item.read_only_applied:
+            if not isinstance(watermark, dict):
+                purge_before_replay = True
+                replay_mode = "cutover_full_missing_watermark"
+            elif bool(replication_state.get("cutover_attempted")):
+                purge_before_replay = True
+                replay_mode = "cutover_full_retry"
+                watermark = None
+            else:
+                replay_mode = "cutover_delta"
+                replication_state["cutover_attempted"] = True
+                self._store_item_replication_state(item, replication_state)
+                item.updated_at = utcnow()
+                self._commit()
+        else:
+            purge_before_replay = True
+            replay_mode = "one_shot_full"
+
+        self._buckets.set_versioning(target_bucket, target_ctx.account, enabled=True)
+
+        deleted = 0
+        if purge_before_replay:
+            purged_current, purged_versions = self._purge_target_bucket(target_ctx, target_bucket)
+            deleted = purged_current + purged_versions
+            if deleted > 0:
+                on_object_progress(deleted_inc=deleted, force=True)
+
+        source_profile = _json_loads(item.source_snapshot_json)
+        copied = 0
+        replayed_entries: list[_BucketVersionEntry] = []
+
+        with ExitStack() as copy_grant_stack:
+            if same_endpoint_copy and bool(migration.auto_grant_source_read_for_copy):
+                candidate = self._sample_version_probe_candidate(
+                    source_bucket,
+                    source_profile=source_profile if isinstance(source_profile, dict) else None,
+                )
+                if candidate is not None:
+                    sample_key, sample_version_id = candidate
+                    copy_grant_stack.enter_context(
+                        self._temporary_source_copy_grant(
+                            source_ctx,
+                            target_ctx,
+                            source_bucket=source_bucket,
+                            sample_key=sample_key,
+                            sample_version_id=sample_version_id,
+                        )
+                    )
+
+            copied, replayed_entries = self._replay_bucket_versions(
+                source_ctx,
+                target_ctx,
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                same_endpoint_copy=same_endpoint_copy,
+                watermark=watermark,
+                control_check=control_check,
+                on_progress=on_object_progress,
+            )
+        if copied < 0:
+            return -1, -1, self._new_empty_sync_diff()
+
+        if replay_mode == "pre_sync_full":
+            replication_state["pre_sync_watermark"] = self._build_version_replay_watermark(replayed_entries)
+            replication_state["cutover_attempted"] = False
+            self._store_item_replication_state(item, replication_state)
+        on_object_progress(force=True)
+
+        compared = self._compare_versioned_timelines(
+            source_ctx,
+            target_ctx,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
+            control_check=control_check,
+        )
+        if compared is None:
+            return -1, -1, self._new_empty_sync_diff()
+        diff = self._version_aware_diff_to_sync_diff(compared)
+
+        self._add_event(
+            migration,
+            item=item,
+            level="info",
+            message="Sync batch completed.",
+            metadata={
+                "copied": copied,
+                "deleted": deleted,
+                "same_endpoint_copy": same_endpoint_copy,
+                "replay_mode": replay_mode,
+                "version_aware": True,
+            },
+        )
+        self._commit()
+        return copied, deleted, diff
+
+    def _replay_bucket_versions(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        same_endpoint_copy: bool,
+        watermark: Optional[dict[str, Any]],
+        control_check: Callable[[], str],
+        on_progress: Optional[Callable[..., None]] = None,
+    ) -> tuple[int, list[_BucketVersionEntry]]:
+        source_client = self._context_client(source_ctx)
+        target_client = self._context_client(target_ctx)
+        copied = 0
+        replayed_entries: list[_BucketVersionEntry] = []
+        scan_count_since_control = 0
+
+        for _key, timeline in self._iter_bucket_version_timelines(source_ctx, source_bucket, client=source_client):
+            for entry in timeline:
+                scan_count_since_control += 1
+                if scan_count_since_control >= _DIFF_CONTROL_CHECK_INTERVAL_OBJECTS:
+                    state = control_check()
+                    if state == "lost_lease":
+                        if on_progress is not None:
+                            on_progress(force=True)
+                        raise _WorkerLeaseLostError("Worker lease lost while replaying bucket versions")
+                    if state in {"pause", "cancel"}:
+                        if on_progress is not None:
+                            on_progress(force=True)
+                        return -1, []
+                    scan_count_since_control = 0
+
+                if watermark is not None and not self._entry_is_after_watermark(entry, watermark):
+                    continue
+
+                if entry.is_delete_marker:
+                    self._replay_delete_marker(target_client, target_bucket, entry.key)
+                else:
+                    self._copy_single_object_version(
+                        source_ctx,
+                        target_ctx,
+                        source_bucket=source_bucket,
+                        target_bucket=target_bucket,
+                        key=entry.key,
+                        version_id=entry.version_id,
+                        same_endpoint=same_endpoint_copy,
+                        source_client=source_client,
+                        target_client=target_client,
+                    )
+                copied += 1
+                replayed_entries.append(entry)
+                if on_progress is not None:
+                    on_progress(copied_inc=1)
+
+        if on_progress is not None:
+            on_progress(force=True)
+        return copied, replayed_entries
+
+    def _replay_delete_marker(self, target_client: Any, target_bucket: str, key: str) -> None:
+        try:
+            target_client.delete_object(Bucket=target_bucket, Key=key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(
+                f"Unable to recreate delete marker for '{key}' in bucket '{target_bucket}': {exc}"
+            ) from exc
+
+    def _version_aware_diff_to_sync_diff(self, diff: _VersionAwareDiff) -> _SyncDiff:
+        return _SyncDiff(
+            copy_keys=[],
+            delete_keys=[],
+            source_count=diff.source_count,
+            target_count=diff.target_count,
+            matched_count=diff.matched_count,
+            different_count=diff.different_count,
+            only_source_count=diff.only_source_count,
+            only_target_count=diff.only_target_count,
+            sample=diff.sample,
+        )
+
     def _new_empty_sync_diff(self) -> _SyncDiff:
         return _SyncDiff(
             copy_keys=[],
@@ -2977,7 +3476,185 @@ class BucketMigrationService:
             },
         )
 
-    def _compare_buckets_streamed(
+    def _load_version_timeline_map(
+        self,
+        ctx: _ResolvedContext,
+        bucket_name: str,
+        *,
+        control_check: Callable[[], str],
+        client: Optional[Any] = None,
+    ) -> Optional[dict[str, list[_BucketVersionEntry]]]:
+        resolved_client = client or self._context_client(ctx)
+        timelines: dict[str, list[_BucketVersionEntry]] = {}
+        scanned_keys = 0
+        for key, timeline in self._iter_bucket_version_timelines(ctx, bucket_name, client=resolved_client):
+            scanned_keys += 1
+            if scanned_keys % 200 == 0:
+                state = control_check()
+                if state == "lost_lease":
+                    raise _WorkerLeaseLostError("Worker lease lost while loading version timelines")
+                if state in {"pause", "cancel"}:
+                    return None
+            timelines[key] = list(timeline)
+        return timelines
+
+    def _timeline_has_current_object(self, timeline: list[_BucketVersionEntry]) -> bool:
+        return bool(timeline) and not bool(timeline[-1].is_delete_marker)
+
+    def _compare_versioned_timelines(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        control_check: Callable[[], str],
+    ) -> Optional[_VersionAwareDiff]:
+        source_client = self._context_client(source_ctx)
+        target_client = self._context_client(target_ctx)
+        source_timelines = self._load_version_timeline_map(
+            source_ctx,
+            source_bucket,
+            control_check=control_check,
+            client=source_client,
+        )
+        if source_timelines is None:
+            return None
+        target_timelines = self._load_version_timeline_map(
+            target_ctx,
+            target_bucket,
+            control_check=control_check,
+            client=target_client,
+        )
+        if target_timelines is None:
+            return None
+
+        source_count = sum(1 for timeline in source_timelines.values() if self._timeline_has_current_object(timeline))
+        target_count = sum(1 for timeline in target_timelines.values() if self._timeline_has_current_object(timeline))
+        matched_count = 0
+        different_count = 0
+        only_source_count = 0
+        only_target_count = 0
+        size_only_pairs: list[_VersionTimelineDiffKey] = []
+        sample = {
+            "only_source_sample": [],
+            "only_target_sample": [],
+            "different_sample": [],
+        }
+        source_details_cache: dict[tuple[str, str], _VersionedObjectDetails] = {}
+        target_details_cache: dict[tuple[str, str], _VersionedObjectDetails] = {}
+
+        for index, key in enumerate(sorted(set(source_timelines.keys()) | set(target_timelines.keys())), start=1):
+            if index % 200 == 0:
+                state = control_check()
+                if state == "lost_lease":
+                    raise _WorkerLeaseLostError("Worker lease lost while comparing version-aware timelines")
+                if state in {"pause", "cancel"}:
+                    return None
+
+            source_timeline = source_timelines.get(key)
+            target_timeline = target_timelines.get(key)
+            if source_timeline is None:
+                only_target_count += 1
+                if len(sample["only_target_sample"]) < 200:
+                    sample["only_target_sample"].append(key)
+                continue
+            if target_timeline is None:
+                only_source_count += 1
+                if len(sample["only_source_sample"]) < 200:
+                    sample["only_source_sample"].append(key)
+                continue
+
+            equal_timeline = True
+            first_difference: Optional[dict[str, Any]] = None
+            local_size_only_pairs: list[_VersionTimelineDiffKey] = []
+
+            if len(source_timeline) != len(target_timeline):
+                equal_timeline = False
+                first_difference = {
+                    "key": key,
+                    "reason": "timeline_length_mismatch",
+                    "source_entries": len(source_timeline),
+                    "target_entries": len(target_timeline),
+                }
+            else:
+                for source_entry, target_entry in zip(source_timeline, target_timeline):
+                    if bool(source_entry.is_delete_marker) != bool(target_entry.is_delete_marker):
+                        equal_timeline = False
+                        first_difference = {
+                            "key": key,
+                            "reason": "entry_kind_mismatch",
+                            "source_kind": "delete_marker" if source_entry.is_delete_marker else "object",
+                            "target_kind": "delete_marker" if target_entry.is_delete_marker else "object",
+                        }
+                        break
+                    if source_entry.is_delete_marker:
+                        continue
+
+                    source_cache_key = (key, source_entry.version_id)
+                    target_cache_key = (key, target_entry.version_id)
+                    source_details = source_details_cache.get(source_cache_key)
+                    if source_details is None:
+                        source_details = self._versioned_object_details(
+                            source_client,
+                            source_bucket,
+                            key,
+                            version_id=source_entry.version_id,
+                        )
+                        source_details_cache[source_cache_key] = source_details
+                    target_details = target_details_cache.get(target_cache_key)
+                    if target_details is None:
+                        target_details = self._versioned_object_details(
+                            target_client,
+                            target_bucket,
+                            key,
+                            version_id=target_entry.version_id,
+                        )
+                        target_details_cache[target_cache_key] = target_details
+
+                    equal, compare_by, reason = self._compare_versioned_object_details(source_details, target_details)
+                    if not equal:
+                        equal_timeline = False
+                        first_difference = {
+                            "key": key,
+                            "reason": reason or "object_mismatch",
+                            "compare_by": compare_by,
+                            "source_size": source_details.size,
+                            "target_size": target_details.size,
+                            "source_etag": source_details.etag,
+                            "target_etag": target_details.etag,
+                        }
+                        break
+                    if compare_by == "size":
+                        local_size_only_pairs.append(
+                            _VersionTimelineDiffKey(
+                                key=key,
+                                source_version_id=source_entry.version_id,
+                                target_version_id=target_entry.version_id,
+                            )
+                        )
+
+            if equal_timeline:
+                matched_count += 1
+                size_only_pairs.extend(local_size_only_pairs)
+                continue
+
+            different_count += 1
+            if first_difference is not None and len(sample["different_sample"]) < 200:
+                sample["different_sample"].append(first_difference)
+
+        return _VersionAwareDiff(
+            source_count=source_count,
+            target_count=target_count,
+            matched_count=matched_count,
+            different_count=different_count,
+            only_source_count=only_source_count,
+            only_target_count=only_target_count,
+            sample=sample,
+            size_only_pairs=tuple(size_only_pairs),
+        )
+
+    def _compare_buckets_version_aware(
         self,
         source_ctx: _ResolvedContext,
         target_ctx: _ResolvedContext,
@@ -2986,11 +3663,33 @@ class BucketMigrationService:
         target_bucket: str,
         control_check: Callable[[], str],
     ) -> Optional[_SyncDiff]:
+        compared = self._compare_versioned_timelines(
+            source_ctx,
+            target_ctx,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
+            control_check=control_check,
+        )
+        if compared is None:
+            return None
+        return self._version_aware_diff_to_sync_diff(compared)
+
+    def _compare_buckets_streamed(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        strategy: str = "current_only",
+        control_check: Callable[[], str],
+    ) -> Optional[_SyncDiff]:
         return self._verifier.compare_buckets_streamed(
             source_ctx,
             target_ctx,
             source_bucket=source_bucket,
             target_bucket=target_bucket,
+            strategy=strategy,
             control_check=control_check,
         )
 
@@ -3001,8 +3700,17 @@ class BucketMigrationService:
         *,
         source_bucket: str,
         target_bucket: str,
+        strategy: str = "current_only",
         control_check: Callable[[], str],
     ) -> Optional[_SyncDiff]:
+        if strategy == "version_aware":
+            return self._compare_buckets_version_aware(
+                source_ctx,
+                target_ctx,
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                control_check=control_check,
+            )
         source_client = self._context_client(source_ctx)
         target_client = self._context_client(target_ctx)
         diff = self._new_empty_sync_diff()
@@ -3067,6 +3775,7 @@ class BucketMigrationService:
         *,
         source_bucket: str,
         target_bucket: str,
+        strategy: str = "current_only",
         parallelism_max: int,
         control_check: Callable[[], str],
     ) -> tuple[int, int, list[str], dict[str, int]]:
@@ -3075,6 +3784,7 @@ class BucketMigrationService:
             target_ctx,
             source_bucket=source_bucket,
             target_bucket=target_bucket,
+            strategy=strategy,
             parallelism_max=parallelism_max,
             control_check=control_check,
         )
@@ -3086,9 +3796,19 @@ class BucketMigrationService:
         *,
         source_bucket: str,
         target_bucket: str,
+        strategy: str = "current_only",
         parallelism_max: int,
         control_check: Callable[[], str],
     ) -> tuple[int, int, list[str], dict[str, int]]:
+        if strategy == "version_aware":
+            return self._strong_verify_version_aware_candidates(
+                source_ctx,
+                target_ctx,
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                parallelism_max=parallelism_max,
+                control_check=control_check,
+            )
         worker_count = max(1, int(parallelism_max))
         batch_size = max(worker_count, worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER)
         size_only_count = 0
@@ -3156,6 +3876,101 @@ class BucketMigrationService:
         if not flush_batch():
             return -1, 0, [], method_counts
         return size_only_count, verified_count, failed_keys, method_counts
+
+    def _strong_verify_version_aware_candidates(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        parallelism_max: int,
+        control_check: Callable[[], str],
+    ) -> tuple[int, int, list[str], dict[str, int]]:
+        compared = self._compare_versioned_timelines(
+            source_ctx,
+            target_ctx,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
+            control_check=control_check,
+        )
+        if compared is None:
+            return -1, 0, [], {"head_checksum": 0, "stream_sha256": 0}
+
+        pairs = list(compared.size_only_pairs)
+        if not pairs:
+            return 0, 0, [], {"head_checksum": 0, "stream_sha256": 0}
+
+        verified_count = 0
+        failed_keys: list[str] = []
+        method_counts: dict[str, int] = {"head_checksum": 0, "stream_sha256": 0}
+        worker_count = max(1, min(int(parallelism_max), len(pairs)))
+        thread_local = threading.local()
+
+        def _verify_worker(pair: _VersionTimelineDiffKey) -> tuple[str, bool, str]:
+            resolved_source_client = getattr(thread_local, "source_client", None)
+            if resolved_source_client is None:
+                resolved_source_client = self._context_client(source_ctx)
+                thread_local.source_client = resolved_source_client
+            resolved_target_client = getattr(thread_local, "target_client", None)
+            if resolved_target_client is None:
+                resolved_target_client = self._context_client(target_ctx)
+                thread_local.target_client = resolved_target_client
+            verified, method = self._strong_verify_single_object(
+                source_ctx,
+                target_ctx,
+                source_bucket,
+                target_bucket,
+                pair.key,
+                source_version_id=pair.source_version_id,
+                target_version_id=pair.target_version_id,
+                source_client=resolved_source_client,
+                target_client=resolved_target_client,
+            )
+            return pair.key, verified, method
+
+        for chunk in _chunked(pairs, worker_count):
+            state = control_check()
+            if state == "lost_lease":
+                raise _WorkerLeaseLostError("Worker lease lost while strong-verifying version-aware objects")
+            if state in {"pause", "cancel"}:
+                return -1, 0, [], method_counts
+
+            with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-version-verify") as executor:
+                futures = {
+                    executor.submit(_verify_worker, pair): pair
+                    for pair in chunk
+                }
+                interrupted_state: Optional[str] = None
+                pending = set(futures)
+                while pending:
+                    done, pending = wait(pending, timeout=1.0)
+                    state = control_check()
+                    if state == "lost_lease":
+                        interrupted_state = "lost_lease"
+                    elif state in {"pause", "cancel"} and interrupted_state is None:
+                        interrupted_state = state
+
+                    for future in done:
+                        pair = futures[future]
+                        try:
+                            key, verified, method = future.result()
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning("Version-aware strong verification failed: %s", exc)
+                            failed_keys.append(pair.key)
+                            continue
+                        method_counts[method] = method_counts.get(method, 0) + 1
+                        if verified:
+                            verified_count += 1
+                        else:
+                            failed_keys.append(key)
+
+                if interrupted_state == "lost_lease":
+                    raise _WorkerLeaseLostError("Worker lease lost while strong-verifying version-aware objects")
+                if interrupted_state in {"pause", "cancel"}:
+                    return -1, 0, [], method_counts
+
+        return len(pairs), verified_count, failed_keys, method_counts
 
     def _iter_bucket_diff_entries(
         self,
@@ -3387,7 +4202,23 @@ class BucketMigrationService:
         if same_endpoint:
             copy_source = {"Bucket": source_bucket, "Key": key}
             try:
-                resolved_target_client.copy_object(Bucket=target_bucket, Key=key, CopySource=copy_source)
+                head = self._head_object_with_version(
+                    resolved_source_client,
+                    source_bucket,
+                    key,
+                    version_id=None,
+                )
+                kwargs: dict[str, Any] = {
+                    "Bucket": target_bucket,
+                    "Key": key,
+                    "CopySource": copy_source,
+                    "MetadataDirective": "COPY",
+                    "TaggingDirective": "COPY",
+                }
+                storage_class = head.get("StorageClass")
+                if isinstance(storage_class, str) and storage_class.strip():
+                    kwargs["StorageClass"] = storage_class.strip()
+                resolved_target_client.copy_object(**kwargs)
                 return
             except (ClientError, BotoCoreError) as exc:
                 if not self._is_access_denied_error(exc):
@@ -3418,6 +4249,96 @@ class BucketMigrationService:
             target_client=resolved_target_client,
         )
 
+    def _copy_single_object_version(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        key: str,
+        version_id: str,
+        same_endpoint: bool,
+        source_client: Any | None = None,
+        target_client: Any | None = None,
+    ) -> None:
+        resolved_source_client = source_client or self._context_client(source_ctx)
+        resolved_target_client = target_client or self._context_client(target_ctx)
+        if same_endpoint:
+            copy_source = {"Bucket": source_bucket, "Key": key, "VersionId": version_id}
+            head = self._head_object_with_version(
+                resolved_source_client,
+                source_bucket,
+                key,
+                version_id=version_id,
+            )
+            kwargs: dict[str, Any] = {
+                "Bucket": target_bucket,
+                "Key": key,
+                "CopySource": copy_source,
+                "MetadataDirective": "COPY",
+                "TaggingDirective": "COPY",
+            }
+            storage_class = head.get("StorageClass")
+            if isinstance(storage_class, str) and storage_class.strip():
+                kwargs["StorageClass"] = storage_class.strip()
+            try:
+                resolved_target_client.copy_object(**kwargs)
+                return
+            except (ClientError, BotoCoreError) as exc:
+                if not self._is_access_denied_error(exc):
+                    raise RuntimeError(
+                        f"Unable to copy object version '{version_id}' for '{key}' with x-amz-copy-source: {exc}"
+                    ) from exc
+                logger.warning(
+                    "CopyObject with x-amz-copy-source denied for version '%s' of '%s' (%s), "
+                    "falling back to stream-copy.",
+                    version_id,
+                    key,
+                    exc,
+                )
+
+        self._stream_copy_single_object_version(
+            source_ctx,
+            target_ctx,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
+            key=key,
+            version_id=version_id,
+            source_client=resolved_source_client,
+            target_client=resolved_target_client,
+        )
+
+    def _build_upload_extra_args(
+        self,
+        *,
+        head: dict[str, Any],
+        tags: tuple[tuple[str, str], ...],
+    ) -> dict[str, Any]:
+        extra_args: dict[str, Any] = {}
+        metadata = head.get("Metadata") if isinstance(head.get("Metadata"), dict) else {}
+        if metadata:
+            extra_args["Metadata"] = {
+                str(meta_key): str(meta_value)
+                for meta_key, meta_value in metadata.items()
+                if meta_key is not None and meta_value is not None
+            }
+        for head_field, extra_arg_field in (
+            ("ContentType", "ContentType"),
+            ("CacheControl", "CacheControl"),
+            ("ContentDisposition", "ContentDisposition"),
+            ("ContentEncoding", "ContentEncoding"),
+            ("ContentLanguage", "ContentLanguage"),
+            ("Expires", "Expires"),
+            ("StorageClass", "StorageClass"),
+        ):
+            value = head.get(head_field)
+            if value is not None:
+                extra_args[extra_arg_field] = value
+        if tags:
+            extra_args["Tagging"] = urlencode({tag_key: tag_value for tag_key, tag_value in tags})
+        return extra_args
+
     def _stream_copy_single_object(
         self,
         source_ctx: _ResolvedContext,
@@ -3433,11 +4354,77 @@ class BucketMigrationService:
         resolved_target_client = target_client or self._context_client(target_ctx)
         body = None
         try:
+            head = self._head_object_with_version(
+                resolved_source_client,
+                source_bucket,
+                key,
+                version_id=None,
+            )
+            tags = self._get_object_tags_with_version(
+                resolved_source_client,
+                source_bucket,
+                key,
+                version_id=None,
+            )
             response = resolved_source_client.get_object(Bucket=source_bucket, Key=key)
             body = response.get("Body")
-            resolved_target_client.upload_fileobj(body, target_bucket, key)
+            extra_args = self._build_upload_extra_args(head=head, tags=tags)
+            if extra_args:
+                resolved_target_client.upload_fileobj(body, target_bucket, key, ExtraArgs=extra_args)
+            else:
+                resolved_target_client.upload_fileobj(body, target_bucket, key)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to stream-copy object '{key}': {exc}") from exc
+        finally:
+            if body is not None:
+                try:
+                    body.close()
+                except Exception:  # noqa: BLE001
+                    pass
+
+    def _stream_copy_single_object_version(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        key: str,
+        version_id: str,
+        source_client: Any | None = None,
+        target_client: Any | None = None,
+    ) -> None:
+        resolved_source_client = source_client or self._context_client(source_ctx)
+        resolved_target_client = target_client or self._context_client(target_ctx)
+        body = None
+        try:
+            head = self._head_object_with_version(
+                resolved_source_client,
+                source_bucket,
+                key,
+                version_id=version_id,
+            )
+            tags = self._get_object_tags_with_version(
+                resolved_source_client,
+                source_bucket,
+                key,
+                version_id=version_id,
+            )
+            response = resolved_source_client.get_object(
+                Bucket=source_bucket,
+                Key=key,
+                VersionId=version_id,
+            )
+            body = response.get("Body")
+            extra_args = self._build_upload_extra_args(head=head, tags=tags)
+            if extra_args:
+                resolved_target_client.upload_fileobj(body, target_bucket, key, ExtraArgs=extra_args)
+            else:
+                resolved_target_client.upload_fileobj(body, target_bucket, key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(
+                f"Unable to stream-copy object version '{version_id}' for '{key}': {exc}"
+            ) from exc
         finally:
             if body is not None:
                 try:
@@ -3699,6 +4686,337 @@ class BucketMigrationService:
             continuation_token = page.get("NextContinuationToken")
             if not continuation_token:
                 break
+
+    def _normalize_datetime(self, value: Any) -> datetime:
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc)
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+
+    def _stable_datetime_string(self, value: Any) -> Optional[str]:
+        if not isinstance(value, datetime):
+            return None
+        return self._normalize_datetime(value).isoformat()
+
+    def _version_group_sort_key(self, entry: _BucketVersionEntry) -> tuple[str, float, int]:
+        return (
+            entry.key,
+            -self._normalize_datetime(entry.last_modified).timestamp(),
+            entry.order_index,
+        )
+
+    def _version_replay_sort_key(self, entry: _BucketVersionEntry) -> tuple[float, int, int]:
+        # list_object_versions returns reverse-chronological entries within a key,
+        # while replay/verification needs oldest -> newest. When a backend rounds
+        # several recreated entries to the same second, keep objects before delete
+        # markers and reverse the order_index tie-breaker so versions replay in
+        # their original logical order within the timestamp group.
+        return (
+            self._normalize_datetime(entry.last_modified).timestamp(),
+            1 if entry.is_delete_marker else 0,
+            -entry.order_index,
+        )
+
+    def _iter_bucket_version_timelines(
+        self,
+        ctx: _ResolvedContext,
+        bucket_name: str,
+        *,
+        client: Optional[Any] = None,
+    ):
+        resolved_client = client or self._context_client(ctx)
+        key_marker: Optional[str] = None
+        version_marker: Optional[str] = None
+        order_index = 0
+        buffered_key: Optional[str] = None
+        buffered_entries: list[_BucketVersionEntry] = []
+
+        while True:
+            kwargs: dict[str, Any] = {"Bucket": bucket_name}
+            if key_marker:
+                kwargs["KeyMarker"] = key_marker
+            if version_marker:
+                kwargs["VersionIdMarker"] = version_marker
+            try:
+                page = resolved_client.list_object_versions(**kwargs)
+            except (ClientError, BotoCoreError) as exc:
+                raise RuntimeError(f"Unable to list object versions in bucket '{bucket_name}': {exc}") from exc
+
+            page_entries: list[_BucketVersionEntry] = []
+            for raw in page.get("Versions", []) or []:
+                key = raw.get("Key")
+                version_id = raw.get("VersionId")
+                if not isinstance(key, str) or not key or not isinstance(version_id, str) or not version_id:
+                    continue
+                etag_raw = raw.get("ETag")
+                etag = etag_raw.strip().strip('"') if isinstance(etag_raw, str) else None
+                page_entries.append(
+                    _BucketVersionEntry(
+                        key=key,
+                        version_id=version_id,
+                        is_delete_marker=False,
+                        is_latest=bool(raw.get("IsLatest")),
+                        last_modified=raw.get("LastModified"),
+                        size=int(raw.get("Size") or 0),
+                        etag=etag or None,
+                        storage_class=raw.get("StorageClass"),
+                        order_index=order_index,
+                    )
+                )
+                order_index += 1
+            for raw in page.get("DeleteMarkers", []) or []:
+                key = raw.get("Key")
+                version_id = raw.get("VersionId")
+                if not isinstance(key, str) or not key or not isinstance(version_id, str) or not version_id:
+                    continue
+                page_entries.append(
+                    _BucketVersionEntry(
+                        key=key,
+                        version_id=version_id,
+                        is_delete_marker=True,
+                        is_latest=bool(raw.get("IsLatest")),
+                        last_modified=raw.get("LastModified"),
+                        size=0,
+                        etag=None,
+                        storage_class=None,
+                        order_index=order_index,
+                    )
+                )
+                order_index += 1
+
+            for entry in sorted(page_entries, key=self._version_group_sort_key):
+                if buffered_key is None:
+                    buffered_key = entry.key
+                if entry.key != buffered_key:
+                    yield buffered_key, sorted(buffered_entries, key=self._version_replay_sort_key)
+                    buffered_key = entry.key
+                    buffered_entries = []
+                buffered_entries.append(entry)
+
+            key_marker = page.get("NextKeyMarker")
+            version_marker = page.get("NextVersionIdMarker")
+            if not key_marker and not version_marker:
+                break
+
+        if buffered_key is not None:
+            yield buffered_key, sorted(buffered_entries, key=self._version_replay_sort_key)
+
+    def _version_watermark_signature(self, entry: _BucketVersionEntry) -> tuple[str, str, bool]:
+        return (entry.key, entry.version_id, bool(entry.is_delete_marker))
+
+    def _build_version_replay_watermark(self, entries: list[_BucketVersionEntry]) -> Optional[dict[str, Any]]:
+        if not entries:
+            return None
+        latest_dt = max(self._normalize_datetime(entry.last_modified) for entry in entries)
+        tie_entries = [
+            {
+                "key": entry.key,
+                "version_id": entry.version_id,
+                "is_delete_marker": bool(entry.is_delete_marker),
+            }
+            for entry in entries
+            if self._normalize_datetime(entry.last_modified) == latest_dt
+        ]
+        return {
+            "last_modified": latest_dt.isoformat(),
+            "tie_entries": tie_entries,
+        }
+
+    def _entry_is_after_watermark(self, entry: _BucketVersionEntry, watermark: Optional[dict[str, Any]]) -> bool:
+        if not isinstance(watermark, dict):
+            return True
+        raw_last_modified = watermark.get("last_modified")
+        if not isinstance(raw_last_modified, str) or not raw_last_modified.strip():
+            return True
+        try:
+            normalized_watermark = self._normalize_datetime(datetime.fromisoformat(raw_last_modified))
+        except ValueError:
+            return True
+        entry_dt = self._normalize_datetime(entry.last_modified)
+        if entry_dt > normalized_watermark:
+            return True
+        if entry_dt < normalized_watermark:
+            return False
+        tie_entries = watermark.get("tie_entries") if isinstance(watermark.get("tie_entries"), list) else []
+        tie_set = {
+            (
+                str(raw.get("key") or ""),
+                str(raw.get("version_id") or ""),
+                bool(raw.get("is_delete_marker")),
+            )
+            for raw in tie_entries
+            if isinstance(raw, dict)
+        }
+        return self._version_watermark_signature(entry) not in tie_set
+
+    def _head_object_with_version(
+        self,
+        client: Any,
+        bucket_name: str,
+        key: str,
+        *,
+        version_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {"Bucket": bucket_name, "Key": key}
+        if version_id:
+            kwargs["VersionId"] = version_id
+        try:
+            response = client.head_object(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(
+                f"Unable to read metadata for '{key}' in bucket '{bucket_name}': {exc}"
+            ) from exc
+        return response if isinstance(response, dict) else {}
+
+    def _get_object_tags_with_version(
+        self,
+        client: Any,
+        bucket_name: str,
+        key: str,
+        *,
+        version_id: Optional[str] = None,
+    ) -> tuple[tuple[str, str], ...]:
+        kwargs: dict[str, Any] = {"Bucket": bucket_name, "Key": key}
+        if version_id:
+            kwargs["VersionId"] = version_id
+        try:
+            response = client.get_object_tagging(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to fetch tags for '{key}' in bucket '{bucket_name}': {exc}") from exc
+        tagset = response.get("TagSet") if isinstance(response, dict) else []
+        tags: list[tuple[str, str]] = []
+        for raw in tagset or []:
+            key_value = str(raw.get("Key") or "").strip()
+            if not key_value:
+                continue
+            tags.append((key_value, str(raw.get("Value") or "")))
+        return tuple(sorted(tags))
+
+    def _checksums_from_head_response(self, response: dict[str, Any]) -> dict[str, str]:
+        checksums: dict[str, str] = {}
+        for field in _VERSION_CHECKSUM_FIELDS:
+            value = response.get(field)
+            if isinstance(value, str) and value.strip():
+                checksums[field] = value.strip()
+        return checksums
+
+    def _versioned_object_details(
+        self,
+        client: Any,
+        bucket_name: str,
+        key: str,
+        *,
+        version_id: Optional[str],
+    ) -> _VersionedObjectDetails:
+        head = self._head_object_with_version(client, bucket_name, key, version_id=version_id)
+        checksums = self._checksums_from_head_response(head)
+        etag_raw = head.get("ETag")
+        etag = etag_raw.strip().strip('"') if isinstance(etag_raw, str) else None
+        shared_checksum_compare = next((field for field in _VERSION_CHECKSUM_FIELDS if field in checksums), None)
+        compare_by = shared_checksum_compare.lower() if shared_checksum_compare else (
+            "md5" if self._etag_md5(etag) else "size"
+        )
+        metadata = head.get("Metadata") if isinstance(head.get("Metadata"), dict) else {}
+        return _VersionedObjectDetails(
+            size=int(head.get("ContentLength") or 0),
+            etag=etag or None,
+            compare_by=compare_by,
+            checksums=checksums,
+            content_type=head.get("ContentType"),
+            cache_control=head.get("CacheControl"),
+            content_disposition=head.get("ContentDisposition"),
+            content_encoding=head.get("ContentEncoding"),
+            content_language=head.get("ContentLanguage"),
+            expires=self._stable_datetime_string(head.get("Expires")),
+            storage_class=head.get("StorageClass"),
+            metadata={str(key): str(value) for key, value in metadata.items() if key is not None and value is not None},
+            tags=self._get_object_tags_with_version(client, bucket_name, key, version_id=version_id),
+        )
+
+    def _compare_versioned_object_details(
+        self,
+        source_details: _VersionedObjectDetails,
+        target_details: _VersionedObjectDetails,
+    ) -> tuple[bool, str, Optional[str]]:
+        for field in _VERSION_CHECKSUM_FIELDS:
+            source_value = source_details.checksums.get(field)
+            target_value = target_details.checksums.get(field)
+            if source_value and target_value:
+                if source_value != target_value:
+                    return False, field.lower(), f"{field.lower()}_mismatch"
+                compare_by = field.lower()
+                break
+        else:
+            source_md5 = self._etag_md5(source_details.etag)
+            target_md5 = self._etag_md5(target_details.etag)
+            if source_md5 and target_md5:
+                compare_by = "md5"
+                if source_md5 != target_md5:
+                    return False, compare_by, "md5_mismatch"
+            else:
+                compare_by = "size"
+                if source_details.size != target_details.size:
+                    return False, compare_by, "size_mismatch"
+
+        comparisons = (
+            ("content_type", source_details.content_type, target_details.content_type),
+            ("cache_control", source_details.cache_control, target_details.cache_control),
+            ("content_disposition", source_details.content_disposition, target_details.content_disposition),
+            ("content_encoding", source_details.content_encoding, target_details.content_encoding),
+            ("content_language", source_details.content_language, target_details.content_language),
+            ("expires", source_details.expires, target_details.expires),
+            ("storage_class", source_details.storage_class, target_details.storage_class),
+            ("metadata", source_details.metadata, target_details.metadata),
+            ("tags", source_details.tags, target_details.tags),
+        )
+        for field_name, source_value, target_value in comparisons:
+            if source_value != target_value:
+                return False, compare_by, f"{field_name}_mismatch"
+        return True, compare_by, None
+
+    def _source_versioning_status_from_item(self, item: BucketMigrationItem) -> Optional[str]:
+        source_snapshot = _json_loads(item.source_snapshot_json)
+        if not isinstance(source_snapshot, dict):
+            return None
+        versioning = source_snapshot.get("versioning")
+        if not isinstance(versioning, dict):
+            return None
+        status = str(versioning.get("status") or "").strip()
+        return status or None
+
+    def _needs_target_versioning_finalization(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+    ) -> bool:
+        if self._item_execution_strategy(item) != "version_aware":
+            return False
+        if not bool(migration.copy_bucket_settings):
+            return False
+        return str(self._source_versioning_status_from_item(item) or "").strip().lower() == "suspended"
+
+    def _finalize_target_versioning_state(
+        self,
+        target_account: S3Account,
+        target_bucket: str,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+    ) -> None:
+        if not self._needs_target_versioning_finalization(migration, item):
+            return
+        replication_state = self._load_item_replication_state(item)
+        if replication_state.get("target_versioning_finalized") == "suspended":
+            return
+        self._buckets.set_versioning(target_bucket, target_account, enabled=False)
+        replication_state["target_versioning_finalized"] = "suspended"
+        self._store_item_replication_state(item, replication_state)
+        self._add_event(
+            migration,
+            item=item,
+            level="info",
+            message="Target bucket versioning finalized to match suspended source state.",
+        )
 
     def _list_current_objects(self, ctx: _ResolvedContext, bucket_name: str) -> dict[str, dict[str, Any]]:
         objects_by_key: dict[str, dict[str, Any]] = {}
@@ -3968,6 +5286,7 @@ class BucketMigrationService:
             purged_current, purged_versions = self._purge_target_bucket(target_ctx, item.target_bucket)
             purged_count = purged_current + purged_versions
             item.objects_deleted = int(item.objects_deleted or 0) + purged_count
+            item.replication_state_json = None
         except Exception as exc:  # noqa: BLE001
             rollback_issues.append(
                 _truncate_db_text(

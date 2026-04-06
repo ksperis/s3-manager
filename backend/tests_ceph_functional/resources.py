@@ -36,6 +36,7 @@ class ResourceTracker:
     accounts: list[tuple[int, bool, str | None]] = field(default_factory=list)
     buckets: list[tuple[int, str]] = field(default_factory=list)
     users: list[int] = field(default_factory=list)
+    migrations: list[int] = field(default_factory=list)
     ceph_admin_users: list[tuple[str, str | None]] = field(default_factory=list)
     ceph_admin_accounts: list[str] = field(default_factory=list)
 
@@ -54,6 +55,9 @@ class ResourceTracker:
 
     def track_user(self, user_id: int) -> None:
         self.users.append(user_id)
+
+    def track_migration(self, migration_id: int) -> None:
+        self.migrations.append(migration_id)
 
     def track_ceph_admin_user(self, uid: str, *, tenant: str | None = None) -> None:
         if not uid:
@@ -75,6 +79,9 @@ class ResourceTracker:
     def discard_user(self, user_id: int) -> None:
         self.users = [uid for uid in self.users if uid != user_id]
 
+    def discard_migration(self, migration_id: int) -> None:
+        self.migrations = [tracked_id for tracked_id in self.migrations if tracked_id != migration_id]
+
     def discard_account(self, account_id: int) -> None:
         self.accounts = [
             (aid, flag, rgw_account_id)
@@ -94,6 +101,18 @@ class ResourceTracker:
 
     def cleanup(self, log: Callable[[str], None] | None = None) -> list[str]:
         errors: list[str] = []
+        for migration_id in reversed(self.migrations):
+            try:
+                self.admin_session.delete(
+                    f"/manager/migrations/{migration_id}",
+                    expected_status=(204, 404),
+                )
+                if log:
+                    log(f"Deleted migration {migration_id}")
+            except BackendAPIError as exc:
+                errors.append(f"migration {migration_id}: {exc}")
+        self.migrations.clear()
+
         for account_id, bucket_name in reversed(self.buckets):
             try:
                 self.admin_session.delete(

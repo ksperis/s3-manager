@@ -771,6 +771,9 @@ export default function ManagerMigrationWizardPage() {
                 </div>
                 <div>
                   <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Execution flow</p>
+                  <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                    Precheck selects <code>version_aware</code> automatically for versioned buckets and replays versions plus delete markers.
+                  </p>
                   <ol className="mt-1 list-decimal space-y-0.5 pl-4">
                     {summaryOperationSteps.map((stepText, stepIndex) => (
                       <li key={`wizard-summary-operation-flow-${stepIndex}`} className="ui-caption text-slate-600 dark:text-slate-300">

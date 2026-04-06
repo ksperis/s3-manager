@@ -11,10 +11,13 @@ from sqlalchemy.orm.exc import DetachedInstanceError
 from app.core.security import get_password_hash, verify_password
 from app.db import (
     ApiToken,
+    AuditLog,
+    BucketMigration,
     RefreshSession,
     S3Account,
     S3Connection,
     S3User,
+    TagDefinition,
     User,
     UserRole,
     UserS3Account,
@@ -252,6 +255,21 @@ class UsersService:
             self.db.query(RefreshSession)
             .filter(RefreshSession.revoked_by_user_id == user.id)
             .update({RefreshSession.revoked_by_user_id: None}, synchronize_session=False)
+        )
+        (
+            self.db.query(AuditLog)
+            .filter(AuditLog.user_id == user.id)
+            .update({AuditLog.user_id: None}, synchronize_session=False)
+        )
+        (
+            self.db.query(BucketMigration)
+            .filter(BucketMigration.created_by_user_id == user.id)
+            .update({BucketMigration.created_by_user_id: None}, synchronize_session=False)
+        )
+        (
+            self.db.query(TagDefinition)
+            .filter(TagDefinition.owner_user_id == user.id)
+            .update({TagDefinition.owner_user_id: None}, synchronize_session=False)
         )
         self.db.delete(user)
         self.db.commit()

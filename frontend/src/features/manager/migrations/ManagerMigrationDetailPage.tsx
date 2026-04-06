@@ -40,6 +40,7 @@ import {
   precheckChipClasses,
   precheckMessageClasses,
   statusChipClasses,
+  strategyLabel,
   stepLabel,
   type MigrationOperatorAction,
   type ReviewItemSummary,
@@ -681,7 +682,7 @@ export default function ManagerMigrationDetailPage() {
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                            strategy: {reviewItem.strategy}
+                            strategy: {strategyLabel(reviewItem.strategy)}
                           </span>
                           {reviewItem.blocking && (
                             <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Generator
 
 import pytest
+import requests
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -88,14 +89,43 @@ def backend_authenticator(ceph_test_settings: CephTestSettings) -> BackendAuthen
 
 
 @pytest.fixture(scope="session")
+def backend_preflight(ceph_test_settings: CephTestSettings) -> None:
+    verify: bool | str = ceph_test_settings.backend_ca_bundle or ceph_test_settings.verify_tls
+    try:
+        response = requests.get(
+            ceph_test_settings.health_url,
+            timeout=ceph_test_settings.request_timeout,
+            verify=verify,
+        )
+    except requests.RequestException as exc:
+        pytest.fail(
+            "Ceph functional tests require a reachable backend API. "
+            f"Unable to reach {ceph_test_settings.health_url}: {exc}"
+        )
+    if response.status_code >= 400:
+        pytest.fail(
+            "Ceph functional tests require a healthy backend API. "
+            f"{ceph_test_settings.health_url} returned {response.status_code}: {response.text[:200]}"
+        )
+
+
+@pytest.fixture(scope="session")
 def super_admin_session(
     backend_authenticator: BackendAuthenticator,
     ceph_test_settings: CephTestSettings,
+    backend_preflight: None,
 ) -> BackendSession:
-    return backend_authenticator.login(
-        ceph_test_settings.super_admin_email,
-        ceph_test_settings.super_admin_password,
-    )
+    try:
+        return backend_authenticator.login(
+            ceph_test_settings.super_admin_email,
+            ceph_test_settings.super_admin_password,
+        )
+    except Exception as exc:  # noqa: BLE001
+        pytest.fail(
+            "Ceph functional tests require a valid super-admin login. "
+            "Adjust CEPH_TEST_SUPERADMIN_EMAIL/CEPH_TEST_SUPERADMIN_PASSWORD or the seed defaults. "
+            f"Configured login '{ceph_test_settings.super_admin_email}' failed: {exc}"
+        )
 
 
 @pytest.fixture(scope="session")

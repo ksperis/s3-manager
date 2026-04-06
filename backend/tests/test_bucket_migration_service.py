@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import io
 import json
 import time
@@ -167,6 +167,26 @@ def _current_only_execution_plan() -> str:
             "delete_source_safe": True,
             "rollback_safe": True,
             "same_endpoint_copy_safe": True,
+            "blocking_codes": [],
+        }
+    )
+
+
+def _version_aware_execution_plan(
+    *,
+    delete_source_safe: bool = True,
+    rollback_safe: bool = True,
+    same_endpoint_copy_safe: bool = True,
+) -> str:
+    return json.dumps(
+        {
+            "report_version": 2,
+            "strategy": "version_aware",
+            "supported": True,
+            "blocked": False,
+            "delete_source_safe": delete_source_safe,
+            "rollback_safe": rollback_safe,
+            "same_endpoint_copy_safe": same_endpoint_copy_safe,
             "blocking_codes": [],
         }
     )
@@ -1764,7 +1784,7 @@ def test_start_migration_requires_execution_plan_when_precheck_is_legacy(db_sess
         assert "Precheck must be re-run before start" in str(exc)
 
 
-def test_run_precheck_fails_when_source_bucket_requires_version_aware_strategy(db_session):
+def test_run_precheck_passes_when_source_bucket_requires_version_aware_strategy(db_session):
     user = _create_user(db_session)
     source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
     target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
@@ -1796,19 +1816,23 @@ def test_run_precheck_fails_when_source_bucket_requires_version_aware_strategy(d
     service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
     service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._precheck_target_lock_with_probe_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._precheck_version_aware_source_access = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._inspector.inspect_bucket_state = (  # type: ignore[method-assign]
         lambda *_args, **_kwargs: _bucket_profile_stub("bucket-a", versioning_status="Enabled", has_noncurrent_versions=True)
     )
 
     checked = service.run_precheck(migration.id)
 
-    assert checked.precheck_status == "failed"
+    assert checked.precheck_status == "passed"
     report = json.loads(checked.precheck_report_json or "{}")
     item_report = report.get("items", [])[0]
     assert item_report.get("strategy") == "version_aware"
-    assert item_report.get("blocking") is True
+    assert item_report.get("blocking") is False
+    capabilities = report.get("capabilities") or {}
+    assert capabilities.get("version_aware_available") is True
+    assert "version_aware" in list(capabilities.get("supported_strategies") or [])
     assert any(
-        str(message.get("code", "")) == "version_aware_required"
+        str(message.get("code", "")) == "version_aware_supported"
         for message in item_report.get("messages", [])
         if isinstance(message, dict)
     )
@@ -2021,6 +2045,508 @@ def test_sync_bucket_uses_stream_copy_when_same_endpoint_copy_option_is_disabled
     assert deleted == 0
     assert captured_same_endpoint_flags == [False]
     assert captured_event_metadata[0]["same_endpoint_copy"] is False
+
+
+def test_sync_bucket_version_aware_cross_endpoint_replays_versions_and_delete_markers(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace(context_id="src", endpoint="https://source.example.test", account=SimpleNamespace())
+    target_ctx = SimpleNamespace(context_id="dst", endpoint="https://target.example.test", account=SimpleNamespace())
+    migration = SimpleNamespace(
+        mode="one_shot",
+        use_same_endpoint_copy=False,
+        auto_grant_source_read_for_copy=False,
+        updated_at=None,
+        last_heartbeat_at=None,
+    )
+    item = SimpleNamespace(
+        execution_plan_json=_version_aware_execution_plan(),
+        source_snapshot_json=json.dumps({"versioning": {"status": "Enabled"}}),
+        replication_state_json=None,
+        objects_copied=0,
+        objects_deleted=0,
+        updated_at=None,
+        pre_sync_done=False,
+        read_only_applied=False,
+    )
+
+    version_timelines = [
+        (
+            "doc.txt",
+            [
+                SimpleNamespace(
+                    key="doc.txt",
+                    version_id="v1",
+                    is_delete_marker=False,
+                    is_latest=False,
+                    last_modified=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+                ),
+                SimpleNamespace(
+                    key="doc.txt",
+                    version_id="v2",
+                    is_delete_marker=False,
+                    is_latest=False,
+                    last_modified=datetime(2026, 1, 1, 11, 0, tzinfo=timezone.utc),
+                ),
+                SimpleNamespace(
+                    key="doc.txt",
+                    version_id="dm-1",
+                    is_delete_marker=True,
+                    is_latest=True,
+                    last_modified=datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+                ),
+            ],
+        )
+    ]
+    source_payloads = {
+        "v1": b"old-version",
+        "v2": b"new-version",
+    }
+    source_heads = {
+        "v1": {
+            "ContentLength": len(source_payloads["v1"]),
+            "ETag": '"etag-v1"',
+            "ContentType": "text/plain",
+            "Metadata": {"x-origin": "old"},
+            "StorageClass": "STANDARD",
+        },
+        "v2": {
+            "ContentLength": len(source_payloads["v2"]),
+            "ETag": '"etag-v2"',
+            "ContentType": "text/plain",
+            "Metadata": {"x-origin": "new"},
+            "StorageClass": "STANDARD",
+        },
+    }
+
+    class _SourceClient:
+        def head_object(self, *, Bucket, Key, VersionId=None):
+            assert Bucket == "bucket-a"
+            assert Key == "doc.txt"
+            return source_heads[VersionId]
+
+        def get_object(self, *, Bucket, Key, VersionId=None):
+            assert Bucket == "bucket-a"
+            assert Key == "doc.txt"
+            return {"Body": io.BytesIO(source_payloads[VersionId])}
+
+        def get_object_tagging(self, *, Bucket, Key, VersionId=None):
+            assert Bucket == "bucket-a"
+            assert Key == "doc.txt"
+            return {"TagSet": [{"Key": "stage", "Value": VersionId}]}
+
+    class _TargetClient:
+        def __init__(self):
+            self.actions: list[tuple[str, object]] = []
+
+        def upload_fileobj(self, body, bucket_name, key, ExtraArgs=None):
+            self.actions.append(("upload", {"bucket": bucket_name, "key": key, "body": body.read(), "extra": ExtraArgs or {}}))
+
+        def delete_object(self, *, Bucket, Key):
+            self.actions.append(("delete_marker", {"bucket": Bucket, "key": Key}))
+
+    target_client = _TargetClient()
+    source_client = _SourceClient()
+
+    service._context_client = lambda ctx: source_client if ctx.context_id == "src" else target_client  # type: ignore[method-assign]
+    service._buckets = SimpleNamespace(set_versioning=lambda *_args, **_kwargs: None)  # type: ignore[assignment]
+    service._iter_bucket_version_timelines = lambda *_args, **_kwargs: iter(version_timelines)  # type: ignore[method-assign]
+    service._compare_versioned_timelines = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
+        source_count=0,
+        target_count=0,
+        matched_count=1,
+        different_count=0,
+        only_source_count=0,
+        only_target_count=0,
+        sample={"only_source_sample": [], "only_target_sample": [], "different_sample": []},
+    )
+    service._purge_target_bucket = lambda *_args, **_kwargs: (0, 0)  # type: ignore[method-assign]
+    service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+
+    copied, deleted, diff = service._sync_bucket(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        allow_delete=True,
+        parallelism_max=4,
+        migration=migration,
+        item=item,
+        control_check=lambda: "run",
+    )
+
+    assert copied == 3
+    assert deleted == 0
+    assert diff.matched_count == 1
+    assert [entry[0] for entry in target_client.actions] == ["upload", "upload", "delete_marker"]
+    assert target_client.actions[0][1]["body"] == b"old-version"
+    assert target_client.actions[1][1]["body"] == b"new-version"
+    assert target_client.actions[0][1]["extra"]["Metadata"] == {"x-origin": "old"}
+    assert target_client.actions[1][1]["extra"]["Tagging"] == "stage=v2"
+
+
+def test_stream_copy_single_object_preserves_headers_metadata_and_tags(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace(context_id="src", endpoint="https://source.example.test", account=SimpleNamespace())
+    target_ctx = SimpleNamespace(context_id="dst", endpoint="https://target.example.test", account=SimpleNamespace())
+
+    class _SourceClient:
+        def head_object(self, *, Bucket, Key, VersionId=None):
+            assert Bucket == "bucket-a"
+            assert Key == "doc.txt"
+            assert VersionId is None
+            return {
+                "ContentType": "text/plain",
+                "CacheControl": "max-age=60",
+                "ContentLanguage": "fr",
+                "Metadata": {"x-origin": "suite"},
+            }
+
+        def get_object(self, *, Bucket, Key):
+            assert Bucket == "bucket-a"
+            assert Key == "doc.txt"
+            return {"Body": io.BytesIO(b"payload")}
+
+        def get_object_tagging(self, *, Bucket, Key, VersionId=None):
+            assert Bucket == "bucket-a"
+            assert Key == "doc.txt"
+            assert VersionId is None
+            return {"TagSet": [{"Key": "suite", "Value": "functional"}]}
+
+    class _TargetClient:
+        def __init__(self):
+            self.uploads: list[dict[str, object]] = []
+
+        def upload_fileobj(self, body, bucket_name, key, ExtraArgs=None):
+            self.uploads.append(
+                {
+                    "bucket": bucket_name,
+                    "key": key,
+                    "body": body.read(),
+                    "extra": ExtraArgs or {},
+                }
+            )
+
+    target_client = _TargetClient()
+    source_client = _SourceClient()
+
+    service._context_client = lambda ctx: source_client if ctx.context_id == "src" else target_client  # type: ignore[method-assign]
+
+    service._stream_copy_single_object(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        key="doc.txt",
+    )
+
+    assert target_client.uploads == [
+        {
+            "bucket": "bucket-b",
+            "key": "doc.txt",
+            "body": b"payload",
+            "extra": {
+                "ContentType": "text/plain",
+                "CacheControl": "max-age=60",
+                "ContentLanguage": "fr",
+                "Metadata": {"x-origin": "suite"},
+                "Tagging": "suite=functional",
+            },
+        }
+    ]
+
+
+def test_version_replay_sort_key_orders_objects_before_delete_markers_for_same_timestamp(db_session):
+    service = BucketMigrationService(db_session)
+    same_ts = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    ordered = sorted(
+        [
+            SimpleNamespace(
+                key="doc.txt",
+                version_id="delete",
+                is_delete_marker=True,
+                last_modified=same_ts,
+                order_index=6,
+            ),
+            SimpleNamespace(
+                key="doc.txt",
+                version_id="newer-object",
+                is_delete_marker=False,
+                last_modified=same_ts,
+                order_index=0,
+            ),
+            SimpleNamespace(
+                key="doc.txt",
+                version_id="older-object",
+                is_delete_marker=False,
+                last_modified=same_ts,
+                order_index=1,
+            ),
+        ],
+        key=service._version_replay_sort_key,
+    )
+
+    assert [entry.version_id for entry in ordered] == ["older-object", "newer-object", "delete"]
+
+
+def test_sync_bucket_version_aware_same_endpoint_uses_copy_source_version_id(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace(context_id="src", endpoint="https://same.example.test", account=SimpleNamespace())
+    target_ctx = SimpleNamespace(context_id="dst", endpoint="https://same.example.test", account=SimpleNamespace())
+    migration = SimpleNamespace(
+        mode="one_shot",
+        use_same_endpoint_copy=True,
+        auto_grant_source_read_for_copy=False,
+        updated_at=None,
+        last_heartbeat_at=None,
+    )
+    item = SimpleNamespace(
+        execution_plan_json=_version_aware_execution_plan(),
+        source_snapshot_json=json.dumps({"versioning": {"status": "Enabled"}}),
+        replication_state_json=None,
+        objects_copied=0,
+        objects_deleted=0,
+        updated_at=None,
+        pre_sync_done=False,
+        read_only_applied=False,
+    )
+    version_timelines = [
+        (
+            "doc.txt",
+            [
+                SimpleNamespace(
+                    key="doc.txt",
+                    version_id="v1",
+                    is_delete_marker=False,
+                    is_latest=True,
+                    last_modified=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+                ),
+            ],
+        )
+    ]
+
+    class _SourceClient:
+        def head_object(self, *, Bucket, Key, VersionId=None):
+            assert Bucket == "bucket-a"
+            assert Key == "doc.txt"
+            return {"ETag": '"etag-v1"', "StorageClass": "STANDARD", "ContentLength": 3}
+
+    class _TargetClient:
+        def __init__(self):
+            self.copy_requests: list[dict[str, object]] = []
+
+        def copy_object(self, **kwargs):
+            self.copy_requests.append(kwargs)
+            return {"VersionId": "target-v1"}
+
+    source_client = _SourceClient()
+    target_client = _TargetClient()
+
+    service._context_client = lambda ctx: source_client if ctx.context_id == "src" else target_client  # type: ignore[method-assign]
+    service._buckets = SimpleNamespace(set_versioning=lambda *_args, **_kwargs: None)  # type: ignore[assignment]
+    service._iter_bucket_version_timelines = lambda *_args, **_kwargs: iter(version_timelines)  # type: ignore[method-assign]
+    service._compare_versioned_timelines = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
+        source_count=1,
+        target_count=1,
+        matched_count=1,
+        different_count=0,
+        only_source_count=0,
+        only_target_count=0,
+        sample={"only_source_sample": [], "only_target_sample": [], "different_sample": []},
+    )
+    service._purge_target_bucket = lambda *_args, **_kwargs: (0, 0)  # type: ignore[method-assign]
+    service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+
+    copied, deleted, _diff = service._sync_bucket(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        allow_delete=True,
+        parallelism_max=4,
+        migration=migration,
+        item=item,
+        control_check=lambda: "run",
+    )
+
+    assert copied == 1
+    assert deleted == 0
+    assert target_client.copy_requests == [
+        {
+            "Bucket": "bucket-b",
+            "Key": "doc.txt",
+            "CopySource": {"Bucket": "bucket-a", "Key": "doc.txt", "VersionId": "v1"},
+            "MetadataDirective": "COPY",
+            "TaggingDirective": "COPY",
+            "StorageClass": "STANDARD",
+        }
+    ]
+
+
+def test_sync_bucket_version_aware_presync_stores_watermark_and_cutover_replays_only_delta(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace(context_id="src", endpoint="https://source.example.test", account=SimpleNamespace())
+    target_ctx = SimpleNamespace(context_id="dst", endpoint="https://target.example.test", account=SimpleNamespace())
+    migration = SimpleNamespace(
+        mode="pre_sync",
+        use_same_endpoint_copy=False,
+        auto_grant_source_read_for_copy=False,
+        updated_at=None,
+        last_heartbeat_at=None,
+    )
+    item = SimpleNamespace(
+        execution_plan_json=_version_aware_execution_plan(),
+        source_snapshot_json=json.dumps({"versioning": {"status": "Enabled"}}),
+        replication_state_json=None,
+        objects_copied=0,
+        objects_deleted=0,
+        updated_at=None,
+        pre_sync_done=False,
+        read_only_applied=False,
+    )
+
+    first_pass_timelines = [
+        (
+            "doc.txt",
+            [
+                SimpleNamespace(
+                    key="doc.txt",
+                    version_id="v1",
+                    is_delete_marker=False,
+                    is_latest=False,
+                    last_modified=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+                ),
+                SimpleNamespace(
+                    key="doc.txt",
+                    version_id="v2",
+                    is_delete_marker=False,
+                    is_latest=True,
+                    last_modified=datetime(2026, 1, 1, 11, 0, tzinfo=timezone.utc),
+                ),
+            ],
+        )
+    ]
+    second_pass_timelines = [
+        (
+            "doc.txt",
+            [
+                SimpleNamespace(
+                    key="doc.txt",
+                    version_id="v1",
+                    is_delete_marker=False,
+                    is_latest=False,
+                    last_modified=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+                ),
+                SimpleNamespace(
+                    key="doc.txt",
+                    version_id="v2",
+                    is_delete_marker=False,
+                    is_latest=False,
+                    last_modified=datetime(2026, 1, 1, 11, 0, tzinfo=timezone.utc),
+                ),
+                SimpleNamespace(
+                    key="doc.txt",
+                    version_id="v3",
+                    is_delete_marker=False,
+                    is_latest=True,
+                    last_modified=datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+                ),
+            ],
+        )
+    ]
+    source_payloads = {"v1": b"one", "v2": b"two", "v3": b"three"}
+
+    class _SourceClient:
+        def head_object(self, *, Bucket, Key, VersionId=None):
+            return {"ETag": f'"etag-{VersionId}"', "ContentLength": len(source_payloads[VersionId]), "Metadata": {}}
+
+        def get_object(self, *, Bucket, Key, VersionId=None):
+            return {"Body": io.BytesIO(source_payloads[VersionId])}
+
+        def get_object_tagging(self, *, Bucket, Key, VersionId=None):
+            return {"TagSet": []}
+
+    class _TargetClient:
+        def __init__(self):
+            self.upload_bodies: list[bytes] = []
+
+        def upload_fileobj(self, body, bucket_name, key, ExtraArgs=None):
+            self.upload_bodies.append(body.read())
+
+    source_client = _SourceClient()
+    target_client = _TargetClient()
+    set_versioning_calls: list[bool] = []
+    timeline_state = {"current": first_pass_timelines}
+
+    service._context_client = lambda ctx: source_client if ctx.context_id == "src" else target_client  # type: ignore[method-assign]
+    service._buckets = SimpleNamespace(set_versioning=lambda *_args, **kwargs: set_versioning_calls.append(bool(kwargs.get("enabled"))))  # type: ignore[assignment]
+    service._iter_bucket_version_timelines = lambda *_args, **_kwargs: iter(timeline_state["current"])  # type: ignore[method-assign]
+    service._compare_versioned_timelines = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
+        source_count=1,
+        target_count=1,
+        matched_count=1,
+        different_count=0,
+        only_source_count=0,
+        only_target_count=0,
+        sample={"only_source_sample": [], "only_target_sample": [], "different_sample": []},
+    )
+    service._purge_target_bucket = lambda *_args, **_kwargs: (0, 0)  # type: ignore[method-assign]
+    service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+
+    copied_pre, deleted_pre, _ = service._sync_bucket(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        allow_delete=False,
+        parallelism_max=4,
+        migration=migration,
+        item=item,
+        control_check=lambda: "run",
+    )
+
+    assert copied_pre == 2
+    watermark = json.loads(item.replication_state_json or "{}").get("pre_sync_watermark")
+    assert watermark is not None
+    item.pre_sync_done = True
+    item.read_only_applied = True
+    timeline_state["current"] = second_pass_timelines
+
+    copied_cutover, deleted_cutover, _ = service._sync_bucket(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        allow_delete=True,
+        parallelism_max=4,
+        migration=migration,
+        item=item,
+        control_check=lambda: "run",
+    )
+
+    assert deleted_pre == 0
+    assert copied_cutover == 1
+    assert deleted_cutover == 0
+    assert target_client.upload_bodies == [b"one", b"two", b"three"]
+    assert set_versioning_calls == [True, True]
+
+
+def test_finalize_target_versioning_state_suspends_target_for_version_aware_copy_settings(db_session):
+    service = BucketMigrationService(db_session)
+    migration = SimpleNamespace(copy_bucket_settings=True)
+    item = SimpleNamespace(
+        execution_plan_json=_version_aware_execution_plan(),
+        source_snapshot_json=json.dumps({"versioning": {"status": "Suspended"}}),
+        replication_state_json=None,
+    )
+    set_versioning_calls: list[bool] = []
+    service._buckets = SimpleNamespace(set_versioning=lambda *_args, **kwargs: set_versioning_calls.append(bool(kwargs.get("enabled"))))  # type: ignore[assignment]
+    service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+
+    service._finalize_target_versioning_state(SimpleNamespace(), "bucket-b", migration, item)
+
+    assert set_versioning_calls == [False]
+    replication_state = json.loads(item.replication_state_json or "{}")
+    assert replication_state.get("target_versioning_finalized") == "suspended"
 
 
 def test_restore_source_policy_replays_backup_policy_as_is(db_session):
@@ -2888,27 +3414,34 @@ def test_add_event_webhook_failure_does_not_break_migration_events(db_session):
     db_session.flush()
 
 
-def test_delete_migration_allows_final_statuses(db_session):
+def test_delete_migration_allows_final_statuses_and_draft(db_session):
     user = _create_user(db_session)
     source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
     target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
     db_session.commit()
 
     service = BucketMigrationService(db_session)
-    payload = BucketMigrationCreateRequest(
-        source_context_id=str(source.id),
-        target_context_id=str(target.id),
-        mode="one_shot",
-        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
-    )
-    migration = service.create_migration(payload, user)
-    migration.status = "completed"
-    db_session.commit()
+    statuses = ("draft", "completed")
+    for index, status in enumerate(statuses, start=1):
+        payload = BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            mode="one_shot",
+            buckets=[
+                BucketMigrationBucketMapping(
+                    source_bucket=f"bucket-a-{index}",
+                    target_bucket=f"bucket-a-dst-{index}",
+                )
+            ],
+        )
+        migration = service.create_migration(payload, user)
+        migration.status = status
+        db_session.commit()
 
-    service.delete_migration(migration.id)
+        service.delete_migration(migration.id)
 
-    deleted = db_session.query(BucketMigration).filter(BucketMigration.id == migration.id).first()
-    assert deleted is None
+        deleted = db_session.query(BucketMigration).filter(BucketMigration.id == migration.id).first()
+        assert deleted is None
 
 
 def test_delete_migration_rejects_non_final_status(db_session):
@@ -2925,12 +3458,14 @@ def test_delete_migration_rejects_non_final_status(db_session):
         buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
     )
     migration = service.create_migration(payload, user)
+    migration.status = "running"
+    db_session.commit()
 
     try:
         service.delete_migration(migration.id)
         assert False, "Expected delete_migration to be blocked for non-final status"
     except ValueError as exc:
-        assert "can only be deleted from a final status" in str(exc)
+        assert "can only be deleted from a final status or from draft" in str(exc)
 
 
 def test_sync_bucket_updates_object_counters_incrementally(db_session):

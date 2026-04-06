@@ -217,6 +217,7 @@ class BucketMigrationInspector:
         current_count = 0
         noncurrent_count = 0
         delete_marker_count = 0
+        sample_version: Optional[dict[str, Any]] = None
         current_sample: list[str] = []
         noncurrent_sample: list[str] = []
         delete_marker_sample: list[str] = []
@@ -249,8 +250,15 @@ class BucketMigrationInspector:
 
             for entry in page.get("Versions", []) or []:
                 key = entry.get("Key")
+                version_id = entry.get("VersionId")
                 if not isinstance(key, str) or not key:
                     continue
+                if sample_version is None and isinstance(version_id, str) and version_id:
+                    sample_version = {
+                        "key": key,
+                        "version_id": version_id,
+                        "is_latest": bool(entry.get("IsLatest")),
+                    }
                 is_latest = bool(entry.get("IsLatest"))
                 if is_latest:
                     current_count += 1
@@ -280,6 +288,7 @@ class BucketMigrationInspector:
             "delete_marker_count": delete_marker_count,
             "has_noncurrent_versions": noncurrent_count > 0,
             "has_delete_markers": delete_marker_count > 0,
+            "sample_version": sample_version,
             "current_version_sample": current_sample,
             "noncurrent_version_sample": noncurrent_sample,
             "delete_marker_sample": delete_marker_sample,
@@ -510,8 +519,8 @@ class BucketMigrationPrecheckPlanner:
 
     def _global_capabilities(self, *, same_endpoint: bool, same_endpoint_copy_requested: bool) -> dict[str, Any]:
         return {
-            "supported_strategies": ["current_only"],
-            "version_aware_available": False,
+            "supported_strategies": ["current_only", "version_aware"],
+            "version_aware_available": True,
             "same_endpoint": bool(same_endpoint),
             "same_endpoint_copy_requested": bool(same_endpoint_copy_requested),
             "supported_bucket_settings": list(_SUPPORTED_BUCKET_SETTINGS),
@@ -871,27 +880,50 @@ class BucketMigrationPrecheckPlanner:
                         or versioning.get("suspended")
                         or version_scan.get("has_noncurrent_versions")
                         or version_scan.get("has_delete_markers")
-                        or object_lock.get("enabled")
+                    )
+                    requires_object_lock_governance = bool(
+                        object_lock.get("enabled")
                         or object_lock.get("mode")
                         or object_lock.get("days") is not None
                         or object_lock.get("years") is not None
                     )
                     if requires_version_aware:
                         strategy = "version_aware"
+                    if requires_object_lock_governance:
+                        strategy = "version_aware"
                         add_check(
-                            code="version_aware_required",
+                            code="object_lock_governance_not_supported",
                             severity="error",
                             blocking=True,
                             scope="source_bucket",
                             message=(
-                                "Source bucket requires version-aware migration, but only current-only migration "
-                                "is implemented in this release."
+                                "Source bucket uses object-lock governance semantics that are outside the "
+                                "supported perimeter of version-aware migration."
                             ),
                             details={
                                 "versioning_status": versioning.get("status"),
                                 "has_noncurrent_versions": bool(version_scan.get("has_noncurrent_versions")),
                                 "has_delete_markers": bool(version_scan.get("has_delete_markers")),
                                 "object_lock_enabled": bool(object_lock.get("enabled")),
+                                "object_lock_mode": object_lock.get("mode"),
+                                "object_lock_days": object_lock.get("days"),
+                                "object_lock_years": object_lock.get("years"),
+                            },
+                        )
+                    elif requires_version_aware:
+                        add_check(
+                            code="version_aware_supported",
+                            severity="info",
+                            blocking=False,
+                            scope="source_bucket",
+                            message=(
+                                "Source bucket requires version-aware migration and will replicate object "
+                                "history and delete markers."
+                            ),
+                            details={
+                                "versioning_status": versioning.get("status"),
+                                "has_noncurrent_versions": bool(version_scan.get("has_noncurrent_versions")),
+                                "has_delete_markers": bool(version_scan.get("has_delete_markers")),
                             },
                         )
 
@@ -958,6 +990,32 @@ class BucketMigrationPrecheckPlanner:
                             details={"unsupported_settings": unsupported_settings},
                         )
 
+                    if strategy == "version_aware" and not requires_object_lock_governance:
+                        try:
+                            self._service._precheck_version_aware_source_access(
+                                source_ctx,
+                                item.source_bucket,
+                                source_profile,
+                            )
+                            add_check(
+                                code="version_aware_source_access_validated",
+                                severity="info",
+                                blocking=False,
+                                scope="source_bucket",
+                                message=(
+                                    "Version-aware source access is validated for explicit version reads "
+                                    "and version tags."
+                                ),
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            add_check(
+                                code="version_aware_source_access_failed",
+                                severity="error",
+                                blocking=True,
+                                scope="source_bucket",
+                                message=f"Version-aware source access precheck failed: {exc}",
+                            )
+
             same_endpoint_copy_safe = not same_endpoint_copy_enabled
             if same_endpoint_copy_enabled and target_exists is not True and source_access_ok:
                 try:
@@ -966,6 +1024,8 @@ class BucketMigrationPrecheckPlanner:
                         target_ctx,
                         item.source_bucket,
                         auto_grant=bool(migration.auto_grant_source_read_for_copy),
+                        strategy=strategy,
+                        source_profile=source_profile,
                     )
                     if probe == "source_empty":
                         same_endpoint_copy_safe = False
@@ -1051,28 +1111,34 @@ class BucketMigrationPrecheckPlanner:
 
             delete_source_safe = True
             if migration.delete_source:
-                if strategy not in {"current_only", "skip_existing"}:
+                if strategy == "version_aware" and any(
+                    bool((source_profile or {}).get("object_lock", {}).get(field))
+                    for field in ("enabled", "mode", "days", "years")
+                ):
                     delete_source_safe = False
                     add_check(
-                        code="delete_source_requires_version_aware",
+                        code="delete_source_object_lock_not_supported",
                         severity="error",
                         blocking=True,
                         scope="delete_source",
                         message=(
-                            "Source deletion is blocked because the source bucket requires "
-                            "version-aware migration semantics."
+                            "Source deletion is blocked because object-lock governance is not supported "
+                            "by the version-aware migration worker."
                         ),
                     )
                 else:
                     add_check(
-                        code="delete_source_current_only_supported",
+                        code="delete_source_supported",
                         severity="info",
                         blocking=False,
                         scope="delete_source",
-                        message="Source deletion is compatible with the current-only migration strategy.",
+                        message="Source deletion is compatible with the planned migration strategy.",
                     )
 
-            rollback_safe = strategy in {"current_only", "skip_existing"}
+            rollback_safe = strategy in {"current_only", "skip_existing", "version_aware"} and not any(
+                bool((source_profile or {}).get("object_lock", {}).get(field))
+                for field in ("enabled", "mode", "days", "years")
+            )
             if not rollback_safe:
                 add_check(
                     code="rollback_not_safe",

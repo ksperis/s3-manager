@@ -50,6 +50,13 @@ or use the helper script:
 python backend/tests_ceph_functional/run.py
 ```
 
+To run only the live bucket migration scenarios:
+
+```bash
+PYTHONPATH=backend \
+  pytest backend/tests_ceph_functional/test_bucket_migration_flow.py -m ceph_functional
+```
+
 A summary table is displayed at the end of the run along with any cleanup issues.
 All resources created during a test are tracked and deleted automatically, even when tests fail.
 Ceph-admin entity creation tests are executed only when RGW admin cleanup credentials are available.
@@ -60,6 +67,7 @@ Ceph-admin entity creation tests are executed only when RGW admin cleanup creden
 - **Bucket configuration**: validates Manager bucket round-trips for versioning, lifecycle, CORS, tags, policy and public access block, plus dedicated logging/website/quota/notifications/replication scenarios when the cluster supports them.
 - **IAM & policies**: provisions IAM users/keys, creates managed policies, attaches them to users, and exercises key/user deletion.
 - **Stats & traffic**: hits `/manager/stats/overview` and `/manager/stats/traffic` after generating activity, skipping gracefully when RGW usage logs are unavailable.
+- **Bucket migration**: exercises one-shot and pre-sync migrations for current-only and version-aware buckets, validates replicated object state through the backend API, and requires the migration worker to be enabled on the target backend.
 - **Ceph-admin endpoints & metrics**: validates endpoint discovery, access probes, info, cluster storage and traffic metrics routes.
 - **Ceph-admin accounts**: validates listing/search/detail/update/metrics against dedicated RGW test accounts.
 - **Ceph-admin users**: validates listing/search/detail/config/caps/quota/key lifecycle/metrics on dedicated RGW test users.

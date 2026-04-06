@@ -96,6 +96,12 @@ describe("ManagerMigrationWizardPage", () => {
     expect(screen.getByText("Summary")).toBeInTheDocument();
     expect(screen.getByText("Operations plan")).toBeInTheDocument();
     expect(screen.getByText("bucket-a -> mig-bucket-a")).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) =>
+        element?.textContent ===
+        "Precheck selects version_aware automatically for versioned buckets and replays versions plus delete markers."
+      )
+    ).toBeInTheDocument();
     expect(screen.getByText(/Use stream copy \(GetObject \+ upload\) for object replication\./)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create migration" }));
 

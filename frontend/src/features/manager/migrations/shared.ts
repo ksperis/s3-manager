@@ -124,6 +124,19 @@ export function stepLabel(step: string): string {
   return labels[step] ?? step;
 }
 
+export function strategyLabel(strategy: string): string {
+  if (strategy === "version_aware") {
+    return "version_aware (versions + delete markers)";
+  }
+  if (strategy === "current_only") {
+    return "current_only (current objects only)";
+  }
+  if (strategy === "skip_existing") {
+    return "skip_existing (target already exists)";
+  }
+  return strategy;
+}
+
 export function parseReviewItemMessages(value: unknown): ReviewItemMessage[] {
   if (!Array.isArray(value)) return [];
   const messages: ReviewItemMessage[] = [];
@@ -212,23 +225,36 @@ export function buildPlannedSteps(
   if (options.copyBucketSettings) {
     steps.push("Copy bucket settings.");
   }
-  if (options.useSameEndpointCopy) {
-    steps.push("Use same-endpoint x-amz-copy-source for object replication.");
+  if (item.strategy === "version_aware") {
+    if (options.useSameEndpointCopy) {
+      steps.push("Use same-endpoint x-amz-copy-source with explicit source VersionId values.");
+    } else {
+      steps.push("Use stream copy (GetObject version + upload) for version-aware object replication.");
+    }
+    steps.push("Replay object history oldest to newest and recreate delete markers on destination.");
   } else {
-    steps.push("Use stream copy (GetObject + upload) for object replication.");
+    if (options.useSameEndpointCopy) {
+      steps.push("Use same-endpoint x-amz-copy-source for object replication.");
+    } else {
+      steps.push("Use stream copy (GetObject + upload) for object replication.");
+    }
   }
   if (options.mode === "pre_sync") {
-    steps.push("Run pre-sync then wait for cutover.");
+    steps.push(item.strategy === "version_aware" ? "Run full history pre-sync then wait for cutover." : "Run pre-sync then wait for cutover.");
   }
   if (options.useSameEndpointCopy && options.autoGrantSourceReadForCopy) {
     steps.push("Temporarily grant source read access for same-endpoint x-amz-copy-source operations.");
   }
   steps.push("Apply source bucket protection policy.");
-  steps.push("Run sync/re-sync including deletion diff.");
-  steps.push("Run final md5 + size verification.");
+  steps.push(item.strategy === "version_aware" ? "Run version-aware sync/re-sync, including delete marker replay." : "Run sync/re-sync including deletion diff.");
+  steps.push(item.strategy === "version_aware" ? "Run final version-aware verification on timelines, metadata and tags." : "Run final md5 + size verification.");
   if (options.deleteSource) {
     if (options.strongIntegrityCheck) {
-      steps.push("Run optional strong integrity verification on size-only matches before deleting source.");
+      steps.push(
+        item.strategy === "version_aware"
+          ? "Run optional strong integrity verification on size-only version matches before deleting source."
+          : "Run optional strong integrity verification on size-only matches before deleting source."
+      );
     }
     steps.push("Delete source bucket only if final diff is clean.");
   }

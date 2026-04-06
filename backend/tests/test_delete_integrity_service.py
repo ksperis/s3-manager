@@ -6,6 +6,7 @@ from datetime import date
 from app.db import (
     ApiToken,
     AuditLog,
+    BucketMigration,
     BillingAssignment,
     BillingRateCard,
     BillingStorageDaily,
@@ -23,6 +24,7 @@ from app.db import (
 )
 from app.services.s3_accounts_service import S3AccountsService
 from app.services.users_service import UsersService
+from app.db.tag_definition import TagDefinition
 
 
 def _seed_endpoint(db_session) -> StorageEndpoint:
@@ -193,3 +195,51 @@ def test_unlink_account_cleans_links_and_nulls_references(db_session):
     assert usage is not None and usage.s3_account_id is None
     assert storage is not None and storage.s3_account_id is None
     assert assignment is not None and assignment.s3_account_id is None
+
+
+def test_delete_user_nulls_nullable_foreign_keys(db_session):
+    user = User(email="delete-fk-user@example.com", hashed_password="x", role=UserRole.UI_ADMIN.value)
+    db_session.add(user)
+    db_session.flush()
+
+    audit = AuditLog(
+        user_id=user.id,
+        user_email=user.email,
+        user_role=user.role,
+        scope="admin",
+        action="delete_user_test",
+    )
+    migration = BucketMigration(
+        created_by_user_id=user.id,
+        source_context_id="10",
+        target_context_id="20",
+        mode="one_shot",
+        copy_bucket_settings=False,
+        delete_source=False,
+        lock_target_writes=True,
+        use_same_endpoint_copy=False,
+        auto_grant_source_read_for_copy=False,
+        status="draft",
+        precheck_status="pending",
+        parallelism_max=1,
+        total_items=0,
+    )
+    tag_definition = TagDefinition(
+        domain_kind="private_connection_user",
+        owner_user_id=user.id,
+        label="Delete user label",
+        label_key="delete-user-label",
+        color_key="slate",
+    )
+    db_session.add_all([audit, migration, tag_definition])
+    db_session.commit()
+
+    UsersService(db_session).delete_user(user.id)
+
+    refreshed_audit = db_session.query(AuditLog).filter(AuditLog.id == audit.id).first()
+    refreshed_migration = db_session.query(BucketMigration).filter(BucketMigration.id == migration.id).first()
+    refreshed_definition = db_session.query(TagDefinition).filter(TagDefinition.id == tag_definition.id).first()
+
+    assert refreshed_audit is not None and refreshed_audit.user_id is None
+    assert refreshed_migration is not None and refreshed_migration.created_by_user_id is None
+    assert refreshed_definition is not None and refreshed_definition.owner_user_id is None
