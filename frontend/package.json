@@ -14,6 +14,8 @@
     "test:ci": "vitest run --reporter=default --reporter=junit --outputFile=../gl-test-reports/frontend-junit.xml",
     "test:watch": "vitest",
     "test:a11y": "vitest run --testNamePattern=a11y",
+    "test:e2e": "playwright test -c playwright.e2e.config.ts",
+    "test:e2e:ci": "CI=1 playwright test -c playwright.e2e.config.ts",
     "deadcode:check": "knip --config knip.json --include files",
     "docs:screenshots": "playwright test -c playwright.docs.config.ts",
     "docs:screenshots:check": "node ./scripts/docs-screenshots/check.mjs",

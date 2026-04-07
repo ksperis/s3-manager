@@ -21,6 +21,7 @@ GitLab pipelines publish JUnit XML test reports for:
 
 - `backend-tests`
 - `frontend-tests`
+- `frontend-browser-e2e`
 - `ceph-functional-tests` when that job is enabled by CI variables
 
 These reports feed the pipeline **Tests** tab and merge request **Test summary** panel.
@@ -30,6 +31,14 @@ Useful local commands:
 
 - backend: `cd backend && PYTHONPATH=. ./.venv/bin/pytest tests -q`
 - frontend: `cd frontend && npm test`
+- browser e2e: `docker run --rm -p 5000:5000 -e S3_IGNORE_SUBDOMAIN_BUCKETNAME=true ghcr.io/getmoto/motoserver:5.1.18` then `cd frontend && npm run test:e2e`
+
+Playwright browser E2E notes:
+
+- The suite targets `/browser` only and uses a local FastAPI runner plus a Moto S3 service.
+- If local port `5000` is already used, publish Moto on another port and override `E2E_S3_ENDPOINT`, for example `docker run --rm -p 5001:5000 ...` with `E2E_S3_ENDPOINT=http://localhost:5001`.
+- Outside CI, the Playwright config reuses an existing Vite or backend server if one is already listening on the expected ports. Otherwise it starts both automatically.
+- GitLab stores the JUnit report at `gl-test-reports/frontend-browser-e2e-junit.xml` and keeps the HTML report plus Playwright artifacts under `frontend/playwright-report/` and `frontend/test-results/`.
 
 ## Container publishing
 

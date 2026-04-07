@@ -7,6 +7,7 @@ TODO_local.md
 *.db
 *.db.save
 backend/app/data/
+backend/.browser-e2e-runtime/
 .pytest_cache/
 __pycache__/
 *.py[cod]
@@ -26,6 +27,10 @@ pytestdebug.log
 node_modules/
 dist/
 .vite/
+frontend/playwright-report/
+frontend/test-results/
+frontend/e2e/.auth/
+gl-test-reports/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
