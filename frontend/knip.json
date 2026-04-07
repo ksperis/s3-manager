@@ -2,6 +2,14 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "project": [
     "src/**/*.{ts,tsx}",
-    "scripts/**/*.{ts,mjs}"
-  ]
+    "e2e/**/*.{ts,tsx}",
+    "scripts/**/*.{ts,mjs}",
+    "playwright*.config.ts"
+  ],
+  "playwright": {
+    "config": [
+      "playwright.e2e.config.ts",
+      "playwright.docs.config.ts"
+    ]
+  }
 }

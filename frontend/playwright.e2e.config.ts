@@ -37,12 +37,12 @@ export default defineConfig({
   projects: [
     {
       name: "setup",
-      testMatch: /setup\/.*\.setup\.ts/,
+      testMatch: "setup/**/*.setup.ts",
     },
     {
       name: "chromium",
       dependencies: ["setup"],
-      testMatch: /browser\/.*\.spec\.ts/,
+      testMatch: "browser/**/*.spec.ts",
       use: {
         browserName: "chromium",
         storageState: storageStatePath,

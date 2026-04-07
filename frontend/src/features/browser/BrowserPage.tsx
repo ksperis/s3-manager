@@ -6981,15 +6981,15 @@ export default function BrowserPage({
     );
   };
 
-  const createOperationController = (operationId: string) => {
+  const createOperationController = useCallback((operationId: string) => {
     const controller = new AbortController();
     operationControllersRef.current.set(operationId, controller);
     return controller;
-  };
+  }, []);
 
-  const clearOperationController = (operationId: string) => {
+  const clearOperationController = useCallback((operationId: string) => {
     operationControllersRef.current.delete(operationId);
-  };
+  }, []);
 
   const abortOperationController = (operationId: string) => {
     const controller = operationControllersRef.current.get(operationId);
@@ -10061,7 +10061,6 @@ export default function BrowserPage({
     accountIdForApi,
     bucketName,
     cancelCopyDetails,
-    cancelDeleteDetails,
     clipboard,
     clipboardMatchesContext,
     clearOperationController,
@@ -10073,7 +10072,6 @@ export default function BrowserPage({
     formatOperationError,
     getSseCustomerKeyForScope,
     hasS3AccountContext,
-    isOperationAborted,
     listAllObjectsForPrefix,
     normalizedPrefix,
     refreshObjectsNow,
