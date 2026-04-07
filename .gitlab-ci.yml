@@ -246,12 +246,13 @@ frontend-browser-e2e:
   before_script:
     - mkdir -p gl-test-reports
     - |
-      if ! command -v python3 >/dev/null 2>&1 || ! python3 -m pip --version >/dev/null 2>&1; then
+      if ! command -v python3 >/dev/null 2>&1 || ! python3 -m venv --help >/dev/null 2>&1; then
         apt-get update
-        apt-get install -y python3 python3-pip
+        apt-get install -y python3 python3-venv
       fi
-    - python3 -m pip install --upgrade pip
-    - python3 -m pip install -r backend/requirements-test.txt
+    - python3 -m venv backend/.venv
+    - backend/.venv/bin/python -m pip install --upgrade pip
+    - backend/.venv/bin/python -m pip install -r backend/requirements-test.txt
   script:
     - cd frontend
     - npm ci
@@ -261,10 +262,7 @@ frontend-browser-e2e:
     - touch frontend/playwright-report/.keep frontend/test-results/.keep
     - |
       if [ ! -f gl-test-reports/frontend-browser-e2e-junit.xml ]; then
-        cat <<'EOF' > gl-test-reports/frontend-browser-e2e-junit.xml
-        <?xml version="1.0" encoding="UTF-8"?>
-        <testsuites />
-        EOF
+        printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<testsuites />' > gl-test-reports/frontend-browser-e2e-junit.xml
       fi
   artifacts:
     when: always
