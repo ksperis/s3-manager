@@ -245,7 +245,11 @@ frontend-browser-e2e:
     E2E_S3_SECRET_KEY: minio123
   before_script:
     - mkdir -p gl-test-reports
-    - if ! command -v python3 >/dev/null 2>&1; then apt-get update && apt-get install -y python3 python3-pip; fi
+    - |
+      if ! command -v python3 >/dev/null 2>&1 || ! python3 -m pip --version >/dev/null 2>&1; then
+        apt-get update
+        apt-get install -y python3 python3-pip
+      fi
     - python3 -m pip install --upgrade pip
     - python3 -m pip install -r backend/requirements-test.txt
   script:
