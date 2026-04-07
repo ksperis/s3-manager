@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  waitForElementToBeRemoved,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -223,20 +224,42 @@ async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
       ? getContextToolbar()
       : getActionsToolbar();
   await user.click(within(toolbar).getByRole("button", { name: "More" }));
-  return await screen.findByRole("menu", { name: "More" });
+  const menus = await screen.findAllByRole("menu", { name: "More" });
+  return menus[menus.length - 1] as HTMLElement;
+}
+
+async function openActionsMoreMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    within(getActionsToolbar()).getByRole("button", { name: "More" }),
+  );
+  const menus = await screen.findAllByRole("menu", { name: "More" });
+  return menus[menus.length - 1] as HTMLElement;
 }
 
 async function enableActionBar(user: ReturnType<typeof userEvent.setup>) {
   await findRowByLabel("a.txt");
+  if (screen.queryByRole("toolbar", { name: "Browser actions bar" })) {
+    return;
+  }
   const menu = await openContextMoreMenu(user);
-  await user.click(
-    within(menu).getByRole("menuitemcheckbox", { name: /Action bar/i }),
-  );
+  const actionBarToggle = within(menu).getByRole("menuitemcheckbox", {
+    name: /Action bar/i,
+  });
+  if (actionBarToggle.getAttribute("aria-checked") !== "true") {
+    await user.click(actionBarToggle);
+  } else {
+    await user.click(
+      within(getContextToolbar()).getByRole("button", { name: "More" }),
+    );
+  }
   await waitFor(() => {
     expect(
       screen.getByRole("toolbar", { name: "Browser actions bar" }),
     ).toBeInTheDocument();
   });
+  await waitForElementToBeRemoved(() =>
+    screen.queryByRole("menu", { name: "More" }),
+  ).catch(() => undefined);
 }
 
 async function copyOrCutItem(
@@ -293,8 +316,7 @@ async function copyOrCutSelection(
     await user.click(within(actionsToolbar).getByRole("button", { name: "Copy" }));
     return;
   }
-  await user.click(within(actionsToolbar).getByRole("button", { name: "More" }));
-  const menu = await screen.findByRole("menu", { name: "More" });
+  const menu = await openActionsMoreMenu(user);
   await user.click(within(menu).getByRole("menuitem", { name: "Cut" }));
 }
 
@@ -1601,10 +1623,7 @@ describe("BrowserPage interactions", () => {
       within(uploadMenu).getByRole("menuitem", { name: "Upload folder" }),
     ).toBeInTheDocument();
 
-    await user.click(
-      within(actionsToolbar).getByRole("button", { name: "More" }),
-    );
-    const menu = await screen.findByRole("menu", { name: "More" });
+    const menu = await openActionsMoreMenu(user);
 
     expect(
       within(menu).getByRole("menuitem", { name: "Copy URL" }),
@@ -2907,13 +2926,14 @@ describe("BrowserPage interactions", () => {
     await enableActionBar(user);
     await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
     await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
-    await user.click(
-      within(getActionsToolbar()).getByRole("button", { name: "More" }),
-    );
-    const menu = await screen.findByRole("menu", { name: "More" });
-    await user.click(
-      within(menu).getByRole("menuitem", { name: "Bulk attributes" }),
-    );
+    const menu = await openActionsMoreMenu(user);
+    const bulkAttributesAction = within(menu).getByRole("menuitem", {
+      name: "Bulk attributes",
+    });
+    await waitFor(() => {
+      expect(bulkAttributesAction).toBeEnabled();
+    });
+    await user.click(bulkAttributesAction);
 
     const modal = await screen.findByRole("dialog", { name: "Bulk attributes" });
     await user.click(
@@ -2999,13 +3019,14 @@ describe("BrowserPage interactions", () => {
     await enableActionBar(user);
     await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
     await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
-    await user.click(
-      within(getActionsToolbar()).getByRole("button", { name: "More" }),
-    );
-    const menu = await screen.findByRole("menu", { name: "More" });
-    await user.click(
-      within(menu).getByRole("menuitem", { name: "Restore to date" }),
-    );
+    const menu = await openActionsMoreMenu(user);
+    const restoreToDateAction = within(menu).getByRole("menuitem", {
+      name: "Restore to date",
+    });
+    await waitFor(() => {
+      expect(restoreToDateAction).toBeEnabled();
+    });
+    await user.click(restoreToDateAction);
 
     const modal = await screen.findByRole("dialog", { name: "Restore to date" });
     const dateInput = modal.querySelector(
