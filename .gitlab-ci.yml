@@ -252,11 +252,7 @@ frontend-browser-e2e:
       fi
       if ! python3 -m ensurepip --version >/dev/null 2>&1; then
         apt-get update
-        PYTHON_VENV_PACKAGE="$(python3 - <<'PY'
-import sys
-print(f"python{sys.version_info.major}.{sys.version_info.minor}-venv")
-PY
-)"
+        PYTHON_VENV_PACKAGE="python$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')-venv"
         apt-get install -y "$PYTHON_VENV_PACKAGE"
       fi
     - rm -rf backend/.venv
