@@ -20,6 +20,22 @@ class AuditService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    @staticmethod
+    def _resolve_account_reference(
+        account: Optional[S3Account],
+        account_id: Optional[int],
+        account_name: Optional[str],
+    ) -> tuple[Optional[int], Optional[str]]:
+        if account is None:
+            resolved_account_id = account_id if isinstance(account_id, int) and account_id > 0 else None
+            return resolved_account_id, account_name
+
+        resolved_account_name = account.name if account.name else account_name
+        raw_account_id = getattr(account, "id", None)
+        if isinstance(raw_account_id, int) and raw_account_id > 0:
+            return raw_account_id, resolved_account_name
+        return None, resolved_account_name
+
     def record_action(
         self,
         *,
@@ -40,8 +56,11 @@ class AuditService:
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
     ) -> None:
-        resolved_account_id = account.id if account else account_id
-        resolved_account_name = account.name if account else account_name
+        resolved_account_id, resolved_account_name = self._resolve_account_reference(
+            account,
+            account_id,
+            account_name,
+        )
         resolved_user_email = user.email if user else (user_email or "unknown")
         resolved_user_role = user.role if user else (user_role or "unknown")
 
