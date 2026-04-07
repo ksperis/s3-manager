@@ -59,6 +59,9 @@ def _build_app_settings_payload() -> str:
 
 def _prepare_environment(backend_root: Path) -> dict[str, str]:
     env = os.environ.copy()
+    for key in list(env):
+        if key.startswith("OIDC_PROVIDERS__"):
+            env.pop(key, None)
 
     runtime_dir = backend_root / ".browser-e2e-runtime"
     runtime_dir.mkdir(exist_ok=True)

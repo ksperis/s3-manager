@@ -245,6 +245,9 @@ frontend-browser-e2e:
     E2E_S3_SECRET_KEY: minio123
   before_script:
     - mkdir -p gl-test-reports
+    - rm -f backend/.env
+    - for var in $(env | cut -d= -f1 | grep '^OIDC_PROVIDERS__' || true); do unset "$var"; done
+    - export OIDC_PROVIDERS="{}"
     - |
       if ! command -v python3 >/dev/null 2>&1; then
         apt-get update
