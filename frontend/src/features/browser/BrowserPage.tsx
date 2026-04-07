@@ -1025,8 +1025,7 @@ export default function BrowserPage({
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const uploadQueueRef = useRef<UploadQueueItem[]>([]);
   const activeUploadsRef = useRef(0);
-  const uploadControllersRef = useRef(new Map<string, AbortController>());
-  const downloadControllersRef = useRef(new Map<string, AbortController>());
+  const operationControllersRef = useRef(new Map<string, AbortController>());
   const stsCredentialsRef = useRef<StsCredentials | null>(null);
   const stsRefreshRef = useRef<Promise<StsCredentials | null> | null>(null);
   const [showActiveOperations, setShowActiveOperations] = useState(false);
@@ -6772,6 +6771,14 @@ export default function BrowserPage({
     [loadObjects, loadTreeChildren],
   );
 
+  const refreshObjectsNow = useCallback(
+    async (prefixOverride: string) => {
+      await loadObjects({ prefixOverride, silent: true });
+      loadTreeChildren(prefixOverride, { expand: false });
+    },
+    [loadObjects, loadTreeChildren],
+  );
+
   const recordUploadedKey = (bucket: string, key: string) => {
     if (!bucket || !key) return;
     const next = pendingUploadedKeysByBucketRef.current;
@@ -6974,18 +6981,38 @@ export default function BrowserPage({
     );
   };
 
-  const cancelUploadOperation = (operationId: string) => {
-    const controller = uploadControllersRef.current.get(operationId);
+  const createOperationController = (operationId: string) => {
+    const controller = new AbortController();
+    operationControllersRef.current.set(operationId, controller);
+    return controller;
+  };
+
+  const clearOperationController = (operationId: string) => {
+    operationControllersRef.current.delete(operationId);
+  };
+
+  const abortOperationController = (operationId: string) => {
+    const controller = operationControllersRef.current.get(operationId);
     if (controller) {
       controller.abort();
     }
   };
 
+  const isOperationAborted = (
+    err: unknown,
+    controller?: AbortController | null,
+  ) => isAbortError(err) || Boolean(controller?.signal.aborted);
+
+  const cancelUploadOperation = (operationId: string) => {
+    abortOperationController(operationId);
+  };
+
   const cancelDownloadOperation = (operationId: string) => {
-    const controller = downloadControllersRef.current.get(operationId);
-    if (controller) {
-      controller.abort();
-    }
+    abortOperationController(operationId);
+  };
+
+  const cancelCopyOperation = (operationId: string) => {
+    abortOperationController(operationId);
   };
 
   const cancelDownloadDetails = (operationId: string) => {
@@ -7001,10 +7028,39 @@ export default function BrowserPage({
     });
   };
 
+  const cancelCopyDetails = useCallback((operationId: string) => {
+    setCopyDetails((prev) => {
+      const items = prev[operationId];
+      if (!items) return prev;
+      const nextItems = items.map((item) =>
+        item.status === "queued" || item.status === "copying"
+          ? { ...item, status: "cancelled", errorMessage: undefined }
+          : item,
+      );
+      return { ...prev, [operationId]: nextItems };
+    });
+  }, []);
+
+  const cancelDeleteDetails = useCallback((operationId: string) => {
+    setDeleteDetails((prev) => {
+      const items = prev[operationId];
+      if (!items) return prev;
+      const nextItems = items.map((item) =>
+        item.status === "queued" || item.status === "deleting"
+          ? { ...item, status: "cancelled", errorMessage: undefined }
+          : item,
+      );
+      return { ...prev, [operationId]: nextItems };
+    });
+  }, []);
+
   const cancelOperation = (operationId: string) => {
     cancelUploadOperation(operationId);
     cancelDownloadOperation(operationId);
+    cancelCopyOperation(operationId);
     cancelDownloadDetails(operationId);
+    cancelCopyDetails(operationId);
+    cancelDeleteDetails(operationId);
   };
 
   const cancelUploadGroup = (groupId: string) => {
@@ -7306,8 +7362,7 @@ export default function BrowserPage({
         sizeBytes: file.size,
       },
     );
-    const controller = new AbortController();
-    uploadControllersRef.current.set(operationId, controller);
+    const controller = createOperationController(operationId);
     try {
       if (!useProxyTransfers && file.size >= MULTIPART_THRESHOLD) {
         await uploadMultipart(
@@ -7359,7 +7414,7 @@ export default function BrowserPage({
         }
       }
     } finally {
-      uploadControllersRef.current.delete(operationId);
+      clearOperationController(operationId);
     }
   };
 
@@ -7947,6 +8002,7 @@ export default function BrowserPage({
       targetPrefix: string,
       targetBucket?: string,
       targetSelector?: S3AccountSelector,
+      signal?: AbortSignal,
     ) => {
       const bucket = targetBucket ?? bucketName;
       if (!bucket || !hasS3AccountContext) return [];
@@ -7958,11 +8014,12 @@ export default function BrowserPage({
           targetSelector ?? accountIdForApi,
           bucket,
           {
-          prefix: targetPrefix,
-          continuationToken: continuation,
-          maxKeys: 1000,
-          type: "file",
-          recursive: true,
+            prefix: targetPrefix,
+            continuationToken: continuation,
+            maxKeys: 1000,
+            type: "file",
+            recursive: true,
+            signal,
           },
         );
         collected.push(...data.objects);
@@ -8099,8 +8156,9 @@ export default function BrowserPage({
     keys: string[],
     onProgress?: (deleted: number, total: number) => void,
     detailOperationId?: string,
+    signal?: AbortSignal,
   ) => {
-    if (!bucketName || !hasS3AccountContext || keys.length === 0) return;
+    if (!bucketName || !hasS3AccountContext || keys.length === 0) return 0;
     const uniqueKeys = Array.from(new Set(keys));
     const total = uniqueKeys.length;
     const chunks = chunkItems(uniqueKeys, 1000);
@@ -8113,6 +8171,10 @@ export default function BrowserPage({
     );
     const workers = Array.from({ length: workerCount }, async () => {
       while (queue.length > 0 && !hasError) {
+        if (signal?.aborted) {
+          hasError = new DOMException("Aborted", "AbortError");
+          return;
+        }
         const chunk = queue.shift();
         if (!chunk) return;
         try {
@@ -8123,13 +8185,28 @@ export default function BrowserPage({
             accountIdForApi,
             bucketName,
             chunk.map((key) => ({ key })),
+            signal,
           );
+          if (signal?.aborted) {
+            if (detailOperationId) {
+              updateDeleteDetailsStatus(detailOperationId, chunk, "cancelled");
+            }
+            hasError = new DOMException("Aborted", "AbortError");
+            return;
+          }
           if (detailOperationId) {
             updateDeleteDetailsStatus(detailOperationId, chunk, "done");
           }
           deletedCount += chunk.length;
           onProgress?.(deletedCount, total);
         } catch (err) {
+          if (isAbortError(err) || signal?.aborted) {
+            if (detailOperationId) {
+              updateDeleteDetailsStatus(detailOperationId, chunk, "cancelled");
+            }
+            hasError = err;
+            return;
+          }
           if (detailOperationId) {
             updateDeleteDetailsStatus(
               detailOperationId,
@@ -8146,9 +8223,12 @@ export default function BrowserPage({
     if (hasError) {
       throw hasError;
     }
+    return deletedCount;
   };
 
-  const deleteFolderRecursive = async (folderItem: BrowserItem) => {
+  const deleteFolderRecursive = async (
+    folderItem: BrowserItem,
+  ): Promise<OperationCompletionStatus | undefined> => {
     if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder")
       return;
     setShowOperationsModal(true);
@@ -8157,19 +8237,28 @@ export default function BrowserPage({
       "deleting",
       "Deleting folder",
       `${bucketName}/${folderPrefix}`,
-      { kind: "delete" },
+      { kind: "delete", cancelable: true },
       0,
     );
+    const controller = createOperationController(operationId);
     let completionStatus: OperationCompletionStatus = "done";
     let completionError: string | undefined;
+    let deletedCount = 0;
+    let total = 0;
     try {
-      const objects = await listAllObjectsForPrefix(folderPrefix);
+      const objects = await listAllObjectsForPrefix(
+        folderPrefix,
+        undefined,
+        undefined,
+        controller.signal,
+      );
       const keys = Array.from(
         new Set([...objects.map((obj) => obj.key), folderPrefix]),
       );
+      total = keys.length;
       if (keys.length === 0) {
         setStatusMessage("Folder is empty.");
-        return;
+        return completionStatus;
       }
       const detailItems = objects.map((obj) => {
         const relativeKey = obj.key.startsWith(folderPrefix)
@@ -8193,7 +8282,7 @@ export default function BrowserPage({
       if (detailItems.length > 0) {
         setDeleteDetails((prev) => ({ ...prev, [operationId]: detailItems }));
       }
-      await deleteObjectsInBatches(
+      deletedCount = await deleteObjectsInBatches(
         keys,
         (deleted, total) => {
           const progress =
@@ -8205,19 +8294,31 @@ export default function BrowserPage({
           );
         },
         detailItems.length > 0 ? operationId : undefined,
+        controller.signal,
       );
       setStatusMessage(`Deleted folder ${folderItem.name}`);
     } catch (err) {
-      completionStatus = "failed";
-      completionError = formatOperationError(
-        err,
-        "Unable to delete folder.",
-        "Unable to delete folder.",
-      );
-      setStatusMessage(completionError);
+      if (isOperationAborted(err, controller)) {
+        completionStatus = "cancelled";
+        cancelDeleteDetails(operationId);
+        setStatusMessage(
+          `Delete cancelled after ${deletedCount} of ${total} item(s).`,
+        );
+        await refreshObjectsNow(prefix);
+      } else {
+        completionStatus = "failed";
+        completionError = formatOperationError(
+          err,
+          "Unable to delete folder.",
+          "Unable to delete folder.",
+        );
+        setStatusMessage(completionError);
+      }
     } finally {
+      clearOperationController(operationId);
       completeOperation(operationId, completionStatus, completionError);
     }
+    return completionStatus;
   };
 
   const updateDownloadDetail = (
@@ -8288,8 +8389,7 @@ export default function BrowserPage({
       `${bucketName}/${folderPrefix}`,
       { kind: "download", cancelable: true },
     );
-    const controller = new AbortController();
-    downloadControllersRef.current.set(operationId, controller);
+    const controller = createOperationController(operationId);
     let completionStatus: OperationCompletionStatus = "done";
     let completionError: string | undefined;
     try {
@@ -8600,7 +8700,7 @@ export default function BrowserPage({
         setStatusMessage(completionError);
       }
     } finally {
-      downloadControllersRef.current.delete(operationId);
+      clearOperationController(operationId);
       completeOperation(operationId, completionStatus, completionError);
     }
   };
@@ -8621,8 +8721,7 @@ export default function BrowserPage({
       currentPath || bucketName,
       { kind: "download", cancelable: true },
     );
-    const controller = new AbortController();
-    downloadControllersRef.current.set(operationId, controller);
+    const controller = createOperationController(operationId);
     let completionStatus: OperationCompletionStatus = "done";
     const downloadTargets = files.map((item) => ({
       item,
@@ -8742,7 +8841,7 @@ export default function BrowserPage({
         setStatusMessage(completionError);
       }
     } finally {
-      downloadControllersRef.current.delete(operationId);
+      clearOperationController(operationId);
       completeOperation(operationId, completionStatus, completionError);
     }
   };
@@ -8875,6 +8974,7 @@ export default function BrowserPage({
       setShowOperationsModal(true);
     }
     try {
+      let deleteCancelled = false;
       if (fileTargets.length > 0) {
         const targetPath =
           fileTargets.length === 1
@@ -8889,11 +8989,19 @@ export default function BrowserPage({
           "deleting",
           operationLabel,
           targetPath,
-          { kind: operationKind },
+          {
+            kind: operationKind,
+            cancelable: fileTargets.length > 1,
+          },
           0,
         );
+        const controller =
+          fileTargets.length > 1
+            ? createOperationController(operationId)
+            : null;
         let completionStatus: OperationCompletionStatus = "done";
         let completionError: string | undefined;
+        let deletedCount = 0;
         try {
           if (fileTargets.length > 1) {
             setDeleteDetails((prev) => ({
@@ -8906,7 +9014,7 @@ export default function BrowserPage({
               })),
             }));
           }
-          await deleteObjectsInBatches(
+          deletedCount = await deleteObjectsInBatches(
             fileTargets.map((item) => item.key),
             (deleted, total) => {
               const progress =
@@ -8920,22 +9028,42 @@ export default function BrowserPage({
               );
             },
             fileTargets.length > 1 ? operationId : undefined,
+            controller?.signal,
           );
           setStatusMessage(`Deleted ${fileTargets.length} object(s)`);
         } catch (err) {
-          completionStatus = "failed";
-          completionError = formatOperationError(
-            err,
-            "Unable to delete selected objects.",
-            "Unable to delete selected objects.",
-          );
-          setStatusMessage(completionError);
+          if (isOperationAborted(err, controller)) {
+            completionStatus = "cancelled";
+            cancelDeleteDetails(operationId);
+            setStatusMessage(
+              `Delete cancelled after ${deletedCount} of ${fileTargets.length} item(s).`,
+            );
+            await refreshObjectsNow(prefix);
+            deleteCancelled = true;
+          } else {
+            completionStatus = "failed";
+            completionError = formatOperationError(
+              err,
+              "Unable to delete selected objects.",
+              "Unable to delete selected objects.",
+            );
+            setStatusMessage(completionError);
+          }
         } finally {
+          if (controller) {
+            clearOperationController(operationId);
+          }
           completeOperation(operationId, completionStatus, completionError);
         }
       }
+      if (deleteCancelled) {
+        return;
+      }
       for (const folder of folderTargets) {
-        await deleteFolderRecursive(folder);
+        const folderStatus = await deleteFolderRecursive(folder);
+        if (folderStatus === "cancelled") {
+          return;
+        }
       }
       const processedTargets = [...fileTargets, ...folderTargets];
       setSelectedIds((prev) =>
@@ -9016,6 +9144,8 @@ export default function BrowserPage({
     setBulkAttributesLoading(true);
     setBulkAttributesError(null);
     setBulkAttributesSummary(null);
+    let operationId: string | null = null;
+    let controller: AbortController | null = null;
     try {
       const keys = await resolveBulkAttributeKeys(bulkActionItems);
       if (keys.length === 0) {
@@ -9025,16 +9155,19 @@ export default function BrowserPage({
       if (keys.length > 1) {
         setShowOperationsModal(true);
       }
-      const operationId = startOperation(
+      operationId = startOperation(
         "copying",
         "Updating attributes",
         currentPath || bucketName,
-        { kind: "other" },
+        { kind: "other", cancelable: true },
         0,
       );
+      controller = createOperationController(operationId);
       const total = keys.length;
       let completed = 0;
+      let succeeded = 0;
       let failures = 0;
+      let cancelled = false;
 
       const updateProgress = () => {
         const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
@@ -9079,33 +9212,58 @@ export default function BrowserPage({
                 : undefined,
             storage_class: shouldApplyStorage ? bulkStorageClass : undefined,
           };
-          await updateObjectMetadata(accountIdForApi, bucketName, payload);
+          await updateObjectMetadata(
+            accountIdForApi,
+            bucketName,
+            payload,
+            controller?.signal,
+          );
         }
         if (shouldApplyTags) {
-          await updateObjectTags(accountIdForApi, bucketName, {
-            key,
-            tags: tagsPairs,
-          });
+          await updateObjectTags(
+            accountIdForApi,
+            bucketName,
+            {
+              key,
+              tags: tagsPairs,
+            },
+            controller?.signal,
+          );
         }
         if (shouldApplyAcl) {
-          await updateObjectAcl(accountIdForApi, bucketName, {
-            key,
-            acl: bulkAclValue,
-          });
+          await updateObjectAcl(
+            accountIdForApi,
+            bucketName,
+            {
+              key,
+              acl: bulkAclValue,
+            },
+            controller?.signal,
+          );
         }
         if (shouldApplyLegalHold) {
-          await updateObjectLegalHold(accountIdForApi, bucketName, {
-            key,
-            status: bulkLegalHoldStatus,
-          });
+          await updateObjectLegalHold(
+            accountIdForApi,
+            bucketName,
+            {
+              key,
+              status: bulkLegalHoldStatus,
+            },
+            controller?.signal,
+          );
         }
         if (shouldApplyRetention) {
-          await updateObjectRetention(accountIdForApi, bucketName, {
-            key,
-            mode: bulkRetentionMode,
-            retain_until: retentionIso,
-            bypass_governance: bulkRetentionBypass,
-          });
+          await updateObjectRetention(
+            accountIdForApi,
+            bucketName,
+            {
+              key,
+              mode: bulkRetentionMode,
+              retain_until: retentionIso,
+              bypass_governance: bulkRetentionBypass,
+            },
+            controller?.signal,
+          );
         }
       };
 
@@ -9115,12 +9273,21 @@ export default function BrowserPage({
         Math.min(otherOperationsParallelismRef.current, queue.length),
       );
       const workers = Array.from({ length: workerCount }, async () => {
-        while (queue.length > 0) {
+        while (queue.length > 0 && !cancelled) {
+          if (controller?.signal.aborted) {
+            cancelled = true;
+            return;
+          }
           const key = queue.shift();
           if (!key) return;
           try {
             await applyForKey(key);
+            succeeded += 1;
           } catch {
+            if (controller?.signal.aborted) {
+              cancelled = true;
+              return;
+            }
             failures += 1;
           } finally {
             completed += 1;
@@ -9129,6 +9296,14 @@ export default function BrowserPage({
         }
       });
       await Promise.all(workers);
+      if (cancelled || controller?.signal.aborted) {
+        const summary = `Update cancelled after ${succeeded} of ${total} item(s).`;
+        completeOperation(operationId, "cancelled");
+        setBulkAttributesSummary(summary);
+        setStatusMessage(summary);
+        await refreshObjectsNow(prefix);
+        return;
+      }
       const completionError =
         failures > 0 ? "Some objects failed to update attributes." : undefined;
       completeOperation(
@@ -9144,6 +9319,9 @@ export default function BrowserPage({
     } catch {
       setBulkAttributesError("Unable to update attributes.");
     } finally {
+      if (operationId) {
+        clearOperationController(operationId);
+      }
       setBulkAttributesLoading(false);
     }
   };
@@ -9170,6 +9348,8 @@ export default function BrowserPage({
     setBulkRestoreError(null);
     setBulkRestoreSummary(null);
     setBulkRestorePreview(null);
+    let operationId: string | null = null;
+    let controller: AbortController | null = null;
     try {
       const buildRestorePlan = async () => {
         const fileItems = bulkActionItems.filter(
@@ -9332,16 +9512,20 @@ export default function BrowserPage({
       if (total > 1) {
         setShowOperationsModal(true);
       }
-      const operationId = startOperation(
+      operationId = startOperation(
         "copying",
         "Restoring snapshot",
         currentPath || bucketName,
-        { kind: "other" },
+        { kind: "other", cancelable: true },
         0,
       );
+      controller = createOperationController(operationId);
       let completed = 0;
+      let restoredCount = 0;
+      let deletedCount = 0;
       let restoreFailures = 0;
       let deleteFailures = 0;
+      let cancelled = false;
 
       const updateProgress = (count: number) => {
         const percent = total > 0 ? Math.round((count / total) * 100) : 100;
@@ -9359,7 +9543,11 @@ export default function BrowserPage({
           Math.min(otherOperationsParallelismRef.current, queue.length),
         );
         const workers = Array.from({ length: workerCount }, async () => {
-          while (queue.length > 0) {
+          while (queue.length > 0 && !cancelled) {
+            if (controller?.signal.aborted) {
+              cancelled = true;
+              return;
+            }
             const item = queue.shift();
             if (!item) return;
             try {
@@ -9369,8 +9557,13 @@ export default function BrowserPage({
                 destination_key: item.key,
                 replace_metadata: false,
                 move: false,
-              });
+              }, controller?.signal);
+              restoredCount += 1;
             } catch {
+              if (controller?.signal.aborted) {
+                cancelled = true;
+                return;
+              }
               restoreFailures += 1;
             } finally {
               completed += 1;
@@ -9381,14 +9574,27 @@ export default function BrowserPage({
         await Promise.all(workers);
       }
 
-      if (deleteList.length > 0) {
+      if (!cancelled && deleteList.length > 0) {
         try {
-          await deleteObjectsInBatches(deleteList, (deleted) => {
+          deletedCount = await deleteObjectsInBatches(deleteList, (deleted) => {
             updateProgress(completed + deleted);
-          });
-        } catch {
-          deleteFailures = deleteList.length;
+          }, undefined, controller?.signal);
+        } catch (err) {
+          if (isOperationAborted(err, controller)) {
+            cancelled = true;
+          } else {
+            deleteFailures = deleteList.length;
+          }
         }
+      }
+
+      if (cancelled || controller?.signal.aborted) {
+        const summary = `Restore cancelled after ${restoredCount + deletedCount} of ${total} item(s).`;
+        completeOperation(operationId, "cancelled");
+        setBulkRestoreSummary(summary);
+        setStatusMessage(summary);
+        await refreshObjectsNow(prefix);
+        return;
       }
 
       const failures = restoreFailures + deleteFailures;
@@ -9406,6 +9612,9 @@ export default function BrowserPage({
     } catch {
       setBulkRestoreError("Unable to restore objects.");
     } finally {
+      if (operationId) {
+        clearOperationController(operationId);
+      }
       setBulkRestoreLoading(false);
     }
   };
@@ -9443,27 +9652,41 @@ export default function BrowserPage({
       "deleting",
       "Cleaning old versions",
       currentPath || bucketName,
-      { kind: "other" },
+      { kind: "other", cancelable: true },
       0,
     );
+    const controller = createOperationController(operationId);
     let cleanupCompletionStatus: OperationCompletionStatus = "done";
     let cleanupCompletionError: string | undefined;
     try {
-      const result = await cleanupObjectVersions(accountIdForApi, bucketName, {
-        prefix: normalizedPrefix,
-        keep_last_n: keepLastValue,
-        older_than_days: olderThanValue,
-        delete_orphan_markers: cleanupDeleteOrphanMarkers,
-      });
+      const result = await cleanupObjectVersions(
+        accountIdForApi,
+        bucketName,
+        {
+          prefix: normalizedPrefix,
+          keep_last_n: keepLastValue,
+          older_than_days: olderThanValue,
+          delete_orphan_markers: cleanupDeleteOrphanMarkers,
+        },
+        controller.signal,
+      );
       const summary = `Removed ${result.deleted_versions} version(s) and ${result.deleted_delete_markers} delete marker(s).`;
       setCleanupSummary(summary);
       setStatusMessage(summary);
       requestObjectsRefresh(prefix);
-    } catch {
-      cleanupCompletionStatus = "failed";
-      cleanupCompletionError = "Unable to clean old versions for this prefix.";
-      setCleanupError("Unable to clean old versions for this prefix.");
+    } catch (err) {
+      if (isOperationAborted(err, controller)) {
+        cleanupCompletionStatus = "cancelled";
+        setCleanupSummary("Cleanup cancelled.");
+        setStatusMessage("Cleanup cancelled.");
+        await refreshObjectsNow(prefix);
+      } else {
+        cleanupCompletionStatus = "failed";
+        cleanupCompletionError = "Unable to clean old versions for this prefix.";
+        setCleanupError("Unable to clean old versions for this prefix.");
+      }
     } finally {
+      clearOperationController(operationId);
       completeOperation(
         operationId,
         cleanupCompletionStatus,
@@ -9643,15 +9866,18 @@ export default function BrowserPage({
       destinationPrefix
         ? `${destinationBucket}/${destinationPrefix}`
         : destinationBucket,
-      { kind: "copy" },
+      { kind: "copy", cancelable: true },
       0,
     );
+    const controller = createOperationController(operationId);
     if (copyDetailItems.length > 0) {
       setCopyDetails((prev) => ({ ...prev, [operationId]: copyDetailItems }));
     }
     const total = copyTasks.length;
     let completed = 0;
+    let succeeded = 0;
     let failures = 0;
+    let cancelled = false;
     const updateProgress = () => {
       const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
       setOperations((prev) =>
@@ -9685,18 +9911,27 @@ export default function BrowserPage({
         Math.min(otherOperationsParallelismRef.current, queue.length),
       );
       const workers = Array.from({ length: workerCount }, async () => {
-        while (queue.length > 0) {
+        while (queue.length > 0 && !cancelled) {
+          if (controller.signal.aborted) {
+            cancelled = true;
+            return;
+          }
           const task = queue.shift();
           if (!task) return;
           try {
             updateCopyDetailStatus(operationId, task.detailId, "copying");
             if (useServerSideCopy) {
-              await copyObject(accountIdForApi, destinationBucket, {
-                source_bucket: task.sourceBucket,
-                source_key: task.sourceKey,
-                destination_key: task.destinationKey,
-                move: isMove,
-              });
+              await copyObject(
+                accountIdForApi,
+                destinationBucket,
+                {
+                  source_bucket: task.sourceBucket,
+                  source_key: task.sourceKey,
+                  destination_key: task.destinationKey,
+                  move: isMove,
+                },
+                controller.signal,
+              );
             } else {
               const sourceSseKeyBase64 = getSseCustomerKeyForScope(
                 task.sourceSelector,
@@ -9712,6 +9947,7 @@ export default function BrowserPage({
                 task.sourceKey,
                 null,
                 sourceSseKeyBase64,
+                controller.signal,
               );
               await transferClipboardObjectBetweenContexts({
                 source: {
@@ -9729,6 +9965,7 @@ export default function BrowserPage({
                 sizeBytes: sourceMeta.size,
                 contentType: sourceMeta.content_type ?? undefined,
                 move: isMove,
+                signal: controller.signal,
                 resolveMode: resolveTransferModeCached,
                 downloadBlob: downloadObjectBlobForTransfer,
                 downloadStream: downloadObjectStreamForTransfer,
@@ -9746,6 +9983,7 @@ export default function BrowserPage({
                     key,
                     null,
                     sseCustomerKeyBase64,
+                    controller.signal,
                   );
                   return { sizeBytes: metadata.size };
                 },
@@ -9753,7 +9991,14 @@ export default function BrowserPage({
               });
             }
             updateCopyDetailStatus(operationId, task.detailId, "done");
+            succeeded += 1;
           } catch (err) {
+            if (isAbortError(err) || controller.signal.aborted) {
+              cancelled = true;
+              controller.abort();
+              updateCopyDetailStatus(operationId, task.detailId, "cancelled");
+              return;
+            }
             updateCopyDetailStatus(
               operationId,
               task.detailId,
@@ -9769,6 +10014,16 @@ export default function BrowserPage({
       });
       await Promise.all(workers);
 
+      if (cancelled || controller.signal.aborted) {
+        cancelCopyDetails(operationId);
+        completeOperation(operationId, "cancelled");
+        setStatusMessage(
+          `${isMove ? "Move" : "Copy"} cancelled after ${succeeded} of ${total} item(s).`,
+        );
+        await refreshObjectsNow(destinationPrefix);
+        return;
+      }
+
       const completionError =
         failures > 0 ? "Some items failed to copy or move." : undefined;
       completeOperation(
@@ -9778,11 +10033,20 @@ export default function BrowserPage({
       );
       const summary = `${isMove ? "Moved" : "Copied"} ${total - failures} of ${total} item(s).`;
       setStatusMessage(summary);
-      requestObjectsRefresh(prefix);
+      await refreshObjectsNow(destinationPrefix);
       if (isMove && failures === 0) {
         setClipboard(null);
       }
     } catch (err) {
+      if (isAbortError(err) || controller.signal.aborted) {
+        cancelCopyDetails(operationId);
+        completeOperation(operationId, "cancelled");
+        setStatusMessage(
+          `${isMove ? "Move" : "Copy"} cancelled after ${succeeded} of ${total} item(s).`,
+        );
+        await refreshObjectsNow(destinationPrefix);
+        return;
+      }
       const completionError = formatOperationError(
         err,
         "Unable to paste items.",
@@ -9790,23 +10054,29 @@ export default function BrowserPage({
       );
       completeOperation(operationId, "failed", completionError);
       setStatusMessage(completionError);
+    } finally {
+      clearOperationController(operationId);
     }
   }, [
     accountIdForApi,
     bucketName,
+    cancelCopyDetails,
+    cancelDeleteDetails,
     clipboard,
     clipboardMatchesContext,
+    clearOperationController,
     completeOperation,
+    createOperationController,
     deleteObjectForTransfer,
     downloadObjectBlobForTransfer,
     downloadObjectStreamForTransfer,
     formatOperationError,
     getSseCustomerKeyForScope,
     hasS3AccountContext,
+    isOperationAborted,
     listAllObjectsForPrefix,
     normalizedPrefix,
-    prefix,
-    requestObjectsRefresh,
+    refreshObjectsNow,
     resolveClipboardTransferMode,
     normalizeSelectorId,
     startOperation,
@@ -9994,29 +10264,44 @@ export default function BrowserPage({
       "copying",
       "Restoring version",
       `${bucketName}/${item.key}`,
+      { cancelable: true },
     );
+    const controller = createOperationController(operationId);
     let completionStatus: OperationCompletionStatus = "done";
     let completionError: string | undefined;
     try {
-      await copyObject(accountIdForApi, bucketName, {
-        source_key: item.key,
-        source_version_id: item.version_id,
-        destination_key: item.key,
-        replace_metadata: false,
-        move: false,
-      });
+      await copyObject(
+        accountIdForApi,
+        bucketName,
+        {
+          source_key: item.key,
+          source_version_id: item.version_id,
+          destination_key: item.key,
+          replace_metadata: false,
+          move: false,
+        },
+        controller.signal,
+      );
       setStatusMessage(`Restored version ${item.version_id}`);
       await loadObjects({ prefixOverride: prefix });
       await refreshVersionsForKey(item.key);
     } catch (err) {
-      completionStatus = "failed";
-      completionError = formatOperationError(
-        err,
-        "Unable to restore version.",
-        "Unable to restore version.",
-      );
-      setStatusMessage(completionError);
+      if (isOperationAborted(err, controller)) {
+        completionStatus = "cancelled";
+        setStatusMessage("Restore version cancelled.");
+        await loadObjects({ prefixOverride: prefix });
+        await refreshVersionsForKey(item.key);
+      } else {
+        completionStatus = "failed";
+        completionError = formatOperationError(
+          err,
+          "Unable to restore version.",
+          "Unable to restore version.",
+        );
+        setStatusMessage(completionError);
+      }
     } finally {
+      clearOperationController(operationId);
       completeOperation(operationId, completionStatus, completionError);
     }
   };
@@ -10051,31 +10336,48 @@ export default function BrowserPage({
       "deleting",
       operationLabel,
       `${bucketName}/${item.key}`,
+      { cancelable: true },
     );
+    const controller = createOperationController(operationId);
     let completionStatus: OperationCompletionStatus = "done";
     let completionError: string | undefined;
     try {
-      await deleteObjects(accountIdForApi, bucketName, [
-        { key: item.key, version_id: item.version_id },
-      ]);
+      await deleteObjects(
+        accountIdForApi,
+        bucketName,
+        [{ key: item.key, version_id: item.version_id }],
+        controller.signal,
+      );
       setStatusMessage(
         item.is_delete_marker ? "Delete marker removed." : "Version deleted.",
       );
       await loadObjects({ prefixOverride: prefix });
       await refreshVersionsForKey(item.key);
     } catch (err) {
-      completionStatus = "failed";
-      completionError = formatOperationError(
-        err,
-        item.is_delete_marker
-          ? "Unable to delete marker."
-          : "Unable to delete version.",
-        item.is_delete_marker
-          ? "Unable to delete marker."
-          : "Unable to delete version.",
-      );
-      setWarningMessage(completionError);
+      if (isOperationAborted(err, controller)) {
+        completionStatus = "cancelled";
+        setStatusMessage(
+          item.is_delete_marker
+            ? "Delete marker removal cancelled."
+            : "Delete version cancelled.",
+        );
+        await loadObjects({ prefixOverride: prefix });
+        await refreshVersionsForKey(item.key);
+      } else {
+        completionStatus = "failed";
+        completionError = formatOperationError(
+          err,
+          item.is_delete_marker
+            ? "Unable to delete marker."
+            : "Unable to delete version.",
+          item.is_delete_marker
+            ? "Unable to delete marker."
+            : "Unable to delete version.",
+        );
+        setWarningMessage(completionError);
+      }
     } finally {
+      clearOperationController(operationId);
       completeOperation(operationId, completionStatus, completionError);
     }
   };
@@ -10356,10 +10658,14 @@ export default function BrowserPage({
             acc[item.status] += 1;
             return acc;
           },
-          { total: 0, queued: 0, deleting: 0, done: 0, failed: 0 } as Record<
-            DeleteDetailStatus | "total",
-            number
-          >,
+          {
+            total: 0,
+            queued: 0,
+            deleting: 0,
+            done: 0,
+            failed: 0,
+            cancelled: 0,
+          } as Record<DeleteDetailStatus | "total", number>,
         );
         return { op, items, counts };
       });
@@ -10375,7 +10681,14 @@ export default function BrowserPage({
             acc[item.status] += 1;
             return acc;
           },
-          { total: 0, queued: 0, copying: 0, done: 0, failed: 0 } as Record<
+          {
+            total: 0,
+            queued: 0,
+            copying: 0,
+            done: 0,
+            failed: 0,
+            cancelled: 0,
+          } as Record<
             CopyDetailStatus | "total",
             number
           >,
@@ -10513,7 +10826,7 @@ export default function BrowserPage({
     () =>
       deleteGroups.reduce((sum, group) => {
         const completedItems = group.items.filter(
-          (item) => item.status === "done",
+          (item) => item.status === "done" || item.status === "cancelled",
         ).length;
         const fallback =
           completedItems === 0 &&
@@ -10529,7 +10842,7 @@ export default function BrowserPage({
     () =>
       copyGroups.reduce((sum, group) => {
         const completedItems = group.items.filter(
-          (item) => item.status === "done",
+          (item) => item.status === "done" || item.status === "cancelled",
         ).length;
         const fallback =
           completedItems === 0 &&
@@ -10675,7 +10988,9 @@ export default function BrowserPage({
         (group.op.status === "deleting" ||
           group.items.some((item) => item.status === "deleting"));
       const hasQueued = group.items.some((item) => item.status === "queued");
-      const hasCompleted = group.items.some((item) => item.status === "done");
+      const hasCompleted = group.items.some(
+        (item) => item.status === "done" || item.status === "cancelled",
+      );
       const hasFailed =
         group.items.some((item) => item.status === "failed") ||
         group.op.completionStatus === "failed";
@@ -10703,7 +11018,9 @@ export default function BrowserPage({
         (group.op.status === "copying" ||
           group.items.some((item) => item.status === "copying"));
       const hasQueued = group.items.some((item) => item.status === "queued");
-      const hasCompleted = group.items.some((item) => item.status === "done");
+      const hasCompleted = group.items.some(
+        (item) => item.status === "done" || item.status === "cancelled",
+      );
       const hasFailed =
         group.items.some((item) => item.status === "failed") ||
         group.op.completionStatus === "failed";
@@ -10727,7 +11044,7 @@ export default function BrowserPage({
   const operationSortIndexById = useMemo(() => {
     const next: Record<string, number> = {};
     operations.forEach((op, index) => {
-      next[op.id] = index;
+      next[op.id] = operations.length - index;
     });
     return next;
   }, [operations]);
@@ -10735,7 +11052,7 @@ export default function BrowserPage({
     const next: Record<string, number> = {};
     uploadQueue.forEach((item, index) => {
       if (next[item.groupId] == null) {
-        next[item.groupId] = index;
+        next[item.groupId] = uploadQueue.length - index;
       }
     });
     return next;
@@ -10747,17 +11064,15 @@ export default function BrowserPage({
         .map((item) => operationSortIndexById[item.id])
         .filter((value): value is number => typeof value === "number");
       if (opIndices.length > 0) {
-        next[group.id] = Math.min(...opIndices);
+        next[group.id] = Math.max(...opIndices);
         return;
       }
-      next[group.id] =
-        operations.length + (uploadQueueOrderByGroup[group.id] ?? 0);
+      next[group.id] = uploadQueueOrderByGroup[group.id] ?? 0;
     });
     return next;
   }, [
     uploadGroups,
     operationSortIndexById,
-    operations.length,
     uploadQueueOrderByGroup,
   ]);
   const operationSortFallback = operations.length + uploadQueue.length + 1000;
@@ -11769,6 +12084,15 @@ export default function BrowserPage({
                   {renderUploadQuickMenu("bottom-start")}
                   <button
                     type="button"
+                    className={chromeToolbarPrimaryClasses}
+                    onClick={handleToolbarDownload}
+                    disabled={!toolbarCanDownload}
+                  >
+                    <DownloadIcon className="h-3.5 w-3.5" />
+                    Download
+                  </button>
+                  <button
+                    type="button"
                     className={chromeToolbarButtonClasses}
                     onClick={handleNewFolder}
                     disabled={!toolbarCanCreateFolder}
@@ -11777,15 +12101,6 @@ export default function BrowserPage({
                   >
                     <FolderPlusIcon className="h-3.5 w-3.5" />
                     New folder
-                  </button>
-                  <button
-                    type="button"
-                    className={chromeToolbarPrimaryClasses}
-                    onClick={handleToolbarDownload}
-                    disabled={!toolbarCanDownload}
-                  >
-                    <DownloadIcon className="h-3.5 w-3.5" />
-                    Download
                   </button>
                   <button
                     type="button"

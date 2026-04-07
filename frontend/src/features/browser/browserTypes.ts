@@ -86,7 +86,12 @@ export type DownloadDetailItem = {
   errorMessage?: string;
 };
 
-export type DeleteDetailStatus = "queued" | "deleting" | "done" | "failed";
+export type DeleteDetailStatus =
+  | "queued"
+  | "deleting"
+  | "done"
+  | "failed"
+  | "cancelled";
 
 export type DeleteDetailItem = {
   id: string;
@@ -96,7 +101,12 @@ export type DeleteDetailItem = {
   errorMessage?: string;
 };
 
-export type CopyDetailStatus = "queued" | "copying" | "done" | "failed";
+export type CopyDetailStatus =
+  | "queued"
+  | "copying"
+  | "done"
+  | "failed"
+  | "cancelled";
 
 export type CopyDetailItem = {
   id: string;

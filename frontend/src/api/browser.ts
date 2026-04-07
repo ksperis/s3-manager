@@ -521,7 +521,8 @@ export async function fetchObjectMetadata(
   bucketName: string,
   key: string,
   versionId?: string | null,
-  sseCustomerKeyBase64?: string | null
+  sseCustomerKeyBase64?: string | null,
+  signal?: AbortSignal
 ): Promise<ObjectMetadata> {
   const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
   const { data } = await client.get<ObjectMetadata>(
@@ -529,6 +530,7 @@ export async function fetchObjectMetadata(
     {
       params,
       headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+      signal,
     }
   );
   return data;
@@ -551,13 +553,15 @@ export async function getObjectTags(
 export async function updateObjectTags(
   accountId: S3AccountSelector,
   bucketName: string,
-  payload: ObjectTags
+  payload: ObjectTags,
+  signal?: AbortSignal
 ): Promise<ObjectTags> {
   const { data } = await client.put<ObjectTags>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-tags`,
     payload,
     {
       params: withS3AccountParam(undefined, accountId),
+      signal,
     }
   );
   return data;
@@ -566,12 +570,13 @@ export async function updateObjectTags(
 export async function updateObjectMetadata(
   accountId: S3AccountSelector,
   bucketName: string,
-  payload: ObjectMetadataUpdate
+  payload: ObjectMetadataUpdate,
+  signal?: AbortSignal
 ): Promise<ObjectMetadata> {
   const { data } = await client.put<ObjectMetadata>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-meta`,
     payload,
-    { params: withS3AccountParam(undefined, accountId) }
+    { params: withS3AccountParam(undefined, accountId), signal }
   );
   return data;
 }
@@ -579,12 +584,13 @@ export async function updateObjectMetadata(
 export async function updateObjectAcl(
   accountId: S3AccountSelector,
   bucketName: string,
-  payload: ObjectAcl
+  payload: ObjectAcl,
+  signal?: AbortSignal
 ): Promise<ObjectAcl> {
   const { data } = await client.put<ObjectAcl>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-acl`,
     payload,
-    { params: withS3AccountParam(undefined, accountId) }
+    { params: withS3AccountParam(undefined, accountId), signal }
   );
   return data;
 }
@@ -606,12 +612,13 @@ export async function getObjectLegalHold(
 export async function updateObjectLegalHold(
   accountId: S3AccountSelector,
   bucketName: string,
-  payload: ObjectLegalHold
+  payload: ObjectLegalHold,
+  signal?: AbortSignal
 ): Promise<ObjectLegalHold> {
   const { data } = await client.put<ObjectLegalHold>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-legal-hold`,
     payload,
-    { params: withS3AccountParam(undefined, accountId) }
+    { params: withS3AccountParam(undefined, accountId), signal }
   );
   return data;
 }
@@ -633,12 +640,13 @@ export async function getObjectRetention(
 export async function updateObjectRetention(
   accountId: S3AccountSelector,
   bucketName: string,
-  payload: ObjectRetention
+  payload: ObjectRetention,
+  signal?: AbortSignal
 ): Promise<ObjectRetention> {
   const { data } = await client.put<ObjectRetention>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-retention`,
     payload,
-    { params: withS3AccountParam(undefined, accountId) }
+    { params: withS3AccountParam(undefined, accountId), signal }
   );
   return data;
 }
@@ -675,22 +683,25 @@ export async function presignObject(
 export async function copyObject(
   accountId: S3AccountSelector,
   bucketName: string,
-  payload: CopyObjectPayload
+  payload: CopyObjectPayload,
+  signal?: AbortSignal
 ): Promise<void> {
   await client.post(`/browser/buckets/${encodeURIComponent(bucketName)}/copy`, payload, {
     params: withS3AccountParam(undefined, accountId),
+    signal,
   });
 }
 
 export async function deleteObjects(
   accountId: S3AccountSelector,
   bucketName: string,
-  objects: DeleteObjectEntry[]
+  objects: DeleteObjectEntry[],
+  signal?: AbortSignal
 ): Promise<number> {
   const { data } = await client.post<{ deleted: number }>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/delete`,
     { objects },
-    { params: withS3AccountParam(undefined, accountId) }
+    { params: withS3AccountParam(undefined, accountId), signal }
   );
   return data.deleted;
 }
@@ -698,12 +709,13 @@ export async function deleteObjects(
 export async function cleanupObjectVersions(
   accountId: S3AccountSelector,
   bucketName: string,
-  payload: CleanupObjectVersionsPayload
+  payload: CleanupObjectVersionsPayload,
+  signal?: AbortSignal
 ): Promise<CleanupObjectVersionsResponse> {
   const { data } = await client.post<CleanupObjectVersionsResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/versions/cleanup`,
     payload,
-    { params: withS3AccountParam(undefined, accountId) }
+    { params: withS3AccountParam(undefined, accountId), signal }
   );
   return data;
 }

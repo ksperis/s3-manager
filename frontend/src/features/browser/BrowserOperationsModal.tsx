@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { Fragment, useMemo, useRef, type ReactNode } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 import Modal from "../../components/Modal";
 import { formatBytes } from "../../utils/format";
 import {
@@ -154,6 +154,9 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     visibleCopyGroups,
     visibleUploadGroups,
     visibleOtherOperations,
+    operationSortIndexById,
+    uploadGroupSortIndexById,
+    operationSortFallback,
     isGroupExpanded,
     toggleGroupExpanded,
     getSectionVisibleCount,
@@ -254,8 +257,6 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     return { label: "In progress", classes: statusClasses(options.status) };
   };
 
-  const timelineOrderByKeyRef = useRef<Record<string, number>>({});
-  const nextTimelineOrderRef = useRef(0);
   const timelineEntries = useMemo(() => {
     const entries = [
       ...visibleDownloadGroups.map((group) => ({
@@ -284,16 +285,36 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
         op,
       })),
     ];
-    entries.forEach((entry) => {
-      if (timelineOrderByKeyRef.current[entry.key] == null) {
-        nextTimelineOrderRef.current -= 1;
-        timelineOrderByKeyRef.current[entry.key] = nextTimelineOrderRef.current;
+
+    const resolveSortIndex = (
+      entry: (typeof entries)[number],
+    ): number => {
+      if (entry.type === "upload") {
+        return uploadGroupSortIndexById[entry.group.id] ?? -operationSortFallback;
       }
-    });
+      const operationId = entry.type === "other" ? entry.op.id : entry.group.op.id;
+      return operationSortIndexById[operationId] ?? -operationSortFallback;
+    };
+
     return entries.sort(
-      (a, b) => (timelineOrderByKeyRef.current[a.key] ?? 0) - (timelineOrderByKeyRef.current[b.key] ?? 0)
+      (a, b) => {
+        const orderDelta = resolveSortIndex(b) - resolveSortIndex(a);
+        if (orderDelta !== 0) {
+          return orderDelta;
+        }
+        return a.key.localeCompare(b.key);
+      },
     );
-  }, [visibleCopyGroups, visibleDeleteGroups, visibleDownloadGroups, visibleOtherOperations, visibleUploadGroups]);
+  }, [
+    operationSortFallback,
+    operationSortIndexById,
+    uploadGroupSortIndexById,
+    visibleCopyGroups,
+    visibleDeleteGroups,
+    visibleDownloadGroups,
+    visibleOtherOperations,
+    visibleUploadGroups,
+  ]);
 
   const renderDownloadGroup = (group: DownloadGroup) => {
     const queuedItems = group.items.filter((item) => item.status === "queued");
@@ -466,7 +487,9 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
   const renderDeleteGroup = (group: DeleteGroup) => {
     const queuedItems = group.items.filter((item) => item.status === "queued");
     const activeItems = group.items.filter((item) => item.status === "deleting");
-    const completedItems = group.items.filter((item) => item.status === "done");
+    const completedItems = group.items.filter(
+      (item) => item.status === "done" || item.status === "cancelled",
+    );
     const failedItems = group.items.filter((item) => item.status === "failed");
     const completedCount = completedItems.length;
     const visibleQueuedItems = queuedItems.slice(0, getSectionVisibleCount(group.op.id, "queued"));
@@ -495,6 +518,15 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
         >
           {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
         </button>
+        {group.op.cancelable && !group.op.completedAt && (
+          <button
+            type="button"
+            className={operationStopClasses}
+            onClick={() => cancelOperation(group.op.id)}
+          >
+            Stop all
+          </button>
+        )}
       </>
     );
     const details = isGroupExpanded(group.op.id) ? (
@@ -545,7 +577,10 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
               <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
-                  <p className="ui-caption text-slate-400">{item.status === "done" && "Done"}</p>
+                  <p className="ui-caption text-slate-400">
+                    {item.status === "done" && "Done"}
+                    {item.status === "cancelled" && "Cancelled"}
+                  </p>
                 </div>
               </div>
             ))}
@@ -612,7 +647,9 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
   const renderCopyGroup = (group: CopyGroup) => {
     const queuedItems = group.items.filter((item) => item.status === "queued");
     const activeItems = group.items.filter((item) => item.status === "copying");
-    const completedItems = group.items.filter((item) => item.status === "done");
+    const completedItems = group.items.filter(
+      (item) => item.status === "done" || item.status === "cancelled",
+    );
     const failedItems = group.items.filter((item) => item.status === "failed");
     const completedCount = completedItems.length;
     const visibleQueuedItems = queuedItems.slice(0, getSectionVisibleCount(group.op.id, "queued"));
@@ -641,6 +678,15 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
         >
           {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
         </button>
+        {group.op.cancelable && !group.op.completedAt && (
+          <button
+            type="button"
+            className={operationStopClasses}
+            onClick={() => cancelOperation(group.op.id)}
+          >
+            Stop all
+          </button>
+        )}
       </>
     );
     const details = isGroupExpanded(group.op.id) ? (
@@ -699,6 +745,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
                   <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
                   <p className="ui-caption text-slate-400">
                     {item.status === "done" && "Done"}
+                    {item.status === "cancelled" && "Cancelled"}
                     {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
                   </p>
                 </div>

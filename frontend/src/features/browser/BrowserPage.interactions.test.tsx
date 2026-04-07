@@ -19,10 +19,17 @@ const listBrowserObjectsMock = vi.fn();
 const getBucketVersioningMock = vi.fn();
 const getBucketCorsStatusMock = vi.fn();
 const ensureBucketCorsMock = vi.fn();
+const listObjectVersionsMock = vi.fn();
 const fetchObjectMetadataMock = vi.fn();
 const getObjectTagsMock = vi.fn();
 const copyObjectMock = vi.fn();
 const deleteObjectsMock = vi.fn();
+const updateObjectMetadataMock = vi.fn();
+const updateObjectTagsMock = vi.fn();
+const updateObjectAclMock = vi.fn();
+const updateObjectLegalHoldMock = vi.fn();
+const updateObjectRetentionMock = vi.fn();
+const cleanupObjectVersionsMock = vi.fn();
 const createFolderMock = vi.fn();
 const presignObjectMock = vi.fn();
 const proxyDownloadMock = vi.fn();
@@ -81,11 +88,22 @@ vi.mock("../../api/browser", async () => {
     getBucketCorsStatus: (...args: unknown[]) =>
       getBucketCorsStatusMock(...args),
     ensureBucketCors: (...args: unknown[]) => ensureBucketCorsMock(...args),
+    listObjectVersions: (...args: unknown[]) => listObjectVersionsMock(...args),
     fetchObjectMetadata: (...args: unknown[]) =>
       fetchObjectMetadataMock(...args),
     getObjectTags: (...args: unknown[]) => getObjectTagsMock(...args),
     copyObject: (...args: unknown[]) => copyObjectMock(...args),
     deleteObjects: (...args: unknown[]) => deleteObjectsMock(...args),
+    updateObjectMetadata: (...args: unknown[]) =>
+      updateObjectMetadataMock(...args),
+    updateObjectTags: (...args: unknown[]) => updateObjectTagsMock(...args),
+    updateObjectAcl: (...args: unknown[]) => updateObjectAclMock(...args),
+    updateObjectLegalHold: (...args: unknown[]) =>
+      updateObjectLegalHoldMock(...args),
+    updateObjectRetention: (...args: unknown[]) =>
+      updateObjectRetentionMock(...args),
+    cleanupObjectVersions: (...args: unknown[]) =>
+      cleanupObjectVersionsMock(...args),
     createFolder: (...args: unknown[]) => createFolderMock(...args),
     presignObject: (...args: unknown[]) => presignObjectMock(...args),
     proxyDownload: (...args: unknown[]) => proxyDownloadMock(...args),
@@ -199,9 +217,12 @@ function seedBrowserRootUiState(value: unknown) {
 }
 
 async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(
-    within(getContextToolbar()).getByRole("button", { name: "More" }),
-  );
+  const toolbar =
+    screen.queryByRole("toolbar", { name: "Browser context bar" }) &&
+    within(getContextToolbar()).queryByRole("button", { name: "More" })
+      ? getContextToolbar()
+      : getActionsToolbar();
+  await user.click(within(toolbar).getByRole("button", { name: "More" }));
   return await screen.findByRole("menu", { name: "More" });
 }
 
@@ -232,6 +253,49 @@ async function copyOrCutItem(
 async function pasteFromCurrentPath(user: ReturnType<typeof userEvent.setup>) {
   const menu = await openContextMoreMenu(user);
   await user.click(within(menu).getByRole("menuitem", { name: /^Paste/ }));
+}
+
+async function pasteFromContextPanel(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("tab", { name: "Context" }));
+  const panel = screen.getByRole("tabpanel", { name: "Context" });
+  await user.click(within(panel).getByRole("button", { name: /^Paste/ }));
+}
+
+async function openOperationsModal(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    within(getContextToolbar()).getByRole("button", { name: "Operations" }),
+  );
+  return await screen.findByRole("dialog", { name: "Operations overview" });
+}
+
+function createAbortablePromise(signal?: AbortSignal) {
+  return new Promise<never>((_resolve, reject) => {
+    const abort = () => reject(new DOMException("Aborted", "AbortError"));
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
+
+async function copyOrCutSelection(
+  user: ReturnType<typeof userEvent.setup>,
+  labels: string[],
+  action: "Copy" | "Cut" = "Copy",
+) {
+  await enableActionBar(user);
+  for (const label of labels) {
+    await user.click(screen.getByRole("checkbox", { name: `Select ${label}` }));
+  }
+  const actionsToolbar = getActionsToolbar();
+  if (action === "Copy") {
+    await user.click(within(actionsToolbar).getByRole("button", { name: "Copy" }));
+    return;
+  }
+  await user.click(within(actionsToolbar).getByRole("button", { name: "More" }));
+  const menu = await screen.findByRole("menu", { name: "More" });
+  await user.click(within(menu).getByRole("menuitem", { name: "Cut" }));
 }
 
 describe("BrowserPage interactions", () => {
@@ -332,6 +396,13 @@ describe("BrowserPage interactions", () => {
     });
     getBucketCorsStatusMock.mockResolvedValue({ enabled: true, rules: [] });
     ensureBucketCorsMock.mockResolvedValue({ enabled: true, rules: [] });
+    listObjectVersionsMock.mockResolvedValue({
+      versions: [],
+      delete_markers: [],
+      is_truncated: false,
+      next_key_marker: null,
+      next_version_id_marker: null,
+    });
     fetchObjectMetadataMock.mockResolvedValue({
       key: "a.txt",
       size: 10,
@@ -345,6 +416,15 @@ describe("BrowserPage interactions", () => {
     });
     copyObjectMock.mockResolvedValue(undefined);
     deleteObjectsMock.mockResolvedValue(1);
+    updateObjectMetadataMock.mockResolvedValue(undefined);
+    updateObjectTagsMock.mockResolvedValue(undefined);
+    updateObjectAclMock.mockResolvedValue(undefined);
+    updateObjectLegalHoldMock.mockResolvedValue(undefined);
+    updateObjectRetentionMock.mockResolvedValue(undefined);
+    cleanupObjectVersionsMock.mockResolvedValue({
+      deleted_versions: 1,
+      deleted_delete_markers: 0,
+    });
     createFolderMock.mockResolvedValue(undefined);
     presignObjectMock.mockImplementation(
       async (_accountId: string, _bucketName: string, payload?: { key?: string }) => ({
@@ -1468,17 +1548,32 @@ describe("BrowserPage interactions", () => {
     await user.click(await findRowByLabel("a.txt"));
 
     const actionsToolbar = getActionsToolbar();
+    const uploadButton = within(actionsToolbar).getByRole("button", {
+      name: "Upload",
+    });
+    const downloadButton = within(actionsToolbar).getByRole("button", {
+      name: "Download",
+    });
+    const newFolderButton = within(actionsToolbar).getByRole("button", {
+      name: "New folder",
+    });
 
     expect(within(actionsToolbar).getByText("1 selected")).toBeInTheDocument();
+    expect(uploadButton).toBeInTheDocument();
+    expect(downloadButton).toBeInTheDocument();
+    expect(newFolderButton).toBeInTheDocument();
     expect(
-      within(actionsToolbar).getByRole("button", { name: "Upload" }),
-    ).toBeInTheDocument();
+      Boolean(
+        uploadButton.compareDocumentPosition(downloadButton) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
     expect(
-      within(actionsToolbar).getByRole("button", { name: "New folder" }),
-    ).toBeInTheDocument();
-    expect(
-      within(actionsToolbar).getByRole("button", { name: "Download" }),
-    ).toBeInTheDocument();
+      Boolean(
+        downloadButton.compareDocumentPosition(newFolderButton) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
     expect(
       within(actionsToolbar).getByRole("button", { name: "Open" }),
     ).toBeDisabled();
@@ -1496,7 +1591,7 @@ describe("BrowserPage interactions", () => {
     ).not.toBeInTheDocument();
 
     await user.click(
-      within(actionsToolbar).getByRole("button", { name: "Upload" }),
+      uploadButton,
     );
     const uploadMenu = await screen.findByRole("menu", { name: "Upload" });
     expect(
@@ -2177,12 +2272,17 @@ describe("BrowserPage interactions", () => {
     await pasteFromCurrentPath(user);
 
     await waitFor(() => {
-      expect(copyObjectMock).toHaveBeenCalledWith("acc-1", "bucket-1", {
-        source_bucket: "bucket-1",
-        source_key: "a.txt",
-        destination_key: "docs/a.txt",
-        move: false,
-      });
+      expect(copyObjectMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        {
+          source_bucket: "bucket-1",
+          source_key: "a.txt",
+          destination_key: "docs/a.txt",
+          move: false,
+        },
+        expect.any(AbortSignal),
+      );
     });
     expect(presignObjectMock).not.toHaveBeenCalled();
   });
@@ -2219,6 +2319,7 @@ describe("BrowserPage interactions", () => {
         "a.txt",
         null,
         null,
+        expect.any(AbortSignal),
       );
       expect(presignObjectMock).toHaveBeenCalledWith(
         "acc-1",
@@ -2239,6 +2340,297 @@ describe("BrowserPage interactions", () => {
         null,
       );
     });
+  });
+
+  it("refreshes the current object listing after cross-context paste", async () => {
+    const user = userEvent.setup();
+    const view = renderPage({ accountIdForApi: "acc-1" });
+    let destinationDocsUpdated = false;
+
+    listBrowserObjectsMock.mockImplementation(
+      (
+        accountId: string,
+        _bucketName: string,
+        payload?: { prefix?: string },
+      ) => {
+        const prefix = payload?.prefix ?? "";
+        if (prefix === "docs/") {
+          const objects =
+            accountId === "acc-2" && destinationDocsUpdated
+              ? [
+                  {
+                    key: "docs/a.txt",
+                    size: 10,
+                    last_modified: "2026-03-10T10:18:00Z",
+                    storage_class: "STANDARD",
+                    etag: '"etag-docs-a"',
+                  },
+                  {
+                    key: "docs/readme.txt",
+                    size: 42,
+                    last_modified: "2026-03-10T10:45:00Z",
+                    storage_class: "STANDARD",
+                    etag: '"etag-docs"',
+                  },
+                ]
+              : [
+                  {
+                    key: "docs/readme.txt",
+                    size: 42,
+                    last_modified: "2026-03-10T10:45:00Z",
+                    storage_class: "STANDARD",
+                    etag: '"etag-docs"',
+                  },
+                ];
+          return Promise.resolve({
+            prefix: "docs/",
+            objects,
+            prefixes: [],
+            is_truncated: false,
+            next_continuation_token: null,
+          });
+        }
+        return Promise.resolve({
+          prefix: "",
+          objects: [
+            {
+              key: "a.txt",
+              size: 10,
+              last_modified: "2026-03-10T10:15:00Z",
+              storage_class: "STANDARD",
+              etag: '"etag-a"',
+            },
+            {
+              key: "b.txt",
+              size: 20,
+              last_modified: "2026-03-10T10:16:00Z",
+              storage_class: "STANDARD",
+              etag: '"etag-b"',
+            },
+            {
+              key: "c.txt",
+              size: 30,
+              last_modified: "2026-03-10T10:17:00Z",
+              storage_class: "STANDARD",
+              etag: '"etag-c"',
+            },
+          ],
+          prefixes: ["docs/"],
+          is_truncated: false,
+          next_continuation_token: null,
+        });
+      },
+    );
+
+    presignObjectMock.mockImplementation(
+      async (
+        accountId: string,
+        _bucketName: string,
+        payload?: { key?: string; operation?: string },
+      ) => {
+        if (
+          accountId === "acc-2" &&
+          payload?.operation === "put_object" &&
+          payload.key === "docs/a.txt"
+        ) {
+          destinationDocsUpdated = true;
+        }
+        return {
+          url: `https://example.test/${payload?.key ?? "object"}`,
+          method: payload?.operation === "get_object" ? "GET" : "PUT",
+          expires_in: 1800,
+          headers: {},
+        };
+      },
+    );
+
+    await copyOrCutItem(user, "a.txt", "Copy");
+
+    view.rerender(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <BrowserPage accountIdForApi="acc-2" />
+      </MemoryRouter>,
+    );
+
+    await user.dblClick(await findRowByLabel("docs"));
+    await findRowByLabel("readme.txt");
+    await pasteFromCurrentPath(user);
+
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-2",
+        "bucket-1",
+        expect.objectContaining({ prefix: "docs/" }),
+      );
+      expect(screen.getByRole("button", { name: "a.txt" })).toBeInTheDocument();
+    });
+  });
+
+  it("shows Stop all for multi-item same-context paste and cancels queued copy tasks", async () => {
+    const user = userEvent.setup();
+    fetchBrowserSettingsMock.mockResolvedValue({
+      allow_proxy_transfers: false,
+      direct_upload_parallelism: 3,
+      proxy_upload_parallelism: 2,
+      direct_download_parallelism: 3,
+      proxy_download_parallelism: 2,
+      other_operations_parallelism: 1,
+      streaming_zip_threshold_mb: 200,
+    });
+    copyObjectMock.mockImplementation(
+      async (
+        _accountId: string,
+        _bucketName: string,
+        payload: { destination_key: string },
+        signal?: AbortSignal,
+      ) =>
+        new Promise<void>((resolve, reject) => {
+          if (payload.destination_key !== "docs/a.txt") {
+            resolve();
+            return;
+          }
+          const abort = () => reject(new DOMException("Aborted", "AbortError"));
+          if (signal?.aborted) {
+            abort();
+            return;
+          }
+          signal?.addEventListener("abort", abort, { once: true });
+        }),
+    );
+
+    renderPage({ accountIdForApi: "acc-1", defaultShowInspector: true });
+
+    await copyOrCutSelection(user, ["a.txt", "b.txt"], "Copy");
+    await user.dblClick(await findRowByLabel("docs"));
+    await findRowByLabel("readme.txt");
+    await pasteFromCurrentPath(user);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
+    });
+    const stopAllButton = await within(dialog).findByRole("button", {
+      name: "Stop all",
+    });
+    expect(stopAllButton).toBeInTheDocument();
+
+    await user.click(stopAllButton);
+
+    await waitFor(() => {
+      expect(copyObjectMock).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByText("Copy cancelled after 0 of 2 item(s)."),
+      ).toBeInTheDocument();
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({ prefix: "docs/" }),
+      );
+    });
+
+    expect(copyObjectMock.mock.calls[0]?.[3]).toBeInstanceOf(AbortSignal);
+    expect((copyObjectMock.mock.calls[0]?.[3] as AbortSignal).aborted).toBe(
+      true,
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Show files" }));
+    await waitFor(() => {
+      expect(within(dialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("cancels cross-context move batches without deleting pending sources and keeps paste available", async () => {
+    const user = userEvent.setup();
+    fetchBrowserSettingsMock.mockResolvedValue({
+      allow_proxy_transfers: false,
+      direct_upload_parallelism: 3,
+      proxy_upload_parallelism: 2,
+      direct_download_parallelism: 3,
+      proxy_download_parallelism: 2,
+      other_operations_parallelism: 1,
+      streaming_zip_threshold_mb: 200,
+    });
+    presignObjectMock.mockImplementation(
+      async (
+        _accountId: string,
+        _bucketName: string,
+        payload?: { key?: string; operation?: string },
+      ) => ({
+        url: `https://example.test/${payload?.key ?? "object"}`,
+        method: payload?.operation === "get_object" ? "GET" : "PUT",
+        expires_in: 1800,
+        headers: {},
+      }),
+    );
+    fetchMock.mockImplementation(
+      async (input?: RequestInfo | URL, init?: RequestInit) => {
+        const method = (init?.method || "GET").toUpperCase();
+        const url = String(input ?? "");
+        if (method === "GET" && url.includes("/a.txt")) {
+          return new Promise<Response>((resolve, reject) => {
+            const abort = () =>
+              reject(new DOMException("Aborted", "AbortError"));
+            if (init?.signal?.aborted) {
+              abort();
+              return;
+            }
+            init?.signal?.addEventListener("abort", abort, { once: true });
+          });
+        }
+        if (method === "PUT" || method === "POST" || method === "DELETE") {
+          return new Response(null, { status: 200 });
+        }
+        return new Response("direct-bytes", {
+          status: 200,
+          headers: { "Content-Type": "text/plain" },
+        });
+      },
+    );
+
+    const view = renderPage({
+      accountIdForApi: "acc-1",
+      defaultShowInspector: true,
+    });
+
+    await copyOrCutSelection(user, ["a.txt", "b.txt"], "Cut");
+
+    view.rerender(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <BrowserPage accountIdForApi="acc-2" defaultShowInspector />
+      </MemoryRouter>,
+    );
+
+    await user.dblClick(await findRowByLabel("docs"));
+    await findRowByLabel("readme.txt");
+    await pasteFromCurrentPath(user);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
+    });
+    await user.click(
+      await within(dialog).findByRole("button", { name: "Stop all" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Move cancelled after 0 of 2 item(s)."),
+      ).toBeInTheDocument();
+      expect(deleteObjectsMock).not.toHaveBeenCalled();
+      expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+        "acc-2",
+        "bucket-1",
+        expect.objectContaining({ prefix: "docs/" }),
+      );
+    });
+
+    await user.click(within(dialog).getByRole("button", { name: "Show files" }));
+    await waitFor(() => {
+      expect(within(dialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    });
+
+    await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
+    await user.click(screen.getByRole("tab", { name: "Context" }));
+    const panel = screen.getByRole("tabpanel", { name: "Context" });
+    expect(within(panel).getByRole("button", { name: /^Paste/ })).toBeEnabled();
   });
 
   it("verifies the destination before deleting the source on cross-context move", async () => {
@@ -2417,7 +2809,7 @@ describe("BrowserPage interactions", () => {
         "acc-1",
         "bucket-1",
         "a.txt",
-        undefined,
+        expect.any(AbortSignal),
         null,
       );
       expect(proxyUploadMock).toHaveBeenCalledWith(
@@ -2426,12 +2818,381 @@ describe("BrowserPage interactions", () => {
         "a.txt",
         expect.any(Blob),
         undefined,
-        undefined,
+        expect.any(AbortSignal),
         null,
         "a.txt",
       );
     });
     expect(copyObjectMock).not.toHaveBeenCalled();
+  });
+
+  it("shows Stop all for multi-object delete and marks remaining items as cancelled", async () => {
+    const user = userEvent.setup();
+    fetchBrowserSettingsMock.mockResolvedValue({
+      allow_proxy_transfers: false,
+      direct_upload_parallelism: 3,
+      proxy_upload_parallelism: 2,
+      direct_download_parallelism: 3,
+      proxy_download_parallelism: 2,
+      other_operations_parallelism: 1,
+      streaming_zip_threshold_mb: 200,
+    });
+    deleteObjectsMock.mockImplementation(
+      async (
+        _selector: string,
+        _bucket: string,
+        _objects: Array<{ key: string }>,
+        signal?: AbortSignal,
+      ) => createAbortablePromise(signal),
+    );
+
+    renderPage();
+    await enableActionBar(user);
+    await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
+
+    await user.click(
+      within(getActionsToolbar()).getByRole("button", { name: "Delete" }),
+    );
+    const confirm = await screen.findByRole("dialog", {
+      name: "Delete objects",
+    });
+    await user.click(within(confirm).getByRole("button", { name: "Delete" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
+    });
+    await user.click(
+      await within(dialog).findByRole("button", { name: "Stop all" }),
+    );
+
+    await waitFor(() => {
+      expect(deleteObjectsMock).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByText("Delete cancelled after 0 of 2 item(s)."),
+      ).toBeInTheDocument();
+    });
+    expect(deleteObjectsMock.mock.calls[0]?.[3]).toBeInstanceOf(AbortSignal);
+    expect((deleteObjectsMock.mock.calls[0]?.[3] as AbortSignal).aborted).toBe(
+      true,
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Show files" }));
+    await waitFor(() => {
+      expect(within(dialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("supports Stop for bulk attributes and leaves queued items cancelled", async () => {
+    const user = userEvent.setup();
+    fetchBrowserSettingsMock.mockResolvedValue({
+      allow_proxy_transfers: false,
+      direct_upload_parallelism: 3,
+      proxy_upload_parallelism: 2,
+      direct_download_parallelism: 3,
+      proxy_download_parallelism: 2,
+      other_operations_parallelism: 1,
+      streaming_zip_threshold_mb: 200,
+    });
+    updateObjectMetadataMock.mockImplementation(
+      async (
+        _selector: string,
+        _bucket: string,
+        _payload: unknown,
+        signal?: AbortSignal,
+      ) => createAbortablePromise(signal),
+    );
+
+    renderPage();
+    await enableActionBar(user);
+    await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
+    await user.click(
+      within(getActionsToolbar()).getByRole("button", { name: "More" }),
+    );
+    const menu = await screen.findByRole("menu", { name: "More" });
+    await user.click(
+      within(menu).getByRole("menuitem", { name: "Bulk attributes" }),
+    );
+
+    const modal = await screen.findByRole("dialog", { name: "Bulk attributes" });
+    await user.click(
+      within(modal).getByRole("checkbox", { name: "Metadata headers" }),
+    );
+    await user.type(within(modal).getByPlaceholderText("Content-Type"), "text/plain");
+    await user.click(within(modal).getByRole("button", { name: "Apply changes" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
+    });
+    await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
+
+    await waitFor(() => {
+      expect(updateObjectMetadataMock).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getAllByText("Update cancelled after 0 of 2 item(s).").length,
+      ).toBeGreaterThan(0);
+    });
+    expect(updateObjectMetadataMock.mock.calls[0]?.[3]).toBeInstanceOf(
+      AbortSignal,
+    );
+    expect(
+      (updateObjectMetadataMock.mock.calls[0]?.[3] as AbortSignal).aborted,
+    ).toBe(true);
+  });
+
+  it("supports Stop for restore-to-date batches", async () => {
+    const user = userEvent.setup();
+    getBucketVersioningMock.mockResolvedValue({
+      enabled: true,
+      status: "Enabled",
+    });
+    fetchBrowserSettingsMock.mockResolvedValue({
+      allow_proxy_transfers: false,
+      direct_upload_parallelism: 3,
+      proxy_upload_parallelism: 2,
+      direct_download_parallelism: 3,
+      proxy_download_parallelism: 2,
+      other_operations_parallelism: 1,
+      streaming_zip_threshold_mb: 200,
+    });
+    listObjectVersionsMock.mockImplementation(
+      async (
+        _selector: string,
+        _bucket: string,
+        options?: { key?: string | null },
+      ) => ({
+        versions: [
+          {
+            key: options?.key ?? "a.txt",
+            version_id: "v2",
+            is_latest: true,
+            is_delete_marker: false,
+            last_modified: "2026-03-10T10:00:00Z",
+            size: 10,
+          },
+          {
+            key: options?.key ?? "a.txt",
+            version_id: "v1",
+            is_latest: false,
+            is_delete_marker: false,
+            last_modified: "2026-03-01T10:00:00Z",
+            size: 10,
+          },
+        ],
+        delete_markers: [],
+        is_truncated: false,
+        next_key_marker: null,
+        next_version_id_marker: null,
+      }),
+    );
+    copyObjectMock.mockImplementation(
+      async (
+        _selector: string,
+        _bucket: string,
+        _payload: unknown,
+        signal?: AbortSignal,
+      ) => createAbortablePromise(signal),
+    );
+
+    renderPage();
+    await enableActionBar(user);
+    await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
+    await user.click(
+      within(getActionsToolbar()).getByRole("button", { name: "More" }),
+    );
+    const menu = await screen.findByRole("menu", { name: "More" });
+    await user.click(
+      within(menu).getByRole("menuitem", { name: "Restore to date" }),
+    );
+
+    const modal = await screen.findByRole("dialog", { name: "Restore to date" });
+    const dateInput = modal.querySelector(
+      'input[type="datetime-local"]',
+    ) as HTMLInputElement | null;
+    expect(dateInput).not.toBeNull();
+    fireEvent.change(dateInput as HTMLInputElement, {
+      target: { value: "2026-03-05T12:00" },
+    });
+    await user.click(within(modal).getByRole("button", { name: "Run restore" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
+    });
+    await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
+
+    await waitFor(() => {
+      expect(copyObjectMock).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getAllByText("Restore cancelled after 0 of 2 item(s).").length,
+      ).toBeGreaterThan(0);
+    });
+    expect(copyObjectMock.mock.calls[0]?.[3]).toBeInstanceOf(AbortSignal);
+    expect((copyObjectMock.mock.calls[0]?.[3] as AbortSignal).aborted).toBe(
+      true,
+    );
+  });
+
+  it("supports Stop for cleaning old versions", async () => {
+    const user = userEvent.setup();
+    getBucketVersioningMock.mockResolvedValue({
+      enabled: true,
+      status: "Enabled",
+    });
+    cleanupObjectVersionsMock.mockImplementation(
+      async (
+        _selector: string,
+        _bucket: string,
+        _payload: unknown,
+        signal?: AbortSignal,
+      ) => createAbortablePromise(signal),
+    );
+
+    renderPage({ defaultShowInspector: true });
+    await user.click(screen.getByRole("tab", { name: "Context" }));
+    const panel = screen.getByRole("tabpanel", { name: "Context" });
+    await user.click(
+      within(panel).getByRole("button", { name: "Clean old versions" }),
+    );
+
+    const modal = await screen.findByRole("dialog", { name: "Clean old versions" });
+    await user.type(within(modal).getByPlaceholderText("e.g. 3"), "1");
+    await user.click(within(modal).getByRole("button", { name: "Run cleanup" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
+    });
+    await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
+
+    await waitFor(() => {
+      expect(cleanupObjectVersionsMock).toHaveBeenCalledTimes(1);
+      expect(screen.getAllByText("Cleanup cancelled.").length).toBeGreaterThan(
+        0,
+      );
+    });
+    expect(cleanupObjectVersionsMock.mock.calls[0]?.[3]).toBeInstanceOf(
+      AbortSignal,
+    );
+    expect(
+      (cleanupObjectVersionsMock.mock.calls[0]?.[3] as AbortSignal).aborted,
+    ).toBe(true);
+  });
+
+  it("supports Stop for restore version and delete version operations", async () => {
+    const user = userEvent.setup();
+    getBucketVersioningMock.mockResolvedValue({
+      enabled: true,
+      status: "Enabled",
+    });
+    listObjectVersionsMock.mockResolvedValue({
+      versions: [
+        {
+          key: "a.txt",
+          version_id: "v1",
+          is_latest: false,
+          is_delete_marker: false,
+          last_modified: "2026-03-01T10:00:00Z",
+          size: 10,
+        },
+      ],
+      delete_markers: [],
+      is_truncated: false,
+      next_key_marker: null,
+      next_version_id_marker: null,
+    });
+    copyObjectMock.mockImplementation(
+      async (
+        _selector: string,
+        _bucket: string,
+        _payload: unknown,
+        signal?: AbortSignal,
+      ) => createAbortablePromise(signal),
+    );
+    deleteObjectsMock.mockImplementation(
+      async (
+        _selector: string,
+        _bucket: string,
+        _objects: Array<{ key: string; version_id?: string }>,
+        signal?: AbortSignal,
+      ) => createAbortablePromise(signal),
+    );
+
+    renderPage({ defaultShowInspector: true });
+    await user.click(await findRowByLabel("a.txt"));
+    await user.click(screen.getByRole("tab", { name: "Details" }));
+    await screen.findByRole("button", { name: "Restore" });
+
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    let dialog = await openOperationsModal(user);
+    await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Restore version cancelled.")).toBeInTheDocument();
+    });
+    expect(copyObjectMock.mock.calls[0]?.[3]).toBeInstanceOf(AbortSignal);
+    expect((copyObjectMock.mock.calls[0]?.[3] as AbortSignal).aborted).toBe(
+      true,
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
+
+    await user.click(screen.getByRole("button", { name: "Delete version" }));
+    const confirm = await screen.findByRole("dialog", { name: "Delete version" });
+    await user.click(within(confirm).getByRole("button", { name: "Delete" }));
+
+    dialog = await openOperationsModal(user);
+    await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Delete version cancelled.")).toBeInTheDocument();
+    });
+    expect(deleteObjectsMock.mock.calls[0]?.[3]).toBeInstanceOf(AbortSignal);
+    expect((deleteObjectsMock.mock.calls[0]?.[3] as AbortSignal).aborted).toBe(
+      true,
+    );
+  });
+
+  it("orders operation cards by descending add order across different operation types", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await enableActionBar(user);
+    await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
+    await user.click(
+      within(getActionsToolbar()).getByRole("button", { name: "Delete" }),
+    );
+    let confirm = await screen.findByRole("dialog", { name: "Delete objects" });
+    await user.click(within(confirm).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Deleted 2 object(s)")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
+    await user.click(
+      within(getActionsToolbar()).getByRole("button", { name: "Copy" }),
+    );
+    await user.dblClick(await findRowByLabel("docs"));
+    await findRowByLabel("readme.txt");
+    await pasteFromCurrentPath(user);
+
+    await waitFor(() => {
+      expect(screen.getByText("Copied 2 of 2 item(s).")).toBeInTheDocument();
+    });
+
+    const dialog = await openOperationsModal(user);
+    const copyCardTitle = within(dialog).getByText("Copying items");
+    const deleteCardTitle = within(dialog).getByText("Deleting 2 objects");
+
+    expect(
+      Boolean(
+        copyCardTitle.compareDocumentPosition(deleteCardTitle) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
   });
 
   it("renders CORS warning with inline info action and moves CORS button into popover", async () => {
