@@ -256,6 +256,16 @@ frontend-browser-e2e:
     - cd frontend
     - npm ci
     - npm run test:e2e:ci
+  after_script:
+    - mkdir -p gl-test-reports frontend/playwright-report frontend/test-results
+    - touch frontend/playwright-report/.keep frontend/test-results/.keep
+    - |
+      if [ ! -f gl-test-reports/frontend-browser-e2e-junit.xml ]; then
+        cat <<'EOF' > gl-test-reports/frontend-browser-e2e-junit.xml
+        <?xml version="1.0" encoding="UTF-8"?>
+        <testsuites />
+        EOF
+      fi
   artifacts:
     when: always
     expire_in: 1 week
