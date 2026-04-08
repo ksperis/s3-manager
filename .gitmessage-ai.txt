@@ -1,0 +1,29 @@
+# AI-authored commit template for s3-manager.
+# Use Conventional Commits on the first line.
+# Allowed types: feat, fix, refactor, perf, test, docs, build, ci, chore, revert
+# Recommended scopes when one area clearly dominates:
+#   backend, frontend, docs, ci, admin, manager, browser, ceph-admin, release
+# Examples:
+#   feat(frontend): add browser object compare panel
+#   fix(ci): stabilize browser e2e bootstrap
+#   chore(release): prepare v0.1.6
+#
+# `scope` is optional when no single area dominates.
+# Use English and do not end the subject with a period.
+
+<type>(<scope>): <imperative summary>
+
+Why:
+# 1-2 sentences explaining the intent and expected outcome.
+
+What:
+# - concrete change 1
+# - concrete change 2
+
+Validation:
+# - command/test run
+# - or: not run (reason)
+
+# Add a blank line followed by:
+# BREAKING CHANGE: <impact>
+# when the change breaks compatibility.

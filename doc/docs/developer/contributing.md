@@ -6,6 +6,45 @@
 - Avoid introducing hidden authorization layers.
 - Update documentation when behavior changes.
 
+## AI-authored commit messages
+
+AI-authored commits should follow the repository Conventional Commit policy so
+future changelog automation can consume them reliably without rewriting the
+existing mixed history.
+
+Required format for AI-authored commits:
+
+- subject: `<type>(<scope>): <imperative summary>`
+- allowed types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`,
+  `ci`, `chore`, `revert`
+- use a scope when one area clearly dominates; common scopes in this repo are
+  `backend`, `frontend`, `docs`, `ci`, `admin`, `manager`, `browser`,
+  `ceph-admin`, `release`
+- subject in English, without a trailing period
+- body sections in this order: `Why:`, `What:`, `Validation:`
+- breaking commits must add a blank line followed by `BREAKING CHANGE: ...`
+
+Frequent mappings:
+
+- `docs: ...`
+- `ci: ...`
+- `fix(backend): ...`
+- `feat(frontend): ...`
+- `chore(release): ...`
+
+Versioned helpers:
+
+- template: `.gitmessage-ai.txt`
+- validator:
+  `python3 backend/scripts/validate_ai_commit_message.py <path-to-message>`
+- optional Git usage:
+  `git commit --template .gitmessage-ai.txt`
+
+The validator is intentionally non-blocking in this phase. Use it for
+AI-authored commits when preparing release-ready history, and start automated
+changelog generation from the first release/tag created after this policy lands
+rather than parsing the full legacy history.
+
 ## Pull request checklist
 
 - clear intent

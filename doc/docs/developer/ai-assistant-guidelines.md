@@ -147,6 +147,45 @@ flows unless the pathway is explicit, authorized, and audited.
   action, target entity, and account context.
 - Include executor or workflow identifiers in audit metadata when available.
 
+## Git commits authored by AI assistants
+
+When an AI assistant creates a Git commit in this repository, it must use a
+Conventional Commit subject and a structured body so the commit history can be
+reused for automated changelog generation later.
+
+Required subject format:
+
+- `<type>(<scope>): <imperative summary>`
+- Allowed types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`,
+  `ci`, `chore`, `revert`
+- `scope` is optional, but expected when a dominant area is clear
+- Recommended scopes: `backend`, `frontend`, `docs`, `ci`, `admin`,
+  `manager`, `browser`, `ceph-admin`, `release`
+- Write the subject in English and do not end it with a period
+
+Required body sections:
+
+- `Why:` 1 to 2 sentences about the intent or expected outcome
+- `What:` 1 to 3 bullet points describing the concrete changes
+- `Validation:` tests executed, or `not run` with a reason
+
+Breaking changes:
+
+- Use `!` in the subject only when the change is actually breaking
+- Add a `BREAKING CHANGE:` footer whenever the commit is breaking
+
+Repository helpers:
+
+- Use the versioned template at `.gitmessage-ai.txt`
+- Validate a prepared message with
+  `python3 backend/scripts/validate_ai_commit_message.py <path-to-message>`
+
+Scope of this policy:
+
+- It applies to future AI-authored commits only
+- Existing history is intentionally left unchanged
+- Humans are not blocked by hooks or CI in this first phase
+
 ## Limits
 
 This document guides change design and review. It does not replace:
