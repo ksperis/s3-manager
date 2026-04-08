@@ -189,12 +189,26 @@ def _match_account_rules(
 
 def _includes_for_account_fields(fields: set[str]) -> set[str]:
     include: set[str] = set()
-    # Listing payload is already enriched with profile/limits/quota via per-account detail fetch.
-    # Raw /admin/metadata/account may only expose account ids.
-    # Keep per-account enrichment only for fields that are still missing.
+    if fields & {"account_name", "email"}:
+        include.add("profile")
+    if fields & {"max_users", "max_buckets"}:
+        include.add("limits")
+    if fields & {"quota_max_size_bytes", "quota_max_objects"}:
+        include.add("quota")
     if fields & {"bucket_count", "user_count"}:
         include.add("stats")
     return include
+
+
+def _account_field_needs_enrichment(account: CephAdminRgwAccountSummary, field: str) -> bool:
+    if field == "account_name":
+        return not bool((account.account_name or "").strip())
+    value = getattr(account, field, None)
+    return value is None
+
+
+def _account_profile_needs_enrichment(account: CephAdminRgwAccountSummary) -> bool:
+    return _account_field_needs_enrichment(account, "account_name") or account.email is None
 
 
 def _extract_count(data: dict[str, Any], keys: tuple[str, ...]) -> Optional[int]:
@@ -334,10 +348,11 @@ def _enrich_accounts(
 
 def _get_cached_rgw_accounts_payload(ctx: CephAdminContext) -> list[Any]:
     key = _RgwAccountsPayloadCacheKey(endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0))
+
     def _fetch_payload() -> list[Any]:
         try:
             try:
-                payload = ctx.rgw_admin.list_accounts(include_details=True)
+                payload = ctx.rgw_admin.list_accounts(include_details=False)
             except TypeError:
                 payload = ctx.rgw_admin.list_accounts()
         except RGWAdminError as exc:
@@ -435,7 +450,12 @@ def list_rgw_accounts(
 
         advanced_fields = _common_collect_filter_fields(parsed_advanced_filter)
         sort_fields = {sort_by} if sort_by else {"account_id"}
-        needed_for_listing = _includes_for_account_fields(advanced_fields | sort_fields)
+        listing_fields = {
+            field
+            for field in (advanced_fields | sort_fields)
+            if any(_account_field_needs_enrichment(item, field) for item in results)
+        }
+        needed_for_listing = _includes_for_account_fields(listing_fields)
         if needed_for_listing:
             results = _enrich_accounts(results, needed_for_listing, ctx)
 
@@ -475,13 +495,34 @@ def list_rgw_accounts(
             needle in account.account_id.lower() or needle in (account.account_name or "").lower()
         ),
     )
+    if (
+        not filtered_results
+        and isinstance(search, str)
+        and search.strip()
+        and parsed_advanced_filter is None
+        and any(not (account.account_name or "").strip() for account in results)
+    ):
+        searchable_results = _enrich_accounts(results, {"profile"}, ctx)
+        filtered_results = _common_apply_simple_search(
+            searchable_results,
+            search=search,
+            parsed_filter=parsed_advanced_filter,
+            match_with_filter=lambda account, needle: needle in account.account_id.lower(),
+            match_without_filter=lambda account, needle: (
+                needle in account.account_id.lower() or needle in (account.account_name or "").lower()
+            ),
+        )
     page_items, total, has_next = _common_paginate(
         filtered_results,
         page=page,
         page_size=page_size,
         clone=_clone_account_list,
     )
-    requested_for_page = requested & {"stats"}
+    requested_for_page = set(requested)
+    if "profile" in requested_for_page and not any(_account_profile_needs_enrichment(item) for item in page_items):
+        requested_for_page.discard("profile")
+    if any(_account_field_needs_enrichment(item, "account_name") for item in page_items):
+        requested_for_page.add("profile")
     if requested_for_page and page_items:
         page_items = _enrich_accounts(page_items, requested_for_page, ctx)
 

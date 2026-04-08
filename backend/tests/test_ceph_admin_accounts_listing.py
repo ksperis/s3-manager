@@ -14,10 +14,12 @@ class FakeRGWAdmin:
         self._accounts_payload = accounts_payload
         self._account_details = account_details
         self.list_accounts_calls = 0
+        self.list_accounts_include_details: list[bool] = []
         self.get_account_calls = 0
 
     def list_accounts(self, include_details: bool = True):
         self.list_accounts_calls += 1
+        self.list_accounts_include_details.append(bool(include_details))
         return self._accounts_payload
 
     def get_account(self, account_id: str, allow_not_found: bool = True):
@@ -31,6 +33,7 @@ class FakeRGWAdmin:
 class FakeRGWAdminMetadataIds(FakeRGWAdmin):
     def list_accounts(self, include_details: bool = True):
         self.list_accounts_calls += 1
+        self.list_accounts_include_details.append(bool(include_details))
         if include_details:
             return list(self._account_details.values())
         return self._accounts_payload
@@ -119,7 +122,7 @@ def test_ceph_admin_accounts_listing_cache_is_reused_across_pages():
     assert rgw_admin.list_accounts_calls == 1
 
 
-def test_ceph_admin_accounts_listing_falls_back_to_include_details_when_metadata_has_only_ids():
+def test_ceph_admin_accounts_listing_enriches_page_profile_when_metadata_has_only_ids():
     accounts_payload = ["RGW03", "RGW01", "RGW02"]
     account_details = {
         "RGW01": _build_account_payload("RGW01", account_name="Alpha", email="alpha@example.test"),
@@ -144,7 +147,8 @@ def test_ceph_admin_accounts_listing_falls_back_to_include_details_when_metadata
     assert [item.account_name for item in response.items] == ["Alpha", "Beta", "Gamma"]
     assert [item.email for item in response.items] == ["alpha@example.test", "beta@example.test", "gamma@example.test"]
     assert rgw_admin.list_accounts_calls == 1
-    assert rgw_admin.get_account_calls == 0
+    assert rgw_admin.list_accounts_include_details == [False]
+    assert rgw_admin.get_account_calls == 3
 
 
 def test_ceph_admin_accounts_listing_cache_is_reused_for_quick_filter_changes():
@@ -184,6 +188,34 @@ def test_ceph_admin_accounts_listing_cache_is_reused_for_quick_filter_changes():
     assert [item.account_id for item in first.items] == ["RGW01", "RGW02", "RGW03"]
     assert [item.account_id for item in second.items] == ["RGW01"]
     assert rgw_admin.list_accounts_calls == 1
+    assert rgw_admin.list_accounts_include_details == [False]
+
+
+def test_ceph_admin_accounts_search_by_name_falls_back_to_profile_enrichment():
+    accounts_payload = ["RGW03", "RGW01", "RGW02"]
+    account_details = {
+        "RGW01": _build_account_payload("RGW01", account_name="Alpha"),
+        "RGW02": _build_account_payload("RGW02", account_name="Beta"),
+        "RGW03": _build_account_payload("RGW03", account_name="Gamma"),
+    }
+    ctx, rgw_admin = _build_ctx(endpoint_id=2201, accounts_payload=accounts_payload, account_details=account_details)
+
+    result = accounts_router.list_rgw_accounts(
+        page=1,
+        page_size=25,
+        search="beta",
+        advanced_filter=None,
+        sort_by="account_id",
+        sort_dir="asc",
+        include=[],
+        ctx=ctx,
+    )
+
+    assert [item.account_id for item in result.items] == ["RGW02"]
+    assert result.items[0].account_name == "Beta"
+    assert rgw_admin.list_accounts_calls == 1
+    assert rgw_admin.list_accounts_include_details == [False]
+    assert rgw_admin.get_account_calls == 3
 
 
 def test_ceph_admin_accounts_advanced_filter_uses_cached_listing_and_lazy_include():
@@ -281,7 +313,72 @@ def test_ceph_admin_accounts_sort_by_name_uses_metadata_without_detail_fetch():
     assert [item.account_id for item in result.items] == ["RGW01", "RGW02", "RGW03"]
     assert [item.account_name for item in result.items] == ["Alpha", "Beta", "Gamma"]
     assert rgw_admin.list_accounts_calls == 1
+    assert rgw_admin.list_accounts_include_details == [False]
     assert rgw_admin.get_account_calls == 0
+
+
+def test_ceph_admin_accounts_search_with_includes_enriches_only_current_page():
+    accounts_payload = ["RGW03", "RGW01", "RGW02"]
+    account_details = {
+        "RGW01": _build_account_payload(
+            "RGW01",
+            account_name="Alpha",
+            email="alpha@example.test",
+            max_users=5,
+            max_buckets=7,
+            quota_size=1024,
+            quota_objects=10,
+            bucket_count=2,
+            user_count=1,
+        ),
+        "RGW02": _build_account_payload(
+            "RGW02",
+            account_name="Beta",
+            email="beta@example.test",
+            max_users=8,
+            max_buckets=9,
+            quota_size=2048,
+            quota_objects=20,
+            bucket_count=4,
+            user_count=3,
+        ),
+        "RGW03": _build_account_payload(
+            "RGW03",
+            account_name="Gamma",
+            email="gamma@example.test",
+            max_users=11,
+            max_buckets=12,
+            quota_size=4096,
+            quota_objects=30,
+            bucket_count=6,
+            user_count=5,
+        ),
+    }
+    ctx, rgw_admin = _build_ctx(endpoint_id=2501, accounts_payload=accounts_payload, account_details=account_details)
+
+    result = accounts_router.list_rgw_accounts(
+        page=1,
+        page_size=50,
+        search="RGW02",
+        advanced_filter=None,
+        sort_by="account_id",
+        sort_dir="asc",
+        include=["profile", "limits", "quota", "stats"],
+        ctx=ctx,
+    )
+
+    assert [item.account_id for item in result.items] == ["RGW02"]
+    assert result.items[0].account_name == "Beta"
+    assert result.items[0].email == "beta@example.test"
+    assert result.items[0].max_users == 8
+    assert result.items[0].max_buckets == 9
+    assert result.items[0].quota_max_size_bytes == 2048
+    assert result.items[0].quota_max_objects == 20
+    assert result.items[0].bucket_count == 4
+    assert result.items[0].user_count == 3
+    assert rgw_admin.list_accounts_calls == 1
+    assert rgw_admin.list_accounts_include_details == [False]
+    assert rgw_admin.get_account_calls == 1
 
 
 def test_build_account_detail_ignores_legacy_kebab_case_limit_fields():
