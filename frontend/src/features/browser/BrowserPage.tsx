@@ -30,6 +30,7 @@ import {
   toolbarCompactSelectClasses,
 } from "../../components/toolbarControlClasses";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
+import UiBadge from "../../components/ui/UiBadge";
 import {
   cx,
   uiCardClass,
@@ -1962,16 +1963,18 @@ export default function BrowserPage({
         label: "Unavailable",
         title:
           "Download/Upload unavailable: CORS is disabled and proxy transfers are disabled.",
-        className:
-          "border-rose-200/70 bg-rose-200/60 text-rose-600/70 dark:border-rose-400/40 dark:bg-rose-400/25 dark:text-rose-200/90",
+        tone: "danger" as const,
+        indicatorClassName:
+          "border-rose-200/70 bg-rose-200/60 dark:border-rose-400/40 dark:bg-rose-400/25",
       };
     }
     if (useProxyTransfers) {
       return {
         label: "Proxy",
         title: "Download/Upload mode: Backend proxy transfers are active.",
-        className:
-          "border-amber-200/70 bg-amber-200/60 text-amber-600/70 dark:border-amber-400/40 dark:bg-amber-400/25 dark:text-amber-200/90",
+        tone: "warning" as const,
+        indicatorClassName:
+          "border-amber-200/70 bg-amber-200/60 dark:border-amber-400/40 dark:bg-amber-400/25",
       };
     }
     if (sseActive) {
@@ -1979,8 +1982,9 @@ export default function BrowserPage({
         label: "SSE-C",
         title:
           "Download/Upload mode: SSE-C customer key is active for this bucket.",
-        className:
-          "border-sky-200/70 bg-sky-200/60 text-sky-700/80 dark:border-sky-400/40 dark:bg-sky-400/25 dark:text-sky-100/90",
+        tone: "info" as const,
+        indicatorClassName:
+          "border-sky-200/70 bg-sky-200/60 dark:border-sky-400/40 dark:bg-sky-400/25",
       };
     }
     if (stsCredentials) {
@@ -1989,8 +1993,9 @@ export default function BrowserPage({
         title: stsExpirationLabel
           ? `Download/Upload mode: STS credentials active (expires at ${stsExpirationLabel}).`
           : "Download/Upload mode: STS credentials are active.",
-        className:
-          "border-emerald-200/70 bg-emerald-200/60 text-emerald-600/70 dark:border-emerald-400/40 dark:bg-emerald-400/25 dark:text-emerald-200/90",
+        tone: "success" as const,
+        indicatorClassName:
+          "border-emerald-200/70 bg-emerald-200/60 dark:border-emerald-400/40 dark:bg-emerald-400/25",
       };
     }
     return {
@@ -1998,8 +2003,9 @@ export default function BrowserPage({
       title: legacyStsTooltip
         ? `Download/Upload mode: Presigned URLs are active. ${legacyStsTooltip}`
         : "Download/Upload mode: Presigned URLs are active.",
-      className:
-        "border-emerald-200/70 bg-emerald-200/60 text-emerald-600/70 dark:border-emerald-400/40 dark:bg-emerald-400/25 dark:text-emerald-200/90",
+      tone: "success" as const,
+      indicatorClassName:
+        "border-emerald-200/70 bg-emerald-200/60 dark:border-emerald-400/40 dark:bg-emerald-400/25",
     };
   }, [
     corsStatus,
@@ -12183,19 +12189,20 @@ export default function BrowserPage({
                           title={accessBadge.title}
                         >
                           <span
-                            className={`mt-0.5 inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${accessBadge.className}`}
+                            className={`mt-0.5 inline-flex h-2.5 w-2.5 shrink-0 rounded-full border ${accessBadge.indicatorClassName}`}
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
                               <p className="font-semibold text-slate-700 dark:text-slate-100">
                                 Transfers
                               </p>
-                              <span
-                                className={`${chromeChipButtonClasses} shrink-0 border-current/10 px-2.5 py-1`}
-                                aria-label={`${accessBadge.label} — ${accessBadge.title}`}
+                              <UiBadge
+                                tone={accessBadge.tone}
+                                className="shrink-0 whitespace-nowrap px-2.5 py-1"
+                                title={accessBadge.title}
                               >
                                 {accessBadge.label}
-                              </span>
+                              </UiBadge>
                             </div>
                             <p className="text-slate-500 dark:text-slate-400">
                               {accessBadge.title}

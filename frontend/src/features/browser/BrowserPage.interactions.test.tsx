@@ -228,6 +228,14 @@ async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
   return menus[menus.length - 1] as HTMLElement;
 }
 
+function expectPassiveStatusBadge(badge: HTMLElement) {
+  const className = badge.getAttribute("class") ?? "";
+  expect(className).toContain("rounded-full");
+  expect(className).not.toContain("rounded-md");
+  expect(className).not.toContain("shadow-sm");
+  expect(className).not.toContain("hover:border-primary");
+}
+
 async function openActionsMoreMenu(user: ReturnType<typeof userEvent.setup>) {
   await user.click(
     within(getActionsToolbar()).getByRole("button", { name: "More" }),
@@ -850,6 +858,50 @@ describe("BrowserPage interactions", () => {
         screen.getByRole("toolbar", { name: "Browser actions bar" }),
       ).toBeInTheDocument();
     });
+  });
+
+  it("renders a passive Presign badge in the More status section", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const menu = await openContextMoreMenu(user);
+    expect(within(menu).getByText("Transfers")).toBeInTheDocument();
+    const badge = await within(menu).findByText("Presign");
+    expectPassiveStatusBadge(badge);
+  });
+
+  it("renders a passive Unavailable badge when direct and proxy transfers are both unavailable", async () => {
+    const user = userEvent.setup();
+    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const menu = await openContextMoreMenu(user);
+    expect(within(menu).getByText("Transfers")).toBeInTheDocument();
+    const badge = await within(menu).findByText("Unavailable");
+    expectPassiveStatusBadge(badge);
+  });
+
+  it("renders a passive Proxy badge when proxy transfers are active", async () => {
+    const user = userEvent.setup();
+    fetchBrowserSettingsMock.mockResolvedValue({
+      allow_proxy_transfers: true,
+      direct_upload_parallelism: 3,
+      proxy_upload_parallelism: 2,
+      direct_download_parallelism: 3,
+      proxy_download_parallelism: 2,
+      other_operations_parallelism: 2,
+      streaming_zip_threshold_mb: 200,
+    });
+    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const menu = await openContextMoreMenu(user);
+    expect(within(menu).getByText("Transfers")).toBeInTheDocument();
+    const badge = await within(menu).findByText("Proxy");
+    expectPassiveStatusBadge(badge);
   });
 
   it("keeps advanced search controls available after the explorer chrome refresh", async () => {
