@@ -13,7 +13,7 @@
   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
 }
 
-.docs-screenshot-carousel img {
+.docs-screenshot-carousel img:not(.docs-themed-shot__image) {
   display: block;
   width: 100%;
   height: auto;

@@ -26,7 +26,7 @@ It can also be used solely through the integrated S3 browser for direct object a
 ### Admin
 
 <a href="https://ksperis.github.io/s3-manager/user/screenshots-gallery/#admin">
-  <img src="doc/docs/assets/screenshots/user/user-overview.png" alt="Admin dashboard" width="560">
+  <img src="doc/docs/assets/screenshots/user/user-overview.light.png" alt="Admin dashboard" width="560">
 </a>
 
 - Manage UI users, roles, and workspace entitlements.
@@ -37,7 +37,7 @@ It can also be used solely through the integrated S3 browser for direct object a
 ### Manager
 
 <a href="https://ksperis.github.io/s3-manager/user/screenshots-gallery/#manager">
-  <img src="doc/docs/assets/screenshots/user/workspace-manager.png" alt="Manager buckets" width="560">
+  <img src="doc/docs/assets/screenshots/user/workspace-manager.light.png" alt="Manager buckets" width="560">
 </a>
 
 - Create and configure buckets with versioning, lifecycle, quotas, CORS, and access controls.
@@ -48,7 +48,7 @@ It can also be used solely through the integrated S3 browser for direct object a
 ### Browser
 
 <a href="https://ksperis.github.io/s3-manager/user/screenshots-gallery/#browser">
-  <img src="doc/docs/assets/screenshots/user/workspace-browser.png" alt="S3 browser" width="560">
+  <img src="doc/docs/assets/screenshots/user/workspace-browser.light.png" alt="S3 browser" width="560">
 </a>
 
 - Browse buckets, prefixes, and objects from the selected context.
@@ -59,7 +59,7 @@ It can also be used solely through the integrated S3 browser for direct object a
 ### Ceph-admin
 
 <a href="https://ksperis.github.io/s3-manager/user/screenshots-gallery/#ceph-admin">
-  <img src="doc/docs/assets/screenshots/user/workspace-ceph-admin.png" alt="Ceph Admin" width="560">
+  <img src="doc/docs/assets/screenshots/user/workspace-ceph-admin.light.png" alt="Ceph Admin" width="560">
 </a>
 
 - Manage Ceph RGW accounts and users at cluster scope.
@@ -72,7 +72,7 @@ It can also be used solely through the integrated S3 browser for direct object a
 > Note: the Portal feature is temporarily removed; this screenshot is kept as historical documentation.
 
 <a href="https://ksperis.github.io/s3-manager/user/screenshots-gallery/#portal">
-  <img src="doc/docs/assets/screenshots/user/workspace-portal.png" alt="Portal" width="560">
+  <img src="doc/docs/assets/screenshots/user/workspace-portal.light.png" alt="Portal" width="560">
 </a>
 
 - Historical workspace for guided self-service workflows.

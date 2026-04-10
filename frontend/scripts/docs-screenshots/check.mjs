@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const userDocsDir = path.join(repoRoot, "doc", "docs", "user");
 const screenshotsDir = path.join(repoRoot, "doc", "docs", "assets", "screenshots", "user");
+const readmePath = path.join(repoRoot, "README.md");
 const ALLOWED_EXTRA_SCREENSHOTS = new Set();
 const MULTI_SCREENSHOT_PAGE_RULES = new Map([
   ["screenshots-gallery.md", { min: 2 }],
@@ -14,14 +15,19 @@ const markdownFiles = (await fs.readdir(userDocsDir)).filter((name) => name.ends
 const errors = [];
 const referencedScreenshots = new Set();
 
+const stripFencedCodeBlocks = (content) => content.replace(/^```[\s\S]*?^```$/gm, "");
+
 const extractThemedScreenshotReferences = (content) => {
   const blockMatches = [...content.matchAll(/<div[^>]+data-docs-themed-shot[^>]*>([\s\S]*?)<\/div>/g)];
   return blockMatches.map((match) => {
     const block = match[1];
-    const variants = Object.fromEntries(
-      [...block.matchAll(/<img[^>]+data-docs-shot-variant=["'](light|dark)["'][^>]+src=["'](?:\.\.\/)+assets\/screenshots\/user\/([^"']+\.png)["'][^>]*>/g)]
-        .map((variantMatch) => [variantMatch[1], variantMatch[2]])
-    );
+    const variants = {};
+    for (const variantMatch of block.matchAll(/<img[^>]+data-docs-shot-variant=["'](light|dark)["'][^>]+src=["']([^"']+\.png)["'][^>]*>/g)) {
+      variants[variantMatch[1]] = {
+        ref: variantMatch[2],
+        fileName: path.basename(variantMatch[2]),
+      };
+    }
     return {
       light: variants.light ?? null,
       dark: variants.dark ?? null,
@@ -35,6 +41,11 @@ const extractLegacyScreenshotReferences = (content) => {
     .map((match) => match[1])
     .filter((name) => !name.endsWith(".light.png") && !name.endsWith(".dark.png"));
 };
+
+const extractReadmeScreenshotReferences = (content) => (
+  [...content.matchAll(/<img[^>]+src=["'](doc\/docs\/assets\/screenshots\/user\/[^"']+\.png)["'][^>]*>/g)]
+    .map((match) => match[1])
+);
 
 const pngSize = async (filePath) => {
   const buffer = await fs.readFile(filePath);
@@ -50,7 +61,7 @@ const pngSize = async (filePath) => {
 
 for (const fileName of markdownFiles) {
   const filePath = path.join(userDocsDir, fileName);
-  const content = await fs.readFile(filePath, "utf8");
+  const content = stripFencedCodeBlocks(await fs.readFile(filePath, "utf8"));
   const matches = extractThemedScreenshotReferences(content);
   const pageRule = MULTI_SCREENSHOT_PAGE_RULES.get(fileName);
   const legacyMatches = extractLegacyScreenshotReferences(content);
@@ -75,25 +86,32 @@ for (const fileName of markdownFiles) {
       continue;
     }
 
-    const variantNames = [reference.light, reference.dark];
+    const variants = [reference.light, reference.dark];
+    const variantNames = variants.map((variant) => variant.fileName);
     const normalizedNames = variantNames.map((name) => name.replace(/\.(light|dark)\.png$/, ""));
     if (normalizedNames[0] !== normalizedNames[1]) {
       errors.push(`${fileName}: themed screenshot block ${index + 1} must use matching light/dark basenames`);
     }
 
-    for (const imageName of new Set(variantNames)) {
+    for (const variant of variants) {
+      const imageName = variant.fileName;
+      const resolvedPath = path.resolve(path.dirname(filePath), variant.ref);
       referencedScreenshots.add(imageName);
-      const imagePath = path.join(screenshotsDir, imageName);
+
+      if (path.normalize(resolvedPath) !== path.normalize(path.join(screenshotsDir, imageName))) {
+        errors.push(`${fileName}: screenshot block ${index + 1} uses an invalid path for ${imageName}: ${variant.ref}`);
+        continue;
+      }
 
       try {
-        await fs.access(imagePath);
+        await fs.access(resolvedPath);
       } catch {
         errors.push(`${fileName}: missing screenshot file ${imageName}`);
         continue;
       }
 
       try {
-        const { width, height } = await pngSize(imagePath);
+        const { width, height } = await pngSize(resolvedPath);
         if (width !== 1728 || height !== 972) {
           errors.push(`${fileName}: screenshot ${imageName} has ${width}x${height}, expected 1728x972`);
         }
@@ -101,6 +119,20 @@ for (const fileName of markdownFiles) {
         errors.push(`${fileName}: unable to validate ${imageName} (${error instanceof Error ? error.message : String(error)})`);
       }
     }
+  }
+}
+
+const readmeContent = await fs.readFile(readmePath, "utf8");
+for (const ref of extractReadmeScreenshotReferences(readmeContent)) {
+  const fileName = path.basename(ref);
+  const resolvedPath = path.resolve(repoRoot, ref);
+  referencedScreenshots.add(fileName);
+
+  try {
+    await fs.access(resolvedPath);
+  } catch {
+    errors.push(`README.md: missing screenshot file ${ref}`);
+    continue;
   }
 }
 
