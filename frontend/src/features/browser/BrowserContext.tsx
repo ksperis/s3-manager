@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useMemo, useState, ReactNode } fr
 import { useSearchParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import { ExecutionContext, ExecutionContextKind, listExecutionContexts } from "../../api/executionContexts";
+import { EXECUTION_CONTEXTS_REFRESH_EVENT } from "../../utils/executionContextRefresh";
 
 const EXECUTION_CONTEXT_STORAGE_KEY = "selectedExecutionContextId";
 const EXECUTION_CONTEXT_URL_PARAM = "ctx";
@@ -61,9 +62,17 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
   const sessionInfo = useMemo(() => readSessionInfo(), []);
   const requiresContextSelection = !sessionInfo.isSession;
   const [contexts, setContexts] = useState<ExecutionContext[]>([]);
+  const [contextsRefreshToken, setContextsRefreshToken] = useState(0);
   const [selectedContextId, setSelectedContextIdState] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleRefresh = () => setContextsRefreshToken((value) => value + 1);
+    window.addEventListener(EXECUTION_CONTEXTS_REFRESH_EVENT, handleRefresh);
+    return () => window.removeEventListener(EXECUTION_CONTEXTS_REFRESH_EVENT, handleRefresh);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -81,7 +90,7 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
       }
     };
     load();
-  }, [requiresContextSelection]);
+  }, [contextsRefreshToken, requiresContextSelection]);
 
   useEffect(() => {
     if (!requiresContextSelection) {

@@ -26,7 +26,7 @@ import {
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "./useLiveS3CredentialsValidation";
-import { notifyExecutionContextsRefresh } from "../manager/S3AccountContext";
+import { notifyExecutionContextsRefresh } from "../../utils/executionContextRefresh";
 import {
   WORKSPACE_STORAGE_KEY,
   isAdminLikeRole,

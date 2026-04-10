@@ -6,6 +6,7 @@ import axios from "axios";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createConnection } from "../api/connections";
 import { listStorageEndpoints, StorageEndpoint } from "../api/storageEndpoints";
+import { notifyExecutionContextsRefresh } from "../utils/executionContextRefresh";
 import Modal from "./Modal";
 
 type EndpointMode = "preset" | "custom";
@@ -253,6 +254,7 @@ export default function AddS3ConnectionFromKeyModal({
         credential_owner_type: defaultOwnerType || null,
         credential_owner_identifier: defaultOwnerIdentifier || null,
       });
+      notifyExecutionContextsRefresh();
       onCreated?.();
       onClose();
     } catch (err) {

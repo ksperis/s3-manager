@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExecutionContext } from "../../api/executionContexts";
 import { fetchManagerContext } from "../../api/managerContext";
-import { EXECUTION_CONTEXTS_REFRESH_EVENT, S3AccountProvider, useS3AccountContext } from "./S3AccountContext";
+import { EXECUTION_CONTEXTS_REFRESH_EVENT } from "../../utils/executionContextRefresh";
+import { S3AccountProvider, useS3AccountContext } from "./S3AccountContext";
 
 const listExecutionContextsMock = vi.fn();
 const fetchManagerContextMock = vi.mocked(fetchManagerContext);

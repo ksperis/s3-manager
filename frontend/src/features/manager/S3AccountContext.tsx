@@ -7,15 +7,10 @@ import { useSearchParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import { ExecutionContext, listExecutionContexts } from "../../api/executionContexts";
 import { fetchManagerContext, type ManagerAccessMode } from "../../api/managerContext";
+import { EXECUTION_CONTEXTS_REFRESH_EVENT } from "../../utils/executionContextRefresh";
 
 const EXECUTION_CONTEXT_STORAGE_KEY = "selectedExecutionContextId";
 const EXECUTION_CONTEXT_URL_PARAM = "ctx";
-export const EXECUTION_CONTEXTS_REFRESH_EVENT = "execution-contexts:refresh";
-
-export function notifyExecutionContextsRefresh(): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(EXECUTION_CONTEXTS_REFRESH_EVENT));
-}
 
 type S3AccountContextType = {
   accounts: ExecutionContext[];
