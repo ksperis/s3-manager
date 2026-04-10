@@ -34,4 +34,7 @@ You can identify whether the issue is permission, feature flag, endpoint capabil
 
 ## Visual example
 
-![Troubleshooting example when no account context is selected](../assets/screenshots/user/troubleshooting.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/troubleshooting.light.png" alt="Troubleshooting example when no account context is selected" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/troubleshooting.dark.png" alt="Troubleshooting example when no account context is selected" loading="lazy">
+</div>

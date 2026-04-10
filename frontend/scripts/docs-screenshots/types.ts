@@ -1,4 +1,5 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+export type ScreenshotThemeVariant = "light" | "dark";
 
 export type LocalStorageSeed = {
   token: string;
@@ -35,7 +36,7 @@ export type DocScreenshotScenario = {
   id: string;
   docPage: string;
   route: string;
-  outputFile: string;
+  outputBasename: string;
   waitFor: string;
   storage: LocalStorageSeed;
   actions?: ScenarioAction[];

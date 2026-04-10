@@ -35,4 +35,7 @@ You can compare monthly billing exposure across tenants and drill into the subje
 
 ## Visual example
 
-![Admin Billing page with monthly summary, subject totals, and selected account detail charts](../assets/screenshots/user/admin-billing.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/admin-billing.light.png" alt="Admin Billing page with monthly summary, subject totals, and selected account detail charts" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/admin-billing.dark.png" alt="Admin Billing page with monthly summary, subject totals, and selected account detail charts" loading="lazy">
+</div>

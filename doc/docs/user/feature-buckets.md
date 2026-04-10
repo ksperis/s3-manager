@@ -40,4 +40,7 @@ Bucket configuration is applied as native backend settings and visible in detail
 
 ## Visual example
 
-![Buckets feature page with creation and table controls](../assets/screenshots/user/feature-buckets.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/feature-buckets.light.png" alt="Buckets feature page with creation and table controls" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/feature-buckets.dark.png" alt="Buckets feature page with creation and table controls" loading="lazy">
+</div>

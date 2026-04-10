@@ -1,5 +1,7 @@
 (function () {
   const carouselSelector = "[data-docs-carousel]";
+  const themedShotSelector = "[data-docs-themed-shot]";
+  const themedShotVariantSelector = "[data-docs-shot-variant]";
   const screenshotTriggerSelector = ".docs-screenshot-trigger";
   const focusableSelector = [
     "a[href]",
@@ -9,6 +11,8 @@
     "textarea:not([disabled])",
     "[tabindex]:not([tabindex='-1'])",
   ].join(", ");
+  const collections = new Set();
+  let themeObserver = null;
 
   const lightbox = {
     root: null,
@@ -53,14 +57,17 @@
   }
 
   function createCollection(title, options) {
-    return {
+    const collection = {
       title,
       slides: [],
       thumbButtons: [],
       currentIndex: 0,
       hideChromeWhenSingle: Boolean(options && options.hideChromeWhenSingle),
       render: () => {},
+      refresh: () => {},
     };
+    collections.add(collection);
+    return collection;
   }
 
   function escapeHtml(value) {
@@ -82,19 +89,61 @@
     }
   }
 
-  function resolveImageUrl(image) {
+  function getActiveThemeVariant() {
+    return document.documentElement?.dataset.mdColorScheme === "slate" ? "dark" : "light";
+  }
+
+  function isThemedShot(element) {
+    return element instanceof HTMLElement && element.matches(themedShotSelector);
+  }
+
+  function getThemedShotVariantImage(shot, variant) {
+    if (!isThemedShot(shot)) return null;
+    const image = shot.querySelector(`${themedShotVariantSelector}[data-docs-shot-variant="${variant}"]`);
+    return image instanceof HTMLImageElement ? image : null;
+  }
+
+  function getActiveMediaElement(element) {
+    if (isThemedShot(element)) {
+      return (
+        getThemedShotVariantImage(element, getActiveThemeVariant())
+        || getThemedShotVariantImage(element, "light")
+        || getThemedShotVariantImage(element, "dark")
+      );
+    }
+    return element instanceof HTMLImageElement ? element : null;
+  }
+
+  function resolveMediaUrl(element) {
+    const image = getActiveMediaElement(element);
     if (!(image instanceof HTMLImageElement)) return "";
     return resolveUrl(image.currentSrc || image.getAttribute("src") || "");
   }
 
-  function resolveImagePath(image) {
-    const url = resolveImageUrl(image);
+  function resolveMediaPath(element) {
+    const url = resolveMediaUrl(element);
     if (!url) return "";
 
     try {
       return new URL(url).pathname;
     } catch (_error) {
       return url;
+    }
+  }
+
+  function resolveMediaAlt(element, fallback) {
+    const image = getActiveMediaElement(element);
+    if (image && image.getAttribute("alt")) {
+      return image.getAttribute("alt") || fallback || "";
+    }
+    return fallback || "";
+  }
+
+  function updateThumbPreview(thumb, sourceUrl) {
+    if (!(thumb instanceof HTMLElement)) return;
+    const thumbImage = thumb.querySelector("img");
+    if (thumbImage instanceof HTMLImageElement) {
+      thumbImage.src = sourceUrl;
     }
   }
 
@@ -274,7 +323,7 @@
       thumb.setAttribute("aria-label", `Show slide ${index + 1}: ${slide.thumbLabel}`);
 
       const thumbImage = document.createElement("img");
-      thumbImage.src = slide.src;
+      thumbImage.src = slide.getSrc();
       thumbImage.alt = "";
       thumbImage.loading = "lazy";
       thumb.appendChild(thumbImage);
@@ -305,8 +354,8 @@
 
     lightbox.root.classList.toggle("is-simple", hideChrome);
     lightbox.title.textContent = collection.title;
-    lightbox.image.src = slide.src;
-    lightbox.image.alt = slide.alt;
+    lightbox.image.src = slide.getSrc();
+    lightbox.image.alt = slide.getAlt();
     lightbox.caption.innerHTML = slide.captionHTML;
     lightbox.counter.textContent = `${collection.currentIndex + 1} / ${collection.slides.length}`;
 
@@ -321,6 +370,7 @@
       const active = thumbIndex === collection.currentIndex;
       thumb.classList.toggle("is-active", active);
       thumb.setAttribute("aria-current", active ? "true" : "false");
+      updateThumbPreview(thumb, collection.slides[thumbIndex].getSrc());
       if (!hideChrome && active) {
         thumb.scrollIntoView({ block: "nearest", inline: "nearest" });
       }
@@ -425,7 +475,9 @@
     trapFocus(lightbox.dialog, event);
   }
 
-  function createImageTrigger(image, label, variantClass) {
+  function createMediaTrigger(media, label, variantClass) {
+    if (!(media instanceof HTMLElement) || !media.parentNode) return null;
+
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = `docs-screenshot-trigger ${variantClass}`;
@@ -435,8 +487,8 @@
     hint.className = "docs-screenshot-trigger__hint";
     hint.textContent = "Fullscreen";
 
-    image.parentNode.insertBefore(trigger, image);
-    trigger.append(image, hint);
+    media.parentNode.insertBefore(trigger, media);
+    trigger.append(media, hint);
 
     return trigger;
   }
@@ -481,16 +533,17 @@
     collection.thumbButtons = figures.map((figure, index) => {
       figure.classList.add("docs-screenshot-carousel__slide");
 
-      const image = figure.querySelector("img");
+      const media = figure.querySelector(`${themedShotSelector}, img`);
       const caption = figure.querySelector("figcaption");
-      const label = figure.dataset.thumbLabel || image?.getAttribute("alt") || `Slide ${index + 1}`;
-      const trigger = image ? createImageTrigger(image, label, "docs-screenshot-trigger--carousel") : null;
+      const label = figure.dataset.thumbLabel || resolveMediaAlt(media) || `Slide ${index + 1}`;
+      const trigger = media ? createMediaTrigger(media, label, "docs-screenshot-trigger--carousel") : null;
 
       collection.slides.push({
         figure,
         trigger,
-        src: image ? resolveImageUrl(image) : "",
-        alt: image?.getAttribute("alt") || label,
+        media,
+        getSrc: () => resolveMediaUrl(media),
+        getAlt: () => resolveMediaAlt(media, label),
         captionHTML: caption?.innerHTML || escapeHtml(label),
         thumbLabel: label,
       });
@@ -509,9 +562,9 @@
       thumb.className = "docs-screenshot-carousel__thumb";
       thumb.setAttribute("aria-label", `Show slide ${index + 1}: ${label}`);
 
-      if (image) {
+      if (media) {
         const thumbImage = document.createElement("img");
-        thumbImage.src = resolveImageUrl(image);
+        thumbImage.src = resolveMediaUrl(media);
         thumbImage.alt = "";
         thumbImage.loading = "lazy";
         thumb.appendChild(thumbImage);
@@ -554,9 +607,17 @@
       nextButton.disabled = index === collection.slides.length - 1;
       counter.textContent = `${index + 1} / ${collection.slides.length}`;
 
+      collection.refresh();
+
       if (lightbox.currentCollection === collection && isLightboxOpen()) {
         updateLightbox();
       }
+    };
+
+    collection.refresh = () => {
+      collection.thumbButtons.forEach((thumb, thumbIndex) => {
+        updateThumbPreview(thumb, collection.slides[thumbIndex].getSrc());
+      });
     };
 
     previousButton.addEventListener("click", () => {
@@ -588,14 +649,15 @@
     return title || "Documentation screenshot";
   }
 
-  function isEligibleStandaloneImage(image) {
-    if (!(image instanceof HTMLImageElement)) return false;
-    if (image.dataset.docsScreenshotEnhanced === "true") return false;
-    if (image.closest(carouselSelector)) return false;
-    if (image.closest(screenshotTriggerSelector)) return false;
-    if (image.closest("a, button")) return false;
+  function isEligibleStandaloneMedia(element) {
+    if (!(element instanceof HTMLElement)) return false;
+    if (element.dataset.docsScreenshotEnhanced === "true") return false;
+    if (element.closest(carouselSelector)) return false;
+    if (element.closest(screenshotTriggerSelector)) return false;
+    if (element.closest("a, button")) return false;
+    if (!isThemedShot(element) && element.closest(themedShotSelector)) return false;
 
-    const path = resolveImagePath(image);
+    const path = resolveMediaPath(element);
     return path.includes("/assets/screenshots/") || path.includes("assets/screenshots/");
   }
 
@@ -603,23 +665,24 @@
     const contentRoot = getContentRoot();
     if (!contentRoot) return;
 
-    const images = Array.from(contentRoot.querySelectorAll("img")).filter(isEligibleStandaloneImage);
-    if (images.length === 0) return;
+    const mediaNodes = Array.from(contentRoot.querySelectorAll(`${themedShotSelector}, img`)).filter(isEligibleStandaloneMedia);
+    if (mediaNodes.length === 0) return;
 
     const collection = createCollection(getPageTitle(contentRoot), {
       hideChromeWhenSingle: true,
     });
 
-    images.forEach((image, index) => {
-      image.dataset.docsScreenshotEnhanced = "true";
+    mediaNodes.forEach((media, index) => {
+      media.dataset.docsScreenshotEnhanced = "true";
 
-      const label = (image.getAttribute("alt") || "").trim() || `Screenshot ${index + 1}`;
-      const trigger = createImageTrigger(image, label, "docs-screenshot-trigger--standalone");
+      const label = resolveMediaAlt(media, `Screenshot ${index + 1}`).trim() || `Screenshot ${index + 1}`;
+      const trigger = createMediaTrigger(media, label, "docs-screenshot-trigger--standalone");
 
       collection.slides.push({
         trigger,
-        src: resolveImageUrl(image),
-        alt: image.getAttribute("alt") || label,
+        media,
+        getSrc: () => resolveMediaUrl(media),
+        getAlt: () => resolveMediaAlt(media, label),
         captionHTML: escapeHtml(label),
         thumbLabel: label,
       });
@@ -646,13 +709,45 @@
       }
     };
 
+    collection.refresh = () => {
+      if (lightbox.currentCollection === collection && isLightboxOpen()) {
+        updateLightbox();
+      }
+    };
+
     collection.render(0);
   }
 
+  function refreshCollections() {
+    collections.forEach((collection) => {
+      if (typeof collection.refresh === "function") {
+        collection.refresh();
+      }
+    });
+  }
+
+  function observeThemeChanges() {
+    if (themeObserver || !document.documentElement) return;
+
+    themeObserver = new MutationObserver((mutations) => {
+      if (mutations.some((mutation) => mutation.attributeName === "data-md-color-scheme")) {
+        refreshCollections();
+      }
+    });
+
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-md-color-scheme"],
+    });
+  }
+
   function initScreenshotViewer() {
+    collections.clear();
     closeLightbox({ restoreFocus: false });
     document.querySelectorAll(carouselSelector).forEach((root) => enhanceCarousel(root));
     enhanceStandaloneScreenshots();
+    observeThemeChanges();
+    refreshCollections();
   }
 
   if (typeof document$ !== "undefined" && document$ && typeof document$.subscribe === "function") {

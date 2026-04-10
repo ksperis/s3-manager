@@ -13,7 +13,6 @@ export default defineConfig({
     viewport: { width: 1728, height: 972 },
     locale: "en-US",
     timezoneId: "UTC",
-    colorScheme: "dark",
   },
   webServer: {
     command: "npm run dev -- --host 127.0.0.1 --port 4173",

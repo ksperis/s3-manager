@@ -19,6 +19,23 @@
   height: auto;
 }
 
+.docs-themed-shot {
+  display: block;
+  width: 100%;
+}
+
+.docs-themed-shot__image {
+  display: none;
+  width: 100%;
+  height: auto;
+}
+
+html:not([data-md-color-scheme="slate"]) .docs-themed-shot__image--light,
+html[data-md-color-scheme="default"] .docs-themed-shot__image--light,
+html[data-md-color-scheme="slate"] .docs-themed-shot__image--dark {
+  display: block;
+}
+
 .docs-screenshot-carousel figcaption {
   padding: 1rem 1.1rem 1.1rem;
   color: var(--md-default-fg-color);
@@ -102,6 +119,7 @@
 }
 
 .docs-screenshot-trigger img,
+.docs-screenshot-trigger .docs-themed-shot,
 .docs-screenshot-carousel__image-button img {
   display: block;
   width: 100%;

@@ -42,4 +42,7 @@ You can run Ceph cluster-wide tasks without switching to account-scoped Manager 
 
 ## Visual example
 
-![Ceph Admin workspace with endpoint and RGW inventory](../assets/screenshots/user/workspace-ceph-admin.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/workspace-ceph-admin.light.png" alt="Ceph Admin workspace with endpoint and RGW inventory" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/workspace-ceph-admin.dark.png" alt="Ceph Admin workspace with endpoint and RGW inventory" loading="lazy">
+</div>

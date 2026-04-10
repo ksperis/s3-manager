@@ -43,23 +43,33 @@ When adding or changing routes/features:
 
 ## User screenshot workflow
 
-User pages in `doc/docs/user/*.md` normally include exactly one screenshot reference:
+User pages in `doc/docs/user/*.md` normally include exactly one themed screenshot block:
 
-`![...](../assets/screenshots/user/<page-screenshot>.png)`
+```html
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/<page-screenshot>.light.png" alt="..." loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/<page-screenshot>.dark.png" alt="..." loading="lazy">
+</div>
+```
 
 Published docs automatically enhance screenshots under `assets/screenshots/` so a click opens them in a fullscreen viewer.
 
 Exception:
 
-- `user/screenshots-gallery.md` is a curated gallery page and may include multiple screenshot references via HTML `<img>` tags.
+- `user/screenshots-gallery.md` is a curated gallery page and may include multiple themed screenshot blocks inside HTML `<figure>` tags.
 
-The screenshots are generated with synthetic/mock data using Playwright:
+Most screenshots are generated with synthetic/mock data using Playwright:
 
 ```bash
 npm --prefix frontend run docs:screenshots
 ```
 
-Validate references and dimensions (1728x972) before merging:
+The generator writes both variants for each logical screenshot:
+
+- `basename.light.png`
+- `basename.dark.png`
+
+Validate references and dimensions (1728x972 for both variants) before merging:
 
 ```bash
 npm --prefix frontend run docs:screenshots:check
@@ -67,14 +77,18 @@ npm --prefix frontend run docs:screenshots:check
 
 If you add a new standard user page:
 
-1. Add a scenario in `frontend/scripts/docs-screenshots/scenarios.ts` with route, storage seed, mocks, and output file.
+1. Add a scenario in `frontend/scripts/docs-screenshots/scenarios.ts` with route, storage seed, mocks, and output basename.
 2. Generate screenshots.
-3. Add one screenshot reference to the new markdown page using normal Markdown image syntax.
+3. Add one themed screenshot block to the new markdown page.
 4. Run the screenshot check script.
 
 If you update the gallery page:
 
 1. Add or update the required screenshot scenarios in `frontend/scripts/docs-screenshots/scenarios.ts`.
 2. Generate screenshots.
-3. Reference the curated screenshots from `user/screenshots-gallery.md`.
+3. Reference the curated screenshots from `user/screenshots-gallery.md` using themed screenshot blocks.
 4. Run the screenshot check script.
+
+Historical note:
+
+- `workspace-portal` is manually maintained because Portal is no longer part of the active product surface, but it still follows the same `.light.png` / `.dark.png` convention.

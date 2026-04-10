@@ -37,4 +37,7 @@ You can inspect object history and act on previous versions without leaving Brow
 
 ## Visual example
 
-![Browser object versions modal showing prior versions and delete markers for a daily report](../assets/screenshots/user/feature-object-versions-browser.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/feature-object-versions-browser.light.png" alt="Browser object versions modal showing prior versions and delete markers for a daily report" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/feature-object-versions-browser.dark.png" alt="Browser object versions modal showing prior versions and delete markers for a daily report" loading="lazy">
+</div>

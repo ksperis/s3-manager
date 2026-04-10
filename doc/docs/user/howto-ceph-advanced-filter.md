@@ -37,4 +37,7 @@ The bucket table is narrowed down to the buckets matching your advanced criteria
 
 ## Visual example
 
-![Ceph Admin advanced filter drawer](../assets/screenshots/user/ceph-admin-advanced-filter.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/ceph-admin-advanced-filter.light.png" alt="Ceph Admin advanced filter drawer" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/ceph-admin-advanced-filter.dark.png" alt="Ceph Admin advanced filter drawer" loading="lazy">
+</div>

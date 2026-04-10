@@ -33,4 +33,7 @@ IAM resources are managed with native IAM semantics.
 
 ## Visual example
 
-![IAM users feature page with principal list](../assets/screenshots/user/feature-iam.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/feature-iam.light.png" alt="IAM users feature page with principal list" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/feature-iam.dark.png" alt="IAM users feature page with principal list" loading="lazy">
+</div>

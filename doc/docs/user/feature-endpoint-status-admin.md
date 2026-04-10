@@ -34,4 +34,7 @@ You can assess current backend health quickly and identify which endpoints requi
 
 ## Visual example
 
-![Admin Endpoint Status page with latency overview, health timelines, and recent incidents](../assets/screenshots/user/admin-endpoint-status.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/admin-endpoint-status.light.png" alt="Admin Endpoint Status page with latency overview, health timelines, and recent incidents" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/admin-endpoint-status.dark.png" alt="Admin Endpoint Status page with latency overview, health timelines, and recent incidents" loading="lazy">
+</div>

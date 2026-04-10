@@ -44,4 +44,7 @@ You can map each operational task to the right workspace and avoid cross-scope m
 
 ## Visual example
 
-![Manager workspace navigation for storage administration](../assets/screenshots/user/use-cases-storage-admin.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/use-cases-storage-admin.light.png" alt="Manager workspace navigation for storage administration" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/use-cases-storage-admin.dark.png" alt="Manager workspace navigation for storage administration" loading="lazy">
+</div>

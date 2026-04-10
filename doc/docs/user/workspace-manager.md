@@ -41,4 +41,7 @@ Tenant resources are managed in the right scope with explicit context control.
 
 ## Visual example
 
-![Manager workspace with buckets, topics and migration tools](../assets/screenshots/user/workspace-manager.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/workspace-manager.light.png" alt="Manager workspace with buckets, topics and migration tools" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/workspace-manager.dark.png" alt="Manager workspace with buckets, topics and migration tools" loading="lazy">
+</div>

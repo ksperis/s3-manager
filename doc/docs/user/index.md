@@ -17,4 +17,7 @@ Use this section for task-oriented instructions. Each page focuses on actionable
 
 ## Visual example
 
-![Admin overview with workspace and platform navigation](../assets/screenshots/user/user-overview.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/user-overview.light.png" alt="Admin overview with workspace and platform navigation" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/user-overview.dark.png" alt="Admin overview with workspace and platform navigation" loading="lazy">
+</div>

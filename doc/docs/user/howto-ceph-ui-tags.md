@@ -35,4 +35,7 @@ Selected buckets receive UI tags that can be reused to speed up repeated operati
 
 ## Visual example
 
-![Ceph Admin UI tags workflow on selected buckets](../assets/screenshots/user/ceph-admin-ui-tags.png)
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/ceph-admin-ui-tags.light.png" alt="Ceph Admin UI tags workflow on selected buckets" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/ceph-admin-ui-tags.dark.png" alt="Ceph Admin UI tags workflow on selected buckets" loading="lazy">
+</div>
