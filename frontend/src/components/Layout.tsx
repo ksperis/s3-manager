@@ -2,11 +2,21 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { logout as logoutRequest } from "../api/auth";
 import Header from "./Header";
 import Sidebar, { SidebarLink, SidebarSection } from "./Sidebar";
+import {
+  DESKTOP_SIDEBAR_SESSION_STORAGE_KEY,
+  SIDEBAR_COMPACT_WIDTH,
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_RESIZE_KEYBOARD_STEP,
+  isSidebarCompact,
+  normalizeSidebarWidth,
+  stepSidebarWidth,
+} from "./sidebarSizing";
 import Topbar from "./Topbar";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
 
@@ -44,11 +54,6 @@ function getUserEmail(): string | null {
   }
 }
 
-function buildSidebarCompactStorageKey(sidebarTitle?: string, headerTitle?: string): string {
-  const source = (sidebarTitle || headerTitle || "default").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  return `sidebar_compact_${source}`;
-}
-
 export default function Layout({
   navLinks = [],
   navSections,
@@ -72,9 +77,15 @@ export default function Layout({
 }: LayoutProps) {
   const location = useLocation();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const sidebarCompactStorageKey = buildSidebarCompactStorageKey(sidebarTitle, headerTitle);
-  const [desktopSidebarCompact, setDesktopSidebarCompact] = useState(false);
+  const [desktopSidebarWidth, setDesktopSidebarWidth] = useState(() => {
+    if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH;
+    const raw = window.sessionStorage.getItem(DESKTOP_SIDEBAR_SESSION_STORAGE_KEY);
+    return raw ? normalizeSidebarWidth(Number(raw)) : SIDEBAR_DEFAULT_WIDTH;
+  });
+  const [desktopSidebarDragging, setDesktopSidebarDragging] = useState(false);
+  const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const shouldShowSidebar = !hideSidebar;
+  const desktopSidebarCompact = isSidebarCompact(desktopSidebarWidth);
   const userEmail = getUserEmail();
   const logout = () => {
     void logoutRequest().catch((err) => {
@@ -107,15 +118,8 @@ export default function Layout({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!shouldShowSidebar) return;
-    const raw = window.localStorage.getItem(sidebarCompactStorageKey);
-    setDesktopSidebarCompact(raw === "1");
-  }, [shouldShowSidebar, sidebarCompactStorageKey]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(sidebarCompactStorageKey, desktopSidebarCompact ? "1" : "0");
-  }, [desktopSidebarCompact, sidebarCompactStorageKey]);
+    window.sessionStorage.setItem(DESKTOP_SIDEBAR_SESSION_STORAGE_KEY, String(desktopSidebarWidth));
+  }, [desktopSidebarWidth]);
 
   useEffect(() => {
     if (!mobileSidebarOpen) return;
@@ -139,6 +143,71 @@ export default function Layout({
       window.removeEventListener("resize", handleResize);
     };
   }, [mobileSidebarOpen]);
+
+  useEffect(() => {
+    if (!desktopSidebarDragging) return;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const resizeState = sidebarResizeStateRef.current;
+      if (!resizeState) return;
+      const nextWidth = resizeState.startWidth + (event.clientX - resizeState.startX);
+      setDesktopSidebarWidth(normalizeSidebarWidth(nextWidth));
+    };
+
+    const stopDragging = () => {
+      sidebarResizeStateRef.current = null;
+      setDesktopSidebarDragging(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopDragging);
+    window.addEventListener("pointercancel", stopDragging);
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopDragging);
+      window.removeEventListener("pointercancel", stopDragging);
+    };
+  }, [desktopSidebarDragging]);
+
+  const handleDesktopSidebarResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    sidebarResizeStateRef.current = {
+      startX: event.clientX,
+      startWidth: desktopSidebarWidth,
+    };
+    setDesktopSidebarDragging(true);
+  };
+
+  const handleDesktopSidebarResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    switch (event.key) {
+      case "ArrowLeft":
+        event.preventDefault();
+        setDesktopSidebarWidth((current) => stepSidebarWidth(current, -SIDEBAR_RESIZE_KEYBOARD_STEP));
+        break;
+      case "ArrowRight":
+        event.preventDefault();
+        setDesktopSidebarWidth((current) => stepSidebarWidth(current, SIDEBAR_RESIZE_KEYBOARD_STEP));
+        break;
+      case "Home":
+        event.preventDefault();
+        setDesktopSidebarWidth(SIDEBAR_COMPACT_WIDTH);
+        break;
+      case "End":
+        event.preventDefault();
+        setDesktopSidebarWidth(SIDEBAR_MAX_WIDTH);
+        break;
+      default:
+        break;
+    }
+  };
 
   return (
     <div className={`flex ${rootHeightClass} flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50`}>
@@ -195,8 +264,11 @@ export default function Layout({
             sections={navSections}
             links={navLinks}
             headerAction={sidebarAction}
+            width={desktopSidebarWidth}
             compact={desktopSidebarCompact}
-            onToggleCompact={() => setDesktopSidebarCompact((value) => !value)}
+            resizing={desktopSidebarDragging}
+            onResizeStart={handleDesktopSidebarResizeStart}
+            onResizeKeyDown={handleDesktopSidebarResizeKeyDown}
           />
         )}
         <main className={mainClasses}>
