@@ -16,6 +16,9 @@ def _account() -> S3Account:
 def _reset_browser_caches() -> None:
     browser_service._BUCKET_LIST_CACHE.invalidate_where(lambda _key: True)
     browser_service._OBJECT_LIST_CACHE.invalidate_where(lambda _key: True)
+    browser_service._OBJECT_SORT_SNAPSHOT_CACHE.invalidate_where(lambda _key: True)
+    browser_service._OBJECT_LAZY_HEAD_CACHE.invalidate_where(lambda _key: True)
+    browser_service._OBJECT_LAZY_TAGS_CACHE.invalidate_where(lambda _key: True)
 
 
 def test_bucket_cache_reused_between_pages(monkeypatch):

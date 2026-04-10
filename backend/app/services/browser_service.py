@@ -1,5 +1,8 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import base64
+import hashlib
+import json
 import logging
 import os
 import re
@@ -17,6 +20,9 @@ from app.core.config import get_settings
 from app.db import S3Account
 from app.models.browser import (
     BrowserBucket,
+    BrowserObjectLazyColumn,
+    BrowserObjectSortBy,
+    BrowserObjectSortDir,
     BrowserObject,
     BrowserObjectVersion,
     BrowserStsCredentials,
@@ -37,6 +43,8 @@ from app.models.browser import (
     MultipartUploadItem,
     ObjectMetadata,
     ObjectAcl,
+    ObjectColumnValues,
+    ObjectColumnsResponse,
     ObjectLegalHold,
     ObjectMetadataUpdate,
     ObjectRetention,
@@ -71,6 +79,9 @@ BUCKET_LIST_CACHE_TTL_SECONDS = 30
 BUCKET_LIST_CACHE_MAX_ENTRIES = 64
 OBJECT_LIST_CACHE_TTL_SECONDS = 10
 OBJECT_LIST_CACHE_MAX_ENTRIES = 512
+OBJECT_SORT_SNAPSHOT_CACHE_MAX_ENTRIES = 128
+OBJECT_LAZY_COLUMN_CACHE_TTL_SECONDS = 15
+OBJECT_LAZY_COLUMN_CACHE_MAX_ENTRIES = 2048
 OBJECT_LIST_SCAN_PAGE_BUDGET = 20
 OBJECT_LIST_SCAN_TIME_BUDGET_MS = 1200
 
@@ -139,6 +150,28 @@ class _TtlLruCache(Generic[_CacheKey, _CacheValue]):
         return removed
 
 
+@dataclass
+class _SortedObjectSnapshot:
+    prefixes: list[str]
+    objects: list[BrowserObject]
+
+
+@dataclass(frozen=True)
+class _ObjectLazyHeadCacheValue:
+    content_type: Optional[str]
+    metadata_count: Optional[int]
+    cache_control: Optional[str]
+    expires: Optional[datetime]
+    restore_status: Optional[str]
+    available: bool
+
+
+@dataclass(frozen=True)
+class _ObjectLazyTagsCacheValue:
+    tags_count: Optional[int]
+    available: bool
+
+
 _BUCKET_LIST_CACHE: _TtlLruCache[str, list[BrowserBucket]] = _TtlLruCache(
     max_entries=BUCKET_LIST_CACHE_MAX_ENTRIES,
     ttl_seconds=BUCKET_LIST_CACHE_TTL_SECONDS,
@@ -146,6 +179,18 @@ _BUCKET_LIST_CACHE: _TtlLruCache[str, list[BrowserBucket]] = _TtlLruCache(
 _OBJECT_LIST_CACHE: _TtlLruCache[tuple, ListBrowserObjectsResponse] = _TtlLruCache(
     max_entries=OBJECT_LIST_CACHE_MAX_ENTRIES,
     ttl_seconds=OBJECT_LIST_CACHE_TTL_SECONDS,
+)
+_OBJECT_SORT_SNAPSHOT_CACHE: _TtlLruCache[tuple, _SortedObjectSnapshot] = _TtlLruCache(
+    max_entries=OBJECT_SORT_SNAPSHOT_CACHE_MAX_ENTRIES,
+    ttl_seconds=OBJECT_LIST_CACHE_TTL_SECONDS,
+)
+_OBJECT_LAZY_HEAD_CACHE: _TtlLruCache[tuple, _ObjectLazyHeadCacheValue] = _TtlLruCache(
+    max_entries=OBJECT_LAZY_COLUMN_CACHE_MAX_ENTRIES,
+    ttl_seconds=OBJECT_LAZY_COLUMN_CACHE_TTL_SECONDS,
+)
+_OBJECT_LAZY_TAGS_CACHE: _TtlLruCache[tuple, _ObjectLazyTagsCacheValue] = _TtlLruCache(
+    max_entries=OBJECT_LAZY_COLUMN_CACHE_MAX_ENTRIES,
+    ttl_seconds=OBJECT_LAZY_COLUMN_CACHE_TTL_SECONDS,
 )
 
 
@@ -164,6 +209,41 @@ def _normalize_expiration(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value
+
+
+def _sorted_snapshot_signature(parts: tuple[object, ...]) -> str:
+    serialized = json.dumps(parts, separators=(",", ":"), default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _encode_sorted_cursor(*, prefixes_offset: int, objects_offset: int, signature: str) -> str:
+    payload = {
+        "v": 1,
+        "mode": "sorted",
+        "po": max(0, int(prefixes_offset)),
+        "oo": max(0, int(objects_offset)),
+        "sig": signature,
+    }
+    encoded = base64.urlsafe_b64encode(
+        json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    ).decode("ascii")
+    return encoded.rstrip("=")
+
+
+def _decode_sorted_cursor(token: Optional[str]) -> Optional[dict[str, object]]:
+    if not token:
+        return None
+    padded = token + "=" * (-len(token) % 4)
+    try:
+        decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
+        payload = json.loads(decoded.decode("utf-8"))
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("mode") != "sorted" or payload.get("v") != 1:
+        return None
+    return payload
 
 
 def _get_cached_sts_credentials(cache_key: str) -> Optional[CachedStsCredentials]:
@@ -356,6 +436,86 @@ class BrowserService:
             bool(recursive),
         )
 
+    def _object_sort_snapshot_cache_key(
+        self,
+        *,
+        account_cache_key: str,
+        bucket_name: str,
+        prefix: str,
+        query: Optional[str],
+        query_exact: bool,
+        query_case_sensitive: bool,
+        item_type: str,
+        storage_class: Optional[str],
+        recursive: bool,
+        sort_by: BrowserObjectSortBy,
+        sort_dir: BrowserObjectSortDir,
+    ) -> tuple:
+        return (
+            account_cache_key,
+            bucket_name,
+            prefix,
+            (query or "").strip(),
+            bool(query_exact),
+            bool(query_case_sensitive),
+            item_type,
+            storage_class or "",
+            bool(recursive),
+            sort_by,
+            sort_dir,
+        )
+
+    def _object_lazy_head_cache_key(
+        self,
+        *,
+        account_cache_key: str,
+        bucket_name: str,
+        key: str,
+        sse_customer: Optional[SseCustomerContext],
+    ) -> tuple:
+        return (
+            account_cache_key,
+            bucket_name,
+            key,
+            "head",
+            getattr(sse_customer, "key_md5", "") or "",
+        )
+
+    def _object_lazy_tags_cache_key(
+        self,
+        *,
+        account_cache_key: str,
+        bucket_name: str,
+        key: str,
+    ) -> tuple:
+        return (
+            account_cache_key,
+            bucket_name,
+            key,
+            "tags",
+        )
+
+    def _normalize_datetime_value(self, value: Optional[datetime]) -> Optional[datetime]:
+        if value is None:
+            return None
+        return _normalize_expiration(value)
+
+    def _normalize_restore_status(self, value: object) -> Optional[str]:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        if 'ongoing-request="true"' in text:
+            return "In progress"
+        match = re.search(r'expiry-date="([^"]+)"', text)
+        if not match:
+            return None
+        try:
+            expires_at = datetime.strptime(match.group(1), "%a, %d %b %Y %H:%M:%S %Z")
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+            return f"Restored until {expires_at.isoformat()}"
+        except ValueError:
+            return "Restored"
+
     def invalidate_bucket_list_cache(self, account_key: str) -> None:
         if not account_key:
             return
@@ -367,6 +527,15 @@ class BrowserService:
         if not account_key or not bucket_name:
             return
         removed = _OBJECT_LIST_CACHE.invalidate_where(
+            lambda key: len(key) >= 2 and key[0] == account_key and key[1] == bucket_name
+        )
+        removed += _OBJECT_SORT_SNAPSHOT_CACHE.invalidate_where(
+            lambda key: len(key) >= 2 and key[0] == account_key and key[1] == bucket_name
+        )
+        removed += _OBJECT_LAZY_HEAD_CACHE.invalidate_where(
+            lambda key: len(key) >= 2 and key[0] == account_key and key[1] == bucket_name
+        )
+        removed += _OBJECT_LAZY_TAGS_CACHE.invalidate_where(
             lambda key: len(key) >= 2 and key[0] == account_key and key[1] == bucket_name
         )
         if removed > 0:
@@ -813,10 +982,36 @@ class BrowserService:
         self.invalidate_bucket_list_cache_for_account(account)
         self.invalidate_object_list_cache_for_account(account, bucket_name)
 
-    def list_objects(
+    def _build_query_matcher(
+        self,
+        *,
+        normalized_prefix: str,
+        query_value_raw: str,
+        query_exact: bool,
+        query_case_sensitive: bool,
+    ) -> Callable[[str], bool]:
+        query_value = query_value_raw if query_case_sensitive else query_value_raw.lower()
+
+        def matches_query(value: str) -> bool:
+            if not query_value:
+                return True
+            relative = value
+            if normalized_prefix and relative.startswith(normalized_prefix):
+                relative = relative[len(normalized_prefix):]
+            if relative.endswith("/"):
+                relative = relative[:-1]
+            comparable_value = relative if query_case_sensitive else relative.lower()
+            if query_exact:
+                return comparable_value == query_value
+            return query_value in comparable_value
+
+        return matches_query
+
+    def _list_objects_default_order(
         self,
         bucket_name: str,
         account: S3Account,
+        *,
         prefix: str = "",
         continuation_token: Optional[str] = None,
         max_keys: int = 1000,
@@ -830,7 +1025,6 @@ class BrowserService:
         normalized_prefix = prefix or ""
         normalized_max_keys = max(1, min(1000, int(max_keys or 1000)))
         query_value_raw = (query or "").strip()
-        query_value = query_value_raw if query_case_sensitive else query_value_raw.lower()
         type_filter = (item_type or "all").lower()
         if type_filter not in {"all", "file", "folder"}:
             type_filter = "all"
@@ -854,20 +1048,12 @@ class BrowserService:
             logger.debug("Browser object cache hit: account=%s bucket=%s", account_cache_key, bucket_name)
             return cached.model_copy(deep=True)
         client = self._client(account)
-
-        def matches_query(value: str) -> bool:
-            if not query_value:
-                return True
-            relative = value
-            if normalized_prefix and relative.startswith(normalized_prefix):
-                relative = relative[len(normalized_prefix):]
-            if relative.endswith("/"):
-                relative = relative[:-1]
-            comparable_value = relative if query_case_sensitive else relative.lower()
-            if query_exact:
-                return comparable_value == query_value
-            return query_value in comparable_value
-
+        matches_query = self._build_query_matcher(
+            normalized_prefix=normalized_prefix,
+            query_value_raw=query_value_raw,
+            query_exact=query_exact,
+            query_case_sensitive=query_case_sensitive,
+        )
         filtered_mode = bool(query_value_raw) or type_filter != "all" or storage_filter is not None or recursive
 
         if not filtered_mode:
@@ -1040,6 +1226,280 @@ class BrowserService:
         _OBJECT_LIST_CACHE.set(object_cache_key, result.model_copy(deep=True))
         logger.debug("Browser object cache miss: account=%s bucket=%s", account_cache_key, bucket_name)
         return result
+
+    def _scan_sorted_object_snapshot(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        *,
+        prefix: str = "",
+        query: Optional[str] = None,
+        query_exact: bool = False,
+        query_case_sensitive: bool = False,
+        item_type: Optional[str] = None,
+        storage_class: Optional[str] = None,
+        recursive: bool = False,
+        sort_by: BrowserObjectSortBy,
+        sort_dir: BrowserObjectSortDir,
+    ) -> _SortedObjectSnapshot:
+        normalized_prefix = prefix or ""
+        query_value_raw = (query or "").strip()
+        type_filter = (item_type or "all").lower()
+        if type_filter not in {"all", "file", "folder"}:
+            type_filter = "all"
+        storage_filter = (storage_class or "").strip() or None
+        account_cache_key = self._account_cache_key(account)
+        snapshot_cache_key = self._object_sort_snapshot_cache_key(
+            account_cache_key=account_cache_key,
+            bucket_name=bucket_name,
+            prefix=normalized_prefix,
+            query=query_value_raw,
+            query_exact=query_exact,
+            query_case_sensitive=query_case_sensitive,
+            item_type=type_filter,
+            storage_class=storage_filter,
+            recursive=recursive,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+        )
+        cached = _OBJECT_SORT_SNAPSHOT_CACHE.get(snapshot_cache_key)
+        if cached is not None:
+            return _SortedObjectSnapshot(
+                prefixes=list(cached.prefixes),
+                objects=[item.model_copy(deep=True) for item in cached.objects],
+            )
+
+        client = self._client(account)
+        matches_query = self._build_query_matcher(
+            normalized_prefix=normalized_prefix,
+            query_value_raw=query_value_raw,
+            query_exact=query_exact,
+            query_case_sensitive=query_case_sensitive,
+        )
+        objects: list[BrowserObject] = []
+        prefixes: list[str] = []
+        seen_prefixes: set[str] = set()
+        scan_token: Optional[str] = None
+
+        while True:
+            kwargs = {
+                "Bucket": bucket_name,
+                "Prefix": normalized_prefix,
+                "MaxKeys": 1000,
+            }
+            if not recursive:
+                kwargs["Delimiter"] = "/"
+            if scan_token:
+                kwargs["ContinuationToken"] = scan_token
+            try:
+                resp = client.list_objects_v2(**kwargs)
+            except (ClientError, BotoCoreError) as exc:
+                raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
+
+            page_recursive_prefixes: set[str] = set()
+            for obj in resp.get("Contents", []):
+                key = obj.get("Key")
+                if not key:
+                    continue
+                size = int(obj.get("Size") or 0)
+                if prefix and key.rstrip("/") == prefix.rstrip("/") and size == 0:
+                    continue
+                is_folder_marker = key.endswith("/") and size == 0
+
+                if recursive and type_filter != "file":
+                    if is_folder_marker and key != normalized_prefix:
+                        page_recursive_prefixes.add(key)
+                    if normalized_prefix and key.startswith(normalized_prefix):
+                        relative = key[len(normalized_prefix):]
+                    else:
+                        relative = key
+                    segments = [segment for segment in relative.split("/") if segment]
+                    if len(segments) > 1:
+                        running = normalized_prefix
+                        for segment in segments[:-1]:
+                            running = f"{running}{segment}/"
+                            page_recursive_prefixes.add(running)
+
+                if type_filter == "folder":
+                    continue
+                if recursive and is_folder_marker:
+                    continue
+                if not matches_query(key):
+                    continue
+                storage = obj.get("StorageClass")
+                if storage_filter and storage != storage_filter:
+                    continue
+                objects.append(
+                    BrowserObject(
+                        key=key,
+                        size=size,
+                        last_modified=obj.get("LastModified"),
+                        storage_class=storage,
+                        etag=self._clean_etag(obj.get("ETag")),
+                    )
+                )
+
+            if not recursive and type_filter != "file":
+                for entry in resp.get("CommonPrefixes", []) or []:
+                    prefix_value = entry.get("Prefix")
+                    if not prefix_value or prefix_value in seen_prefixes:
+                        continue
+                    if not matches_query(prefix_value):
+                        continue
+                    seen_prefixes.add(prefix_value)
+                    prefixes.append(prefix_value)
+
+            if recursive and type_filter != "file":
+                for prefix_value in sorted(page_recursive_prefixes):
+                    if prefix_value in seen_prefixes:
+                        continue
+                    if not matches_query(prefix_value):
+                        continue
+                    seen_prefixes.add(prefix_value)
+                    prefixes.append(prefix_value)
+
+            if not resp.get("IsTruncated"):
+                break
+            scan_token = resp.get("NextContinuationToken")
+            if not scan_token:
+                break
+
+        prefixes.sort()
+
+        def compare_values(left: object, right: object) -> int:
+            if left is None and right is None:
+                return 0
+            if left is None:
+                return 1
+            if right is None:
+                return -1
+            if left < right:
+                return -1
+            if left > right:
+                return 1
+            return 0
+
+        def sort_value(item: BrowserObject) -> object:
+            if sort_by == "name":
+                return item.key
+            if sort_by == "size":
+                return item.size
+            if sort_by == "modified":
+                return self._normalize_datetime_value(item.last_modified)
+            if sort_by == "storage_class":
+                return item.storage_class
+            return item.etag
+
+        def compare_objects(left: BrowserObject, right: BrowserObject) -> int:
+            primary = compare_values(sort_value(left), sort_value(right))
+            if primary != 0:
+                return primary if sort_dir == "asc" else -primary
+            return compare_values(left.key, right.key)
+
+        from functools import cmp_to_key
+
+        objects.sort(key=cmp_to_key(compare_objects))
+        snapshot = _SortedObjectSnapshot(prefixes=prefixes, objects=objects)
+        _OBJECT_SORT_SNAPSHOT_CACHE.set(snapshot_cache_key, snapshot)
+        return _SortedObjectSnapshot(
+            prefixes=list(snapshot.prefixes),
+            objects=[item.model_copy(deep=True) for item in snapshot.objects],
+        )
+
+    def list_objects(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        prefix: str = "",
+        continuation_token: Optional[str] = None,
+        max_keys: int = 1000,
+        query: Optional[str] = None,
+        query_exact: bool = False,
+        query_case_sensitive: bool = False,
+        item_type: Optional[str] = None,
+        storage_class: Optional[str] = None,
+        recursive: bool = False,
+        sort_by: BrowserObjectSortBy = "name",
+        sort_dir: BrowserObjectSortDir = "asc",
+    ) -> ListBrowserObjectsResponse:
+        normalized_max_keys = max(1, min(1000, int(max_keys or 1000)))
+        if sort_by == "name" and sort_dir == "asc":
+            return self._list_objects_default_order(
+                bucket_name,
+                account,
+                prefix=prefix,
+                continuation_token=continuation_token,
+                max_keys=normalized_max_keys,
+                query=query,
+                query_exact=query_exact,
+                query_case_sensitive=query_case_sensitive,
+                item_type=item_type,
+                storage_class=storage_class,
+                recursive=recursive,
+            )
+
+        snapshot = self._scan_sorted_object_snapshot(
+            bucket_name,
+            account,
+            prefix=prefix,
+            query=query,
+            query_exact=query_exact,
+            query_case_sensitive=query_case_sensitive,
+            item_type=item_type,
+            storage_class=storage_class,
+            recursive=recursive,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+        )
+        account_cache_key = self._account_cache_key(account)
+        snapshot_signature = _sorted_snapshot_signature(
+            self._object_sort_snapshot_cache_key(
+                account_cache_key=account_cache_key,
+                bucket_name=bucket_name,
+                prefix=prefix or "",
+                query=(query or "").strip(),
+                query_exact=query_exact,
+                query_case_sensitive=query_case_sensitive,
+                item_type=(item_type or "all").lower() if (item_type or "").lower() in {"all", "file", "folder"} else "all",
+                storage_class=(storage_class or "").strip() or None,
+                recursive=recursive,
+                sort_by=sort_by,
+                sort_dir=sort_dir,
+            )
+        )
+        cursor_payload = _decode_sorted_cursor(continuation_token)
+        prefixes_offset = 0
+        objects_offset = 0
+        if cursor_payload and cursor_payload.get("sig") == snapshot_signature:
+            prefixes_offset = max(0, int(cursor_payload.get("po") or 0))
+            objects_offset = max(0, int(cursor_payload.get("oo") or 0))
+        prefixes_offset = min(prefixes_offset, len(snapshot.prefixes))
+        objects_offset = min(objects_offset, len(snapshot.objects))
+
+        prefixes = snapshot.prefixes[prefixes_offset : prefixes_offset + normalized_max_keys]
+        remaining = normalized_max_keys - len(prefixes)
+        objects = (
+            snapshot.objects[objects_offset : objects_offset + remaining]
+            if remaining > 0
+            else []
+        )
+        next_prefixes_offset = prefixes_offset + len(prefixes)
+        next_objects_offset = objects_offset + len(objects)
+        has_more = next_prefixes_offset < len(snapshot.prefixes) or next_objects_offset < len(snapshot.objects)
+        next_token = None
+        if has_more:
+            next_token = _encode_sorted_cursor(
+                prefixes_offset=next_prefixes_offset,
+                objects_offset=next_objects_offset,
+                signature=snapshot_signature,
+            )
+        return ListBrowserObjectsResponse(
+            prefix=prefix,
+            objects=[item.model_copy(deep=True) for item in objects],
+            prefixes=list(prefixes),
+            is_truncated=has_more,
+            next_continuation_token=next_token,
+        )
 
     def list_object_versions(
         self,
@@ -1283,6 +1743,131 @@ class BrowserService:
             metadata=metadata,
             version_id=resp.get("VersionId") or version_id,
         )
+
+    def _get_object_lazy_head_columns(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        key: str,
+        *,
+        sse_customer: Optional[SseCustomerContext] = None,
+    ) -> _ObjectLazyHeadCacheValue:
+        account_cache_key = self._account_cache_key(account)
+        cache_key = self._object_lazy_head_cache_key(
+            account_cache_key=account_cache_key,
+            bucket_name=bucket_name,
+            key=key,
+            sse_customer=sse_customer,
+        )
+        cached = _OBJECT_LAZY_HEAD_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
+        client = self._client(account)
+        kwargs = {"Bucket": bucket_name, "Key": key}
+        kwargs.update(self._sse_customer_params(sse_customer))
+        try:
+            resp = client.head_object(**kwargs)
+            metadata = resp.get("Metadata") or {}
+            result = _ObjectLazyHeadCacheValue(
+                content_type=resp.get("ContentType"),
+                metadata_count=len(metadata),
+                cache_control=resp.get("CacheControl"),
+                expires=resp.get("Expires"),
+                restore_status=self._normalize_restore_status(resp.get("Restore")),
+                available=True,
+            )
+        except (ClientError, BotoCoreError):
+            result = _ObjectLazyHeadCacheValue(
+                content_type=None,
+                metadata_count=None,
+                cache_control=None,
+                expires=None,
+                restore_status=None,
+                available=False,
+            )
+        _OBJECT_LAZY_HEAD_CACHE.set(cache_key, result)
+        return result
+
+    def _get_object_lazy_tags_columns(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        key: str,
+    ) -> _ObjectLazyTagsCacheValue:
+        account_cache_key = self._account_cache_key(account)
+        cache_key = self._object_lazy_tags_cache_key(
+            account_cache_key=account_cache_key,
+            bucket_name=bucket_name,
+            key=key,
+        )
+        cached = _OBJECT_LAZY_TAGS_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
+        client = self._client(account)
+        kwargs = {"Bucket": bucket_name, "Key": key}
+        try:
+            resp = client.get_object_tagging(**kwargs)
+            result = _ObjectLazyTagsCacheValue(
+                tags_count=len(resp.get("TagSet") or []),
+                available=True,
+            )
+        except (ClientError, BotoCoreError):
+            result = _ObjectLazyTagsCacheValue(tags_count=None, available=False)
+        _OBJECT_LAZY_TAGS_CACHE.set(cache_key, result)
+        return result
+
+    def get_object_columns(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        *,
+        keys: list[str],
+        columns: set[BrowserObjectLazyColumn],
+        sse_customer: Optional[SseCustomerContext] = None,
+    ) -> ObjectColumnsResponse:
+        normalized_keys: list[str] = []
+        seen_keys: set[str] = set()
+        for raw_key in keys:
+            key = str(raw_key or "").strip()
+            if not key or key in seen_keys:
+                continue
+            seen_keys.add(key)
+            normalized_keys.append(key)
+
+        head_columns = {"content_type", "metadata_count", "cache_control", "expires", "restore_status"}
+        tags_columns = {"tags_count"}
+        wants_head = bool(columns & head_columns)
+        wants_tags = bool(columns & tags_columns)
+        items: list[ObjectColumnValues] = []
+
+        for key in normalized_keys:
+            head_value: Optional[_ObjectLazyHeadCacheValue] = None
+            tags_value: Optional[_ObjectLazyTagsCacheValue] = None
+            if wants_head:
+                head_value = self._get_object_lazy_head_columns(
+                    bucket_name,
+                    account,
+                    key,
+                    sse_customer=sse_customer,
+                )
+            if wants_tags:
+                tags_value = self._get_object_lazy_tags_columns(bucket_name, account, key)
+            items.append(
+                ObjectColumnValues(
+                    key=key,
+                    content_type=head_value.content_type if head_value else None,
+                    tags_count=tags_value.tags_count if tags_value else None,
+                    metadata_count=head_value.metadata_count if head_value else None,
+                    cache_control=head_value.cache_control if head_value else None,
+                    expires=head_value.expires if head_value else None,
+                    restore_status=head_value.restore_status if head_value else None,
+                    metadata_status="ready" if (not wants_head or (head_value and head_value.available)) else "error",
+                    tags_status="ready" if (not wants_tags or (tags_value and tags_value.available)) else "error",
+                )
+            )
+        return ObjectColumnsResponse(items=items)
 
     def get_object_tags(
         self,

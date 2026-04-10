@@ -24,12 +24,45 @@ class BrowserObject(BaseModel):
     storage_class: Optional[str] = None
 
 
+BrowserObjectSortBy = Literal["name", "size", "modified", "storage_class", "etag"]
+BrowserObjectSortDir = Literal["asc", "desc"]
+BrowserObjectLazyColumn = Literal[
+    "content_type",
+    "tags_count",
+    "metadata_count",
+    "cache_control",
+    "expires",
+    "restore_status",
+]
+
+
 class ListBrowserObjectsResponse(BaseModel):
     prefix: str
     objects: list[BrowserObject]
     prefixes: list[str]
     is_truncated: bool = False
     next_continuation_token: Optional[str] = None
+
+
+class ObjectColumnsRequest(BaseModel):
+    keys: list[str] = Field(default_factory=list, min_length=1, max_length=200)
+    columns: list[BrowserObjectLazyColumn] = Field(default_factory=list, min_length=1, max_length=6)
+
+
+class ObjectColumnValues(BaseModel):
+    key: str
+    content_type: Optional[str] = None
+    tags_count: Optional[int] = None
+    metadata_count: Optional[int] = None
+    cache_control: Optional[str] = None
+    expires: Optional[datetime] = None
+    restore_status: Optional[str] = None
+    metadata_status: Literal["ready", "error"] = "ready"
+    tags_status: Literal["ready", "error"] = "ready"
+
+
+class ObjectColumnsResponse(BaseModel):
+    items: list[ObjectColumnValues] = Field(default_factory=list)
 
 
 class PaginatedBrowserBucketsResponse(BaseModel):

@@ -13,10 +13,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
 import { BROWSER_ROOT_UI_STATE_STORAGE_KEY } from "./browserRootUiState";
+import { BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY } from "./browserEmbeddedColumnsState";
 
 const searchBrowserBucketsMock = vi.fn();
 const fetchBrowserSettingsMock = vi.fn();
 const listBrowserObjectsMock = vi.fn();
+const fetchBrowserObjectColumnsMock = vi.fn();
 const getBucketVersioningMock = vi.fn();
 const getBucketCorsStatusMock = vi.fn();
 const ensureBucketCorsMock = vi.fn();
@@ -84,6 +86,8 @@ vi.mock("../../api/browser", async () => {
     fetchBrowserSettings: (...args: unknown[]) =>
       fetchBrowserSettingsMock(...args),
     listBrowserObjects: (...args: unknown[]) => listBrowserObjectsMock(...args),
+    fetchBrowserObjectColumns: (...args: unknown[]) =>
+      fetchBrowserObjectColumnsMock(...args),
     getBucketVersioning: (...args: unknown[]) =>
       getBucketVersioningMock(...args),
     getBucketCorsStatus: (...args: unknown[]) =>
@@ -242,6 +246,16 @@ async function openActionsMoreMenu(user: ReturnType<typeof userEvent.setup>) {
   );
   const menus = await screen.findAllByRole("menu", { name: "More" });
   return menus[menus.length - 1] as HTMLElement;
+}
+
+async function openColumnsSubmenuFromMore(
+  user: ReturnType<typeof userEvent.setup>,
+) {
+  const moreMenu = await openContextMoreMenu(user);
+  await user.click(
+    within(moreMenu).getByRole("menuitem", { name: /^Columns/i }),
+  );
+  return await screen.findByRole("menu", { name: "Columns" });
 }
 
 async function enableActionBar(user: ReturnType<typeof userEvent.setup>) {
@@ -419,6 +433,30 @@ describe("BrowserPage interactions", () => {
         });
       },
     );
+    fetchBrowserObjectColumnsMock.mockImplementation(
+      async (
+        _accountId: string,
+        _bucketName: string,
+        payload?: { keys?: string[]; columns?: string[] },
+      ) => ({
+        items: (payload?.keys ?? []).map((key) => ({
+          key,
+          content_type: key === "b.txt" ? "text/csv" : "text/plain",
+          tags_count: 0,
+          metadata_count: 0,
+          cache_control: null,
+          expires: null,
+          restore_status: null,
+          metadata_status:
+            payload?.columns?.some((column) => column !== "tags_count")
+              ? "ready"
+              : "error",
+          tags_status: payload?.columns?.includes("tags_count")
+            ? "ready"
+            : "error",
+        })),
+      }),
+    );
 
     getBucketVersioningMock.mockResolvedValue({
       enabled: false,
@@ -573,6 +611,92 @@ describe("BrowserPage interactions", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("opens More > Columns on all browser surfaces", async () => {
+    const user = userEvent.setup();
+    const entries = ["/browser", "/manager/browser", "/ceph-admin/browser"];
+
+    for (const entry of entries) {
+      const view =
+        entry === "/browser"
+          ? renderPage({ initialEntry: entry })
+          : renderEmbeddedPage({ initialEntry: entry });
+      await findRowByLabel("a.txt");
+
+      const columnsMenu = await openColumnsSubmenuFromMore(user);
+      expect(
+        within(columnsMenu).getByRole("menuitemcheckbox", { name: /ETag/ }),
+      ).toBeInTheDocument();
+      expect(
+        within(columnsMenu).getByRole("menuitem", { name: "Reset columns" }),
+      ).toBeInTheDocument();
+
+      view.unmount();
+    }
+  });
+
+  it("persists columns separately for root and embedded browsers", async () => {
+    const user = userEvent.setup();
+
+    const rootView = renderPage({ initialEntry: "/browser" });
+    await findRowByLabel("a.txt");
+    let columnsMenu = await openColumnsSubmenuFromMore(user);
+    await user.click(
+      within(columnsMenu).getByRole("menuitemcheckbox", { name: /ETag/ }),
+    );
+    expect(
+      screen.getByRole("columnheader", { name: "ETag" }),
+    ).toBeInTheDocument();
+    rootView.unmount();
+
+    const embeddedView = renderEmbeddedPage({ initialEntry: "/manager/browser" });
+    await findRowByLabel("a.txt");
+    expect(
+      screen.queryByRole("columnheader", { name: "ETag" }),
+    ).not.toBeInTheDocument();
+    columnsMenu = await openColumnsSubmenuFromMore(user);
+    await user.click(
+      within(columnsMenu).getByRole("menuitemcheckbox", {
+        name: /Storage class/,
+      }),
+    );
+    expect(
+      screen.getByRole("columnheader", { name: "Storage class" }),
+    ).toBeInTheDocument();
+    embeddedView.unmount();
+
+    const cephAdminView = renderEmbeddedPage({
+      initialEntry: "/ceph-admin/browser",
+    });
+    await findRowByLabel("a.txt");
+    expect(
+      screen.getByRole("columnheader", { name: "Storage class" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "ETag" }),
+    ).not.toBeInTheDocument();
+    cephAdminView.unmount();
+
+    renderPage({ initialEntry: "/browser" });
+    await findRowByLabel("a.txt");
+    expect(
+      screen.getByRole("columnheader", { name: "ETag" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Storage class" }),
+    ).not.toBeInTheDocument();
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY) ?? "{}",
+      ).objectColumns,
+    ).toContain("etag");
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY) ??
+          "[]",
+      ),
+    ).toContain("storageClass");
+  });
+
   it("toggles non-lazy columns and updates table headers/cells", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -598,15 +722,17 @@ describe("BrowserPage interactions", () => {
 
     await user.click(screen.getByRole("button", { name: "Size" }));
     await user.click(screen.getByRole("button", { name: "Size" }));
-
-    const rowCDesc = await findRowByLabel("c.txt");
-    const rowADesc = await findRowByLabel("a.txt");
-    expect(
-      Boolean(
-        rowCDesc.compareDocumentPosition(rowADesc) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      ),
-    ).toBe(true);
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenLastCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({
+          prefix: "",
+          sortBy: "size",
+          sortDir: "desc",
+        }),
+      );
+    });
 
     const menu = openHeaderConfigMenu();
     await user.click(within(menu).getByRole("button", { name: /Size/ }));
@@ -614,32 +740,61 @@ describe("BrowserPage interactions", () => {
     expect(
       screen.queryByRole("columnheader", { name: "Size" }),
     ).not.toBeInTheDocument();
-    const rowAReset = await findRowByLabel("a.txt");
-    const rowCReset = await findRowByLabel("c.txt");
-    expect(
-      Boolean(
-        rowAReset.compareDocumentPosition(rowCReset) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      ),
-    ).toBe(true);
+    await waitFor(() => {
+      const lastOptions = listBrowserObjectsMock.mock.calls.at(-1)?.[2] as
+        | Record<string, unknown>
+        | undefined;
+      expect(lastOptions?.prefix).toBe("");
+      expect(lastOptions?.sortBy).toBe("name");
+      expect(lastOptions?.sortDir).toBe("asc");
+    });
   });
 
   it("loads lazy metadata columns without blocking the listing", async () => {
     const user = userEvent.setup();
-    const metadataResolvers: Array<() => void> = [];
-    fetchObjectMetadataMock.mockImplementation(
-      (_accountId: string, _bucketName: string, key: string) => {
-        return new Promise((resolve) => {
-          metadataResolvers.push(() =>
+    let resolveColumns: (() => void) | null = null;
+    fetchBrowserObjectColumnsMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveColumns = () =>
             resolve({
-              key,
-              size: 10,
-              metadata: { alpha: "1", beta: "2" },
-              content_type: key === "b.txt" ? "text/csv" : "text/plain",
-            }),
-          );
-        });
-      },
+              items: [
+                {
+                  key: "a.txt",
+                  content_type: "text/plain",
+                  tags_count: null,
+                  metadata_count: 2,
+                  cache_control: null,
+                  expires: null,
+                  restore_status: null,
+                  metadata_status: "ready",
+                  tags_status: "error",
+                },
+                {
+                  key: "b.txt",
+                  content_type: "text/csv",
+                  tags_count: null,
+                  metadata_count: 2,
+                  cache_control: null,
+                  expires: null,
+                  restore_status: null,
+                  metadata_status: "ready",
+                  tags_status: "error",
+                },
+                {
+                  key: "c.txt",
+                  content_type: "text/plain",
+                  tags_count: null,
+                  metadata_count: 2,
+                  cache_control: null,
+                  expires: null,
+                  restore_status: null,
+                  metadata_status: "ready",
+                  tags_status: "error",
+                },
+              ],
+            });
+        }),
     );
 
     renderPage();
@@ -658,32 +813,75 @@ describe("BrowserPage interactions", () => {
     });
     expect(screen.getByRole("button", { name: "a.txt" })).toBeInTheDocument();
 
-    metadataResolvers.forEach((resolve) => resolve());
+    resolveColumns?.();
     await waitFor(() => {
       const plainCount = screen.queryAllByText("text/plain").length;
       const csvCount = screen.queryAllByText("text/csv").length;
       expect(plainCount + csvCount).toBeGreaterThan(0);
     });
-    expect(fetchObjectMetadataMock.mock.calls.length).toBeGreaterThan(0);
-    const metadataKeys = fetchObjectMetadataMock.mock.calls.map(
-      (call) => call[2] as string,
+    const initialCallCount = fetchBrowserObjectColumnsMock.mock.calls.length;
+    expect(initialCallCount).toBeGreaterThan(0);
+    const metadataKeys = fetchBrowserObjectColumnsMock.mock.calls.flatMap(
+      (call) =>
+        (((call[2] as { keys?: string[] } | undefined)?.keys ?? []) as string[]),
     );
     expect(
       metadataKeys.every((key) => ["a.txt", "b.txt", "c.txt"].includes(key)),
     ).toBe(true);
+    expect(fetchObjectMetadataMock).not.toHaveBeenCalled();
     expect(getObjectTagsMock).not.toHaveBeenCalled();
+
+    const reopenedMenu = openHeaderConfigMenu();
+    await user.click(
+      within(reopenedMenu).getByRole("button", { name: /Content-Type/ }),
+    );
+    await user.click(
+      within(reopenedMenu).getByRole("button", { name: /Content-Type/ }),
+    );
+    expect(
+      screen.getByRole("columnheader", { name: "Content-Type" }),
+    ).toBeInTheDocument();
+    expect(fetchBrowserObjectColumnsMock).toHaveBeenCalledTimes(initialCallCount);
   });
 
   it("does not fetch lazy columns for folders or deleted rows", async () => {
     const user = userEvent.setup();
-    getObjectTagsMock.mockResolvedValue({
-      key: "a.txt",
-      tags: [
-        { key: "a", value: "1" },
-        { key: "b", value: "2" },
-        { key: "c", value: "3" },
+    fetchBrowserObjectColumnsMock.mockResolvedValue({
+      items: [
+        {
+          key: "a.txt",
+          content_type: null,
+          tags_count: 3,
+          metadata_count: null,
+          cache_control: null,
+          expires: null,
+          restore_status: null,
+          metadata_status: "error",
+          tags_status: "ready",
+        },
+        {
+          key: "b.txt",
+          content_type: null,
+          tags_count: 3,
+          metadata_count: null,
+          cache_control: null,
+          expires: null,
+          restore_status: null,
+          metadata_status: "error",
+          tags_status: "ready",
+        },
+        {
+          key: "c.txt",
+          content_type: null,
+          tags_count: 3,
+          metadata_count: null,
+          cache_control: null,
+          expires: null,
+          restore_status: null,
+          metadata_status: "error",
+          tags_status: "ready",
+        },
       ],
-      version_id: null,
     });
 
     renderPage();
@@ -693,16 +891,64 @@ describe("BrowserPage interactions", () => {
     await user.click(within(menu).getByRole("button", { name: "Tags" }));
 
     await waitFor(() => {
-      expect(getObjectTagsMock.mock.calls.length).toBeGreaterThan(0);
+      expect(fetchBrowserObjectColumnsMock.mock.calls.length).toBeGreaterThan(0);
     });
-    const tagKeys = getObjectTagsMock.mock.calls.map(
-      (call) => call[2] as string,
-    );
+    const firstPayload = fetchBrowserObjectColumnsMock.mock.calls[0]?.[2] as {
+      keys: string[];
+      columns: string[];
+    };
     expect(
-      tagKeys.every((key) => ["a.txt", "b.txt", "c.txt"].includes(key)),
+      firstPayload.keys.every((key) => ["a.txt", "b.txt", "c.txt"].includes(key)),
     ).toBe(true);
+    expect(firstPayload.columns).toEqual(["tags_count"]);
+    expect(getObjectTagsMock).not.toHaveBeenCalled();
     expect(fetchObjectMetadataMock).not.toHaveBeenCalled();
     expect(within(docsRow).getByText("—")).toBeInTheDocument();
+  });
+
+  it("sorts only base listing columns through the backend and keeps lazy columns non-sortable", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    await user.click(screen.getByRole("button", { name: "Size" }));
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenLastCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({
+          prefix: "",
+          sortBy: "size",
+          sortDir: "asc",
+        }),
+      );
+    });
+
+    const columnsMenu = await openColumnsSubmenuFromMore(user);
+    await user.click(
+      within(columnsMenu).getByRole("menuitemcheckbox", {
+        name: /Storage class/,
+      }),
+    );
+    await user.click(
+      within(columnsMenu).getByRole("menuitemcheckbox", { name: "Tags" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Storage class" }));
+    await waitFor(() => {
+      expect(listBrowserObjectsMock).toHaveBeenLastCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({
+          prefix: "",
+          sortBy: "storage_class",
+          sortDir: "asc",
+        }),
+      );
+    });
+
+    const tagsHeader = screen.getByRole("columnheader", { name: "Tags" });
+    expect(within(tagsHeader).queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("switches compact/list view from header config menu", async () => {

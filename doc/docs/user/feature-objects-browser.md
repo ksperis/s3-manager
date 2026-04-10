@@ -18,6 +18,7 @@ Use this guide for object-level actions in Browser surfaces.
 3. Use actions as needed:
    - Use the context menu for the full action set on the current path, object, or selection.
    - Use the toolbar `More` menu when right-click is not available or when the action bar is compact.
+   - Use `More > Columns` to choose which object columns are visible. The default column set stays unchanged until you customize it.
    - Use the inspector to access the same context and selection actions on the main `/browser` page.
    - Upload files
    - Download objects
@@ -36,6 +37,8 @@ Use this guide for object-level actions in Browser surfaces.
 - Selection actions include download, open, copy URL, copy, cut, bulk attributes, advanced actions, restore, and delete when the current selection allows them.
 - Long-running bulk actions surface in **Operations overview**, where queued, active, completed, and failed work stays visible without leaving Browser.
 - The toolbar `More` menu remains available in `/manager/browser` and `/ceph-admin/browser`, where the inspector is not shown.
+- Object columns available from `More > Columns` include base listing columns such as `Size`, `Modified`, `Storage class`, and `ETag`, plus lazy detail columns such as `Content-Type`, `Tags`, `Metadata`, `Cache-Control`, `Expires`, and `Restore status`.
+- Only base listing columns are sortable. Lazy detail columns are display-only and load on demand for visible rows.
 - Actions can be disabled for the current state. For example, `Copy URL` is disabled when SSE-C is active, and deleted items must be restored from versions before direct download or delete operations.
 
 ## Expected result

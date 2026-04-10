@@ -75,6 +75,7 @@ import {
   createFolder,
   deleteObjects,
   getBucketVersioning,
+  fetchBrowserObjectColumns,
   fetchObjectMetadata,
   getBucketCorsStatus,
   ensureBucketCors,
@@ -133,11 +134,17 @@ import {
   type ClipboardTransferMode,
 } from "./browserClipboardTransfer";
 import {
+  readBrowserRootObjectColumns,
   readBrowserRootContextSelection,
   readStoredBrowserRootUiState,
   writeBrowserRootContextSelection,
+  writeBrowserRootObjectColumns,
   writeBrowserRootUiLayout,
 } from "./browserRootUiState";
+import {
+  readBrowserEmbeddedObjectColumns,
+  writeBrowserEmbeddedObjectColumns,
+} from "./browserEmbeddedColumnsState";
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { S3AccountProvider } from "../manager/S3AccountContext";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
@@ -381,13 +388,17 @@ type BrowserColumnId =
   | "etag"
   | "contentType"
   | "tagsCount"
-  | "metadataCount";
+  | "metadataCount"
+  | "cacheControl"
+  | "expires"
+  | "restoreStatus";
+type BrowserSortKey = "name" | "size" | "modified" | "storageClass" | "etag";
 type ColumnLazySource = "metadata" | "tags";
 type ColumnDefinition = {
   id: BrowserColumnId;
   label: string;
   defaultVisible: boolean;
-  sortable?: "size" | "modified";
+  sortable?: BrowserSortKey;
   lazySource?: ColumnLazySource;
   widthClassName: string;
   align?: "left" | "right";
@@ -397,6 +408,9 @@ type LazyColumnCacheEntry = {
   contentType: string | null;
   tagsCount: number | null;
   metadataCount: number | null;
+  cacheControl: string | null;
+  expires: string | null;
+  restoreStatus: string | null;
   metadataStatus: LazyFieldStatus;
   tagsStatus: LazyFieldStatus;
 };
@@ -425,6 +439,7 @@ const PATH_SUGGESTION_SOURCE_WEIGHT: Record<PathSuggestionSource, number> = {
 const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
 const LAZY_COLUMN_CONCURRENCY = 4;
+const LAZY_COLUMN_BATCH_SIZE = 24;
 const LAZY_COLUMN_ROOT_MARGIN = "200px";
 const COLUMN_DEFINITIONS: ColumnDefinition[] = [
   { id: "type", label: "Type", defaultVisible: false, widthClassName: "w-28" },
@@ -447,9 +462,16 @@ const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     id: "storageClass",
     label: "Storage class",
     defaultVisible: false,
+    sortable: "storageClass",
     widthClassName: "w-40",
   },
-  { id: "etag", label: "ETag", defaultVisible: false, widthClassName: "w-48" },
+  {
+    id: "etag",
+    label: "ETag",
+    defaultVisible: false,
+    sortable: "etag",
+    widthClassName: "w-48",
+  },
   {
     id: "contentType",
     label: "Content-Type",
@@ -473,6 +495,27 @@ const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     widthClassName: "w-24",
     align: "right",
   },
+  {
+    id: "cacheControl",
+    label: "Cache-Control",
+    defaultVisible: false,
+    lazySource: "metadata",
+    widthClassName: "w-44",
+  },
+  {
+    id: "expires",
+    label: "Expires",
+    defaultVisible: false,
+    lazySource: "metadata",
+    widthClassName: "w-44",
+  },
+  {
+    id: "restoreStatus",
+    label: "Restore status",
+    defaultVisible: false,
+    lazySource: "metadata",
+    widthClassName: "w-44",
+  },
 ];
 const COLUMN_IDS_IN_ORDER = COLUMN_DEFINITIONS.map(
   (definition) => definition.id,
@@ -481,10 +524,38 @@ const DEFAULT_VISIBLE_COLUMN_IDS = COLUMN_DEFINITIONS.filter(
   (definition) => definition.defaultVisible,
 ).map((definition) => definition.id);
 
+const loadVisibleColumnsForSurface = (isMainBrowserPath: boolean): BrowserColumnId[] => {
+  const stored = isMainBrowserPath
+    ? readBrowserRootObjectColumns()
+    : readBrowserEmbeddedObjectColumns();
+  if (!stored.length) {
+    return DEFAULT_VISIBLE_COLUMN_IDS;
+  }
+  const selected = new Set(stored);
+  const normalized = COLUMN_IDS_IN_ORDER.filter((columnId) =>
+    selected.has(columnId),
+  );
+  return normalized.length > 0 ? normalized : DEFAULT_VISIBLE_COLUMN_IDS;
+};
+
+const persistVisibleColumnsForSurface = (
+  isMainBrowserPath: boolean,
+  columns: BrowserColumnId[],
+) => {
+  if (isMainBrowserPath) {
+    writeBrowserRootObjectColumns(columns);
+    return;
+  }
+  writeBrowserEmbeddedObjectColumns(columns);
+};
+
 const createLazyColumnCacheEntry = (): LazyColumnCacheEntry => ({
   contentType: null,
   tagsCount: null,
   metadataCount: null,
+  cacheControl: null,
+  expires: null,
+  restoreStatus: null,
   metadataStatus: "idle",
   tagsStatus: "idle",
 });
@@ -982,9 +1053,10 @@ export default function BrowserPage({
   const [filter, setFilter] = useState("");
   const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
   const [showToolbarMoreMenu, setShowToolbarMoreMenu] = useState(false);
+  const [showToolbarColumnsMenu, setShowToolbarColumnsMenu] = useState(false);
   const [showUploadQuickMenu, setShowUploadQuickMenu] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<BrowserColumnId[]>(
-    DEFAULT_VISIBLE_COLUMN_IDS,
+    () => loadVisibleColumnsForSurface(isMainBrowserPath),
   );
   const [lazyColumnCache, setLazyColumnCache] = useState<
     Record<string, LazyColumnCacheEntry>
@@ -1022,6 +1094,14 @@ export default function BrowserPage({
   );
   const [storageFilter, setStorageFilter] = useState<string>("all");
   const [sortId, setSortId] = useState("name-asc");
+  const sortKey = sortId.split("-")[0] as BrowserSortKey;
+  const sortDirection = sortId.endsWith("asc") ? "asc" : "desc";
+  const backendSortBy = useMemo<
+    "name" | "size" | "modified" | "storage_class" | "etag"
+  >(() => {
+    if (sortKey === "storageClass") return "storage_class";
+    return sortKey;
+  }, [sortKey]);
   const [operations, setOperations] = useState<OperationItem[]>([]);
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const uploadQueueRef = useRef<UploadQueueItem[]>([]);
@@ -1181,6 +1261,8 @@ export default function BrowserPage({
   const uploadQuickMenuRef = useRef<HTMLDivElement | null>(null);
   const toolbarMoreButtonRef = useRef<HTMLButtonElement | null>(null);
   const toolbarMoreMenuRef = useRef<HTMLDivElement | null>(null);
+  const toolbarColumnsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const toolbarColumnsMenuRef = useRef<HTMLDivElement | null>(null);
   const corsActionTriggerRef = useRef<HTMLButtonElement | null>(null);
   const corsActionPopoverRef = useRef<HTMLDivElement | null>(null);
   const objectsListViewportRef = useRef<HTMLDivElement | null>(null);
@@ -1425,6 +1507,14 @@ export default function BrowserPage({
       showActionBar,
     });
   }, [isMainBrowserPath, showActionBar, showFolders, showInspector]);
+
+  useEffect(() => {
+    setVisibleColumns(loadVisibleColumnsForSurface(isMainBrowserPath));
+  }, [isMainBrowserPath]);
+
+  useEffect(() => {
+    persistVisibleColumnsForSurface(isMainBrowserPath, visibleColumns);
+  }, [isMainBrowserPath, visibleColumns]);
 
   const toggleFoldersPanel = useCallback(() => {
     if (!canUseFoldersPanel) return;
@@ -2291,10 +2381,14 @@ export default function BrowserPage({
       const target = event.target as Node;
       if (toolbarMoreButtonRef.current?.contains(target)) return;
       if (toolbarMoreMenuRef.current?.contains(target)) return;
+      if (toolbarColumnsButtonRef.current?.contains(target)) return;
+      if (toolbarColumnsMenuRef.current?.contains(target)) return;
+      setShowToolbarColumnsMenu(false);
       setShowToolbarMoreMenu(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        setShowToolbarColumnsMenu(false);
         setShowToolbarMoreMenu(false);
       }
     };
@@ -2880,6 +2974,8 @@ export default function BrowserPage({
             type: typeFilter,
             storageClass: storageFilter,
             recursive: requestRecursive,
+            sortBy: backendSortBy,
+            sortDir: sortDirection,
             signal: controller.signal,
           });
           if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
@@ -3089,6 +3185,7 @@ export default function BrowserPage({
     },
     [
       accountIdForApi,
+      backendSortBy,
       bucketName,
       filter,
       hasS3AccountContext,
@@ -3101,6 +3198,7 @@ export default function BrowserPage({
       searchScope,
       showDeletedObjects,
       storageFilter,
+      sortDirection,
       typeFilter,
       updateBucketAccessEntry,
     ],
@@ -3362,7 +3460,7 @@ export default function BrowserPage({
       setObjectsLoading(false);
       return;
     }
-    const navigationKey = `${String(accountIdForApi ?? "")}::${String(accessMode ?? "")}::${bucketName}::${normalizedPrefix}`;
+    const navigationKey = `${String(accountIdForApi ?? "")}::${String(accessMode ?? "")}::${bucketName}::${normalizedPrefix}::${sortId}`;
     const shouldLoadImmediately =
       objectsNavigationKeyRef.current !== navigationKey;
     objectsNavigationKeyRef.current = navigationKey;
@@ -3396,6 +3494,7 @@ export default function BrowserPage({
     searchScope,
     showDeletedObjects,
     storageFilter,
+    sortId,
     typeFilter,
     loadObjects,
   ]);
@@ -3849,9 +3948,12 @@ export default function BrowserPage({
 
   const items = useMemo(() => {
     const activePrefixSet = new Set(prefixes);
-    const combinedPrefixes = Array.from(
-      new Set([...prefixes, ...deletedPrefixes]),
-    );
+    const combinedPrefixes = [...prefixes];
+    deletedPrefixes.forEach((prefixKey) => {
+      if (!activePrefixSet.has(prefixKey)) {
+        combinedPrefixes.push(prefixKey);
+      }
+    });
     const folderItems = combinedPrefixes.map((prefixKey) => {
       const rawName = shortName(prefixKey, displayPrefixForItems);
       const name = rawName.endsWith("/") ? rawName.slice(0, -1) : rawName;
@@ -3951,41 +4053,46 @@ export default function BrowserPage({
       key: "size",
       direction: "asc" as const,
     },
+    {
+      id: "storageClass-asc",
+      label: "Storage class (A-Z)",
+      key: "storageClass",
+      direction: "asc" as const,
+    },
+    {
+      id: "storageClass-desc",
+      label: "Storage class (Z-A)",
+      key: "storageClass",
+      direction: "desc" as const,
+    },
+    {
+      id: "etag-asc",
+      label: "ETag (A-Z)",
+      key: "etag",
+      direction: "asc" as const,
+    },
+    {
+      id: "etag-desc",
+      label: "ETag (Z-A)",
+      key: "etag",
+      direction: "desc" as const,
+    },
   ];
   const activeSort =
     sortOptions.find((option) => option.id === sortId) ?? sortOptions[0];
 
-  const filteredItems = useMemo(() => {
-    return [...items].sort((a, b) => {
-      if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
-      if (activeSort.key === "size") {
-        const aSize = a.sizeBytes ?? 0;
-        const bSize = b.sizeBytes ?? 0;
-        return activeSort.direction === "asc" ? aSize - bSize : bSize - aSize;
-      }
-      if (activeSort.key === "modified") {
-        const result = (a.modifiedAt ?? 0) - (b.modifiedAt ?? 0);
-        return activeSort.direction === "asc" ? result : -result;
-      }
-      const result = a.name.localeCompare(b.name);
-      return activeSort.direction === "asc" ? result : -result;
-    });
-  }, [activeSort.direction, activeSort.key, items]);
-
   const listItems = useMemo(
     () =>
       showFolderItems
-        ? filteredItems
-        : filteredItems.filter((item) => item.type !== "folder"),
-    [filteredItems, showFolderItems],
+        ? items
+        : items.filter((item) => item.type !== "folder"),
+    [items, showFolderItems],
   );
   const listItemById = useMemo(
     () => new Map(listItems.map((item) => [item.id, item])),
     [listItems],
   );
-  const effectiveVisibleColumns = isMainBrowserPath
-    ? visibleColumns
-    : DEFAULT_VISIBLE_COLUMN_IDS;
+  const effectiveVisibleColumns = visibleColumns;
   const visibleColumnSet = useMemo(
     () => new Set(effectiveVisibleColumns),
     [effectiveVisibleColumns],
@@ -3999,10 +4106,13 @@ export default function BrowserPage({
   );
   const lazyMetadataColumnsVisible =
     visibleColumnSet.has("contentType") ||
-    visibleColumnSet.has("metadataCount");
+    visibleColumnSet.has("metadataCount") ||
+    visibleColumnSet.has("cacheControl") ||
+    visibleColumnSet.has("expires") ||
+    visibleColumnSet.has("restoreStatus");
   const lazyTagsColumnsVisible = visibleColumnSet.has("tagsCount");
   const hasActiveLazyColumns =
-    isMainBrowserPath && (lazyMetadataColumnsVisible || lazyTagsColumnsVisible);
+    lazyMetadataColumnsVisible || lazyTagsColumnsVisible;
   const objectTableColSpan = 3 + visibleColumnDefinitions.length;
   const normalizedSearchQuery = filter.trim();
   const hasSearchQuery = normalizedSearchQuery.length > 0;
@@ -4095,8 +4205,6 @@ export default function BrowserPage({
   );
   const canLoadMoreBucketResults =
     bucketMenuHasNext && !loadingBuckets && !bucketMenuLoadingMore;
-  const sortKey = sortId.split("-")[0] as "name" | "size" | "modified";
-  const sortDirection = sortId.endsWith("asc") ? "asc" : "desc";
   const activePathSuggestion =
     pathSuggestionIndex >= 0 && pathSuggestionIndex < pathSuggestions.length
       ? pathSuggestions[pathSuggestionIndex]
@@ -4131,15 +4239,22 @@ export default function BrowserPage({
   );
 
   useEffect(() => {
-    if (!isMainBrowserPath) return;
     if (sortKey === "size" && !visibleColumnSet.has("size")) {
       setSortId("name-asc");
       return;
     }
     if (sortKey === "modified" && !visibleColumnSet.has("modified")) {
       setSortId("name-asc");
+      return;
     }
-  }, [isMainBrowserPath, sortKey, visibleColumnSet]);
+    if (sortKey === "storageClass" && !visibleColumnSet.has("storageClass")) {
+      setSortId("name-asc");
+      return;
+    }
+    if (sortKey === "etag" && !visibleColumnSet.has("etag")) {
+      setSortId("name-asc");
+    }
+  }, [sortKey, visibleColumnSet]);
 
   useLayoutEffect(() => {
     if (!useBucketsPanel) {
@@ -5998,64 +6113,110 @@ export default function BrowserPage({
     setVisibleColumns(DEFAULT_VISIBLE_COLUMN_IDS);
   }, []);
 
-  const loadLazyColumnDataForItem = useCallback(
-    async (itemId: string) => {
-      const currentEntry =
-        lazyColumnCacheRef.current[itemId] ?? createLazyColumnCacheEntry();
-      const shouldLoadMetadata =
-        lazyMetadataColumnsVisible &&
-        (currentEntry.metadataStatus === "loading" ||
-          currentEntry.metadataStatus === "idle");
-      const shouldLoadTags =
-        lazyTagsColumnsVisible &&
-        (currentEntry.tagsStatus === "loading" ||
-          currentEntry.tagsStatus === "idle");
-      if (!shouldLoadMetadata && !shouldLoadTags) {
-        return;
-      }
-      const item = lazyListItemsByIdRef.current.get(itemId);
-      if (
-        !item ||
-        item.type !== "file" ||
-        item.isDeleted ||
-        !bucketName ||
-        !hasS3AccountContext
-      ) {
+  const loadLazyColumnDataForItems = useCallback(
+    async (itemIds: string[]) => {
+      const batchIds = Array.from(new Set(itemIds));
+      if (batchIds.length === 0) return;
+
+      const loadPlan = new Map<
+        string,
+        { key: string; loadMetadata: boolean; loadTags: boolean }
+      >();
+      batchIds.forEach((itemId) => {
+        const currentEntry =
+          lazyColumnCacheRef.current[itemId] ?? createLazyColumnCacheEntry();
+        const loadMetadata =
+          lazyMetadataColumnsVisible &&
+          (currentEntry.metadataStatus === "loading" ||
+            currentEntry.metadataStatus === "idle");
+        const loadTags =
+          lazyTagsColumnsVisible &&
+          (currentEntry.tagsStatus === "loading" ||
+            currentEntry.tagsStatus === "idle");
+        if (!loadMetadata && !loadTags) {
+          return;
+        }
+        const item = lazyListItemsByIdRef.current.get(itemId);
+        if (!item || item.type !== "file" || item.isDeleted) {
+          loadPlan.set(itemId, {
+            key: itemId,
+            loadMetadata,
+            loadTags,
+          });
+          return;
+        }
+        loadPlan.set(itemId, {
+          key: item.key,
+          loadMetadata,
+          loadTags,
+        });
+      });
+      if (loadPlan.size === 0) return;
+
+      if (!bucketName || !hasS3AccountContext) {
         setLazyColumnCache((prev) => {
-          const entry = prev[itemId];
-          if (!entry) return prev;
-          let nextEntry = entry;
-          let changed = false;
-          if (shouldLoadMetadata && entry.metadataStatus === "loading") {
-            nextEntry = { ...nextEntry, metadataStatus: "error" };
-            changed = true;
-          }
-          if (shouldLoadTags && entry.tagsStatus === "loading") {
-            nextEntry = { ...nextEntry, tagsStatus: "error" };
-            changed = true;
-          }
-          return changed ? { ...prev, [itemId]: nextEntry } : prev;
+          const next = { ...prev };
+          loadPlan.forEach((plan, itemId) => {
+            const entry = next[itemId];
+            if (!entry) return;
+            next[itemId] = {
+              ...entry,
+              metadataStatus:
+                plan.loadMetadata && entry.metadataStatus === "loading"
+                  ? "error"
+                  : entry.metadataStatus,
+              tagsStatus:
+                plan.loadTags && entry.tagsStatus === "loading"
+                  ? "error"
+                  : entry.tagsStatus,
+            };
+          });
+          return next;
         });
         return;
       }
 
+      const requestedColumns: Array<
+        | "content_type"
+        | "tags_count"
+        | "metadata_count"
+        | "cache_control"
+        | "expires"
+        | "restore_status"
+      > = [];
+      if (Array.from(loadPlan.values()).some((plan) => plan.loadMetadata)) {
+        requestedColumns.push(
+          "content_type",
+          "metadata_count",
+          "cache_control",
+          "expires",
+          "restore_status",
+        );
+      }
+      if (Array.from(loadPlan.values()).some((plan) => plan.loadTags)) {
+        requestedColumns.push("tags_count");
+      }
+      if (requestedColumns.length === 0) return;
+
+      const keys = Array.from(
+        new Set(
+          Array.from(loadPlan.values())
+            .map((plan) => plan.key)
+            .filter((value) => value.length > 0),
+        ),
+      );
       try {
-        const metadataPromise = shouldLoadMetadata
-          ? fetchObjectMetadata(
-              accountIdForApi,
-              bucketName,
-              item.key,
-              null,
-              sseCustomerKeyBase64,
-            )
-          : Promise.resolve(null);
-        const tagsPromise = shouldLoadTags
-          ? getObjectTags(accountIdForApi, bucketName, item.key)
-          : Promise.resolve(null);
-        const [metadataResult, tagsResult] = await Promise.allSettled([
-          metadataPromise,
-          tagsPromise,
-        ]);
+        const response = await fetchBrowserObjectColumns(
+          accountIdForApi,
+          bucketName,
+          {
+            keys,
+            columns: requestedColumns,
+          },
+          {
+            sseCustomerKeyBase64,
+          },
+        );
         if (
           accountIdForApiRef.current !== accountIdForApi ||
           bucketNameRef.current !== bucketName ||
@@ -6064,56 +6225,67 @@ export default function BrowserPage({
           return;
         }
 
+        const valuesByKey = new Map(
+          response.items.map((entry) => [entry.key, entry]),
+        );
         setLazyColumnCache((prev) => {
-          const entry = prev[itemId] ?? createLazyColumnCacheEntry();
-          let nextEntry = entry;
+          const next = { ...prev };
+          loadPlan.forEach((plan, itemId) => {
+            const entry = next[itemId] ?? createLazyColumnCacheEntry();
+            const values = valuesByKey.get(plan.key);
+            let nextEntry = entry;
 
-          if (shouldLoadMetadata) {
-            if (metadataResult.status === "fulfilled") {
-              const metadata = metadataResult.value;
-              nextEntry = {
-                ...nextEntry,
-                contentType: metadata?.content_type ?? null,
-                metadataCount: metadata
-                  ? Object.keys(metadata.metadata ?? {}).length
-                  : 0,
-                metadataStatus: "ready",
-              };
-            } else {
-              nextEntry = { ...nextEntry, metadataStatus: "error" };
+            if (plan.loadMetadata) {
+              if (values && values.metadata_status === "ready") {
+                nextEntry = {
+                  ...nextEntry,
+                  contentType: values.content_type ?? null,
+                  metadataCount: values.metadata_count ?? 0,
+                  cacheControl: values.cache_control ?? null,
+                  expires: values.expires ?? null,
+                  restoreStatus: values.restore_status ?? null,
+                  metadataStatus: "ready",
+                };
+              } else {
+                nextEntry = { ...nextEntry, metadataStatus: "error" };
+              }
             }
-          }
 
-          if (shouldLoadTags) {
-            if (tagsResult.status === "fulfilled") {
-              const tags = tagsResult.value;
-              nextEntry = {
-                ...nextEntry,
-                tagsCount: tags?.tags?.length ?? 0,
-                tagsStatus: "ready",
-              };
-            } else {
-              nextEntry = { ...nextEntry, tagsStatus: "error" };
+            if (plan.loadTags) {
+              if (values && values.tags_status === "ready") {
+                nextEntry = {
+                  ...nextEntry,
+                  tagsCount: values.tags_count ?? 0,
+                  tagsStatus: "ready",
+                };
+              } else {
+                nextEntry = { ...nextEntry, tagsStatus: "error" };
+              }
             }
-          }
 
-          return { ...prev, [itemId]: nextEntry };
+            next[itemId] = nextEntry;
+          });
+          return next;
         });
       } catch {
         setLazyColumnCache((prev) => {
-          const entry = prev[itemId];
-          if (!entry) return prev;
-          let nextEntry = entry;
-          let changed = false;
-          if (shouldLoadMetadata && entry.metadataStatus === "loading") {
-            nextEntry = { ...nextEntry, metadataStatus: "error" };
-            changed = true;
-          }
-          if (shouldLoadTags && entry.tagsStatus === "loading") {
-            nextEntry = { ...nextEntry, tagsStatus: "error" };
-            changed = true;
-          }
-          return changed ? { ...prev, [itemId]: nextEntry } : prev;
+          const next = { ...prev };
+          loadPlan.forEach((plan, itemId) => {
+            const entry = next[itemId];
+            if (!entry) return;
+            next[itemId] = {
+              ...entry,
+              metadataStatus:
+                plan.loadMetadata && entry.metadataStatus === "loading"
+                  ? "error"
+                  : entry.metadataStatus,
+              tagsStatus:
+                plan.loadTags && entry.tagsStatus === "loading"
+                  ? "error"
+                  : entry.tagsStatus,
+            };
+          });
+          return next;
         });
       }
     },
@@ -6130,20 +6302,22 @@ export default function BrowserPage({
 
   const drainLazyColumnQueue = useCallback(() => {
     while (lazyInFlightRef.current < LAZY_COLUMN_CONCURRENCY) {
-      const nextItemId = lazyQueueRef.current.shift();
-      if (!nextItemId) {
+      const nextItemIds = lazyQueueRef.current.splice(0, LAZY_COLUMN_BATCH_SIZE);
+      if (nextItemIds.length === 0) {
         return;
       }
-      lazyQueuedIdsRef.current.delete(nextItemId);
+      nextItemIds.forEach((itemId) => {
+        lazyQueuedIdsRef.current.delete(itemId);
+      });
       lazyInFlightRef.current += 1;
-      void loadLazyColumnDataForItem(nextItemId)
+      void loadLazyColumnDataForItems(nextItemIds)
         .catch(() => undefined)
         .finally(() => {
           lazyInFlightRef.current -= 1;
           drainLazyColumnQueue();
         });
     }
-  }, [loadLazyColumnDataForItem]);
+  }, [loadLazyColumnDataForItems]);
 
   const scheduleLazyColumnLoad = useCallback(
     (itemId: string) => {
@@ -6396,7 +6570,7 @@ export default function BrowserPage({
       }
     }
   };
-  const handleSortToggle = (key: "name" | "size" | "modified") => {
+  const handleSortToggle = (key: BrowserSortKey) => {
     setSortId((prev) => {
       if (!prev.startsWith(key)) {
         return `${key}-asc`;
@@ -11419,13 +11593,16 @@ export default function BrowserPage({
   const hasToolbarStatusSection = isMainBrowserPath || Boolean(accessBadge);
   const hasToolbarLayoutSection =
     showFolderToggle || showInspectorToggle || showActionBarToggle;
+  const hasToolbarColumnsSection = true;
   const hasToolbarSecondaryActionsSection =
     hasToolbarPathActions || hasToolbarSelectionActions || showSseControls;
   const hasToolbarMoreMenu =
     hasToolbarStatusSection ||
     hasToolbarLayoutSection ||
+    hasToolbarColumnsSection ||
     hasToolbarSecondaryActionsSection;
   const closeToolbarMoreMenu = () => {
+    setShowToolbarColumnsMenu(false);
     setShowToolbarMoreMenu(false);
   };
   const closeUploadQuickMenu = () => {
@@ -11437,12 +11614,17 @@ export default function BrowserPage({
   };
   const toggleToolbarMoreMenu = () => {
     setShowUploadQuickMenu(false);
+    setShowToolbarColumnsMenu(false);
     setShowToolbarMoreMenu((prev) => !prev);
   };
   const toggleUploadQuickMenu = () => {
-    setShowToolbarMoreMenu(false);
+    closeToolbarMoreMenu();
     setShowUploadQuickMenu((prev) => !prev);
   };
+  const toggleToolbarColumnsMenu = () => {
+    setShowToolbarColumnsMenu((prev) => !prev);
+  };
+  const toolbarColumnsSummary = `${visibleColumns.length}/${COLUMN_DEFINITIONS.length} visible`;
   const handleToolbarDownload = () => {
     if (canSelectionDownloadFolder && selectionPrimary) {
       handleDownloadFolder(selectionPrimary);
@@ -11570,6 +11752,11 @@ export default function BrowserPage({
     }
   }, [hasToolbarMoreMenu, showToolbarMoreMenu]);
 
+  useEffect(() => {
+    if (showToolbarMoreMenu) return;
+    setShowToolbarColumnsMenu(false);
+  }, [showToolbarMoreMenu]);
+
   const renderLazyCellValue = (
     status: LazyFieldStatus,
     value: string | number | null,
@@ -11592,6 +11779,22 @@ export default function BrowserPage({
         Loading...
       </span>
     );
+  };
+
+  const formatExpiresCellValue = (value: string | null) => {
+    if (!value) return null;
+    return formatDateTime(value);
+  };
+
+  const formatRestoreStatusCellValue = (value: string | null) => {
+    if (!value) return null;
+    const prefixLabel = "Restored until ";
+    if (!value.startsWith(prefixLabel)) {
+      return value;
+    }
+    const rawDate = value.slice(prefixLabel.length).trim();
+    if (!rawDate) return "Restored";
+    return `${prefixLabel}${formatDateTime(rawDate)}`;
   };
 
   const renderColumnCellValue = (
@@ -11636,29 +11839,108 @@ export default function BrowserPage({
         lazyEntry.metadataCount,
       );
     }
+    if (columnId === "cacheControl") {
+      return renderLazyCellValue(
+        lazyEntry.metadataStatus,
+        lazyEntry.cacheControl,
+      );
+    }
+    if (columnId === "expires") {
+      return renderLazyCellValue(
+        lazyEntry.metadataStatus,
+        formatExpiresCellValue(lazyEntry.expires),
+      );
+    }
+    if (columnId === "restoreStatus") {
+      return renderLazyCellValue(
+        lazyEntry.metadataStatus,
+        formatRestoreStatusCellValue(lazyEntry.restoreStatus),
+      );
+    }
     return "—";
   };
 
   const renderColumnHeaderContent = (column: ColumnDefinition) => {
-    if (column.sortable === "size" || column.sortable === "modified") {
-      const active = sortKey === column.sortable;
-      return (
+    if (!column.sortable) {
+      return <span className="inline-flex h-6 items-center">{column.label}</span>;
+    }
+    const active = sortKey === column.sortable;
+    return (
+      <button
+        type="button"
+        onClick={() => handleSortToggle(column.sortable)}
+        className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
+      >
+        <span>{column.label}</span>
+        <ChevronDownIcon
+          className={`h-3 w-3 transition ${active ? "opacity-100" : "opacity-30"} ${
+            active && sortDirection === "asc" ? "-rotate-180" : ""
+          }`}
+        />
+      </button>
+    );
+  };
+
+  const renderToolbarColumnsSubmenu = () => (
+    <AnchoredPortalMenu
+      open={showToolbarColumnsMenu}
+      anchorRef={toolbarColumnsButtonRef}
+      placement="bottom-end"
+      offset={6}
+      minWidth={256}
+      className={`w-72 ${browserFloatingMenuClasses}`}
+    >
+      <div
+        ref={toolbarColumnsMenuRef}
+        role="menu"
+        aria-label="Columns"
+        className="max-h-[min(70vh,24rem)] overflow-y-auto"
+      >
+        <div className="px-3 pb-2 pt-2">
+          <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">
+            Object columns
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+            Only base listing columns can be sorted.
+          </p>
+        </div>
+        <div className={contextMenuSeparatorClasses} />
+        {COLUMN_DEFINITIONS.map((column) => {
+          const checked = visibleColumnSet.has(column.id);
+          return (
+            <button
+              key={column.id}
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={checked}
+              className={contextMenuItemClasses}
+              onClick={() => handleToggleVisibleColumn(column.id)}
+            >
+              <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[11px] font-bold">
+                {checked ? "✓" : ""}
+              </span>
+              <span className="min-w-0 flex-1">{column.label}</span>
+              {column.sortable && (
+                <span className="ml-2 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                  Sort
+                </span>
+              )}
+            </button>
+          );
+        })}
+        <div className={contextMenuSeparatorClasses} />
         <button
           type="button"
-          onClick={() => handleSortToggle(column.sortable)}
-          className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
+          role="menuitem"
+          className={contextMenuItemClasses}
+          onClick={handleResetVisibleColumns}
         >
-          <span>{column.label}</span>
-          <ChevronDownIcon
-            className={`h-3 w-3 transition ${active ? "opacity-100" : "opacity-30"} ${
-              active && sortDirection === "asc" ? "-rotate-180" : ""
-            }`}
-          />
+          <SlidersIcon className="h-3.5 w-3.5" />
+          Reset columns
         </button>
-      );
-    }
-    return <span className="inline-flex h-6 items-center">{column.label}</span>;
-  };
+      </div>
+    </AnchoredPortalMenu>
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
@@ -12259,9 +12541,44 @@ export default function BrowserPage({
                       )}
                     </>
                   )}
-                  {hasToolbarSecondaryActionsSection && (
+                  {hasToolbarColumnsSection && (
                     <>
                       {(hasToolbarStatusSection || hasToolbarLayoutSection) && (
+                        <div className={contextMenuSeparatorClasses} />
+                      )}
+                      <p className={toolbarOverflowSectionTitleClasses}>
+                        Columns
+                      </p>
+                      <button
+                        ref={toolbarColumnsButtonRef}
+                        type="button"
+                        role="menuitem"
+                        aria-haspopup="menu"
+                        aria-expanded={showToolbarColumnsMenu}
+                        className={contextMenuItemClasses}
+                        onClick={toggleToolbarColumnsMenu}
+                      >
+                        <SlidersIcon className="h-3.5 w-3.5" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block">Columns</span>
+                          <span className="block text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500">
+                            {toolbarColumnsSummary}
+                          </span>
+                        </span>
+                        <ChevronDownIcon
+                          className={`h-3.5 w-3.5 shrink-0 transition ${
+                            showToolbarColumnsMenu ? "" : "-rotate-90"
+                          }`}
+                        />
+                      </button>
+                      {renderToolbarColumnsSubmenu()}
+                    </>
+                  )}
+                  {hasToolbarSecondaryActionsSection && (
+                    <>
+                      {(hasToolbarStatusSection ||
+                        hasToolbarLayoutSection ||
+                        hasToolbarColumnsSection) && (
                         <div className={contextMenuSeparatorClasses} />
                       )}
                       {hasToolbarPathActions && (
@@ -13956,11 +14273,9 @@ export default function BrowserPage({
         }))}
         visibleColumns={visibleColumnSet}
         onToggleVisibleColumn={(columnId) => {
-          if (!isMainBrowserPath) return;
           handleToggleVisibleColumn(columnId as BrowserColumnId);
         }}
         onResetVisibleColumns={() => {
-          if (!isMainBrowserPath) return;
           handleResetVisibleColumns();
         }}
       />

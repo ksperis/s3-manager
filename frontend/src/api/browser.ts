@@ -58,6 +58,8 @@ export type BrowserObjectsQuery = {
   type?: "all" | "file" | "folder";
   storageClass?: string;
   recursive?: boolean;
+  sortBy?: "name" | "size" | "modified" | "storage_class" | "etag";
+  sortDir?: "asc" | "desc";
 };
 
 export type BrowserObjectVersion = {
@@ -99,6 +101,30 @@ export type ObjectMetadata = {
 };
 
 export type ObjectTag = { key: string; value: string };
+
+export type BrowserLazyColumnField =
+  | "content_type"
+  | "tags_count"
+  | "metadata_count"
+  | "cache_control"
+  | "expires"
+  | "restore_status";
+
+export type BrowserObjectColumnValues = {
+  key: string;
+  content_type?: string | null;
+  tags_count?: number | null;
+  metadata_count?: number | null;
+  cache_control?: string | null;
+  expires?: string | null;
+  restore_status?: string | null;
+  metadata_status: "ready" | "error";
+  tags_status: "ready" | "error";
+};
+
+export type BrowserObjectColumnsResponse = {
+  items: BrowserObjectColumnValues[];
+};
 
 export type ObjectTags = {
   key: string;
@@ -438,12 +464,44 @@ export async function listBrowserObjects(
       item_type: options?.type && options.type !== "all" ? options.type : undefined,
       storage_class: options?.storageClass && options.storageClass !== "all" ? options.storageClass : undefined,
       recursive: options?.recursive ? true : undefined,
+      sort_by:
+        options?.sortBy && !(options.sortBy === "name" && (options?.sortDir ?? "asc") === "asc")
+          ? options.sortBy
+          : undefined,
+      sort_dir:
+        options?.sortDir && (options.sortDir !== "asc" || (options?.sortBy && options.sortBy !== "name"))
+          ? options.sortDir
+          : undefined,
     },
     accountId
   );
   const { data } = await client.get<ListBrowserObjectsResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/objects`,
     { params, signal: options?.signal }
+  );
+  return data;
+}
+
+export async function fetchBrowserObjectColumns(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: {
+    keys: string[];
+    columns: BrowserLazyColumnField[];
+  },
+  options?: {
+    sseCustomerKeyBase64?: string | null;
+    signal?: AbortSignal;
+  }
+): Promise<BrowserObjectColumnsResponse> {
+  const { data } = await client.post<BrowserObjectColumnsResponse>(
+    `/browser/buckets/${encodeURIComponent(bucketName)}/objects/columns`,
+    payload,
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildSseCustomerBackendHeaders(options?.sseCustomerKeyBase64),
+      signal: options?.signal,
+    }
   );
   return data;
 }

@@ -47,7 +47,9 @@ from app.models.bucket import (
 )
 from app.models.browser import (
     BrowserBucket,
+    BrowserObjectSortBy,
     BrowserStsCredentials,
+    BrowserObjectSortDir,
     BucketVersioningStatus,
     BucketCorsStatus,
     CleanupObjectVersionsPayload,
@@ -62,6 +64,8 @@ from app.models.browser import (
     MultipartUploadInitRequest,
     MultipartUploadInitResponse,
     ObjectAcl,
+    ObjectColumnsRequest,
+    ObjectColumnsResponse,
     ObjectLegalHold,
     ObjectMetadata,
     ObjectMetadataUpdate,
@@ -1163,6 +1167,8 @@ def list_objects(
     item_type: Optional[str] = None,
     storage_class: Optional[str] = None,
     recursive: bool = Query(default=False),
+    sort_by: BrowserObjectSortBy = Query(default="name"),
+    sort_dir: BrowserObjectSortDir = Query(default="asc"),
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1180,6 +1186,29 @@ def list_objects(
             item_type=item_type,
             storage_class=storage_class,
             recursive=recursive,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+        )
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
+
+
+@router.post("/buckets/{bucket_name}/objects/columns", response_model=ObjectColumnsResponse)
+def get_object_columns(
+    bucket_name: str,
+    payload: ObjectColumnsRequest,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> ObjectColumnsResponse:
+    try:
+        return service.get_object_columns(
+            bucket_name,
+            account,
+            keys=payload.keys,
+            columns=set(payload.columns),
+            sse_customer=sse_customer,
         )
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)

@@ -19,6 +19,7 @@ export type BrowserRootUiContextSelection = {
 export type BrowserRootUiState = {
   layout: BrowserRootUiLayoutState;
   contextSelections: Record<string, BrowserRootUiContextSelection>;
+  objectColumns: string[];
 };
 
 const DEFAULT_LAYOUT_STATE: BrowserRootUiLayoutState = {
@@ -30,6 +31,7 @@ const DEFAULT_LAYOUT_STATE: BrowserRootUiLayoutState = {
 const createDefaultState = (): BrowserRootUiState => ({
   layout: { ...DEFAULT_LAYOUT_STATE },
   contextSelections: {},
+  objectColumns: [],
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -63,6 +65,11 @@ const normalizeContextSelections = (value: unknown): Record<string, BrowserRootU
   return entries;
 };
 
+const normalizeObjectColumns = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+};
+
 export const readStoredBrowserRootUiState = (): BrowserRootUiState | null => {
   if (typeof window === "undefined") {
     return null;
@@ -75,6 +82,7 @@ export const readStoredBrowserRootUiState = (): BrowserRootUiState | null => {
     return {
       layout: normalizeLayoutState(parsed.layout),
       contextSelections: normalizeContextSelections(parsed.contextSelections),
+      objectColumns: normalizeObjectColumns(parsed.objectColumns),
     };
   } catch {
     return null;
@@ -118,5 +126,17 @@ export const writeBrowserRootContextSelection = (
       ...current.contextSelections,
       [contextId]: normalizeContextSelection(selection) ?? { bucketName: "", prefix: "" },
     },
+  });
+};
+
+export const readBrowserRootObjectColumns = (): string[] => {
+  return readBrowserRootUiState().objectColumns;
+};
+
+export const writeBrowserRootObjectColumns = (columns: string[]) => {
+  const current = readBrowserRootUiState();
+  writeBrowserRootUiState({
+    ...current,
+    objectColumns: normalizeObjectColumns(columns),
   });
 };
