@@ -1314,6 +1314,7 @@ export default function BrowserPage({
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const bucketMenuRef = useRef<HTMLDivElement | null>(null);
   const searchOptionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchOptionsButtonRef = useRef<HTMLButtonElement | null>(null);
   const uploadQuickButtonRef = useRef<HTMLButtonElement | null>(null);
   const uploadQuickMenuRef = useRef<HTMLDivElement | null>(null);
   const toolbarMoreButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -2485,6 +2486,9 @@ export default function BrowserPage({
   useEffect(() => {
     if (!showSearchOptionsMenu) return;
     const handleMouseDown = (event: MouseEvent) => {
+      if (searchOptionsButtonRef.current?.contains(event.target as Node)) {
+        return;
+      }
       if (
         searchOptionsMenuRef.current &&
         !searchOptionsMenuRef.current.contains(event.target as Node)
@@ -12726,6 +12730,7 @@ export default function BrowserPage({
                                 className={`${browserSearchInputClasses} pl-9 pr-9 normal-case`}
                               />
                               <button
+                                ref={searchOptionsButtonRef}
                                 type="button"
                                 onClick={() =>
                                   setShowSearchOptionsMenu((prev) => !prev)
@@ -12742,9 +12747,17 @@ export default function BrowserPage({
                               >
                                 <SlidersIcon className="h-3 w-3" />
                               </button>
-                              {showSearchOptionsMenu && (
+                              <AnchoredPortalMenu
+                                open={showSearchOptionsMenu}
+                                anchorRef={searchOptionsButtonRef}
+                                placement="bottom-end"
+                                offset={8}
+                                minWidth={288}
+                                className={`w-72 ${browserFloatingMenuClasses}`}
+                              >
                                 <div
-                                  className={`absolute right-0 z-40 mt-2 w-72 space-y-3 ${browserFloatingMenuClasses}`}
+                                  ref={searchOptionsMenuRef}
+                                  className="space-y-3"
                                 >
                                   <label className="block space-y-1">
                                     <span className={browserSearchLabelClasses}>
@@ -12888,7 +12901,7 @@ export default function BrowserPage({
                                     </button>
                                   </div>
                                 </div>
-                              )}
+                              </AnchoredPortalMenu>
                             </div>
                           </div>
                         </th>
