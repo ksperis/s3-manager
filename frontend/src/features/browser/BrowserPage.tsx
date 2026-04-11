@@ -4421,7 +4421,7 @@ export default function BrowserPage({
 
   const openItemDetails = (item: BrowserItem) => {
     if (item.type === "file") {
-      openObjectDetails(item, item.isDeleted ? "versions" : "properties");
+      openObjectDetails(item, "preview");
       return;
     }
     if (!canUseInspectorPanel) return;
@@ -13491,55 +13491,6 @@ export default function BrowserPage({
                             </div>
                             <div className={inspectorSectionCardClasses}>
                               <p className={inspectorSectionTitleClasses}>
-                                Summary
-                              </p>
-                              <div className="grid gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
-                                  <span className="text-slate-500">Path</span>
-                                  <span className="min-w-0 break-all text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedPath}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
-                                  <span className="text-slate-500">Owner</span>
-                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedItem.owner}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
-                                  <span className="text-slate-500">
-                                    Last modified
-                                  </span>
-                                  <span className="min-w-0 text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedItem.modified}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
-                                  <span className="text-slate-500">
-                                    Type
-                                  </span>
-                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedItem.type === "folder"
-                                      ? inspectedItem.isDeleted
-                                        ? "Deleted folder"
-                                        : "Prefix"
-                                      : inspectedItem.isDeleted
-                                        ? "Deleted object"
-                                        : "Object"}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
-                                  <span className="text-slate-500">
-                                    Storage class
-                                  </span>
-                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedItem.storageClass ?? "-"}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className={inspectorSectionCardClasses}>
-                              <p className={inspectorSectionTitleClasses}>
                                 Quick actions
                               </p>
                               <div className="flex flex-wrap gap-2">
@@ -13597,6 +13548,55 @@ export default function BrowserPage({
                                     </button>
                                   </>
                                 )}
+                              </div>
+                            </div>
+                            <div className={inspectorSectionCardClasses}>
+                              <p className={inspectorSectionTitleClasses}>
+                                Summary
+                              </p>
+                              <div className="grid gap-2 ui-caption text-slate-600 dark:text-slate-300">
+                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
+                                  <span className="text-slate-500">Path</span>
+                                  <span className="min-w-0 break-all text-right font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedPath}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
+                                  <span className="text-slate-500">Owner</span>
+                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedItem.owner}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
+                                  <span className="text-slate-500">
+                                    Last modified
+                                  </span>
+                                  <span className="min-w-0 text-right font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedItem.modified}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
+                                  <span className="text-slate-500">
+                                    Type
+                                  </span>
+                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedItem.type === "folder"
+                                      ? inspectedItem.isDeleted
+                                        ? "Deleted folder"
+                                        : "Prefix"
+                                      : inspectedItem.isDeleted
+                                        ? "Deleted object"
+                                        : "Object"}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
+                                  <span className="text-slate-500">
+                                    Storage class
+                                  </span>
+                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedItem.storageClass ?? "-"}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </div>

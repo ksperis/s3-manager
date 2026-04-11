@@ -2264,9 +2264,6 @@ describe("BrowserPage interactions", () => {
       within(menu).getByRole("button", { name: "Details" }),
     ).toBeInTheDocument();
     expect(
-      within(menu).getByRole("button", { name: "Preview" }),
-    ).toBeInTheDocument();
-    expect(
       within(menu).getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
     expect(
@@ -2281,11 +2278,9 @@ describe("BrowserPage interactions", () => {
     expect(
       within(menu).getByRole("button", { name: "Delete" }),
     ).toBeInTheDocument();
-    expect(menuButtons.indexOf("Preview")).toBeLessThan(
+    expect(menuButtons).not.toContain("Preview");
+    expect(menuButtons.indexOf("Details")).toBeLessThan(
       menuButtons.indexOf("Versions"),
-    );
-    expect(menuButtons.indexOf("Versions")).toBeLessThan(
-      menuButtons.indexOf("Details"),
     );
     expect(menuButtons).not.toContain("Advanced");
     expect(
@@ -2297,7 +2292,7 @@ describe("BrowserPage interactions", () => {
     expect(
       await screen.findByRole("dialog", { name: "Object details · a.txt" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Properties" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -2352,7 +2347,7 @@ describe("BrowserPage interactions", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps More actions available when the inspector panel is disabled and omits Details", async () => {
+  it("keeps More actions available when the inspector panel is disabled and still exposes Details for files", async () => {
     const user = userEvent.setup();
     renderPage({ defaultShowInspector: false, allowInspectorPanel: false });
 
@@ -2365,18 +2360,24 @@ describe("BrowserPage interactions", () => {
     await user.click(moreButton);
     const menu = await screen.findByRole("menu");
 
-    expect(
-      within(menu).queryByRole("button", { name: "Details" }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(menu).getByRole("button", { name: "Preview" }),
-    ).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
     expect(
       within(menu).getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("tablist", { name: "Inspector tabs" }),
     ).not.toBeInTheDocument();
+
+    await user.click(within(menu).getByRole("button", { name: "Details" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Object details · a.txt" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("keeps inspector tabs on one line and removes the counter from the Selection tab", async () => {

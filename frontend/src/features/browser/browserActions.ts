@@ -74,9 +74,8 @@ export const CONTEXT_MENU_PATH_LAYOUT_ACTION_IDS: BrowserActionId[] = [
 ];
 
 export const CONTEXT_MENU_ITEM_ACTION_IDS: BrowserActionId[] = [
-  "preview",
-  "versions",
   "details",
+  "versions",
   "open",
   "download",
   "copyUrl",
@@ -310,8 +309,16 @@ export const resolveBrowserActions = ({
   if (scope === "item") {
     setState("details", {
       label: "Details",
-      visible: isSingle && Boolean(primary) && inspectorAvailable,
-      enabled: isSingle && Boolean(primary) && inspectorAvailable,
+      visible:
+        isSingle &&
+        Boolean(primary) &&
+        (isPrimaryFile || inspectorAvailable),
+      enabled:
+        isSingle &&
+        Boolean(primary) &&
+        (isPrimaryFile
+          ? canUseContextActions && (!isPrimaryDeleted || versioningEnabled)
+          : inspectorAvailable),
     });
     if (isPrimaryFile && versioningEnabled) {
       setState("versions", {

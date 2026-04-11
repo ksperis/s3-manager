@@ -110,6 +110,7 @@ describe("resolveBrowserActions", () => {
     });
 
     expect(actions.details.visible).toBe(true);
+    expect(actions.details.enabled).toBe(true);
     expect(actions.preview.visible).toBe(true);
     expect(actions.preview.enabled).toBe(false);
     expect(actions.download.visible).toBe(true);
@@ -118,6 +119,21 @@ describe("resolveBrowserActions", () => {
     expect(actions.versions.enabled).toBe(true);
     expect(actions.copy.enabled).toBe(false);
     expect(actions.delete.enabled).toBe(false);
+  });
+
+  it("keeps file Details available even when the inspector panel is disabled", () => {
+    const actions = resolveBrowserActions({
+      scope: "item",
+      items: [fileItem],
+      bucketName: "bucket-1",
+      hasS3AccountContext: true,
+      versioningEnabled: false,
+      canPaste: false,
+      inspectorAvailable: false,
+    });
+
+    expect(actions.details.visible).toBe(true);
+    expect(actions.details.enabled).toBe(true);
   });
 
   it("keeps open available for a single folder selection", () => {

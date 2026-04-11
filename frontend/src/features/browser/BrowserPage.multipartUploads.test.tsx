@@ -208,17 +208,17 @@ describe("BrowserPage multipart uploads modal", () => {
       .getAllByRole("button")
       .map((button) => button.textContent?.trim());
 
-    expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
     expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
-    expect(menuButtons.indexOf("Preview")).toBeLessThan(menuButtons.indexOf("Details"));
+    expect(menuButtons).not.toContain("Preview");
+    expect(menuButtons[0]).toBe("Details");
     expect(menuButtons).not.toContain("Advanced");
     expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
 
     await user.click(within(menu).getByRole("button", { name: "Details" }));
 
-    const propertiesTab = await screen.findByRole("tab", { name: "Properties" });
+    const previewTab = await screen.findByRole("tab", { name: "Preview" });
     expect(screen.getByText(/Object details · .*monthly\.csv/i)).toBeInTheDocument();
-    expect(propertiesTab).toHaveAttribute(
+    expect(previewTab).toHaveAttribute(
       "aria-selected",
       "true"
     );
