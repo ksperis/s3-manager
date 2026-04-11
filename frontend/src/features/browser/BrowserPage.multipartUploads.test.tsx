@@ -178,7 +178,7 @@ describe("BrowserPage multipart uploads modal", () => {
     expect(await screen.findByText("Multipart upload aborted for uploads/big-file.bin.")).toBeInTheDocument();
   });
 
-  it("opens the row actions menu from More actions and opens object details only after choosing Details", async () => {
+  it("opens the row actions menu from More actions and routes file Details to the inspector", async () => {
     const user = userEvent.setup();
 
     listBrowserObjectsMock.mockResolvedValue({
@@ -209,19 +209,23 @@ describe("BrowserPage multipart uploads modal", () => {
       .map((button) => button.textContent?.trim());
 
     expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
-    expect(menuButtons).not.toContain("Preview");
-    expect(menuButtons[0]).toBe("Details");
+    expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Properties" })).toBeInTheDocument();
+    expect(menuButtons.slice(0, 3)).toEqual([
+      "Details",
+      "Preview",
+      "Properties",
+    ]);
     expect(menuButtons).not.toContain("Advanced");
     expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
 
     await user.click(within(menu).getByRole("button", { name: "Details" }));
 
-    const previewTab = await screen.findByRole("tab", { name: "Preview" });
-    expect(screen.getByText(/Object details · .*monthly\.csv/i)).toBeInTheDocument();
-    expect(previewTab).toHaveAttribute(
+    expect(await screen.findByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
       "aria-selected",
       "true"
     );
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Object details · .*monthly\.csv/i)).not.toBeInTheDocument();
   });
 });

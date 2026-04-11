@@ -17,6 +17,7 @@ export type BrowserActionId =
   | "toggleShowFolders"
   | "toggleShowDeleted"
   | "details"
+  | "properties"
   | "open"
   | "preview"
   | "download"
@@ -75,7 +76,9 @@ export const CONTEXT_MENU_PATH_LAYOUT_ACTION_IDS: BrowserActionId[] = [
 
 export const CONTEXT_MENU_ITEM_ACTION_IDS: BrowserActionId[] = [
   "details",
+  "preview",
   "versions",
+  "properties",
   "open",
   "download",
   "copyUrl",
@@ -164,6 +167,7 @@ const ALL_ACTION_IDS: BrowserActionId[] = [
   "toggleShowFolders",
   "toggleShowDeleted",
   "details",
+  "properties",
   "open",
   "preview",
   "download",
@@ -187,6 +191,7 @@ const defaultSectionByActionId: Record<BrowserActionId, BrowserActionSection> = 
   toggleShowFolders: "layout",
   toggleShowDeleted: "layout",
   details: "selection",
+  properties: "selection",
   open: "selection",
   preview: "selection",
   download: "selection",
@@ -312,13 +317,11 @@ export const resolveBrowserActions = ({
       visible:
         isSingle &&
         Boolean(primary) &&
-        (isPrimaryFile || inspectorAvailable),
+        inspectorAvailable,
       enabled:
         isSingle &&
         Boolean(primary) &&
-        (isPrimaryFile
-          ? canUseContextActions && (!isPrimaryDeleted || versioningEnabled)
-          : inspectorAvailable),
+        inspectorAvailable,
     });
     if (isPrimaryFile && versioningEnabled) {
       setState("versions", {
@@ -340,6 +343,11 @@ export const resolveBrowserActions = ({
         visible: true,
         enabled: canUseContextActions && !isPrimaryDeleted,
       });
+      setState("properties", {
+        label: "Properties",
+        visible: true,
+        enabled: canUseContextActions && (!isPrimaryDeleted || versioningEnabled),
+      });
     }
     if (isSingle && Boolean(primary)) {
       setState("download", {
@@ -354,11 +362,6 @@ export const resolveBrowserActions = ({
         visible: true,
         enabled: canUseContextActions && !copyUrlDisabled,
         disabledReason: copyUrlDisabled ? copyUrlDisabledReason : undefined,
-      });
-      setState("advanced", {
-        label: "Advanced",
-        visible: true,
-        enabled: canUseContextActions,
       });
     }
     if (selectionInfo.items.length > 0) {

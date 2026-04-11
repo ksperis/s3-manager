@@ -2237,7 +2237,21 @@ describe("BrowserPage interactions", () => {
     });
   });
 
-  it("opens the single-row actions menu from More actions and only opens Details on explicit choice", async () => {
+  it("opens the unified preview modal on file double-click", async () => {
+    const user = userEvent.setup();
+    renderPage({ defaultShowInspector: false });
+
+    await user.dblClick(await findRowByLabel("a.txt"));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Object details · a.txt",
+    });
+    expect(
+      within(dialog).getByRole("tab", { name: "Preview" }),
+    ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("opens the single-row actions menu from More actions and routes Details to the inspector", async () => {
     const user = userEvent.setup();
     getBucketVersioningMock.mockResolvedValue({
       enabled: true,
@@ -2264,6 +2278,12 @@ describe("BrowserPage interactions", () => {
       within(menu).getByRole("button", { name: "Details" }),
     ).toBeInTheDocument();
     expect(
+      within(menu).getByRole("button", { name: "Preview" }),
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", { name: "Properties" }),
+    ).toBeInTheDocument();
+    expect(
       within(menu).getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
     expect(
@@ -2278,9 +2298,14 @@ describe("BrowserPage interactions", () => {
     expect(
       within(menu).getByRole("button", { name: "Delete" }),
     ).toBeInTheDocument();
-    expect(menuButtons).not.toContain("Preview");
     expect(menuButtons.indexOf("Details")).toBeLessThan(
+      menuButtons.indexOf("Preview"),
+    );
+    expect(menuButtons.indexOf("Preview")).toBeLessThan(
       menuButtons.indexOf("Versions"),
+    );
+    expect(menuButtons.indexOf("Versions")).toBeLessThan(
+      menuButtons.indexOf("Properties"),
     );
     expect(menuButtons).not.toContain("Advanced");
     expect(
@@ -2290,13 +2315,15 @@ describe("BrowserPage interactions", () => {
     await user.click(within(menu).getByRole("button", { name: "Details" }));
 
     expect(
-      await screen.findByRole("dialog", { name: "Object details · a.txt" }),
+      await screen.findByRole("tablist", { name: "Inspector tabs" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Object details · a.txt" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not show a focused fallback in Selection tab when no object is selected", async () => {
@@ -2314,6 +2341,41 @@ describe("BrowserPage interactions", () => {
     expect(
       screen.getByText("Select one or more objects to see selection actions."),
     ).toBeInTheDocument();
+  });
+
+  it("opens Preview and Properties from the file actions menu into the unified modal", async () => {
+    const user = userEvent.setup();
+    getBucketVersioningMock.mockResolvedValue({
+      enabled: true,
+      status: "Enabled",
+    });
+    renderPage({ defaultShowInspector: false });
+
+    const row = await findRowByLabel("a.txt");
+
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    let menu = await screen.findByRole("menu");
+    await user.click(within(menu).getByRole("button", { name: "Preview" }));
+
+    let dialog = await screen.findByRole("dialog", {
+      name: "Object details · a.txt",
+    });
+    expect(within(dialog).getByRole("tab", { name: "Preview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
+
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    menu = await screen.findByRole("menu");
+    await user.click(within(menu).getByRole("button", { name: "Properties" }));
+
+    dialog = await screen.findByRole("dialog", {
+      name: "Object details · a.txt",
+    });
+    expect(
+      within(dialog).getByRole("tab", { name: "Properties" }),
+    ).toHaveAttribute("aria-selected", "true");
   });
 
   it("shows folder row actions from More actions with the same single-item menu content", async () => {
@@ -2347,7 +2409,7 @@ describe("BrowserPage interactions", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps More actions available when the inspector panel is disabled and still exposes Details for files", async () => {
+  it("keeps More actions available when the inspector panel is disabled and omits Details for files", async () => {
     const user = userEvent.setup();
     renderPage({ defaultShowInspector: false, allowInspectorPanel: false });
 
@@ -2360,8 +2422,9 @@ describe("BrowserPage interactions", () => {
     await user.click(moreButton);
     const menu = await screen.findByRole("menu");
 
-    expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
-    expect(within(menu).queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Properties" })).toBeInTheDocument();
     expect(
       within(menu).getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
@@ -2369,15 +2432,9 @@ describe("BrowserPage interactions", () => {
       screen.queryByRole("tablist", { name: "Inspector tabs" }),
     ).not.toBeInTheDocument();
 
-    await user.click(within(menu).getByRole("button", { name: "Details" }));
-
     expect(
-      await screen.findByRole("dialog", { name: "Object details · a.txt" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+      screen.queryByRole("dialog", { name: "Object details · a.txt" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps inspector tabs on one line and removes the counter from the Selection tab", async () => {
@@ -2492,7 +2549,7 @@ describe("BrowserPage interactions", () => {
     });
   });
 
-  it("routes preview, versions and object details entries into one modal with lazy tab loading", async () => {
+  it("routes preview, versions and object details entries into the inspector and unified modal with lazy loading", async () => {
     const user = userEvent.setup();
     getBucketVersioningMock.mockResolvedValue({
       enabled: true,
@@ -2545,6 +2602,11 @@ describe("BrowserPage interactions", () => {
     await user.click(screen.getByRole("tab", { name: "Details" }));
     const panel = screen.getByRole("tabpanel", { name: "Details" });
 
+    await waitFor(() => {
+      expect(listObjectVersionsMock).toHaveBeenCalledTimes(1);
+    });
+    expect(within(panel).getByText("No versions found.")).toBeInTheDocument();
+
     await user.click(within(panel).getByRole("button", { name: "Versions" }));
     dialog = await screen.findByRole("dialog", {
       name: "Object details · a.txt",
@@ -2553,7 +2615,7 @@ describe("BrowserPage interactions", () => {
       within(dialog).getByRole("tab", { name: "Versions" }),
     ).toHaveAttribute("aria-selected", "true");
     await waitFor(() => {
-      expect(listObjectVersionsMock).toHaveBeenCalledTimes(1);
+      expect(listObjectVersionsMock).toHaveBeenCalledTimes(2);
     });
     expect(getObjectLegalHoldMock).not.toHaveBeenCalled();
     expect(getObjectRetentionMock).not.toHaveBeenCalled();

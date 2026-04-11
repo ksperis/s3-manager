@@ -74,6 +74,7 @@ type BrowserContextMenuProps = {
   onOpenBulkRestore: (items: BrowserItem[]) => void;
   onOpenObjectVersions: (item: BrowserItem) => void;
   onOpenAdvanced: (item: BrowserItem) => void;
+  onOpenProperties: (item: BrowserItem) => void;
   onDeleteItems: (items: BrowserItem[]) => void;
   onDownloadFolder: (item: BrowserItem) => void;
   onDownloadItems: (items: BrowserItem[]) => void;
@@ -121,6 +122,7 @@ export default function BrowserContextMenu({
   onOpenBulkRestore,
   onOpenObjectVersions,
   onOpenAdvanced,
+  onOpenProperties,
   onDeleteItems,
   onDownloadFolder,
   onDownloadItems,
@@ -232,6 +234,9 @@ export default function BrowserContextMenu({
       case "versions":
         onOpenObjectVersions(contextItem);
         return;
+      case "properties":
+        onOpenProperties(contextItem);
+        return;
       case "open":
         onOpenItem(contextItem);
         return;
@@ -329,6 +334,7 @@ export default function BrowserContextMenu({
     toggleShowFolders: <FolderIcon className="h-3.5 w-3.5" />,
     toggleShowDeleted: <TrashIcon className="h-3.5 w-3.5" />,
     details: <InfoIcon className="h-3.5 w-3.5" />,
+    properties: <SettingsIcon className="h-3.5 w-3.5" />,
     open: <OpenIcon className="h-3.5 w-3.5" />,
     preview: <EyeIcon className="h-3.5 w-3.5" />,
     download: <DownloadIcon className="h-3.5 w-3.5" />,

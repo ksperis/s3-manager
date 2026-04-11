@@ -113,6 +113,8 @@ describe("resolveBrowserActions", () => {
     expect(actions.details.enabled).toBe(true);
     expect(actions.preview.visible).toBe(true);
     expect(actions.preview.enabled).toBe(false);
+    expect(actions.properties.visible).toBe(true);
+    expect(actions.properties.enabled).toBe(true);
     expect(actions.download.visible).toBe(true);
     expect(actions.download.enabled).toBe(false);
     expect(actions.versions.visible).toBe(true);
@@ -121,7 +123,7 @@ describe("resolveBrowserActions", () => {
     expect(actions.delete.enabled).toBe(false);
   });
 
-  it("keeps file Details available even when the inspector panel is disabled", () => {
+  it("hides file Details when the inspector panel is disabled but keeps preview and properties", () => {
     const actions = resolveBrowserActions({
       scope: "item",
       items: [fileItem],
@@ -132,8 +134,11 @@ describe("resolveBrowserActions", () => {
       inspectorAvailable: false,
     });
 
-    expect(actions.details.visible).toBe(true);
-    expect(actions.details.enabled).toBe(true);
+    expect(actions.details.visible).toBe(false);
+    expect(actions.preview.visible).toBe(true);
+    expect(actions.preview.enabled).toBe(true);
+    expect(actions.properties.visible).toBe(true);
+    expect(actions.properties.enabled).toBe(true);
   });
 
   it("keeps open available for a single folder selection", () => {
