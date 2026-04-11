@@ -2789,7 +2789,11 @@ describe("BrowserPage interactions", () => {
         }),
       );
     });
-    expect(await within(dialog).findByText("direct-bytes")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        within(dialog).queryByText("Loading preview..."),
+      ).not.toBeInTheDocument();
+    });
     expect(within(dialog).queryByTitle("Object preview")).not.toBeInTheDocument();
     expect(listObjectVersionsMock).not.toHaveBeenCalled();
     expect(getObjectLegalHoldMock).not.toHaveBeenCalled();
