@@ -2103,7 +2103,7 @@ describe("BrowserPage interactions", () => {
     const actionsToolbar = getActionsToolbar();
     const orderedButtons = [
       "Open",
-      "Properties",
+      "Preview",
       "New folder",
       "Copy",
       "Paste",
@@ -2128,7 +2128,7 @@ describe("BrowserPage interactions", () => {
       within(actionsToolbar).getByRole("button", { name: "Paste" }),
     ).toBeDisabled();
     expect(
-      within(actionsToolbar).getByRole("button", { name: "Properties" }),
+      within(actionsToolbar).getByRole("button", { name: "Preview" }),
     ).toBeEnabled();
     expect(
       within(actionsToolbar).getByRole("button", { name: "Open" }),
@@ -2191,7 +2191,7 @@ describe("BrowserPage interactions", () => {
       within(actionsToolbar).getByRole("button", { name: "Open" }),
     ).toBeEnabled();
     expect(
-      within(actionsToolbar).getByRole("button", { name: "Properties" }),
+      within(actionsToolbar).getByRole("button", { name: "Preview" }),
     ).toBeDisabled();
   });
 
@@ -2212,7 +2212,7 @@ describe("BrowserPage interactions", () => {
       within(actionsToolbar).getByRole("button", { name: "Paste" }),
     ).toBeEnabled();
     expect(
-      within(actionsToolbar).getByRole("button", { name: "Properties" }),
+      within(actionsToolbar).getByRole("button", { name: "Preview" }),
     ).toBeDisabled();
 
     let menu = await openActionsMoreMenu(user);
@@ -2240,25 +2240,25 @@ describe("BrowserPage interactions", () => {
 
     expect(within(actionsToolbar).getByText("2 selected")).toBeInTheDocument();
     expect(
-      within(actionsToolbar).getByRole("button", { name: "Properties" }),
+      within(actionsToolbar).getByRole("button", { name: "Preview" }),
     ).toBeDisabled();
   });
 
-  it("opens Properties from the action bar into the unified modal", async () => {
+  it("opens Preview from the action bar into the unified modal", async () => {
     const user = userEvent.setup();
     renderPage();
     await enableActionBar(user);
 
     await user.click(await findRowByLabel("a.txt"));
     await user.click(
-      within(getActionsToolbar()).getByRole("button", { name: "Properties" }),
+      within(getActionsToolbar()).getByRole("button", { name: "Preview" }),
     );
 
     const dialog = await screen.findByRole("dialog", {
       name: "Object details · a.txt",
     });
     expect(
-      within(dialog).getByRole("tab", { name: "Properties" }),
+      within(dialog).getByRole("tab", { name: "Preview" }),
     ).toHaveAttribute("aria-selected", "true");
   });
 

@@ -4709,7 +4709,7 @@ export default function BrowserPage({
       sseActive,
     ],
   );
-  const toolbarPropertiesActionState = useMemo(() => {
+  const toolbarPreviewActionState = useMemo(() => {
     if (!selectionIsSingle || !selectionPrimary) {
       return null;
     }
@@ -4724,7 +4724,7 @@ export default function BrowserPage({
       copyUrlDisabled: sseActive,
       copyUrlDisabledReason,
       inspectorAvailable: canUseInspectorPanel,
-    }).properties;
+    }).preview;
   }, [
     bucketName,
     canPaste,
@@ -11414,9 +11414,9 @@ export default function BrowserPage({
     selectedCount > 0 ? `${selectedCount} selected` : "No selection";
   const toolbarPasteLabel = pathActionStates.paste.label || "Paste";
   const toolbarCanPaste = pathActionStates.paste.enabled;
-  const toolbarCanProperties = Boolean(
-    toolbarPropertiesActionState?.visible &&
-      toolbarPropertiesActionState.enabled,
+  const toolbarCanPreview = Boolean(
+    toolbarPreviewActionState?.visible &&
+      toolbarPreviewActionState.enabled,
   );
   const toolbarCanUploadFiles = pathActionStates.uploadFiles.enabled;
   const toolbarCanUploadFolder = pathActionStates.uploadFolder.enabled;
@@ -12209,14 +12209,14 @@ export default function BrowserPage({
                     className={chromeToolbarButtonClasses}
                     onClick={() => {
                       if (selectionPrimary) {
-                        openPropertiesForItem(selectionPrimary);
+                        handlePreviewItem(selectionPrimary);
                       }
                     }}
-                    disabled={!toolbarCanProperties}
-                    title="Properties"
+                    disabled={!toolbarCanPreview}
+                    title="Preview"
                   >
-                    <SettingsIcon className="h-3.5 w-3.5" />
-                    Properties
+                    <EyeIcon className="h-3.5 w-3.5" />
+                    Preview
                   </button>
                   <button
                     type="button"
