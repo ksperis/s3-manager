@@ -17,7 +17,7 @@ Use this guide for object-level actions in Browser surfaces.
    - Non-active buckets stay collapsed; inaccessible buckets are dimmed until selected.
 3. Use actions as needed:
    - Use the context menu for the full action set on the current path, object, or selection.
-   - On `/browser`, use the action bar for the primary shortcuts: `Upload`, `New folder`, `Paste`, `Properties`, `Open`, `Download`, `Copy`, and `Delete`.
+   - On `/browser`, use the action bar in this order: `Open`, `Properties`, `New folder`, `Copy`, `Paste`, `Upload`, `Download`, `Delete`, then `Refresh` and `More`.
    - Use the toolbar `More` menu when right-click is not available or when the action bar is compact.
    - Use `More > Columns` to choose which object columns are visible. The default column set stays unchanged until you customize it.
    - Use the inspector to access the same context and selection actions on the main `/browser` page. The `Details` tab stays lightweight and can open the full file object sheet directly.

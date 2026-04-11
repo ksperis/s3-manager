@@ -2102,13 +2102,13 @@ describe("BrowserPage interactions", () => {
 
     const actionsToolbar = getActionsToolbar();
     const orderedButtons = [
-      "Upload",
-      "New folder",
-      "Paste",
-      "Properties",
       "Open",
-      "Download",
+      "Properties",
+      "New folder",
       "Copy",
+      "Paste",
+      "Upload",
+      "Download",
       "Delete",
       "Refresh",
       "More",
@@ -2146,7 +2146,7 @@ describe("BrowserPage interactions", () => {
       within(actionsToolbar).queryByRole("button", { name: "Copy URL" }),
     ).not.toBeInTheDocument();
 
-    await user.click(orderedButtons[0]);
+    await user.click(within(actionsToolbar).getByRole("button", { name: "Upload" }));
     const uploadMenu = await screen.findByRole("menu", { name: "Upload" });
     expect(
       within(uploadMenu).getByRole("menuitem", { name: "Upload files" }),

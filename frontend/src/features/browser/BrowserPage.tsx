@@ -12196,6 +12196,61 @@ export default function BrowserPage({
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                   <button
+                    type="button"
+                    className={chromeToolbarButtonClasses}
+                    onClick={handleToolbarOpen}
+                    disabled={!toolbarCanOpen}
+                  >
+                    <OpenIcon className="h-3.5 w-3.5" />
+                    Open
+                  </button>
+                  <button
+                    type="button"
+                    className={chromeToolbarButtonClasses}
+                    onClick={() => {
+                      if (selectionPrimary) {
+                        openPropertiesForItem(selectionPrimary);
+                      }
+                    }}
+                    disabled={!toolbarCanProperties}
+                    title="Properties"
+                  >
+                    <SettingsIcon className="h-3.5 w-3.5" />
+                    Properties
+                  </button>
+                  <button
+                    type="button"
+                    className={chromeToolbarButtonClasses}
+                    onClick={handleNewFolder}
+                    disabled={!toolbarCanCreateFolder}
+                    aria-label="New folder"
+                    title="New folder"
+                  >
+                    <FolderPlusIcon className="h-3.5 w-3.5" />
+                    New folder
+                  </button>
+                  <button
+                    type="button"
+                    className={chromeToolbarButtonClasses}
+                    onClick={() => handleCopyItems(selectionItems)}
+                    disabled={!toolbarCanCopy}
+                  >
+                    <CopyIcon className="h-3.5 w-3.5" />
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    className={chromeToolbarButtonClasses}
+                    onClick={() => {
+                      void handlePasteItems();
+                    }}
+                    disabled={!toolbarCanPaste}
+                    title={toolbarPasteLabel}
+                  >
+                    <PasteIcon className="h-3.5 w-3.5" />
+                    {toolbarPasteLabel}
+                  </button>
+                  <button
                     ref={uploadQuickButtonRef}
                     type="button"
                     className={chromeToolbarPrimaryClasses}
@@ -12221,67 +12276,12 @@ export default function BrowserPage({
                   {renderUploadQuickMenu("bottom-start")}
                   <button
                     type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={handleNewFolder}
-                    disabled={!toolbarCanCreateFolder}
-                    aria-label="New folder"
-                    title="New folder"
-                  >
-                    <FolderPlusIcon className="h-3.5 w-3.5" />
-                    New folder
-                  </button>
-                  <button
-                    type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={() => {
-                      void handlePasteItems();
-                    }}
-                    disabled={!toolbarCanPaste}
-                    title={toolbarPasteLabel}
-                  >
-                    <PasteIcon className="h-3.5 w-3.5" />
-                    {toolbarPasteLabel}
-                  </button>
-                  <button
-                    type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={() => {
-                      if (selectionPrimary) {
-                        openPropertiesForItem(selectionPrimary);
-                      }
-                    }}
-                    disabled={!toolbarCanProperties}
-                    title="Properties"
-                  >
-                    <SettingsIcon className="h-3.5 w-3.5" />
-                    Properties
-                  </button>
-                  <button
-                    type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={handleToolbarOpen}
-                    disabled={!toolbarCanOpen}
-                  >
-                    <OpenIcon className="h-3.5 w-3.5" />
-                    Open
-                  </button>
-                  <button
-                    type="button"
                     className={chromeToolbarPrimaryClasses}
                     onClick={handleToolbarDownload}
                     disabled={!toolbarCanDownload}
                   >
                     <DownloadIcon className="h-3.5 w-3.5" />
                     Download
-                  </button>
-                  <button
-                    type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={() => handleCopyItems(selectionItems)}
-                    disabled={!toolbarCanCopy}
-                  >
-                    <CopyIcon className="h-3.5 w-3.5" />
-                    Copy
                   </button>
                   <button
                     type="button"
