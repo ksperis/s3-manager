@@ -42,7 +42,6 @@ import {
   formatDateTime,
   formatLocalDateTime,
   previewKindForItem,
-  previewLabelForItem,
   toIsoString,
 } from "./browserUtils";
 import type {
@@ -1755,17 +1754,14 @@ export default function BrowserObjectDetailsModal({
           clearPreviewObjectUrl();
           onClose();
         }}
-        maxWidthClass="max-w-6xl"
-        maxBodyHeightClass="max-h-[85vh]"
+        maxWidthClass="max-w-7xl"
+        maxBodyHeightClass="h-[88vh]"
       >
         <div className="space-y-4">
           <div className="sticky top-0 z-10 -mx-6 -mt-4 space-y-4 border-b border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/95">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                    {previewLabelForItem(itemSnapshot)}
-                  </span>
                   {isDeletedCurrent && (
                     <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 ui-caption font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-900/30 dark:text-rose-100">
                       Deleted
@@ -1810,10 +1806,15 @@ export default function BrowserObjectDetailsModal({
                     Copy URL
                   </button>
                 )}
-                {!isDeletedCurrent && copyUrlDisabledReason && (
-                  <span className="max-w-[18rem] ui-caption text-slate-500 dark:text-slate-400">
-                    {copyUrlDisabledReason}
-                  </span>
+                {!isDeletedCurrent && copyUrlDisabled && (
+                  <button
+                    type="button"
+                    className={bulkActionClasses}
+                    disabled
+                    title={copyUrlDisabledReason ?? "Copy URL is unavailable."}
+                  >
+                    Copy URL
+                  </button>
                 )}
               </div>
             </div>

@@ -13698,7 +13698,7 @@ export default function BrowserPage({
           title={`Configure bucket · ${configBucketName}`}
           onClose={closeBucketConfigurationModal}
           maxWidthClass="max-w-7xl"
-          maxBodyHeightClass="max-h-[85vh]"
+          maxBodyHeightClass="h-[88vh]"
         >
           <S3AccountProvider scope={bucketConfigContextScope}>
             <BucketDetailPage
