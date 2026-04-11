@@ -12,9 +12,14 @@ test("opens object versions for a versioned Moto object", async ({ page }) => {
   await objectRow.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menu").getByRole("button", { name: "Versions" }).click();
 
-  const versionsDialog = page.getByRole("dialog", { name: /Object versions/ });
+  const versionsDialog = page.getByRole("dialog", {
+    name: "Object details · report.json",
+  });
   await expect(versionsDialog).toBeVisible();
-  await expect(versionsDialog).toContainText("Object versions");
+  await expect(
+    versionsDialog.getByRole("tab", { name: "Versions" }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(versionsDialog).toContainText("Versions");
   const restoreButtons = versionsDialog.getByRole("button", { name: "Restore" });
   await expect(restoreButtons).toHaveCount(3);
 });
