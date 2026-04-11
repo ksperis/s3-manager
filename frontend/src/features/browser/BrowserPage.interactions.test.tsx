@@ -326,6 +326,18 @@ async function copyOrCutItem(
 }
 
 async function pasteFromCurrentPath(user: ReturnType<typeof userEvent.setup>) {
+  const actionsToolbar = screen.queryByRole("toolbar", {
+    name: "Browser actions bar",
+  });
+  if (actionsToolbar) {
+    const inlinePasteButton = within(actionsToolbar).queryByRole("button", {
+      name: /^Paste/,
+    });
+    if (inlinePasteButton) {
+      await user.click(inlinePasteButton);
+      return;
+    }
+  }
   const menu = await openContextMoreMenu(user);
   await user.click(within(menu).getByRole("menuitem", { name: /^Paste/ }));
 }
@@ -2089,32 +2101,35 @@ describe("BrowserPage interactions", () => {
     await user.click(await findRowByLabel("a.txt"));
 
     const actionsToolbar = getActionsToolbar();
-    const uploadButton = within(actionsToolbar).getByRole("button", {
-      name: "Upload",
-    });
-    const downloadButton = within(actionsToolbar).getByRole("button", {
-      name: "Download",
-    });
-    const newFolderButton = within(actionsToolbar).getByRole("button", {
-      name: "New folder",
-    });
+    const orderedButtons = [
+      "Upload",
+      "New folder",
+      "Paste",
+      "Properties",
+      "Open",
+      "Download",
+      "Copy",
+      "Delete",
+      "Refresh",
+      "More",
+    ].map((name) => within(actionsToolbar).getByRole("button", { name }));
 
     expect(within(actionsToolbar).getByText("1 selected")).toBeInTheDocument();
-    expect(uploadButton).toBeInTheDocument();
-    expect(downloadButton).toBeInTheDocument();
-    expect(newFolderButton).toBeInTheDocument();
+    for (let index = 0; index < orderedButtons.length - 1; index += 1) {
+      expect(
+        Boolean(
+          orderedButtons[index].compareDocumentPosition(
+            orderedButtons[index + 1],
+          ) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+      ).toBe(true);
+    }
     expect(
-      Boolean(
-        uploadButton.compareDocumentPosition(downloadButton) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ),
-    ).toBe(true);
+      within(actionsToolbar).getByRole("button", { name: "Paste" }),
+    ).toBeDisabled();
     expect(
-      Boolean(
-        downloadButton.compareDocumentPosition(newFolderButton) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ),
-    ).toBe(true);
+      within(actionsToolbar).getByRole("button", { name: "Properties" }),
+    ).toBeEnabled();
     expect(
       within(actionsToolbar).getByRole("button", { name: "Open" }),
     ).toBeDisabled();
@@ -2131,9 +2146,7 @@ describe("BrowserPage interactions", () => {
       within(actionsToolbar).queryByRole("button", { name: "Copy URL" }),
     ).not.toBeInTheDocument();
 
-    await user.click(
-      uploadButton,
-    );
+    await user.click(orderedButtons[0]);
     const uploadMenu = await screen.findByRole("menu", { name: "Upload" });
     expect(
       within(uploadMenu).getByRole("menuitem", { name: "Upload files" }),
@@ -2177,6 +2190,76 @@ describe("BrowserPage interactions", () => {
     expect(
       within(actionsToolbar).getByRole("button", { name: "Open" }),
     ).toBeEnabled();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Properties" }),
+    ).toBeDisabled();
+  });
+
+  it("keeps Paste in the action bar and avoids duplicating it in More", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await enableActionBar(user);
+
+    const objectsList = screen.getByLabelText("Objects list");
+    const actionsToolbar = getActionsToolbar();
+
+    await copyOrCutItem(user, "a.txt", "Copy");
+    (objectsList as HTMLDivElement).focus();
+    fireEvent.keyDown(objectsList, { key: "Escape" });
+
+    expect(within(actionsToolbar).getByText("No selection")).toBeInTheDocument();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Paste" }),
+    ).toBeEnabled();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Properties" }),
+    ).toBeDisabled();
+
+    let menu = await openActionsMoreMenu(user);
+    expect(
+      within(menu).queryByRole("menuitem", { name: /^Paste/ }),
+    ).not.toBeInTheDocument();
+    await user.click(document.body);
+
+    await copyOrCutItem(user, "a.txt", "Cut");
+    (objectsList as HTMLDivElement).focus();
+    fireEvent.keyDown(objectsList, { key: "Escape" });
+
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Paste (Move)" }),
+    ).toBeEnabled();
+
+    menu = await openActionsMoreMenu(user);
+    expect(
+      within(menu).queryByRole("menuitem", { name: /^Paste/ }),
+    ).not.toBeInTheDocument();
+    await user.click(document.body);
+
+    await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
+
+    expect(within(actionsToolbar).getByText("2 selected")).toBeInTheDocument();
+    expect(
+      within(actionsToolbar).getByRole("button", { name: "Properties" }),
+    ).toBeDisabled();
+  });
+
+  it("opens Properties from the action bar into the unified modal", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await enableActionBar(user);
+
+    await user.click(await findRowByLabel("a.txt"));
+    await user.click(
+      within(getActionsToolbar()).getByRole("button", { name: "Properties" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Object details · a.txt",
+    });
+    expect(
+      within(dialog).getByRole("tab", { name: "Properties" }),
+    ).toHaveAttribute("aria-selected", "true");
   });
 
   it("preserves refresh behavior from the compact toolbar", async () => {

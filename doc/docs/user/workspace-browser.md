@@ -19,6 +19,7 @@ Use **Browser** for direct bucket/object operations.
    - The active bucket stays pinned at the top of the panel while other buckets remain collapsed.
 4. Perform object actions from the most appropriate surface:
    - Right-click for the full context menu on the current path, item, or selection.
+   - Use the action bar on `/browser` for primary shortcuts such as `Upload`, `New folder`, `Paste`, `Properties`, `Download`, `Copy`, and `Delete`.
    - Use the toolbar `More` menu as the non-context fallback, especially in compact layouts.
    - Use the inspector on `/browser` for the same context and selection actions without leaving the current view. The `Details` tab is a lightweight summary and quick-launch surface for file object details.
 5. Perform uploads, downloads, previews, deletes, restores, and metadata/tag actions from those surfaces.

@@ -17,6 +17,7 @@ Use this guide for object-level actions in Browser surfaces.
    - Non-active buckets stay collapsed; inaccessible buckets are dimmed until selected.
 3. Use actions as needed:
    - Use the context menu for the full action set on the current path, object, or selection.
+   - On `/browser`, use the action bar for the primary shortcuts: `Upload`, `New folder`, `Paste`, `Properties`, `Open`, `Download`, `Copy`, and `Delete`.
    - Use the toolbar `More` menu when right-click is not available or when the action bar is compact.
    - Use `More > Columns` to choose which object columns are visible. The default column set stays unchanged until you customize it.
    - Use the inspector to access the same context and selection actions on the main `/browser` page. The `Details` tab stays lightweight and can open the full file object sheet directly.
@@ -34,6 +35,7 @@ Use this guide for object-level actions in Browser surfaces.
 ## Action access
 
 - Path actions include upload, folder creation, paste, versions, restore, cleanup, and copy path.
+- The main `/browser` action bar exposes the most common current-path and single-selection shortcuts directly, while `More` keeps secondary and compact-layout actions available.
 - Selection actions include download, open, copy URL, copy, cut, bulk attributes, advanced actions, restore, and delete when the current selection allows them.
 - File entry points such as `Preview`, `Versions`, and advanced object actions converge into the same `Object details` modal, each opening the most relevant tab first.
 - Long-running bulk actions surface in **Operations overview**, where queued, active, completed, and failed work stays visible without leaving Browser.

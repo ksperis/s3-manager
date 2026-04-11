@@ -4709,6 +4709,34 @@ export default function BrowserPage({
       sseActive,
     ],
   );
+  const toolbarPropertiesActionState = useMemo(() => {
+    if (!selectionIsSingle || !selectionPrimary) {
+      return null;
+    }
+    return resolveBrowserActions({
+      scope: "item",
+      items: [selectionPrimary],
+      bucketName,
+      hasS3AccountContext,
+      versioningEnabled: isVersioningEnabled,
+      canPaste,
+      clipboardMode: clipboard?.mode ?? null,
+      copyUrlDisabled: sseActive,
+      copyUrlDisabledReason,
+      inspectorAvailable: canUseInspectorPanel,
+    }).properties;
+  }, [
+    bucketName,
+    canPaste,
+    canUseInspectorPanel,
+    clipboard?.mode,
+    copyUrlDisabledReason,
+    hasS3AccountContext,
+    isVersioningEnabled,
+    selectionIsSingle,
+    selectionPrimary,
+    sseActive,
+  ]);
   const toolbarMorePathActions = useMemo(
     () =>
       getVisibleBrowserActions(pathActionStates, TOOLBAR_MORE_PATH_ACTION_IDS),
@@ -11384,6 +11412,12 @@ export default function BrowserPage({
     "px-1 py-1 ui-caption font-semibold text-slate-500 dark:text-slate-400";
   const toolbarSelectionSummary =
     selectedCount > 0 ? `${selectedCount} selected` : "No selection";
+  const toolbarPasteLabel = pathActionStates.paste.label || "Paste";
+  const toolbarCanPaste = pathActionStates.paste.enabled;
+  const toolbarCanProperties = Boolean(
+    toolbarPropertiesActionState?.visible &&
+      toolbarPropertiesActionState.enabled,
+  );
   const toolbarCanUploadFiles = pathActionStates.uploadFiles.enabled;
   const toolbarCanUploadFolder = pathActionStates.uploadFolder.enabled;
   const toolbarCanCreateFolder = pathActionStates.newFolder.enabled;
@@ -11397,8 +11431,11 @@ export default function BrowserPage({
   const toolbarCanDelete =
     selectionActionStates.delete.visible &&
     selectionActionStates.delete.enabled;
+  const toolbarPathActions = isActionBarVisible
+    ? toolbarMorePathActions.filter((action) => action.id !== "paste")
+    : toolbarMorePathActions;
   const hasToolbarPathActions =
-    !canSelectionActions && toolbarMorePathActions.length > 0;
+    !canSelectionActions && toolbarPathActions.length > 0;
   const toolbarSelectionActions = isActionBarVisible
     ? toolbarMoreSelectionOverflowActions
     : toolbarMoreSelectionFullActions;
@@ -12184,15 +12221,6 @@ export default function BrowserPage({
                   {renderUploadQuickMenu("bottom-start")}
                   <button
                     type="button"
-                    className={chromeToolbarPrimaryClasses}
-                    onClick={handleToolbarDownload}
-                    disabled={!toolbarCanDownload}
-                  >
-                    <DownloadIcon className="h-3.5 w-3.5" />
-                    Download
-                  </button>
-                  <button
-                    type="button"
                     className={chromeToolbarButtonClasses}
                     onClick={handleNewFolder}
                     disabled={!toolbarCanCreateFolder}
@@ -12205,11 +12233,46 @@ export default function BrowserPage({
                   <button
                     type="button"
                     className={chromeToolbarButtonClasses}
+                    onClick={() => {
+                      void handlePasteItems();
+                    }}
+                    disabled={!toolbarCanPaste}
+                    title={toolbarPasteLabel}
+                  >
+                    <PasteIcon className="h-3.5 w-3.5" />
+                    {toolbarPasteLabel}
+                  </button>
+                  <button
+                    type="button"
+                    className={chromeToolbarButtonClasses}
+                    onClick={() => {
+                      if (selectionPrimary) {
+                        openPropertiesForItem(selectionPrimary);
+                      }
+                    }}
+                    disabled={!toolbarCanProperties}
+                    title="Properties"
+                  >
+                    <SettingsIcon className="h-3.5 w-3.5" />
+                    Properties
+                  </button>
+                  <button
+                    type="button"
+                    className={chromeToolbarButtonClasses}
                     onClick={handleToolbarOpen}
                     disabled={!toolbarCanOpen}
                   >
                     <OpenIcon className="h-3.5 w-3.5" />
                     Open
+                  </button>
+                  <button
+                    type="button"
+                    className={chromeToolbarPrimaryClasses}
+                    onClick={handleToolbarDownload}
+                    disabled={!toolbarCanDownload}
+                  >
+                    <DownloadIcon className="h-3.5 w-3.5" />
+                    Download
                   </button>
                   <button
                     type="button"
@@ -12400,7 +12463,7 @@ export default function BrowserPage({
                           <p className={toolbarOverflowSectionTitleClasses}>
                             Current path
                           </p>
-                          {toolbarMorePathActions.map((action) =>
+                          {toolbarPathActions.map((action) =>
                             renderToolbarMoreActionButton(action, () =>
                               runPathAction(action.id),
                             ),
