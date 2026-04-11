@@ -2603,6 +2603,57 @@ describe("BrowserPage interactions", () => {
     });
   });
 
+  it("shows disabled legal hold and retention controls when object lock is not enabled on the bucket", async () => {
+    const user = userEvent.setup();
+    const objectLockError = new Error(
+      "Unable to fetch retention for 'a.txt': An error occurred (InvalidRequest) when calling the GetObjectRetention operation: bucket object lock not configured",
+    );
+    getObjectLegalHoldMock.mockRejectedValue(objectLockError);
+    getObjectRetentionMock.mockRejectedValue(objectLockError);
+
+    renderPage({ defaultShowInspector: true });
+
+    await user.click(await findRowByLabel("a.txt"));
+    await user.click(screen.getByRole("tab", { name: "Details" }));
+    const panel = screen.getByRole("tabpanel", { name: "Details" });
+
+    await user.click(
+      within(panel).getByRole("button", { name: "Open object details" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Object details · a.txt",
+    });
+
+    await user.click(
+      within(dialog).getByRole("tab", { name: "Access & Protection" }),
+    );
+
+    await waitFor(() => {
+      expect(getObjectLegalHoldMock).toHaveBeenCalledTimes(1);
+      expect(getObjectRetentionMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(
+      within(dialog).getAllByText(
+        "Object Lock is not enabled on this bucket. Legal hold and retention settings are unavailable.",
+      ),
+    ).toHaveLength(2);
+    expect(
+      within(dialog).queryByText(/Unable to fetch retention/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByText(/Unable to load protection settings/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Update legal hold" }),
+    ).toBeDisabled();
+    expect(
+      within(dialog).getByRole("button", { name: "Update retention" }),
+    ).toBeDisabled();
+    expect(within(dialog).getByLabelText("Bypass governance retention")).toBeDisabled();
+  });
+
   it("clears Details content when Escape clears selection while Details is active", async () => {
     const user = userEvent.setup();
     renderPage({ defaultShowInspector: true });

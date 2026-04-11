@@ -150,6 +150,20 @@ const formatRestoreStatus = (value?: string | null) => {
   return value;
 };
 
+const OBJECT_LOCK_DISABLED_MESSAGE =
+  "Object Lock is not enabled on this bucket. Legal hold and retention settings are unavailable.";
+
+const isObjectLockUnavailableMessage = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("object lock") &&
+    (normalized.includes("not configured") ||
+      normalized.includes("not enabled") ||
+      normalized.includes("not found") ||
+      normalized.includes("invalidrequest"))
+  );
+};
+
 const nextTabAfterDeleted = (versioningEnabled: boolean) =>
   versioningEnabled ? "versions" : "preview";
 
@@ -226,6 +240,7 @@ export default function BrowserObjectDetailsModal({
   const [legalHoldLoading, setLegalHoldLoading] = useState(false);
   const [legalHoldLoaded, setLegalHoldLoaded] = useState(false);
   const [legalHoldError, setLegalHoldError] = useState<string | null>(null);
+  const [objectLockUnavailable, setObjectLockUnavailable] = useState(false);
   const [retentionMode, setRetentionMode] = useState<
     "" | "GOVERNANCE" | "COMPLIANCE"
   >("");
@@ -481,36 +496,76 @@ export default function BrowserObjectDetailsModal({
       return;
     }
     let protectionFailed = false;
+    let objectLockUnavailableDetected = false;
     setLegalHoldLoading(true);
     setLegalHoldError(null);
     setRetentionLoading(true);
     setRetentionError(null);
+    setObjectLockUnavailable(false);
     try {
-      const [nextLegalHold, nextRetention] = await Promise.all([
+      const [nextLegalHold, nextRetention] = await Promise.allSettled([
         getObjectLegalHold(accountId, bucketName, itemSnapshot.key, versionId ?? null),
         getObjectRetention(accountId, bucketName, itemSnapshot.key, versionId ?? null),
       ]);
-      setLegalHoldStatus(nextLegalHold.status === "ON" ? "ON" : "OFF");
-      setRetentionMode(nextRetention.mode ?? "");
-      setRetentionDate(formatLocalDateTime(nextRetention.retain_until));
-      setLegalHoldLoaded(true);
-      setRetentionLoaded(true);
-    } catch (err) {
-      protectionFailed = true;
-      const message = extractApiError(
-        err,
-        "Unable to load protection settings.",
-      );
-      setLegalHoldError(message);
-      setRetentionError(message);
-      if (force) {
+
+      const legalHoldFailure =
+        nextLegalHold.status === "rejected"
+          ? extractApiError(nextLegalHold.reason, "Unable to load legal hold.")
+          : null;
+      const retentionFailure =
+        nextRetention.status === "rejected"
+          ? extractApiError(nextRetention.reason, "Unable to load retention.")
+          : null;
+      objectLockUnavailableDetected = [legalHoldFailure, retentionFailure]
+        .filter((message): message is string => Boolean(message))
+        .some((message) => isObjectLockUnavailableMessage(message));
+
+      if (objectLockUnavailableDetected) {
+        setObjectLockUnavailable(true);
+        setLegalHoldStatus("OFF");
+        setRetentionMode("");
+        setRetentionDate("");
+        setRetentionBypass(false);
+        setLegalHoldLoaded(true);
+        setRetentionLoaded(true);
+        setLegalHoldError(null);
+        setRetentionError(null);
+        return;
+      }
+
+      if (nextLegalHold.status === "fulfilled") {
+        setLegalHoldStatus(nextLegalHold.value.status === "ON" ? "ON" : "OFF");
+        setLegalHoldLoaded(true);
+        setLegalHoldError(null);
+      } else {
+        protectionFailed = true;
         setLegalHoldLoaded(false);
+        setLegalHoldError(legalHoldFailure);
+      }
+
+      if (nextRetention.status === "fulfilled") {
+        setRetentionMode(nextRetention.value.mode ?? "");
+        setRetentionDate(formatLocalDateTime(nextRetention.value.retain_until));
+        setRetentionLoaded(true);
+        setRetentionError(null);
+      } else {
+        protectionFailed = true;
         setRetentionLoaded(false);
+        setRetentionError(retentionFailure);
+      }
+
+      if (force && protectionFailed) {
+        if (nextLegalHold.status === "rejected") {
+          setLegalHoldLoaded(false);
+        }
+        if (nextRetention.status === "rejected") {
+          setRetentionLoaded(false);
+        }
       }
     } finally {
       setLegalHoldLoading(false);
       setRetentionLoading(false);
-      if (!protectionFailed) {
+      if (!protectionFailed && !objectLockUnavailableDetected) {
         setLegalHoldError(null);
         setRetentionError(null);
       }
@@ -553,6 +608,7 @@ export default function BrowserObjectDetailsModal({
     setLegalHoldLoading(false);
     setLegalHoldLoaded(false);
     setLegalHoldError(null);
+    setObjectLockUnavailable(false);
     setRetentionMode("");
     setRetentionDate("");
     setRetentionBypass(false);
@@ -1455,7 +1511,9 @@ export default function BrowserObjectDetailsModal({
         </div>
       </div>
 
-      <div className={panelCardClasses}>
+      <div
+        className={`${panelCardClasses} ${objectLockUnavailable ? "opacity-60" : ""}`}
+      >
         <div className="flex items-center justify-between">
           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
             Legal hold
@@ -1471,6 +1529,11 @@ export default function BrowserObjectDetailsModal({
             {legalHoldError}
           </p>
         )}
+        {objectLockUnavailable && (
+          <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+            {OBJECT_LOCK_DISABLED_MESSAGE}
+          </p>
+        )}
         <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
           <select
             className={inputClasses}
@@ -1478,6 +1541,7 @@ export default function BrowserObjectDetailsModal({
             onChange={(event) =>
               setLegalHoldStatus(event.target.value as "ON" | "OFF")
             }
+            disabled={objectLockUnavailable}
           >
             <option value="OFF">OFF</option>
             <option value="ON">ON</option>
@@ -1486,14 +1550,16 @@ export default function BrowserObjectDetailsModal({
             type="button"
             className={buttonPrimaryClasses}
             onClick={() => void handleSaveLegalHold()}
-            disabled={savingLegalHold || legalHoldLoading}
+            disabled={savingLegalHold || legalHoldLoading || objectLockUnavailable}
           >
             {savingLegalHold ? "Saving..." : "Update legal hold"}
           </button>
         </div>
       </div>
 
-      <div className={panelCardClasses}>
+      <div
+        className={`${panelCardClasses} ${objectLockUnavailable ? "opacity-60" : ""}`}
+      >
         <div className="flex items-center justify-between">
           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
             Retention
@@ -1509,6 +1575,11 @@ export default function BrowserObjectDetailsModal({
             {retentionError}
           </p>
         )}
+        {objectLockUnavailable && (
+          <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+            {OBJECT_LOCK_DISABLED_MESSAGE}
+          </p>
+        )}
         <div className="mt-2 grid gap-2 md:grid-cols-2">
           <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
             <span>Mode</span>
@@ -1520,6 +1591,7 @@ export default function BrowserObjectDetailsModal({
                   event.target.value as "" | "GOVERNANCE" | "COMPLIANCE",
                 )
               }
+              disabled={objectLockUnavailable}
             >
               <option value="">Select mode</option>
               <option value="GOVERNANCE">GOVERNANCE</option>
@@ -1533,6 +1605,7 @@ export default function BrowserObjectDetailsModal({
               className={inputClasses}
               value={retentionDate}
               onChange={(event) => setRetentionDate(event.target.value)}
+              disabled={objectLockUnavailable}
             />
           </label>
         </div>
@@ -1541,6 +1614,7 @@ export default function BrowserObjectDetailsModal({
             type="checkbox"
             checked={retentionBypass}
             onChange={(event) => setRetentionBypass(event.target.checked)}
+            disabled={objectLockUnavailable}
           />
           Bypass governance retention
         </label>
@@ -1552,6 +1626,7 @@ export default function BrowserObjectDetailsModal({
             disabled={
               savingRetention ||
               retentionLoading ||
+              objectLockUnavailable ||
               !retentionMode ||
               !retentionDate
             }
