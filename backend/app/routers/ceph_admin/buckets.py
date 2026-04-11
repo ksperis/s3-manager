@@ -93,7 +93,14 @@ class _BucketListCacheKey:
 class _BucketListCacheEntry:
     endpoint_id: int
     expires_at: float
+    listing: _BucketListingSnapshot
+
+
+@dataclass
+class _BucketListingSnapshot:
     items: list[CephAdminBucketSummary]
+    stats_available: bool = True
+    stats_warning: str | None = None
 
 
 @dataclass(frozen=True)
@@ -120,6 +127,12 @@ class _BucketListingProgressSnapshot:
 
 class _BucketListingCancelled(RuntimeError):
     pass
+
+
+_BUCKET_STATS_UNAVAILABLE_WARNING = (
+    "Bucket stats are unavailable via Ceph Admin credentials on this endpoint. "
+    "Showing owner metadata without usage or quota values."
+)
 
 
 class _BucketListingProgressEmitter:
@@ -1199,6 +1212,60 @@ def _filter_requires_owner_metadata(query: CephAdminBucketFilterQuery | None) ->
     return False
 
 
+def _request_requires_bucket_stats(query: CephAdminBucketFilterQuery | None, sort_by: str) -> bool:
+    return sort_by in {"used_bytes", "object_count"} or _shared_filter_requires_stats(query)
+
+
+def _request_requires_owner_metadata(
+    query: CephAdminBucketFilterQuery | None,
+    sort_by: str,
+    simple_filter: str | None,
+) -> bool:
+    return _filter_requires_owner_metadata(query) or sort_by in {"tenant", "owner"} or bool(simple_filter)
+
+
+def _backfill_bucket_owner_metadata(
+    ctx: CephAdminContext,
+    buckets: list[CephAdminBucketSummary],
+    *,
+    include_tenant: bool = False,
+) -> list[CephAdminBucketSummary]:
+    if not buckets:
+        return buckets
+
+    pending = [
+        bucket
+        for bucket in buckets
+        if not bucket.owner or (include_tenant and bucket.tenant is None)
+    ]
+    if not pending:
+        return buckets
+
+    def load_one(bucket: CephAdminBucketSummary) -> tuple[CephAdminBucketSummary, str | None, str | None]:
+        try:
+            payload = ctx.rgw_admin.get_bucket_info(bucket.name, stats=False, allow_not_found=True)
+        except RGWAdminError:
+            return bucket, None, None
+        if not isinstance(payload, dict) or payload.get("not_found"):
+            return bucket, None, None
+        tenant, owner = _extract_bucket_owner_scope(payload)
+        return bucket, tenant, owner
+
+    max_workers = min(BUCKET_OWNER_LOOKUP_MAX_WORKERS, len(pending))
+    if max_workers <= 1:
+        resolved = [load_one(bucket) for bucket in pending]
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            resolved = list(executor.map(load_one, pending))
+
+    for bucket, tenant, owner in resolved:
+        if not bucket.owner and owner:
+            bucket.owner = owner
+        if include_tenant and bucket.tenant is None and tenant:
+            bucket.tenant = tenant
+    return buckets
+
+
 def _enrich_buckets(
     buckets: list[CephAdminBucketSummary],
     requested: set[str],
@@ -1517,24 +1584,28 @@ def _get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> l
 
 def _get_cached_bucket_listing(
     key: _BucketListCacheKey,
-    builder: Callable[[], list[CephAdminBucketSummary]],
-) -> list[CephAdminBucketSummary]:
+    builder: Callable[[], _BucketListingSnapshot],
+) -> _BucketListingSnapshot:
     now = monotonic()
     with _BUCKET_LIST_CACHE_LOCK:
         _prune_bucket_listing_cache(now)
         cached = _BUCKET_LIST_CACHE.get(key)
         if cached is not None:
             _BUCKET_LIST_CACHE.move_to_end(key)
-            return cached.items
+            return cached.listing
 
-    items = builder()
+    listing = builder()
     expires_at = monotonic() + BUCKET_LIST_CACHE_TTL_SECONDS
     with _BUCKET_LIST_CACHE_LOCK:
         _prune_bucket_listing_cache(monotonic())
-        _BUCKET_LIST_CACHE[key] = _BucketListCacheEntry(endpoint_id=key.endpoint_id, expires_at=expires_at, items=items)
+        _BUCKET_LIST_CACHE[key] = _BucketListCacheEntry(
+            endpoint_id=key.endpoint_id,
+            expires_at=expires_at,
+            listing=listing,
+        )
         _BUCKET_LIST_CACHE.move_to_end(key)
         _prune_bucket_listing_cache(monotonic())
-    return items
+    return listing
 
 
 def _invalidate_bucket_listing_cache(endpoint_id: int) -> None:
@@ -1605,20 +1676,17 @@ def _compute_bucket_listing(
     else:
         simple_filter, advanced_filter = _shared_parse_filter(filter)
     simple_filter = simple_filter.strip() if isinstance(simple_filter, str) and simple_filter.strip() else None
-
-    storage_metrics_enabled = True
-    endpoint = getattr(ctx, "endpoint", None)
-    if endpoint is not None and hasattr(endpoint, "provider") and hasattr(endpoint, "features_config"):
-        storage_metrics_enabled = bool(resolve_feature_flags(endpoint).metrics_enabled)
-    if not storage_metrics_enabled:
-        with_stats = False
-    elif _shared_filter_requires_stats(advanced_filter):
+    stats_required_for_request = _request_requires_bucket_stats(advanced_filter, sort_by)
+    if stats_required_for_request:
         with_stats = True
 
     include_set = parse_includes(include)
     wants_owner_name = "owner_name" in include_set
-    needs_owner_metadata = _filter_requires_owner_metadata(advanced_filter) or sort_by in {"tenant", "owner"}
-    fetch_with_stats = with_stats or needs_owner_metadata
+    needs_owner_metadata = _request_requires_owner_metadata(
+        advanced_filter,
+        sort_by,
+        simple_filter if not advanced_filter else None,
+    )
     requested_features = include_set & {
         "tags",
         "versioning",
@@ -1643,33 +1711,63 @@ def _compute_bucket_listing(
     )
     _invoke_cancel_check(cancel_check)
 
-    def build_listing() -> list[CephAdminBucketSummary]:
+    def build_listing() -> _BucketListingSnapshot:
         _invoke_cancel_check(cancel_check)
-        try:
-            name_candidates = _extract_name_candidates(advanced_filter)
+        name_candidates = _extract_name_candidates(advanced_filter)
+        effective_with_stats = with_stats
+        stats_available = True
+        stats_warning: str | None = None
+
+        def load_entries(request_with_stats: bool) -> list[dict]:
             progress.emit(percent=10, stage="fetch_rgw", message="Loading buckets from RGW", force=True)
             if name_candidates is not None:
                 if not name_candidates:
-                    entries: list[dict] = []
-                else:
-                    allowed_names = set(name_candidates)
-                    entries = [
-                        entry
-                        for entry in _get_cached_rgw_bucket_entries(ctx, with_stats=fetch_with_stats)
-                        if _extract_bucket_name(entry) in allowed_names
-                    ]
-            else:
-                entries = _get_cached_rgw_bucket_entries(ctx, with_stats=fetch_with_stats)
-            progress.emit(
-                percent=15,
-                stage="fetch_rgw",
-                processed=len(entries),
-                total=len(entries),
-                message="RGW bucket payload loaded",
-                force=True,
-            )
+                    return []
+                allowed_names = set(name_candidates)
+                return [
+                    entry
+                    for entry in _get_cached_rgw_bucket_entries(ctx, with_stats=request_with_stats)
+                    if _extract_bucket_name(entry) in allowed_names
+                ]
+            return _get_cached_rgw_bucket_entries(ctx, with_stats=request_with_stats)
+
+        try:
+            entries = load_entries(with_stats)
         except RGWAdminError as exc:
-            raise_bad_gateway_from_runtime(exc)
+            if not with_stats:
+                raise_bad_gateway_from_runtime(exc)
+            if stats_required_for_request:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Bucket stats are unavailable via Ceph Admin credentials for this request",
+                ) from exc
+            logger.warning(
+                "Ceph admin bucket listing stats fallback on endpoint=%s error=%s",
+                getattr(getattr(ctx, "endpoint", None), "id", "unknown"),
+                exc,
+            )
+            effective_with_stats = False
+            stats_available = False
+            stats_warning = _BUCKET_STATS_UNAVAILABLE_WARNING
+            try:
+                progress.emit(
+                    percent=12,
+                    stage="fetch_rgw_fallback",
+                    message="Bucket stats unavailable, retrying without stats",
+                    force=True,
+                )
+                entries = load_entries(False)
+            except RGWAdminError as fallback_exc:
+                raise_bad_gateway_from_runtime(fallback_exc)
+
+        progress.emit(
+            percent=15,
+            stage="fetch_rgw",
+            processed=len(entries),
+            total=len(entries),
+            message="RGW bucket payload loaded",
+            force=True,
+        )
 
         results: list[CephAdminBucketSummary] = []
         total_entries = len(entries)
@@ -1677,7 +1775,7 @@ def _compute_bucket_listing(
             _invoke_cancel_check(cancel_check)
             summary = _build_bucket_summary(entry)
             if summary:
-                if not with_stats:
+                if not effective_with_stats:
                     summary.used_bytes = None
                     summary.object_count = None
                     summary.quota_max_size_bytes = None
@@ -1700,6 +1798,10 @@ def _compute_bucket_listing(
             force=True,
         )
         _invoke_cancel_check(cancel_check)
+
+        if needs_owner_metadata and results:
+            progress.emit(percent=63, stage="owner_backfill", message="Loading bucket owner metadata", force=True)
+            results = _backfill_bucket_owner_metadata(ctx, results, include_tenant=True)
 
         if advanced_filter and advanced_filter.rules:
             progress.emit(percent=65, stage="expensive_filters", message="Applying advanced filters", force=True)
@@ -1876,10 +1978,15 @@ def _compute_bucket_listing(
 
         sortable.sort(key=lambda item: item[0], reverse=sort_dir == "desc")
         results = [bucket for _, bucket in sortable] + missing_values
-        return results
+        return _BucketListingSnapshot(
+            items=results,
+            stats_available=stats_available,
+            stats_warning=stats_warning,
+        )
 
     _invoke_cancel_check(cancel_check)
-    results = _get_cached_bucket_listing(cache_key, build_listing)
+    listing = _get_cached_bucket_listing(cache_key, build_listing)
+    results = listing.items
     progress.emit(percent=98, stage="sort_paginate", message="Sorting and paginating results", force=True)
 
     filtered_results = results
@@ -1901,6 +2008,8 @@ def _compute_bucket_listing(
     start = max(page - 1, 0) * page_size
     end = start + page_size
     page_items = _clone_bucket_list(filtered_results[start:end])
+    if page_items:
+        page_items = _backfill_bucket_owner_metadata(ctx, page_items, include_tenant=wants_owner_name)
 
     requested = ({feature for feature in requested_features if feature != "tags"} | requested_detail_fields)
     if requested or ("tags" in requested_features):
@@ -1931,6 +2040,8 @@ def _compute_bucket_listing(
         page=page,
         page_size=page_size,
         has_next=has_next,
+        stats_available=listing.stats_available,
+        stats_warning=listing.stats_warning,
     )
     progress.emit(percent=100, stage="finalize", processed=total, total=total, message="Search completed", force=True)
     return response

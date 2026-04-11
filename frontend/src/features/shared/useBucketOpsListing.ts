@@ -59,6 +59,8 @@ type UseBucketOpsListingResult = {
   loadingDetails: boolean;
   advancedProgress: AdvancedSearchProgress;
   error: string | null;
+  statsAvailable: boolean | null;
+  statsWarning: string | null;
   setError: Dispatch<SetStateAction<string | null>>;
   refresh: () => void;
 };
@@ -102,6 +104,8 @@ export function useBucketOpsListing({
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [advancedProgress, setAdvancedProgress] = useState<AdvancedSearchProgress>(INACTIVE_ADVANCED_PROGRESS);
   const [error, setError] = useState<string | null>(null);
+  const [statsAvailable, setStatsAvailable] = useState<boolean | null>(null);
+  const [statsWarning, setStatsWarning] = useState<string | null>(null);
   const requestSeqRef = useRef(0);
   const requestAbortRef = useRef<AbortController | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -123,6 +127,8 @@ export function useBucketOpsListing({
     setLoadingDetails(false);
     setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
     setError(null);
+    setStatsAvailable(null);
+    setStatsWarning(null);
 
     try {
       const baseParams = {
@@ -186,11 +192,15 @@ export function useBucketOpsListing({
       const baseItems = baseResponse.items ?? [];
       setItems(baseItems);
       setTotal(baseResponse.total ?? 0);
+      setStatsAvailable(baseResponse.stats_available !== false);
+      setStatsWarning(baseResponse.stats_warning ?? null);
       setLoading(false);
       setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
 
       const needsDetails = includeParams.length > 0 || (requiresStats && !baseRequiresStats);
       if (!needsDetails || baseItems.length === 0) return;
+
+      const detailWithStats = requiresStats && baseResponse.stats_available !== false;
 
       setLoadingDetails(true);
       try {
@@ -210,7 +220,7 @@ export function useBucketOpsListing({
             sort_by: sort.field,
             sort_dir: sort.direction,
             include: includeParams.length > 0 ? includeParams : undefined,
-            with_stats: requiresStats,
+            with_stats: detailWithStats,
           },
           { signal: requestAbort.signal }
         );
@@ -218,6 +228,8 @@ export function useBucketOpsListing({
         if (requestId !== requestSeqRef.current) return;
 
         const detailsByKey = new Map((detailResponse.items ?? []).map((bucket) => [bucketRowKey(bucket), bucket]));
+        setStatsAvailable(detailResponse.stats_available !== false);
+        setStatsWarning(detailResponse.stats_warning ?? null);
         setItems(baseItems.map((bucket) => detailsByKey.get(bucketRowKey(bucket)) ?? bucket));
       } finally {
         if (requestId === requestSeqRef.current) {
@@ -261,6 +273,8 @@ export function useBucketOpsListing({
       setLoading(false);
       setLoadingDetails(false);
       setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
+      setStatsAvailable(null);
+      setStatsWarning(null);
       return;
     }
     void fetchBuckets();
@@ -280,6 +294,8 @@ export function useBucketOpsListing({
     loadingDetails,
     advancedProgress,
     error,
+    statsAvailable,
+    statsWarning,
     setError,
     refresh,
   };

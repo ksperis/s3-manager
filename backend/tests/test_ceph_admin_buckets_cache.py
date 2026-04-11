@@ -721,18 +721,19 @@ def test_ceph_admin_bucket_listing_owner_name_filter_loads_owner_metadata_when_b
     class NamesOnlyWithoutStatsAdmin:
         def __init__(self):
             self.calls: list[bool] = []
+            self.info_calls: list[tuple[str, bool]] = []
 
         def get_all_buckets(self, with_stats: bool = True):
             self.calls.append(with_stats)
-            if with_stats:
-                return [
-                    {"name": "bucket-a", "owner": "user-alpha"},
-                    {"name": "bucket-b", "owner": "user-beta"},
-                ]
             return ["bucket-a", "bucket-b"]
 
         def get_bucket_info(self, bucket_name: str, stats: bool = True, allow_not_found: bool = False):
-            return {"name": bucket_name}
+            self.info_calls.append((bucket_name, stats))
+            owners = {
+                "bucket-a": "user-alpha",
+                "bucket-b": "user-beta",
+            }
+            return {"name": bucket_name, "owner": owners.get(bucket_name)}
 
         def get_account(self, owner_id: str, allow_not_found: bool = True):
             return None
@@ -768,7 +769,89 @@ def test_ceph_admin_bucket_listing_owner_name_filter_loads_owner_metadata_when_b
     )
 
     assert [item.name for item in response.items] == ["bucket-a"]
-    assert rgw_admin.calls[0] is True
+    assert rgw_admin.calls == [False]
+    assert rgw_admin.info_calls == [("bucket-a", False), ("bucket-b", False)]
+
+
+def test_ceph_admin_bucket_listing_falls_back_without_stats_and_backfills_owner():
+    class StatsFallbackAdmin:
+        def __init__(self):
+            self.calls: list[bool] = []
+            self.info_calls: list[tuple[str, bool]] = []
+
+        def get_all_buckets(self, with_stats: bool = True):
+            self.calls.append(with_stats)
+            if with_stats:
+                raise buckets_router.RGWAdminError("stats call failed")
+            return ["bucket-a", "bucket-b"]
+
+        def get_bucket_info(self, bucket_name: str, stats: bool = True, allow_not_found: bool = False):
+            self.info_calls.append((bucket_name, stats))
+            owners = {
+                "bucket-a": "owner-a",
+                "bucket-b": "owner-b",
+            }
+            return {"name": bucket_name, "owner": owners.get(bucket_name)}
+
+    rgw_admin = StatsFallbackAdmin()
+    ctx = SimpleNamespace(
+        endpoint=SimpleNamespace(id=188),
+        rgw_admin=rgw_admin,
+        access_key="AKIA_TEST",
+        secret_key="SECRET_TEST",
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=True,
+        ctx=ctx,
+    )
+
+    assert response.stats_available is False
+    assert response.stats_warning
+    assert [(item.name, item.owner) for item in response.items] == [
+        ("bucket-a", "owner-a"),
+        ("bucket-b", "owner-b"),
+    ]
+    assert rgw_admin.calls == [True, False]
+    assert rgw_admin.info_calls == [("bucket-a", False), ("bucket-b", False)]
+
+
+def test_ceph_admin_bucket_listing_rejects_stats_sort_when_stats_fetch_fails():
+    class FailingStatsAdmin:
+        def get_all_buckets(self, with_stats: bool = True):
+            if with_stats:
+                raise buckets_router.RGWAdminError("stats call failed")
+            return ["bucket-a"]
+
+    ctx = SimpleNamespace(
+        endpoint=SimpleNamespace(id=189),
+        rgw_admin=FailingStatsAdmin(),
+        access_key="AKIA_TEST",
+        secret_key="SECRET_TEST",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        buckets_router.list_buckets(
+            page=1,
+            page_size=25,
+            filter=None,
+            advanced_filter=None,
+            sort_by="used_bytes",
+            sort_dir="desc",
+            include=[],
+            with_stats=True,
+            ctx=ctx,
+        )
+
+    assert exc.value.status_code == 502
+    assert "Bucket stats are unavailable" in str(exc.value.detail)
 
 
 def test_ceph_admin_bucket_listing_sort_by_usage_treats_missing_values_as_zero():

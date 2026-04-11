@@ -124,6 +124,8 @@ const formatNumber = (value?: number | null) => {
   return value.toLocaleString();
 };
 
+const isStatsSortField = (field: SortField) => field === "used_bytes" || field === "object_count";
+
 const formatAdvancedSearchStage = (stage: string) => {
   if (!stage.trim()) return "";
   return stage
@@ -1895,7 +1897,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     [isStorageOps, cephSelectedEndpoint]
   );
   const cephAdminBrowserEnabled = !isStorageOps && generalSettings.browser_enabled && generalSettings.browser_ceph_admin_enabled;
-  const usageFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.metrics !== false;
+  const [cephBucketStatsAvailable, setCephBucketStatsAvailable] = useState<boolean | null>(null);
+  const [cephBucketStatsEndpointId, setCephBucketStatsEndpointId] = useState<number | null>(null);
+  const usageFeatureEnabled =
+    isStorageOps ||
+    cephBucketStatsEndpointId !== selectedEndpointId ||
+    cephBucketStatsAvailable !== false;
   const staticWebsiteFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.static_website === true;
   const sseFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.sse !== false;
 
@@ -2411,8 +2418,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [advancedStatsRequired, usageFeatureEnabled, visibleColumns]);
   const sortRequiresStats = useMemo(() => sort.field === "used_bytes" || sort.field === "object_count", [sort.field]);
   const baseRequiresStats = useMemo(
-    () => usageFeatureEnabled && (advancedStatsRequired || sortRequiresStats),
-    [advancedStatsRequired, sortRequiresStats, usageFeatureEnabled]
+    () => (isStorageOps ? usageFeatureEnabled && (advancedStatsRequired || sortRequiresStats) : usageFeatureEnabled),
+    [advancedStatsRequired, isStorageOps, sortRequiresStats, usageFeatureEnabled]
   );
   const detailLoadingColumnIds = useMemo(() => {
     const ids = new Set<string>(includeParams);
@@ -2476,6 +2483,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     loadingDetails,
     advancedProgress,
     error,
+    statsAvailable,
+    statsWarning,
     setError,
     refresh: refreshBuckets,
   } = useBucketOpsListing({
@@ -2493,6 +2502,26 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     listBuckets,
     streamBuckets,
   });
+  const usageUnavailableBadge = statsWarning ? "Bucket stats unavailable" : "Storage metrics unavailable";
+  const usageUnavailableDescription = statsWarning
+    ? statsWarning
+    : "Storage metrics are unavailable for this listing, so range filters and quota actions are disabled.";
+
+  useEffect(() => {
+    if (isStorageOps) {
+      setCephBucketStatsAvailable(true);
+      setCephBucketStatsEndpointId(STORAGE_OPS_SCOPE_ID);
+      return;
+    }
+    setCephBucketStatsAvailable(null);
+    setCephBucketStatsEndpointId(null);
+  }, [isStorageOps, selectedEndpointId]);
+
+  useEffect(() => {
+    if (isStorageOps || statsAvailable === null) return;
+    setCephBucketStatsAvailable(statsAvailable);
+    setCephBucketStatsEndpointId(selectedEndpointId ?? null);
+  }, [isStorageOps, selectedEndpointId, statsAvailable]);
 
   const selectionQueryKey = useMemo(
     () =>
@@ -2521,6 +2550,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [allFilteredBucketNamesKey, allFilteredBucketNames, selectionQueryKey, total]);
 
   const toggleSort = (field: SortField) => {
+    if (!usageFeatureEnabled && isStatsSortField(field)) return;
     setSort((prev) => {
       if (prev.field === field) {
         return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
@@ -2529,6 +2559,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     });
     setPage(1);
   };
+
+  useEffect(() => {
+    if (usageFeatureEnabled || !isStatsSortField(sort.field)) return;
+    setSort({ field: "name", direction: "asc" });
+    setPage(1);
+  }, [sort.field, usageFeatureEnabled]);
 
   const toggleColumn = (id: ColumnId) => {
     setVisibleColumns((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
@@ -6816,6 +6852,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
+      {statsWarning && <PageBanner tone="warning">{statsWarning}</PageBanner>}
       {orphanedTagDetails.length > 0 && (
         <PageBanner tone="warning">
           <div className="flex flex-col gap-2">
@@ -7429,14 +7466,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                             </p>
                             {!usageFeatureEnabled && (
                               <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200">
-                                Storage metrics disabled on endpoint
+                                {usageUnavailableBadge}
                               </span>
                             )}
                           </div>
 
                           {!usageFeatureEnabled ? (
                             <p className="ui-caption text-slate-500 dark:text-slate-400">
-                              This endpoint does not expose storage metrics, so range filters are disabled.
+                              {usageUnavailableDescription}
                             </p>
                           ) : (
                             <div className="grid gap-3 lg:grid-cols-2">
@@ -8207,7 +8244,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                       direction={sort.direction}
                       align={col.align ?? (col.label === "Actions" ? "right" : "left")}
                       className={headerClass}
-                      onSort={col.field ? (field) => toggleSort(field as SortField) : undefined}
+                      onSort={
+                        col.field && (usageFeatureEnabled || !isStatsSortField(col.field as SortField))
+                          ? (field) => toggleSort(field as SortField)
+                          : undefined
+                      }
                     />
                   );
                 })}
@@ -8335,7 +8376,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                     {bulkConfigClipboard ? "Paste copied configs" : "Paste copied configs (nothing copied)"}
                   </option>
                   <option value="set_quota" disabled={!usageFeatureEnabled}>
-                    {usageFeatureEnabled ? "Set bucket quota" : "Set bucket quota (storage metrics disabled)"}
+                    {usageFeatureEnabled ? "Set bucket quota" : "Set bucket quota (bucket stats unavailable)"}
                   </option>
                   <option value="add_public_access_block">Add block public access</option>
                   <option value="remove_public_access_block">Remove block public access</option>

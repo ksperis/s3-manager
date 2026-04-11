@@ -69,6 +69,8 @@ class CephAdminBucketSummary(BaseModel):
 
 class PaginatedCephAdminBucketsResponse(PaginatedResponse):
     items: list[CephAdminBucketSummary]
+    stats_available: bool = True
+    stats_warning: Optional[str] = None
 
 
 class PaginatedCephAdminAccountsResponse(PaginatedResponse):

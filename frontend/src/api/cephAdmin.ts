@@ -478,7 +478,10 @@ export type CephAdminBucket = {
   column_details?: Record<string, unknown> | null;
 };
 
-export type PaginatedCephAdminBucketsResponse = PaginatedResponse<CephAdminBucket>;
+export type PaginatedCephAdminBucketsResponse = PaginatedResponse<CephAdminBucket> & {
+  stats_available?: boolean;
+  stats_warning?: string | null;
+};
 
 export type ListCephAdminBucketsParams = {
   page?: number;

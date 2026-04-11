@@ -58,10 +58,10 @@ def _build_ctx(*, metrics_enabled: bool, sse_enabled: bool = False) -> tuple[Sim
     return ctx, rgw_admin
 
 
-def test_ceph_admin_bucket_listing_never_requests_stats_when_metrics_feature_disabled():
+def test_ceph_admin_bucket_listing_can_request_stats_when_metrics_feature_disabled():
     ctx, rgw_admin = _build_ctx(metrics_enabled=False)
 
-    buckets_router.list_buckets(
+    response = buckets_router.list_buckets(
         page=1,
         page_size=25,
         filter=None,
@@ -73,7 +73,49 @@ def test_ceph_admin_bucket_listing_never_requests_stats_when_metrics_feature_dis
         ctx=ctx,
     )
 
-    assert rgw_admin.with_stats_calls == [False]
+    assert rgw_admin.with_stats_calls == [True]
+    assert response.stats_available is True
+    assert response.stats_warning is None
+
+
+def test_ceph_admin_bucket_listing_returns_owner_and_usage_without_metrics_feature():
+    class StatsPayloadAdmin(FakeRGWAdmin):
+        def get_all_buckets(self, with_stats: bool = True, **_: object):
+            self.with_stats_calls.append(bool(with_stats))
+            return {
+                "buckets": [
+                    {
+                        "name": "bucket-a",
+                        "owner": "owner-a",
+                        "usage": {"total_bytes": 2048, "total_objects": 5},
+                    }
+                ]
+            }
+
+    ctx = SimpleNamespace(
+        endpoint=_build_endpoint(metrics_enabled=False),
+        rgw_admin=StatsPayloadAdmin(),
+        access_key="AKIA_TEST",
+        secret_key="SECRET_TEST",
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=True,
+        ctx=ctx,
+    )
+
+    assert response.items[0].owner == "owner-a"
+    assert response.items[0].used_bytes == 2048
+    assert response.items[0].object_count == 5
+    assert response.stats_available is True
+    assert ctx.rgw_admin.with_stats_calls == [True]
 
 
 def test_ceph_admin_account_metrics_requires_metrics_feature():
