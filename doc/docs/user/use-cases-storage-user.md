@@ -35,6 +35,6 @@ You can complete daily storage tasks without navigating admin-only areas.
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/use-cases-storage-user.light.png" alt="Browser workspace with folders, action bar, and inspector open for a daily object workflow" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/use-cases-storage-user.dark.png" alt="Browser workspace with folders, action bar, and inspector open for a daily object workflow" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/use-cases-storage-user.light.png" alt="Browser workspace with folders, action bar, and inspector open for a daily object workflow" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/use-cases-storage-user.dark.png" alt="Browser workspace with folders, action bar, and inspector open for a daily object workflow" loading="lazy">
 </div>

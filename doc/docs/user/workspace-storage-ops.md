@@ -42,6 +42,6 @@ You can search and operate on large bucket sets across authorized accounts and c
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/workspace-storage-ops.light.png" alt="Storage Ops workspace with cross-context bucket operations" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/workspace-storage-ops.dark.png" alt="Storage Ops workspace with cross-context bucket operations" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-storage-ops.light.png" alt="Storage Ops workspace with cross-context bucket operations" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-storage-ops.dark.png" alt="Storage Ops workspace with cross-context bucket operations" loading="lazy">
 </div>

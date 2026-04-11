@@ -40,6 +40,6 @@ The target bucket reflects the new configuration and the updated status is visib
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/manager-bucket-configuration.light.png" alt="Manager bucket list with configure action" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/manager-bucket-configuration.dark.png" alt="Manager bucket list with configure action" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/manager-bucket-configuration.light.png" alt="Manager bucket list with configure action" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/manager-bucket-configuration.dark.png" alt="Manager bucket list with configure action" loading="lazy">
 </div>

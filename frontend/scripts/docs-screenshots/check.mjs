@@ -16,6 +16,9 @@ const errors = [];
 const referencedScreenshots = new Set();
 
 const stripFencedCodeBlocks = (content) => content.replace(/^```[\s\S]*?^```$/gm, "");
+const expectedUserDocScreenshotRef = (docFileName, imageName) => (
+  `${docFileName === "index.md" ? "../" : "../../"}assets/screenshots/user/${imageName}`
+);
 
 const extractThemedScreenshotReferences = (content) => {
   const blockMatches = [...content.matchAll(/<div[^>]+data-docs-themed-shot[^>]*>([\s\S]*?)<\/div>/g)];
@@ -95,10 +98,11 @@ for (const fileName of markdownFiles) {
 
     for (const variant of variants) {
       const imageName = variant.fileName;
-      const resolvedPath = path.resolve(path.dirname(filePath), variant.ref);
+      const expectedRef = expectedUserDocScreenshotRef(fileName, imageName);
+      const resolvedPath = path.join(screenshotsDir, imageName);
       referencedScreenshots.add(imageName);
 
-      if (path.normalize(resolvedPath) !== path.normalize(path.join(screenshotsDir, imageName))) {
+      if (variant.ref !== expectedRef) {
         errors.push(`${fileName}: screenshot block ${index + 1} uses an invalid path for ${imageName}: ${variant.ref}`);
         continue;
       }
