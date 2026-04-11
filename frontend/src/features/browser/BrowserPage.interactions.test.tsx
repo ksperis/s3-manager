@@ -231,6 +231,26 @@ function seedBrowserRootUiState(value: unknown) {
   );
 }
 
+function setBrowserLayoutRect(width: number, height = 720) {
+  const layout = screen.getByTestId("browser-layout");
+  Object.defineProperty(layout, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      width,
+      height,
+      top: 0,
+      left: 0,
+      right: width,
+      bottom: height,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }),
+  });
+  fireEvent(window, new Event("resize"));
+  return layout;
+}
+
 async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
   const toolbar =
     screen.queryByRole("toolbar", { name: "Browser context bar" }) &&
@@ -1378,6 +1398,185 @@ describe("BrowserPage interactions", () => {
     expect(
       screen.getByRole("toolbar", { name: "Browser actions bar" }),
     ).toBeInTheDocument();
+  });
+
+  it("uses the default panel widths when nothing is stored", async () => {
+    renderPage({ defaultShowFolders: true, defaultShowInspector: true });
+    await findRowByLabel("a.txt");
+
+    const layout = setBrowserLayoutRect(1400);
+
+    await waitFor(() => {
+      expect(layout.style.gridTemplateColumns).toBe(
+        "280px minmax(0, 1fr) 320px",
+      );
+    });
+    expect(
+      screen.getByRole("separator", { name: "Resize folders panel" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("separator", { name: "Resize inspector panel" }),
+    ).toBeInTheDocument();
+  });
+
+  it("resizes the folders panel and persists the width", async () => {
+    renderPage({ defaultShowFolders: true, defaultShowInspector: true });
+    await findRowByLabel("a.txt");
+
+    const layout = setBrowserLayoutRect(1400);
+    const separator = screen.getByRole("separator", {
+      name: "Resize folders panel",
+    });
+
+    fireEvent.pointerDown(separator, { clientX: 286 });
+    fireEvent.pointerMove(document, { clientX: 360 });
+    fireEvent.pointerUp(document);
+
+    await waitFor(() => {
+      expect(layout.style.gridTemplateColumns).toBe(
+        "354px minmax(0, 1fr) 320px",
+      );
+    });
+    await waitFor(() => {
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY) ?? "{}",
+        ).layout.foldersPanelWidthPx,
+      ).toBe(354);
+    });
+  });
+
+  it("resizes the inspector panel and persists the width", async () => {
+    renderPage({ defaultShowFolders: true, defaultShowInspector: true });
+    await findRowByLabel("a.txt");
+
+    const layout = setBrowserLayoutRect(1400);
+    const separator = screen.getByRole("separator", {
+      name: "Resize inspector panel",
+    });
+
+    fireEvent.pointerDown(separator, { clientX: 1074 });
+    fireEvent.pointerMove(document, { clientX: 980 });
+    fireEvent.pointerUp(document);
+
+    await waitFor(() => {
+      expect(layout.style.gridTemplateColumns).toBe(
+        "280px minmax(0, 1fr) 414px",
+      );
+    });
+    await waitFor(() => {
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY) ?? "{}",
+        ).layout.inspectorPanelWidthPx,
+      ).toBe(414);
+    });
+  });
+
+  it("restores persisted panel widths on remount", async () => {
+    seedBrowserRootUiState({
+      layout: {
+        showFolders: true,
+        showInspector: true,
+        showActionBar: false,
+        foldersPanelWidthPx: 360,
+        inspectorPanelWidthPx: 410,
+      },
+      contextSelections: {},
+    });
+
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const layout = setBrowserLayoutRect(1400);
+
+    await waitFor(() => {
+      expect(layout.style.gridTemplateColumns).toBe(
+        "360px minmax(0, 1fr) 410px",
+      );
+    });
+  });
+
+  it("resets panel widths to defaults on resizer double-click", async () => {
+    seedBrowserRootUiState({
+      layout: {
+        showFolders: true,
+        showInspector: true,
+        showActionBar: false,
+        foldersPanelWidthPx: 360,
+        inspectorPanelWidthPx: 410,
+      },
+      contextSelections: {},
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const layout = setBrowserLayoutRect(1400);
+
+    await user.dblClick(
+      screen.getByRole("separator", { name: "Resize folders panel" }),
+    );
+    await user.dblClick(
+      screen.getByRole("separator", { name: "Resize inspector panel" }),
+    );
+
+    await waitFor(() => {
+      expect(layout.style.gridTemplateColumns).toBe(
+        "280px minmax(0, 1fr) 320px",
+      );
+    });
+  });
+
+  it("only renders resizers for visible and allowed panels", async () => {
+    const inspectorOnlyRender = renderPage({
+      defaultShowInspector: true,
+      defaultShowFolders: false,
+    });
+    await findRowByLabel("a.txt");
+    expect(
+      screen.queryByRole("separator", { name: "Resize folders panel" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("separator", { name: "Resize inspector panel" }),
+    ).toBeInTheDocument();
+
+    inspectorOnlyRender.unmount();
+
+    const embeddedRender = renderEmbeddedPage();
+    await findRowByLabel("a.txt");
+    expect(
+      screen.queryByRole("separator", { name: "Resize folders panel" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: "Resize inspector panel" }),
+    ).not.toBeInTheDocument();
+
+    embeddedRender.unmount();
+
+    const matchMediaSpy = vi.spyOn(window, "matchMedia").mockImplementation(
+      () =>
+        ({
+          matches: true,
+          media: "(max-width: 1023px)",
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }) as MediaQueryList,
+    );
+    renderPage({ defaultShowFolders: true, defaultShowInspector: true });
+    await findRowByLabel("a.txt");
+
+    expect(
+      screen.queryByRole("separator", { name: "Resize folders panel" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: "Resize inspector panel" }),
+    ).not.toBeInTheDocument();
+    matchMediaSpy.mockRestore();
   });
 
   it("restores the last bucket and path for the same execution context", async () => {

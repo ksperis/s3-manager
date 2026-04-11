@@ -13,6 +13,7 @@ import {
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import {
@@ -129,12 +130,19 @@ import {
   type ClipboardTransferMode,
 } from "./browserClipboardTransfer";
 import {
+  DEFAULT_FOLDERS_PANEL_WIDTH_PX,
+  DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
+  MAX_FOLDERS_PANEL_WIDTH_PX,
+  MAX_INSPECTOR_PANEL_WIDTH_PX,
+  MIN_FOLDERS_PANEL_WIDTH_PX,
+  MIN_INSPECTOR_PANEL_WIDTH_PX,
   readBrowserRootObjectColumns,
   readBrowserRootContextSelection,
   readStoredBrowserRootUiState,
   writeBrowserRootContextSelection,
   writeBrowserRootObjectColumns,
   writeBrowserRootUiLayout,
+  writeBrowserRootUiPanelWidths,
 } from "./browserRootUiState";
 import {
   readBrowserEmbeddedObjectColumns,
@@ -425,6 +433,9 @@ const PATH_HISTORY_LIMIT = 20;
 const PATH_HISTORY_STORAGE_KEY = "browser:path-history:v1";
 const PANELS_DISABLE_MAX_WIDTH_PX = 1023;
 const PANELS_DISABLE_MEDIA_QUERY = `(max-width: ${PANELS_DISABLE_MAX_WIDTH_PX}px)`;
+const PANEL_LAYOUT_GAP_PX = 12;
+const PANEL_RESIZER_HITBOX_WIDTH_PX = 12;
+const MIN_BROWSER_CENTER_WIDTH_PX = 320;
 const CONTEXT_MENU_PADDING_PX = 8;
 const CONTEXT_MENU_FALLBACK_WIDTH_PX = 240;
 const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 320;
@@ -438,6 +449,74 @@ const PATH_SUGGESTION_SOURCE_WEIGHT: Record<PathSuggestionSource, number> = {
 };
 const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
+
+const clampBrowserPanelWidth = (
+  value: number,
+  min: number,
+  max: number,
+) => Math.min(max, Math.max(min, Math.round(value)));
+
+const resolveBrowserPanelWidths = ({
+  containerWidth,
+  foldersPanelWidthPx,
+  inspectorPanelWidthPx,
+  isFoldersPanelVisible,
+  isInspectorPanelVisible,
+}: {
+  containerWidth: number;
+  foldersPanelWidthPx: number;
+  inspectorPanelWidthPx: number;
+  isFoldersPanelVisible: boolean;
+  isInspectorPanelVisible: boolean;
+}) => {
+  let resolvedFoldersWidth = clampBrowserPanelWidth(
+    foldersPanelWidthPx,
+    MIN_FOLDERS_PANEL_WIDTH_PX,
+    MAX_FOLDERS_PANEL_WIDTH_PX,
+  );
+  let resolvedInspectorWidth = clampBrowserPanelWidth(
+    inspectorPanelWidthPx,
+    MIN_INSPECTOR_PANEL_WIDTH_PX,
+    MAX_INSPECTOR_PANEL_WIDTH_PX,
+  );
+  if (containerWidth <= 0) {
+    return { resolvedFoldersWidth, resolvedInspectorWidth };
+  }
+
+  const gapCount =
+    (isFoldersPanelVisible ? 1 : 0) + (isInspectorPanelVisible ? 1 : 0);
+  const occupiedGapWidth = gapCount * PANEL_LAYOUT_GAP_PX;
+
+  if (isInspectorPanelVisible) {
+    const maxInspectorWidth = isFoldersPanelVisible
+      ? containerWidth -
+        resolvedFoldersWidth -
+        occupiedGapWidth -
+        MIN_BROWSER_CENTER_WIDTH_PX
+      : containerWidth - occupiedGapWidth - MIN_BROWSER_CENTER_WIDTH_PX;
+    resolvedInspectorWidth = clampBrowserPanelWidth(
+      resolvedInspectorWidth,
+      MIN_INSPECTOR_PANEL_WIDTH_PX,
+      Math.max(MIN_INSPECTOR_PANEL_WIDTH_PX, maxInspectorWidth),
+    );
+  }
+
+  if (isFoldersPanelVisible) {
+    const maxFoldersWidth = isInspectorPanelVisible
+      ? containerWidth -
+        resolvedInspectorWidth -
+        occupiedGapWidth -
+        MIN_BROWSER_CENTER_WIDTH_PX
+      : containerWidth - occupiedGapWidth - MIN_BROWSER_CENTER_WIDTH_PX;
+    resolvedFoldersWidth = clampBrowserPanelWidth(
+      resolvedFoldersWidth,
+      MIN_FOLDERS_PANEL_WIDTH_PX,
+      Math.max(MIN_FOLDERS_PANEL_WIDTH_PX, maxFoldersWidth),
+    );
+  }
+
+  return { resolvedFoldersWidth, resolvedInspectorWidth };
+};
 const LAZY_COLUMN_CONCURRENCY = 4;
 const LAZY_COLUMN_BATCH_SIZE = 24;
 const LAZY_COLUMN_ROOT_MARGIN = "200px";
@@ -866,13 +945,11 @@ export default function BrowserPage({
     normalizedPath.endsWith("/manager/browser") ||
     normalizedPath.endsWith("/ceph-admin/browser");
   const isMainBrowserPath = normalizedPath === "/browser";
-  const initialRootUiLayout = useMemo(
-    () =>
-      isMainBrowserPath
-        ? (readStoredBrowserRootUiState()?.layout ?? null)
-        : null,
-    [isMainBrowserPath],
+  const initialStoredRootUiLayout = useMemo(
+    () => readStoredBrowserRootUiState()?.layout ?? null,
+    [],
   );
+  const initialRootUiLayout = isMainBrowserPath ? initialStoredRootUiLayout : null;
   const browserRootContextId =
     accountIdForApi == null ? null : String(accountIdForApi);
   const bucketAccessContextKey =
@@ -925,6 +1002,20 @@ export default function BrowserPage({
   const [showActionBar, setShowActionBar] = useState(() =>
     isMainBrowserPath ? (initialRootUiLayout?.showActionBar ?? false) : false,
   );
+  const [foldersPanelWidthPx, setFoldersPanelWidthPx] = useState(
+    () =>
+      initialStoredRootUiLayout?.foldersPanelWidthPx ??
+      DEFAULT_FOLDERS_PANEL_WIDTH_PX,
+  );
+  const [inspectorPanelWidthPx, setInspectorPanelWidthPx] = useState(
+    () =>
+      initialStoredRootUiLayout?.inspectorPanelWidthPx ??
+      DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
+  );
+  const [layoutContainerWidthPx, setLayoutContainerWidthPx] = useState(0);
+  const [activePanelResize, setActivePanelResize] = useState<
+    "folders" | "inspector" | null
+  >(null);
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
@@ -1235,6 +1326,7 @@ export default function BrowserPage({
   const bucketMenuFilterRef = useRef<HTMLInputElement | null>(null);
   const bucketPanelViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketPanelLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const layoutContainerRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
   const newFolderInputRef = useRef<HTMLInputElement | null>(null);
@@ -1275,11 +1367,15 @@ export default function BrowserPage({
   const prefixDeleteMarkersRef = useRef(prefixDeleteMarkers);
   const prefixVersionKeyMarkerRef = useRef(prefixVersionKeyMarker);
   const prefixVersionIdMarkerRef = useRef(prefixVersionIdMarker);
+  const foldersPanelWidthRef = useRef(foldersPanelWidthPx);
+  const inspectorPanelWidthRef = useRef(inspectorPanelWidthPx);
   const objectVersionsRef = useRef(objectVersions);
   const objectDeleteMarkersRef = useRef(objectDeleteMarkers);
   const objectVersionKeyMarkerRef = useRef(objectVersionKeyMarker);
   const objectVersionIdMarkerRef = useRef(objectVersionIdMarker);
   const objectVersionsTargetKeyRef = useRef(objectVersionsTargetKey);
+  const isFoldersPanelVisibleRef = useRef(false);
+  const isInspectorPanelVisibleRef = useRef(false);
   const lazyColumnCacheRef = useRef<Record<string, LazyColumnCacheEntry>>({});
   const lazyListItemsByIdRef = useRef<Map<string, BrowserItem>>(new Map());
   const lazyQueueRef = useRef<string[]>([]);
@@ -1473,6 +1569,95 @@ export default function BrowserPage({
       showActionBar,
     });
   }, [isMainBrowserPath, showActionBar, showFolders, showInspector]);
+
+  useEffect(() => {
+    foldersPanelWidthRef.current = foldersPanelWidthPx;
+    inspectorPanelWidthRef.current = inspectorPanelWidthPx;
+  }, [foldersPanelWidthPx, inspectorPanelWidthPx]);
+
+  useEffect(() => {
+    isFoldersPanelVisibleRef.current = isFoldersPanelVisible;
+    isInspectorPanelVisibleRef.current = isInspectorPanelVisible;
+  }, [isFoldersPanelVisible, isInspectorPanelVisible]);
+
+  useLayoutEffect(() => {
+    const updateLayoutContainerWidth = () => {
+      setLayoutContainerWidthPx(
+        Math.round(layoutContainerRef.current?.getBoundingClientRect().width ?? 0),
+      );
+    };
+    updateLayoutContainerWidth();
+    if (typeof window === "undefined") return;
+    window.addEventListener("resize", updateLayoutContainerWidth);
+    if (typeof ResizeObserver === "undefined" || !layoutContainerRef.current) {
+      return () => {
+        window.removeEventListener("resize", updateLayoutContainerWidth);
+      };
+    }
+    const observer = new ResizeObserver(() => {
+      updateLayoutContainerWidth();
+    });
+    observer.observe(layoutContainerRef.current);
+    return () => {
+      window.removeEventListener("resize", updateLayoutContainerWidth);
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activePanelResize) return;
+    writeBrowserRootUiPanelWidths({
+      foldersPanelWidthPx,
+      inspectorPanelWidthPx,
+    });
+  }, [activePanelResize, foldersPanelWidthPx, inspectorPanelWidthPx]);
+
+  useEffect(() => {
+    if (!activePanelResize) return;
+    const handlePointerMove = (event: PointerEvent) => {
+      const rect = layoutContainerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      if (activePanelResize === "folders") {
+        if (!isFoldersPanelVisibleRef.current) return;
+        const nextWidth =
+          event.clientX - rect.left - PANEL_LAYOUT_GAP_PX / 2;
+        const { resolvedFoldersWidth } = resolveBrowserPanelWidths({
+          containerWidth: rect.width,
+          foldersPanelWidthPx: nextWidth,
+          inspectorPanelWidthPx: inspectorPanelWidthRef.current,
+          isFoldersPanelVisible: isFoldersPanelVisibleRef.current,
+          isInspectorPanelVisible: isInspectorPanelVisibleRef.current,
+        });
+        setFoldersPanelWidthPx(resolvedFoldersWidth);
+        return;
+      }
+      if (!isInspectorPanelVisibleRef.current) return;
+      const nextWidth = rect.right - event.clientX - PANEL_LAYOUT_GAP_PX / 2;
+      const { resolvedInspectorWidth } = resolveBrowserPanelWidths({
+        containerWidth: rect.width,
+        foldersPanelWidthPx: foldersPanelWidthRef.current,
+        inspectorPanelWidthPx: nextWidth,
+        isFoldersPanelVisible: isFoldersPanelVisibleRef.current,
+        isInspectorPanelVisible: isInspectorPanelVisibleRef.current,
+      });
+      setInspectorPanelWidthPx(resolvedInspectorWidth);
+    };
+    const stopPanelResize = () => {
+      setActivePanelResize(null);
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", stopPanelResize);
+    document.addEventListener("pointercancel", stopPanelResize);
+    return () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", stopPanelResize);
+      document.removeEventListener("pointercancel", stopPanelResize);
+    };
+  }, [activePanelResize]);
 
   useEffect(() => {
     setVisibleColumns(loadVisibleColumnsForSurface(isMainBrowserPath));
@@ -4410,14 +4595,40 @@ export default function BrowserPage({
   const selectionHasDeleted = selectionInfo.hasDeleted;
   const canSelectionActions = selectionInfo.items.length > 0;
 
-  const layoutClass =
-    isFoldersPanelVisible && isInspectorPanelVisible
-      ? "lg:grid-cols-[280px_minmax(0,1fr)_320px]"
-      : isFoldersPanelVisible
-        ? "lg:grid-cols-[280px_minmax(0,1fr)]"
-        : isInspectorPanelVisible
-          ? "lg:grid-cols-[minmax(0,1fr)_320px]"
-          : "lg:grid-cols-[minmax(0,1fr)]";
+  const { resolvedFoldersWidth, resolvedInspectorWidth } = useMemo(
+    () =>
+      resolveBrowserPanelWidths({
+        containerWidth: layoutContainerWidthPx,
+        foldersPanelWidthPx,
+        inspectorPanelWidthPx,
+        isFoldersPanelVisible,
+        isInspectorPanelVisible,
+      }),
+    [
+      foldersPanelWidthPx,
+      inspectorPanelWidthPx,
+      isFoldersPanelVisible,
+      isInspectorPanelVisible,
+      layoutContainerWidthPx,
+    ],
+  );
+  const layoutTemplateColumns = useMemo(() => {
+    if (isFoldersPanelVisible && isInspectorPanelVisible) {
+      return `${resolvedFoldersWidth}px minmax(0, 1fr) ${resolvedInspectorWidth}px`;
+    }
+    if (isFoldersPanelVisible) {
+      return `${resolvedFoldersWidth}px minmax(0, 1fr)`;
+    }
+    if (isInspectorPanelVisible) {
+      return `minmax(0, 1fr) ${resolvedInspectorWidth}px`;
+    }
+    return "minmax(0, 1fr)";
+  }, [
+    isFoldersPanelVisible,
+    isInspectorPanelVisible,
+    resolvedFoldersWidth,
+    resolvedInspectorWidth,
+  ]);
   const rowPadding = compactMode ? "!py-0.5" : "py-2.5";
   const rowHeightClasses = compactMode ? "h-9" : "h-16";
   const rowCellClasses = rowPadding;
@@ -4574,6 +4785,29 @@ export default function BrowserPage({
     }
     openObjectDetails(item, "preview");
   };
+
+  const startPanelResize = useCallback(
+    (side: "folders" | "inspector") =>
+      (event: ReactPointerEvent<HTMLDivElement>) => {
+        if (
+          (side === "folders" && !isFoldersPanelVisibleRef.current) ||
+          (side === "inspector" && !isInspectorPanelVisibleRef.current)
+        ) {
+          return;
+        }
+        event.preventDefault();
+        setActivePanelResize(side);
+      },
+    [],
+  );
+
+  const resetFoldersPanelWidth = useCallback(() => {
+    setFoldersPanelWidthPx(DEFAULT_FOLDERS_PANEL_WIDTH_PX);
+  }, []);
+
+  const resetInspectorPanelWidth = useCallback(() => {
+    setInspectorPanelWidthPx(DEFAULT_INSPECTOR_PANEL_WIDTH_PX);
+  }, []);
 
   const openItemDetails = (item: BrowserItem) => {
     if (!canUseInspectorPanel) return;
@@ -12337,7 +12571,10 @@ export default function BrowserPage({
 
         <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden p-3">
           <div
-            className={`grid min-h-0 flex-1 grid-rows-1 gap-3 ${layoutClass}`}
+            ref={layoutContainerRef}
+            data-testid="browser-layout"
+            className="relative grid min-h-0 flex-1 grid-rows-1 gap-3"
+            style={{ gridTemplateColumns: layoutTemplateColumns }}
           >
             {isFoldersPanelVisible && (
               <BrowserBucketsPanel
@@ -13680,15 +13917,16 @@ export default function BrowserPage({
                             </div>
                             <div className={inspectorSectionCardClasses}>
                               <p className={inspectorSectionTitleClasses}>
-                                Quick actions
+                                Actions
                               </p>
-                              <div className="flex flex-wrap gap-2">
+                              <div className="mt-2 flex flex-wrap gap-2">
                                 {inspectedItem.type === "folder" ? (
                                   <button
                                     type="button"
-                                    className={chromeChipButtonClasses}
+                                    className={chromeBulkActionClasses}
                                     onClick={() => handleOpenItem(inspectedItem)}
                                   >
+                                    <OpenIcon className="h-3.5 w-3.5" />
                                     Open
                                   </button>
                                 ) : (
@@ -13696,7 +13934,7 @@ export default function BrowserPage({
                                     {!inspectedItem.isDeleted && (
                                       <button
                                         type="button"
-                                        className={chromeChipButtonClasses}
+                                        className={chromeBulkActionClasses}
                                         onClick={() =>
                                           openObjectDetails(
                                             inspectedItem,
@@ -13704,13 +13942,14 @@ export default function BrowserPage({
                                           )
                                         }
                                       >
+                                        <EyeIcon className="h-3.5 w-3.5" />
                                         Preview
                                       </button>
                                     )}
                                     {isVersioningEnabled && (
                                       <button
                                         type="button"
-                                        className={chromeChipButtonClasses}
+                                        className={chromeBulkActionClasses}
                                         onClick={() =>
                                           openObjectDetails(
                                             inspectedItem,
@@ -13718,12 +13957,13 @@ export default function BrowserPage({
                                           )
                                         }
                                       >
+                                        <ListIcon className="h-3.5 w-3.5" />
                                         Versions
                                       </button>
                                     )}
                                     <button
                                       type="button"
-                                      className={chromeChipButtonClasses}
+                                      className={chromeBulkActionClasses}
                                       onClick={() =>
                                         openObjectDetails(
                                           inspectedItem,
@@ -13733,6 +13973,7 @@ export default function BrowserPage({
                                         )
                                       }
                                     >
+                                      <SettingsIcon className="h-3.5 w-3.5" />
                                       Open object details
                                     </button>
                                   </>
@@ -13792,6 +14033,9 @@ export default function BrowserPage({
                               inspectedItem.type === "file" && (
                                 <BrowserObjectVersionsList
                                   title="Versions"
+                                  containerClassName={inspectorSectionCardClasses}
+                                  titleClassName={inspectorSectionTitleClasses}
+                                  bodyClassName="mt-2 space-y-2"
                                   versions={objectVersionRows}
                                   loading={objectVersionsLoading}
                                   error={objectVersionsError}
@@ -13821,6 +14065,52 @@ export default function BrowserPage({
                     )}
                   </div>
                 </div>
+              </div>
+            )}
+            {isFoldersPanelVisible && (
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize folders panel"
+                title="Resize folders panel"
+                className="absolute inset-y-0 z-20 -translate-x-1/2 cursor-col-resize touch-none select-none"
+                style={{
+                  left: `calc(${resolvedFoldersWidth}px + ${PANEL_LAYOUT_GAP_PX / 2}px)`,
+                  width: `${PANEL_RESIZER_HITBOX_WIDTH_PX}px`,
+                }}
+                onPointerDown={startPanelResize("folders")}
+                onDoubleClick={resetFoldersPanelWidth}
+              >
+                <div
+                  className={`mx-auto h-full w-0.5 rounded-full bg-slate-200 transition dark:bg-slate-700 ${
+                    activePanelResize === "folders"
+                      ? "bg-primary dark:bg-primary-300"
+                      : "hover:bg-slate-300 dark:hover:bg-slate-500"
+                  }`}
+                />
+              </div>
+            )}
+            {isInspectorPanelVisible && (
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize inspector panel"
+                title="Resize inspector panel"
+                className="absolute inset-y-0 z-20 translate-x-1/2 cursor-col-resize touch-none select-none"
+                style={{
+                  right: `calc(${resolvedInspectorWidth}px + ${PANEL_LAYOUT_GAP_PX / 2}px)`,
+                  width: `${PANEL_RESIZER_HITBOX_WIDTH_PX}px`,
+                }}
+                onPointerDown={startPanelResize("inspector")}
+                onDoubleClick={resetInspectorPanelWidth}
+              >
+                <div
+                  className={`mx-auto h-full w-0.5 rounded-full bg-slate-200 transition dark:bg-slate-700 ${
+                    activePanelResize === "inspector"
+                      ? "bg-primary dark:bg-primary-300"
+                      : "hover:bg-slate-300 dark:hover:bg-slate-500"
+                  }`}
+                />
               </div>
             )}
           </div>

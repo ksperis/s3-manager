@@ -55,8 +55,6 @@ type BrowserBucketsPanelProps = {
   loadMoreSentinelRef: RefObject<HTMLDivElement | null>;
 };
 
-const currentBucketCardClasses =
-  "rounded-xl border border-primary-200 bg-primary-50/70 p-3 shadow-sm dark:border-primary-500/40 dark:bg-primary-500/10";
 const bucketSectionTitleClasses = "ui-caption font-semibold text-slate-500 dark:text-slate-400";
 const bucketFilterInputClasses =
   cx(toolbarCompactInputClasses, "w-full py-2 font-medium");
@@ -256,7 +254,7 @@ export default function BrowserBucketsPanel({
       >
         <div className="space-y-3">
           {currentBucketMatchesFilter && (
-            <section className={currentBucketCardClasses} aria-label="Current bucket">
+            <section className={bucketSubtleCardClasses} aria-label="Current bucket">
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className={bucketSectionTitleClasses}>Current bucket</p>

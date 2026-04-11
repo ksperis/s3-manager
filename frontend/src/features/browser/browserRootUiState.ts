@@ -4,11 +4,19 @@
  */
 
 export const BROWSER_ROOT_UI_STATE_STORAGE_KEY = "browser:root-ui-state:v1";
+export const DEFAULT_FOLDERS_PANEL_WIDTH_PX = 280;
+export const DEFAULT_INSPECTOR_PANEL_WIDTH_PX = 320;
+export const MIN_FOLDERS_PANEL_WIDTH_PX = 220;
+export const MAX_FOLDERS_PANEL_WIDTH_PX = 420;
+export const MIN_INSPECTOR_PANEL_WIDTH_PX = 280;
+export const MAX_INSPECTOR_PANEL_WIDTH_PX = 520;
 
 export type BrowserRootUiLayoutState = {
   showFolders: boolean;
   showInspector: boolean;
   showActionBar: boolean;
+  foldersPanelWidthPx?: number;
+  inspectorPanelWidthPx?: number;
 };
 
 export type BrowserRootUiContextSelection = {
@@ -26,6 +34,8 @@ const DEFAULT_LAYOUT_STATE: BrowserRootUiLayoutState = {
   showFolders: false,
   showInspector: false,
   showActionBar: false,
+  foldersPanelWidthPx: DEFAULT_FOLDERS_PANEL_WIDTH_PX,
+  inspectorPanelWidthPx: DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
 };
 
 const createDefaultState = (): BrowserRootUiState => ({
@@ -37,12 +47,36 @@ const createDefaultState = (): BrowserRootUiState => ({
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+const clampPanelWidth = (
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.round(value)));
+};
+
 const normalizeLayoutState = (value: unknown): BrowserRootUiLayoutState => {
   const raw = isRecord(value) ? value : {};
   return {
     showFolders: raw.showFolders === true,
     showInspector: raw.showInspector === true,
     showActionBar: raw.showActionBar === true,
+    foldersPanelWidthPx: clampPanelWidth(
+      raw.foldersPanelWidthPx,
+      DEFAULT_FOLDERS_PANEL_WIDTH_PX,
+      MIN_FOLDERS_PANEL_WIDTH_PX,
+      MAX_FOLDERS_PANEL_WIDTH_PX,
+    ),
+    inspectorPanelWidthPx: clampPanelWidth(
+      raw.inspectorPanelWidthPx,
+      DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
+      MIN_INSPECTOR_PANEL_WIDTH_PX,
+      MAX_INSPECTOR_PANEL_WIDTH_PX,
+    ),
   };
 };
 
@@ -104,7 +138,28 @@ export const writeBrowserRootUiLayout = (layout: BrowserRootUiLayoutState) => {
   const current = readBrowserRootUiState();
   writeBrowserRootUiState({
     ...current,
-    layout: normalizeLayoutState(layout),
+    layout: normalizeLayoutState({
+      ...current.layout,
+      ...layout,
+    }),
+  });
+};
+
+export const writeBrowserRootUiPanelWidths = ({
+  foldersPanelWidthPx,
+  inspectorPanelWidthPx,
+}: {
+  foldersPanelWidthPx?: number;
+  inspectorPanelWidthPx?: number;
+}) => {
+  const current = readBrowserRootUiState();
+  writeBrowserRootUiState({
+    ...current,
+    layout: normalizeLayoutState({
+      ...current.layout,
+      foldersPanelWidthPx,
+      inspectorPanelWidthPx,
+    }),
   });
 };
 

@@ -13,6 +13,9 @@ type BrowserObjectVersionsListProps = {
   loading: boolean;
   error: string | null;
   emptyLabel?: string;
+  containerClassName?: string;
+  titleClassName?: string;
+  bodyClassName?: string;
   canLoadMore?: boolean;
   onLoadMore?: () => void;
   onRestoreVersion: (version: BrowserObjectVersion) => void;
@@ -25,19 +28,22 @@ export default function BrowserObjectVersionsList({
   loading,
   error,
   emptyLabel = "No versions found.",
+  containerClassName = "space-y-2",
+  titleClassName = "ui-caption font-semibold uppercase tracking-wide text-slate-400",
+  bodyClassName = "space-y-2",
   canLoadMore = false,
   onLoadMore,
   onRestoreVersion,
   onDeleteVersion,
 }: BrowserObjectVersionsListProps) {
   return (
-    <div className="space-y-2">
+    <div className={containerClassName}>
       <div className="flex items-center justify-between">
-        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+        <p className={titleClassName}>{title}</p>
         {loading && <span className="ui-caption text-slate-500 dark:text-slate-400">Loading...</span>}
       </div>
       {error && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{error}</p>}
-      <div className="space-y-2">
+      <div className={bodyClassName}>
         {versions.length === 0 && !loading && (
           <span className="ui-caption text-slate-500 dark:text-slate-400">{emptyLabel}</span>
         )}
