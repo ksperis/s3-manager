@@ -96,6 +96,7 @@ export type ObjectMetadata = {
   content_language?: string | null;
   expires?: string | null;
   storage_class?: string | null;
+  restore_status?: string | null;
   metadata: Record<string, string>;
   version_id?: string | null;
 };
@@ -180,6 +181,7 @@ export type PresignRequest = {
   expires_in?: number;
   content_type?: string | null;
   content_length?: number | null;
+  response_content_disposition?: string | null;
   version_id?: string | null;
 };
 

@@ -74,17 +74,16 @@ export const CONTEXT_MENU_PATH_LAYOUT_ACTION_IDS: BrowserActionId[] = [
 ];
 
 export const CONTEXT_MENU_ITEM_ACTION_IDS: BrowserActionId[] = [
-  "details",
-  "versions",
-  "open",
   "preview",
+  "versions",
+  "details",
+  "open",
   "download",
   "copyUrl",
   "copy",
   "cut",
   "bulkAttributes",
   "restoreToDate",
-  "advanced",
   "delete",
 ];
 

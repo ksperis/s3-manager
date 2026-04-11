@@ -1740,6 +1740,7 @@ class BrowserService:
             content_language=resp.get("ContentLanguage"),
             expires=resp.get("Expires"),
             storage_class=resp.get("StorageClass"),
+            restore_status=self._normalize_restore_status(resp.get("Restore")),
             metadata=metadata,
             version_id=resp.get("VersionId") or version_id,
         )
@@ -2213,6 +2214,8 @@ class BrowserService:
         headers: dict[str, str] = self._sse_customer_headers(sse_customer)
         if payload.version_id:
             params["VersionId"] = payload.version_id
+        if payload.response_content_disposition:
+            params["ResponseContentDisposition"] = payload.response_content_disposition
         try:
             if payload.operation == "get_object":
                 url = client.generate_presigned_url(

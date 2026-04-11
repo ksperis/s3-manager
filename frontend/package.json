@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "lint": "eslint src/components src/features/auth/LoginPage.tsx src/features/auth/OidcCallbackPage.tsx src/features/manager/ManagerMigrationsPage.tsx src/router.tsx src/utils/routePrefetch.ts src/test --ext .ts,.tsx",
-    "lint:browser": "eslint src/features/browser/BrowserPage.tsx src/features/browser/ObjectAdvancedModal.tsx src/features/browser/BrowserDialogModals.tsx --ext .ts,.tsx",
+    "lint:browser": "eslint src/features/browser/BrowserPage.tsx src/features/browser/BrowserObjectDetailsModal.tsx src/features/browser/BrowserDialogModals.tsx --ext .ts,.tsx",
     "test": "vitest run",
     "test:ci": "vitest run --reporter=default --reporter=junit --outputFile=../gl-test-reports/frontend-junit.xml",
     "test:watch": "vitest",

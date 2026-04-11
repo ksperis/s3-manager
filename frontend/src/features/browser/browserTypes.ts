@@ -133,6 +133,13 @@ export type BulkMetadataDraft = {
 
 export type PreviewKind = "image" | "video" | "audio" | "pdf" | "text" | "generic";
 
+export type ObjectDetailsTabId =
+  | "preview"
+  | "versions"
+  | "properties"
+  | "protection"
+  | "archive";
+
 export type ContextMenuKind = "item" | "selection" | "path" | "headerConfig";
 
 export type ContextMenuState = {

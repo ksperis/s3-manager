@@ -905,7 +905,8 @@ export const scenarios: DocScreenshotScenario[] = [
       { type: "wait", selector: "text=report-2026-03-08.json" },
       { type: "click", selector: "tr:has-text('report-2026-03-08.json') button[aria-label='More actions']" },
       { type: "click", selector: "[role='menu'] button:has-text('Versions')" },
-      { type: "wait", selector: "text=Object versions · daily/report-2026-03-08.json" },
+      { type: "wait", selector: "text=Object details · report-2026-03-08.json" },
+      { type: "wait", selector: "[role='tab'][aria-selected='true']:has-text('Versions')" },
       { type: "wait", selector: "text=v: v-2026-03-08-0715" },
     ],
     mockRules: withBaseRules(

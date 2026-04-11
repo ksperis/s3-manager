@@ -15,10 +15,11 @@ Use this guide when you need to inspect object history, restore a previous state
 1. Open a Browser surface and navigate to the target bucket and object.
 2. Open **Versions** from the item actions.
    - On `/browser`, you can use the item `More actions` menu, the context menu, or version-aware flows triggered from deleted objects.
-3. Review the entries shown in the object versions modal.
+3. Review the entries shown in the `Versions` tab of the file `Object details` modal.
    - Latest versions and delete markers are clearly identified.
    - Each row keeps restore and delete actions next to the corresponding version metadata.
-4. Restore or remove the required version directly from the modal.
+4. Restore or remove the required version directly from the tab.
+   - If the current object state is deleted, Browser opens `Object details` directly on `Versions`.
 
 ## Expected result
 
@@ -27,7 +28,7 @@ You can inspect object history and act on previous versions without leaving Brow
 ## Limits / feature flags
 
 !!! note
-    Browser availability depends on workspace browser flags and endpoint capabilities. The versions modal is only useful when the target bucket has S3 versioning enabled.
+    Browser availability depends on workspace browser flags and endpoint capabilities. The `Versions` tab is only useful when the target bucket has S3 versioning enabled.
 
 ## Related pages
 

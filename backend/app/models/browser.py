@@ -107,6 +107,7 @@ class ObjectMetadata(BaseModel):
     content_language: Optional[str] = None
     expires: Optional[datetime] = None
     storage_class: Optional[str] = None
+    restore_status: Optional[str] = None
     metadata: dict[str, str] = Field(default_factory=dict)
     version_id: Optional[str] = None
 
@@ -168,6 +169,7 @@ class PresignRequest(BaseModel):
     expires_in: int = Field(default=900, ge=60, le=43200)
     content_type: Optional[str] = None
     content_length: Optional[int] = None
+    response_content_disposition: Optional[str] = None
     version_id: Optional[str] = None
 
 

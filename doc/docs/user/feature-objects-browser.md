@@ -19,12 +19,12 @@ Use this guide for object-level actions in Browser surfaces.
    - Use the context menu for the full action set on the current path, object, or selection.
    - Use the toolbar `More` menu when right-click is not available or when the action bar is compact.
    - Use `More > Columns` to choose which object columns are visible. The default column set stays unchanged until you customize it.
-   - Use the inspector to access the same context and selection actions on the main `/browser` page.
+   - Use the inspector to access the same context and selection actions on the main `/browser` page. The `Details` tab stays lightweight and can open the full file object sheet directly.
    - Upload files
    - Download objects
    - Preview supported files
    - Delete objects or delete markers
-   - Manage versions, restores, and advanced object operations
+   - Manage versions, restores, metadata, tags, ACL, retention, signed URLs, and archive restore workflows from the unified `Object details` modal for files
 4. Use bulk actions when handling many objects.
 5. You can copy or cut items, switch to another Browser execution context, and paste into the target bucket or prefix.
    - Same-context paste keeps the existing storage-side copy path.
@@ -35,6 +35,7 @@ Use this guide for object-level actions in Browser surfaces.
 
 - Path actions include upload, folder creation, paste, versions, restore, cleanup, and copy path.
 - Selection actions include download, open, copy URL, copy, cut, bulk attributes, advanced actions, restore, and delete when the current selection allows them.
+- File entry points such as `Preview`, `Versions`, and advanced object actions converge into the same `Object details` modal, each opening the most relevant tab first.
 - Long-running bulk actions surface in **Operations overview**, where queued, active, completed, and failed work stays visible without leaving Browser.
 - The toolbar `More` menu remains available in `/manager/browser` and `/ceph-admin/browser`, where the inspector is not shown.
 - Object columns available from `More > Columns` include base listing columns such as `Size`, `Modified`, `Storage class`, and `ETag`, plus lazy detail columns such as `Content-Type`, `Tags`, `Metadata`, `Cache-Control`, `Expires`, and `Restore status`.

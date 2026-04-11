@@ -63,8 +63,6 @@ import {
   BrowserSettings,
   BucketCorsStatus,
   MultipartUploadItem,
-  ObjectMetadata,
-  ObjectTag,
   PresignPartRequest,
   PresignRequest,
   StsCredentials,
@@ -80,7 +78,6 @@ import {
   getBucketCorsStatus,
   ensureBucketCors,
   getStsCredentials,
-  getObjectTags,
   getStsStatus,
   initiateMultipartUpload,
   listBrowserObjects,
@@ -122,13 +119,10 @@ import {
   BrowserCopyValueModal,
 } from "./BrowserDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
+import BrowserObjectDetailsModal from "./BrowserObjectDetailsModal";
 import BrowserOperationsModal from "./BrowserOperationsModal";
-import BrowserObjectVersionsList from "./BrowserObjectVersionsList";
-import BrowserObjectVersionsModal from "./BrowserObjectVersionsModal";
 import BrowserMultipartUploadsModal from "./BrowserMultipartUploadsModal";
 import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
-import BrowserPreviewModal from "./BrowserPreviewModal";
-import ObjectAdvancedModal from "./ObjectAdvancedModal";
 import {
   transferClipboardObjectBetweenContexts,
   type ClipboardTransferMode,
@@ -243,7 +237,6 @@ import {
   normalizeUploadPath,
   parseKeyValueLines,
   pairsToRecord,
-  previewKindForItem,
   previewLabelForItem,
   shortName,
   toIsoString,
@@ -276,6 +269,7 @@ import type {
   DeleteDetailStatus,
   DownloadDetailItem,
   DownloadDetailStatus,
+  ObjectDetailsTabId,
   OperationCompletionStatus,
   OperationItem,
   SelectionStats,
@@ -296,6 +290,11 @@ type BrowserPageProps = {
   showPanelToggles?: boolean;
   defaultShowFolders?: boolean;
   defaultShowInspector?: boolean;
+};
+
+type ObjectDetailsTarget = {
+  item: BrowserItem;
+  initialTab: ObjectDetailsTabId;
 };
 
 type ToolbarToggleMenuItemProps = {
@@ -951,46 +950,7 @@ export default function BrowserPage({
   const [prefixVersionIdMarker, setPrefixVersionIdMarker] = useState<
     string | null
   >(null);
-  const [objectVersions, setObjectVersions] = useState<BrowserObjectVersion[]>(
-    [],
-  );
-  const [objectDeleteMarkers, setObjectDeleteMarkers] = useState<
-    BrowserObjectVersion[]
-  >([]);
-  const [objectVersionsLoading, setObjectVersionsLoading] = useState(false);
-  const [objectVersionsError, setObjectVersionsError] = useState<string | null>(
-    null,
-  );
-  const [objectVersionKeyMarker, setObjectVersionKeyMarker] = useState<
-    string | null
-  >(null);
-  const [objectVersionIdMarker, setObjectVersionIdMarker] = useState<
-    string | null
-  >(null);
   const [bucketVersioningEnabled, setBucketVersioningEnabled] = useState(false);
-  const [showObjectVersionsModal, setShowObjectVersionsModal] = useState(false);
-  const [objectVersionsModalKey, setObjectVersionsModalKey] = useState<
-    string | null
-  >(null);
-  const [objectVersionsModalPath, setObjectVersionsModalPath] = useState<
-    string | null
-  >(null);
-  const [objectVersionsModal, setObjectVersionsModal] = useState<
-    BrowserObjectVersion[]
-  >([]);
-  const [objectDeleteMarkersModal, setObjectDeleteMarkersModal] = useState<
-    BrowserObjectVersion[]
-  >([]);
-  const [objectVersionsModalLoading, setObjectVersionsModalLoading] =
-    useState(false);
-  const [objectVersionsModalError, setObjectVersionsModalError] = useState<
-    string | null
-  >(null);
-  const [objectVersionModalKeyMarker, setObjectVersionModalKeyMarker] =
-    useState<string | null>(null);
-  const [objectVersionModalIdMarker, setObjectVersionModalIdMarker] = useState<
-    string | null
-  >(null);
   const [showMultipartUploadsModal, setShowMultipartUploadsModal] =
     useState(false);
   const [multipartUploads, setMultipartUploads] = useState<
@@ -1131,15 +1091,8 @@ export default function BrowserPage({
   const [copyDetails, setCopyDetails] = useState<
     Record<string, CopyDetailItem[]>
   >({});
-  const [inspectedMetadata, setInspectedMetadata] =
-    useState<ObjectMetadata | null>(null);
-  const [inspectedTags, setInspectedTags] = useState<ObjectTag[]>([]);
-  const [inspectedTagsVersionId, setInspectedTagsVersionId] = useState<
-    string | null
-  >(null);
-  const [metadataLoading, setMetadataLoading] = useState(false);
-  const [metadataError, setMetadataError] = useState<string | null>(null);
-  const [showAdvancedModal, setShowAdvancedModal] = useState(false);
+  const [objectDetailsTarget, setObjectDetailsTarget] =
+    useState<ObjectDetailsTarget | null>(null);
   const [configBucketName, setConfigBucketName] = useState<string | null>(null);
   const [showCreateBucketModal, setShowCreateBucketModal] = useState(false);
   const [createBucketNameValue, setCreateBucketNameValue] = useState("");
@@ -1161,13 +1114,6 @@ export default function BrowserPage({
     null,
   );
   const [showOperationsModal, setShowOperationsModal] = useState(false);
-  const [previewItem, setPreviewItem] = useState<BrowserItem | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewContentType, setPreviewContentType] = useState<string | null>(
-    null,
-  );
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
   const [pathSuggestions, setPathSuggestions] = useState<PathSuggestion[]>([]);
@@ -1309,10 +1255,6 @@ export default function BrowserPage({
   const prefixDeleteMarkersRef = useRef(prefixDeleteMarkers);
   const prefixVersionKeyMarkerRef = useRef(prefixVersionKeyMarker);
   const prefixVersionIdMarkerRef = useRef(prefixVersionIdMarker);
-  const objectVersionsRef = useRef(objectVersions);
-  const objectDeleteMarkersRef = useRef(objectDeleteMarkers);
-  const objectVersionKeyMarkerRef = useRef(objectVersionKeyMarker);
-  const objectVersionIdMarkerRef = useRef(objectVersionIdMarker);
   const lazyColumnCacheRef = useRef<Record<string, LazyColumnCacheEntry>>({});
   const lazyListItemsByIdRef = useRef<Map<string, BrowserItem>>(new Map());
   const lazyQueueRef = useRef<string[]>([]);
@@ -1320,8 +1262,6 @@ export default function BrowserPage({
   const lazyInFlightRef = useRef(0);
   const accountIdForApiRef = useRef(accountIdForApi);
   const bucketAccessByNameRef = useRef(bucketAccessByName);
-  const inspectedItemRef = useRef<BrowserItem | null>(null);
-  const previewObjectUrlRef = useRef<string | null>(null);
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
   const contextCountIdRef = useRef(0);
   const bucketInspectorRequestIdRef = useRef(0);
@@ -3270,141 +3210,6 @@ export default function BrowserPage({
     [accountIdForApi, bucketName, hasS3AccountContext, isVersioningEnabled, normalizedPrefix],
   );
 
-  const loadObjectVersions = useCallback(
-    async (opts?: {
-      append?: boolean;
-      keyMarker?: string | null;
-      versionIdMarker?: string | null;
-      targetKey?: string | null;
-    }) => {
-      if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
-      const targetKey = opts?.targetKey ?? inspectedItemRef.current?.key ?? null;
-      if (!targetKey) return;
-      if (!opts?.append) {
-        setObjectVersionsLoading(true);
-        setObjectVersionsError(null);
-      } else {
-        setObjectVersionsLoading(true);
-      }
-      const resolvedKeyMarker =
-        opts?.keyMarker !== undefined
-          ? opts.keyMarker
-          : objectVersionKeyMarkerRef.current;
-      const resolvedVersionIdMarker =
-        opts?.versionIdMarker !== undefined
-          ? opts.versionIdMarker
-          : objectVersionIdMarkerRef.current;
-      try {
-        const data = await listObjectVersions(accountIdForApi, bucketName, {
-          key: targetKey,
-          keyMarker: resolvedKeyMarker ?? undefined,
-          versionIdMarker: resolvedVersionIdMarker ?? undefined,
-          maxKeys: VERSIONS_PAGE_SIZE,
-        });
-        const mergedVersions = opts?.append
-          ? [...objectVersionsRef.current, ...data.versions]
-          : data.versions;
-        const mergedDeleteMarkers = opts?.append
-          ? [...objectDeleteMarkersRef.current, ...data.delete_markers]
-          : data.delete_markers;
-        const versionsLimitReached =
-          mergedVersions.length > VERSIONS_LIST_HARD_LIMIT ||
-          mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
-        setObjectVersions(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
-        setObjectDeleteMarkers(
-          mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT),
-        );
-        if (versionsLimitReached) {
-          setObjectVersionKeyMarker(null);
-          setObjectVersionIdMarker(null);
-          setWarningMessage(
-            `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
-          );
-        } else {
-          setObjectVersionKeyMarker(data.next_key_marker ?? null);
-          setObjectVersionIdMarker(data.next_version_id_marker ?? null);
-        }
-      } catch (err) {
-        setObjectVersionsError(
-          extractApiError(err, "Unable to list versions for this object."),
-        );
-        if (!opts?.append) {
-          setObjectVersions([]);
-          setObjectDeleteMarkers([]);
-        }
-      } finally {
-        setObjectVersionsLoading(false);
-      }
-    },
-    [accountIdForApi, bucketName, hasS3AccountContext, isVersioningEnabled],
-  );
-
-  const loadObjectVersionsModal = async (opts?: {
-    append?: boolean;
-    keyMarker?: string | null;
-    versionIdMarker?: string | null;
-    targetKey?: string | null;
-  }) => {
-    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
-    const targetKey = opts?.targetKey ?? objectVersionsModalKey ?? null;
-    if (!targetKey) return;
-    if (!opts?.append) {
-      setObjectVersionsModalLoading(true);
-      setObjectVersionsModalError(null);
-    } else {
-      setObjectVersionsModalLoading(true);
-    }
-    const resolvedKeyMarker =
-      opts?.keyMarker !== undefined
-        ? opts.keyMarker
-        : objectVersionModalKeyMarker;
-    const resolvedVersionIdMarker =
-      opts?.versionIdMarker !== undefined
-        ? opts.versionIdMarker
-        : objectVersionModalIdMarker;
-    try {
-      const data = await listObjectVersions(accountIdForApi, bucketName, {
-        key: targetKey,
-        keyMarker: resolvedKeyMarker ?? undefined,
-        versionIdMarker: resolvedVersionIdMarker ?? undefined,
-        maxKeys: VERSIONS_PAGE_SIZE,
-      });
-      const mergedVersions = opts?.append
-        ? [...objectVersionsModal, ...data.versions]
-        : data.versions;
-      const mergedDeleteMarkers = opts?.append
-        ? [...objectDeleteMarkersModal, ...data.delete_markers]
-        : data.delete_markers;
-      const versionsLimitReached =
-        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT ||
-        mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
-      setObjectVersionsModal(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
-      setObjectDeleteMarkersModal(
-        mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT),
-      );
-      if (versionsLimitReached) {
-        setObjectVersionModalKeyMarker(null);
-        setObjectVersionModalIdMarker(null);
-        setWarningMessage(
-          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`,
-        );
-      } else {
-        setObjectVersionModalKeyMarker(data.next_key_marker ?? null);
-        setObjectVersionModalIdMarker(data.next_version_id_marker ?? null);
-      }
-    } catch (err) {
-      setObjectVersionsModalError(
-        extractApiError(err, "Unable to list versions for this object."),
-      );
-      if (!opts?.append) {
-        setObjectVersionsModal([]);
-        setObjectDeleteMarkersModal([]);
-      }
-    } finally {
-      setObjectVersionsModalLoading(false);
-    }
-  };
-
   useLayoutEffect(() => {
     if (previousAccountIdRef.current === accountIdForApi) {
       return;
@@ -3582,17 +3387,14 @@ export default function BrowserPage({
     setDeletedObjectsNextVersionIdMarker(null);
     setDeletedObjectsIsTruncated(false);
     setShowPrefixVersions(false);
-    closeObjectVersionsModal();
     setPrefixVersions([]);
     setPrefixDeleteMarkers([]);
     setPrefixVersionsError(null);
     setPrefixVersionKeyMarker(null);
     setPrefixVersionIdMarker(null);
-    setObjectVersions([]);
-    setObjectDeleteMarkers([]);
-    setObjectVersionsError(null);
-    setObjectVersionKeyMarker(null);
-    setObjectVersionIdMarker(null);
+    setObjectDetailsTarget((prev) =>
+      prev?.initialTab === "versions" ? null : prev,
+    );
   }, [bucketName, isVersioningEnabled]);
 
   useEffect(() => {
@@ -4015,71 +3817,6 @@ export default function BrowserPage({
     objects,
     prefixes,
   ]);
-
-  const sortOptions = [
-    {
-      id: "name-asc",
-      label: "Name (A-Z)",
-      key: "name",
-      direction: "asc" as const,
-    },
-    {
-      id: "name-desc",
-      label: "Name (Z-A)",
-      key: "name",
-      direction: "desc" as const,
-    },
-    {
-      id: "modified-desc",
-      label: "Last modified (newest)",
-      key: "modified",
-      direction: "desc" as const,
-    },
-    {
-      id: "modified-asc",
-      label: "Last modified (oldest)",
-      key: "modified",
-      direction: "asc" as const,
-    },
-    {
-      id: "size-desc",
-      label: "Size (largest)",
-      key: "size",
-      direction: "desc" as const,
-    },
-    {
-      id: "size-asc",
-      label: "Size (smallest)",
-      key: "size",
-      direction: "asc" as const,
-    },
-    {
-      id: "storageClass-asc",
-      label: "Storage class (A-Z)",
-      key: "storageClass",
-      direction: "asc" as const,
-    },
-    {
-      id: "storageClass-desc",
-      label: "Storage class (Z-A)",
-      key: "storageClass",
-      direction: "desc" as const,
-    },
-    {
-      id: "etag-asc",
-      label: "ETag (A-Z)",
-      key: "etag",
-      direction: "asc" as const,
-    },
-    {
-      id: "etag-desc",
-      label: "ETag (Z-A)",
-      key: "etag",
-      direction: "desc" as const,
-    },
-  ];
-  const activeSort =
-    sortOptions.find((option) => option.id === sortId) ?? sortOptions[0];
 
   const listItems = useMemo(
     () =>
@@ -4521,11 +4258,6 @@ export default function BrowserPage({
   const selectionHasDeleted = selectionInfo.hasDeleted;
   const canSelectionActions = selectionInfo.items.length > 0;
 
-  const previewKind = useMemo(() => {
-    if (!previewItem) return null;
-    return previewKindForItem(previewItem, previewContentType);
-  }, [previewContentType, previewItem]);
-
   const layoutClass =
     isFoldersPanelVisible && isInspectorPanelVisible
       ? "lg:grid-cols-[280px_minmax(0,1fr)_320px]"
@@ -4549,14 +4281,6 @@ export default function BrowserPage({
   const prefixVersionRows = useMemo(
     () => buildVersionRows(prefixVersions, prefixDeleteMarkers),
     [prefixDeleteMarkers, prefixVersions],
-  );
-  const objectVersionRows = useMemo(
-    () => buildVersionRows(objectVersions, objectDeleteMarkers),
-    [objectDeleteMarkers, objectVersions],
-  );
-  const objectVersionModalRows = useMemo(
-    () => buildVersionRows(objectVersionsModal, objectDeleteMarkersModal),
-    [objectDeleteMarkersModal, objectVersionsModal],
   );
 
   const currentPath = useMemo(() => {
@@ -4660,6 +4384,27 @@ export default function BrowserPage({
     ? `${bucketName}/${inspectedItem.key}`
     : currentPath;
 
+  const openObjectDetails = (
+    item: BrowserItem,
+    requestedTab: ObjectDetailsTabId,
+  ) => {
+    if (item.type !== "file") return;
+    let initialTab = requestedTab;
+    if (item.isDeleted) {
+      setWarningMessage(
+        "This object is deleted. Open versions to inspect or restore it.",
+      );
+      if (!isVersioningEnabled) {
+        return;
+      }
+      initialTab = "versions";
+    } else if (requestedTab === "versions" && !isVersioningEnabled) {
+      initialTab = "preview";
+    }
+    setActiveItem(item);
+    setObjectDetailsTarget({ item, initialTab });
+  };
+
   const openItemPrimaryAction = (item: BrowserItem) => {
     if (item.type === "folder") {
       handleOpenItem(item);
@@ -4667,14 +4412,18 @@ export default function BrowserPage({
     }
     if (item.isDeleted) {
       if (isVersioningEnabled) {
-        openObjectVersionsModal(item);
+        openObjectDetails(item, "versions");
       }
       return;
     }
-    handlePreviewItem(item);
+    openObjectDetails(item, "preview");
   };
 
   const openItemDetails = (item: BrowserItem) => {
+    if (item.type === "file") {
+      openObjectDetails(item, item.isDeleted ? "versions" : "properties");
+      return;
+    }
     if (!canUseInspectorPanel) return;
     setSelectedIds([item.id]);
     setSelectionAnchorId(item.id);
@@ -4700,49 +4449,16 @@ export default function BrowserPage({
   };
 
   const openAdvancedForItem = (item: BrowserItem) => {
-    if (item.isDeleted) return;
-    setActiveItem(item);
-    setShowAdvancedModal(true);
+    openObjectDetails(item, "properties");
+  };
+
+  const handlePreviewItem = (item: BrowserItem) => {
+    openObjectDetails(item, "preview");
   };
 
   const handleOpenItem = (item: BrowserItem) => {
     if (item.type !== "folder") return;
     handleSelectPrefix(item.key);
-  };
-
-  const clearPreviewObjectUrl = useCallback(() => {
-    if (!previewObjectUrlRef.current) return;
-    URL.revokeObjectURL(previewObjectUrlRef.current);
-    previewObjectUrlRef.current = null;
-  }, []);
-
-  const closePreview = () => {
-    clearPreviewObjectUrl();
-    setPreviewItem(null);
-    setPreviewUrl(null);
-    setPreviewContentType(null);
-    setPreviewLoading(false);
-    setPreviewError(null);
-  };
-
-  const handlePreviewItem = (item: BrowserItem) => {
-    if (item.type !== "file") return;
-    if (item.isDeleted) {
-      setWarningMessage(
-        "This object is deleted. Open versions to inspect or restore it.",
-      );
-      if (isVersioningEnabled) {
-        openObjectVersionsModal(item);
-      }
-      return;
-    }
-    setActiveItem(item);
-    clearPreviewObjectUrl();
-    setPreviewError(null);
-    setPreviewUrl(null);
-    setPreviewContentType(null);
-    setPreviewLoading(true);
-    setPreviewItem(item);
   };
 
   const handleSelectPrefix = (nextPrefix: string) => {
@@ -4861,13 +4577,8 @@ export default function BrowserPage({
     setStatusMessage(null);
     setWarningMessage(null);
     setIsEditingPath(false);
-    clearPreviewObjectUrl();
-    setPreviewItem(null);
-    setPreviewUrl(null);
-    setPreviewContentType(null);
-    setPreviewLoading(false);
-    setPreviewError(null);
-  }, [accountIdForApi, bucketName, clearPreviewObjectUrl, prefix]);
+    setObjectDetailsTarget(null);
+  }, [accountIdForApi, bucketName, prefix]);
 
   useEffect(() => {
     lazyColumnCacheRef.current = lazyColumnCache;
@@ -4905,28 +4616,12 @@ export default function BrowserPage({
   ]);
 
   useEffect(() => {
-    objectVersionsRef.current = objectVersions;
-    objectDeleteMarkersRef.current = objectDeleteMarkers;
-    objectVersionKeyMarkerRef.current = objectVersionKeyMarker;
-    objectVersionIdMarkerRef.current = objectVersionIdMarker;
-  }, [
-    objectDeleteMarkers,
-    objectVersionIdMarker,
-    objectVersionKeyMarker,
-    objectVersions,
-  ]);
-
-  useEffect(() => {
     accountIdForApiRef.current = accountIdForApi;
   }, [accountIdForApi]);
 
   useEffect(() => {
     bucketAccessByNameRef.current = bucketAccessByName;
   }, [bucketAccessByName]);
-
-  useEffect(() => {
-    inspectedItemRef.current = inspectedItem;
-  }, [inspectedItem]);
 
   useEffect(() => {
     lazyListItemsByIdRef.current = listItemById;
@@ -5133,217 +4828,6 @@ export default function BrowserPage({
       setStorageFilter("all");
     }
   }, [searchableStorageClasses, storageFilter]);
-
-  useEffect(() => {
-    if (
-      !bucketName ||
-      !inspectedItem ||
-      inspectedItem.type === "folder" ||
-      !hasS3AccountContext
-    ) {
-      setInspectedMetadata(null);
-      setInspectedTags([]);
-      setInspectedTagsVersionId(null);
-      setMetadataError(null);
-      setMetadataLoading(false);
-      return;
-    }
-    if (inspectedItem.isDeleted) {
-      setInspectedMetadata(null);
-      setInspectedTags([]);
-      setInspectedTagsVersionId(inspectedItem.deleteMarkerVersionId ?? null);
-      setMetadataError(
-        "Latest state: deleted (delete marker). Open versions to restore or remove marker.",
-      );
-      setMetadataLoading(false);
-      return;
-    }
-    let isMounted = true;
-    setMetadataLoading(true);
-    setMetadataError(null);
-    Promise.all([
-      fetchObjectMetadata(
-        accountIdForApi,
-        bucketName,
-        inspectedItem.key,
-        null,
-        sseCustomerKeyBase64,
-      ),
-      getObjectTags(accountIdForApi, bucketName, inspectedItem.key),
-    ])
-      .then(([meta, tags]) => {
-        if (!isMounted) return;
-        setInspectedMetadata(meta);
-        setInspectedTags(tags.tags ?? []);
-        setInspectedTagsVersionId(tags.version_id ?? null);
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        setMetadataError(
-          extractApiError(err, "Unable to load object details."),
-        );
-        setInspectedMetadata(null);
-        setInspectedTags([]);
-        setInspectedTagsVersionId(null);
-      })
-      .finally(() => {
-        if (isMounted) {
-          setMetadataLoading(false);
-        }
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem, sseCustomerKeyBase64]);
-
-  useEffect(() => {
-    if (
-      !previewItem ||
-      !bucketName ||
-      !hasS3AccountContext ||
-      !accountIdForApi
-    ) {
-      return;
-    }
-    if (previewItem.type !== "file" || previewItem.isDeleted) {
-      setPreviewError(
-        previewItem.isDeleted
-          ? "Preview unavailable for deleted objects."
-          : "Preview is available for files only.",
-      );
-      setPreviewLoading(false);
-      return;
-    }
-    let isMounted = true;
-    setPreviewLoading(true);
-    setPreviewError(null);
-    setPreviewUrl(null);
-    setPreviewContentType(null);
-    clearPreviewObjectUrl();
-
-    const loadPreview = async () => {
-      const contentTypePromise = fetchObjectMetadata(
-        accountIdForApi,
-        bucketName,
-        previewItem.key,
-        null,
-        sseCustomerKeyBase64,
-      )
-        .then((meta) => meta.content_type ?? null)
-        .catch(() => null);
-
-      if (useProxyTransfers || sseActive) {
-        const blob = useProxyTransfers
-          ? await proxyDownload(
-              accountIdForApi,
-              bucketName,
-              previewItem.key,
-              undefined,
-              sseCustomerKeyBase64,
-            )
-          : await (async () => {
-              const presign = await presignObjectRequest(bucketName, {
-                key: previewItem.key,
-                operation: "get_object",
-                expires_in: 900,
-              });
-              const response = await fetch(presign.url, {
-                headers: presign.headers || undefined,
-              });
-              if (!response.ok) {
-                throw new Error("Preview download failed.");
-              }
-              return response.blob();
-            })();
-        if (!isMounted) return;
-        const url = URL.createObjectURL(blob);
-        previewObjectUrlRef.current = url;
-        setPreviewUrl(url);
-        const contentType = (await contentTypePromise) ?? (blob.type || null);
-        setPreviewContentType(contentType);
-        return;
-      }
-
-      const [contentType, presign] = await Promise.all([
-        contentTypePromise,
-        presignObjectRequest(bucketName, {
-          key: previewItem.key,
-          operation: "get_object",
-          expires_in: 900,
-        }),
-      ]);
-      if (!isMounted) return;
-      setPreviewContentType(contentType);
-      setPreviewUrl(presign.url);
-    };
-
-    loadPreview()
-      .catch(() => {
-        if (!isMounted) return;
-        setPreviewError(
-          useProxyTransfers
-            ? "Unable to load preview."
-            : "Unable to generate preview URL.",
-        );
-      })
-      .finally(() => {
-        if (isMounted) {
-          setPreviewLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    accountIdForApi,
-    bucketName,
-    clearPreviewObjectUrl,
-    hasS3AccountContext,
-    presignObjectRequest,
-    previewItem,
-    sseActive,
-    sseCustomerKeyBase64,
-    useProxyTransfers,
-  ]);
-
-  useEffect(() => {
-    if (!showAdvancedModal) return;
-    if (!inspectedItem || inspectedItem.type !== "file") {
-      setShowAdvancedModal(false);
-    }
-  }, [inspectedItem, showAdvancedModal]);
-
-  useEffect(() => {
-    if (
-      !bucketName ||
-      !hasS3AccountContext ||
-      !inspectedItem ||
-      inspectedItem.type === "folder" ||
-      !isVersioningEnabled
-    ) {
-      setObjectVersions([]);
-      setObjectDeleteMarkers([]);
-      setObjectVersionsError(null);
-      setObjectVersionKeyMarker(null);
-      setObjectVersionIdMarker(null);
-      return;
-    }
-    setObjectVersionKeyMarker(null);
-    setObjectVersionIdMarker(null);
-    loadObjectVersions({
-      append: false,
-      keyMarker: null,
-      versionIdMarker: null,
-      targetKey: inspectedItem.key,
-    });
-  }, [
-    bucketName,
-    hasS3AccountContext,
-    inspectedItem,
-    isVersioningEnabled,
-    loadObjectVersions,
-  ]);
 
   const loadBucketInspectorData = useCallback(
     async (force = false) => {
@@ -6593,14 +6077,6 @@ export default function BrowserPage({
         versionIdMarker: null,
       });
     }
-    if (inspectedItem?.type === "file") {
-      loadObjectVersions({
-        append: false,
-        keyMarker: null,
-        versionIdMarker: null,
-        targetKey: inspectedItem.key,
-      });
-    }
   };
 
   const canLoadMoreObjectResults = Boolean(
@@ -6903,39 +6379,7 @@ export default function BrowserPage({
   };
 
   const openObjectVersionsModal = (item: BrowserItem) => {
-    if (
-      !bucketName ||
-      !hasS3AccountContext ||
-      item.type !== "file" ||
-      !isVersioningEnabled
-    )
-      return;
-    setObjectVersionsModalKey(item.key);
-    setObjectVersionsModalPath(`${bucketName}/${item.key}`);
-    setObjectVersionsModal([]);
-    setObjectDeleteMarkersModal([]);
-    setObjectVersionsModalError(null);
-    setObjectVersionModalKeyMarker(null);
-    setObjectVersionModalIdMarker(null);
-    setShowObjectVersionsModal(true);
-    loadObjectVersionsModal({
-      append: false,
-      keyMarker: null,
-      versionIdMarker: null,
-      targetKey: item.key,
-    });
-  };
-
-  const closeObjectVersionsModal = () => {
-    setShowObjectVersionsModal(false);
-    setObjectVersionsModalKey(null);
-    setObjectVersionsModalPath(null);
-    setObjectVersionsModal([]);
-    setObjectDeleteMarkersModal([]);
-    setObjectVersionsModalLoading(false);
-    setObjectVersionsModalError(null);
-    setObjectVersionModalKeyMarker(null);
-    setObjectVersionModalIdMarker(null);
+    openObjectDetails(item, "versions");
   };
 
   const requestObjectsRefresh = useCallback(
@@ -9105,7 +8549,7 @@ export default function BrowserPage({
         "This item is deleted. Open it or use versions to restore content before downloading.",
       );
       if (item.type === "file" && isVersioningEnabled) {
-        openObjectVersionsModal(item);
+        openObjectDetails(item, "versions");
       }
       return;
     }
@@ -10266,7 +9710,7 @@ export default function BrowserPage({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const shortcutsBlocked =
-      showAdvancedModal ||
+      Boolean(objectDetailsTarget) ||
       showNewFolderModal ||
       showOperationsModal ||
       showBulkAttributesModal ||
@@ -10274,9 +9718,7 @@ export default function BrowserPage({
       showSseCustomerModal ||
       showCleanupModal ||
       showPrefixVersions ||
-      showObjectVersionsModal ||
       showMultipartUploadsModal ||
-      Boolean(previewItem) ||
       Boolean(confirmDialog) ||
       Boolean(copyDialog);
     const isEditableTarget = (target: EventTarget | null) => {
@@ -10348,12 +9790,11 @@ export default function BrowserPage({
     handlePasteItems,
     hasS3AccountContext,
     listItems,
-    previewItem,
     selectedItems,
     setActiveRowId,
     setSelectionAnchorId,
     startEditingPath,
-    showAdvancedModal,
+    objectDetailsTarget,
     showNewFolderModal,
     showBulkAttributesModal,
     showBulkRestoreModal,
@@ -10362,41 +9803,13 @@ export default function BrowserPage({
     confirmDialog,
     copyDialog,
     showMultipartUploadsModal,
-    showObjectVersionsModal,
     showOperationsModal,
     showPrefixVersions,
     syncInspectorTabWithSelection,
   ]);
 
-  const refreshInspectedObject = async (targetKey?: string) => {
-    if (!bucketName || !hasS3AccountContext || !targetKey) return;
-    setMetadataLoading(true);
-    setMetadataError(null);
-    try {
-      const [meta, tags] = await Promise.all([
-        fetchObjectMetadata(
-          accountIdForApi,
-          bucketName,
-          targetKey,
-          null,
-          sseCustomerKeyBase64,
-        ),
-        getObjectTags(accountIdForApi, bucketName, targetKey),
-      ]);
-      setInspectedMetadata(meta);
-      setInspectedTags(tags.tags ?? []);
-      setInspectedTagsVersionId(tags.version_id ?? null);
-    } catch (err) {
-      setMetadataError(extractApiError(err, "Unable to load object details."));
-      setInspectedMetadata(null);
-      setInspectedTags([]);
-      setInspectedTagsVersionId(null);
-    } finally {
-      setMetadataLoading(false);
-    }
-  };
-
-  const refreshVersionsForKey = async (targetKey: string) => {
+  const refreshObjectListing = async (_targetKey: string) => {
+    await loadObjects({ prefixOverride: prefix });
     if (showPrefixVersions) {
       await loadPrefixVersions({
         append: false,
@@ -10404,28 +9817,6 @@ export default function BrowserPage({
         versionIdMarker: null,
       });
     }
-    if (inspectedItem?.type === "file" && inspectedItem.key === targetKey) {
-      await loadObjectVersions({
-        append: false,
-        keyMarker: null,
-        versionIdMarker: null,
-        targetKey,
-      });
-    }
-    if (showObjectVersionsModal && objectVersionsModalKey === targetKey) {
-      await loadObjectVersionsModal({
-        append: false,
-        keyMarker: null,
-        versionIdMarker: null,
-        targetKey,
-      });
-    }
-  };
-
-  const handleAdvancedRefresh = async (targetKey: string) => {
-    await refreshInspectedObject(targetKey);
-    await loadObjects({ prefixOverride: prefix });
-    await refreshVersionsForKey(targetKey);
   };
 
   const handleRestoreVersion = async (item: BrowserObjectVersion) => {
@@ -10461,14 +9852,12 @@ export default function BrowserPage({
         controller.signal,
       );
       setStatusMessage(`Restored version ${item.version_id}`);
-      await loadObjects({ prefixOverride: prefix });
-      await refreshVersionsForKey(item.key);
+      await refreshObjectListing(item.key);
     } catch (err) {
       if (isOperationAborted(err, controller)) {
         completionStatus = "cancelled";
         setStatusMessage("Restore version cancelled.");
-        await loadObjects({ prefixOverride: prefix });
-        await refreshVersionsForKey(item.key);
+        await refreshObjectListing(item.key);
       } else {
         completionStatus = "failed";
         completionError = formatOperationError(
@@ -10529,8 +9918,7 @@ export default function BrowserPage({
       setStatusMessage(
         item.is_delete_marker ? "Delete marker removed." : "Version deleted.",
       );
-      await loadObjects({ prefixOverride: prefix });
-      await refreshVersionsForKey(item.key);
+      await refreshObjectListing(item.key);
     } catch (err) {
       if (isOperationAborted(err, controller)) {
         completionStatus = "cancelled";
@@ -10539,8 +9927,7 @@ export default function BrowserPage({
             ? "Delete marker removal cancelled."
             : "Delete version cancelled.",
         );
-        await loadObjects({ prefixOverride: prefix });
-        await refreshVersionsForKey(item.key);
+        await refreshObjectListing(item.key);
       } else {
         completionStatus = "failed";
         completionError = formatOperationError(
@@ -14104,18 +13491,8 @@ export default function BrowserPage({
                             </div>
                             <div className={inspectorSectionCardClasses}>
                               <p className={inspectorSectionTitleClasses}>
-                                Metadata
+                                Summary
                               </p>
-                              {metadataLoading && (
-                                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                  Loading metadata...
-                                </p>
-                              )}
-                              {metadataError && (
-                                <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                                  {metadataError}
-                                </p>
-                              )}
                               <div className="grid gap-2 ui-caption text-slate-600 dark:text-slate-300">
                                 <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
                                   <span className="text-slate-500">Path</span>
@@ -14139,17 +13516,16 @@ export default function BrowserPage({
                                 </div>
                                 <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
                                   <span className="text-slate-500">
-                                    Content type
+                                    Type
                                   </span>
-                                  <span className="min-w-0 break-all text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedMetadata?.content_type ??
-                                      "unknown"}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
-                                  <span className="text-slate-500">ETag</span>
-                                  <span className="min-w-0 break-all text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedMetadata?.etag ?? "-"}
+                                  <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedItem.type === "folder"
+                                      ? inspectedItem.isDeleted
+                                        ? "Deleted folder"
+                                        : "Prefix"
+                                      : inspectedItem.isDeleted
+                                        ? "Deleted object"
+                                        : "Object"}
                                   </span>
                                 </div>
                                 <div className="grid grid-cols-[minmax(0,6.5rem)_minmax(0,1fr)] items-start gap-x-3 gap-y-1">
@@ -14157,55 +13533,72 @@ export default function BrowserPage({
                                     Storage class
                                   </span>
                                   <span className="min-w-0 break-words text-right font-semibold text-slate-700 dark:text-slate-100">
-                                    {inspectedMetadata?.storage_class ??
-                                      inspectedItem.storageClass ??
-                                      "-"}
+                                    {inspectedItem.storageClass ?? "-"}
                                   </span>
                                 </div>
                               </div>
                             </div>
                             <div className={inspectorSectionCardClasses}>
                               <p className={inspectorSectionTitleClasses}>
-                                Tags
+                                Quick actions
                               </p>
                               <div className="flex flex-wrap gap-2">
-                                {inspectedTags.length ? (
-                                  inspectedTags.map((tag) => (
-                                    <span
-                                      key={`${tag.key}:${tag.value}`}
-                                      className={chromeChipButtonClasses}
-                                    >
-                                      {tag.key}
-                                      {tag.value ? `=${tag.value}` : ""}
-                                    </span>
-                                  ))
+                                {inspectedItem.type === "folder" ? (
+                                  <button
+                                    type="button"
+                                    className={chromeChipButtonClasses}
+                                    onClick={() => handleOpenItem(inspectedItem)}
+                                  >
+                                    Open
+                                  </button>
                                 ) : (
-                                  <span className="ui-caption text-slate-500 dark:text-slate-400">
-                                    No tags defined.
-                                  </span>
+                                  <>
+                                    {!inspectedItem.isDeleted && (
+                                      <button
+                                        type="button"
+                                        className={chromeChipButtonClasses}
+                                        onClick={() =>
+                                          openObjectDetails(
+                                            inspectedItem,
+                                            "preview",
+                                          )
+                                        }
+                                      >
+                                        Preview
+                                      </button>
+                                    )}
+                                    {isVersioningEnabled && (
+                                      <button
+                                        type="button"
+                                        className={chromeChipButtonClasses}
+                                        onClick={() =>
+                                          openObjectDetails(
+                                            inspectedItem,
+                                            "versions",
+                                          )
+                                        }
+                                      >
+                                        Versions
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className={chromeChipButtonClasses}
+                                      onClick={() =>
+                                        openObjectDetails(
+                                          inspectedItem,
+                                          inspectedItem.isDeleted
+                                            ? "versions"
+                                            : "properties",
+                                        )
+                                      }
+                                    >
+                                      Open object details
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </div>
-                            {isVersioningEnabled &&
-                              inspectedItem.type === "file" && (
-                                <BrowserObjectVersionsList
-                                  versions={objectVersionRows}
-                                  loading={objectVersionsLoading}
-                                  error={objectVersionsError}
-                                  canLoadMore={Boolean(
-                                    objectVersionKeyMarker ||
-                                    objectVersionIdMarker,
-                                  )}
-                                  onLoadMore={() =>
-                                    loadObjectVersions({
-                                      append: true,
-                                      targetKey: inspectedItem.key,
-                                    })
-                                  }
-                                  onRestoreVersion={handleRestoreVersion}
-                                  onDeleteVersion={handleDeleteVersion}
-                                />
-                              )}
                           </div>
                         ) : (
                           <div className={inspectorEmptyStateClasses}>
@@ -14279,16 +13672,27 @@ export default function BrowserPage({
           handleResetVisibleColumns();
         }}
       />
-      <BrowserPreviewModal
-        previewItem={previewItem}
-        previewUrl={previewUrl}
-        previewContentType={previewContentType}
-        previewKind={previewKind}
-        previewLoading={previewLoading}
-        previewError={previewError}
-        onClose={closePreview}
-        onDownload={handleDownloadItems}
-      />
+      {objectDetailsTarget && objectDetailsTarget.item.type === "file" && (
+        <BrowserObjectDetailsModal
+          accountId={accountIdForApi}
+          bucketName={bucketName}
+          item={objectDetailsTarget.item}
+          initialTab={objectDetailsTarget.initialTab}
+          versioningEnabled={isVersioningEnabled}
+          sseCustomerKeyBase64={sseCustomerKeyBase64}
+          useProxyTransfers={useProxyTransfers}
+          sseActive={sseActive}
+          copyUrlDisabled={sseActive}
+          copyUrlDisabledReason={copyUrlDisabledReason}
+          presignObjectRequest={presignObjectRequest}
+          onClose={() => setObjectDetailsTarget(null)}
+          onDownload={handleDownloadTarget}
+          onCopyUrl={(item) => handleCopyUrl(item)}
+          onRefreshBrowserObjects={refreshObjectListing}
+          onRestoreVersion={handleRestoreVersion}
+          onDeleteVersion={handleDeleteVersion}
+        />
+      )}
       {configBucketName && bucketConfigurationEnabled && (
         <Modal
           title={`Configure bucket · ${configBucketName}`}
@@ -14490,19 +13894,6 @@ export default function BrowserPage({
           </form>
         </Modal>
       )}
-      {showAdvancedModal && inspectedItem && inspectedItem.type === "file" && (
-        <ObjectAdvancedModal
-          accountId={accountIdForApi}
-          bucketName={bucketName}
-          item={inspectedItem}
-          metadata={inspectedMetadata}
-          tags={inspectedTags}
-          tagsVersionId={inspectedTagsVersionId}
-          sseCustomerKeyBase64={sseCustomerKeyBase64}
-          onClose={() => setShowAdvancedModal(false)}
-          onRefresh={handleAdvancedRefresh}
-        />
-      )}
       {showMultipartUploadsModal && bucketName && hasS3AccountContext && (
         <BrowserMultipartUploadsModal
           bucketName={bucketName}
@@ -14543,38 +13934,6 @@ export default function BrowserPage({
           onDeleteVersion={handleDeleteVersion}
         />
       )}
-      {showObjectVersionsModal &&
-        isVersioningEnabled &&
-        objectVersionsModalKey &&
-        objectVersionsModalPath && (
-          <BrowserObjectVersionsModal
-            bucketName={bucketName}
-            objectKey={objectVersionsModalKey}
-            objectPath={objectVersionsModalPath}
-            objectVersionsLoading={objectVersionsModalLoading}
-            objectVersionsError={objectVersionsModalError}
-            objectVersionRows={objectVersionModalRows}
-            objectVersionKeyMarker={objectVersionModalKeyMarker}
-            objectVersionIdMarker={objectVersionModalIdMarker}
-            onClose={closeObjectVersionsModal}
-            onRefresh={() =>
-              loadObjectVersionsModal({
-                append: false,
-                keyMarker: null,
-                versionIdMarker: null,
-                targetKey: objectVersionsModalKey,
-              })
-            }
-            onLoadMore={() =>
-              loadObjectVersionsModal({
-                append: true,
-                targetKey: objectVersionsModalKey,
-              })
-            }
-            onRestoreVersion={handleRestoreVersion}
-            onDeleteVersion={handleDeleteVersion}
-          />
-        )}
       {showBulkAttributesModal && (
         <BrowserBulkAttributesModal
           bulkActionFileCount={bulkActionFileCount}

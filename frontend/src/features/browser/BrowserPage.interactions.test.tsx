@@ -30,8 +30,11 @@ const deleteObjectsMock = vi.fn();
 const updateObjectMetadataMock = vi.fn();
 const updateObjectTagsMock = vi.fn();
 const updateObjectAclMock = vi.fn();
+const getObjectLegalHoldMock = vi.fn();
+const getObjectRetentionMock = vi.fn();
 const updateObjectLegalHoldMock = vi.fn();
 const updateObjectRetentionMock = vi.fn();
+const restoreObjectMock = vi.fn();
 const cleanupObjectVersionsMock = vi.fn();
 const createFolderMock = vi.fn();
 const presignObjectMock = vi.fn();
@@ -41,6 +44,8 @@ const initiateMultipartUploadMock = vi.fn();
 const presignPartMock = vi.fn();
 const completeMultipartUploadMock = vi.fn();
 const abortMultipartUploadMock = vi.fn();
+const createObjectUrlMock = vi.fn();
+const revokeObjectUrlMock = vi.fn();
 
 const getBucketStatsMock = vi.fn();
 const getBucketPropertiesMock = vi.fn();
@@ -103,10 +108,15 @@ vi.mock("../../api/browser", async () => {
       updateObjectMetadataMock(...args),
     updateObjectTags: (...args: unknown[]) => updateObjectTagsMock(...args),
     updateObjectAcl: (...args: unknown[]) => updateObjectAclMock(...args),
+    getObjectLegalHold: (...args: unknown[]) =>
+      getObjectLegalHoldMock(...args),
+    getObjectRetention: (...args: unknown[]) =>
+      getObjectRetentionMock(...args),
     updateObjectLegalHold: (...args: unknown[]) =>
       updateObjectLegalHoldMock(...args),
     updateObjectRetention: (...args: unknown[]) =>
       updateObjectRetentionMock(...args),
+    restoreObject: (...args: unknown[]) => restoreObjectMock(...args),
     cleanupObjectVersions: (...args: unknown[]) =>
       cleanupObjectVersionsMock(...args),
     createFolder: (...args: unknown[]) => createFolderMock(...args),
@@ -300,12 +310,6 @@ async function pasteFromCurrentPath(user: ReturnType<typeof userEvent.setup>) {
   await user.click(within(menu).getByRole("menuitem", { name: /^Paste/ }));
 }
 
-async function pasteFromContextPanel(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("tab", { name: "Context" }));
-  const panel = screen.getByRole("tabpanel", { name: "Context" });
-  await user.click(within(panel).getByRole("button", { name: /^Paste/ }));
-}
-
 async function openOperationsModal(user: ReturnType<typeof userEvent.setup>) {
   await user.click(
     within(getContextToolbar()).getByRole("button", { name: "Operations" }),
@@ -346,6 +350,17 @@ describe("BrowserPage interactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    createObjectUrlMock.mockReturnValue("blob:preview-url");
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: createObjectUrlMock,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: revokeObjectUrlMock,
+    });
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockImplementation(
       async (_input?: RequestInfo | URL, init?: RequestInit) => {
@@ -487,8 +502,15 @@ describe("BrowserPage interactions", () => {
     updateObjectMetadataMock.mockResolvedValue(undefined);
     updateObjectTagsMock.mockResolvedValue(undefined);
     updateObjectAclMock.mockResolvedValue(undefined);
+    getObjectLegalHoldMock.mockResolvedValue({ key: "a.txt", status: "OFF" });
+    getObjectRetentionMock.mockResolvedValue({
+      key: "a.txt",
+      mode: null,
+      retain_until: null,
+    });
     updateObjectLegalHoldMock.mockResolvedValue(undefined);
     updateObjectRetentionMock.mockResolvedValue(undefined);
+    restoreObjectMock.mockResolvedValue(undefined);
     cleanupObjectVersionsMock.mockResolvedValue({
       deleted_versions: 1,
       deleted_delete_markers: 0,
@@ -2217,6 +2239,10 @@ describe("BrowserPage interactions", () => {
 
   it("opens the single-row actions menu from More actions and only opens Details on explicit choice", async () => {
     const user = userEvent.setup();
+    getBucketVersioningMock.mockResolvedValue({
+      enabled: true,
+      status: "Enabled",
+    });
     renderPage({ defaultShowInspector: false });
 
     await user.click(await findRowByLabel("a.txt"));
@@ -2230,6 +2256,9 @@ describe("BrowserPage interactions", () => {
       }),
     );
     const menu = await screen.findByRole("menu");
+    const menuButtons = within(menu)
+      .getAllByRole("button")
+      .map((button) => button.textContent?.trim());
 
     expect(
       within(menu).getByRole("button", { name: "Details" }),
@@ -2250,11 +2279,15 @@ describe("BrowserPage interactions", () => {
       within(menu).getByRole("button", { name: "Cut" }),
     ).toBeInTheDocument();
     expect(
-      within(menu).getByRole("button", { name: "Advanced" }),
-    ).toBeInTheDocument();
-    expect(
       within(menu).getByRole("button", { name: "Delete" }),
     ).toBeInTheDocument();
+    expect(menuButtons.indexOf("Preview")).toBeLessThan(
+      menuButtons.indexOf("Versions"),
+    );
+    expect(menuButtons.indexOf("Versions")).toBeLessThan(
+      menuButtons.indexOf("Details"),
+    );
+    expect(menuButtons).not.toContain("Advanced");
     expect(
       screen.queryByRole("tablist", { name: "Inspector tabs" }),
     ).not.toBeInTheDocument();
@@ -2262,33 +2295,20 @@ describe("BrowserPage interactions", () => {
     await user.click(within(menu).getByRole("button", { name: "Details" }));
 
     expect(
-      await screen.findByRole("tablist", { name: "Inspector tabs" }),
+      await screen.findByRole("dialog", { name: "Object details · a.txt" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Properties" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    expect(
-      within(screen.getByRole("tabpanel", { name: "Details" })).getByText(
-        "a.txt",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
   });
 
   it("does not show a focused fallback in Selection tab when no object is selected", async () => {
     const user = userEvent.setup();
     renderPage({ defaultShowInspector: true });
 
-    await user.click(
-      within(await findRowByLabel("a.txt")).getByRole("button", {
-        name: "More actions",
-      }),
-    );
-    await user.click(
-      within(await screen.findByRole("menu")).getByRole("button", {
-        name: "Details",
-      }),
-    );
+    await user.click(await findRowByLabel("a.txt"));
     const objectsList = screen.getByLabelText("Objects list");
     (objectsList as HTMLDivElement).focus();
     fireEvent.keyDown(objectsList, { key: "Escape" });
@@ -2468,6 +2488,98 @@ describe("BrowserPage interactions", () => {
           "b.txt",
         ),
       ).toBeInTheDocument();
+    });
+  });
+
+  it("routes preview, versions and object details entries into one modal with lazy tab loading", async () => {
+    const user = userEvent.setup();
+    getBucketVersioningMock.mockResolvedValue({
+      enabled: true,
+      status: "Enabled",
+    });
+    renderPage({ defaultShowInspector: true });
+
+    const rowA = await findRowByLabel("a.txt");
+    await user.click(
+      within(rowA).getByRole("button", {
+        name: "Preview",
+      }),
+    );
+
+    let dialog = await screen.findByRole("dialog", {
+      name: "Object details · a.txt",
+    });
+    expect(
+      within(dialog).getByRole("tab", { name: "Preview" }),
+    ).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => {
+      expect(presignObjectMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        expect.objectContaining({
+          key: "a.txt",
+          operation: "get_object",
+          response_content_disposition: expect.stringContaining("inline;"),
+        }),
+        null,
+      );
+    });
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://example.test/a.txt",
+        expect.objectContaining({
+          headers: {},
+        }),
+      );
+    });
+    expect(await within(dialog).findByText("direct-bytes")).toBeInTheDocument();
+    expect(within(dialog).queryByTitle("Object preview")).not.toBeInTheDocument();
+    expect(listObjectVersionsMock).not.toHaveBeenCalled();
+    expect(getObjectLegalHoldMock).not.toHaveBeenCalled();
+    expect(getObjectRetentionMock).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
+
+    await user.click(rowA);
+    await user.click(screen.getByRole("tab", { name: "Details" }));
+    const panel = screen.getByRole("tabpanel", { name: "Details" });
+
+    await user.click(within(panel).getByRole("button", { name: "Versions" }));
+    dialog = await screen.findByRole("dialog", {
+      name: "Object details · a.txt",
+    });
+    expect(
+      within(dialog).getByRole("tab", { name: "Versions" }),
+    ).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => {
+      expect(listObjectVersionsMock).toHaveBeenCalledTimes(1);
+    });
+    expect(getObjectLegalHoldMock).not.toHaveBeenCalled();
+    expect(getObjectRetentionMock).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
+
+    await user.click(
+      within(panel).getByRole("button", { name: "Open object details" }),
+    );
+    dialog = await screen.findByRole("dialog", {
+      name: "Object details · a.txt",
+    });
+    expect(
+      within(dialog).getByRole("tab", { name: "Properties" }),
+    ).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => {
+      expect(getObjectTagsMock).toHaveBeenCalledTimes(1);
+    });
+    expect(getObjectLegalHoldMock).not.toHaveBeenCalled();
+    expect(getObjectRetentionMock).not.toHaveBeenCalled();
+
+    await user.click(
+      within(dialog).getByRole("tab", { name: "Access & Protection" }),
+    );
+    await waitFor(() => {
+      expect(getObjectLegalHoldMock).toHaveBeenCalledTimes(1);
+      expect(getObjectRetentionMock).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -3440,9 +3552,19 @@ describe("BrowserPage interactions", () => {
     renderPage({ defaultShowInspector: true });
     await user.click(await findRowByLabel("a.txt"));
     await user.click(screen.getByRole("tab", { name: "Details" }));
-    await screen.findByRole("button", { name: "Restore" });
+    await user.click(
+      within(screen.getByRole("tabpanel", { name: "Details" })).getByRole(
+        "button",
+        { name: "Versions" },
+      ),
+    );
 
-    await user.click(screen.getByRole("button", { name: "Restore" }));
+    const detailsDialog = await screen.findByRole("dialog", {
+      name: "Object details · a.txt",
+    });
+    await within(detailsDialog).findByRole("button", { name: "Restore" });
+
+    await user.click(within(detailsDialog).getByRole("button", { name: "Restore" }));
     let dialog = await openOperationsModal(user);
     await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
 
@@ -3456,7 +3578,9 @@ describe("BrowserPage interactions", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
 
-    await user.click(screen.getByRole("button", { name: "Delete version" }));
+    await user.click(
+      within(detailsDialog).getByRole("button", { name: "Delete version" }),
+    );
     const confirm = await screen.findByRole("dialog", { name: "Delete version" });
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
 
@@ -3482,7 +3606,9 @@ describe("BrowserPage interactions", () => {
     await user.click(
       within(getActionsToolbar()).getByRole("button", { name: "Delete" }),
     );
-    let confirm = await screen.findByRole("dialog", { name: "Delete objects" });
+    const confirm = await screen.findByRole("dialog", {
+      name: "Delete objects",
+    });
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
 
     await waitFor(() => {

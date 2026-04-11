@@ -178,7 +178,7 @@ describe("BrowserPage multipart uploads modal", () => {
     expect(await screen.findByText("Multipart upload aborted for uploads/big-file.bin.")).toBeInTheDocument();
   });
 
-  it("opens the row actions menu from More actions and only opens the inspector after choosing Details", async () => {
+  it("opens the row actions menu from More actions and opens object details only after choosing Details", async () => {
     const user = userEvent.setup();
 
     listBrowserObjectsMock.mockResolvedValue({
@@ -204,13 +204,24 @@ describe("BrowserPage multipart uploads modal", () => {
     await user.click(moreButton);
     const menu = await screen.findByRole("menu");
 
-    expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
+    const menuButtons = within(menu)
+      .getAllByRole("button")
+      .map((button) => button.textContent?.trim());
+
     expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
+    expect(menuButtons.indexOf("Preview")).toBeLessThan(menuButtons.indexOf("Details"));
+    expect(menuButtons).not.toContain("Advanced");
     expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
 
     await user.click(within(menu).getByRole("button", { name: "Details" }));
 
-    expect(await screen.findByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
+    const propertiesTab = await screen.findByRole("tab", { name: "Properties" });
+    expect(screen.getByText(/Object details · .*monthly\.csv/i)).toBeInTheDocument();
+    expect(propertiesTab).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
   });
 });
