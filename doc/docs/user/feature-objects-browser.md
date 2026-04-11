@@ -61,6 +61,6 @@ Object-level operations are executed with current context credentials and reflec
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/feature-objects-browser.light.png" alt="Browser operations overview showing a running delete on selected objects" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/feature-objects-browser.dark.png" alt="Browser operations overview showing a running delete on selected objects" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/feature-objects-browser.light.png" alt="Browser operations overview showing a running delete on selected objects" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/feature-objects-browser.dark.png" alt="Browser operations overview showing a running delete on selected objects" loading="lazy">
 </div>

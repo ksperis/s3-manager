@@ -33,6 +33,6 @@ SNS topics are managed within the selected manager context.
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/feature-topics.light.png" alt="SNS Topics feature page with topic actions" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/feature-topics.dark.png" alt="SNS Topics feature page with topic actions" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/feature-topics.light.png" alt="SNS Topics feature page with topic actions" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/feature-topics.dark.png" alt="SNS Topics feature page with topic actions" loading="lazy">
 </div>

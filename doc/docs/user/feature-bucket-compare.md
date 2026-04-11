@@ -35,6 +35,6 @@ You get an actionable diff view to support controlled bucket alignment.
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/feature-bucket-compare.light.png" alt="Bucket compare result showing detected differences and remediation actions" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/feature-bucket-compare.dark.png" alt="Bucket compare result showing detected differences and remediation actions" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/feature-bucket-compare.light.png" alt="Bucket compare result showing detected differences and remediation actions" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/feature-bucket-compare.dark.png" alt="Bucket compare result showing detected differences and remediation actions" loading="lazy">
 </div>

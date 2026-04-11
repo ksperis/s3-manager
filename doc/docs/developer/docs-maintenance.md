@@ -47,10 +47,13 @@ User pages in `doc/docs/user/*.md` normally include exactly one themed screensho
 
 ```html
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../assets/screenshots/user/<page-screenshot>.light.png" alt="..." loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../assets/screenshots/user/<page-screenshot>.dark.png" alt="..." loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/<page-screenshot>.light.png" alt="..." loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/<page-screenshot>.dark.png" alt="..." loading="lazy">
 </div>
 ```
+
+Use `../../assets/...` for published user pages under `/user/<slug>/`.
+Only `doc/docs/user/index.md` stays on `../assets/...` because it renders at `/user/`.
 
 Published docs automatically enhance screenshots under `assets/screenshots/` so a click opens them in a fullscreen viewer.
 

@@ -724,6 +724,10 @@
         collection.refresh();
       }
     });
+
+    if (isLightboxOpen()) {
+      updateLightbox();
+    }
   }
 
   function observeThemeChanges() {
