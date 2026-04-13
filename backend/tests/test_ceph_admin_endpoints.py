@@ -143,7 +143,10 @@ def test_get_ceph_admin_endpoint_access_disables_metrics_without_supervision_cre
     monkeypatch.setattr(
         endpoints_router,
         "get_rgw_admin_client",
-        lambda **kwargs: SimpleNamespace(get_account=lambda account_id, allow_not_found=True: None),
+        lambda **kwargs: SimpleNamespace(
+            account_api_supported=True,
+            get_account=lambda account_id, allow_not_found=True, allow_not_implemented=False: None,
+        ),
     )
 
     payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint)
@@ -159,7 +162,9 @@ def test_get_ceph_admin_endpoint_access_disables_accounts_when_account_api_unava
     monkeypatch.setattr(endpoints_router, "validate_ceph_admin_service_identity", lambda _endpoint: None)
 
     class _FailingClient:
-        def get_account(self, account_id, allow_not_found=True):
+        account_api_supported = None
+
+        def get_account(self, account_id, allow_not_found=True, allow_not_implemented=False):
             raise endpoints_router.RGWAdminError("RGW admin error 403: AccessDenied")
 
     monkeypatch.setattr(endpoints_router, "get_rgw_admin_client", lambda **kwargs: _FailingClient())
@@ -178,7 +183,9 @@ def test_get_ceph_admin_endpoint_access_allows_admin_when_admin_feature_disabled
     captured: list[str] = []
 
     class _Client:
-        def get_account(self, account_id, allow_not_found=True):
+        account_api_supported = True
+
+        def get_account(self, account_id, allow_not_found=True, allow_not_implemented=False):
             return None
 
     def fake_get_rgw_admin_client(**kwargs):

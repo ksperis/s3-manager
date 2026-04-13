@@ -96,7 +96,12 @@ class FakeAccountsAdmin:
         )
         return {}
 
-    def get_account(self, account_id: str, allow_not_found: bool = True):
+    def get_account(
+        self,
+        account_id: str,
+        allow_not_found: bool = True,
+        allow_not_implemented: bool = False,
+    ):
         return {
             "id": account_id,
             "name": f"Account-{account_id}",
@@ -226,7 +231,12 @@ class FakeUsersAdmin:
             "user_quota": {"enabled": True, "max_size": 512, "max_objects": 10},
         }
 
-    def get_account(self, account_id: str, allow_not_found: bool = True):
+    def get_account(
+        self,
+        account_id: str,
+        allow_not_found: bool = True,
+        allow_not_implemented: bool = False,
+    ):
         self.get_account_calls += 1
         return {"id": account_id, "name": f"Account-{account_id}"}
 

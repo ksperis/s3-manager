@@ -378,8 +378,14 @@ class StorageEndpointsService:
             try:
                 # Probe /admin/account directly with a synthetic account id.
                 # If the account does not exist, RGW returns not_found and the API is still available.
-                admin_client.get_account("RGW00000000000000000", allow_not_found=True)
-                result.account = True
+                admin_client.get_account(
+                    "RGW00000000000000000",
+                    allow_not_found=True,
+                    allow_not_implemented=True,
+                )
+                result.account = admin_client.account_api_supported is True
+                if not result.account:
+                    result.account_error = "RGW account API is unavailable."
             except RGWAdminError as exc:
                 result.account_error = str(exc)
 

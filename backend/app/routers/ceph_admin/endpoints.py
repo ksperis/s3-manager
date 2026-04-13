@@ -200,8 +200,12 @@ def get_ceph_admin_endpoint_access(
                     verify_tls=bool(getattr(endpoint, "verify_tls", True)),
                 )
                 # Probe /admin/account directly; not_found still means the API is reachable.
-                admin_client.get_account("RGW00000000000000000", allow_not_found=True)
-                can_accounts = True
+                admin_client.get_account(
+                    "RGW00000000000000000",
+                    allow_not_found=True,
+                    allow_not_implemented=True,
+                )
+                can_accounts = admin_client.account_api_supported is True
             except RGWAdminError:
                 can_accounts = False
     return CephAdminEndpointAccess(

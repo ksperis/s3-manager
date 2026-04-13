@@ -22,7 +22,12 @@ class FakeRGWAdmin:
         self.list_accounts_include_details.append(bool(include_details))
         return self._accounts_payload
 
-    def get_account(self, account_id: str, allow_not_found: bool = True):
+    def get_account(
+        self,
+        account_id: str,
+        allow_not_found: bool = True,
+        allow_not_implemented: bool = False,
+    ):
         self.get_account_calls += 1
         payload = self._account_details.get(account_id)
         if payload is None:

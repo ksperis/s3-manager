@@ -41,7 +41,12 @@ class FakeRGWAdmin:
                 return entry
         return {"not_found": True} if allow_not_found else None
 
-    def get_account(self, owner_id: str, allow_not_found: bool = True):
+    def get_account(
+        self,
+        owner_id: str,
+        allow_not_found: bool = True,
+        allow_not_implemented: bool = False,
+    ):
         self.get_account_calls += 1
         return {"id": owner_id, "name": f"Owner-{owner_id}"}
 
@@ -535,6 +540,62 @@ def test_ceph_admin_bucket_listing_owner_name_lookup_deduplicates_same_owner():
     assert rgw_admin.get_account_calls == 1
 
 
+def test_ceph_admin_bucket_listing_owner_name_skips_account_lookup_when_feature_disabled():
+    class FeatureDisabledAdmin(FakeRGWAdmin):
+        def __init__(self, payload: list[dict]):
+            super().__init__(payload)
+
+        def get_account(
+            self,
+            owner_id: str,
+            allow_not_found: bool = True,
+            allow_not_implemented: bool = False,
+        ):
+            self.get_account_calls += 1
+            return {"id": owner_id, "name": f"Owner-{owner_id}"}
+
+        def get_user(
+            self,
+            uid: str,
+            tenant: str | None = None,
+            allow_not_found: bool = True,
+        ):
+            self.get_user_calls += 1
+            return {"uid": uid, "display_name": f"Display-{uid}"}
+
+    payload = [
+        {"name": "bucket-a", "owner": "user-alpha"},
+        {"name": "bucket-b", "owner": "user-beta"},
+    ]
+    rgw_admin = FeatureDisabledAdmin(payload)
+    ctx = SimpleNamespace(
+        endpoint=SimpleNamespace(
+            id=174,
+            provider="ceph",
+            features_config="features:\n  account:\n    enabled: false\n",
+        ),
+        rgw_admin=rgw_admin,
+        access_key="AKIA_TEST",
+        secret_key="SECRET_TEST",
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=["owner_name"],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.owner_name for item in response.items] == ["Display-user-alpha", "Display-user-beta"]
+    assert rgw_admin.get_account_calls == 0
+    assert rgw_admin.get_user_calls == 2
+
+
 def test_ceph_admin_bucket_listing_owner_name_filter_accounts_only_limits_rgw_calls():
     payload = [
         {"name": "bucket-account", "owner": "RGW00000000000000001"},
@@ -611,7 +672,12 @@ def test_ceph_admin_bucket_listing_owner_name_filter_is_strict_for_user_display_
     ctx, _ = _build_ctx(endpoint_id=183, payload=payload)
 
     class NoDisplayNameAdmin(FakeRGWAdmin):
-        def get_account(self, owner_id: str, allow_not_found: bool = True):
+        def get_account(
+            self,
+            owner_id: str,
+            allow_not_found: bool = True,
+            allow_not_implemented: bool = False,
+        ):
             return None
 
         def get_user(self, uid: str, tenant: str | None = None, allow_not_found: bool = True):
@@ -649,7 +715,12 @@ def test_ceph_admin_bucket_listing_owner_name_filter_is_strict_for_account_name(
     ctx, _ = _build_ctx(endpoint_id=184, payload=payload)
 
     class IdOnlyAccountAdmin(FakeRGWAdmin):
-        def get_account(self, owner_id: str, allow_not_found: bool = True):
+        def get_account(
+            self,
+            owner_id: str,
+            allow_not_found: bool = True,
+            allow_not_implemented: bool = False,
+        ):
             return {"id": owner_id}
 
         def get_user(self, uid: str, tenant: str | None = None, allow_not_found: bool = True):
@@ -687,7 +758,12 @@ def test_ceph_admin_bucket_listing_owner_name_filter_is_strict_for_account_name_
     ctx, _ = _build_ctx(endpoint_id=185, payload=payload)
 
     class AccountNameOnlyAdmin(FakeRGWAdmin):
-        def get_account(self, owner_id: str, allow_not_found: bool = True):
+        def get_account(
+            self,
+            owner_id: str,
+            allow_not_found: bool = True,
+            allow_not_implemented: bool = False,
+        ):
             return {"id": owner_id, "account_name": f"Owner-{owner_id}"}
 
         def get_user(self, uid: str, tenant: str | None = None, allow_not_found: bool = True):
@@ -735,7 +811,12 @@ def test_ceph_admin_bucket_listing_owner_name_filter_loads_owner_metadata_when_b
             }
             return {"name": bucket_name, "owner": owners.get(bucket_name)}
 
-        def get_account(self, owner_id: str, allow_not_found: bool = True):
+        def get_account(
+            self,
+            owner_id: str,
+            allow_not_found: bool = True,
+            allow_not_implemented: bool = False,
+        ):
             return None
 
         def get_user(self, uid: str, tenant: str | None = None, allow_not_found: bool = True):

@@ -284,6 +284,7 @@ def test_detect_features_warns_when_usage_log_endpoint_is_unavailable(db_session
     class FakeRGWClient:
         def __init__(self, access_key: str):
             self.access_key = access_key
+            self.account_api_supported = None
 
         def get_user_by_access_key(self, access_key: str, allow_not_found: bool = False):
             assert self.access_key == "AKIA-ADMIN"
@@ -301,10 +302,17 @@ def test_detect_features_warns_when_usage_log_endpoint_is_unavailable(db_session
             assert show_summary is False
             return {"not_found": True}
 
-        def get_account(self, account_id: str, allow_not_found: bool = False):
+        def get_account(
+            self,
+            account_id: str,
+            allow_not_found: bool = False,
+            allow_not_implemented: bool = False,
+        ):
             assert self.access_key == "AKIA-ADMIN"
             assert account_id == "RGW00000000000000000"
             assert allow_not_found is True
+            assert allow_not_implemented is True
+            self.account_api_supported = True
             return None
 
     monkeypatch.setattr(
@@ -443,6 +451,7 @@ def test_detect_features_reuses_stored_secrets_in_edit_mode(db_session, monkeypa
     class FakeRGWClient:
         def __init__(self, access_key: str):
             self.access_key = access_key
+            self.account_api_supported = None
 
         def get_user_by_access_key(self, access_key: str, allow_not_found: bool = False):
             assert self.access_key == endpoint.admin_access_key
@@ -460,10 +469,17 @@ def test_detect_features_reuses_stored_secrets_in_edit_mode(db_session, monkeypa
             assert show_summary is False
             return {"entries": [], "summary": []}
 
-        def get_account(self, account_id: str, allow_not_found: bool = False):
+        def get_account(
+            self,
+            account_id: str,
+            allow_not_found: bool = False,
+            allow_not_implemented: bool = False,
+        ):
             assert self.access_key == endpoint.admin_access_key
             assert account_id == "RGW00000000000000000"
             assert allow_not_found is True
+            assert allow_not_implemented is True
+            self.account_api_supported = True
             return {"id": "RGW00000000000000001"}
 
     def _fake_get_rgw_admin_client(**kwargs):

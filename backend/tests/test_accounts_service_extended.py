@@ -18,15 +18,28 @@ class _FakeRGWAdmin:
         self.account_payload: dict = {"user_list": []}
         self.raise_topics: Exception | None = None
         self.raise_get_account: Exception | None = None
+        self.get_account_calls = 0
+        self.account_api_supported: bool | None = None
+        self.unsupported_account_api = False
 
     def list_topics(self, account_id: str | None = None):
         if self.raise_topics:
             raise self.raise_topics
         return self.topics_by_account.get(account_id)
 
-    def get_account(self, account_id: str, allow_not_found: bool = False):
+    def get_account(
+        self,
+        account_id: str,
+        allow_not_found: bool = False,
+        allow_not_implemented: bool = False,
+    ):
+        self.get_account_calls += 1
         if self.raise_get_account:
             raise self.raise_get_account
+        if allow_not_implemented and self.unsupported_account_api:
+            self.account_api_supported = False
+            return None
+        self.account_api_supported = True
         return self.account_payload
 
     def get_account_quota(self, account_id: str):
@@ -143,6 +156,21 @@ def test_account_rgw_users_paths(db_session):
     admin.raise_get_account = None
     admin.account_payload = {"user_list": ["RGW1-admin", "alice", "bob", "alice"]}
     assert service._account_rgw_users("RGW1", None, admin) == (2, ["alice", "bob"])
+
+
+def test_account_rgw_users_skips_optional_lookup_when_accounts_api_is_unavailable(db_session):
+    service, admin = _service(db_session)
+    admin.unsupported_account_api = True
+
+    assert service._account_rgw_users("RGW1", None, admin) == (None, None)
+    assert admin.get_account_calls == 1
+
+
+def test_account_rgw_users_skips_lookup_when_endpoint_capabilities_disable_accounts(db_session):
+    service, admin = _service(db_session)
+
+    assert service._account_rgw_users("RGW1", None, admin, endpoint_capabilities={"account": False}) == (None, None)
+    assert admin.get_account_calls == 0
 
 
 def test_update_account_user_links_missing_user(db_session, monkeypatch):

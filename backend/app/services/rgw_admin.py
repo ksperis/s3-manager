@@ -4,6 +4,7 @@ import re
 import secrets
 from datetime import datetime, timezone
 from time import perf_counter
+from threading import Lock
 from typing import Any, Dict, Optional, Tuple
 
 import requests
@@ -55,6 +56,19 @@ class RGWAdminClient:
             if bucket_list_stats_timeout_seconds is not None
             else float(settings.rgw_admin_bucket_list_stats_timeout_seconds)
         )
+        self._account_api_support_state = "unknown"
+        self._account_api_support_lock = Lock()
+
+    @property
+    def account_api_supported(self) -> Optional[bool]:
+        if self._account_api_support_state == "supported":
+            return True
+        if self._account_api_support_state == "unsupported":
+            return False
+        return None
+
+    def _mark_account_api_support(self, supported: bool) -> None:
+        self._account_api_support_state = "supported" if supported else "unsupported"
 
     def _request(
         self,
@@ -395,6 +409,7 @@ class RGWAdminClient:
         )
         if result.get("not_found"):
             raise RGWAdminError("RGW account API not available or account endpoint returned 404.")
+        self._mark_account_api_support(True)
         if result.get("conflict") and account_id:
             existing = self.get_account(account_id, allow_not_found=True)
             if existing and not existing.get("not_found"):
@@ -447,6 +462,10 @@ class RGWAdminClient:
             allow_not_found=True,
             allow_not_implemented=True,
         )
+        if isinstance(result, dict) and result.get("not_implemented"):
+            self._mark_account_api_support(False)
+            return result
+        self._mark_account_api_support(True)
         if isinstance(result, dict) and result.get("conflict"):
             existing = self.get_account(account_id, allow_not_found=True)
             if existing and not existing.get("not_found"):
@@ -458,7 +477,7 @@ class RGWAdminClient:
             "id": account_id,
             "format": "json",
         }
-        return self._request(
+        result = self._request(
             "DELETE",
             "/admin/account",
             params=params,
@@ -466,6 +485,11 @@ class RGWAdminClient:
             allow_not_found=True,
             allow_not_implemented=True,
         )
+        if isinstance(result, dict) and result.get("not_implemented"):
+            self._mark_account_api_support(False)
+            return result
+        self._mark_account_api_support(True)
+        return result
 
     def set_account_quota(
         self,
@@ -490,7 +514,7 @@ class RGWAdminClient:
         if max_objects is not None:
             params["max-objects"] = int(max_objects)
         params["enabled"] = "true" if enabled else "false"
-        return self._request(
+        result = self._request(
             "PUT",
             "/admin/account",
             params=params,
@@ -498,13 +522,60 @@ class RGWAdminClient:
             allow_not_found=True,
             allow_not_implemented=True,
         )
+        if isinstance(result, dict) and result.get("not_implemented"):
+            self._mark_account_api_support(False)
+            return result
+        self._mark_account_api_support(True)
+        return result
 
-    def get_account(self, account_id: str, allow_not_found: bool = False) -> Optional[Dict[str, Any]]:
+    def _get_account_once(
+        self,
+        account_id: str,
+        *,
+        allow_not_found: bool = False,
+        allow_not_implemented: bool = False,
+    ) -> Optional[Dict[str, Any]]:
         params: Dict[str, Any] = {"id": account_id, "format": "json"}
-        result = self._request("GET", "/admin/account", params=params, allow_not_found=allow_not_found)
+        result = self._request(
+            "GET",
+            "/admin/account",
+            params=params,
+            allow_not_found=allow_not_found,
+            allow_not_implemented=allow_not_implemented,
+        )
+        if result.get("not_implemented"):
+            self._mark_account_api_support(False)
+            return None
+        self._mark_account_api_support(True)
         if result.get("not_found"):
             return None
         return result
+
+    def get_account(
+        self,
+        account_id: str,
+        allow_not_found: bool = False,
+        allow_not_implemented: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        if not allow_not_implemented:
+            return self._get_account_once(account_id, allow_not_found=allow_not_found)
+        if self.account_api_supported is False:
+            return None
+        if self.account_api_supported is None:
+            with self._account_api_support_lock:
+                if self.account_api_supported is False:
+                    return None
+                if self.account_api_supported is None:
+                    return self._get_account_once(
+                        account_id,
+                        allow_not_found=allow_not_found,
+                        allow_not_implemented=True,
+                    )
+        return self._get_account_once(
+            account_id,
+            allow_not_found=allow_not_found,
+            allow_not_implemented=True,
+        )
 
     def get_account_quota(self, account_id: str) -> Tuple[Optional[int], Optional[int]]:
         payload = self.get_account(account_id, allow_not_found=True) or {}

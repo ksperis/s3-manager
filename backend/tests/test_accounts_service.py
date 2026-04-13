@@ -88,7 +88,12 @@ class FakeRGWAdmin:
     def list_users(self):
         return []
 
-    def get_account(self, account_id: str, allow_not_found: bool = False):
+    def get_account(
+        self,
+        account_id: str,
+        allow_not_found: bool = False,
+        allow_not_implemented: bool = False,
+    ):
         return {"id": account_id, "user_list": []}
 
 
@@ -136,7 +141,12 @@ class FakeRGWAdminImport:
     def __init__(self):
         self.calls: list[tuple[str, Optional[str]]] = []
 
-    def get_account(self, account_id: str, allow_not_found: bool = False):
+    def get_account(
+        self,
+        account_id: str,
+        allow_not_found: bool = False,
+        allow_not_implemented: bool = False,
+    ):
         return {"id": account_id, "name": "LegacyS3Account", "user_list": []}
 
     def get_user(self, uid: str, tenant: Optional[str] = None, allow_not_found: bool = False):
@@ -195,7 +205,12 @@ class FakeRGWAdminImportCreatesRoot:
     def __init__(self):
         self.created_users: list[tuple[str, Optional[str]]] = []
 
-    def get_account(self, account_id: str, allow_not_found: bool = False):
+    def get_account(
+        self,
+        account_id: str,
+        allow_not_found: bool = False,
+        allow_not_implemented: bool = False,
+    ):
         return {"id": account_id, "name": "MissingRootS3Account", "user_list": []}
 
     def get_user(self, uid: str, tenant: Optional[str] = None, allow_not_found: bool = False):
@@ -264,7 +279,12 @@ class FakeRGWDeleteAdmin:
     def list_users(self):
         return []
 
-    def get_account(self, account_id: str, allow_not_found: bool = False):
+    def get_account(
+        self,
+        account_id: str,
+        allow_not_found: bool = False,
+        allow_not_implemented: bool = False,
+    ):
         return {"id": account_id, "user_list": []}
 
 

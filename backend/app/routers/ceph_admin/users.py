@@ -90,6 +90,13 @@ def _normalize_optional_str(value: Any) -> Optional[str]:
     return _common_normalize_optional_str(value)
 
 
+def _optional_account_lookup_enabled(ctx: CephAdminContext) -> bool | None:
+    try:
+        return resolve_feature_flags(ctx.endpoint).account_enabled
+    except Exception:
+        return None
+
+
 def _extract_user_payload(raw: dict) -> dict:
     if not isinstance(raw, dict):
         return {}
@@ -316,16 +323,27 @@ def _enrich_users(
         account_id = _normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
         if "account" in requested:
             user.account_id = account_id
+            payload_account_name = _normalize_optional_str(
+                payload.get("account_name") or user_payload.get("account_name")
+            )
             if account_id:
                 if account_id not in account_name_by_id:
-                    try:
-                        account_payload = ctx.rgw_admin.get_account(account_id, allow_not_found=True)
-                    except RGWAdminError as exc:
-                        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+                    account_payload = None
+                    if _optional_account_lookup_enabled(ctx) is not False:
+                        try:
+                            account_payload = ctx.rgw_admin.get_account(
+                                account_id,
+                                allow_not_found=True,
+                                allow_not_implemented=True,
+                            )
+                        except RGWAdminError as exc:
+                            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
                     account_name_by_id[account_id] = _normalize_optional_str(
                         account_payload.get("name") if isinstance(account_payload, dict) else None
                     )
-                user.account_name = account_name_by_id.get(account_id)
+                user.account_name = account_name_by_id.get(account_id) or payload_account_name
+            else:
+                user.account_name = payload_account_name
         if "profile" in requested:
             user.full_name = _normalize_optional_str(user_payload.get("display_name") or payload.get("display_name"))
             user.email = _normalize_optional_str(user_payload.get("email") or payload.get("email"))
@@ -551,18 +569,29 @@ def _load_user_payload(uid: str, tenant: Optional[str], ctx: CephAdminContext) -
     return payload
 
 
-def _resolve_account_name(account_id: Optional[str], ctx: CephAdminContext) -> Optional[str]:
+def _resolve_account_name(
+    account_id: Optional[str],
+    ctx: CephAdminContext,
+    *,
+    payload_account_name: Optional[str] = None,
+) -> Optional[str]:
     if not account_id:
-        return None
+        return payload_account_name
+    if _optional_account_lookup_enabled(ctx) is False:
+        return payload_account_name
     try:
-        account_payload = ctx.rgw_admin.get_account(account_id, allow_not_found=True)
+        account_payload = ctx.rgw_admin.get_account(
+            account_id,
+            allow_not_found=True,
+            allow_not_implemented=True,
+        )
     except RGWAdminError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     if not isinstance(account_payload, dict) or account_payload.get("not_found"):
-        return None
+        return payload_account_name
     return _normalize_optional_str(
         account_payload.get("name") or account_payload.get("display_name") or account_payload.get("account_name")
-    )
+    ) or payload_account_name
 
 
 def _build_metrics_from_buckets(payload: Any) -> CephAdminEntityMetrics:
@@ -838,7 +867,13 @@ def create_rgw_user(
     resolved_account_id = _normalize_optional_str(
         user_payload.get("account_id") or _extract_user_payload(user_payload).get("account_id")
     )
-    account_name = _resolve_account_name(resolved_account_id, ctx)
+    account_name = _resolve_account_name(
+        resolved_account_id,
+        ctx,
+        payload_account_name=_normalize_optional_str(
+            user_payload.get("account_name") or _extract_user_payload(user_payload).get("account_name")
+        ),
+    )
     keys = _serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=lookup_tenant))
     detail = _build_user_detail(
         user_payload,
@@ -868,7 +903,13 @@ def get_rgw_user_detail(
 ) -> CephAdminRgwUserDetail:
     payload = _load_user_payload(user_id, tenant, ctx)
     account_id = _normalize_optional_str(payload.get("account_id") or _extract_user_payload(payload).get("account_id"))
-    account_name = _resolve_account_name(account_id, ctx)
+    account_name = _resolve_account_name(
+        account_id,
+        ctx,
+        payload_account_name=_normalize_optional_str(
+            payload.get("account_name") or _extract_user_payload(payload).get("account_name")
+        ),
+    )
     keys = _serialize_access_keys(ctx.rgw_admin.list_user_keys(user_id.strip(), tenant=tenant))
     return _build_user_detail(
         payload,
@@ -969,7 +1010,13 @@ def update_rgw_user_config(
     _invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     payload = _load_user_payload(uid, tenant, ctx)
     account_id = _normalize_optional_str(payload.get("account_id") or _extract_user_payload(payload).get("account_id"))
-    account_name = _resolve_account_name(account_id, ctx)
+    account_name = _resolve_account_name(
+        account_id,
+        ctx,
+        payload_account_name=_normalize_optional_str(
+            payload.get("account_name") or _extract_user_payload(payload).get("account_name")
+        ),
+    )
     keys = _serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=tenant))
     return _build_user_detail(
         payload,

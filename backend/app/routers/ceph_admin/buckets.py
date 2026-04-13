@@ -437,9 +437,19 @@ def _resolve_owner_name(
         return None
 
     name: str | None = None
-    if owner_scope in {"any", "account"}:
+    account_lookup_enabled: bool | None
+    try:
+        account_lookup_enabled = resolve_feature_flags(ctx.endpoint).account_enabled
+    except Exception:
+        account_lookup_enabled = None
+
+    if owner_scope in {"any", "account"} and account_lookup_enabled is not False:
         try:
-            account_payload = ctx.rgw_admin.get_account(owner_id, allow_not_found=True)
+            account_payload = ctx.rgw_admin.get_account(
+                owner_id,
+                allow_not_found=True,
+                allow_not_implemented=True,
+            )
         except RGWAdminError:
             account_payload = None
         if isinstance(account_payload, dict) and not account_payload.get("not_found"):

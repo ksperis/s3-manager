@@ -702,6 +702,35 @@ def test_account_quota_and_get_account_success_paths(monkeypatch):
     assert gb_params["enabled"] == "true"
 
 
+def test_get_account_optional_not_implemented_marks_api_unsupported_and_caches(monkeypatch):
+    client = _client()
+    captured: list[tuple[str, str, dict[str, object]]] = []
+
+    def fake_request(method: str, path: str, **kwargs):
+        captured.append((method, path, kwargs))
+        return {"not_implemented": True}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    assert client.get_account("RGW1", allow_not_found=True, allow_not_implemented=True) is None
+    assert client.get_account("RGW2", allow_not_found=True, allow_not_implemented=True) is None
+    assert client.account_api_supported is False
+    assert len(captured) == 1
+    assert captured[0][1] == "/admin/account"
+
+
+def test_get_account_strict_still_raises_when_account_api_is_unavailable(monkeypatch):
+    client = _client()
+
+    def fake_request(method: str, path: str, **kwargs):
+        raise RGWAdminError("RGW admin error 405: MethodNotAllowed")
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    with pytest.raises(RGWAdminError, match="405"):
+        client.get_account("RGW1", allow_not_found=True)
+
+
 def test_create_user_with_account_id_conflict_without_existing(monkeypatch):
     client = _client()
     monkeypatch.setattr(client, "_request", lambda *args, **kwargs: {"conflict": True})

@@ -16,6 +16,7 @@ class FakeRGWAdmin:
         self.list_users_calls = 0
         self.get_user_calls = 0
         self.get_account_calls = 0
+        self.list_user_keys_calls = 0
 
     def list_users(self):
         self.list_users_calls += 1
@@ -28,9 +29,18 @@ class FakeRGWAdmin:
             return {"not_found": True} if allow_not_found else None
         return payload
 
-    def get_account(self, account_id: str, allow_not_found: bool = True):
+    def get_account(
+        self,
+        account_id: str,
+        allow_not_found: bool = True,
+        allow_not_implemented: bool = False,
+    ):
         self.get_account_calls += 1
         return {"id": account_id, "name": f"Account-{account_id}"}
+
+    def list_user_keys(self, uid: str, tenant: str | None = None):
+        self.list_user_keys_calls += 1
+        return []
 
 
 @pytest.fixture(autouse=True)
@@ -46,9 +56,15 @@ def clear_users_listing_cache():
         users_router._RGW_USERS_PAYLOAD_CACHE.clear()
 
 
-def _build_ctx(endpoint_id: int, users_payload: list[str], user_details: dict[tuple[str | None, str], dict]):
+def _build_ctx(
+    endpoint_id: int,
+    users_payload: list[str],
+    user_details: dict[tuple[str | None, str], dict],
+    *,
+    endpoint: object | None = None,
+):
     rgw_admin = FakeRGWAdmin(users_payload=users_payload, user_details=user_details)
-    ctx = SimpleNamespace(endpoint=SimpleNamespace(id=endpoint_id), rgw_admin=rgw_admin)
+    ctx = SimpleNamespace(endpoint=endpoint or SimpleNamespace(id=endpoint_id), rgw_admin=rgw_admin)
     return ctx, rgw_admin
 
 
@@ -57,6 +73,7 @@ def _build_user_payload(
     *,
     tenant: str | None = None,
     account_id: str | None = None,
+    account_name: str | None = None,
     full_name: str | None = None,
     email: str | None = None,
     suspended: bool | None = None,
@@ -75,6 +92,8 @@ def _build_user_payload(
         },
         "account_id": account_id,
     }
+    if account_name is not None:
+        payload["account_name"] = account_name
     if quota_size is not None or quota_objects is not None:
         payload["user_quota"] = {
             "max_size": quota_size,
@@ -245,6 +264,62 @@ def test_ceph_admin_users_advanced_filter_rejects_invalid_json():
             ctx=ctx,
         )
     assert exc.value.status_code == 400
+
+
+def test_ceph_admin_users_listing_account_include_skips_lookup_when_feature_disabled():
+    users_payload = ["alpha"]
+    user_details = {
+        (None, "alpha"): _build_user_payload(
+            "alpha",
+            account_id="RGW-1",
+            account_name="Inline Account",
+        )
+    }
+    endpoint = SimpleNamespace(
+        id=16,
+        provider="ceph",
+        features_config="features:\n  account:\n    enabled: false\n",
+    )
+    ctx, rgw_admin = _build_ctx(endpoint_id=16, users_payload=users_payload, user_details=user_details, endpoint=endpoint)
+
+    response = users_router.list_rgw_users(
+        page=1,
+        page_size=25,
+        search=None,
+        advanced_filter=None,
+        sort_by="uid",
+        sort_dir="asc",
+        include=["account"],
+        ctx=ctx,
+    )
+
+    assert response.items[0].account_id == "RGW-1"
+    assert response.items[0].account_name == "Inline Account"
+    assert rgw_admin.get_account_calls == 0
+
+
+def test_ceph_admin_user_detail_preserves_payload_account_name_when_account_api_disabled():
+    users_payload = ["alpha"]
+    user_details = {
+        (None, "alpha"): _build_user_payload(
+            "alpha",
+            account_id="RGW-1",
+            account_name="Inline Account",
+        )
+    }
+    endpoint = SimpleNamespace(
+        id=17,
+        provider="ceph",
+        features_config="features:\n  account:\n    enabled: false\n",
+    )
+    ctx, rgw_admin = _build_ctx(endpoint_id=17, users_payload=users_payload, user_details=user_details, endpoint=endpoint)
+
+    detail = users_router.get_rgw_user_detail("alpha", tenant=None, ctx=ctx)
+
+    assert detail.account_id == "RGW-1"
+    assert detail.account_name == "Inline Account"
+    assert rgw_admin.get_account_calls == 0
+    assert rgw_admin.list_user_keys_calls == 1
 
 
 def test_build_user_detail_reads_default_placement_and_storage_class():

@@ -405,6 +405,7 @@ class S3AccountsService:
         account_identifier: Optional[str],
         precomputed_users: Optional[dict[str, list[str]]],
         admin: Optional[RGWAdminClient],
+        endpoint_capabilities: Optional[dict[str, bool]] = None,
     ) -> tuple[Optional[int], Optional[list[str]]]:
         normalized_key = self._normalize_account_key(account_identifier)
         if not normalized_key:
@@ -414,10 +415,18 @@ class S3AccountsService:
             return len(users), users
         if not admin:
             return None, None
+        if endpoint_capabilities is not None and not endpoint_capabilities.get("account", False):
+            return None, None
         try:
-            account_info = admin.get_account(account_identifier, allow_not_found=True)
+            account_info = admin.get_account(
+                account_identifier,
+                allow_not_found=True,
+                allow_not_implemented=True,
+            )
         except RGWAdminError as exc:
             logger.debug("Unable to fetch account info for %s: %s", account_identifier, exc)
+            return None, None
+        if getattr(admin, "account_api_supported", None) is False:
             return None, None
         if not account_info:
             return 0, []
@@ -499,6 +508,8 @@ class S3AccountsService:
 
         results: list[S3AccountSchema] = []
         for acc in db_accounts:
+            endpoint = self._get_linked_storage_endpoint(acc.storage_endpoint_id)
+            endpoint_capabilities = self._endpoint_capabilities(endpoint)
             root_meta = roots_by_account.get(acc.rgw_account_id or str(acc.id))
             used_bytes = None
             used_objects = None
@@ -518,9 +529,13 @@ class S3AccountsService:
             if include_quota and admin:
                 quota_max_size_gb, quota_max_objects = self._account_quota(acc, admin)
             if include_rgw_details and admin:
-                rgw_user_count, rgw_user_uids = self._account_rgw_users(account_identifier, None, admin)
+                rgw_user_count, rgw_user_uids = self._account_rgw_users(
+                    account_identifier,
+                    None,
+                    admin,
+                    endpoint_capabilities=endpoint_capabilities,
+                )
                 rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
-            endpoint = self._get_linked_storage_endpoint(acc.storage_endpoint_id)
             results.append(
                 S3AccountSchema(
                     id=str(account_identifier),
@@ -596,10 +611,16 @@ class S3AccountsService:
         admin = self._admin_for_account(account, allow_missing=True)
         rgw_user_count = rgw_user_uids = rgw_topic_count = rgw_topics = None
         quota_max_size_gb, quota_max_objects = self._account_quota(account, admin)
-        if admin:
-            rgw_user_count, rgw_user_uids = self._account_rgw_users(account_identifier, None, admin)
-            rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
         endpoint = self._get_linked_storage_endpoint(account.storage_endpoint_id)
+        endpoint_capabilities = self._endpoint_capabilities(endpoint)
+        if admin:
+            rgw_user_count, rgw_user_uids = self._account_rgw_users(
+                account_identifier,
+                None,
+                admin,
+                endpoint_capabilities=endpoint_capabilities,
+            )
+            rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
         return S3AccountSchema(
             id=account_identifier,
             db_id=account.id,
@@ -936,12 +957,19 @@ class S3AccountsService:
                 raise ValueError("Unable to delete RGW tenant: rgw_account_id is missing for this account.")
             admin = self._admin_for_account(account, allow_missing=False)
             account_identifier = account.rgw_account_id
+            endpoint = self._get_linked_storage_endpoint(account.storage_endpoint_id)
+            endpoint_capabilities = self._endpoint_capabilities(endpoint)
 
             # Safety: only allow RGW deletion when we can prove the tenant is empty.
             _, _, bucket_count = self._account_usage(account)
             if bucket_count is None:
                 raise ValueError("Unable to verify bucket existence; cannot delete the RGW tenant.")
-            rgw_user_count, _ = self._account_rgw_users(account_identifier, None, admin)
+            rgw_user_count, _ = self._account_rgw_users(
+                account_identifier,
+                None,
+                admin,
+                endpoint_capabilities=endpoint_capabilities,
+            )
             if rgw_user_count is None:
                 raise ValueError("Unable to verify RGW users; cannot delete the RGW tenant.")
             rgw_topic_count, _ = self._account_topics_info(account_identifier, admin)
