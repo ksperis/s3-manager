@@ -18,6 +18,7 @@ from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOp
 from app.routers import dependencies
 from app.routers.storage_ops import buckets as storage_ops_router
 from app.services import app_settings_service
+from app.services.connection_identity_service import ConnectionIdentityResolution
 from app.main import app
 
 
@@ -614,6 +615,185 @@ def test_storage_ops_applies_cheap_field_prefilter_before_feature_enrichment(cli
         assert payload["total"] == 1
         assert [item["name"] for item in payload["items"]] == ["1::alpha"]
         assert enrich_inputs == [["alpha"]]
+    finally:
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
+        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+        app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
+
+
+def test_storage_ops_owner_quota_and_usage_use_context_principal_and_resolve_connection_once(client, monkeypatch):
+    identity_calls: list[int] = []
+
+    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
+        assert workspace == "manager"
+        return [
+            ExecutionContext(
+                kind="account",
+                id="1",
+                display_name="Account A",
+                endpoint_name="Primary",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+            ),
+            ExecutionContext(
+                kind="connection",
+                id="conn-2",
+                display_name="Connection B",
+                endpoint_name="Archive",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
+            ),
+        ]
+
+    def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
+        if account_ref == "1":
+            return SimpleNamespace(
+                context_id="1",
+                rgw_account_id="RGW00000000000000011",
+                rgw_user_uid="root-11",
+                storage_endpoint=SimpleNamespace(id=11),
+            )
+        if account_ref == "conn-2":
+            return SimpleNamespace(
+                context_id="conn-2",
+                rgw_account_id=None,
+                rgw_user_uid=None,
+                storage_endpoint=SimpleNamespace(id=12),
+                _source_connection=SimpleNamespace(id=22),
+            )
+        raise AssertionError(f"unexpected context {account_ref}")
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            if account.context_id == "1":
+                return [Bucket(name="alpha", used_bytes=40, object_count=4), Bucket(name="beta", used_bytes=60, object_count=6)]
+            if account.context_id == "conn-2":
+                return [Bucket(name="gamma", used_bytes=20, object_count=2), Bucket(name="delta", used_bytes=30, object_count=3)]
+            return []
+
+    def fake_resolve_rgw_identity(self, connection):  # noqa: ANN001
+        identity_calls.append(connection.id)
+        return ConnectionIdentityResolution(
+            rgw_user_uid="user-conn",
+            rgw_account_id="tenant-conn",
+            metrics_enabled=True,
+            usage_enabled=True,
+            reason=None,
+        )
+
+    def fake_enrich_buckets(self, buckets, *, include_name=False, include_quota=False, include_usage=False, usage_by_key=None):  # noqa: ANN001, ARG002
+        if include_usage:
+            total_bytes = sum(int(bucket.used_bytes or 0) for bucket in buckets)
+            total_objects = sum(int(bucket.object_count or 0) for bucket in buckets)
+            for bucket in buckets:
+                bucket.owner_used_bytes = total_bytes
+                bucket.owner_object_count = total_objects
+        for bucket in buckets:
+            if include_name:
+                bucket.owner_name = f"Owner {bucket.owner}"
+            if include_quota:
+                bucket.owner_quota_max_size_bytes = 200
+                bucket.owner_quota_max_objects = 20
+        return buckets
+
+    monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
+    monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
+    monkeypatch.setattr(storage_ops_router.ConnectionIdentityService, "resolve_rgw_identity", fake_resolve_rgw_identity)
+    monkeypatch.setattr(storage_ops_router.BucketOwnerMetadataService, "enrich_buckets", fake_enrich_buckets)
+
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
+    app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
+    try:
+        response = client.get(
+            "/api/storage-ops/buckets",
+            params=[
+                ("include", "owner_name"),
+                ("include", "owner_quota"),
+                ("include", "owner_quota_usage"),
+            ],
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["total"] == 4
+        items = {item["name"]: item for item in payload["items"]}
+
+        assert items["1::alpha"]["owner"] == "RGW00000000000000011"
+        assert items["1::alpha"]["owner_name"] == "Owner RGW00000000000000011"
+        assert items["1::alpha"]["owner_used_bytes"] == 100
+        assert items["1::alpha"]["owner_quota_max_size_bytes"] == 200
+
+        assert items["conn-2::gamma"]["tenant"] == "tenant-conn"
+        assert items["conn-2::gamma"]["owner"] == "user-conn"
+        assert items["conn-2::gamma"]["owner_name"] == "Owner user-conn"
+        assert items["conn-2::gamma"]["owner_used_bytes"] == 50
+        assert items["conn-2::gamma"]["owner_quota_max_size_bytes"] == 200
+
+        assert identity_calls == [22]
+    finally:
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
+        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+        app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
+
+
+def test_storage_ops_owner_identity_failures_leave_owner_quota_fields_null(client, monkeypatch):
+    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
+        assert workspace == "manager"
+        return [
+            ExecutionContext(
+                kind="connection",
+                id="conn-3",
+                display_name="Connection C",
+                endpoint_name="Archive",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
+            )
+        ]
+
+    def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
+        return SimpleNamespace(
+            context_id=account_ref,
+            rgw_account_id=None,
+            rgw_user_uid=None,
+            storage_endpoint=SimpleNamespace(id=13),
+            _source_connection=SimpleNamespace(id=33),
+        )
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            return [Bucket(name="orphan", used_bytes=7, object_count=1)]
+
+    def fake_resolve_rgw_identity(self, connection):  # noqa: ANN001, ARG002
+        return ConnectionIdentityResolution(
+            rgw_user_uid=None,
+            rgw_account_id=None,
+            metrics_enabled=True,
+            usage_enabled=True,
+            reason="identity unavailable",
+        )
+
+    monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
+    monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
+    monkeypatch.setattr(storage_ops_router.ConnectionIdentityService, "resolve_rgw_identity", fake_resolve_rgw_identity)
+
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
+    app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
+    try:
+        response = client.get(
+            "/api/storage-ops/buckets",
+            params=[
+                ("include", "owner_name"),
+                ("include", "owner_quota"),
+                ("include", "owner_quota_usage"),
+            ],
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["total"] == 1
+        item = payload["items"][0]
+        assert item["name"] == "conn-3::orphan"
+        assert item["owner"] is None
+        assert item["owner_name"] is None
+        assert item["owner_quota_max_size_bytes"] is None
+        assert item["owner_used_bytes"] is None
     finally:
         app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)

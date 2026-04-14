@@ -11,7 +11,7 @@ from typing import Optional
 from app.db import S3Connection, StorageProvider
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.utils.rgw import is_rgw_account_id
-from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
+from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_rgw_admin_api_endpoint
 
 
 @dataclass(frozen=True)
@@ -52,15 +52,128 @@ class ConnectionIdentityService:
         self.ttl_seconds = max(1, int(ttl_seconds))
 
     def resolve_metrics_identity(self, connection: S3Connection) -> ConnectionIdentityResolution:
-        key = self._cache_key(connection)
+        key = self._cache_key(connection, scope="metrics")
         cached = self._cache_get(key)
         if cached is not None:
             return cached
-        resolved = self._resolve_uncached(connection)
+        resolved = self._resolve_metrics_uncached(connection)
         self._cache_set(key, resolved)
         return resolved
 
-    def _resolve_uncached(self, connection: S3Connection) -> ConnectionIdentityResolution:
+    def resolve_rgw_identity(self, connection: S3Connection) -> ConnectionIdentityResolution:
+        key = self._cache_key(connection, scope="identity")
+        cached = self._cache_get(key)
+        if cached is not None:
+            return cached
+        resolved = self._resolve_identity_uncached(connection)
+        self._cache_set(key, resolved)
+        return resolved
+
+    def _resolve_identity_uncached(self, connection: S3Connection) -> ConnectionIdentityResolution:
+        endpoint = getattr(connection, "storage_endpoint", None)
+        if connection.storage_endpoint_id is None or endpoint is None:
+            return ConnectionIdentityResolution(
+                rgw_user_uid=None,
+                rgw_account_id=None,
+                metrics_enabled=False,
+                usage_enabled=False,
+                reason="RGW identity is unavailable: this connection must target a configured storage endpoint.",
+            )
+
+        provider_value = str(getattr(endpoint, "provider", "")).strip().lower()
+        if provider_value != StorageProvider.CEPH.value:
+            return ConnectionIdentityResolution(
+                rgw_user_uid=None,
+                rgw_account_id=None,
+                metrics_enabled=False,
+                usage_enabled=False,
+                reason="RGW identity is unavailable: this connection endpoint is not a Ceph provider.",
+            )
+
+        flags = resolve_feature_flags(endpoint)
+        metrics_enabled = bool(flags.metrics_enabled)
+        usage_enabled = bool(flags.usage_enabled)
+
+        uid, account_id = _identity_from_metadata(
+            getattr(connection, "credential_owner_type", None),
+            getattr(connection, "credential_owner_identifier", None),
+        )
+        if uid:
+            return ConnectionIdentityResolution(
+                rgw_user_uid=uid,
+                rgw_account_id=account_id,
+                metrics_enabled=metrics_enabled,
+                usage_enabled=usage_enabled,
+                reason=None,
+            )
+
+        access_key = (getattr(connection, "access_key_id", None) or "").strip()
+        if not access_key:
+            return ConnectionIdentityResolution(
+                rgw_user_uid=None,
+                rgw_account_id=None,
+                metrics_enabled=metrics_enabled,
+                usage_enabled=usage_enabled,
+                reason="RGW identity is unavailable: connection access key is missing.",
+            )
+
+        admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
+        if not admin_endpoint:
+            return ConnectionIdentityResolution(
+                rgw_user_uid=None,
+                rgw_account_id=None,
+                metrics_enabled=metrics_enabled,
+                usage_enabled=usage_enabled,
+                reason="RGW identity is unavailable: admin endpoint is not configured for this endpoint.",
+            )
+
+        lookup_access_key = getattr(endpoint, "supervision_access_key", None) or getattr(endpoint, "admin_access_key", None)
+        lookup_secret_key = getattr(endpoint, "supervision_secret_key", None) or getattr(endpoint, "admin_secret_key", None)
+        if not lookup_access_key or not lookup_secret_key:
+            return ConnectionIdentityResolution(
+                rgw_user_uid=None,
+                rgw_account_id=None,
+                metrics_enabled=metrics_enabled,
+                usage_enabled=usage_enabled,
+                reason="RGW identity is unavailable: lookup credentials are not configured for this endpoint.",
+            )
+
+        try:
+            rgw_admin = get_rgw_admin_client(
+                access_key=lookup_access_key,
+                secret_key=lookup_secret_key,
+                endpoint=admin_endpoint,
+                region=getattr(endpoint, "region", None),
+                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+            )
+            payload = rgw_admin.get_user_by_access_key(access_key, allow_not_found=True)
+        except RGWAdminError as exc:
+            return ConnectionIdentityResolution(
+                rgw_user_uid=None,
+                rgw_account_id=None,
+                metrics_enabled=metrics_enabled,
+                usage_enabled=usage_enabled,
+                reason=f"RGW identity is unavailable: unable to resolve RGW identity ({exc}).",
+            )
+
+        uid, account_id = _identity_from_rgw_payload(payload)
+        if not uid:
+            return ConnectionIdentityResolution(
+                rgw_user_uid=None,
+                rgw_account_id=None,
+                metrics_enabled=metrics_enabled,
+                usage_enabled=usage_enabled,
+                reason="RGW identity is unavailable: unable to resolve RGW identity for this connection.",
+            )
+        return ConnectionIdentityResolution(
+            rgw_user_uid=uid,
+            rgw_account_id=account_id,
+            metrics_enabled=metrics_enabled,
+            usage_enabled=usage_enabled,
+            reason=None,
+        )
+
+    def _resolve_metrics_uncached(self, connection: S3Connection) -> ConnectionIdentityResolution:
         endpoint = getattr(connection, "storage_endpoint", None)
         if connection.storage_endpoint_id is None or endpoint is None:
             return ConnectionIdentityResolution(
@@ -104,79 +217,29 @@ class ConnectionIdentityService:
                 reason="Metrics are unavailable: supervision credentials are not configured for this endpoint.",
             )
 
-        uid, account_id = _identity_from_metadata(
-            getattr(connection, "credential_owner_type", None),
-            getattr(connection, "credential_owner_identifier", None),
-        )
-        if uid:
+        identity = self._resolve_identity_uncached(connection)
+        if identity.iam_identity:
             return ConnectionIdentityResolution(
-                rgw_user_uid=uid,
-                rgw_account_id=account_id,
+                rgw_user_uid=identity.rgw_user_uid,
+                rgw_account_id=identity.rgw_account_id,
                 metrics_enabled=metrics_enabled,
                 usage_enabled=usage_enabled,
                 reason=None,
             )
-
-        admin_endpoint = resolve_admin_endpoint(endpoint)
-        if not admin_endpoint:
-            return ConnectionIdentityResolution(
-                rgw_user_uid=None,
-                rgw_account_id=None,
-                metrics_enabled=metrics_enabled,
-                usage_enabled=usage_enabled,
-                reason="Metrics are unavailable: admin endpoint is not configured for this endpoint.",
-            )
-
-        access_key = (getattr(connection, "access_key_id", None) or "").strip()
-        if not access_key:
-            return ConnectionIdentityResolution(
-                rgw_user_uid=None,
-                rgw_account_id=None,
-                metrics_enabled=metrics_enabled,
-                usage_enabled=usage_enabled,
-                reason="Metrics are unavailable: connection access key is missing.",
-            )
-
-        try:
-            rgw_admin = get_rgw_admin_client(
-                access_key=supervision_access_key,
-                secret_key=supervision_secret_key,
-                endpoint=admin_endpoint,
-                region=getattr(endpoint, "region", None),
-                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
-            )
-            payload = rgw_admin.get_user_by_access_key(access_key, allow_not_found=True)
-        except RGWAdminError as exc:
-            return ConnectionIdentityResolution(
-                rgw_user_uid=None,
-                rgw_account_id=None,
-                metrics_enabled=metrics_enabled,
-                usage_enabled=usage_enabled,
-                reason=f"Metrics are unavailable: unable to resolve RGW identity ({exc}).",
-            )
-
-        uid, account_id = _identity_from_rgw_payload(payload)
-        if not uid:
-            return ConnectionIdentityResolution(
-                rgw_user_uid=None,
-                rgw_account_id=None,
-                metrics_enabled=metrics_enabled,
-                usage_enabled=usage_enabled,
-                reason="Metrics are unavailable: unable to resolve RGW identity for this connection.",
-            )
         return ConnectionIdentityResolution(
-            rgw_user_uid=uid,
-            rgw_account_id=account_id,
+            rgw_user_uid=None,
+            rgw_account_id=None,
             metrics_enabled=metrics_enabled,
             usage_enabled=usage_enabled,
-            reason=None,
+            reason=identity.reason or "Metrics are unavailable: unable to resolve RGW identity for this connection.",
         )
 
-    def _cache_key(self, connection: S3Connection) -> tuple:
+    def _cache_key(self, connection: S3Connection, *, scope: str) -> tuple:
         endpoint = getattr(connection, "storage_endpoint", None)
         endpoint_updated = getattr(endpoint, "updated_at", None)
         connection_updated = getattr(connection, "updated_at", None)
         return (
+            scope,
             getattr(connection, "id", None),
             (getattr(connection, "access_key_id", None) or "").strip(),
             getattr(connection, "storage_endpoint_id", None),

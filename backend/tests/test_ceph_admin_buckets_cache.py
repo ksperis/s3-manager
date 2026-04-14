@@ -19,20 +19,36 @@ from app.models.bucket import (
 )
 from app.models.ceph_admin import CephAdminBucketSummary
 from app.routers.ceph_admin import buckets as buckets_router
+from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
 from app.services.buckets_service import BucketsService
 
 
 class FakeRGWAdmin:
-    def __init__(self, payload: list[dict]):
+    def __init__(
+        self,
+        payload: list[dict],
+        *,
+        account_listing: list[dict] | None = None,
+        account_details: dict[str, dict] | None = None,
+        user_details: dict[tuple[str | None, str], dict] | None = None,
+    ):
         self._payload = payload
+        self._account_listing = account_listing or []
+        self._account_details = account_details or {}
+        self._user_details = user_details or {}
         self.get_all_buckets_calls = 0
         self.get_bucket_info_calls = 0
+        self.list_accounts_calls = 0
         self.get_account_calls = 0
         self.get_user_calls = 0
 
     def get_all_buckets(self, with_stats: bool = True):
         self.get_all_buckets_calls += 1
         return self._payload
+
+    def list_accounts(self, include_details: bool = False):  # noqa: ARG002
+        self.list_accounts_calls += 1
+        return list(self._account_listing)
 
     def get_bucket_info(self, bucket_name: str, stats: bool = True, allow_not_found: bool = False):
         self.get_bucket_info_calls += 1
@@ -48,10 +64,14 @@ class FakeRGWAdmin:
         allow_not_implemented: bool = False,
     ):
         self.get_account_calls += 1
+        if owner_id in self._account_details:
+            return self._account_details[owner_id]
         return {"id": owner_id, "name": f"Owner-{owner_id}"}
 
     def get_user(self, uid: str, tenant: str | None = None, allow_not_found: bool = True):
         self.get_user_calls += 1
+        if (tenant, uid) in self._user_details:
+            return self._user_details[(tenant, uid)]
         return {"uid": uid, "display_name": f"User-{uid}"}
 
 
@@ -61,15 +81,29 @@ def clear_buckets_listing_cache():
         buckets_router._BUCKET_LIST_CACHE.clear()
     with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+    invalidate_bucket_owner_metadata_cache()
     yield
     with buckets_router._BUCKET_LIST_CACHE_LOCK:
         buckets_router._BUCKET_LIST_CACHE.clear()
     with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+    invalidate_bucket_owner_metadata_cache()
 
 
-def _build_ctx(endpoint_id: int, payload: list[dict]):
-    rgw_admin = FakeRGWAdmin(payload)
+def _build_ctx(
+    endpoint_id: int,
+    payload: list[dict],
+    *,
+    account_listing: list[dict] | None = None,
+    account_details: dict[str, dict] | None = None,
+    user_details: dict[tuple[str | None, str], dict] | None = None,
+):
+    rgw_admin = FakeRGWAdmin(
+        payload,
+        account_listing=account_listing,
+        account_details=account_details,
+        user_details=user_details,
+    )
     ctx = SimpleNamespace(
         endpoint=SimpleNamespace(id=endpoint_id),
         rgw_admin=rgw_admin,
@@ -1792,3 +1826,150 @@ def test_ceph_admin_bucket_stream_cancels_work_when_client_disconnects(monkeypat
 
     asyncio.run(_run())
     assert cancelled["value"] is True
+
+
+def test_ceph_admin_owner_quota_columns_use_cached_account_listing_across_pages():
+    owner_id = "RGW00000000000000001"
+    payload = [
+        {"name": "bucket-a", "owner": owner_id},
+        {"name": "bucket-b", "owner": owner_id},
+    ]
+    ctx, rgw_admin = _build_ctx(
+        endpoint_id=401,
+        payload=payload,
+        account_listing=[
+            {
+                "account_id": owner_id,
+                "name": "Account One",
+                "account_quota": {"enabled": True, "max_size": 4096, "max_objects": 42},
+            }
+        ],
+    )
+
+    first = buckets_router.list_buckets(
+        page=1,
+        page_size=1,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=["owner_quota"],
+        with_stats=False,
+        ctx=ctx,
+    )
+    second = buckets_router.list_buckets(
+        page=2,
+        page_size=1,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=["owner_quota"],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert first.items[0].owner_quota_max_size_bytes == 4096
+    assert first.items[0].owner_quota_max_objects == 42
+    assert second.items[0].owner_quota_max_size_bytes == 4096
+    assert second.items[0].owner_quota_max_objects == 42
+    assert rgw_admin.list_accounts_calls == 1
+    assert rgw_admin.get_account_calls == 0
+
+
+def test_ceph_admin_owner_quota_filter_for_user_owner_is_deduplicated_and_cached():
+    payload = [
+        {"name": "bucket-a", "owner": "user-a", "tenant": "tenant-a"},
+        {"name": "bucket-b", "owner": "user-a", "tenant": "tenant-a"},
+    ]
+    ctx, rgw_admin = _build_ctx(
+        endpoint_id=402,
+        payload=payload,
+        user_details={
+            ("tenant-a", "user-a"): {
+                "uid": "user-a",
+                "tenant": "tenant-a",
+                "display_name": "User A",
+                "user_quota": {"enabled": True, "max_size": 8192, "max_objects": 64},
+            }
+        },
+    )
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"field": "owner_quota_max_size_bytes", "op": "gte", "value": 4096},
+            ],
+        }
+    )
+
+    first = buckets_router.list_buckets(
+        page=1,
+        page_size=1,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+    second = buckets_router.list_buckets(
+        page=2,
+        page_size=1,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in first.items] == ["bucket-a"]
+    assert [item.name for item in second.items] == ["bucket-b"]
+    assert rgw_admin.get_user_calls == 1
+
+
+def test_ceph_admin_owner_quota_usage_percent_filter_uses_global_owner_usage():
+    owner_id = "RGW00000000000000009"
+    payload = [
+        {"name": "bucket-a", "owner": owner_id, "usage": {"rgw.main": {"size_actual": 30, "num_objects": 3}}},
+        {"name": "bucket-b", "owner": owner_id, "usage": {"rgw.main": {"size_actual": 60, "num_objects": 6}}},
+    ]
+    ctx, rgw_admin = _build_ctx(
+        endpoint_id=403,
+        payload=payload,
+        account_listing=[
+            {
+                "account_id": owner_id,
+                "name": "Account Nine",
+                "account_quota": {"enabled": True, "max_size": 100, "max_objects": 10},
+            }
+        ],
+    )
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"field": "name", "op": "eq", "value": "bucket-a"},
+                {"field": "owner_quota_usage_size_percent", "op": "gte", "value": 80},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=True,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-a"]
+    assert rgw_admin.get_all_buckets_calls == 1
+    assert rgw_admin.list_accounts_calls == 1

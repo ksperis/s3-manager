@@ -62,6 +62,10 @@ class CephAdminBucketSummary(BaseModel):
     object_count: Optional[int] = None
     quota_max_size_bytes: Optional[int] = None
     quota_max_objects: Optional[int] = None
+    owner_used_bytes: Optional[int] = None
+    owner_object_count: Optional[int] = None
+    owner_quota_max_size_bytes: Optional[int] = None
+    owner_quota_max_objects: Optional[int] = None
     tags: Optional[list[BucketTag]] = None
     features: Optional[dict[str, BucketFeatureStatus]] = None
     column_details: Optional[dict[str, Any]] = None
@@ -281,6 +285,12 @@ BucketFilterField = Literal[
     "object_count",
     "quota_max_size_bytes",
     "quota_max_objects",
+    "owner_used_bytes",
+    "owner_object_count",
+    "owner_quota_max_size_bytes",
+    "owner_quota_max_objects",
+    "owner_quota_usage_size_percent",
+    "owner_quota_usage_object_percent",
 ]
 BucketFilterOp = Literal[
     "eq",

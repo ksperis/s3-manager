@@ -67,7 +67,16 @@ def _filter_requires_stats(query: CephAdminBucketFilterQuery | None) -> bool:
     if not query:
         return False
     for rule in query.rules:
-        if rule.field in {"used_bytes", "object_count", "quota_max_size_bytes", "quota_max_objects"}:
+        if rule.field in {
+            "used_bytes",
+            "object_count",
+            "quota_max_size_bytes",
+            "quota_max_objects",
+            "owner_used_bytes",
+            "owner_object_count",
+            "owner_quota_usage_size_percent",
+            "owner_quota_usage_object_percent",
+        }:
             return True
     return False
 

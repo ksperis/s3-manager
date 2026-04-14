@@ -29,11 +29,13 @@ from app.services.bucket_listing_shared import (
     _filter_requires_stats,
     parse_includes,
 )
+from app.services.bucket_owner_enrichment import BucketOwnerMetadataService
 from app.routers.ceph_admin.listing_common import normalize_text, sort_value
 from app.routers.dependencies import get_account_context, get_current_storage_ops_admin
 from app.routers.execution_contexts import list_execution_contexts
 from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account
 from app.services.buckets_service import BucketsService, get_buckets_service
+from app.services.connection_identity_service import ConnectionIdentityService
 
 router = APIRouter(prefix="/storage-ops/buckets", tags=["storage-ops-buckets"])
 logger = logging.getLogger(__name__)
@@ -41,6 +43,10 @@ logger = logging.getLogger(__name__)
 BUCKET_REF_SEPARATOR = "::"
 STORAGE_OPS_CONTEXT_LISTING_MAX_WORKERS = 6
 CONTEXT_IDENTITY_FIELDS = {"context_name", "context_kind", "endpoint_name"}
+OWNER_QUOTA_FIELDS = {"owner_quota_max_size_bytes", "owner_quota_max_objects"}
+OWNER_USAGE_FIELDS = {"owner_used_bytes", "owner_object_count"}
+OWNER_USAGE_PERCENT_FIELDS = {"owner_quota_usage_size_percent", "owner_quota_usage_object_percent"}
+OWNER_ENRICHED_FIELDS = {"owner_name"} | OWNER_QUOTA_FIELDS | OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS
 
 
 @dataclass(frozen=True)
@@ -55,6 +61,12 @@ class _StorageOpsContextRef:
 class _StorageOpsResolvedContext:
     ref: _StorageOpsContextRef
     account: S3Account
+
+
+@dataclass(frozen=True)
+class _StorageOpsContextOwner:
+    owner: str | None
+    tenant: str | None = None
 
 
 def _encode_bucket_ref(context_id: str, bucket_name: str) -> str:
@@ -170,19 +182,20 @@ def _build_cheap_field_prefilter(
         return None, False
 
     rules = parsed_filter.rules
-    cheap_field_rules = [rule for rule in rules if rule.field and rule.field != "tag"]
+    cheap_field_rules = [rule for rule in rules if rule.field and rule.field not in ({"tag"} | OWNER_ENRICHED_FIELDS)]
     has_feature_rules = any(rule.feature for rule in rules)
     has_tag_rule = any(rule.field == "tag" for rule in rules)
+    has_owner_enriched_rule = any(rule.field in OWNER_ENRICHED_FIELDS for rule in rules)
     if not cheap_field_rules:
         return None, False
 
     if parsed_filter.match == "all":
         cheap_filter = parsed_filter.model_copy(update={"rules": cheap_field_rules})
-        is_complete = not has_feature_rules and not has_tag_rule and len(cheap_field_rules) == len(rules)
+        is_complete = not has_feature_rules and not has_tag_rule and not has_owner_enriched_rule and len(cheap_field_rules) == len(rules)
         return cheap_filter, is_complete
 
     # For "any", cheap prefilter is only complete/safe when there are no expensive rules.
-    if has_feature_rules or has_tag_rule:
+    if has_feature_rules or has_tag_rule or has_owner_enriched_rule:
         return None, False
     cheap_filter = parsed_filter.model_copy(update={"rules": cheap_field_rules})
     return cheap_filter, True
@@ -318,6 +331,58 @@ def _resolve_context_accounts(
     return resolved
 
 
+def _collect_filter_fields(parsed_filter: CephAdminBucketFilterQuery | None) -> set[str]:
+    if not parsed_filter or not parsed_filter.rules:
+        return set()
+    return {rule.field for rule in parsed_filter.rules if rule.field}
+
+
+def _resolve_context_owner(account: S3Account) -> _StorageOpsContextOwner:
+    account_id = str(getattr(account, "rgw_account_id", "") or "").strip()
+    if account_id:
+        return _StorageOpsContextOwner(owner=account_id)
+    user_uid = str(getattr(account, "rgw_user_uid", "") or "").strip()
+    if user_uid:
+        return _StorageOpsContextOwner(owner=user_uid, tenant=account_id or None)
+    source_connection = getattr(account, "_source_connection", None)
+    if source_connection is None:
+        return _StorageOpsContextOwner(owner=None)
+    resolution = ConnectionIdentityService().resolve_rgw_identity(source_connection)
+    if resolution.rgw_user_uid:
+        return _StorageOpsContextOwner(owner=resolution.rgw_user_uid, tenant=resolution.rgw_account_id)
+    return _StorageOpsContextOwner(owner=resolution.rgw_account_id)
+
+
+def _apply_page_owner_enrichment(
+    *,
+    page_items: list[StorageOpsBucketSummary],
+    resolved_contexts_by_id: dict[str, _StorageOpsResolvedContext],
+    include_name: bool,
+    include_quota: bool,
+) -> list[StorageOpsBucketSummary]:
+    if not page_items or (not include_name and not include_quota):
+        return page_items
+
+    buckets_by_context: dict[str, list[StorageOpsBucketSummary]] = {}
+    for bucket in page_items:
+        buckets_by_context.setdefault(bucket.context_id, []).append(bucket)
+
+    for context_id, buckets in buckets_by_context.items():
+        resolved = resolved_contexts_by_id.get(context_id)
+        if resolved is None:
+            continue
+        metadata = BucketOwnerMetadataService(
+            endpoint_id=int(getattr(getattr(resolved.account, "storage_endpoint", None), "id", 0) or 0),
+            account=resolved.account,
+        )
+        metadata.enrich_buckets(
+            buckets,
+            include_name=include_name,
+            include_quota=include_quota,
+        )
+    return page_items
+
+
 def _list_context_buckets(
     *,
     context: _StorageOpsResolvedContext,
@@ -327,6 +392,9 @@ def _list_context_buckets(
     include_tags: bool,
     parsed_filter: CephAdminBucketFilterQuery | None,
     normalized_search: str,
+    filter_requires_owner_name: bool,
+    filter_requires_owner_quota: bool,
+    owner_usage_required: bool,
 ) -> list[StorageOpsBucketSummary]:
     ref = context.ref
     account = context.account
@@ -342,13 +410,14 @@ def _list_context_buckets(
         return []
 
     context_buckets: list[StorageOpsBucketSummary] = []
+    owner_identity = _resolve_context_owner(account)
     for bucket in listed:
         context_buckets.append(
             StorageOpsBucketSummary(
                 name=bucket.name,
                 bucket_name=bucket.name,
-                tenant=None,
-                owner=None,
+                tenant=owner_identity.tenant,
+                owner=owner_identity.owner,
                 owner_name=None,
                 used_bytes=bucket.used_bytes,
                 object_count=bucket.object_count,
@@ -359,6 +428,18 @@ def _list_context_buckets(
                 context_kind=ref.context_kind,
                 endpoint_name=ref.endpoint_name,
             )
+        )
+
+    if context_buckets and (filter_requires_owner_name or filter_requires_owner_quota or owner_usage_required):
+        metadata = BucketOwnerMetadataService(
+            endpoint_id=int(getattr(getattr(account, "storage_endpoint", None), "id", 0) or 0),
+            account=account,
+        )
+        metadata.enrich_buckets(
+            context_buckets,
+            include_name=filter_requires_owner_name,
+            include_quota=filter_requires_owner_quota,
+            include_usage=owner_usage_required,
         )
 
     cheap_prefilter, cheap_prefilter_complete = _build_cheap_field_prefilter(parsed_filter)
@@ -432,6 +513,12 @@ def _compute_storage_ops_listing(
     elif filter:
         simple_filter, parsed_filter = _parse_filter(filter)
     include_set = parse_includes(include)
+    filter_fields = _collect_filter_fields(parsed_filter)
+    wants_owner_name = "owner_name" in include_set
+    wants_owner_quota = "owner_quota" in include_set
+    wants_owner_quota_usage = "owner_quota_usage" in include_set
+    filter_requires_owner_name = "owner_name" in filter_fields
+    filter_requires_owner_quota = bool(filter_fields & (OWNER_QUOTA_FIELDS | OWNER_USAGE_PERCENT_FIELDS))
 
     required_feature_include = {
         rule.feature
@@ -463,9 +550,11 @@ def _compute_storage_ops_listing(
         }
     }
     needs_stats = bool(with_stats or _filter_requires_stats(parsed_filter) or sort_by in {"used_bytes", "object_count"})
+    owner_usage_required = bool(needs_stats and (bool(filter_fields & (OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS)) or wants_owner_quota_usage))
     refs = _collect_context_refs(user, db)
     refs = _filter_context_refs_by_advanced_filter(refs, parsed_filter)
     resolved_contexts = _resolve_context_accounts(refs=refs, request=request, db=db, user=user)
+    resolved_contexts_by_id = {context.ref.context_id: context for context in resolved_contexts}
 
     results: list[StorageOpsBucketSummary] = []
     normalized_search = normalize_text(simple_filter or "")
@@ -481,6 +570,9 @@ def _compute_storage_ops_listing(
                     include_tags=include_tags,
                     parsed_filter=parsed_filter,
                     normalized_search=normalized_search,
+                    filter_requires_owner_name=filter_requires_owner_name,
+                    filter_requires_owner_quota=filter_requires_owner_quota,
+                    owner_usage_required=owner_usage_required,
                 )
             )
     else:
@@ -495,6 +587,9 @@ def _compute_storage_ops_listing(
                     include_tags=include_tags,
                     parsed_filter=parsed_filter,
                     normalized_search=normalized_search,
+                    filter_requires_owner_name=filter_requires_owner_name,
+                    filter_requires_owner_quota=filter_requires_owner_quota,
+                    owner_usage_required=owner_usage_required,
                 )
                 for context in resolved_contexts
             ]
@@ -509,6 +604,13 @@ def _compute_storage_ops_listing(
     start = max(page - 1, 0) * page_size
     end = start + page_size
     page_items = sorted_items[start:end]
+    if page_items and (wants_owner_name or wants_owner_quota or wants_owner_quota_usage):
+        page_items = _apply_page_owner_enrichment(
+            page_items=page_items,
+            resolved_contexts_by_id=resolved_contexts_by_id,
+            include_name=wants_owner_name,
+            include_quota=wants_owner_quota or wants_owner_quota_usage,
+        )
     return PaginatedStorageOpsBucketsResponse(
         items=page_items,
         total=total,

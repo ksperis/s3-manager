@@ -473,6 +473,10 @@ export type CephAdminBucket = {
   object_count?: number | null;
   quota_max_size_bytes?: number | null;
   quota_max_objects?: number | null;
+  owner_used_bytes?: number | null;
+  owner_object_count?: number | null;
+  owner_quota_max_size_bytes?: number | null;
+  owner_quota_max_objects?: number | null;
   tags?: BucketTag[] | null;
   features?: Record<string, BucketFeatureStatus> | null;
   column_details?: Record<string, unknown> | null;

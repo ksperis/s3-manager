@@ -877,6 +877,8 @@ type ColumnId =
   | "tenant"
   | "owner"
   | "owner_name"
+  | "owner_quota"
+  | "owner_quota_usage"
   | "used_bytes"
   | "object_count"
   | "quota_max_size_bytes"
@@ -921,7 +923,19 @@ type AdvancedNumericField =
   | "minQuotaBytes"
   | "maxQuotaBytes"
   | "minQuotaObjects"
-  | "maxQuotaObjects";
+  | "maxQuotaObjects"
+  | "minOwnerUsedBytes"
+  | "maxOwnerUsedBytes"
+  | "minOwnerObjects"
+  | "maxOwnerObjects"
+  | "minOwnerQuotaBytes"
+  | "maxOwnerQuotaBytes"
+  | "minOwnerQuotaObjects"
+  | "maxOwnerQuotaObjects"
+  | "minOwnerQuotaUsageSizePercent"
+  | "maxOwnerQuotaUsageSizePercent"
+  | "minOwnerQuotaUsageObjectPercent"
+  | "maxOwnerQuotaUsageObjectPercent";
 type OwnerNameScope = "any" | "account" | "user";
 type AdvancedTextOrNumericField = "context" | "endpoint" | "tenant" | "owner" | "ownerName" | "s3Tags" | AdvancedNumericField;
 type ActiveFilterRemoveAction =
@@ -973,6 +987,18 @@ export type AdvancedFilterState = {
   maxQuotaBytes: string;
   minQuotaObjects: string;
   maxQuotaObjects: string;
+  minOwnerUsedBytes: string;
+  maxOwnerUsedBytes: string;
+  minOwnerObjects: string;
+  maxOwnerObjects: string;
+  minOwnerQuotaBytes: string;
+  maxOwnerQuotaBytes: string;
+  minOwnerQuotaObjects: string;
+  maxOwnerQuotaObjects: string;
+  minOwnerQuotaUsageSizePercent: string;
+  maxOwnerQuotaUsageSizePercent: string;
+  minOwnerQuotaUsageObjectPercent: string;
+  maxOwnerQuotaUsageObjectPercent: string;
   features: Record<FeatureKey, FeatureFilterState>;
   featureDetails: FeatureDetailFilters;
 };
@@ -1000,6 +1026,18 @@ const defaultAdvancedFilter: AdvancedFilterState = {
   maxQuotaBytes: "",
   minQuotaObjects: "",
   maxQuotaObjects: "",
+  minOwnerUsedBytes: "",
+  maxOwnerUsedBytes: "",
+  minOwnerObjects: "",
+  maxOwnerObjects: "",
+  minOwnerQuotaBytes: "",
+  maxOwnerQuotaBytes: "",
+  minOwnerQuotaObjects: "",
+  maxOwnerQuotaObjects: "",
+  minOwnerQuotaUsageSizePercent: "",
+  maxOwnerQuotaUsageSizePercent: "",
+  minOwnerQuotaUsageObjectPercent: "",
+  maxOwnerQuotaUsageObjectPercent: "",
   features: {
     versioning: "any",
     object_lock: "any",
@@ -1164,6 +1202,35 @@ const parseExactListInput = (value: string): ParsedExactListInput => {
   return { values, listProvided: true };
 };
 
+const BUCKET_STATS_NUMERIC_FILTER_FIELDS: AdvancedNumericField[] = [
+  "minUsedBytes",
+  "maxUsedBytes",
+  "minObjects",
+  "maxObjects",
+  "minQuotaBytes",
+  "maxQuotaBytes",
+  "minQuotaObjects",
+  "maxQuotaObjects",
+];
+
+const OWNER_QUOTA_NUMERIC_FILTER_FIELDS: AdvancedNumericField[] = [
+  "minOwnerQuotaBytes",
+  "maxOwnerQuotaBytes",
+  "minOwnerQuotaObjects",
+  "maxOwnerQuotaObjects",
+];
+
+const OWNER_USAGE_NUMERIC_FILTER_FIELDS: AdvancedNumericField[] = [
+  "minOwnerUsedBytes",
+  "maxOwnerUsedBytes",
+  "minOwnerObjects",
+  "maxOwnerObjects",
+  "minOwnerQuotaUsageSizePercent",
+  "maxOwnerQuotaUsageSizePercent",
+  "minOwnerQuotaUsageObjectPercent",
+  "maxOwnerQuotaUsageObjectPercent",
+];
+
 const buildTextFieldRules = (
   field: "name" | "tenant" | "owner" | "owner_name",
   rawValue: string,
@@ -1266,7 +1333,19 @@ export const buildAdvancedFilterPayload = (
       addNumericRule("quota_max_size_bytes", "lte", advanced.maxQuotaBytes);
       addNumericRule("quota_max_objects", "gte", advanced.minQuotaObjects);
       addNumericRule("quota_max_objects", "lte", advanced.maxQuotaObjects);
+      addNumericRule("owner_used_bytes", "gte", advanced.minOwnerUsedBytes);
+      addNumericRule("owner_used_bytes", "lte", advanced.maxOwnerUsedBytes);
+      addNumericRule("owner_object_count", "gte", advanced.minOwnerObjects);
+      addNumericRule("owner_object_count", "lte", advanced.maxOwnerObjects);
+      addNumericRule("owner_quota_usage_size_percent", "gte", advanced.minOwnerQuotaUsageSizePercent);
+      addNumericRule("owner_quota_usage_size_percent", "lte", advanced.maxOwnerQuotaUsageSizePercent);
+      addNumericRule("owner_quota_usage_object_percent", "gte", advanced.minOwnerQuotaUsageObjectPercent);
+      addNumericRule("owner_quota_usage_object_percent", "lte", advanced.maxOwnerQuotaUsageObjectPercent);
     }
+    addNumericRule("owner_quota_max_size_bytes", "gte", advanced.minOwnerQuotaBytes);
+    addNumericRule("owner_quota_max_size_bytes", "lte", advanced.maxOwnerQuotaBytes);
+    addNumericRule("owner_quota_max_objects", "gte", advanced.minOwnerQuotaObjects);
+    addNumericRule("owner_quota_max_objects", "lte", advanced.maxOwnerQuotaObjects);
 
     (Object.keys(advanced.features) as FeatureKey[]).forEach((key) => {
       if (featureSupport[key] === false) return;
@@ -1316,8 +1395,24 @@ export const hasAdvancedFilters = (
       advanced.minQuotaBytes ||
       advanced.maxQuotaBytes ||
       advanced.minQuotaObjects ||
-      advanced.maxQuotaObjects
+      advanced.maxQuotaObjects ||
+      advanced.minOwnerUsedBytes ||
+      advanced.maxOwnerUsedBytes ||
+      advanced.minOwnerObjects ||
+      advanced.maxOwnerObjects ||
+      advanced.minOwnerQuotaUsageSizePercent ||
+      advanced.maxOwnerQuotaUsageSizePercent ||
+      advanced.minOwnerQuotaUsageObjectPercent ||
+      advanced.maxOwnerQuotaUsageObjectPercent
     )
+  ) {
+    return true;
+  }
+  if (
+    advanced.minOwnerQuotaBytes ||
+    advanced.maxOwnerQuotaBytes ||
+    advanced.minOwnerQuotaObjects ||
+    advanced.maxOwnerQuotaObjects
   ) {
     return true;
   }
@@ -1354,6 +1449,8 @@ const BUCKET_CORE_COLUMN_OPTIONS: Array<{ id: ColumnId; label: string }> = [
   { id: "tenant", label: "Tenant" },
   { id: "owner", label: "Owner" },
   { id: "owner_name", label: "Owner name" },
+  { id: "owner_quota", label: "Owner quota" },
+  { id: "owner_quota_usage", label: "Owner quota usage" },
   { id: "used_bytes", label: "Used" },
   { id: "object_count", label: "Objects" },
   { id: "quota_max_size_bytes", label: "Quota" },
@@ -1379,6 +1476,8 @@ const loadVisibleColumns = (
       "tenant",
       "owner",
       "owner_name",
+      "owner_quota",
+      "owner_quota_usage",
       "used_bytes",
       "object_count",
       "quota_max_size_bytes",
@@ -1698,6 +1797,18 @@ export const sanitizeAdvancedFilter = (value: unknown): AdvancedFilterState => {
     maxQuotaBytes: safeString(data.maxQuotaBytes),
     minQuotaObjects: safeString(data.minQuotaObjects),
     maxQuotaObjects: safeString(data.maxQuotaObjects),
+    minOwnerUsedBytes: safeString(data.minOwnerUsedBytes),
+    maxOwnerUsedBytes: safeString(data.maxOwnerUsedBytes),
+    minOwnerObjects: safeString(data.minOwnerObjects),
+    maxOwnerObjects: safeString(data.maxOwnerObjects),
+    minOwnerQuotaBytes: safeString(data.minOwnerQuotaBytes),
+    maxOwnerQuotaBytes: safeString(data.maxOwnerQuotaBytes),
+    minOwnerQuotaObjects: safeString(data.minOwnerQuotaObjects),
+    maxOwnerQuotaObjects: safeString(data.maxOwnerQuotaObjects),
+    minOwnerQuotaUsageSizePercent: safeString(data.minOwnerQuotaUsageSizePercent),
+    maxOwnerQuotaUsageSizePercent: safeString(data.maxOwnerQuotaUsageSizePercent),
+    minOwnerQuotaUsageObjectPercent: safeString(data.minOwnerQuotaUsageObjectPercent),
+    maxOwnerQuotaUsageObjectPercent: safeString(data.maxOwnerQuotaUsageObjectPercent),
     features,
     featureDetails: sanitizeFeatureDetailFilters(data.featureDetails),
   };
@@ -2372,14 +2483,23 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [featureColumnOptions]);
   const exportIncludeParams = useMemo(() => {
     const include = new Set<string>(["owner_name", "tags"]);
+    if (visibleColumns.includes("owner_quota")) {
+      include.add("owner_quota");
+    }
+    if (visibleColumns.includes("owner_quota_usage")) {
+      include.add("owner_quota");
+      include.add("owner_quota_usage");
+    }
     featureColumnOptions.forEach((column) => include.add(column.id));
     FEATURE_DETAIL_COLUMN_OPTIONS.forEach((column) => include.add(column.include));
     return Array.from(include.values());
-  }, [featureColumnOptions]);
+  }, [featureColumnOptions, visibleColumns]);
 
   const includeParams = useMemo(() => {
     const include: string[] = [];
     if (visibleColumns.includes("owner_name")) include.push("owner_name");
+    if (visibleColumns.includes("owner_quota")) include.push("owner_quota");
+    if (visibleColumns.includes("owner_quota_usage")) include.push("owner_quota", "owner_quota_usage");
     if (visibleColumns.includes("tags")) include.push("tags");
     featureColumnOptions.forEach(({ id }) => {
       if (visibleColumns.includes(id)) include.push(id);
@@ -2400,7 +2520,15 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         advancedApplied.minQuotaBytes ||
         advancedApplied.maxQuotaBytes ||
         advancedApplied.minQuotaObjects ||
-        advancedApplied.maxQuotaObjects
+        advancedApplied.maxQuotaObjects ||
+        advancedApplied.minOwnerUsedBytes ||
+        advancedApplied.maxOwnerUsedBytes ||
+        advancedApplied.minOwnerObjects ||
+        advancedApplied.maxOwnerObjects ||
+        advancedApplied.minOwnerQuotaUsageSizePercent ||
+        advancedApplied.maxOwnerQuotaUsageSizePercent ||
+        advancedApplied.minOwnerQuotaUsageObjectPercent ||
+        advancedApplied.maxOwnerQuotaUsageObjectPercent
     );
   }, [advancedApplied, usageFeatureEnabled]);
 
@@ -2413,6 +2541,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       visibleColumns.includes("quota_max_size_bytes") ||
       visibleColumns.includes("quota_max_objects") ||
       visibleColumns.includes("quota_usage_percent") ||
+      visibleColumns.includes("owner_quota_usage") ||
       visibleColumns.includes("quota_status")
     );
   }, [advancedStatsRequired, usageFeatureEnabled, visibleColumns]);
@@ -2424,10 +2553,20 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const detailLoadingColumnIds = useMemo(() => {
     const ids = new Set<string>(includeParams);
     if (requiresStats && !baseRequiresStats) {
-      ["used_bytes", "object_count", "quota_max_size_bytes", "quota_max_objects", "quota_usage_percent", "quota_status"].forEach((id) => ids.add(id));
+      [
+        "used_bytes",
+        "object_count",
+        "quota_max_size_bytes",
+        "quota_max_objects",
+        "quota_usage_percent",
+        "owner_quota_usage",
+        "quota_status",
+      ].forEach((id) => ids.add(id));
     }
+    if (visibleColumns.includes("owner_quota")) ids.add("owner_quota");
+    if (visibleColumns.includes("owner_quota_usage")) ids.add("owner_quota_usage");
     return ids;
-  }, [includeParams, requiresStats, baseRequiresStats]);
+  }, [includeParams, requiresStats, baseRequiresStats, visibleColumns]);
 
   const availableUiTags = useMemo(() => {
     const tags: string[] = [];
@@ -3199,6 +3338,40 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       }
       if (col === "owner_name") {
         exportColumns.push({ id: col, label: "Owner name", getValue: (bucket) => bucket.owner_name ?? "-" });
+        return;
+      }
+      if (col === "owner_quota") {
+        exportColumns.push({
+          id: col,
+          label: "Owner quota",
+          getValue: (bucket) => {
+            const sizeQuota = normalizeQuotaLimit(bucket.owner_quota_max_size_bytes);
+            const objectQuota = normalizeQuotaLimit(bucket.owner_quota_max_objects);
+            if (sizeQuota === null && objectQuota === null) return "-";
+            return `Size: ${sizeQuota !== null ? formatBytes(sizeQuota) : "-"}; Obj: ${objectQuota !== null ? formatNumber(objectQuota) : "-"}`;
+          },
+        });
+        return;
+      }
+      if (col === "owner_quota_usage") {
+        exportColumns.push({
+          id: col,
+          label: "Owner quota usage",
+          getValue: (bucket) => {
+            const sizeQuota = normalizeQuotaLimit(bucket.owner_quota_max_size_bytes);
+            const objectQuota = normalizeQuotaLimit(bucket.owner_quota_max_objects);
+            const sizeUsed = bucket.owner_used_bytes;
+            const objectUsed = bucket.owner_object_count;
+            if (sizeQuota === null && objectQuota === null && sizeUsed == null && objectUsed == null) return "-";
+            const sizePercent = computeQuotaUsagePercent(sizeUsed, sizeQuota);
+            const objectPercent = computeQuotaUsagePercent(objectUsed, objectQuota);
+            const parts = [
+              `Size: ${sizeUsed == null ? "-" : formatBytes(sizeUsed)}${sizeQuota !== null ? ` / ${formatBytes(sizeQuota)}` : ""}${sizePercent !== null ? ` (${formatQuotaPercent(sizePercent)})` : ""}`,
+              `Obj: ${objectUsed == null ? "-" : formatNumber(objectUsed)}${objectQuota !== null ? ` / ${formatNumber(objectQuota)}` : ""}${objectPercent !== null ? ` (${formatQuotaPercent(objectPercent)})` : ""}`,
+            ];
+            return parts.join("; ");
+          },
+        });
         return;
       }
       if (col === "used_bytes") {
@@ -5247,6 +5420,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     quickFilterPending
   );
   const ownerNameLookupActive = ownerNameDraftValue.length > 0;
+  const ownerQuotaLookupActive = OWNER_QUOTA_NUMERIC_FILTER_FIELDS.some((field) => advancedDraft[field].trim().length > 0);
+  const ownerUsageLookupActive = usageFeatureEnabled
+    && OWNER_USAGE_NUMERIC_FILTER_FIELDS.some((field) => advancedDraft[field].trim().length > 0);
   const s3TagsLookupActive = s3TagsDraftExpressions.length > 0;
   const featureDetailDraftLabels = useMemo(
     () => featureDetailSummary(advancedDraft.featureDetails),
@@ -5269,17 +5445,19 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     Number(ownerNameLookupActive) +
     Number(ownerNameDraftScope !== "any");
   const advancedDraftRangeCount = useMemo(() => {
-    if (!usageFeatureEnabled) return 0;
-    return [
-      advancedDraft.minUsedBytes,
-      advancedDraft.maxUsedBytes,
-      advancedDraft.minObjects,
-      advancedDraft.maxObjects,
-      advancedDraft.minQuotaBytes,
-      advancedDraft.maxQuotaBytes,
-      advancedDraft.minQuotaObjects,
-      advancedDraft.maxQuotaObjects,
-    ].filter((value) => value.trim().length > 0).length;
+    const alwaysAvailableCount = OWNER_QUOTA_NUMERIC_FILTER_FIELDS
+      .map((field) => advancedDraft[field])
+      .filter((value) => value.trim().length > 0).length;
+    if (!usageFeatureEnabled) return alwaysAvailableCount;
+    return (
+      BUCKET_STATS_NUMERIC_FILTER_FIELDS
+        .map((field) => advancedDraft[field])
+        .filter((value) => value.trim().length > 0).length +
+      OWNER_USAGE_NUMERIC_FILTER_FIELDS
+        .map((field) => advancedDraft[field])
+        .filter((value) => value.trim().length > 0).length +
+      alwaysAvailableCount
+    );
   }, [advancedDraft, usageFeatureEnabled]);
   const advancedDraftFeatureCount = useMemo(
     () =>
@@ -5303,6 +5481,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       return featureCostReducedByPrefilter ? "medium" : "high";
     }
     if (ownerNameLookupActive) return "medium";
+    if (ownerQuotaLookupActive) return "medium";
+    if (ownerUsageLookupActive) return "medium";
     if (advancedDraftRangeCount > 0) return "medium";
     if (advancedDraftIdentityCount > 0) return "low";
     return "none";
@@ -5311,6 +5491,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     advancedDraftRangeCount,
     advancedDraftIdentityCount,
     ownerNameLookupActive,
+    ownerQuotaLookupActive,
+    ownerUsageLookupActive,
     s3TagsLookupActive,
     featureCostReducedByPrefilter,
     multipleFeatureFiltersActive,
@@ -5333,6 +5515,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       if (ownerNameLookupActive) {
         return `${FILTER_COST_LABEL.medium}: owner-name filters require owner identity lookups.`;
       }
+      if (ownerQuotaLookupActive && !ownerUsageLookupActive) {
+        return `${FILTER_COST_LABEL.medium}: owner quota filters require owner metadata lookups.`;
+      }
+      if (ownerUsageLookupActive) {
+        return `${FILTER_COST_LABEL.medium}: owner usage filters require owner metadata lookups and bucket stats.`;
+      }
       if (featureCostReducedByPrefilter) {
         return `${FILTER_COST_LABEL.medium}: feature-state filters are active, but owner/tenant prefilters reduce buckets to inspect.`;
       }
@@ -5345,6 +5533,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [
     advancedDraftGlobalCostLevel,
     ownerNameLookupActive,
+    ownerQuotaLookupActive,
+    ownerUsageLookupActive,
     s3TagsLookupActive,
     featureCostReducedByPrefilter,
     multipleFeatureFiltersActive,
@@ -5544,23 +5734,37 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         });
       }
 
-      const numericFilters: Array<{ id: AdvancedNumericField; label: string }> = usageFeatureEnabled
-        ? [
-            { id: "minUsedBytes", label: "Used bytes >=" },
-            { id: "maxUsedBytes", label: "Used bytes <=" },
-            { id: "minObjects", label: "Objects >=" },
-            { id: "maxObjects", label: "Objects <=" },
-            { id: "minQuotaBytes", label: "Quota bytes >=" },
-            { id: "maxQuotaBytes", label: "Quota bytes <=" },
-            { id: "minQuotaObjects", label: "Quota objects >=" },
-            { id: "maxQuotaObjects", label: "Quota objects <=" },
-          ]
-        : [];
-      numericFilters.forEach(({ id, label }) => {
+      const numericFilters: Array<{ id: AdvancedNumericField; label: string; format?: "number" | "percent" }> = [
+        { id: "minOwnerQuotaBytes", label: "Owner quota bytes >=" },
+        { id: "maxOwnerQuotaBytes", label: "Owner quota bytes <=" },
+        { id: "minOwnerQuotaObjects", label: "Owner quota objects >=" },
+        { id: "maxOwnerQuotaObjects", label: "Owner quota objects <=" },
+      ];
+      if (usageFeatureEnabled) {
+        numericFilters.unshift(
+          { id: "minUsedBytes", label: "Used bytes >=" },
+          { id: "maxUsedBytes", label: "Used bytes <=" },
+          { id: "minObjects", label: "Objects >=" },
+          { id: "maxObjects", label: "Objects <=" },
+          { id: "minQuotaBytes", label: "Quota bytes >=" },
+          { id: "maxQuotaBytes", label: "Quota bytes <=" },
+          { id: "minQuotaObjects", label: "Quota objects >=" },
+          { id: "maxQuotaObjects", label: "Quota objects <=" },
+          { id: "minOwnerUsedBytes", label: "Owner used bytes >=" },
+          { id: "maxOwnerUsedBytes", label: "Owner used bytes <=" },
+          { id: "minOwnerObjects", label: "Owner objects >=" },
+          { id: "maxOwnerObjects", label: "Owner objects <=" },
+          { id: "minOwnerQuotaUsageSizePercent", label: "Owner quota usage size % >=", format: "percent" },
+          { id: "maxOwnerQuotaUsageSizePercent", label: "Owner quota usage size % <=", format: "percent" },
+          { id: "minOwnerQuotaUsageObjectPercent", label: "Owner quota usage objects % >=", format: "percent" },
+          { id: "maxOwnerQuotaUsageObjectPercent", label: "Owner quota usage objects % <=", format: "percent" }
+        );
+      }
+      numericFilters.forEach(({ id, label, format }) => {
         const value = (advancedApplied[id] as string).trim();
         if (!value) return;
         const asNumber = Number(value);
-        const display = Number.isFinite(asNumber) ? formatNumber(asNumber) : value;
+        const display = Number.isFinite(asNumber) ? (format === "percent" ? `${asNumber}%` : formatNumber(asNumber)) : value;
         items.push({
           id: `num-${id}`,
           label: `${label} ${display}`,
@@ -5655,8 +5859,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       });
     }
 
+    const numericFilters: Array<{ id: keyof AdvancedFilterState; label: string; format?: "number" | "percent" }> = [
+      { id: "minOwnerQuotaBytes", label: "Owner quota bytes >=" },
+      { id: "maxOwnerQuotaBytes", label: "Owner quota bytes <=" },
+      { id: "minOwnerQuotaObjects", label: "Owner quota objects >=" },
+      { id: "maxOwnerQuotaObjects", label: "Owner quota objects <=" },
+    ];
     if (usageFeatureEnabled) {
-      const numericFilters: Array<{ id: keyof AdvancedFilterState; label: string }> = [
+      numericFilters.unshift(
         { id: "minUsedBytes", label: "Used bytes >=" },
         { id: "maxUsedBytes", label: "Used bytes <=" },
         { id: "minObjects", label: "Objects >=" },
@@ -5665,15 +5875,23 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         { id: "maxQuotaBytes", label: "Quota bytes <=" },
         { id: "minQuotaObjects", label: "Quota objects >=" },
         { id: "maxQuotaObjects", label: "Quota objects <=" },
-      ];
-      numericFilters.forEach(({ id, label }) => {
-        const value = (advancedDraft[id] as string).trim();
-        if (!value) return;
-        const asNumber = Number(value);
-        const display = Number.isFinite(asNumber) ? formatNumber(asNumber) : value;
-        items.push({ id: `draft-num-${id}`, label: `${label} ${display}` });
-      });
+        { id: "minOwnerUsedBytes", label: "Owner used bytes >=" },
+        { id: "maxOwnerUsedBytes", label: "Owner used bytes <=" },
+        { id: "minOwnerObjects", label: "Owner objects >=" },
+        { id: "maxOwnerObjects", label: "Owner objects <=" },
+        { id: "minOwnerQuotaUsageSizePercent", label: "Owner quota usage size % >=", format: "percent" },
+        { id: "maxOwnerQuotaUsageSizePercent", label: "Owner quota usage size % <=", format: "percent" },
+        { id: "minOwnerQuotaUsageObjectPercent", label: "Owner quota usage objects % >=", format: "percent" },
+        { id: "maxOwnerQuotaUsageObjectPercent", label: "Owner quota usage objects % <=", format: "percent" }
+      );
     }
+    numericFilters.forEach(({ id, label, format }) => {
+      const value = (advancedDraft[id] as string).trim();
+      if (!value) return;
+      const asNumber = Number(value);
+      const display = Number.isFinite(asNumber) ? (format === "percent" ? `${asNumber}%` : formatNumber(asNumber)) : value;
+      items.push({ id: `draft-num-${id}`, label: `${label} ${display}` });
+    });
 
     (Object.keys(advancedDraft.features) as FeatureKey[]).forEach((feature) => {
       if (featureSupport[feature] === false) return;
@@ -5983,6 +6201,56 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
   const quotaConfigured = (bucket: CephAdminBucket) =>
     Boolean((bucket.quota_max_size_bytes ?? 0) > 0 || (bucket.quota_max_objects ?? 0) > 0);
+
+  const renderOwnerQuotaCell = (bucket: CephAdminBucket) => {
+    const sizeQuota = normalizeQuotaLimit(bucket.owner_quota_max_size_bytes);
+    const objectQuota = normalizeQuotaLimit(bucket.owner_quota_max_objects);
+    if (sizeQuota === null && objectQuota === null) {
+      return "-";
+    }
+    return (
+      <div className="space-y-0.5">
+        <p className="ui-caption text-slate-600 dark:text-slate-300">
+          Size: <span className="font-semibold">{sizeQuota !== null ? formatBytes(sizeQuota) : "-"}</span>
+        </p>
+        <p className="ui-caption text-slate-600 dark:text-slate-300">
+          Obj: <span className="font-semibold">{objectQuota !== null ? formatNumber(objectQuota) : "-"}</span>
+        </p>
+      </div>
+    );
+  };
+
+  const renderOwnerQuotaUsageCell = (bucket: CephAdminBucket) => {
+    const sizeQuota = normalizeQuotaLimit(bucket.owner_quota_max_size_bytes);
+    const objectQuota = normalizeQuotaLimit(bucket.owner_quota_max_objects);
+    const sizeUsed = bucket.owner_used_bytes;
+    const objectUsed = bucket.owner_object_count;
+    if (sizeQuota === null && objectQuota === null && sizeUsed === null && sizeUsed === undefined && objectUsed === null && objectUsed === undefined) {
+      return "-";
+    }
+    const sizePercent = computeQuotaUsagePercent(sizeUsed, sizeQuota);
+    const objectPercent = computeQuotaUsagePercent(objectUsed, objectQuota);
+    return (
+      <div className="space-y-0.5">
+        <p className="ui-caption text-slate-600 dark:text-slate-300">
+          Size:{" "}
+          <span className="font-semibold">
+            {sizeUsed === null || sizeUsed === undefined ? "-" : formatBytes(sizeUsed)}
+            {sizeQuota !== null ? ` / ${formatBytes(sizeQuota)}` : ""}
+            {sizePercent !== null ? ` (${formatQuotaPercent(sizePercent)})` : ""}
+          </span>
+        </p>
+        <p className="ui-caption text-slate-600 dark:text-slate-300">
+          Obj:{" "}
+          <span className="font-semibold">
+            {objectUsed === null || objectUsed === undefined ? "-" : formatNumber(objectUsed)}
+            {objectQuota !== null ? ` / ${formatNumber(objectQuota)}` : ""}
+            {objectPercent !== null ? ` (${formatQuotaPercent(objectPercent)})` : ""}
+          </span>
+        </p>
+      </div>
+    );
+  };
 
   const renderTagList = (tags?: CephAdminBucket["tags"]) => {
     const safeTags = Array.isArray(tags) ? tags.filter((t) => (t.key ?? "").trim()) : [];
@@ -6626,6 +6894,26 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         headerClassName: "min-w-[12rem] max-w-[24rem]",
         cellClassName: "min-w-[12rem] max-w-[24rem]",
         render: (bucket) => bucket.owner_name ?? "-",
+      });
+    }
+    if (visible.has("owner_quota")) {
+      cols.push({
+        id: "owner_quota",
+        label: "Owner quota",
+        field: null,
+        expensive: true,
+        headerClassName: "w-44",
+        render: (bucket) => renderOwnerQuotaCell(bucket),
+      });
+    }
+    if (visible.has("owner_quota_usage")) {
+      cols.push({
+        id: "owner_quota_usage",
+        label: "Owner quota usage",
+        field: null,
+        expensive: true,
+        headerClassName: "w-52",
+        render: (bucket) => renderOwnerQuotaUsageCell(bucket),
       });
     }
     if (visible.has("used_bytes")) {
@@ -7461,7 +7749,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               <span>Storage Metrics and Quota</span>
                               {renderFilterCostIndicator(
                                 "medium",
-                                "Medium cost: storage metrics and quota filters require bucket stats."
+                                "Medium cost: owner quota filters require owner metadata lookups; usage and percentage filters also require bucket stats."
                               )}
                             </p>
                             {!usageFeatureEnabled && (
@@ -7471,15 +7759,17 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                             )}
                           </div>
 
-                          {!usageFeatureEnabled ? (
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">
-                              {usageUnavailableDescription}
-                            </p>
-                          ) : (
+                          <div className="space-y-3">
+                            {!usageFeatureEnabled && (
+                              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                {usageUnavailableDescription}
+                              </p>
+                            )}
                             <div className="grid gap-3 lg:grid-cols-2">
                               {[
                                 {
                                   title: "Usage",
+                                  disabled: !usageFeatureEnabled,
                                   rows: [
                                     { label: "Bytes", minId: "minUsedBytes" as const, maxId: "maxUsedBytes" as const },
                                     { label: "Objects", minId: "minObjects" as const, maxId: "maxObjects" as const },
@@ -7487,16 +7777,57 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                 },
                                 {
                                   title: "Quota",
+                                  disabled: !usageFeatureEnabled,
                                   rows: [
                                     { label: "Bytes", minId: "minQuotaBytes" as const, maxId: "maxQuotaBytes" as const },
                                     { label: "Objects", minId: "minQuotaObjects" as const, maxId: "maxQuotaObjects" as const },
                                   ],
                                 },
+                                {
+                                  title: "Owner quota",
+                                  disabled: false,
+                                  rows: [
+                                    { label: "Bytes", minId: "minOwnerQuotaBytes" as const, maxId: "maxOwnerQuotaBytes" as const },
+                                    { label: "Objects", minId: "minOwnerQuotaObjects" as const, maxId: "maxOwnerQuotaObjects" as const },
+                                  ],
+                                },
+                                {
+                                  title: "Owner usage",
+                                  disabled: !usageFeatureEnabled,
+                                  rows: [
+                                    { label: "Bytes", minId: "minOwnerUsedBytes" as const, maxId: "maxOwnerUsedBytes" as const },
+                                    { label: "Objects", minId: "minOwnerObjects" as const, maxId: "maxOwnerObjects" as const },
+                                  ],
+                                },
+                                {
+                                  title: "Owner usage %",
+                                  disabled: !usageFeatureEnabled,
+                                  rows: [
+                                    {
+                                      label: "Size %",
+                                      minId: "minOwnerQuotaUsageSizePercent" as const,
+                                      maxId: "maxOwnerQuotaUsageSizePercent" as const,
+                                    },
+                                    {
+                                      label: "Objects %",
+                                      minId: "minOwnerQuotaUsageObjectPercent" as const,
+                                      maxId: "maxOwnerQuotaUsageObjectPercent" as const,
+                                    },
+                                  ],
+                                },
                               ].map((section) => (
-                                <div key={section.title} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                                <div
+                                  key={section.title}
+                                  className={`rounded-lg border border-slate-200 p-3 dark:border-slate-700 ${section.disabled ? "opacity-75" : ""}`}
+                                >
                                   <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     {section.title}
                                   </p>
+                                  {section.disabled && (
+                                    <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                      Requires bucket stats.
+                                    </p>
+                                  )}
                                   <div className="mt-2 space-y-2">
                                     {section.rows.map((row) => {
                                       const minApplied = (advancedApplied?.[row.minId] ?? "").trim();
@@ -7520,7 +7851,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                               value={advancedDraft[row.minId]}
                                               onChange={(e) => updateAdvancedField(row.minId, e.target.value)}
                                               placeholder="min"
-                                              className={`w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${minState.fieldClass}`}
+                                              disabled={section.disabled}
+                                              className={`w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 ${minState.fieldClass}`}
                                             />
                                             <input
                                               type="number"
@@ -7529,7 +7861,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                               value={advancedDraft[row.maxId]}
                                               onChange={(e) => updateAdvancedField(row.maxId, e.target.value)}
                                               placeholder="max"
-                                              className={`w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${maxState.fieldClass}`}
+                                              disabled={section.disabled}
+                                              className={`w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 ${maxState.fieldClass}`}
                                             />
                                           </div>
                                         </div>
@@ -7539,7 +7872,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                 </div>
                               ))}
                             </div>
-                          )}
+                          </div>
                         </section>
 
                         <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
