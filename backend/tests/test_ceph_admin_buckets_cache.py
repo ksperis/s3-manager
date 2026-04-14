@@ -18,7 +18,10 @@ from app.models.bucket import (
     BucketWebsiteRedirectAllRequestsTo,
 )
 from app.models.ceph_admin import CephAdminBucketSummary
+from app.main import app
+from app.routers import dependencies
 from app.routers.ceph_admin import buckets as buckets_router
+from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
 from app.services.buckets_service import BucketsService
 
@@ -148,6 +151,86 @@ def test_ceph_admin_bucket_listing_cache_is_reused_across_pages():
     assert [item.name for item in first.items] == ["bucket-a", "bucket-b"]
     assert [item.name for item in second.items] == ["bucket-c", "bucket-d"]
     assert rgw_admin.get_all_buckets_calls == 1
+
+
+def test_ceph_admin_bucket_query_endpoint_matches_get_for_same_payload(client):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+        {"name": "bucket-c", "owner": "owner-c"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=17, payload=payload)
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"field": "name", "op": "in", "value": ["bucket-a", "bucket-c"]},
+            ],
+        }
+    )
+
+    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
+    app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
+    try:
+        get_response = client.get(
+            "/api/ceph-admin/endpoints/17/buckets",
+            params={"advanced_filter": advanced_filter, "with_stats": "false"},
+        )
+        post_response = client.post(
+            "/api/ceph-admin/endpoints/17/buckets/query",
+            json={
+                "page": 1,
+                "page_size": 25,
+                "advanced_filter": advanced_filter,
+                "with_stats": False,
+            },
+        )
+        assert get_response.status_code == 200
+        assert post_response.status_code == 200
+        assert post_response.json() == get_response.json()
+    finally:
+        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
+        app.dependency_overrides.pop(ceph_admin_dependencies.get_ceph_admin_context, None)
+
+
+def test_ceph_admin_bucket_query_endpoint_accepts_large_exact_name_list(client):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+        {"name": "bucket-c", "owner": "owner-c"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=18, payload=payload)
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "field": "name",
+                    "op": "in",
+                    "value": ["bucket-a", "bucket-c", *[f"bucket-{index:04d}" for index in range(1200)]],
+                },
+            ],
+        }
+    )
+
+    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
+    app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
+    try:
+        response = client.post(
+            "/api/ceph-admin/endpoints/18/buckets/query",
+            json={
+                "page": 1,
+                "page_size": 25,
+                "advanced_filter": advanced_filter,
+                "with_stats": False,
+            },
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert [item["name"] for item in payload["items"]] == ["bucket-a", "bucket-c"]
+    finally:
+        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
+        app.dependency_overrides.pop(ceph_admin_dependencies.get_ceph_admin_context, None)
 
 
 def test_ceph_admin_bucket_listing_cache_can_be_invalidated_per_endpoint():

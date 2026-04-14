@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
+import { shouldUsePostBucketListing } from "../../api/bucketListingTransport";
 import type {
   CephAdminBucket,
   CephAdminBucketsStreamProgress,
@@ -143,7 +144,8 @@ export function useBucketOpsListing({
       const canUseAdvancedStream =
         advancedSearchEnabled &&
         typeof advancedFilterParam === "string" &&
-        advancedFilterParam.trim().startsWith("{");
+        advancedFilterParam.trim().startsWith("{") &&
+        !shouldUsePostBucketListing(baseParams);
 
       let baseResponse;
       if (canUseAdvancedStream) {

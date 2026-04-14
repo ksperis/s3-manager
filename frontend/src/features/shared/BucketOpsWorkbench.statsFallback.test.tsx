@@ -162,4 +162,48 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
     expect(await screen.findByText("Bucket stats unavailable")).toBeInTheDocument();
     expect(screen.getAllByText(/showing owner metadata without usage or quota values/i).length).toBeGreaterThan(0);
   });
+
+  it("falls back to plain listing when an exact quick filter payload is too large for streaming", async () => {
+    mocks.listCephAdminBuckets.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+      stats_available: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench
+          mode="ceph-admin"
+          shell={{
+            pageDescription: "Ceph buckets",
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(mocks.listCephAdminBuckets).toHaveBeenCalled());
+    mocks.listCephAdminBuckets.mockClear();
+    mocks.streamCephAdminBuckets.mockClear();
+
+    const longExactFilter = Array.from({ length: 600 }, (_, index) => `bucket-${String(index).padStart(4, "0")}`).join(
+      "\n"
+    );
+
+    fireEvent.change(screen.getByLabelText("Quick filter"), {
+      target: { value: longExactFilter },
+    });
+
+    await waitFor(() => expect(mocks.listCephAdminBuckets).toHaveBeenCalled());
+    expect(mocks.streamCephAdminBuckets).not.toHaveBeenCalled();
+    expect(mocks.listCephAdminBuckets).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        advanced_filter: expect.stringContaining('"op":"in"'),
+      }),
+      expect.any(Object)
+    );
+  });
 });

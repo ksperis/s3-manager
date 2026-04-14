@@ -48,6 +48,7 @@ from app.models.ceph_admin import (
     CephAdminBucketCompareResult,
     CephAdminBucketFilterQuery,
     CephAdminBucketFilterRule,
+    CephAdminBucketListingRequest,
     CephAdminBucketSummary,
     PaginatedCephAdminBucketsResponse,
 )
@@ -1715,6 +1716,24 @@ def list_buckets(
         sort_dir=sort_dir,
         include=include,
         with_stats=with_stats,
+        ctx=ctx,
+    )
+
+
+@router.post("/query", response_model=PaginatedCephAdminBucketsResponse)
+def query_buckets(
+    payload: CephAdminBucketListingRequest,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> PaginatedCephAdminBucketsResponse:
+    return _compute_bucket_listing(
+        page=payload.page,
+        page_size=payload.page_size,
+        filter=payload.filter,
+        advanced_filter=payload.advanced_filter,
+        sort_by=payload.sort_by,
+        sort_dir=payload.sort_dir,
+        include=payload.include,
+        with_stats=payload.with_stats,
         ctx=ctx,
     )
 

@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
 from app.db import S3Account, User
-from app.models.ceph_admin import CephAdminBucketFilterQuery
+from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketListingRequest
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
 from app.services.bucket_listing_shared import (
     _enrich_buckets,
@@ -648,6 +648,30 @@ def list_storage_ops_buckets(
         sort_dir=sort_dir,
         include=include,
         with_stats=with_stats,
+    )
+
+
+@router.post("/query", response_model=PaginatedStorageOpsBucketsResponse)
+def query_storage_ops_buckets(
+    payload: CephAdminBucketListingRequest,
+    request: Request,
+    user: User = Depends(get_current_storage_ops_admin),
+    db: Session = Depends(get_db),
+    service: BucketsService = Depends(get_buckets_service),
+) -> PaginatedStorageOpsBucketsResponse:
+    return _compute_storage_ops_listing(
+        request=request,
+        db=db,
+        user=user,
+        service=service,
+        page=payload.page,
+        page_size=payload.page_size,
+        filter=payload.filter,
+        advanced_filter=payload.advanced_filter,
+        sort_by=payload.sort_by,
+        sort_dir=payload.sort_dir,
+        include=payload.include,
+        with_stats=payload.with_stats,
     )
 
 

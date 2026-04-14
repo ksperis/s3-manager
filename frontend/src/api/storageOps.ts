@@ -44,6 +44,11 @@ import type {
   ListCephAdminBucketsParams,
   PaginatedCephAdminBucketsResponse,
 } from "./cephAdmin";
+import {
+  buildBucketListingQuery,
+  buildBucketListingRequestBody,
+  shouldUsePostBucketListing,
+} from "./bucketListingTransport";
 import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
 
 export type { CephAdminBucket };
@@ -100,34 +105,24 @@ function resolveBucketTarget(bucketRef: string): StorageOpsBucketRef {
   return decoded;
 }
 
-function buildStorageOpsBucketsQuery(params?: ListCephAdminBucketsParams): URLSearchParams {
-  const query = new URLSearchParams();
-  if (!params) return query;
-  if (params.page !== undefined) query.set("page", String(params.page));
-  if (params.page_size !== undefined) query.set("page_size", String(params.page_size));
-  if (typeof params.filter === "string" && params.filter.trim().length > 0) query.set("filter", params.filter);
-  if (typeof params.advanced_filter === "string" && params.advanced_filter.trim().length > 0) {
-    query.set("advanced_filter", params.advanced_filter);
-  }
-  if (typeof params.sort_by === "string" && params.sort_by.trim().length > 0) query.set("sort_by", params.sort_by);
-  if (typeof params.sort_dir === "string" && params.sort_dir.trim().length > 0) query.set("sort_dir", params.sort_dir);
-  if (Array.isArray(params.include) && params.include.length > 0) query.set("include", params.include.join(","));
-  if (params.with_stats !== undefined) query.set("with_stats", params.with_stats ? "true" : "false");
-  return query;
-}
-
 export async function listStorageOpsBuckets(
   _scopeId: number,
   params?: ListCephAdminBucketsParams,
   options?: ListStorageOpsBucketsOptions
 ): Promise<PaginatedStorageOpsBucketsResponse> {
-  const { data } = await client.get<PaginatedStorageOpsBucketsResponse>("/storage-ops/buckets", {
-    params: {
-      ...params,
-      include: params?.include?.join(","),
-    },
-    signal: options?.signal,
-  });
+  const usePost = shouldUsePostBucketListing(params);
+  const { data } = usePost
+    ? await client.post<PaginatedStorageOpsBucketsResponse>(
+        "/storage-ops/buckets/query",
+        buildBucketListingRequestBody(params),
+        {
+          signal: options?.signal,
+        }
+      )
+    : await client.get<PaginatedStorageOpsBucketsResponse>("/storage-ops/buckets", {
+        params: buildBucketListingQuery(params),
+        signal: options?.signal,
+      });
   return data;
 }
 
@@ -137,7 +132,7 @@ export async function streamStorageOpsBuckets(
   options?: CephAdminBucketsStreamOptions
 ): Promise<PaginatedStorageOpsBucketsResponse> {
   const baseUrl = resolveApiBaseUrl();
-  const query = buildStorageOpsBucketsQuery(params);
+  const query = buildBucketListingQuery(params);
   const queryText = query.toString();
   const url = `${baseUrl}/storage-ops/buckets/stream${queryText ? `?${queryText}` : ""}`;
   return streamBucketsWithSse<CephAdminBucketsStreamProgress, PaginatedStorageOpsBucketsResponse>({

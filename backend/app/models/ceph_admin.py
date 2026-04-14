@@ -77,6 +77,17 @@ class PaginatedCephAdminBucketsResponse(PaginatedResponse):
     stats_warning: Optional[str] = None
 
 
+class CephAdminBucketListingRequest(BaseModel):
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=25, ge=1, le=200)
+    filter: Optional[str] = None
+    advanced_filter: Optional[str] = None
+    sort_by: str = "name"
+    sort_dir: Literal["asc", "desc"] = "asc"
+    include: list[str] = Field(default_factory=list)
+    with_stats: bool = True
+
+
 class PaginatedCephAdminAccountsResponse(PaginatedResponse):
     items: list[CephAdminRgwAccountSummary]
 

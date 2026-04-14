@@ -182,6 +182,75 @@ def test_storage_ops_stream_emits_progress_and_result(client, monkeypatch):
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
 
 
+def test_storage_ops_query_endpoint_matches_get(client, monkeypatch):
+    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
+        assert workspace == "manager"
+        return [
+            ExecutionContext(
+                kind="account",
+                id="1",
+                display_name="Account A",
+                endpoint_name="Endpoint One",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+            ),
+            ExecutionContext(
+                kind="connection",
+                id="conn-2",
+                display_name="Connection B",
+                endpoint_name="Endpoint Two",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
+            ),
+        ]
+
+    def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
+        return SimpleNamespace(context_id=account_ref)
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            if account.context_id == "1":
+                return [Bucket(name="alpha", used_bytes=10), Bucket(name="shared", used_bytes=20)]
+            if account.context_id == "conn-2":
+                return [Bucket(name="beta", used_bytes=30), Bucket(name="shared", used_bytes=40)]
+            return []
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"field": "name", "op": "in", "value": ["1::alpha", "conn-2::shared"]},
+            ],
+        }
+    )
+
+    monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
+    monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
+
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
+    app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
+    try:
+        get_response = client.get(
+            "/api/storage-ops/buckets",
+            params={"advanced_filter": advanced_filter, "with_stats": "false"},
+        )
+        post_response = client.post(
+            "/api/storage-ops/buckets/query",
+            json={
+                "page": 1,
+                "page_size": 25,
+                "advanced_filter": advanced_filter,
+                "with_stats": False,
+            },
+        )
+        assert get_response.status_code == 200
+        assert post_response.status_code == 200
+        assert post_response.json() == get_response.json()
+    finally:
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
+        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+        app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
+
+
 def test_storage_ops_listing_fanout_runs_in_parallel(client, monkeypatch):
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
