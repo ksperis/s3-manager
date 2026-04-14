@@ -126,6 +126,8 @@ export function useBucketOpsListing({
 
     setLoading(true);
     setLoadingDetails(false);
+    setItems([]);
+    setTotal(0);
     setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
     setError(null);
     setStatsAvailable(null);

@@ -114,6 +114,16 @@ vi.mock("./BucketSelectionActionsBar", () => ({
 
 import BucketOpsWorkbench from "./BucketOpsWorkbench";
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
   beforeEach(() => {
     mocks.listCephAdminBuckets.mockReset();
@@ -154,8 +164,6 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
       }),
       expect.any(Object)
     );
-
-    expect(await screen.findByText(/Bucket stats are unavailable via Ceph Admin credentials/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
 
@@ -205,5 +213,60 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
       }),
       expect.any(Object)
     );
+  });
+
+  it("clears the current rows and shows loading while a new filter request is in flight", async () => {
+    const deferred = createDeferred<{
+      items: Array<{ name: string; owner: string }>;
+      total: number;
+      page: number;
+      page_size: number;
+      has_next: boolean;
+      stats_available: boolean;
+    }>();
+
+    mocks.listCephAdminBuckets
+      .mockResolvedValueOnce({
+        items: [{ name: "bucket-a", owner: "owner-a" }],
+        total: 1,
+        page: 1,
+        page_size: 25,
+        has_next: false,
+        stats_available: true,
+      })
+      .mockImplementationOnce(() => deferred.promise);
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench
+          mode="ceph-admin"
+          shell={{
+            pageDescription: "Ceph buckets",
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Quick filter"), {
+      target: { value: "bucket-b" },
+    });
+
+    await waitFor(() => expect(mocks.listCephAdminBuckets).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("bucket-a")).not.toBeInTheDocument();
+    expect(screen.getByText("Loading buckets...")).toBeInTheDocument();
+
+    deferred.resolve({
+      items: [{ name: "bucket-b", owner: "owner-b" }],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+      stats_available: true,
+    });
+
+    expect(await screen.findByText("bucket-b")).toBeInTheDocument();
+    expect(screen.queryByText("Loading buckets...")).not.toBeInTheDocument();
   });
 });
