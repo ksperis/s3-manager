@@ -1933,6 +1933,14 @@ class BrowserService:
             current = client.head_object(**head_kwargs)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to fetch metadata for '{payload.key}': {exc}") from exc
+        tag_kwargs = {"Bucket": bucket_name, "Key": payload.key}
+        if payload.version_id:
+            tag_kwargs["VersionId"] = payload.version_id
+        try:
+            current_tagging = client.get_object_tagging(**tag_kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to fetch tags for '{payload.key}': {exc}") from exc
+        current_tag_set = current_tagging.get("TagSet") or []
 
         current_metadata = current.get("Metadata") or {}
         metadata_source = current_metadata if payload.metadata is None else payload.metadata
@@ -1988,9 +1996,19 @@ class BrowserService:
             "Key": payload.key,
             "CopySource": copy_source,
             "MetadataDirective": "REPLACE",
-            "TaggingDirective": "COPY",
             "Metadata": metadata,
         }
+        if current_tag_set:
+            kwargs["TaggingDirective"] = "REPLACE"
+            kwargs["Tagging"] = urlencode(
+                [
+                    (str(tag.get("Key") or ""), str(tag.get("Value") or ""))
+                    for tag in current_tag_set
+                    if str(tag.get("Key") or "").strip()
+                ]
+            )
+        else:
+            kwargs["TaggingDirective"] = "COPY"
         if content_type is not None:
             kwargs["ContentType"] = content_type
         if cache_control is not None:
@@ -2007,9 +2025,22 @@ class BrowserService:
             kwargs["StorageClass"] = storage_class
 
         try:
-            client.copy_object(**kwargs)
+            copy_response = client.copy_object(**kwargs)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to update metadata for '{payload.key}': {exc}") from exc
+        copied_version_id = copy_response.get("VersionId") if isinstance(copy_response, dict) else None
+        if current_tag_set:
+            tagging_kwargs: dict[str, object] = {
+                "Bucket": bucket_name,
+                "Key": payload.key,
+                "Tagging": {"TagSet": current_tag_set},
+            }
+            if copied_version_id:
+                tagging_kwargs["VersionId"] = copied_version_id
+            try:
+                client.put_object_tagging(**tagging_kwargs)
+            except (ClientError, BotoCoreError) as exc:
+                raise RuntimeError(f"Unable to restore tags for '{payload.key}': {exc}") from exc
 
         self.invalidate_object_list_cache_for_account(account, bucket_name)
         return self.head_object(bucket_name, account, payload.key, version_id=None)

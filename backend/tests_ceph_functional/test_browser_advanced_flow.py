@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import time
 from typing import Any
+import uuid
 
 import pytest
 
@@ -29,6 +30,17 @@ from .test_browser_clipboard_flow import (
 from .test_bucket_configuration_flow import _delete_bucket, _skip_if_cluster_unavailable
 
 pytestmark = pytest.mark.ceph_functional
+
+_BROWSER_STORAGE_CLASSES = {
+    "STANDARD",
+    "STANDARD_IA",
+    "ONEZONE_IA",
+    "INTELLIGENT_TIERING",
+    "GLACIER",
+    "GLACIER_IR",
+    "DEEP_ARCHIVE",
+}
+_ARCHIVE_STORAGE_CLASSES = {"GLACIER", "GLACIER_IR", "DEEP_ARCHIVE"}
 
 
 def _parse_iso_datetime(value: str) -> datetime:
@@ -67,6 +79,23 @@ def _delete_version(
         params=_account_params(account_id),
         json={"objects": [{"key": key, "version_id": version_id}]},
     )
+
+
+def _delete_all_object_versions(
+    session: BackendSession,
+    account_id: int,
+    bucket_name: str,
+    key: str,
+) -> None:
+    listing = _list_versions(session, account_id, bucket_name, key=key)
+    entries = [*(listing.get("versions") or []), *(listing.get("delete_markers") or [])]
+    for entry in entries:
+        version_id = str(entry.get("version_id") or "").strip()
+        if version_id:
+            try:
+                _delete_version(session, account_id, bucket_name, key, version_id)
+            except BackendAPIError:
+                continue
 
 
 def _latest_version_id(
@@ -117,9 +146,534 @@ def _ensure_bucket_object_lock_if_supported(
                 "not enabled",
                 "not supported",
             ),
-        ):
-            return False
+            ):
+                return False
         raise
+
+
+def _assert_close_datetime(actual: object, expected: datetime, *, tolerance_seconds: int = 2) -> None:
+    if not actual:
+        raise AssertionError("Expected a datetime value, got an empty response")
+    actual_dt = _parse_iso_datetime(str(actual))
+    delta_seconds = abs((actual_dt - expected).total_seconds())
+    assert delta_seconds <= tolerance_seconds, (
+        f"Expected datetime close to {expected.isoformat()}, got {actual_dt.isoformat()}"
+    )
+
+
+def _pick_storage_class_target(
+    endpoint_info: dict[str, Any] | None,
+    *,
+    current_storage_class: str | None,
+) -> str:
+    available: set[str] = set()
+    if endpoint_info:
+        for value in endpoint_info.get("storage_classes") or []:
+            cleaned = str(value or "").strip().upper()
+            if cleaned:
+                available.add(cleaned)
+        for placement in endpoint_info.get("placement_targets") or []:
+            for value in (placement or {}).get("storage_classes") or []:
+                cleaned = str(value or "").strip().upper()
+                if cleaned:
+                    available.add(cleaned)
+
+    supported = sorted(value for value in available if value in _BROWSER_STORAGE_CLASSES)
+    current = str(current_storage_class or "").strip().upper() or None
+
+    safe_candidates = [value for value in supported if value not in _ARCHIVE_STORAGE_CLASSES]
+    for candidate in safe_candidates:
+        if candidate != current:
+            return candidate
+    if safe_candidates:
+        return safe_candidates[0]
+
+    for candidate in supported:
+        if candidate != current:
+            return candidate
+    if supported:
+        return supported[0]
+    return "STANDARD"
+
+
+def _get_ceph_endpoint_info(
+    session: BackendSession,
+    endpoint_id: int,
+) -> dict[str, Any] | None:
+    try:
+        info = run_or_skip(
+            "ceph-admin endpoint info for browser object settings",
+            lambda: session.get(f"/ceph-admin/endpoints/{endpoint_id}/info"),
+        )
+    except pytest.skip.Exception:
+        return None
+    if isinstance(info, dict):
+        return info
+    return None
+
+
+def _select_ceph_browser_endpoint(session: BackendSession) -> dict[str, Any]:
+    endpoints = session.get("/ceph-admin/endpoints")
+    if not isinstance(endpoints, list) or not endpoints:
+        pytest.skip("Browser object settings tests require at least one configured Ceph endpoint.")
+    default_endpoint = next((item for item in endpoints if bool((item or {}).get("is_default"))), None)
+    selected = default_endpoint or endpoints[0]
+    endpoint_id = selected.get("id")
+    if endpoint_id is None:
+        pytest.skip("Browser object settings tests require a Ceph endpoint with an id.")
+    return selected
+
+
+def _create_browser_connection_context(
+    super_admin_session: BackendSession,
+    backend_authenticator,
+    ceph_test_settings: CephTestSettings,
+) -> dict[str, Any]:
+    if not ceph_test_settings.rgw_admin_access_key or not ceph_test_settings.rgw_admin_secret_key:
+        pytest.skip("Browser object settings tests require S3 credentials in backend/.env.")
+
+    endpoint = _select_ceph_browser_endpoint(super_admin_session)
+    suffix = uuid.uuid4().hex[:8]
+    manager_email = f"{ceph_test_settings.test_prefix}.browser.{suffix}@example.com"
+    manager_password = f"Test-{uuid.uuid4().hex[:12]}"
+
+    created_user = super_admin_session.post(
+        "/admin/users",
+        json={
+            "email": manager_email,
+            "password": manager_password,
+            "full_name": "Ceph Functional Browser User",
+            "role": "ui_user",
+        },
+        expected_status=201,
+    )
+    user_id = int(created_user["id"])
+
+    created_connection = super_admin_session.post(
+        "/admin/s3-connections",
+        json={
+            "name": f"{ceph_test_settings.test_prefix}-browser-conn-{suffix}",
+            "storage_endpoint_id": int(endpoint["id"]),
+            "access_manager": True,
+            "access_browser": True,
+            "access_key_id": ceph_test_settings.rgw_admin_access_key,
+            "secret_access_key": ceph_test_settings.rgw_admin_secret_key,
+            "provider_hint": "CEPH",
+            "region": endpoint.get("region") or ceph_test_settings.rgw_admin_region or "us-east-1",
+            "verify_tls": ceph_test_settings.rgw_verify_tls,
+        },
+        expected_status=201,
+    )
+    connection_id = int(created_connection["id"])
+    super_admin_session.post(
+        f"/admin/s3-connections/{connection_id}/users",
+        json={"user_id": user_id},
+        expected_status=201,
+    )
+
+    manager_session = backend_authenticator.login(manager_email, manager_password)
+    return {
+        "manager_session": manager_session,
+        "account_ref": f"conn-{connection_id}",
+        "connection_id": connection_id,
+        "user_id": user_id,
+        "endpoint_id": int(endpoint["id"]),
+    }
+
+
+def _delete_with_retry(
+    session: BackendSession,
+    path: str,
+    *,
+    expected_status: int | tuple[int, ...],
+    attempts: int = 5,
+) -> None:
+    for attempt in range(1, attempts + 1):
+        try:
+            session.delete(path, expected_status=expected_status)
+            return
+        except BackendAPIError as exc:
+            payload_text = str(exc.payload).lower() if exc.payload is not None else ""
+            if attempt < attempts and exc.status_code == 500 and "database is locked" in payload_text:
+                time.sleep(0.4 * attempt)
+                continue
+            raise
+
+
+def _cleanup_browser_connection_context(
+    super_admin_session: BackendSession,
+    context: dict[str, Any],
+) -> None:
+    manager_session: BackendSession = context["manager_session"]
+    manager_session.session.close()
+    _delete_with_retry(
+        super_admin_session,
+        f"/admin/s3-connections/{int(context['connection_id'])}",
+        expected_status=(204, 404),
+    )
+    _delete_with_retry(
+        super_admin_session,
+        f"/admin/users/{int(context['user_id'])}",
+        expected_status=(204, 404),
+    )
+
+
+def test_browser_object_properties_roundtrip_flow(
+    ceph_test_settings: CephTestSettings,
+    super_admin_session: BackendSession,
+    backend_authenticator,
+) -> None:
+    context = _create_browser_connection_context(
+        super_admin_session,
+        backend_authenticator,
+        ceph_test_settings,
+    )
+    manager_session: BackendSession = context["manager_session"]
+    account_id = context["account_ref"]
+
+    bucket_name = _bucket_name(ceph_test_settings.test_prefix, "browser-object-properties")
+    _create_bucket(manager_session, account_id, bucket_name, versioning=False)
+
+    object_key = "properties/object-settings.txt"
+    object_payload = b"browser properties roundtrip payload"
+    initial_tags = {"stage": "raw", "suite": "browser"}
+    expected_metadata = {"owner": "qa", "purpose": "properties"}
+    expected_tags = {"env": "ceph", "flow": "properties"}
+    expected_expires = (datetime.now(timezone.utc) + timedelta(days=3)).replace(microsecond=0)
+    endpoint_info = _get_ceph_endpoint_info(super_admin_session, int(context["endpoint_id"]))
+
+    try:
+        _upload_bytes(
+            manager_session,
+            account_id,
+            bucket_name,
+            object_key,
+            object_payload,
+            content_type="text/plain",
+        )
+        _set_object_tags(manager_session, account_id, bucket_name, object_key, initial_tags)
+        _assert_object_matches(
+            manager_session,
+            account_id,
+            bucket_name,
+            object_key,
+            expected_bytes=object_payload,
+            expected_content_type="text/plain",
+            expected_tags=initial_tags,
+        )
+
+        metadata_payload = manager_session.put(
+            f"/browser/buckets/{bucket_name}/object-meta",
+            params=_account_params(account_id),
+            json={
+                "key": object_key,
+                "content_type": "text/markdown; charset=utf-8",
+                "cache_control": "max-age=600",
+                "content_disposition": 'inline; filename="object-settings.txt"',
+                "content_encoding": "identity",
+                "content_language": "fr-FR",
+                "expires": expected_expires.isoformat(),
+                "metadata": expected_metadata,
+            },
+        )
+        assert metadata_payload["content_type"] == "text/markdown; charset=utf-8"
+        assert metadata_payload["cache_control"] == "max-age=600"
+        assert metadata_payload["content_disposition"] == 'inline; filename="object-settings.txt"'
+        assert metadata_payload["content_encoding"] == "identity"
+        assert metadata_payload["content_language"] == "fr-FR"
+        _assert_close_datetime(metadata_payload["expires"], expected_expires)
+        assert dict(sorted((metadata_payload.get("metadata") or {}).items())) == expected_metadata
+
+        metadata_head = _head_object(manager_session, account_id, bucket_name, object_key)
+        assert metadata_head["content_type"] == "text/markdown; charset=utf-8"
+        assert metadata_head["cache_control"] == "max-age=600"
+        assert metadata_head["content_disposition"] == 'inline; filename="object-settings.txt"'
+        assert metadata_head["content_encoding"] == "identity"
+        assert metadata_head["content_language"] == "fr-FR"
+        _assert_close_datetime(metadata_head["expires"], expected_expires)
+        assert dict(sorted((metadata_head.get("metadata") or {}).items())) == expected_metadata
+        assert _get_object_tags(manager_session, account_id, bucket_name, object_key) == initial_tags
+        _assert_object_matches(
+            manager_session,
+            account_id,
+            bucket_name,
+            object_key,
+            expected_bytes=object_payload,
+            expected_content_type="text/markdown; charset=utf-8",
+            expected_metadata=expected_metadata,
+            expected_tags=initial_tags,
+        )
+
+        tags_payload = manager_session.put(
+            f"/browser/buckets/{bucket_name}/object-tags",
+            params=_account_params(account_id),
+            json={
+                "key": object_key,
+                "tags": [{"key": key, "value": value} for key, value in sorted(expected_tags.items())],
+            },
+        )
+        assert tags_payload["key"] == object_key
+        assert _get_object_tags(manager_session, account_id, bucket_name, object_key) == expected_tags
+        metadata_after_tags = _head_object(manager_session, account_id, bucket_name, object_key)
+        assert dict(sorted((metadata_after_tags.get("metadata") or {}).items())) == expected_metadata
+        _assert_object_matches(
+            manager_session,
+            account_id,
+            bucket_name,
+            object_key,
+            expected_bytes=object_payload,
+            expected_content_type="text/markdown; charset=utf-8",
+            expected_metadata=expected_metadata,
+            expected_tags=expected_tags,
+        )
+
+        target_storage_class = _pick_storage_class_target(
+            endpoint_info,
+            current_storage_class=metadata_after_tags.get("storage_class"),
+        )
+        storage_payload = manager_session.put(
+            f"/browser/buckets/{bucket_name}/object-meta",
+            params=_account_params(account_id),
+            json={
+                "key": object_key,
+                "storage_class": target_storage_class,
+            },
+        )
+        storage_class = str(storage_payload.get("storage_class") or "").strip().upper()
+        assert storage_class, "Storage class update should return a storage class"
+        assert storage_class == target_storage_class
+        assert dict(sorted((storage_payload.get("metadata") or {}).items())) == expected_metadata
+
+        metadata_after_storage = _head_object(manager_session, account_id, bucket_name, object_key)
+        assert str(metadata_after_storage.get("storage_class") or "").strip().upper() == target_storage_class
+        assert metadata_after_storage["content_type"] == "text/markdown; charset=utf-8"
+        assert metadata_after_storage["cache_control"] == "max-age=600"
+        assert metadata_after_storage["content_disposition"] == 'inline; filename="object-settings.txt"'
+        assert metadata_after_storage["content_encoding"] == "identity"
+        assert metadata_after_storage["content_language"] == "fr-FR"
+        _assert_close_datetime(metadata_after_storage["expires"], expected_expires)
+        assert dict(sorted((metadata_after_storage.get("metadata") or {}).items())) == expected_metadata
+        assert _get_object_tags(manager_session, account_id, bucket_name, object_key) == expected_tags
+        _assert_object_matches(
+            manager_session,
+            account_id,
+            bucket_name,
+            object_key,
+            expected_bytes=object_payload,
+            expected_content_type="text/markdown; charset=utf-8",
+            expected_metadata=expected_metadata,
+            expected_tags=expected_tags,
+        )
+    finally:
+        try:
+            _delete_object(manager_session, account_id, bucket_name, object_key)
+        except BackendAPIError:
+            pass
+        try:
+            manager_session.delete(
+                f"/manager/buckets/{bucket_name}",
+                params={"account_id": account_id, "force": "true"},
+                expected_status=(200, 404),
+            )
+        except BackendAPIError:
+            pass
+        _cleanup_browser_connection_context(super_admin_session, context)
+
+
+def test_browser_object_access_and_protection_roundtrip_flow(
+    ceph_test_settings: CephTestSettings,
+    super_admin_session: BackendSession,
+    backend_authenticator,
+) -> None:
+    context = _create_browser_connection_context(
+        super_admin_session,
+        backend_authenticator,
+        ceph_test_settings,
+    )
+    manager_session: BackendSession = context["manager_session"]
+    account_id = context["account_ref"]
+
+    bucket_name = _bucket_name(ceph_test_settings.test_prefix, "browser-object-protection")
+    _create_bucket(manager_session, account_id, bucket_name, versioning=True)
+
+    object_key = "protection/object-lock.txt"
+    object_payload = b"browser access and protection payload"
+    version_id: str | None = None
+
+    try:
+        _upload_bytes(
+            manager_session,
+            account_id,
+            bucket_name,
+            object_key,
+            object_payload,
+            content_type="text/plain",
+        )
+        version_id = _latest_version_id(manager_session, account_id, bucket_name, object_key)
+
+        acl_payload = manager_session.put(
+            f"/browser/buckets/{bucket_name}/object-acl",
+            params=_account_params(account_id),
+            json={"key": object_key, "acl": "public-read", "version_id": version_id},
+        )
+        assert acl_payload["acl"] == "public-read"
+        fetched_acl = _get_object_acl(
+            manager_session,
+            account_id,
+            bucket_name,
+            object_key,
+            version_id=version_id,
+        )
+        assert fetched_acl["key"] == object_key
+        assert fetched_acl["acl"] == "public-read"
+
+        presigned = manager_session.post(
+            f"/browser/buckets/{bucket_name}/presign",
+            params=_account_params(account_id),
+            json={
+                "key": object_key,
+                "operation": "get_object",
+                "expires_in": 1800,
+                "version_id": version_id,
+            },
+        )
+        assert presigned["url"].startswith("http")
+        presigned_response = _perform_presigned_request(
+            ceph_test_settings,
+            presigned.get("method") or "GET",
+            presigned["url"],
+            headers=presigned.get("headers") or {},
+        )
+        try:
+            assert presigned_response.content == object_payload
+        finally:
+            presigned_response.close()
+
+        if not _ensure_bucket_object_lock_if_supported(manager_session, account_id, bucket_name):
+            return
+
+        try:
+            legal_hold = manager_session.put(
+                f"/browser/buckets/{bucket_name}/object-legal-hold",
+                params=_account_params(account_id),
+                json={"key": object_key, "status": "ON", "version_id": version_id},
+            )
+            assert legal_hold["status"] == "ON"
+            fetched_legal_hold = manager_session.get(
+                f"/browser/buckets/{bucket_name}/object-legal-hold",
+                params={"account_id": account_id, "key": object_key, "version_id": version_id},
+            )
+            assert fetched_legal_hold["status"] == "ON"
+
+            initial_retain_until = (datetime.now(timezone.utc) + timedelta(days=3)).replace(microsecond=0)
+            retention = manager_session.put(
+                f"/browser/buckets/{bucket_name}/object-retention",
+                params=_account_params(account_id),
+                json={
+                    "key": object_key,
+                    "mode": "GOVERNANCE",
+                    "retain_until": initial_retain_until.isoformat(),
+                    "version_id": version_id,
+                },
+            )
+            assert retention["mode"] == "GOVERNANCE"
+            fetched_retention = manager_session.get(
+                f"/browser/buckets/{bucket_name}/object-retention",
+                params={"account_id": account_id, "key": object_key, "version_id": version_id},
+            )
+            assert fetched_retention["mode"] == "GOVERNANCE"
+            _assert_close_datetime(fetched_retention["retain_until"], initial_retain_until)
+
+            bypass_retain_until = (datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0)
+            bypass_retention = manager_session.put(
+                f"/browser/buckets/{bucket_name}/object-retention",
+                params=_account_params(account_id),
+                json={
+                    "key": object_key,
+                    "mode": "GOVERNANCE",
+                    "retain_until": bypass_retain_until.isoformat(),
+                    "version_id": version_id,
+                    "bypass_governance": True,
+                },
+            )
+            assert bypass_retention["mode"] == "GOVERNANCE"
+            assert bypass_retention["bypass_governance"] is True
+            fetched_bypass_retention = manager_session.get(
+                f"/browser/buckets/{bucket_name}/object-retention",
+                params={"account_id": account_id, "key": object_key, "version_id": version_id},
+            )
+            assert fetched_bypass_retention["mode"] == "GOVERNANCE"
+            _assert_close_datetime(fetched_bypass_retention["retain_until"], bypass_retain_until)
+        except BackendAPIError as exc:
+            if looks_unsupported(
+                exc,
+                markers=(
+                    "object lock",
+                    "retention",
+                    "legal hold",
+                    "invalidbucketstate",
+                    "malformedxml",
+                    "not enabled",
+                    "not supported",
+                ),
+            ):
+                return
+            raise
+
+        _assert_object_matches(
+            manager_session,
+            account_id,
+            bucket_name,
+            object_key,
+            expected_bytes=object_payload,
+            expected_content_type="text/plain",
+        )
+    finally:
+        if version_id:
+            try:
+                manager_session.put(
+                    f"/browser/buckets/{bucket_name}/object-legal-hold",
+                    params=_account_params(account_id),
+                    json={"key": object_key, "status": "OFF", "version_id": version_id},
+                )
+            except BackendAPIError:
+                pass
+            try:
+                manager_session.put(
+                    f"/browser/buckets/{bucket_name}/object-retention",
+                    params=_account_params(account_id),
+                    json={
+                        "key": object_key,
+                        "mode": "GOVERNANCE",
+                        "retain_until": (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat(),
+                        "version_id": version_id,
+                        "bypass_governance": True,
+                    },
+                )
+                time.sleep(1.2)
+            except BackendAPIError:
+                pass
+            try:
+                _delete_version(manager_session, account_id, bucket_name, object_key, version_id)
+            except BackendAPIError:
+                pass
+        try:
+            _delete_object(manager_session, account_id, bucket_name, object_key)
+        except BackendAPIError:
+            pass
+        try:
+            _delete_all_object_versions(manager_session, account_id, bucket_name, object_key)
+        except BackendAPIError:
+            pass
+        try:
+            manager_session.delete(
+                f"/manager/buckets/{bucket_name}",
+                params={"account_id": account_id, "force": "true"},
+                expected_status=(200, 404),
+            )
+        except BackendAPIError:
+            pass
+        _cleanup_browser_connection_context(super_admin_session, context)
 
 
 def test_browser_versions_cleanup_flow(
