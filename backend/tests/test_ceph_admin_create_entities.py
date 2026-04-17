@@ -6,8 +6,10 @@ import pytest
 
 from app.models.ceph_admin import (
     CephAdminRgwAccountCreate,
+    CephAdminRgwAccountConfigUpdate,
     CephAdminRgwUserCapsUpdate,
     CephAdminRgwUserCreate,
+    CephAdminRgwUserConfigUpdate,
 )
 from app.routers.ceph_admin import accounts as accounts_router
 from app.routers.ceph_admin import buckets as buckets_router
@@ -137,6 +139,88 @@ def test_create_rgw_account_supports_quota():
     assert fake_rgw.create_account_calls[0]["account_id"] == "RGW12345678901234567"
     assert len(fake_rgw.set_account_quota_calls) == 1
     assert fake_rgw.set_account_quota_calls[0]["enabled"] is True
+
+
+def test_update_rgw_account_quota_omits_unset_object_limit():
+    fake_rgw = FakeAccountsAdmin()
+    ctx = SimpleNamespace(endpoint=SimpleNamespace(id=901), rgw_admin=fake_rgw)
+
+    accounts_router.update_rgw_account_config(
+        "RGW12345678901234567",
+        CephAdminRgwAccountConfigUpdate(
+            quota_enabled=True,
+            quota_max_size_bytes=4096,
+        ),
+        ctx=ctx,
+    )
+
+    assert fake_rgw.set_account_quota_calls[-1] == {
+        "account_id": "RGW12345678901234567",
+        "max_size_bytes": 4096,
+        "max_objects": None,
+        "enabled": True,
+        "quota_type": "account",
+    }
+
+
+def test_update_rgw_account_quota_clears_object_limit_with_explicit_null():
+    fake_rgw = FakeAccountsAdmin()
+    ctx = SimpleNamespace(endpoint=SimpleNamespace(id=901), rgw_admin=fake_rgw)
+
+    accounts_router.update_rgw_account_config(
+        "RGW12345678901234567",
+        CephAdminRgwAccountConfigUpdate(quota_max_objects=None),
+        ctx=ctx,
+    )
+
+    assert fake_rgw.set_account_quota_calls[-1] == {
+        "account_id": "RGW12345678901234567",
+        "max_size_bytes": None,
+        "max_objects": 0,
+        "enabled": True,
+        "quota_type": "account",
+    }
+
+
+def test_update_rgw_bucket_quota_omits_unset_object_limit():
+    fake_rgw = FakeAccountsAdmin()
+    ctx = SimpleNamespace(endpoint=SimpleNamespace(id=901), rgw_admin=fake_rgw)
+
+    accounts_router.update_rgw_account_config(
+        "RGW12345678901234567",
+        CephAdminRgwAccountConfigUpdate(
+            bucket_quota_enabled=True,
+            bucket_quota_max_size_bytes=8192,
+        ),
+        ctx=ctx,
+    )
+
+    assert fake_rgw.set_account_quota_calls[-1] == {
+        "account_id": "RGW12345678901234567",
+        "max_size_bytes": 8192,
+        "max_objects": None,
+        "enabled": True,
+        "quota_type": "bucket",
+    }
+
+
+def test_update_rgw_bucket_quota_clears_object_limit_with_explicit_null():
+    fake_rgw = FakeAccountsAdmin()
+    ctx = SimpleNamespace(endpoint=SimpleNamespace(id=901), rgw_admin=fake_rgw)
+
+    accounts_router.update_rgw_account_config(
+        "RGW12345678901234567",
+        CephAdminRgwAccountConfigUpdate(bucket_quota_max_objects=None),
+        ctx=ctx,
+    )
+
+    assert fake_rgw.set_account_quota_calls[-1] == {
+        "account_id": "RGW12345678901234567",
+        "max_size_bytes": None,
+        "max_objects": 0,
+        "enabled": True,
+        "quota_type": "bucket",
+    }
 
 
 class FakeUsersAdmin:
@@ -279,6 +363,47 @@ def test_create_rgw_user_with_account_scope_returns_generated_key():
     assert len(fake_rgw.set_user_caps_calls) == 1
     assert fake_rgw.set_user_caps_calls[0]["caps"] == ["usage=read"]
     assert len(fake_rgw.set_user_quota_calls) == 1
+
+
+def test_update_rgw_user_quota_omits_unset_object_limit():
+    fake_rgw = FakeUsersAdmin()
+    ctx = SimpleNamespace(endpoint=SimpleNamespace(id=902), rgw_admin=fake_rgw)
+
+    users_router.update_rgw_user_config(
+        "billing-user",
+        CephAdminRgwUserConfigUpdate(
+            quota_enabled=True,
+            quota_max_size_bytes=2048,
+        ),
+        ctx=ctx,
+    )
+
+    assert fake_rgw.set_user_quota_calls[-1] == {
+        "uid": "billing-user",
+        "tenant": None,
+        "max_size_bytes": 2048,
+        "max_objects": None,
+        "enabled": True,
+    }
+
+
+def test_update_rgw_user_quota_clears_object_limit_with_explicit_null():
+    fake_rgw = FakeUsersAdmin()
+    ctx = SimpleNamespace(endpoint=SimpleNamespace(id=902), rgw_admin=fake_rgw)
+
+    users_router.update_rgw_user_config(
+        "billing-user",
+        CephAdminRgwUserConfigUpdate(quota_max_objects=None),
+        ctx=ctx,
+    )
+
+    assert fake_rgw.set_user_quota_calls[-1] == {
+        "uid": "billing-user",
+        "tenant": None,
+        "max_size_bytes": None,
+        "max_objects": 0,
+        "enabled": True,
+    }
 
 
 def test_summarize_rgw_info_collects_placements_and_storage_classes():

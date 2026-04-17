@@ -8,6 +8,7 @@ import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   CephAdminEntityMetrics,
   CephAdminRgwAccountDetail,
+  UpdateCephAdminAccountPayload,
   getCephAdminAccountDetail,
   getCephAdminAccountMetrics,
   updateCephAdminAccountConfig,
@@ -16,6 +17,7 @@ import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import UsageTile from "../../components/UsageTile";
+import { buildCephAdminQuotaPatch } from "./quotaPatch";
 
 type Props = {
   endpointId: number;
@@ -257,7 +259,7 @@ export default function CephAdminAccountEditModal({
 
     setSaving(true);
     try {
-      const updated = await updateCephAdminAccountConfig(endpointId, accountId, {
+      const payload: UpdateCephAdminAccountPayload = {
         account_name: accountName.trim() || null,
         email: email.trim() || null,
         max_users: parsedMaxUsers,
@@ -265,13 +267,34 @@ export default function CephAdminAccountEditModal({
         max_roles: parsedMaxRoles,
         max_groups: parsedMaxGroups,
         max_access_keys: parsedMaxAccessKeys,
-        quota_enabled: quotaEnabled,
-        quota_max_size_bytes: parsedQuotaBytes,
-        quota_max_objects: parsedQuotaObjects,
-        bucket_quota_enabled: bucketQuotaEnabled,
-        bucket_quota_max_size_bytes: parsedBucketQuotaBytes,
-        bucket_quota_max_objects: parsedBucketQuotaObjects,
-      });
+        ...buildCephAdminQuotaPatch(
+          {
+            enabled: "quota_enabled",
+            maxSizeBytes: "quota_max_size_bytes",
+            maxObjects: "quota_max_objects",
+          },
+          detail?.quota,
+          {
+            enabled: quotaEnabled,
+            maxSizeBytes: parsedQuotaBytes,
+            maxObjects: parsedQuotaObjects,
+          }
+        ),
+        ...buildCephAdminQuotaPatch(
+          {
+            enabled: "bucket_quota_enabled",
+            maxSizeBytes: "bucket_quota_max_size_bytes",
+            maxObjects: "bucket_quota_max_objects",
+          },
+          detail?.bucket_quota,
+          {
+            enabled: bucketQuotaEnabled,
+            maxSizeBytes: parsedBucketQuotaBytes,
+            maxObjects: parsedBucketQuotaObjects,
+          }
+        ),
+      };
+      const updated = await updateCephAdminAccountConfig(endpointId, accountId, payload);
       setDetail(updated);
       setSaveStatus("Account configuration updated.");
       onSaved?.(updated);

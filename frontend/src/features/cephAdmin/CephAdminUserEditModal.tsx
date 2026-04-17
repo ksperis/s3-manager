@@ -10,6 +10,7 @@ import {
   CephAdminRgwAccessKey,
   CephAdminRgwGeneratedAccessKey,
   CephAdminRgwUserDetail,
+  UpdateCephAdminUserPayload,
   createCephAdminUserKey,
   deleteCephAdminUserKey,
   getCephAdminUserDetail,
@@ -26,6 +27,7 @@ import UsageTile from "../../components/UsageTile";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
+import { buildCephAdminQuotaPatch } from "./quotaPatch";
 
 type Props = {
   endpointId: number;
@@ -285,30 +287,41 @@ export default function CephAdminUserEditModal({
 
     setSaving(true);
     try {
+      const payload: UpdateCephAdminUserPayload = {
+        display_name: displayName.trim() || null,
+        email: email.trim() || null,
+        suspended,
+        max_buckets: parsedMaxBuckets,
+        op_mask: opMask.trim() || null,
+        admin: adminFlag,
+        system: systemFlag,
+        account_root: accountRootEnabled ? true : undefined,
+        caps: {
+          mode: capsMode,
+          values: capsTextToValues(capsText),
+        },
+        extra_params: {
+          "default-placement": nextDefaultPlacement || "",
+          "default-storage-class": nextDefaultStorageClass || "",
+        },
+        ...buildCephAdminQuotaPatch(
+          {
+            enabled: "quota_enabled",
+            maxSizeBytes: "quota_max_size_bytes",
+            maxObjects: "quota_max_objects",
+          },
+          detail?.quota,
+          {
+            enabled: quotaEnabled,
+            maxSizeBytes: parsedQuotaBytes,
+            maxObjects: parsedQuotaObjects,
+          }
+        ),
+      };
       const updated = await updateCephAdminUserConfig(
         endpointId,
         uid,
-        {
-          display_name: displayName.trim() || null,
-          email: email.trim() || null,
-          suspended,
-          max_buckets: parsedMaxBuckets,
-          op_mask: opMask.trim() || null,
-          admin: adminFlag,
-          system: systemFlag,
-          account_root: accountRootEnabled ? true : undefined,
-          quota_enabled: quotaEnabled,
-          quota_max_size_bytes: parsedQuotaBytes,
-          quota_max_objects: parsedQuotaObjects,
-          caps: {
-            mode: capsMode,
-            values: capsTextToValues(capsText),
-          },
-          extra_params: {
-            "default-placement": nextDefaultPlacement || "",
-            "default-storage-class": nextDefaultStorageClass || "",
-          },
-        },
+        payload,
         tenant
       );
       setDetail(updated);
