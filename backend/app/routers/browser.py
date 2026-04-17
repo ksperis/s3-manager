@@ -16,6 +16,7 @@ logic implemented in :func:`app.routers.dependencies.get_account_context`.
 """
 
 from typing import Any, NoReturn, Optional, Union
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -102,6 +103,12 @@ from app.services import bucket_config_actions
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.buckets_service import BucketsService, get_buckets_service
 router = APIRouter(prefix="/browser", tags=["browser"])
+
+
+def _build_attachment_content_disposition(filename: str) -> str:
+    fallback = "".join(char if 0x20 <= ord(char) <= 0x7E else "_" for char in filename).replace('"', '\\"')
+    encoded = quote(filename, safe="")
+    return f'attachment; filename="{fallback or "download"}"; filename*=UTF-8\'\'{encoded}'
 
 BrowserActor = Union[User, ManagerSessionPrincipal]
 
@@ -1699,7 +1706,7 @@ def download_object(
         )
         headers = {}
         if filename:
-            headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+            headers["Content-Disposition"] = _build_attachment_content_disposition(filename)
         return StreamingResponse(stream, media_type=content_type or "application/octet-stream", headers=headers)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)

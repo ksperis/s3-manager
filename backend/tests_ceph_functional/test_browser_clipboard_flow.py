@@ -545,6 +545,41 @@ def _proxy_copy_between_accounts(
     )
 
 
+def _special_character_object_cases() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "ascii",
+            "source_key": "special/ascii/report.+~%#$.txt",
+            "copy_key": "copies/ascii/report-copy.+~%#$.txt",
+            "move_key": "moves/ascii/report-moved.+~%#$.txt",
+            "payload": "ASCII special key payload\n".encode("utf-8"),
+            "content_type": "text/plain; charset=utf-8",
+            "metadata": {"owner": "functional", "suite": "special-ascii"},
+            "tags": {"case": "ascii", "mode": "special-keys"},
+        },
+        {
+            "name": "latin-utf8",
+            "source_key": "special/utf8/café-école-àçù.txt",
+            "copy_key": "copies/utf8/café-école-copie.txt",
+            "move_key": "moves/utf8/café-école-déplacé.txt",
+            "payload": "Accents UTF-8 payload\n".encode("utf-8"),
+            "content_type": "text/plain; charset=utf-8",
+            "metadata": {"owner": "functional", "suite": "special-latin"},
+            "tags": {"case": "latin", "mode": "special-keys"},
+        },
+        {
+            "name": "multilingual-utf8",
+            "source_key": "special/utf8/東京-данные.txt",
+            "copy_key": "copies/utf8/東京-данные-копия.txt",
+            "move_key": "moves/utf8/東京-данные-移動.txt",
+            "payload": "Tokyo and data payload\n".encode("utf-8"),
+            "content_type": "text/plain; charset=utf-8",
+            "metadata": {"owner": "functional", "suite": "special-multilingual"},
+            "tags": {"case": "multilingual", "mode": "special-keys"},
+        },
+    ]
+
+
 def test_browser_copy_and_move_same_account_across_bucket_configs(
     ceph_test_settings: CephTestSettings,
     provisioned_account,
@@ -649,6 +684,149 @@ def test_browser_copy_and_move_same_account_across_bucket_configs(
         if str(entry.get("key") or "") == source_key and bool(entry.get("is_latest"))
     ]
     assert latest_delete_markers, "Versioned move should leave the source hidden behind a latest delete marker"
+
+
+def test_browser_special_character_object_keys_same_account(
+    ceph_test_settings: CephTestSettings,
+    provisioned_account,
+    resource_tracker: ResourceTracker,
+) -> None:
+    account_id = provisioned_account.account_id
+    manager_session: BackendSession = provisioned_account.manager_session
+
+    source_bucket = _bucket_name(ceph_test_settings.test_prefix, "clip-special-src-versioned")
+    destination_bucket = _bucket_name(ceph_test_settings.test_prefix, "clip-special-dst")
+    _create_bucket(manager_session, account_id, source_bucket, versioning=True)
+    _create_bucket(manager_session, account_id, destination_bucket, versioning=False)
+    resource_tracker.track_bucket(account_id, source_bucket)
+    resource_tracker.track_bucket(account_id, destination_bucket)
+
+    for case in _special_character_object_cases():
+        source_key = str(case["source_key"])
+        copy_key = str(case["copy_key"])
+        move_key = str(case["move_key"])
+        payload = bytes(case["payload"])
+        content_type = str(case["content_type"])
+        metadata = dict(case["metadata"])
+        tags = dict(case["tags"])
+
+        _upload_bytes(
+            manager_session,
+            account_id,
+            source_bucket,
+            source_key,
+            payload,
+            content_type=content_type,
+            filename=source_key.rsplit("/", 1)[-1],
+        )
+        _set_object_metadata(
+            manager_session,
+            account_id,
+            source_bucket,
+            source_key,
+            content_type=content_type,
+            metadata=metadata,
+        )
+        _set_object_tags(
+            manager_session,
+            account_id,
+            source_bucket,
+            source_key,
+            tags,
+        )
+
+        source_keys = _list_object_keys(
+            manager_session,
+            account_id,
+            source_bucket,
+            prefix="special/",
+        )
+        assert source_key in source_keys
+        assert _head_object(manager_session, account_id, source_bucket, source_key)["key"] == source_key
+        assert _get_object_tags(manager_session, account_id, source_bucket, source_key) == tags
+        assert _download_bytes(manager_session, account_id, source_bucket, source_key) == payload
+
+        _copy_object(
+            manager_session,
+            account_id,
+            destination_bucket,
+            source_bucket=source_bucket,
+            source_key=source_key,
+            destination_key=copy_key,
+        )
+        destination_keys_after_copy = _list_object_keys(
+            manager_session,
+            account_id,
+            destination_bucket,
+            prefix="copies/",
+        )
+        assert copy_key in destination_keys_after_copy
+        _assert_object_matches(
+            manager_session,
+            account_id,
+            destination_bucket,
+            copy_key,
+            expected_bytes=payload,
+            expected_content_type=content_type,
+            expected_metadata=metadata,
+            expected_tags=tags,
+        )
+        assert _head_object(manager_session, account_id, destination_bucket, copy_key)["key"] == copy_key
+
+        _copy_object(
+            manager_session,
+            account_id,
+            destination_bucket,
+            source_bucket=source_bucket,
+            source_key=source_key,
+            destination_key=move_key,
+            move=True,
+        )
+        destination_keys_after_move = _list_object_keys(
+            manager_session,
+            account_id,
+            destination_bucket,
+            prefix="moves/",
+        )
+        assert move_key in destination_keys_after_move
+        _assert_object_matches(
+            manager_session,
+            account_id,
+            destination_bucket,
+            move_key,
+            expected_bytes=payload,
+            expected_content_type=content_type,
+            expected_metadata=metadata,
+            expected_tags=tags,
+        )
+        assert _head_object(manager_session, account_id, destination_bucket, move_key)["key"] == move_key
+
+        _wait_for_object_absence(
+            manager_session,
+            account_id,
+            source_bucket,
+            source_key,
+        )
+        source_keys_after_move = _list_object_keys(
+            manager_session,
+            account_id,
+            source_bucket,
+            prefix="special/",
+        )
+        assert source_key not in source_keys_after_move
+
+        versions = _list_versions(
+            manager_session,
+            account_id,
+            source_bucket,
+            key=source_key,
+        )
+        latest_delete_markers = [
+            entry
+            for entry in (versions.get("delete_markers") or [])
+            if str(entry.get("key") or "") == source_key and bool(entry.get("is_latest"))
+        ]
+        assert latest_delete_markers, f"Versioned move should leave a latest delete marker for '{source_key}'"
 
 
 def test_browser_cross_account_direct_transfer_handles_small_copy_and_large_move(
