@@ -13,7 +13,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
 import { BROWSER_ROOT_UI_STATE_STORAGE_KEY } from "./browserRootUiState";
-import { BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY } from "./browserEmbeddedColumnsState";
+import {
+  BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY,
+  BROWSER_EMBEDDED_COLUMN_WIDTHS_STORAGE_KEY,
+} from "./browserEmbeddedColumnsState";
 
 const searchBrowserBucketsMock = vi.fn();
 const fetchBrowserSettingsMock = vi.fn();
@@ -202,6 +205,11 @@ function openHeaderConfigMenu() {
   return screen.getByRole("menu");
 }
 
+function getObjectTableCols() {
+  const table = screen.getByRole("table");
+  return Array.from(table.querySelectorAll("col"));
+}
+
 function getContextToolbar() {
   return screen.getByRole("toolbar", { name: "Browser context bar" });
 }
@@ -252,14 +260,22 @@ function setBrowserLayoutRect(width: number, height = 720) {
 }
 
 async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
+  const previousMenus = new Set(screen.queryAllByRole("menu", { name: "More" }));
   const toolbar =
     screen.queryByRole("toolbar", { name: "Browser context bar" }) &&
     within(getContextToolbar()).queryByRole("button", { name: "More" })
       ? getContextToolbar()
       : getActionsToolbar();
   await user.click(within(toolbar).getByRole("button", { name: "More" }));
-  const menus = await screen.findAllByRole("menu", { name: "More" });
-  return menus[menus.length - 1] as HTMLElement;
+  await waitFor(() => {
+    const menus = screen.queryAllByRole("menu", { name: "More" });
+    expect(menus.some((menu) => !previousMenus.has(menu))).toBe(true);
+  });
+  const menus = screen.queryAllByRole("menu", { name: "More" });
+  return (
+    menus.find((menu) => !previousMenus.has(menu)) ??
+    (menus[menus.length - 1] as HTMLElement)
+  ) as HTMLElement;
 }
 
 function expectPassiveStatusBadge(badge: HTMLElement) {
@@ -271,11 +287,19 @@ function expectPassiveStatusBadge(badge: HTMLElement) {
 }
 
 async function openActionsMoreMenu(user: ReturnType<typeof userEvent.setup>) {
+  const previousMenus = new Set(screen.queryAllByRole("menu", { name: "More" }));
   await user.click(
     within(getActionsToolbar()).getByRole("button", { name: "More" }),
   );
-  const menus = await screen.findAllByRole("menu", { name: "More" });
-  return menus[menus.length - 1] as HTMLElement;
+  await waitFor(() => {
+    const menus = screen.queryAllByRole("menu", { name: "More" });
+    expect(menus.some((menu) => !previousMenus.has(menu))).toBe(true);
+  });
+  const menus = screen.queryAllByRole("menu", { name: "More" });
+  return (
+    menus.find((menu) => !previousMenus.has(menu)) ??
+    (menus[menus.length - 1] as HTMLElement)
+  ) as HTMLElement;
 }
 
 async function openColumnsSubmenuFromMore(
@@ -751,6 +775,188 @@ describe("BrowserPage interactions", () => {
     ).toContain("storageClass");
   });
 
+  it("resizes object columns and persists widths separately for root and embedded browsers", async () => {
+    const rootView = renderPage({ initialEntry: "/browser" });
+    await findRowByLabel("a.txt");
+
+    expect(getObjectTableCols()[1]?.style.width).toBe("320px");
+
+    const nameSeparator = screen.getByRole("separator", {
+      name: "Resize Name column",
+    });
+    fireEvent.pointerDown(nameSeparator, { clientX: 320 });
+    fireEvent.pointerMove(document, { clientX: 420 });
+    fireEvent.pointerUp(document);
+
+    await waitFor(() => {
+      expect(getObjectTableCols()[1]?.style.width).toBe("420px");
+    });
+    await waitFor(() => {
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY) ?? "{}",
+        ).objectColumnWidths.name,
+      ).toBe(420);
+    });
+    rootView.unmount();
+
+    const embeddedView = renderEmbeddedPage({ initialEntry: "/manager/browser" });
+    await findRowByLabel("a.txt");
+    expect(getObjectTableCols()[1]?.style.width).toBe("320px");
+
+    const modifiedSeparator = screen.getByRole("separator", {
+      name: "Resize Modified column",
+    });
+    fireEvent.pointerDown(modifiedSeparator, { clientX: 160 });
+    fireEvent.pointerMove(document, { clientX: 210 });
+    fireEvent.pointerUp(document);
+
+    await waitFor(() => {
+      expect(getObjectTableCols()[3]?.style.width).toBe("210px");
+    });
+    await waitFor(() => {
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(
+            BROWSER_EMBEDDED_COLUMN_WIDTHS_STORAGE_KEY,
+          ) ?? "{}",
+        ).modified,
+      ).toBe(210);
+    });
+    embeddedView.unmount();
+
+    renderPage({ initialEntry: "/browser" });
+    await findRowByLabel("a.txt");
+    expect(getObjectTableCols()[1]?.style.width).toBe("420px");
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          BROWSER_EMBEDDED_COLUMN_WIDTHS_STORAGE_KEY,
+        ) ?? "{}",
+      ).modified,
+    ).toBe(210);
+  });
+
+  it("restores custom column width when the column is hidden then shown again", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const separator = screen.getByRole("separator", {
+      name: "Resize Modified column",
+    });
+    fireEvent.pointerDown(separator, { clientX: 160 });
+    fireEvent.pointerMove(document, { clientX: 220 });
+    fireEvent.pointerUp(document);
+
+    await waitFor(() => {
+      expect(getObjectTableCols()[3]?.style.width).toBe("220px");
+    });
+
+    let menu = openHeaderConfigMenu();
+    await user.click(within(menu).getByRole("button", { name: /Modified/ }));
+    expect(
+      screen.queryByRole("columnheader", { name: "Modified" }),
+    ).not.toBeInTheDocument();
+
+    menu = openHeaderConfigMenu();
+    await user.click(within(menu).getByRole("button", { name: /Modified/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("columnheader", { name: "Modified" })).toBeInTheDocument();
+      expect(getObjectTableCols()[3]?.style.width).toBe("220px");
+    });
+  });
+
+  it("resets custom widths together with visible columns", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    let menu = openHeaderConfigMenu();
+    await user.click(within(menu).getByRole("button", { name: "ETag" }));
+    expect(screen.getByRole("columnheader", { name: "ETag" })).toBeInTheDocument();
+
+    fireEvent.pointerDown(
+      screen.getByRole("separator", { name: "Resize Name column" }),
+      { clientX: 320 },
+    );
+    fireEvent.pointerMove(document, { clientX: 400 });
+    fireEvent.pointerUp(document);
+
+    fireEvent.pointerDown(
+      screen.getByRole("separator", { name: "Resize ETag column" }),
+      { clientX: 192 },
+    );
+    fireEvent.pointerMove(document, { clientX: 252 });
+    fireEvent.pointerUp(document);
+
+    await waitFor(() => {
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY) ?? "{}",
+        ).objectColumnWidths,
+      ).toMatchObject({
+        name: 400,
+        etag: 252,
+      });
+    });
+
+    menu = openHeaderConfigMenu();
+    await user.click(within(menu).getByRole("button", { name: "Reset columns" }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("columnheader", { name: "ETag" }),
+      ).not.toBeInTheDocument();
+      expect(getObjectTableCols()[1]?.style.width).toBe("320px");
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY) ?? "{}",
+        ).objectColumnWidths ?? {},
+      ).toEqual({});
+    });
+  });
+
+  it("resets a resized column to its default width on double-click", async () => {
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const separator = screen.getByRole("separator", {
+      name: "Resize Name column",
+    });
+    fireEvent.pointerDown(separator, { clientX: 320 });
+    fireEvent.pointerMove(document, { clientX: 430 });
+    fireEvent.pointerUp(document);
+
+    await waitFor(() => {
+      expect(getObjectTableCols()[1]?.style.width).toBe("430px");
+    });
+
+    fireEvent.doubleClick(separator);
+
+    await waitFor(() => {
+      expect(getObjectTableCols()[1]?.style.width).toBe("320px");
+      expect(
+        JSON.parse(
+          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY) ?? "{}",
+        ).objectColumnWidths ?? {},
+      ).toEqual({});
+    });
+  });
+
+  it("does not render resize handles for fixed selection and actions columns", async () => {
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    expect(
+      screen.queryByRole("separator", { name: "Resize Select all column" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: "Resize Actions column" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("toggles non-lazy columns and updates table headers/cells", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -1141,6 +1347,9 @@ describe("BrowserPage interactions", () => {
       within(menu).getByRole("menuitem", { name: "Copy path" }),
     ).toBeInTheDocument();
     expect(
+      within(menu).getByRole("menuitem", { name: "Configure bucket" }),
+    ).toBeInTheDocument();
+    expect(
       within(menu).getByRole("menuitemcheckbox", { name: /Folders panel/i }),
     ).toBeInTheDocument();
     expect(
@@ -1169,6 +1378,8 @@ describe("BrowserPage interactions", () => {
     expect(within(menu).getByText("Transfers")).toBeInTheDocument();
     const badge = await within(menu).findByText("Presign");
     expectPassiveStatusBadge(badge);
+    expect(badge).toHaveClass("px-1.5", "py-0.5", "text-[10px]", "leading-4");
+    expect(badge).not.toHaveClass("px-2.5", "py-1");
   });
 
   it("renders a passive Unavailable badge when direct and proxy transfers are both unavailable", async () => {
@@ -1202,6 +1413,59 @@ describe("BrowserPage interactions", () => {
     expect(within(menu).getByText("Transfers")).toBeInTheDocument();
     const badge = await within(menu).findByText("Proxy");
     expectPassiveStatusBadge(badge);
+  });
+
+  it("opens bucket configuration from More on /browser", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    const menu = await openContextMoreMenu(user);
+    await user.click(
+      within(menu).getByRole("menuitem", { name: "Configure bucket" }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", {
+        name: "Configure bucket · bucket-1",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows Configure bucket disabled in More when no bucket is selected", async () => {
+    const user = userEvent.setup();
+    searchBrowserBucketsMock.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 50,
+      has_next: false,
+    });
+
+    renderPage();
+    await screen.findByRole("button", { name: "Select bucket" });
+
+    const menu = await openContextMoreMenu(user);
+    expect(
+      within(menu).getByRole("menuitem", { name: "Configure bucket" }),
+    ).toBeDisabled();
+  });
+
+  it("does not show Configure bucket in embedded browser More menus", async () => {
+    const user = userEvent.setup();
+    const entries = ["/manager/browser", "/ceph-admin/browser"];
+
+    for (const entry of entries) {
+      const view = renderEmbeddedPage({ initialEntry: entry });
+      await findRowByLabel("a.txt");
+
+      const menu = await openContextMoreMenu(user);
+      expect(
+        within(menu).queryByRole("menuitem", { name: "Configure bucket" }),
+      ).not.toBeInTheDocument();
+
+      view.unmount();
+    }
   });
 
   it("keeps advanced search controls available after the explorer chrome refresh", async () => {

@@ -7,7 +7,9 @@ import {
   MAX_INSPECTOR_PANEL_WIDTH_PX,
   MIN_FOLDERS_PANEL_WIDTH_PX,
   MIN_INSPECTOR_PANEL_WIDTH_PX,
+  readBrowserRootObjectColumnWidths,
   readStoredBrowserRootUiState,
+  writeBrowserRootObjectColumnWidths,
   writeBrowserRootUiLayout,
   writeBrowserRootUiPanelWidths,
 } from "./browserRootUiState";
@@ -38,6 +40,7 @@ describe("browserRootUiState", () => {
       },
       contextSelections: {},
       objectColumns: [],
+      objectColumnWidths: {},
     });
   });
 
@@ -100,5 +103,67 @@ describe("browserRootUiState", () => {
       foldersPanelWidthPx: MIN_FOLDERS_PANEL_WIDTH_PX,
       inspectorPanelWidthPx: MAX_INSPECTOR_PANEL_WIDTH_PX,
     });
+  });
+
+  it("persists object column widths separately from layout", () => {
+    writeBrowserRootUiLayout({
+      showFolders: false,
+      showInspector: true,
+      showActionBar: false,
+    });
+    writeBrowserRootObjectColumnWidths({
+      name: 420,
+      modified: 190,
+    });
+
+    expect(readStoredBrowserRootUiState()).toEqual({
+      layout: {
+        showFolders: false,
+        showInspector: true,
+        showActionBar: false,
+        foldersPanelWidthPx: DEFAULT_FOLDERS_PANEL_WIDTH_PX,
+        inspectorPanelWidthPx: DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
+      },
+      contextSelections: {},
+      objectColumns: [],
+      objectColumnWidths: {
+        name: 420,
+        modified: 190,
+      },
+    });
+  });
+
+  it("normalizes invalid stored object column widths", () => {
+    window.localStorage.setItem(
+      BROWSER_ROOT_UI_STATE_STORAGE_KEY,
+      JSON.stringify({
+        objectColumnWidths: {
+          name: 360.4,
+          modified: 0,
+          size: -20,
+          invalid: "wide",
+        },
+      }),
+    );
+
+    expect(readBrowserRootObjectColumnWidths()).toEqual({
+      name: 360,
+    });
+  });
+
+  it("falls back to empty object column widths when absent", () => {
+    window.localStorage.setItem(
+      BROWSER_ROOT_UI_STATE_STORAGE_KEY,
+      JSON.stringify({
+        layout: {
+          showFolders: true,
+          showInspector: false,
+          showActionBar: false,
+        },
+      }),
+    );
+
+    expect(readBrowserRootObjectColumnWidths()).toEqual({});
+    expect(readStoredBrowserRootUiState()?.objectColumnWidths).toEqual({});
   });
 });

@@ -137,16 +137,20 @@ import {
   MIN_FOLDERS_PANEL_WIDTH_PX,
   MIN_INSPECTOR_PANEL_WIDTH_PX,
   readBrowserRootObjectColumns,
+  readBrowserRootObjectColumnWidths,
   readBrowserRootContextSelection,
   readStoredBrowserRootUiState,
   writeBrowserRootContextSelection,
   writeBrowserRootObjectColumns,
+  writeBrowserRootObjectColumnWidths,
   writeBrowserRootUiLayout,
   writeBrowserRootUiPanelWidths,
 } from "./browserRootUiState";
 import {
   readBrowserEmbeddedObjectColumns,
+  readBrowserEmbeddedObjectColumnWidths,
   writeBrowserEmbeddedObjectColumns,
+  writeBrowserEmbeddedObjectColumnWidths,
 } from "./browserEmbeddedColumnsState";
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { S3AccountProvider } from "../manager/S3AccountContext";
@@ -402,15 +406,28 @@ type BrowserColumnId =
   | "restoreStatus";
 type BrowserSortKey = "name" | "size" | "modified" | "storageClass" | "etag";
 type ColumnLazySource = "metadata" | "tags";
+type BrowserResizableColumnId = "name" | BrowserColumnId;
 type ColumnDefinition = {
   id: BrowserColumnId;
   label: string;
   defaultVisible: boolean;
   sortable?: BrowserSortKey;
   lazySource?: ColumnLazySource;
-  widthClassName: string;
+  defaultWidthPx: number;
+  minWidthPx: number;
+  maxWidthPx: number;
   align?: "left" | "right";
 };
+type ResizableColumnDefinition = {
+  id: BrowserResizableColumnId;
+  label: string;
+  defaultWidthPx: number;
+  minWidthPx: number;
+  maxWidthPx: number;
+};
+type BrowserObjectColumnWidths = Partial<
+  Record<BrowserResizableColumnId, number>
+>;
 type LazyFieldStatus = "idle" | "loading" | "ready" | "error";
 type LazyColumnCacheEntry = {
   contentType: string | null;
@@ -520,14 +537,33 @@ const resolveBrowserPanelWidths = ({
 const LAZY_COLUMN_CONCURRENCY = 4;
 const LAZY_COLUMN_BATCH_SIZE = 24;
 const LAZY_COLUMN_ROOT_MARGIN = "200px";
+const NAME_COLUMN_DEFINITION: ResizableColumnDefinition = {
+  id: "name",
+  label: "Name",
+  defaultWidthPx: 320,
+  minWidthPx: 220,
+  maxWidthPx: 640,
+};
+const SELECTION_COLUMN_WIDTH_PX = 36;
+const ACTIONS_COLUMN_WIDTH_PX = 176;
+const COLUMN_RESIZER_HITBOX_WIDTH_PX = 12;
 const COLUMN_DEFINITIONS: ColumnDefinition[] = [
-  { id: "type", label: "Type", defaultVisible: false, widthClassName: "w-28" },
+  {
+    id: "type",
+    label: "Type",
+    defaultVisible: false,
+    defaultWidthPx: 112,
+    minWidthPx: 96,
+    maxWidthPx: 240,
+  },
   {
     id: "size",
     label: "Size",
     defaultVisible: true,
     sortable: "size",
-    widthClassName: "w-20",
+    defaultWidthPx: 80,
+    minWidthPx: 72,
+    maxWidthPx: 180,
     align: "right",
   },
   {
@@ -535,35 +571,45 @@ const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     label: "Modified",
     defaultVisible: true,
     sortable: "modified",
-    widthClassName: "w-40",
+    defaultWidthPx: 160,
+    minWidthPx: 132,
+    maxWidthPx: 260,
   },
   {
     id: "storageClass",
     label: "Storage class",
     defaultVisible: false,
     sortable: "storageClass",
-    widthClassName: "w-40",
+    defaultWidthPx: 160,
+    minWidthPx: 120,
+    maxWidthPx: 260,
   },
   {
     id: "etag",
     label: "ETag",
     defaultVisible: false,
     sortable: "etag",
-    widthClassName: "w-48",
+    defaultWidthPx: 192,
+    minWidthPx: 140,
+    maxWidthPx: 320,
   },
   {
     id: "contentType",
     label: "Content-Type",
     defaultVisible: false,
     lazySource: "metadata",
-    widthClassName: "w-44",
+    defaultWidthPx: 176,
+    minWidthPx: 140,
+    maxWidthPx: 320,
   },
   {
     id: "tagsCount",
     label: "Tags",
     defaultVisible: false,
     lazySource: "tags",
-    widthClassName: "w-20",
+    defaultWidthPx: 80,
+    minWidthPx: 72,
+    maxWidthPx: 140,
     align: "right",
   },
   {
@@ -571,7 +617,9 @@ const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     label: "Metadata",
     defaultVisible: false,
     lazySource: "metadata",
-    widthClassName: "w-24",
+    defaultWidthPx: 96,
+    minWidthPx: 84,
+    maxWidthPx: 160,
     align: "right",
   },
   {
@@ -579,29 +627,90 @@ const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     label: "Cache-Control",
     defaultVisible: false,
     lazySource: "metadata",
-    widthClassName: "w-44",
+    defaultWidthPx: 176,
+    minWidthPx: 140,
+    maxWidthPx: 320,
   },
   {
     id: "expires",
     label: "Expires",
     defaultVisible: false,
     lazySource: "metadata",
-    widthClassName: "w-44",
+    defaultWidthPx: 176,
+    minWidthPx: 140,
+    maxWidthPx: 320,
   },
   {
     id: "restoreStatus",
     label: "Restore status",
     defaultVisible: false,
     lazySource: "metadata",
-    widthClassName: "w-44",
+    defaultWidthPx: 176,
+    minWidthPx: 140,
+    maxWidthPx: 320,
   },
 ];
 const COLUMN_IDS_IN_ORDER = COLUMN_DEFINITIONS.map(
   (definition) => definition.id,
 );
+const RESIZABLE_COLUMN_IDS_IN_ORDER: BrowserResizableColumnId[] = [
+  NAME_COLUMN_DEFINITION.id,
+  ...COLUMN_IDS_IN_ORDER,
+];
+const RESIZABLE_COLUMN_DEFINITIONS = [
+  NAME_COLUMN_DEFINITION,
+  ...COLUMN_DEFINITIONS,
+] as const;
+const RESIZABLE_COLUMN_DEFINITIONS_BY_ID = RESIZABLE_COLUMN_DEFINITIONS.reduce<
+  Record<BrowserResizableColumnId, ResizableColumnDefinition>
+>((acc, definition) => {
+  acc[definition.id] = definition;
+  return acc;
+}, {} as Record<BrowserResizableColumnId, ResizableColumnDefinition>);
 const DEFAULT_VISIBLE_COLUMN_IDS = COLUMN_DEFINITIONS.filter(
   (definition) => definition.defaultVisible,
 ).map((definition) => definition.id);
+
+const isResizableColumnId = (
+  value: string,
+): value is BrowserResizableColumnId =>
+  RESIZABLE_COLUMN_IDS_IN_ORDER.includes(value as BrowserResizableColumnId);
+
+const clampColumnWidth = (
+  columnId: BrowserResizableColumnId,
+  widthPx: number,
+) => {
+  const definition = RESIZABLE_COLUMN_DEFINITIONS_BY_ID[columnId];
+  return clampBrowserPanelWidth(
+    widthPx,
+    definition.minWidthPx,
+    definition.maxWidthPx,
+  );
+};
+
+const normalizeColumnWidths = (
+  widths: Record<string, number>,
+): BrowserObjectColumnWidths => {
+  return Object.entries(widths).reduce<BrowserObjectColumnWidths>(
+    (acc, [columnId, widthPx]) => {
+      if (
+        !isResizableColumnId(columnId) ||
+        typeof widthPx !== "number" ||
+        !Number.isFinite(widthPx)
+      ) {
+        return acc;
+      }
+      acc[columnId] = clampColumnWidth(columnId, widthPx);
+      return acc;
+    },
+    {},
+  );
+};
+
+const resolveColumnWidthPx = (
+  columnId: BrowserResizableColumnId,
+  widths: BrowserObjectColumnWidths,
+) => widths[columnId] ?? RESIZABLE_COLUMN_DEFINITIONS_BY_ID[columnId].defaultWidthPx;
 
 const loadVisibleColumnsForSurface = (isMainBrowserPath: boolean): BrowserColumnId[] => {
   const stored = isMainBrowserPath
@@ -626,6 +735,27 @@ const persistVisibleColumnsForSurface = (
     return;
   }
   writeBrowserEmbeddedObjectColumns(columns);
+};
+
+const loadColumnWidthsForSurface = (
+  isMainBrowserPath: boolean,
+): BrowserObjectColumnWidths => {
+  const stored = isMainBrowserPath
+    ? readBrowserRootObjectColumnWidths()
+    : readBrowserEmbeddedObjectColumnWidths();
+  return normalizeColumnWidths(stored);
+};
+
+const persistColumnWidthsForSurface = (
+  isMainBrowserPath: boolean,
+  widths: BrowserObjectColumnWidths,
+) => {
+  const normalized = normalizeColumnWidths(widths);
+  if (isMainBrowserPath) {
+    writeBrowserRootObjectColumnWidths(normalized);
+    return;
+  }
+  writeBrowserEmbeddedObjectColumnWidths(normalized);
 };
 
 const createLazyColumnCacheEntry = (): LazyColumnCacheEntry => ({
@@ -945,10 +1075,8 @@ export default function BrowserPage({
     normalizedPath.endsWith("/manager/browser") ||
     normalizedPath.endsWith("/ceph-admin/browser");
   const isMainBrowserPath = normalizedPath === "/browser";
-  const initialStoredRootUiLayout = useMemo(
-    () => readStoredBrowserRootUiState()?.layout ?? null,
-    [],
-  );
+  const initialStoredRootUiState = useMemo(() => readStoredBrowserRootUiState(), []);
+  const initialStoredRootUiLayout = initialStoredRootUiState?.layout ?? null;
   const initialRootUiLayout = isMainBrowserPath ? initialStoredRootUiLayout : null;
   const browserRootContextId =
     accountIdForApi == null ? null : String(accountIdForApi);
@@ -1016,6 +1144,14 @@ export default function BrowserPage({
   const [activePanelResize, setActivePanelResize] = useState<
     "folders" | "inspector" | null
   >(null);
+  const [columnWidths, setColumnWidths] = useState<BrowserObjectColumnWidths>(
+    () => loadColumnWidthsForSurface(isMainBrowserPath),
+  );
+  const [activeColumnResize, setActiveColumnResize] = useState<{
+    columnId: BrowserResizableColumnId;
+    startX: number;
+    startWidthPx: number;
+  } | null>(null);
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
@@ -1331,6 +1467,7 @@ export default function BrowserPage({
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
   const newFolderInputRef = useRef<HTMLInputElement | null>(null);
+  const columnWidthsRef = useRef(columnWidths);
   const pathSuggestionsDebounceRef = useRef<number | null>(null);
   const bucketSearchDebounceRef = useRef<number | null>(null);
   const bucketSearchValueRef = useRef("");
@@ -1577,6 +1714,10 @@ export default function BrowserPage({
   }, [foldersPanelWidthPx, inspectorPanelWidthPx]);
 
   useEffect(() => {
+    columnWidthsRef.current = columnWidths;
+  }, [columnWidths]);
+
+  useEffect(() => {
     isFoldersPanelVisibleRef.current = isFoldersPanelVisible;
     isInspectorPanelVisibleRef.current = isInspectorPanelVisible;
   }, [isFoldersPanelVisible, isInspectorPanelVisible]);
@@ -1667,6 +1808,45 @@ export default function BrowserPage({
   useEffect(() => {
     persistVisibleColumnsForSurface(isMainBrowserPath, visibleColumns);
   }, [isMainBrowserPath, visibleColumns]);
+
+  useEffect(() => {
+    setColumnWidths(loadColumnWidthsForSurface(isMainBrowserPath));
+  }, [isMainBrowserPath]);
+
+  useEffect(() => {
+    if (activeColumnResize) return;
+    persistColumnWidthsForSurface(isMainBrowserPath, columnWidths);
+  }, [activeColumnResize, columnWidths, isMainBrowserPath]);
+
+  useEffect(() => {
+    if (!activeColumnResize) return;
+    const handlePointerMove = (event: PointerEvent) => {
+      const nextWidth =
+        activeColumnResize.startWidthPx + (event.clientX - activeColumnResize.startX);
+      setColumnWidths((prev) => ({
+        ...prev,
+        [activeColumnResize.columnId]: clampColumnWidth(
+          activeColumnResize.columnId,
+          nextWidth,
+        ),
+      }));
+    };
+    const stopColumnResize = () => {
+      setActiveColumnResize(null);
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", stopColumnResize);
+    document.addEventListener("pointercancel", stopColumnResize);
+    return () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", stopColumnResize);
+      document.removeEventListener("pointercancel", stopColumnResize);
+    };
+  }, [activeColumnResize]);
 
   const toggleFoldersPanel = useCallback(() => {
     if (!canUseFoldersPanel) return;
@@ -4135,6 +4315,34 @@ export default function BrowserPage({
       ),
     [visibleColumnSet],
   );
+  const nameColumnWidthPx = useMemo(
+    () => resolveColumnWidthPx("name", columnWidths),
+    [columnWidths],
+  );
+  const visibleColumnWidthsPx = useMemo(
+    () =>
+      visibleColumnDefinitions.reduce<
+        Record<BrowserColumnId, number>
+      >((acc, definition) => {
+        acc[definition.id] = resolveColumnWidthPx(definition.id, columnWidths);
+        return acc;
+      }, {} as Record<BrowserColumnId, number>),
+    [columnWidths, visibleColumnDefinitions],
+  );
+  const objectTableMinWidthPx = useMemo(
+    () =>
+      Math.max(
+        720,
+        SELECTION_COLUMN_WIDTH_PX +
+          nameColumnWidthPx +
+          ACTIONS_COLUMN_WIDTH_PX +
+          visibleColumnDefinitions.reduce(
+            (sum, definition) => sum + visibleColumnWidthsPx[definition.id],
+            0,
+          ),
+      ),
+    [nameColumnWidthPx, visibleColumnDefinitions, visibleColumnWidthsPx],
+  );
   const lazyMetadataColumnsVisible =
     visibleColumnSet.has("contentType") ||
     visibleColumnSet.has("metadataCount") ||
@@ -4832,6 +5040,29 @@ export default function BrowserPage({
       },
     [],
   );
+
+  const startColumnResize = useCallback(
+    (columnId: BrowserResizableColumnId) =>
+      (event: ReactPointerEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setActiveColumnResize({
+          columnId,
+          startX: event.clientX,
+          startWidthPx: resolveColumnWidthPx(columnId, columnWidthsRef.current),
+        });
+      },
+    [],
+  );
+
+  const resetColumnWidth = useCallback((columnId: BrowserResizableColumnId) => {
+    setColumnWidths((prev) => {
+      if (!(columnId in prev)) return prev;
+      const next = { ...prev };
+      delete next[columnId];
+      return next;
+    });
+  }, []);
 
   const resetFoldersPanelWidth = useCallback(() => {
     setFoldersPanelWidthPx(DEFAULT_FOLDERS_PANEL_WIDTH_PX);
@@ -6014,6 +6245,10 @@ export default function BrowserPage({
     [],
   );
 
+  const resetAllColumnWidths = useCallback(() => {
+    setColumnWidths({});
+  }, []);
+
   const handleToggleVisibleColumn = useCallback(
     (columnId: BrowserColumnId) => {
       setVisibleColumns((prev) => {
@@ -6031,7 +6266,8 @@ export default function BrowserPage({
 
   const handleResetVisibleColumns = useCallback(() => {
     setVisibleColumns(DEFAULT_VISIBLE_COLUMN_IDS);
-  }, []);
+    resetAllColumnWidths();
+  }, [resetAllColumnWidths]);
 
   const loadLazyColumnDataForItems = useCallback(
     async (itemIds: string[]) => {
@@ -11445,8 +11681,12 @@ export default function BrowserPage({
   const hasToolbarLayoutSection =
     showFolderToggle || showInspectorToggle || showActionBarToggle;
   const hasToolbarColumnsSection = true;
+  const hasToolbarBucketConfigurationAction = bucketConfigurationEnabled;
   const hasToolbarSecondaryActionsSection =
-    hasToolbarPathActions || hasToolbarSelectionActions || showSseControls;
+    hasToolbarPathActions ||
+    hasToolbarBucketConfigurationAction ||
+    hasToolbarSelectionActions ||
+    showSseControls;
   const hasToolbarMoreMenu =
     hasToolbarStatusSection ||
     hasToolbarLayoutSection ||
@@ -11731,6 +11971,214 @@ export default function BrowserPage({
       </button>
     );
   };
+
+  const renderColumnResizeHandle = (
+    columnId: BrowserResizableColumnId,
+    label: string,
+  ) => (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={`Resize ${label} column`}
+      title={`Resize ${label} column`}
+      className="absolute inset-y-0 right-0 z-10 translate-x-1/2 cursor-col-resize touch-none select-none"
+      style={{ width: `${COLUMN_RESIZER_HITBOX_WIDTH_PX}px` }}
+      onPointerDown={startColumnResize(columnId)}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        resetColumnWidth(columnId);
+      }}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
+      <div
+        className={`mx-auto h-full w-0.5 rounded-full bg-slate-200 transition dark:bg-slate-700 ${
+          activeColumnResize?.columnId === columnId
+            ? "bg-primary dark:bg-primary-300"
+            : "hover:bg-slate-300 dark:hover:bg-slate-500"
+        }`}
+      />
+    </div>
+  );
+
+  const renderNameHeaderContent = () => (
+    <div className="flex min-w-0 items-center gap-2 pr-3">
+      <button
+        type="button"
+        onClick={() => handleSortToggle("name")}
+        className="group inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
+      >
+        <span>Name</span>
+        <ChevronDownIcon
+          className={`h-3 w-3 transition ${
+            sortKey === "name" ? "opacity-100" : "opacity-30"
+          } ${sortKey === "name" && sortDirection === "asc" ? "-rotate-180" : ""}`}
+        />
+      </button>
+      <div
+        ref={searchOptionsMenuRef}
+        className="relative w-48 min-w-0 flex-1 sm:w-56 md:w-64 normal-case"
+      >
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+          <SearchIcon className="h-3 w-3" />
+        </span>
+        <input
+          type="text"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+          placeholder="Search objects"
+          aria-label="Search objects"
+          className={`${browserSearchInputClasses} pl-9 pr-9 normal-case`}
+        />
+        <button
+          ref={searchOptionsButtonRef}
+          type="button"
+          onClick={() => setShowSearchOptionsMenu((prev) => !prev)}
+          className={`absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
+            hasAdvancedSearchOptionsActive
+              ? "text-primary-700 hover:bg-primary-100 dark:text-primary-200 dark:hover:bg-primary-500/20"
+              : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+          }`}
+          aria-haspopup="menu"
+          aria-expanded={showSearchOptionsMenu}
+          aria-label="Search options"
+          title="Search options"
+        >
+          <SlidersIcon className="h-3 w-3" />
+        </button>
+        <AnchoredPortalMenu
+          open={showSearchOptionsMenu}
+          anchorRef={searchOptionsButtonRef}
+          placement="bottom-end"
+          offset={8}
+          minWidth={288}
+          className={`w-72 ${browserFloatingMenuClasses}`}
+        >
+          <div ref={searchOptionsMenuRef} className="space-y-3">
+            <label className="block space-y-1">
+              <span className={browserSearchLabelClasses}>Scope</span>
+              <select
+                value={searchScope}
+                onChange={(event) => {
+                  const scope = event.target.value as SearchScope;
+                  setSearchScope(scope);
+                  if (scope === "bucket") {
+                    setSearchRecursive(false);
+                  }
+                }}
+                className={browserSelectClasses}
+                aria-label="Search scope"
+                disabled={!hasSearchQuery}
+              >
+                <option value="prefix">Current path</option>
+                <option value="bucket">Whole bucket</option>
+              </select>
+            </label>
+            <label className={browserOptionCardClasses}>
+              <input
+                type="checkbox"
+                checked={searchRecursive}
+                onChange={(event) => setSearchRecursive(event.target.checked)}
+                disabled={!hasSearchQuery || searchScope === "bucket"}
+                className={uiCheckboxClass}
+                aria-label="Search recursively in subfolders"
+              />
+              <span>Recursive</span>
+            </label>
+            <label className={browserOptionCardClasses}>
+              <input
+                type="checkbox"
+                checked={searchExactMatch}
+                onChange={(event) => setSearchExactMatch(event.target.checked)}
+                disabled={!hasSearchQuery}
+                className={uiCheckboxClass}
+                aria-label="Use exact match"
+              />
+              <span>Exact match</span>
+            </label>
+            <label className={browserOptionCardClasses}>
+              <input
+                type="checkbox"
+                checked={searchCaseSensitive}
+                onChange={(event) =>
+                  setSearchCaseSensitive(event.target.checked)
+                }
+                disabled={!hasSearchQuery}
+                className={uiCheckboxClass}
+                aria-label="Case-sensitive search"
+              />
+              <span>Case-sensitive</span>
+            </label>
+            <label className="block space-y-1">
+              <span className={browserSearchLabelClasses}>Type</span>
+              <select
+                value={typeFilter}
+                onChange={(event) =>
+                  setTypeFilter(
+                    event.target.value as "all" | "file" | "folder",
+                  )
+                }
+                className={browserSelectClasses}
+                aria-label="Object type filter"
+              >
+                <option value="all">All</option>
+                <option value="file">Files</option>
+                <option value="folder">Folders</option>
+              </select>
+            </label>
+            <label className="block space-y-1">
+              <span className={browserSearchLabelClasses}>Storage class</span>
+              <select
+                value={storageFilter}
+                onChange={(event) => setStorageFilter(event.target.value)}
+                className={browserSelectClasses}
+                aria-label="Storage class filter"
+              >
+                <option value="all">All classes</option>
+                {searchableStorageClasses.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-center justify-end gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setFilter("");
+                  setSearchScope("prefix");
+                  setSearchRecursive(false);
+                  setSearchExactMatch(false);
+                  setSearchCaseSensitive(false);
+                  setTypeFilter("all");
+                  setStorageFilter("all");
+                }}
+                className={chromeChipButtonClasses}
+                disabled={!canResetSearchFilters}
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSearchOptionsMenu(false)}
+                className={chromeChipButtonClasses}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </AnchoredPortalMenu>
+      </div>
+    </div>
+  );
 
   const renderToolbarColumnsSubmenu = () => (
     <AnchoredPortalMenu
@@ -12357,7 +12805,7 @@ export default function BrowserPage({
                               </p>
                               <UiBadge
                                 tone={accessBadge.tone}
-                                className="shrink-0 whitespace-nowrap px-2.5 py-1"
+                                className="shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[10px] leading-4"
                                 title={accessBadge.title}
                               >
                                 {accessBadge.label}
@@ -12458,21 +12906,49 @@ export default function BrowserPage({
                         hasToolbarColumnsSection) && (
                         <div className={contextMenuSeparatorClasses} />
                       )}
-                      {hasToolbarPathActions && (
+                      {(hasToolbarPathActions ||
+                        hasToolbarBucketConfigurationAction) && (
                         <>
                           <p className={toolbarOverflowSectionTitleClasses}>
                             Current path
                           </p>
-                          {toolbarPathActions.map((action) =>
-                            renderToolbarMoreActionButton(action, () =>
-                              runPathAction(action.id),
-                            ),
+                          {hasToolbarBucketConfigurationAction && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className={`${contextMenuItemClasses} ${
+                                !bucketName || !hasS3AccountContext
+                                  ? contextMenuItemDisabledClasses
+                                  : ""
+                              }`}
+                              onClick={() =>
+                                runToolbarMoreAction(() =>
+                                  openBucketConfigurationModal(bucketName),
+                                )
+                              }
+                              disabled={!bucketName || !hasS3AccountContext}
+                              title={
+                                !bucketName
+                                  ? "Select a bucket to configure it."
+                                  : undefined
+                              }
+                            >
+                              <SettingsIcon className="h-3.5 w-3.5" />
+                              Configure bucket
+                            </button>
                           )}
+                          {hasToolbarPathActions &&
+                            toolbarPathActions.map((action) =>
+                              renderToolbarMoreActionButton(action, () =>
+                                runPathAction(action.id),
+                              ),
+                            )}
                         </>
                       )}
                       {hasToolbarSelectionActions && (
                         <>
-                          {hasToolbarPathActions && (
+                          {(hasToolbarPathActions ||
+                            hasToolbarBucketConfigurationAction) && (
                             <div className={contextMenuSeparatorClasses} />
                           )}
                           <p className={toolbarOverflowSectionTitleClasses}>
@@ -12490,6 +12966,7 @@ export default function BrowserPage({
                       {showSseControls && (
                         <>
                           {(hasToolbarPathActions ||
+                            hasToolbarBucketConfigurationAction ||
                             hasToolbarSelectionActions) && (
                             <div className={contextMenuSeparatorClasses} />
                           )}
@@ -12740,14 +13217,31 @@ export default function BrowserPage({
                       </span>
                     </div>
                   )}
-                  <table className="manager-table min-w-[720px] w-full border-separate border-spacing-0 divide-y divide-slate-200 dark:divide-slate-800">
+                  <table
+                    className="manager-table min-w-full border-separate border-spacing-0 divide-y divide-slate-200 dark:divide-slate-800"
+                    style={{ minWidth: `${objectTableMinWidthPx}px` }}
+                  >
+                    <colgroup>
+                      <col style={{ width: `${SELECTION_COLUMN_WIDTH_PX}px` }} />
+                      <col style={{ width: `${nameColumnWidthPx}px` }} />
+                      {visibleColumnDefinitions.map((column) => (
+                        <col
+                          key={column.id}
+                          style={{
+                            width: `${visibleColumnWidthsPx[column.id]}px`,
+                          }}
+                        />
+                      ))}
+                      <col style={{ width: `${ACTIONS_COLUMN_WIDTH_PX}px` }} />
+                    </colgroup>
                     <thead
                       className="sticky top-0 z-[1] border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"
                       onContextMenu={handleHeaderContextMenu}
                     >
                       <tr>
                         <th
-                          className={`w-9 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold text-slate-500 dark:text-slate-400`}
+                          aria-label="Select all"
+                          className={`px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                         >
                           <input
                             type="checkbox"
@@ -12758,230 +13252,35 @@ export default function BrowserPage({
                           />
                         </th>
                         <th
-                          className={`px-4 ${headerPadding} !align-middle text-left ui-caption font-semibold text-slate-500 dark:text-slate-400`}
+                          aria-label="Name"
+                          className={`relative px-4 ${headerPadding} !align-middle text-left ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                         >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleSortToggle("name")}
-                              className="group inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
-                            >
-                              <span>Name</span>
-                              <ChevronDownIcon
-                                className={`h-3 w-3 transition ${
-                                  sortKey === "name"
-                                    ? "opacity-100"
-                                    : "opacity-30"
-                                } ${sortKey === "name" && sortDirection === "asc" ? "-rotate-180" : ""}`}
-                              />
-                            </button>
-                            <div
-                              ref={searchOptionsMenuRef}
-                              className="relative w-48 sm:w-56 md:w-64 normal-case"
-                            >
-                              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                                <SearchIcon className="h-3 w-3" />
-                              </span>
-                              <input
-                                type="text"
-                                value={filter}
-                                onChange={(event) =>
-                                  setFilter(event.target.value)
-                                }
-                                placeholder="Search objects"
-                                aria-label="Search objects"
-                                className={`${browserSearchInputClasses} pl-9 pr-9 normal-case`}
-                              />
-                              <button
-                                ref={searchOptionsButtonRef}
-                                type="button"
-                                onClick={() =>
-                                  setShowSearchOptionsMenu((prev) => !prev)
-                                }
-                                className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-6 w-6 items-center justify-center rounded-lg transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
-                                  hasAdvancedSearchOptionsActive
-                                    ? "text-primary-700 hover:bg-primary-100 dark:text-primary-200 dark:hover:bg-primary-500/20"
-                                    : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                                }`}
-                                aria-haspopup="menu"
-                                aria-expanded={showSearchOptionsMenu}
-                                aria-label="Search options"
-                                title="Search options"
-                              >
-                                <SlidersIcon className="h-3 w-3" />
-                              </button>
-                              <AnchoredPortalMenu
-                                open={showSearchOptionsMenu}
-                                anchorRef={searchOptionsButtonRef}
-                                placement="bottom-end"
-                                offset={8}
-                                minWidth={288}
-                                className={`w-72 ${browserFloatingMenuClasses}`}
-                              >
-                                <div
-                                  ref={searchOptionsMenuRef}
-                                  className="space-y-3"
-                                >
-                                  <label className="block space-y-1">
-                                    <span className={browserSearchLabelClasses}>
-                                      Scope
-                                    </span>
-                                    <select
-                                      value={searchScope}
-                                      onChange={(event) => {
-                                        const scope = event.target
-                                          .value as SearchScope;
-                                        setSearchScope(scope);
-                                        if (scope === "bucket") {
-                                          setSearchRecursive(false);
-                                        }
-                                      }}
-                                      className={browserSelectClasses}
-                                      aria-label="Search scope"
-                                      disabled={!hasSearchQuery}
-                                    >
-                                      <option value="prefix">
-                                        Current path
-                                      </option>
-                                      <option value="bucket">
-                                        Whole bucket
-                                      </option>
-                                    </select>
-                                  </label>
-                                  <label className={browserOptionCardClasses}>
-                                    <input
-                                      type="checkbox"
-                                      checked={searchRecursive}
-                                      onChange={(event) =>
-                                        setSearchRecursive(event.target.checked)
-                                      }
-                                      disabled={
-                                        !hasSearchQuery ||
-                                        searchScope === "bucket"
-                                      }
-                                      className={uiCheckboxClass}
-                                      aria-label="Search recursively in subfolders"
-                                    />
-                                    <span>Recursive</span>
-                                  </label>
-                                  <label className={browserOptionCardClasses}>
-                                    <input
-                                      type="checkbox"
-                                      checked={searchExactMatch}
-                                      onChange={(event) =>
-                                        setSearchExactMatch(
-                                          event.target.checked,
-                                        )
-                                      }
-                                      disabled={!hasSearchQuery}
-                                      className={uiCheckboxClass}
-                                      aria-label="Use exact match"
-                                    />
-                                    <span>Exact match</span>
-                                  </label>
-                                  <label className={browserOptionCardClasses}>
-                                    <input
-                                      type="checkbox"
-                                      checked={searchCaseSensitive}
-                                      onChange={(event) =>
-                                        setSearchCaseSensitive(
-                                          event.target.checked,
-                                        )
-                                      }
-                                      disabled={!hasSearchQuery}
-                                      className={uiCheckboxClass}
-                                      aria-label="Case-sensitive search"
-                                    />
-                                    <span>Case-sensitive</span>
-                                  </label>
-                                  <label className="block space-y-1">
-                                    <span className={browserSearchLabelClasses}>
-                                      Type
-                                    </span>
-                                    <select
-                                      value={typeFilter}
-                                      onChange={(event) =>
-                                        setTypeFilter(
-                                          event.target.value as
-                                            | "all"
-                                            | "file"
-                                            | "folder",
-                                        )
-                                      }
-                                      className={browserSelectClasses}
-                                      aria-label="Object type filter"
-                                    >
-                                      <option value="all">All</option>
-                                      <option value="file">Files</option>
-                                      <option value="folder">Folders</option>
-                                    </select>
-                                  </label>
-                                  <label className="block space-y-1">
-                                    <span className={browserSearchLabelClasses}>
-                                      Storage class
-                                    </span>
-                                    <select
-                                      value={storageFilter}
-                                      onChange={(event) =>
-                                        setStorageFilter(event.target.value)
-                                      }
-                                      className={browserSelectClasses}
-                                      aria-label="Storage class filter"
-                                    >
-                                      <option value="all">All classes</option>
-                                      {searchableStorageClasses.map((value) => (
-                                        <option key={value} value={value}>
-                                          {value}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
-                                  <div className="flex items-center justify-end gap-1.5 pt-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setFilter("");
-                                        setSearchScope("prefix");
-                                        setSearchRecursive(false);
-                                        setSearchExactMatch(false);
-                                        setSearchCaseSensitive(false);
-                                        setTypeFilter("all");
-                                        setStorageFilter("all");
-                                      }}
-                                      className={chromeChipButtonClasses}
-                                      disabled={!canResetSearchFilters}
-                                    >
-                                      Clear
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setShowSearchOptionsMenu(false)
-                                      }
-                                      className={chromeChipButtonClasses}
-                                    >
-                                      Close
-                                    </button>
-                                  </div>
-                                </div>
-                              </AnchoredPortalMenu>
-                            </div>
-                          </div>
+                          {renderNameHeaderContent()}
+                          {renderColumnResizeHandle("name", "Name")}
                         </th>
                         {visibleColumnDefinitions.map((column) => (
                           <th
                             key={column.id}
-                            className={`${column.widthClassName} px-2 ${headerPadding} !align-middle ${
+                            aria-label={column.label}
+                            className={`relative px-2 ${headerPadding} !align-middle ${
                               column.align === "right"
                                 ? "text-right"
                                 : "text-left"
                             } ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                           >
-                            {renderColumnHeaderContent(column)}
+                            <div
+                              className={`pr-3 ${
+                                column.align === "right" ? "flex justify-end" : ""
+                              }`}
+                            >
+                              {renderColumnHeaderContent(column)}
+                            </div>
+                            {renderColumnResizeHandle(column.id, column.label)}
                           </th>
                         ))}
                         <th
-                          className={`w-44 px-2 ${headerPadding} !align-middle text-right ui-caption font-semibold text-slate-500 dark:text-slate-400`}
+                          aria-label="Actions"
+                          className={`px-2 ${headerPadding} !align-middle text-right ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                         >
                           <span className="inline-flex h-6 items-center">
                             Actions
@@ -12998,10 +13297,11 @@ export default function BrowserPage({
                             className={`${rowHeightClasses} text-slate-600 transition-colors hover:bg-slate-50/70 dark:text-slate-300 dark:hover:bg-slate-800/40`}
                           >
                             <td
-                              className={`w-9 px-2 ${rowCellClasses} !align-middle`}
+                              className={`px-2 ${rowCellClasses} !align-middle`}
                             />
                             <td
                               className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} !align-middle ui-body`}
+                              style={{ maxWidth: `${nameColumnWidthPx}px` }}
                             >
                               <button
                                 type="button"
@@ -13019,7 +13319,7 @@ export default function BrowserPage({
                             {visibleColumnDefinitions.map((column) => (
                               <td
                                 key={column.id}
-                                className={`${column.widthClassName} px-2 ${rowCellClasses} !align-middle ui-body text-slate-400 whitespace-nowrap overflow-hidden text-ellipsis ${
+                                className={`px-2 ${rowCellClasses} !align-middle ui-body text-slate-400 whitespace-nowrap overflow-hidden text-ellipsis ${
                                   column.align === "right" ? "text-right" : ""
                                 }`}
                               >
@@ -13027,7 +13327,7 @@ export default function BrowserPage({
                               </td>
                             ))}
                             <td
-                              className={`w-44 px-2 ${rowCellClasses} !align-middle text-right ui-caption text-slate-400`}
+                              className={`px-2 ${rowCellClasses} !align-middle text-right ui-caption text-slate-400`}
                             />
                           </tr>
                         )}
@@ -13111,7 +13411,7 @@ export default function BrowserPage({
                             }`}
                           >
                             <td
-                              className={`w-9 px-2 ${rowCellClasses} !align-middle`}
+                              className={`px-2 ${rowCellClasses} !align-middle`}
                             >
                               <input
                                 type="checkbox"
@@ -13127,6 +13427,7 @@ export default function BrowserPage({
                                   ? "text-rose-700 dark:text-rose-200"
                                   : "text-slate-700 dark:text-slate-200"
                               }`}
+                              style={{ maxWidth: `${nameColumnWidthPx}px` }}
                             >
                               <div
                                 className={`flex min-w-0 items-center ${nameGapClasses}`}
@@ -13211,7 +13512,7 @@ export default function BrowserPage({
                             {visibleColumnDefinitions.map((column) => (
                               <td
                                 key={column.id}
-                                className={`${column.widthClassName} px-2 ${rowCellClasses} !align-middle ui-body text-slate-600 dark:text-slate-300 whitespace-nowrap overflow-hidden text-ellipsis ${
+                                className={`px-2 ${rowCellClasses} !align-middle ui-body text-slate-600 dark:text-slate-300 whitespace-nowrap overflow-hidden text-ellipsis ${
                                   column.align === "right" ? "text-right" : ""
                                 }`}
                               >
@@ -13219,7 +13520,7 @@ export default function BrowserPage({
                               </td>
                             ))}
                             <td
-                              className={`w-44 px-2 ${rowCellClasses} !align-middle text-right`}
+                              className={`px-2 ${rowCellClasses} !align-middle text-right`}
                             >
                               <div className="flex flex-nowrap justify-end gap-1.5">
                                 {item.type === "folder" && (

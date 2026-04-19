@@ -20,6 +20,7 @@ Use this guide for object-level actions in Browser surfaces.
    - On `/browser`, use the action bar in this order: `Open`, `Preview`, `New folder`, `Copy`, `Paste`, `Upload`, `Download`, `Delete`, then `Refresh` and `More`.
    - Use the toolbar `More` menu when right-click is not available or when the action bar is compact.
    - Use `More > Columns` to choose which object columns are visible. The default column set stays unchanged until you customize it.
+   - Drag a column separator in the objects table header to resize `Name` and visible object columns. Double-click a separator to restore that column default width.
    - Use the inspector to access the same context and selection actions on the main `/browser` page. The `Details` tab stays lightweight and can open the full file object sheet directly.
    - Upload files
    - Download objects
@@ -41,6 +42,8 @@ Use this guide for object-level actions in Browser surfaces.
 - Long-running bulk actions surface in **Operations overview**, where queued, active, completed, and failed work stays visible without leaving Browser.
 - The toolbar `More` menu remains available in `/manager/browser` and `/ceph-admin/browser`, where the inspector is not shown.
 - Object columns available from `More > Columns` include base listing columns such as `Size`, `Modified`, `Storage class`, and `ETag`, plus lazy detail columns such as `Content-Type`, `Tags`, `Metadata`, `Cache-Control`, `Expires`, and `Restore status`.
+- Custom column widths are stored locally in the current browser and stay separate between the main `/browser` page and embedded browser surfaces.
+- `Reset columns` restores both the default visible columns and the default widths.
 - Only base listing columns are sortable. Lazy detail columns are display-only and load on demand for visible rows.
 - Actions can be disabled for the current state. For example, `Copy URL` is disabled when SSE-C is active, and deleted items must be restored from versions before direct download or delete operations.
 

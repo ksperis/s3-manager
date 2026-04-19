@@ -28,6 +28,7 @@ export type BrowserRootUiState = {
   layout: BrowserRootUiLayoutState;
   contextSelections: Record<string, BrowserRootUiContextSelection>;
   objectColumns: string[];
+  objectColumnWidths: Record<string, number>;
 };
 
 const DEFAULT_LAYOUT_STATE: BrowserRootUiLayoutState = {
@@ -42,6 +43,7 @@ const createDefaultState = (): BrowserRootUiState => ({
   layout: { ...DEFAULT_LAYOUT_STATE },
   contextSelections: {},
   objectColumns: [],
+  objectColumnWidths: {},
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -104,6 +106,20 @@ const normalizeObjectColumns = (value: unknown): string[] => {
   return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
 };
 
+const normalizeObjectColumnWidths = (value: unknown): Record<string, number> => {
+  if (!isRecord(value)) return {};
+  return Object.entries(value).reduce<Record<string, number>>((acc, [key, entry]) => {
+    if (typeof key !== "string" || key.trim().length === 0) {
+      return acc;
+    }
+    if (typeof entry !== "number" || !Number.isFinite(entry) || entry <= 0) {
+      return acc;
+    }
+    acc[key] = Math.round(entry);
+    return acc;
+  }, {});
+};
+
 export const readStoredBrowserRootUiState = (): BrowserRootUiState | null => {
   if (typeof window === "undefined") {
     return null;
@@ -117,6 +133,7 @@ export const readStoredBrowserRootUiState = (): BrowserRootUiState | null => {
       layout: normalizeLayoutState(parsed.layout),
       contextSelections: normalizeContextSelections(parsed.contextSelections),
       objectColumns: normalizeObjectColumns(parsed.objectColumns),
+      objectColumnWidths: normalizeObjectColumnWidths(parsed.objectColumnWidths),
     };
   } catch {
     return null;
@@ -193,5 +210,19 @@ export const writeBrowserRootObjectColumns = (columns: string[]) => {
   writeBrowserRootUiState({
     ...current,
     objectColumns: normalizeObjectColumns(columns),
+  });
+};
+
+export const readBrowserRootObjectColumnWidths = (): Record<string, number> => {
+  return readBrowserRootUiState().objectColumnWidths;
+};
+
+export const writeBrowserRootObjectColumnWidths = (
+  widths: Record<string, number>,
+) => {
+  const current = readBrowserRootUiState();
+  writeBrowserRootUiState({
+    ...current,
+    objectColumnWidths: normalizeObjectColumnWidths(widths),
   });
 };
