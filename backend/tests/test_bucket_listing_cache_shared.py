@@ -184,3 +184,41 @@ def test_shared_bucket_listing_cache_coalesces_parallel_misses():
     assert builder_calls == 1
     assert len(results) == 2
     assert all(len(items) == 1 and items[0].name == "parallel-demo" for items in results)
+
+
+def test_shared_bucket_listing_cache_expires_after_ttl(monkeypatch):
+    invalidate_bucket_listing_cache()
+    account = _build_account()
+    service = _FakeBucketsService()
+    now = 1000.0
+
+    monkeypatch.setattr("app.services.bucket_listing_cache.monotonic", lambda: now)
+
+    first = get_cached_bucket_listing_for_account(
+        account=account,
+        include=set(),
+        with_stats=True,
+        builder=lambda: service.list_buckets(account, include=None, with_stats=True),
+    )
+    assert len(first) == 1
+    assert service.list_calls == 1
+
+    now = 1299.0
+    second = get_cached_bucket_listing_for_account(
+        account=account,
+        include=set(),
+        with_stats=True,
+        builder=lambda: service.list_buckets(account, include=None, with_stats=True),
+    )
+    assert len(second) == 1
+    assert service.list_calls == 1
+
+    now = 1301.0
+    third = get_cached_bucket_listing_for_account(
+        account=account,
+        include=set(),
+        with_stats=True,
+        builder=lambda: service.list_buckets(account, include=None, with_stats=True),
+    )
+    assert len(third) == 1
+    assert service.list_calls == 2

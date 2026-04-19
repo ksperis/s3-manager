@@ -153,6 +153,61 @@ def test_ceph_admin_bucket_listing_cache_is_reused_across_pages():
     assert rgw_admin.get_all_buckets_calls == 1
 
 
+def test_ceph_admin_bucket_listing_cache_expires_after_ttl(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, rgw_admin = _build_ctx(endpoint_id=33, payload=payload)
+    now = 500.0
+
+    monkeypatch.setattr(buckets_router, "monotonic", lambda: now)
+
+    first = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+    assert [item.name for item in first.items] == ["bucket-a", "bucket-b"]
+    assert rgw_admin.get_all_buckets_calls == 1
+
+    now = 799.0
+    second = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+    assert [item.name for item in second.items] == ["bucket-a", "bucket-b"]
+    assert rgw_admin.get_all_buckets_calls == 1
+
+    now = 801.0
+    third = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+    assert [item.name for item in third.items] == ["bucket-a", "bucket-b"]
+    assert rgw_admin.get_all_buckets_calls == 2
+
+
 def test_ceph_admin_bucket_query_endpoint_matches_get_for_same_payload(client):
     payload = [
         {"name": "bucket-a", "owner": "owner-a"},

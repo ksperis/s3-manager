@@ -75,7 +75,7 @@ from app.utils.usage_stats import compute_usage_ratio_percent, extract_usage_sta
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/buckets", tags=["ceph-admin-buckets"])
 logger = logging.getLogger(__name__)
 
-BUCKET_LIST_CACHE_TTL_SECONDS = 30.0
+BUCKET_LIST_CACHE_TTL_SECONDS = 300.0
 BUCKET_LIST_CACHE_MAX_ENTRIES = 64
 RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES = 16
 BUCKET_ENRICH_MAX_WORKERS = 6

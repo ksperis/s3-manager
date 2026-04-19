@@ -14,7 +14,7 @@ from app.db import S3Account
 from app.models.bucket import Bucket
 from app.utils.s3_endpoint import resolve_s3_client_options
 
-BUCKET_LISTING_CACHE_TTL_SECONDS = 30.0
+BUCKET_LISTING_CACHE_TTL_SECONDS = 300.0
 BUCKET_LISTING_CACHE_MAX_ENTRIES = 512
 
 

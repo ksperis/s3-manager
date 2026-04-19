@@ -85,6 +85,7 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import BucketOpsBulkUpdateModal from "./BucketOpsBulkUpdateModal";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
+import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
 import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
 import {
@@ -189,6 +190,7 @@ type BulkOperation =
   | "delete_cors"
   | "add_policy"
   | "delete_policy";
+type SelectionExportFormat = "text" | "csv" | "json";
 type BulkPreviewTone = "added" | "removed";
 type BulkPreviewLine = { text: string; tone?: BulkPreviewTone };
 type BulkPreviewItem = {
@@ -2128,7 +2130,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [editingStorageOpsBucket, setEditingStorageOpsBucket] = useState<StorageOpsEditingBucket | null>(null);
   const [allFilteredBucketNames, setAllFilteredBucketNames] = useState<string[] | null>(null);
   const [allFilteredBucketNamesKey, setAllFilteredBucketNamesKey] = useState<string | null>(null);
-  const [selectAllLoading, setSelectAllLoading] = useState(false);
+  const [selectAllProgress, setSelectAllProgress] = useState<ActionProgressState | null>(null);
   const [orphanedTagBuckets, setOrphanedTagBuckets] = useState<string[]>([]);
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
@@ -2194,7 +2196,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [bulkApplyProgress, setBulkApplyProgress] = useState<ActionProgressState | null>(null);
   const [selectionTagActionLoading, setSelectionTagActionLoading] = useState<"add" | "remove" | null>(null);
   const [selectionTagAddInput, setSelectionTagAddInput] = useState("");
-  const [selectionExportLoading, setSelectionExportLoading] = useState<"text" | "csv" | "json" | null>(null);
+  const [selectionExportLoading, setSelectionExportLoading] = useState<SelectionExportFormat | null>(null);
   const [selectionActionProgress, setSelectionActionProgress] = useState<ActionProgressState | null>(null);
   const [tagSuggestionBucket, setTagSuggestionBucket] = useState<string | null>(null);
   const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
@@ -2510,7 +2512,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     return groups;
   }, [featureColumnOptions]);
   const exportIncludeParams = useMemo(() => {
-    const include = new Set<string>(["owner_name", "tags"]);
+    const include = new Set<string>();
+    if (visibleColumns.includes("owner_name")) {
+      include.add("owner_name");
+    }
+    if (visibleColumns.includes("tags")) {
+      include.add("tags");
+    }
     if (visibleColumns.includes("owner_quota")) {
       include.add("owner_quota");
     }
@@ -2518,8 +2526,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       include.add("owner_quota");
       include.add("owner_quota_usage");
     }
-    featureColumnOptions.forEach((column) => include.add(column.id));
-    FEATURE_DETAIL_COLUMN_OPTIONS.forEach((column) => include.add(column.include));
+    featureColumnOptions.forEach((column) => {
+      if (visibleColumns.includes(column.id)) {
+        include.add(column.id);
+      }
+    });
+    FEATURE_DETAIL_COLUMN_OPTIONS.forEach((column) => {
+      if (visibleColumns.includes(column.id)) {
+        include.add(column.include);
+      }
+    });
     return Array.from(include.values());
   }, [featureColumnOptions, visibleColumns]);
 
@@ -2577,10 +2593,26 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       visibleColumns.includes("quota_status")
     );
   }, [advancedStatsRequired, usageFeatureEnabled, visibleColumns]);
+  const exportRequiresStats = useMemo(() => {
+    if (!usageFeatureEnabled) return false;
+    return (
+      visibleColumns.includes("used_bytes") ||
+      visibleColumns.includes("object_count") ||
+      visibleColumns.includes("quota_max_size_bytes") ||
+      visibleColumns.includes("quota_max_objects") ||
+      visibleColumns.includes("quota_usage_percent") ||
+      visibleColumns.includes("owner_quota_usage") ||
+      visibleColumns.includes("quota_status")
+    );
+  }, [usageFeatureEnabled, visibleColumns]);
   const sortRequiresStats = useMemo(() => sort.field === "used_bytes" || sort.field === "object_count", [sort.field]);
   const baseRequiresStats = useMemo(
     () => (isStorageOps ? usageFeatureEnabled && (advancedStatsRequired || sortRequiresStats) : usageFeatureEnabled),
     [advancedStatsRequired, isStorageOps, sortRequiresStats, usageFeatureEnabled]
+  );
+  const exportWithStats = useMemo(
+    () => usageFeatureEnabled && (baseRequiresStats || exportRequiresStats),
+    [usageFeatureEnabled, baseRequiresStats, exportRequiresStats]
   );
   const detailLoadingColumnIds = useMemo(() => {
     const ids = new Set<string>(includeParams);
@@ -2709,7 +2741,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   useEffect(() => {
     setAllFilteredBucketNames(null);
     setAllFilteredBucketNamesKey(null);
-    setSelectAllLoading(false);
+    setSelectAllProgress(null);
   }, [selectionQueryKey]);
 
   useEffect(() => {
@@ -2757,14 +2789,17 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     });
   };
 
-  const loadAllFilteredBucketNames = async () => {
+  const selectAllLoading = selectAllProgress !== null;
+
+  const loadAllFilteredBucketNames = async (options?: { onProgress?: (completed: number, total: number) => void }) => {
     if (!selectedEndpointId) return [];
     if (allFilteredBucketNamesKey === selectionQueryKey && allFilteredBucketNames) {
+      options?.onProgress?.(allFilteredBucketNames.length, allFilteredBucketNames.length);
       return allFilteredBucketNames;
     }
     const names = new Set<string>();
     let nextPage = 1;
-    let expectedTotal: number | null = null;
+    let expectedTotal: number | null = total > 0 ? total : null;
     while (true) {
       const response = await listBuckets(selectedEndpointId, {
         page: nextPage,
@@ -2781,6 +2816,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       if (expectedTotal === null && typeof response.total === "number") {
         expectedTotal = response.total;
       }
+      options?.onProgress?.(Math.min(expectedTotal ?? names.size, names.size), expectedTotal ?? names.size);
       if (!response.has_next) {
         break;
       }
@@ -2792,14 +2828,32 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     const resolved = Array.from(names.values());
     setAllFilteredBucketNames(resolved);
     setAllFilteredBucketNamesKey(selectionQueryKey);
+    options?.onProgress?.(resolved.length, expectedTotal ?? resolved.length);
     return resolved;
   };
 
   const setSelectionForFilteredResults = async (checked: boolean) => {
     if (!selectedEndpointId) return;
-    setSelectAllLoading(true);
+    setSelectAllProgress({
+      label: checked ? "Selecting filtered buckets" : "Clearing filtered selection",
+      completed: 0,
+      total: Math.max(total, 0),
+      failed: 0,
+    });
     try {
-      const names = await loadAllFilteredBucketNames();
+      const names = await loadAllFilteredBucketNames({
+        onProgress: (completed, progressTotal) => {
+          setSelectAllProgress((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  completed,
+                  total: progressTotal,
+                }
+              : prev
+          );
+        },
+      });
       setSelectedBuckets((prev) => {
         const next = new Set(prev);
         names.forEach((name) => {
@@ -2815,7 +2869,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       console.error(err);
       setError(extractError(err));
     } finally {
-      setSelectAllLoading(false);
+      setSelectAllProgress(null);
     }
   };
 
@@ -2915,6 +2969,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     : selectedOnPageCount;
   const allSelectedOnFiltered =
     hasResolvedFilteredNames && total > 0 && allFilteredBucketNames.length === total && selectedOnFilteredCount === total;
+  const fullyResolvedFilteredSelection =
+    allSelectedOnFiltered && selectedCount === total && allFilteredBucketNames?.length === total;
   const hiddenSelectedCount = Math.max(selectedCount - selectedOnPageCount, 0);
   const allSelectedOnPage = items.length > 0 && selectedOnPageCount === items.length;
   const headerChecked = hasResolvedFilteredNames ? allSelectedOnFiltered : allSelectedOnPage;
@@ -3280,7 +3336,44 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     });
   }, [bulkConfigClipboard, bulkClipboardSameEndpoint, bulkOperation, selectedBucketList, showBulkUpdateModal]);
 
+  const loadBucketsForCurrentFilteredExport = async (options?: { onProgress?: (completed: number, total: number) => void }) => {
+    const bucketsByName = new Map<string, CephAdminBucket>();
+    if (!selectedEndpointId || total <= 0) {
+      return bucketsByName;
+    }
+
+    let nextPage = 1;
+    let expectedTotal = total;
+    while (true) {
+      const response = await listBuckets(selectedEndpointId, {
+        page: nextPage,
+        page_size: 200,
+        filter: effectiveQuickSearchValue.trim() || undefined,
+        advanced_filter: advancedFilterParam,
+        sort_by: sort.field,
+        sort_dir: sort.direction,
+        include: exportIncludeParams.length > 0 ? exportIncludeParams : undefined,
+        with_stats: exportWithStats,
+      });
+      (response.items ?? []).forEach((bucket) => {
+        bucketsByName.set(bucket.name, bucket);
+      });
+      if (typeof response.total === "number" && response.total > 0) {
+        expectedTotal = response.total;
+      }
+      options?.onProgress?.(Math.min(expectedTotal, bucketsByName.size), expectedTotal);
+      if (!response.has_next) break;
+      nextPage += 1;
+    }
+
+    return bucketsByName;
+  };
+
   const loadSelectedBucketsForExport = async (options?: { onProgress?: (completed: number, total: number) => void }) => {
+    if (fullyResolvedFilteredSelection) {
+      return loadBucketsForCurrentFilteredExport(options);
+    }
+
     const bucketsByName = new Map<string, CephAdminBucket>();
     items.forEach((bucket) => {
       if (selectedBuckets.has(bucket.name)) {
@@ -3306,8 +3399,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           page: nextPage,
           page_size: 200,
           advanced_filter: advancedFilter,
-          include: exportIncludeParams,
-          with_stats: usageFeatureEnabled,
+          include: exportIncludeParams.length > 0 ? exportIncludeParams : undefined,
+          with_stats: exportWithStats,
         });
         (response.items ?? []).forEach((bucket) => {
           if (selectedBuckets.has(bucket.name)) {
@@ -3532,7 +3625,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     return exportColumns;
   };
 
-  const exportSelectedBuckets = async (format: "text" | "csv" | "json") => {
+  const exportSelectedBuckets = async (format: SelectionExportFormat) => {
     if (selectedBucketList.length === 0 || selectionExportLoading) return;
     const withProgress = format === "csv" || format === "json";
     const runToken = withProgress ? selectionActionRunTokenRef.current + 1 : null;
@@ -6817,6 +6910,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           <input
             ref={selectionHeaderRef}
             type="checkbox"
+            aria-label="Select all filtered buckets"
             checked={headerChecked}
             onChange={(e) => {
               void setSelectionForFilteredResults(e.target.checked);
@@ -8569,6 +8663,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             onShowCompareModal={() => setShowCompareModal(true)}
             openBulkUpdateModal={openBulkUpdateModal}
           />
+
+        {selectAllProgress && <ActionProgressCard progress={selectAllProgress} busy className="mb-3" />}
 
         {advancedProgress.active && (
           <div className="mb-3 rounded-xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-slate-900/70">
