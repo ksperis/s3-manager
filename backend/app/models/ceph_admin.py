@@ -36,6 +36,8 @@ class CephAdminRgwAccountSummary(BaseModel):
     max_buckets: Optional[int] = None
     quota_max_size_bytes: Optional[int] = None
     quota_max_objects: Optional[int] = None
+    used_bytes: Optional[int] = None
+    object_count: Optional[int] = None
     bucket_count: Optional[int] = None
     user_count: Optional[int] = None
 
@@ -51,6 +53,8 @@ class CephAdminRgwUserSummary(BaseModel):
     max_buckets: Optional[int] = None
     quota_max_size_bytes: Optional[int] = None
     quota_max_objects: Optional[int] = None
+    used_bytes: Optional[int] = None
+    object_count: Optional[int] = None
 
 
 class CephAdminBucketSummary(BaseModel):
@@ -296,6 +300,8 @@ BucketFilterField = Literal[
     "object_count",
     "quota_max_size_bytes",
     "quota_max_objects",
+    "quota_usage_size_percent",
+    "quota_usage_object_percent",
     "owner_used_bytes",
     "owner_object_count",
     "owner_quota_max_size_bytes",
@@ -542,6 +548,8 @@ UserFilterField = Literal[
     "max_buckets",
     "quota_max_size_bytes",
     "quota_max_objects",
+    "quota_usage_size_percent",
+    "quota_usage_object_percent",
 ]
 UserFilterOp = Literal[
     "eq",
@@ -585,6 +593,8 @@ AccountFilterField = Literal[
     "max_buckets",
     "quota_max_size_bytes",
     "quota_max_objects",
+    "quota_usage_size_percent",
+    "quota_usage_object_percent",
     "bucket_count",
     "user_count",
 ]

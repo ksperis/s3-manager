@@ -72,6 +72,8 @@ def _filter_requires_stats(query: CephAdminBucketFilterQuery | None) -> bool:
             "object_count",
             "quota_max_size_bytes",
             "quota_max_objects",
+            "quota_usage_size_percent",
+            "quota_usage_object_percent",
             "owner_used_bytes",
             "owner_object_count",
             "owner_quota_usage_size_percent",

@@ -87,6 +87,10 @@ type AdvancedFilterState = {
   maxQuotaBytes: string;
   minQuotaObjects: string;
   maxQuotaObjects: string;
+  minQuotaUsageSizePercent: string;
+  maxQuotaUsageSizePercent: string;
+  minQuotaUsageObjectPercent: string;
+  maxQuotaUsageObjectPercent: string;
   minBucketCount: string;
   maxBucketCount: string;
   minUserCount: string;
@@ -103,6 +107,10 @@ type AdvancedNumericField =
   | "maxQuotaBytes"
   | "minQuotaObjects"
   | "maxQuotaObjects"
+  | "minQuotaUsageSizePercent"
+  | "maxQuotaUsageSizePercent"
+  | "minQuotaUsageObjectPercent"
+  | "maxQuotaUsageObjectPercent"
   | "minBucketCount"
   | "maxBucketCount"
   | "minUserCount"
@@ -160,13 +168,17 @@ const defaultAdvancedFilter: AdvancedFilterState = {
   maxQuotaBytes: "",
   minQuotaObjects: "",
   maxQuotaObjects: "",
+  minQuotaUsageSizePercent: "",
+  maxQuotaUsageSizePercent: "",
+  minQuotaUsageObjectPercent: "",
+  maxQuotaUsageObjectPercent: "",
   minBucketCount: "",
   maxBucketCount: "",
   minUserCount: "",
   maxUserCount: "",
 };
 
-const hasAdvancedFilters = (advanced: AdvancedFilterState | null) => {
+const hasAdvancedFilters = (advanced: AdvancedFilterState | null, allowUsageFilters: boolean) => {
   if (!advanced) return false;
   return Boolean(
     advanced.accountName.trim() ||
@@ -179,6 +191,11 @@ const hasAdvancedFilters = (advanced: AdvancedFilterState | null) => {
       advanced.maxQuotaBytes.trim() ||
       advanced.minQuotaObjects.trim() ||
       advanced.maxQuotaObjects.trim() ||
+      (allowUsageFilters &&
+        (advanced.minQuotaUsageSizePercent.trim() ||
+          advanced.maxQuotaUsageSizePercent.trim() ||
+          advanced.minQuotaUsageObjectPercent.trim() ||
+          advanced.maxQuotaUsageObjectPercent.trim())) ||
       advanced.minBucketCount.trim() ||
       advanced.maxBucketCount.trim() ||
       advanced.minUserCount.trim() ||
@@ -189,7 +206,8 @@ const hasAdvancedFilters = (advanced: AdvancedFilterState | null) => {
 const buildAdvancedFilterPayload = (
   advanced: AdvancedFilterState | null,
   quickSearch: string,
-  quickMatchMode: TextMatchMode
+  quickMatchMode: TextMatchMode,
+  allowUsageFilters: boolean
 ) => {
   const rules: Array<Record<string, unknown>> = [];
   const addNumericRule = (field: string, op: "gte" | "lte", raw: string) => {
@@ -218,6 +236,12 @@ const buildAdvancedFilterPayload = (
     addNumericRule("quota_max_size_bytes", "lte", advanced.maxQuotaBytes);
     addNumericRule("quota_max_objects", "gte", advanced.minQuotaObjects);
     addNumericRule("quota_max_objects", "lte", advanced.maxQuotaObjects);
+    if (allowUsageFilters) {
+      addNumericRule("quota_usage_size_percent", "gte", advanced.minQuotaUsageSizePercent);
+      addNumericRule("quota_usage_size_percent", "lte", advanced.maxQuotaUsageSizePercent);
+      addNumericRule("quota_usage_object_percent", "gte", advanced.minQuotaUsageObjectPercent);
+      addNumericRule("quota_usage_object_percent", "lte", advanced.maxQuotaUsageObjectPercent);
+    }
 
     addNumericRule("bucket_count", "gte", advanced.minBucketCount);
     addNumericRule("bucket_count", "lte", advanced.maxBucketCount);
@@ -340,8 +364,8 @@ export default function CephAdminAccountsPage() {
   const effectiveQuickFilterMode: TextMatchMode = quickFilterAppliedForcesExact ? "exact" : quickFilterMode;
   const effectiveSearchValue = effectiveQuickFilterMode === "contains" ? searchValue : "";
   const advancedFilterParam = useMemo(
-    () => buildAdvancedFilterPayload(advancedApplied, searchValue, effectiveQuickFilterMode),
-    [advancedApplied, searchValue, effectiveQuickFilterMode]
+    () => buildAdvancedFilterPayload(advancedApplied, searchValue, effectiveQuickFilterMode, canViewMetrics),
+    [advancedApplied, searchValue, effectiveQuickFilterMode, canViewMetrics]
   );
 
   useEffect(() => {
@@ -532,17 +556,23 @@ export default function CephAdminAccountsPage() {
     { key: "minUserCount", label: "User count >=" },
     { key: "maxUserCount", label: "User count <=" },
   ];
+  const usageNumericFields: Array<{ key: AdvancedNumericField; label: string; format: "percent" }> = [
+    { key: "minQuotaUsageSizePercent", label: "Quota usage size % >=", format: "percent" },
+    { key: "maxQuotaUsageSizePercent", label: "Quota usage size % <=", format: "percent" },
+    { key: "minQuotaUsageObjectPercent", label: "Quota usage objects % >=", format: "percent" },
+    { key: "maxQuotaUsageObjectPercent", label: "Quota usage objects % <=", format: "percent" },
+  ];
 
   const numericFieldStates = useMemo(() => {
     const states = {} as Record<AdvancedNumericField, { labelClass: string; fieldClass: string }>;
-    numericFields.forEach(({ key }) => {
+    [...numericFields, ...usageNumericFields].forEach(({ key }) => {
       const draft = (advancedDraft[key] as string).trim();
       const applied = (advancedApplied?.[key] as string | undefined)?.trim() ?? "";
       const pending = draft !== applied;
       states[key] = fieldHighlight(Boolean(applied), pending);
     });
     return states;
-  }, [advancedDraft, advancedApplied]);
+  }, [advancedDraft, advancedApplied, numericFields, usageNumericFields]);
 
   const toggleQuickFilterMode = () => {
     if (quickFilterDraftForcesExact) return;
@@ -569,8 +599,14 @@ export default function CephAdminAccountsPage() {
     setShowAdvancedFilter(false);
   };
 
-  const advancedAppliedPayload = useMemo(() => buildAdvancedFilterPayload(advancedApplied, "", "contains"), [advancedApplied]);
-  const advancedDraftPayload = useMemo(() => buildAdvancedFilterPayload(advancedDraft, "", "contains"), [advancedDraft]);
+  const advancedAppliedPayload = useMemo(
+    () => buildAdvancedFilterPayload(advancedApplied, "", "contains", canViewMetrics),
+    [advancedApplied, canViewMetrics]
+  );
+  const advancedDraftPayload = useMemo(
+    () => buildAdvancedFilterPayload(advancedDraft, "", "contains", canViewMetrics),
+    [advancedDraft, canViewMetrics]
+  );
   const hasPendingAdvancedChanges = advancedDraftPayload !== advancedAppliedPayload;
   const hasAnyAdvancedToClear = advancedDraftPayload !== undefined || advancedAppliedPayload !== undefined;
 
@@ -599,7 +635,7 @@ export default function CephAdminAccountsPage() {
     clearAdvancedField(action.field);
   };
 
-  const advancedFilterActive = hasAdvancedFilters(advancedApplied);
+  const advancedFilterActive = hasAdvancedFilters(advancedApplied, canViewMetrics);
   const quickFilterActive = quickAppliedValue.length > 0;
   const activeFilterSummaryItems = useMemo(() => {
     const items: ActiveFilterSummaryItem[] = [];
@@ -607,7 +643,7 @@ export default function CephAdminAccountsPage() {
       const label = formatTextFilterSummary("Account ID", searchValue, effectiveQuickFilterMode);
       if (label) items.push({ id: "quick", label, remove: { type: "quick" } });
     }
-    if (advancedApplied && hasAdvancedFilters(advancedApplied)) {
+    if (advancedApplied && hasAdvancedFilters(advancedApplied, canViewMetrics)) {
       const accountNameLabel = formatTextFilterSummary("Account name", advancedApplied.accountName, accountNameAppliedMode);
       if (accountNameLabel) items.push({ id: "accountName", label: accountNameLabel, remove: { type: "advanced", field: "accountName" } });
       const emailLabel = formatTextFilterSummary("Email", advancedApplied.email, emailAppliedMode);
@@ -619,6 +655,15 @@ export default function CephAdminAccountsPage() {
         const display = Number.isFinite(numeric) ? formatNumber(numeric) : raw;
         items.push({ id: `num-${key}`, label: `${label} ${display}`, remove: { type: "advanced", field: key } });
       });
+      if (canViewMetrics) {
+        usageNumericFields.forEach(({ key, label }) => {
+          const raw = (advancedApplied[key] as string).trim();
+          if (!raw) return;
+          const numeric = Number(raw);
+          const display = Number.isFinite(numeric) ? `${numeric}%` : raw;
+          items.push({ id: `num-${key}`, label: `${label} ${display}`, remove: { type: "advanced", field: key } });
+        });
+      }
     }
     return items;
   }, [
@@ -626,9 +671,11 @@ export default function CephAdminAccountsPage() {
     searchValue,
     effectiveQuickFilterMode,
     advancedApplied,
+    canViewMetrics,
     accountNameAppliedMode,
     emailAppliedMode,
     numericFields,
+    usageNumericFields,
   ]);
   const showActiveFiltersCard =
     activeFilterSummaryItems.length > 0 &&
@@ -652,11 +699,24 @@ export default function CephAdminAccountsPage() {
       const display = Number.isFinite(numeric) ? formatNumber(numeric) : raw;
       items.push({ id: `draft-${key}`, label: `${label} ${display}` });
     });
+    if (canViewMetrics) {
+      usageNumericFields.forEach(({ key, label }) => {
+        const raw = (advancedDraft[key] as string).trim();
+        if (!raw) return;
+        const numeric = Number(raw);
+        const display = Number.isFinite(numeric) ? `${numeric}%` : raw;
+        items.push({ id: `draft-${key}`, label: `${label} ${display}` });
+      });
+    }
     return items;
-  }, [advancedDraft, accountNameDraftMode, emailDraftMode, numericFields]);
+  }, [advancedDraft, accountNameDraftMode, emailDraftMode, numericFields, canViewMetrics, usageNumericFields]);
 
   const advancedDraftTextCount = Number(accountNameDraftValue.length > 0) + Number(emailDraftValue.length > 0);
-  const advancedDraftNumericCount = numericFields.filter(({ key }) => (advancedDraft[key] as string).trim().length > 0).length;
+  const advancedDraftNumericCount =
+    numericFields.filter(({ key }) => (advancedDraft[key] as string).trim().length > 0).length +
+    (canViewMetrics
+      ? usageNumericFields.filter(({ key }) => (advancedDraft[key] as string).trim().length > 0).length
+      : 0);
   const advancedDraftActiveCount = advancedDraftTextCount + advancedDraftNumericCount;
   const advancedDraftGlobalCostLevel: FilterCostLevel = useMemo(() => {
     if (advancedDraftNumericCount >= 6) return "high";
@@ -1183,6 +1243,33 @@ export default function CephAdminAccountsPage() {
                                 </label>
                               ))}
                             </div>
+                            {canViewMetrics && (
+                              <div className="mt-4">
+                                <p className="mb-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  Quota usage %
+                                </p>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  {usageNumericFields.map((field) => (
+                                    <label
+                                      key={field.key}
+                                      className={`flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200 ${numericFieldStates[field.key].labelClass}`}
+                                    >
+                                      <span className="inline-flex items-center gap-1">
+                                        <span>{field.label}</span>
+                                        {renderFilterCostIndicator("medium", "Medium cost: usage percentage filters require bucket metrics aggregation.")}
+                                      </span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={advancedDraft[field.key]}
+                                        onChange={(e) => updateAdvancedField(field.key, e.target.value)}
+                                        className={`rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${numericFieldStates[field.key].fieldClass}`}
+                                      />
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </section>
                         </div>
                       </div>

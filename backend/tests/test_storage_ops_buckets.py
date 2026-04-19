@@ -803,6 +803,60 @@ def test_storage_ops_owner_quota_and_usage_use_context_principal_and_resolve_con
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
 
+def test_storage_ops_bucket_quota_usage_percent_filter_forces_stats_and_filters_results(client, monkeypatch):
+    stats_flags: list[bool] = []
+
+    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
+        assert workspace == "manager"
+        return [
+            ExecutionContext(
+                kind="account",
+                id="1",
+                display_name="Account A",
+                endpoint_name="Primary",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+            )
+        ]
+
+    def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
+        return SimpleNamespace(context_id=account_ref)
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            stats_flags.append(with_stats)
+            return [
+                Bucket(name="alpha", used_bytes=60, object_count=6, quota_max_size_bytes=100, quota_max_objects=10),
+                Bucket(name="beta", used_bytes=10, object_count=1),
+            ]
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "quota_usage_size_percent", "op": "gte", "value": 50}],
+        }
+    )
+
+    monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
+    monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
+
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
+    app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
+    try:
+        response = client.get(
+            "/api/storage-ops/buckets",
+            params={"advanced_filter": advanced_filter, "with_stats": "false"},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert [item["name"] for item in payload["items"]] == ["1::alpha"]
+        assert stats_flags == [True]
+    finally:
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
+        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+        app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
+
+
 def test_storage_ops_owner_identity_failures_leave_owner_quota_fields_null(client, monkeypatch):
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"

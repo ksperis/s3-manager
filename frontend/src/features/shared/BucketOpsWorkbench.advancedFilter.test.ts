@@ -59,6 +59,8 @@ describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
   it("serializes owner quota and owner usage filters with the correct backend fields", () => {
     const advanced: AdvancedFilterState = {
       ...baseAdvancedFilter(),
+      minQuotaUsageSizePercent: "70",
+      maxQuotaUsageObjectPercent: "98",
       minOwnerQuotaBytes: "1024",
       maxOwnerQuotaObjects: "50",
       minOwnerUsedBytes: "900",
@@ -72,6 +74,8 @@ describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
 
     expect(payload.rules).toEqual(
       expect.arrayContaining([
+        { field: "quota_usage_size_percent", op: "gte", value: 70 },
+        { field: "quota_usage_object_percent", op: "lte", value: 98 },
         { field: "owner_quota_max_size_bytes", op: "gte", value: 1024 },
         { field: "owner_quota_max_objects", op: "lte", value: 50 },
         { field: "owner_used_bytes", op: "gte", value: 900 },
@@ -103,11 +107,15 @@ describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
 
   it("sanitizes persisted owner quota fields", () => {
     const sanitized = sanitizeAdvancedFilter({
+      minQuotaUsageSizePercent: "71",
+      maxQuotaUsageObjectPercent: "92",
       minOwnerQuotaBytes: "123",
       maxOwnerQuotaObjects: "45",
       minOwnerQuotaUsageSizePercent: "88",
     });
 
+    expect(sanitized.minQuotaUsageSizePercent).toBe("71");
+    expect(sanitized.maxQuotaUsageObjectPercent).toBe("92");
     expect(sanitized.minOwnerQuotaBytes).toBe("123");
     expect(sanitized.maxOwnerQuotaObjects).toBe("45");
     expect(sanitized.minOwnerQuotaUsageSizePercent).toBe("88");

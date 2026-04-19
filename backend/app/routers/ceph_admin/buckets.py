@@ -70,7 +70,7 @@ from app.services.buckets_service import BucketsService
 from app.services.rgw_admin import RGWAdminError
 from app.utils.rgw import extract_bucket_list, is_rgw_account_id
 from app.utils.storage_endpoint_features import resolve_feature_flags
-from app.utils.usage_stats import extract_usage_stats
+from app.utils.usage_stats import compute_usage_ratio_percent, extract_usage_stats
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/buckets", tags=["ceph-admin-buckets"])
 logger = logging.getLogger(__name__)
@@ -543,17 +543,6 @@ def _coerce_number(value: object) -> float | None:
     return None
 
 
-def _quota_usage_percent(used: object, quota: object) -> float | None:
-    used_num = _coerce_number(used)
-    quota_num = _coerce_number(quota)
-    if used_num is None or quota_num is None or quota_num <= 0:
-        return None
-    percent = (used_num / quota_num) * 100.0
-    if percent < 0:
-        return 0.0
-    return percent if percent >= 0 else None
-
-
 def _apply_owner_enrichment(
     ctx: CephAdminContext,
     buckets: list[CephAdminBucketSummary],
@@ -645,10 +634,14 @@ def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilte
         return _match_tag_rule(bucket, rule)
     if field == "owner_kind":
         value = _owner_kind_from_owner(bucket.owner)
+    elif field == "quota_usage_size_percent":
+        value = compute_usage_ratio_percent(bucket.used_bytes, bucket.quota_max_size_bytes)
+    elif field == "quota_usage_object_percent":
+        value = compute_usage_ratio_percent(bucket.object_count, bucket.quota_max_objects)
     elif field == "owner_quota_usage_size_percent":
-        value = _quota_usage_percent(bucket.owner_used_bytes, bucket.owner_quota_max_size_bytes)
+        value = compute_usage_ratio_percent(bucket.owner_used_bytes, bucket.owner_quota_max_size_bytes)
     elif field == "owner_quota_usage_object_percent":
-        value = _quota_usage_percent(bucket.owner_object_count, bucket.owner_quota_max_objects)
+        value = compute_usage_ratio_percent(bucket.owner_object_count, bucket.owner_quota_max_objects)
     else:
         value = getattr(bucket, field, None)
     if op == "is_null":

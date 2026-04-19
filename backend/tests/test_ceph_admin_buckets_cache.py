@@ -2056,3 +2056,41 @@ def test_ceph_admin_owner_quota_usage_percent_filter_uses_global_owner_usage():
     assert [item.name for item in response.items] == ["bucket-a"]
     assert rgw_admin.get_all_buckets_calls == 1
     assert rgw_admin.list_accounts_calls == 1
+
+
+def test_ceph_admin_bucket_quota_usage_percent_filter_matches_bucket_usage_and_ignores_missing_quota():
+    payload = [
+        {
+            "name": "bucket-a",
+            "owner": "RGW01",
+            "usage": {"rgw.main": {"size_actual": 60, "num_objects": 6}},
+            "bucket_quota": {"enabled": True, "max_size": 100, "max_objects": 10},
+        },
+        {
+            "name": "bucket-b",
+            "owner": "RGW01",
+            "usage": {"rgw.main": {"size_actual": 10, "num_objects": 1}},
+        },
+    ]
+    ctx, rgw_admin = _build_ctx(endpoint_id=404, payload=payload)
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "quota_usage_size_percent", "op": "gte", "value": 50}],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-a"]
+    assert rgw_admin.get_all_buckets_calls == 1

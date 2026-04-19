@@ -2,7 +2,11 @@
 
 ## When to use
 
-Use **Advanced filter** in **Ceph Admin > Buckets** when you need precise selection by owner identity, tags, and storage metrics.
+Use **Advanced filter** in **Ceph Admin** listings when you need precise selection by identity, quota ranges, and storage metrics:
+
+- **Buckets** for owner identity, tags, quota limits, and quota usage percentages.
+- **Accounts** for RGW account identity, quotas, counts, and account quota usage percentages.
+- **Users** for RGW user identity, status, quotas, and user quota usage percentages.
 
 ## Prerequisites
 
@@ -11,24 +15,28 @@ Use **Advanced filter** in **Ceph Admin > Buckets** when you need precise select
 
 ## Steps
 
-1. Open **Ceph Admin > Buckets**.
+1. Open the relevant page in **Ceph Admin**:
+   - **Buckets**
+   - **Accounts**
+   - **Users**
 2. Click **Advanced filter**.
 3. In the drawer, define filter rules for the needed scope:
-   - Identity fields (tenant, owner, owner name)
-   - Tag criteria (S3 tags)
-   - Storage and quota ranges (when available)
+   - Identity fields
+   - Tag criteria for buckets (S3 tags)
+   - Storage and quota ranges
+   - Quota usage percentage ranges for bucket, account, or user quotas when metrics are available
 4. Choose match mode (`Contains` or `Exact`) per field when relevant.
 5. Click **Apply filters**.
 6. Review active filters and resulting bucket list; clear or refine filters as needed.
 
 ## Expected result
 
-The bucket table is narrowed down to the buckets matching your advanced criteria.
+The current Ceph Admin listing is narrowed down to the entities matching your advanced criteria.
 
 ## Limits / feature flags
 
 !!! note
-    Some advanced filters require additional lookups and can be slower on large inventories.
+    Some advanced filters require additional lookups or bucket metrics aggregation and can be slower on large inventories.
 
 ## Related pages
 

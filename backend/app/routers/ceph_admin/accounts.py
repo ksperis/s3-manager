@@ -47,7 +47,7 @@ from app.services.rgw_admin import RGWAdminError
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.rgw import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_feature_flags
-from app.utils.usage_stats import extract_usage_stats
+from app.utils.usage_stats import compute_usage_ratio_percent, summarize_bucket_usage
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/accounts", tags=["ceph-admin-accounts"])
 
@@ -117,7 +117,12 @@ def _coerce_number(value: object) -> float | None:
 def _match_account_field_rule(account: CephAdminRgwAccountSummary, rule: CephAdminAccountFilterRule) -> bool:
     field = rule.field
     op = rule.op
-    value = getattr(account, field, None)
+    if field == "quota_usage_size_percent":
+        value = compute_usage_ratio_percent(account.used_bytes, account.quota_max_size_bytes)
+    elif field == "quota_usage_object_percent":
+        value = compute_usage_ratio_percent(account.object_count, account.quota_max_objects)
+    else:
+        value = getattr(account, field, None)
     if op == "is_null":
         return value is None
     if op == "not_null":
@@ -193,16 +198,22 @@ def _includes_for_account_fields(fields: set[str]) -> set[str]:
         include.add("profile")
     if fields & {"max_users", "max_buckets"}:
         include.add("limits")
-    if fields & {"quota_max_size_bytes", "quota_max_objects"}:
+    if fields & {"quota_max_size_bytes", "quota_max_objects", "quota_usage_size_percent", "quota_usage_object_percent"}:
         include.add("quota")
     if fields & {"bucket_count", "user_count"}:
         include.add("stats")
+    if fields & {"used_bytes", "object_count", "quota_usage_size_percent", "quota_usage_object_percent"}:
+        include.add("usage")
     return include
 
 
 def _account_field_needs_enrichment(account: CephAdminRgwAccountSummary, field: str) -> bool:
     if field == "account_name":
         return not bool((account.account_name or "").strip())
+    if field == "quota_usage_size_percent":
+        return account.used_bytes is None or account.quota_max_size_bytes is None
+    if field == "quota_usage_object_percent":
+        return account.object_count is None or account.quota_max_objects is None
     value = getattr(account, field, None)
     return value is None
 
@@ -342,6 +353,16 @@ def _enrich_accounts(
         if "stats" in requested:
             account.bucket_count = _extract_bucket_count(payload)
             account.user_count = _extract_user_count(payload)
+        if "usage" in requested:
+            try:
+                buckets_payload = ctx.rgw_admin.get_all_buckets(account_id=account.account_id, with_stats=True)
+            except RGWAdminError as exc:
+                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            _bucket_usage, total_bytes, total_objects, _bucket_count = summarize_bucket_usage(
+                extract_bucket_list(buckets_payload)
+            )
+            account.used_bytes = total_bytes
+            account.object_count = total_objects
         enriched.append(account)
     return enriched
 
@@ -799,36 +820,12 @@ def get_rgw_account_metrics(
     except RGWAdminError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
-    bucket_usage: list[dict[str, Any]] = []
-    total_bytes = 0
-    total_objects = 0
-    has_bytes = False
-    has_objects = False
-    for entry in extract_bucket_list(payload):
-        if not isinstance(entry, dict):
-            continue
-        name = entry.get("bucket") or entry.get("name")
-        if not name:
-            continue
-        used_bytes, object_count = extract_usage_stats(entry.get("usage"))
-        bucket_usage.append(
-            {
-                "name": str(name),
-                "used_bytes": used_bytes,
-                "object_count": object_count,
-            }
-        )
-        if used_bytes is not None:
-            total_bytes += int(used_bytes)
-            has_bytes = True
-        if object_count is not None:
-            total_objects += int(object_count)
-            has_objects = True
+    bucket_usage, total_bytes, total_objects, bucket_count = summarize_bucket_usage(extract_bucket_list(payload))
     bucket_usage.sort(key=lambda item: item.get("used_bytes") or 0, reverse=True)
     return CephAdminEntityMetrics(
-        total_bytes=total_bytes if has_bytes else None,
-        total_objects=total_objects if has_objects else None,
-        bucket_count=len(bucket_usage),
+        total_bytes=total_bytes,
+        total_objects=total_objects,
+        bucket_count=bucket_count,
         bucket_usage=bucket_usage,
         generated_at=datetime.now(timezone.utc).replace(microsecond=0),
     )

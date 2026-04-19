@@ -1,22 +1,13 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import CephAdminUsersPage from "./CephAdminUsersPage";
 
 const listCephAdminUsersMock = vi.fn();
+const useCephAdminEndpointMock = vi.fn();
 
 vi.mock("./CephAdminEndpointContext", () => ({
-  useCephAdminEndpoint: () => ({
-    selectedEndpointId: 1,
-    selectedEndpoint: {
-      id: 1,
-      name: "Ceph Endpoint 1",
-      capabilities: {},
-    },
-    selectedEndpointAccess: {
-      can_metrics: true,
-    },
-  }),
+  useCephAdminEndpoint: () => useCephAdminEndpointMock(),
 }));
 
 vi.mock("./CephAdminUserCreateModal", () => ({
@@ -52,6 +43,17 @@ function deferred<T>() {
 describe("CephAdminUsersPage list states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useCephAdminEndpointMock.mockReturnValue({
+      selectedEndpointId: 1,
+      selectedEndpoint: {
+        id: 1,
+        name: "Ceph Endpoint 1",
+        capabilities: {},
+      },
+      selectedEndpointAccess: {
+        can_metrics: true,
+      },
+    });
   });
 
   it("shows loading state before displaying empty results", async () => {
@@ -98,5 +100,51 @@ describe("CephAdminUsersPage list states", () => {
 
     expect(await screen.findByText("Forbidden by policy")).toBeInTheDocument();
     expect(screen.getByText("Unable to load users.")).toBeInTheDocument();
+  });
+
+  it("serializes quota usage percent filters only when metrics are available", async () => {
+    listCephAdminUsersMock.mockResolvedValue({ items: [], total: 0 });
+
+    renderPage();
+
+    expect(await screen.findByText("No users found.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /advanced filter/i }));
+    fireEvent.change(screen.getByLabelText("Quota usage size % >="), { target: { value: "75" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    await waitFor(() => {
+      expect(listCephAdminUsersMock).toHaveBeenCalledTimes(2);
+    });
+
+    const lastCall = listCephAdminUsersMock.mock.calls.at(-1);
+    expect(JSON.parse(lastCall?.[1]?.advanced_filter as string)).toEqual({
+      match: "all",
+      rules: [{ field: "quota_usage_size_percent", op: "gte", value: 75 }],
+    });
+  });
+
+  it("hides quota usage percent filters when metrics are unavailable", async () => {
+    useCephAdminEndpointMock.mockReturnValue({
+      selectedEndpointId: 1,
+      selectedEndpoint: {
+        id: 1,
+        name: "Ceph Endpoint 1",
+        capabilities: {},
+      },
+      selectedEndpointAccess: {
+        can_metrics: false,
+      },
+    });
+    listCephAdminUsersMock.mockResolvedValue({ items: [], total: 0 });
+
+    renderPage();
+
+    expect(await screen.findByText("No users found.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /advanced filter/i }));
+
+    expect(screen.queryByText("Quota usage %")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Quota usage size % >=")).not.toBeInTheDocument();
   });
 });

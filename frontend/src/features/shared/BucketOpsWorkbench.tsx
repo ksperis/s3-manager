@@ -924,6 +924,10 @@ type AdvancedNumericField =
   | "maxQuotaBytes"
   | "minQuotaObjects"
   | "maxQuotaObjects"
+  | "minQuotaUsageSizePercent"
+  | "maxQuotaUsageSizePercent"
+  | "minQuotaUsageObjectPercent"
+  | "maxQuotaUsageObjectPercent"
   | "minOwnerUsedBytes"
   | "maxOwnerUsedBytes"
   | "minOwnerObjects"
@@ -987,6 +991,10 @@ export type AdvancedFilterState = {
   maxQuotaBytes: string;
   minQuotaObjects: string;
   maxQuotaObjects: string;
+  minQuotaUsageSizePercent: string;
+  maxQuotaUsageSizePercent: string;
+  minQuotaUsageObjectPercent: string;
+  maxQuotaUsageObjectPercent: string;
   minOwnerUsedBytes: string;
   maxOwnerUsedBytes: string;
   minOwnerObjects: string;
@@ -1026,6 +1034,10 @@ const defaultAdvancedFilter: AdvancedFilterState = {
   maxQuotaBytes: "",
   minQuotaObjects: "",
   maxQuotaObjects: "",
+  minQuotaUsageSizePercent: "",
+  maxQuotaUsageSizePercent: "",
+  minQuotaUsageObjectPercent: "",
+  maxQuotaUsageObjectPercent: "",
   minOwnerUsedBytes: "",
   maxOwnerUsedBytes: "",
   minOwnerObjects: "",
@@ -1211,6 +1223,10 @@ const BUCKET_STATS_NUMERIC_FILTER_FIELDS: AdvancedNumericField[] = [
   "maxQuotaBytes",
   "minQuotaObjects",
   "maxQuotaObjects",
+  "minQuotaUsageSizePercent",
+  "maxQuotaUsageSizePercent",
+  "minQuotaUsageObjectPercent",
+  "maxQuotaUsageObjectPercent",
 ];
 
 const OWNER_QUOTA_NUMERIC_FILTER_FIELDS: AdvancedNumericField[] = [
@@ -1333,6 +1349,10 @@ export const buildAdvancedFilterPayload = (
       addNumericRule("quota_max_size_bytes", "lte", advanced.maxQuotaBytes);
       addNumericRule("quota_max_objects", "gte", advanced.minQuotaObjects);
       addNumericRule("quota_max_objects", "lte", advanced.maxQuotaObjects);
+      addNumericRule("quota_usage_size_percent", "gte", advanced.minQuotaUsageSizePercent);
+      addNumericRule("quota_usage_size_percent", "lte", advanced.maxQuotaUsageSizePercent);
+      addNumericRule("quota_usage_object_percent", "gte", advanced.minQuotaUsageObjectPercent);
+      addNumericRule("quota_usage_object_percent", "lte", advanced.maxQuotaUsageObjectPercent);
       addNumericRule("owner_used_bytes", "gte", advanced.minOwnerUsedBytes);
       addNumericRule("owner_used_bytes", "lte", advanced.maxOwnerUsedBytes);
       addNumericRule("owner_object_count", "gte", advanced.minOwnerObjects);
@@ -1396,6 +1416,10 @@ export const hasAdvancedFilters = (
       advanced.maxQuotaBytes ||
       advanced.minQuotaObjects ||
       advanced.maxQuotaObjects ||
+      advanced.minQuotaUsageSizePercent ||
+      advanced.maxQuotaUsageSizePercent ||
+      advanced.minQuotaUsageObjectPercent ||
+      advanced.maxQuotaUsageObjectPercent ||
       advanced.minOwnerUsedBytes ||
       advanced.maxOwnerUsedBytes ||
       advanced.minOwnerObjects ||
@@ -1797,6 +1821,10 @@ export const sanitizeAdvancedFilter = (value: unknown): AdvancedFilterState => {
     maxQuotaBytes: safeString(data.maxQuotaBytes),
     minQuotaObjects: safeString(data.minQuotaObjects),
     maxQuotaObjects: safeString(data.maxQuotaObjects),
+    minQuotaUsageSizePercent: safeString(data.minQuotaUsageSizePercent),
+    maxQuotaUsageSizePercent: safeString(data.maxQuotaUsageSizePercent),
+    minQuotaUsageObjectPercent: safeString(data.minQuotaUsageObjectPercent),
+    maxQuotaUsageObjectPercent: safeString(data.maxQuotaUsageObjectPercent),
     minOwnerUsedBytes: safeString(data.minOwnerUsedBytes),
     maxOwnerUsedBytes: safeString(data.maxOwnerUsedBytes),
     minOwnerObjects: safeString(data.minOwnerObjects),
@@ -2517,12 +2545,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         advancedApplied.maxUsedBytes ||
         advancedApplied.minObjects ||
         advancedApplied.maxObjects ||
-        advancedApplied.minQuotaBytes ||
-        advancedApplied.maxQuotaBytes ||
-        advancedApplied.minQuotaObjects ||
-        advancedApplied.maxQuotaObjects ||
-        advancedApplied.minOwnerUsedBytes ||
-        advancedApplied.maxOwnerUsedBytes ||
+      advancedApplied.minQuotaBytes ||
+      advancedApplied.maxQuotaBytes ||
+      advancedApplied.minQuotaObjects ||
+      advancedApplied.maxQuotaObjects ||
+      advancedApplied.minQuotaUsageSizePercent ||
+      advancedApplied.maxQuotaUsageSizePercent ||
+      advancedApplied.minQuotaUsageObjectPercent ||
+      advancedApplied.maxQuotaUsageObjectPercent ||
+      advancedApplied.minOwnerUsedBytes ||
+      advancedApplied.maxOwnerUsedBytes ||
         advancedApplied.minOwnerObjects ||
         advancedApplied.maxOwnerObjects ||
         advancedApplied.minOwnerQuotaUsageSizePercent ||
@@ -5750,6 +5782,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           { id: "maxQuotaBytes", label: "Quota bytes <=" },
           { id: "minQuotaObjects", label: "Quota objects >=" },
           { id: "maxQuotaObjects", label: "Quota objects <=" },
+          { id: "minQuotaUsageSizePercent", label: "Quota usage size % >=", format: "percent" },
+          { id: "maxQuotaUsageSizePercent", label: "Quota usage size % <=", format: "percent" },
+          { id: "minQuotaUsageObjectPercent", label: "Quota usage objects % >=", format: "percent" },
+          { id: "maxQuotaUsageObjectPercent", label: "Quota usage objects % <=", format: "percent" },
           { id: "minOwnerUsedBytes", label: "Owner used bytes >=" },
           { id: "maxOwnerUsedBytes", label: "Owner used bytes <=" },
           { id: "minOwnerObjects", label: "Owner objects >=" },
@@ -5875,6 +5911,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         { id: "maxQuotaBytes", label: "Quota bytes <=" },
         { id: "minQuotaObjects", label: "Quota objects >=" },
         { id: "maxQuotaObjects", label: "Quota objects <=" },
+        { id: "minQuotaUsageSizePercent", label: "Quota usage size % >=", format: "percent" },
+        { id: "maxQuotaUsageSizePercent", label: "Quota usage size % <=", format: "percent" },
+        { id: "minQuotaUsageObjectPercent", label: "Quota usage objects % >=", format: "percent" },
+        { id: "maxQuotaUsageObjectPercent", label: "Quota usage objects % <=", format: "percent" },
         { id: "minOwnerUsedBytes", label: "Owner used bytes >=" },
         { id: "maxOwnerUsedBytes", label: "Owner used bytes <=" },
         { id: "minOwnerObjects", label: "Owner objects >=" },
@@ -7781,6 +7821,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                   rows: [
                                     { label: "Bytes", minId: "minQuotaBytes" as const, maxId: "maxQuotaBytes" as const },
                                     { label: "Objects", minId: "minQuotaObjects" as const, maxId: "maxQuotaObjects" as const },
+                                  ],
+                                },
+                                {
+                                  title: "Quota usage %",
+                                  disabled: !usageFeatureEnabled,
+                                  rows: [
+                                    {
+                                      label: "Size %",
+                                      minId: "minQuotaUsageSizePercent" as const,
+                                      maxId: "maxQuotaUsageSizePercent" as const,
+                                    },
+                                    {
+                                      label: "Objects %",
+                                      minId: "minQuotaUsageObjectPercent" as const,
+                                      maxId: "maxQuotaUsageObjectPercent" as const,
+                                    },
                                   ],
                                 },
                                 {

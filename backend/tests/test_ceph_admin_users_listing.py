@@ -10,13 +10,20 @@ from app.routers.ceph_admin import users as users_router
 
 
 class FakeRGWAdmin:
-    def __init__(self, users_payload: list[str], user_details: dict[tuple[str | None, str], dict]):
+    def __init__(
+        self,
+        users_payload: list[str],
+        user_details: dict[tuple[str | None, str], dict],
+        bucket_payloads: dict[str, list[dict]] | None = None,
+    ):
         self._users_payload = users_payload
         self._user_details = user_details
+        self._bucket_payloads = bucket_payloads or {}
         self.list_users_calls = 0
         self.get_user_calls = 0
         self.get_account_calls = 0
         self.list_user_keys_calls = 0
+        self.get_all_buckets_calls = 0
 
     def list_users(self):
         self.list_users_calls += 1
@@ -42,6 +49,11 @@ class FakeRGWAdmin:
         self.list_user_keys_calls += 1
         return []
 
+    def get_all_buckets(self, account_id: str | None = None, uid: str | None = None, with_stats: bool = False):  # noqa: ARG002
+        self.get_all_buckets_calls += 1
+        assert uid is not None
+        return list(self._bucket_payloads.get(uid, []))
+
 
 @pytest.fixture(autouse=True)
 def clear_users_listing_cache():
@@ -62,8 +74,9 @@ def _build_ctx(
     user_details: dict[tuple[str | None, str], dict],
     *,
     endpoint: object | None = None,
+    bucket_payloads: dict[str, list[dict]] | None = None,
 ):
-    rgw_admin = FakeRGWAdmin(users_payload=users_payload, user_details=user_details)
+    rgw_admin = FakeRGWAdmin(users_payload=users_payload, user_details=user_details, bucket_payloads=bucket_payloads)
     ctx = SimpleNamespace(endpoint=endpoint or SimpleNamespace(id=endpoint_id), rgw_admin=rgw_admin)
     return ctx, rgw_admin
 
@@ -354,3 +367,83 @@ def test_build_user_detail_ignores_legacy_kebab_case_default_fields():
 
     assert detail.default_placement is None
     assert detail.default_storage_class is None
+
+
+def test_ceph_admin_users_quota_usage_percent_filter_aggregates_bucket_usage():
+    users_payload = ["tenant-a$alice"]
+    user_details = {
+        ("tenant-a", "alice"): _build_user_payload(
+            "alice",
+            tenant="tenant-a",
+            quota_size=100,
+            quota_objects=10,
+        )
+    }
+    bucket_payloads = {
+        "tenant-a$alice": [
+            {"name": "bucket-a", "usage": {"rgw.main": {"size_actual": 30, "num_objects": 3}}},
+            {"name": "bucket-b", "usage": {"rgw.main": {"size_actual": 50, "num_objects": 5}}},
+        ]
+    }
+    ctx, rgw_admin = _build_ctx(
+        endpoint_id=18,
+        users_payload=users_payload,
+        user_details=user_details,
+        bucket_payloads=bucket_payloads,
+    )
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "quota_usage_size_percent", "op": "gte", "value": 80}],
+        }
+    )
+
+    response = users_router.list_rgw_users(
+        page=1,
+        page_size=25,
+        search=None,
+        advanced_filter=advanced_filter,
+        sort_by="uid",
+        sort_dir="asc",
+        include=[],
+        ctx=ctx,
+    )
+
+    assert [item.uid for item in response.items] == ["alice"]
+    assert rgw_admin.get_all_buckets_calls == 1
+
+
+def test_ceph_admin_users_do_not_fetch_usage_without_usage_percent_filter():
+    users_payload = ["alpha"]
+    user_details = {
+        (None, "alpha"): _build_user_payload("alpha", quota_size=100, quota_objects=10),
+    }
+    bucket_payloads = {
+        "alpha": [{"name": "bucket-a", "usage": {"rgw.main": {"size_actual": 30, "num_objects": 3}}}]
+    }
+    ctx, rgw_admin = _build_ctx(
+        endpoint_id=19,
+        users_payload=users_payload,
+        user_details=user_details,
+        bucket_payloads=bucket_payloads,
+    )
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "quota_max_size_bytes", "op": "gte", "value": 50}],
+        }
+    )
+
+    response = users_router.list_rgw_users(
+        page=1,
+        page_size=25,
+        search=None,
+        advanced_filter=advanced_filter,
+        sort_by="uid",
+        sort_dir="asc",
+        include=[],
+        ctx=ctx,
+    )
+
+    assert [item.uid for item in response.items] == ["alpha"]
+    assert rgw_admin.get_all_buckets_calls == 0

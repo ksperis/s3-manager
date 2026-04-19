@@ -10,12 +10,19 @@ from app.routers.ceph_admin import accounts as accounts_router
 
 
 class FakeRGWAdmin:
-    def __init__(self, accounts_payload: list[object], account_details: dict[str, dict]):
+    def __init__(
+        self,
+        accounts_payload: list[object],
+        account_details: dict[str, dict],
+        bucket_payloads: dict[str, list[dict]] | None = None,
+    ):
         self._accounts_payload = accounts_payload
         self._account_details = account_details
+        self._bucket_payloads = bucket_payloads or {}
         self.list_accounts_calls = 0
         self.list_accounts_include_details: list[bool] = []
         self.get_account_calls = 0
+        self.get_all_buckets_calls = 0
 
     def list_accounts(self, include_details: bool = True):
         self.list_accounts_calls += 1
@@ -33,6 +40,11 @@ class FakeRGWAdmin:
         if payload is None:
             return {"not_found": True} if allow_not_found else None
         return payload
+
+    def get_all_buckets(self, account_id: str | None = None, uid: str | None = None, with_stats: bool = False):  # noqa: ARG002
+        self.get_all_buckets_calls += 1
+        assert account_id is not None
+        return list(self._bucket_payloads.get(account_id, []))
 
 
 class FakeRGWAdminMetadataIds(FakeRGWAdmin):
@@ -57,8 +69,18 @@ def clear_accounts_listing_cache():
         accounts_router._RGW_ACCOUNTS_PAYLOAD_CACHE.clear()
 
 
-def _build_ctx(endpoint_id: int, accounts_payload: list[object], account_details: dict[str, dict]):
-    rgw_admin = FakeRGWAdmin(accounts_payload=accounts_payload, account_details=account_details)
+def _build_ctx(
+    endpoint_id: int,
+    accounts_payload: list[object],
+    account_details: dict[str, dict],
+    *,
+    bucket_payloads: dict[str, list[dict]] | None = None,
+):
+    rgw_admin = FakeRGWAdmin(
+        accounts_payload=accounts_payload,
+        account_details=account_details,
+        bucket_payloads=bucket_payloads,
+    )
     ctx = SimpleNamespace(endpoint=SimpleNamespace(id=endpoint_id), rgw_admin=rgw_admin)
     return ctx, rgw_admin
 
@@ -402,3 +424,78 @@ def test_build_account_detail_ignores_legacy_kebab_case_limit_fields():
 
     assert detail.max_buckets is None
     assert detail.max_users is None
+
+
+def test_ceph_admin_accounts_quota_usage_percent_filter_aggregates_bucket_usage():
+    accounts_payload = [{"id": "RGW01", "name": "Alpha", "quota": {"max_size": 100, "max_objects": 10}}]
+    account_details = {
+        "RGW01": _build_account_payload("RGW01", account_name="Alpha", quota_size=100, quota_objects=10),
+    }
+    bucket_payloads = {
+        "RGW01": [
+            {"name": "bucket-a", "usage": {"rgw.main": {"size_actual": 30, "num_objects": 3}}},
+            {"name": "bucket-b", "usage": {"rgw.main": {"size_actual": 50, "num_objects": 5}}},
+        ]
+    }
+    ctx, rgw_admin = _build_ctx(
+        endpoint_id=2502,
+        accounts_payload=accounts_payload,
+        account_details=account_details,
+        bucket_payloads=bucket_payloads,
+    )
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "quota_usage_size_percent", "op": "gte", "value": 80}],
+        }
+    )
+
+    response = accounts_router.list_rgw_accounts(
+        page=1,
+        page_size=25,
+        search=None,
+        advanced_filter=advanced_filter,
+        sort_by="account_id",
+        sort_dir="asc",
+        include=[],
+        ctx=ctx,
+    )
+
+    assert [item.account_id for item in response.items] == ["RGW01"]
+    assert rgw_admin.get_all_buckets_calls == 1
+
+
+def test_ceph_admin_accounts_do_not_fetch_usage_without_usage_percent_filter():
+    accounts_payload = [{"id": "RGW01", "name": "Alpha", "quota": {"max_size": 100, "max_objects": 10}}]
+    account_details = {
+        "RGW01": _build_account_payload("RGW01", account_name="Alpha", quota_size=100, quota_objects=10),
+    }
+    bucket_payloads = {
+        "RGW01": [{"name": "bucket-a", "usage": {"rgw.main": {"size_actual": 30, "num_objects": 3}}}]
+    }
+    ctx, rgw_admin = _build_ctx(
+        endpoint_id=2503,
+        accounts_payload=accounts_payload,
+        account_details=account_details,
+        bucket_payloads=bucket_payloads,
+    )
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "quota_max_size_bytes", "op": "gte", "value": 50}],
+        }
+    )
+
+    response = accounts_router.list_rgw_accounts(
+        page=1,
+        page_size=25,
+        search=None,
+        advanced_filter=advanced_filter,
+        sort_by="account_id",
+        sort_dir="asc",
+        include=[],
+        ctx=ctx,
+    )
+
+    assert [item.account_id for item in response.items] == ["RGW01"]
+    assert rgw_admin.get_all_buckets_calls == 0
