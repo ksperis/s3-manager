@@ -46,6 +46,10 @@ def test_private_connections_api_does_not_expose_iam_capable(monkeypatch, contra
         "app.services.s3_connection_capabilities_service.probe_connection_can_manage_iam",
         lambda connection: True,
     )
+    monkeypatch.setattr(
+        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        lambda value, field_name="Endpoint URL": value.rstrip("/"),
+    )
 
     response = client.post(
         "/api/connections",

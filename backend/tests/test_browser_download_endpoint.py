@@ -34,7 +34,7 @@ def test_browser_download_returns_stream(client):
     assert response.status_code == 200
     assert response.content == b"file-bytes"
     assert response.headers["content-type"].startswith("text/plain")
-    assert response.headers["content-disposition"] == 'attachment; filename="demo.txt"'
+    assert response.headers["content-disposition"] == 'attachment; filename="demo.txt"; filename*=UTF-8\'\'demo.txt'
     assert captured == {
         "bucket_name": "my-bucket",
         "account_id": 42,
