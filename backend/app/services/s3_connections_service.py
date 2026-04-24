@@ -22,6 +22,7 @@ from app.utils.s3_connection_endpoint import (
     resolve_connection_details,
 )
 from app.utils.s3_connection_ordering import s3_connection_name_order_by
+from app.utils.s3_endpoint import validate_user_supplied_s3_endpoint
 
 
 class S3ConnectionsService:
@@ -165,7 +166,7 @@ class S3ConnectionsService:
             force_path_style = False
             verify_tls = True
         else:
-            endpoint_url = endpoint_url.rstrip("/") if endpoint_url else None
+            endpoint_url = self._validate_manual_endpoint(endpoint_url, verify_tls)
             custom_endpoint_config = build_custom_endpoint_config(
                 endpoint_url,
                 region,
@@ -236,6 +237,7 @@ class S3ConnectionsService:
                 should_probe_iam = True
             if payload.provider_hint is not None:
                 provider = payload.provider_hint
+            endpoint_url = self._validate_manual_endpoint(endpoint_url, verify_tls)
             row.custom_endpoint_config = build_custom_endpoint_config(
                 endpoint_url,
                 region,
@@ -341,3 +343,11 @@ class S3ConnectionsService:
         if len(trimmed) <= 8:
             return "***" + trimmed[-2:]
         return f"{trimmed[:4]}***{trimmed[-4:]}"
+
+    def _validate_manual_endpoint(self, endpoint_url: Optional[str], verify_tls: bool) -> str:
+        normalized = (endpoint_url or "").strip()
+        if not normalized:
+            raise ValueError("Endpoint URL is required.")
+        if not verify_tls:
+            raise ValueError("Manual private connections require TLS verification.")
+        return validate_user_supplied_s3_endpoint(normalized, field_name="Endpoint URL")

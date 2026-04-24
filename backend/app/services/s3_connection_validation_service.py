@@ -12,6 +12,7 @@ from app.models.s3_connection import (
     S3ConnectionCredentialsValidationResult,
 )
 from app.services import s3_client
+from app.utils.s3_endpoint import validate_user_supplied_s3_endpoint
 
 AUTH_ERROR_CODES = {
     "InvalidAccessKeyId",
@@ -29,13 +30,18 @@ class S3ConnectionValidationService:
     def validate_credentials(
         self,
         payload: S3ConnectionCredentialsValidationRequest,
+        *,
+        enforce_manual_endpoint_policy: bool = False,
     ) -> S3ConnectionCredentialsValidationResult:
         access_key_id = payload.access_key_id.strip()
         secret_access_key = payload.secret_access_key.strip()
         if not access_key_id or not secret_access_key:
             raise ValueError("Access key and secret key are required.")
 
-        endpoint_url, region, force_path_style, verify_tls = self._resolve_target(payload)
+        endpoint_url, region, force_path_style, verify_tls = self._resolve_target(
+            payload,
+            enforce_manual_endpoint_policy=enforce_manual_endpoint_policy,
+        )
         try:
             client = s3_client.get_s3_client(
                 access_key=access_key_id,
@@ -85,6 +91,8 @@ class S3ConnectionValidationService:
     def _resolve_target(
         self,
         payload: S3ConnectionCredentialsValidationRequest,
+        *,
+        enforce_manual_endpoint_policy: bool,
     ) -> tuple[str, str | None, bool, bool]:
         if payload.storage_endpoint_id is not None:
             endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == payload.storage_endpoint_id).first()
@@ -98,4 +106,8 @@ class S3ConnectionValidationService:
         endpoint_url = (payload.endpoint_url or "").strip().rstrip("/")
         if not endpoint_url:
             raise ValueError("Endpoint URL is required.")
+        if enforce_manual_endpoint_policy:
+            if not bool(payload.verify_tls):
+                raise ValueError("Manual endpoint validation requires TLS verification.")
+            endpoint_url = validate_user_supplied_s3_endpoint(endpoint_url, field_name="Endpoint URL")
         return endpoint_url, payload.region, bool(payload.force_path_style), bool(payload.verify_tls)

@@ -1537,7 +1537,7 @@ export default function ProfilePage({
                       Endpoint
                     </p>
                     <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Choose a configured endpoint or enter a custom endpoint.
+                      Choose a configured endpoint or enter a public HTTPS custom endpoint.
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1842,7 +1842,7 @@ export default function ProfilePage({
                             Endpoint
                           </p>
                           <p className="ui-caption text-slate-500 dark:text-slate-400">
-                            Choose a configured endpoint or enter a custom endpoint.
+                            Choose a configured endpoint or enter a public HTTPS custom endpoint.
                           </p>
                         </div>
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

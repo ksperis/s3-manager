@@ -71,7 +71,7 @@ def validate_connection_credentials(
     _ensure_private_connections_allowed(user)
     service = S3ConnectionValidationService(db)
     try:
-        return service.validate_credentials(payload)
+        return service.validate_credentials(payload, enforce_manual_endpoint_policy=True)
     except KeyError as exc:
         detail = exc.args[0] if exc.args else "Storage endpoint not found"
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc

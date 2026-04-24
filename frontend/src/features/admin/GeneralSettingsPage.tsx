@@ -30,7 +30,7 @@ const CEPH_ADMIN_WARNING_MESSAGE =
 const BILLING_CRON_REMINDER_MESSAGE =
   "Billing feature enabled. Think about enabling the billing collection cron job.";
 const CUSTOM_LOGIN_ENDPOINT_WARNING_MESSAGE =
-  "Warning: custom endpoints are intended for trusted/local environments. Enabling this may expose users to malicious endpoints if misconfigured.";
+  "Warning: custom endpoints are restricted to public HTTPS targets. Private/local hosts and insecure transport are rejected by the backend. Admin-managed HTTP endpoints remain possible only through the admin surfaces.";
 const BRANDING_PRESET_COLORS = [
   "#0ea5e9",
   "#2563eb",

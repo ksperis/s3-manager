@@ -136,6 +136,10 @@ def test_validate_credentials_invalid_credentials_error(db_session, monkeypatch)
     with _build_client(db_session) as (client, _):
         monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
         monkeypatch.setattr(
+            "app.services.s3_connection_validation_service.validate_user_supplied_s3_endpoint",
+            lambda value, field_name="Endpoint URL": value.rstrip("/"),
+        )
+        monkeypatch.setattr(
             "app.services.s3_connection_validation_service.s3_client.get_s3_client",
             lambda **kwargs: _FakeS3Client(error=_client_error("InvalidAccessKeyId")),
         )
@@ -155,6 +159,47 @@ def test_validate_credentials_invalid_credentials_error(db_session, monkeypatch)
     assert payload["severity"] == "error"
     assert payload["code"] == "InvalidAccessKeyId"
     assert payload["message"] == "Invalid S3 credentials."
+
+
+def test_validate_credentials_rejects_manual_private_endpoint(db_session, monkeypatch):
+    with _build_client(db_session) as (client, _):
+        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+        monkeypatch.setattr(
+            "app.services.s3_connection_validation_service.validate_user_supplied_s3_endpoint",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                ValueError("Endpoint URL resolves to a private or local network address")
+            ),
+        )
+
+        response = client.post(
+            "/api/connections/validate-credentials",
+            json={
+                "endpoint_url": "https://10.0.0.15",
+                "access_key_id": "AKIA-PRIVATE",
+                "secret_access_key": "SECRET-PRIVATE",
+            },
+        )
+
+    assert response.status_code == 400
+    assert "private or local network address" in response.json()["detail"]
+
+
+def test_validate_credentials_rejects_verify_tls_false_for_manual_user_route(db_session, monkeypatch):
+    with _build_client(db_session) as (client, _):
+        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+
+        response = client.post(
+            "/api/connections/validate-credentials",
+            json={
+                "endpoint_url": "https://s3-insecure.example.test",
+                "access_key_id": "AKIA-INSECURE",
+                "secret_access_key": "SECRET-INSECURE",
+                "verify_tls": False,
+            },
+        )
+
+    assert response.status_code == 400
+    assert "TLS verification" in response.json()["detail"]
 
 
 def test_validate_credentials_storage_endpoint_not_found(db_session, monkeypatch):

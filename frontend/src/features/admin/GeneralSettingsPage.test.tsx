@@ -154,10 +154,10 @@ describe("GeneralSettingsPage branding", () => {
     const user = userEvent.setup();
     render(<GeneralSettingsPage />);
 
-    expect(screen.queryByText(/custom endpoints are intended for trusted\/local environments/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/custom endpoints are restricted to public https targets/i)).not.toBeInTheDocument();
 
     await user.click(await screen.findByLabelText("Custom login endpoint"));
-    expect(screen.getByText(/custom endpoints are intended for trusted\/local environments/i)).toBeInTheDocument();
+    expect(screen.getByText(/custom endpoints are restricted to public https targets/i)).toBeInTheDocument();
   });
 
   it("does not render manager extra tools toggles", async () => {

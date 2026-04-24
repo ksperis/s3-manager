@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import ipaddress
 import json
 import logging
 import os
@@ -18,7 +17,7 @@ from contextlib import ExitStack, contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode
 from typing import Any, Callable, Optional
 
 import requests
@@ -48,6 +47,7 @@ from app.services.bucket_migration_runtime import (
 from app.services.object_diff_common import compare_object_entries
 from app.services.s3_client import _delete_objects_count, get_s3_client
 from app.utils.rgw import resolve_admin_uid
+from app.utils.network_targets import validate_outbound_url
 from app.utils.s3_connection_endpoint import resolve_connection_endpoint
 from app.utils.s3_endpoint import normalize_s3_endpoint, resolve_s3_client_options
 from app.utils.time import utcnow
@@ -87,9 +87,6 @@ _FINAL_MIGRATION_STATUSES = (
     "canceled",
     "rolled_back",
 )
-IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
-
-
 class _WorkerLeaseLostError(RuntimeError):
     """Raised when a worker loses ownership of a migration lease."""
 
@@ -302,66 +299,16 @@ def _serialize_event_metadata(metadata: Optional[dict[str, Any]]) -> Optional[st
     return _json_dumps(fallback_payload)
 
 
-def _webhook_host_allowed(host: str) -> bool:
-    normalized_host = str(host or "").strip().lower().rstrip(".")
-    if not normalized_host:
-        return False
-    if not _WEBHOOK_ALLOWED_HOSTS:
-        return True
-    for allowed in _WEBHOOK_ALLOWED_HOSTS:
-        if normalized_host == allowed or normalized_host.endswith(f".{allowed}"):
-            return True
-    return False
-
-
-def _resolve_webhook_host_ips(host: str) -> set[IPAddress]:
-    resolved: set[IPAddress] = set()
-    for family, _, _, _, sockaddr in socket.getaddrinfo(host, None):
-        try:
-            if family == socket.AF_INET6:
-                addr = ipaddress.ip_address(sockaddr[0])
-            else:
-                addr = ipaddress.ip_address(sockaddr[0])
-        except Exception:  # noqa: BLE001
-            continue
-        resolved.add(addr)
-    return resolved
-
-
-def _is_private_or_local_ip(address: IPAddress) -> bool:
-    return bool(
-        address.is_private
-        or address.is_loopback
-        or address.is_link_local
-        or address.is_multicast
-        or address.is_unspecified
-        or address.is_reserved
-    )
-
-
 def _validate_webhook_target_url(webhook_url: str) -> None:
-    parsed = urlparse(webhook_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc or not parsed.hostname:
-        raise ValueError("webhook_url must be a valid http(s) URL")
-    if parsed.username or parsed.password:
-        raise ValueError("webhook_url must not include user credentials")
-
-    host = parsed.hostname.strip().lower().rstrip(".")
-    if not _webhook_host_allowed(host):
-        raise ValueError("webhook_url host is not allowed by webhook policy")
-
-    try:
-        resolved_ips = _resolve_webhook_host_ips(host)
-    except socket.gaierror as exc:
-        raise ValueError(f"webhook_url host cannot be resolved: {exc}") from exc
-    if not resolved_ips:
-        raise ValueError("webhook_url host cannot be resolved")
-
-    if not _WEBHOOK_ALLOW_PRIVATE_TARGETS and any(_is_private_or_local_ip(ip_addr) for ip_addr in resolved_ips):
-        raise ValueError(
-            "webhook_url resolves to a private or local network address; "
-            "set BUCKET_MIGRATION_WEBHOOK_ALLOW_PRIVATE_TARGETS=true to allow it"
-        )
+    validate_outbound_url(
+        webhook_url,
+        field_name="webhook_url",
+        allowed_schemes=("http", "https"),
+        scheme_label="http(s)",
+        allowed_hosts=_WEBHOOK_ALLOWED_HOSTS or None,
+        allow_private_targets=_WEBHOOK_ALLOW_PRIVATE_TARGETS,
+        private_target_hint="; set BUCKET_MIGRATION_WEBHOOK_ALLOW_PRIVATE_TARGETS=true to allow it",
+    )
 
 
 class BucketMigrationService:

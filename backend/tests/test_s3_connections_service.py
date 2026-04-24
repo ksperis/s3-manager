@@ -37,6 +37,11 @@ def _endpoint(db_session) -> StorageEndpoint:
 
 
 def _create_row(db_session, **kwargs) -> S3Connection:
+    custom_endpoint_config = kwargs.get("custom_endpoint_config")
+    if custom_endpoint_config is None and kwargs.get("storage_endpoint_id") is None:
+        custom_endpoint_config = (
+            '{"endpoint_url":"https://existing.example.test","region":"eu-west-1","force_path_style":false,"verify_tls":true}'
+        )
     row = S3Connection(
         created_by_user_id=kwargs["created_by_user_id"],
         name=kwargs.get("name", "conn"),
@@ -45,7 +50,7 @@ def _create_row(db_session, **kwargs) -> S3Connection:
         access_manager=kwargs.get("access_manager", False),
         access_browser=kwargs.get("access_browser", True),
         storage_endpoint_id=kwargs.get("storage_endpoint_id"),
-        custom_endpoint_config=kwargs.get("custom_endpoint_config"),
+        custom_endpoint_config=custom_endpoint_config,
         access_key_id=kwargs.get("access_key_id", "AKIA-CONN-001"),
         secret_access_key=kwargs.get("secret_access_key", "SECRET-CONN-001"),
         capabilities_json=kwargs.get("capabilities_json", '{"can_manage_iam": false}'),
@@ -132,6 +137,10 @@ def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session
     user = _user(db_session, "creator@example.test")
     endpoint = _endpoint(db_session)
     service = S3ConnectionsService(db_session)
+    monkeypatch.setattr(
+        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        lambda value, field_name="Endpoint URL": value.rstrip("/"),
+    )
 
     monkeypatch.setattr(
         service,
@@ -146,7 +155,7 @@ def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session
             endpoint_url="https://custom.example.test/",
             region="us-east-1",
             force_path_style=True,
-            verify_tls=False,
+            verify_tls=True,
             access_key_id="AKIA-CUSTOM-1234",
             secret_access_key="SECRET-CUSTOM",
             access_manager=True,
@@ -157,7 +166,7 @@ def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session
     assert custom.is_shared is False
     assert custom.endpoint_url == "https://custom.example.test"
     assert custom.force_path_style is True
-    assert custom.verify_tls is False
+    assert custom.verify_tls is True
     assert custom.capabilities["can_manage_iam"] is True
     assert custom.access_key_id.startswith("AKIA***")
 
@@ -182,6 +191,10 @@ def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session
 def test_create_and_update_connection_normalize_tags(db_session, monkeypatch):
     owner = _user(db_session, "owner-tags@example.test")
     service = S3ConnectionsService(db_session)
+    monkeypatch.setattr(
+        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        lambda value, field_name="Endpoint URL": value.rstrip("/"),
+    )
 
     monkeypatch.setattr(
         service,
@@ -240,6 +253,10 @@ def test_update_connection_updates_private_connection(db_session, monkeypatch):
         access_browser=True,
     )
     service = S3ConnectionsService(db_session)
+    monkeypatch.setattr(
+        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        lambda value, field_name="Endpoint URL": value.rstrip("/"),
+    )
 
     refreshed: list[int] = []
     monkeypatch.setattr(service, "_refresh_detected_capabilities", lambda current: refreshed.append(current.id))
@@ -250,7 +267,7 @@ def test_update_connection_updates_private_connection(db_session, monkeypatch):
         S3ConnectionUpdate(
             endpoint_url="https://new.example.test/",
             region="us-east-2",
-            verify_tls=False,
+            verify_tls=True,
             force_path_style=True,
             access_key_id="AKIA-UPDATED-7777",
             secret_access_key="SECRET-UPDATED",
@@ -262,26 +279,98 @@ def test_update_connection_updates_private_connection(db_session, monkeypatch):
     )
     assert updated.endpoint_url == "https://new.example.test"
     assert updated.region == "us-east-2"
-    assert updated.verify_tls is False
+    assert updated.verify_tls is True
     assert updated.force_path_style is True
     assert updated.access_manager is True
     assert updated.credential_owner_type == "iam_user"
     assert refreshed == [row.id]
 
 
-def test_update_connection_rejects_invalid_access_flags(db_session):
+def test_create_connection_rejects_manual_endpoint_without_tls_verification(db_session):
+    owner = _user(db_session, "owner-no-tls@example.test")
+    service = S3ConnectionsService(db_session)
+
+    with pytest.raises(ValueError, match="TLS verification"):
+        service.create(
+            owner.id,
+            S3ConnectionCreate(
+                name="custom-no-tls",
+                endpoint_url="https://custom.example.test",
+                access_key_id="AKIA-NO-TLS",
+                secret_access_key="SECRET-NO-TLS",
+                verify_tls=False,
+                access_manager=True,
+                access_browser=True,
+            ),
+        )
+
+
+def test_create_connection_rejects_manual_private_endpoint(db_session, monkeypatch):
+    owner = _user(db_session, "owner-private-endpoint@example.test")
+    service = S3ConnectionsService(db_session)
+    monkeypatch.setattr(
+        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            ValueError("Endpoint URL resolves to a private or local network address")
+        ),
+    )
+
+    with pytest.raises(ValueError, match="private or local network address"):
+        service.create(
+            owner.id,
+            S3ConnectionCreate(
+                name="custom-private",
+                endpoint_url="https://10.0.0.12",
+                access_key_id="AKIA-PRIVATE-ENDPOINT",
+                secret_access_key="SECRET-PRIVATE-ENDPOINT",
+                verify_tls=True,
+                access_manager=True,
+                access_browser=True,
+            ),
+        )
+
+
+def test_update_connection_rejects_existing_manual_endpoint_without_tls_verification(db_session, monkeypatch):
+    owner = _user(db_session, "owner-update-no-tls@example.test")
+    row = _create_row(
+        db_session,
+        created_by_user_id=owner.id,
+        name="existing-no-tls",
+        custom_endpoint_config='{"endpoint_url":"https://old.example.test","region":"eu-west-3","force_path_style":false,"verify_tls":false}',
+        access_manager=False,
+        access_browser=True,
+    )
+    service = S3ConnectionsService(db_session)
+    monkeypatch.setattr(
+        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        lambda value, field_name="Endpoint URL": value.rstrip("/"),
+    )
+
+    with pytest.raises(ValueError, match="TLS verification"):
+        service.update(owner.id, row.id, S3ConnectionUpdate(name="still-invalid"))
+
+
+def test_update_connection_rejects_invalid_access_flags(db_session, monkeypatch):
     owner = _user(db_session, "owner4@example.test")
     row = _create_row(db_session, created_by_user_id=owner.id, name="invalid-flags")
     service = S3ConnectionsService(db_session)
+    monkeypatch.setattr(
+        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        lambda value, field_name="Endpoint URL": value.rstrip("/"),
+    )
 
     with pytest.raises(ValueError, match="At least one access flag"):
         service.update(owner.id, row.id, S3ConnectionUpdate(access_manager=False, access_browser=False))
 
 
-def test_update_connection_supports_active_flag_and_keeps_inactive_visible_in_management_lists(db_session):
+def test_update_connection_supports_active_flag_and_keeps_inactive_visible_in_management_lists(db_session, monkeypatch):
     owner = _user(db_session, "owner-active-flag@example.test")
     row = _create_row(db_session, created_by_user_id=owner.id, name="active-flag-conn", is_active=True)
     service = S3ConnectionsService(db_session)
+    monkeypatch.setattr(
+        "app.services.s3_connections_service.validate_user_supplied_s3_endpoint",
+        lambda value, field_name="Endpoint URL": value.rstrip("/"),
+    )
 
     updated = service.update(owner.id, row.id, S3ConnectionUpdate(is_active=False))
     assert updated.is_active is False

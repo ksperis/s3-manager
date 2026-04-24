@@ -76,6 +76,7 @@ def _mock_external(monkeypatch, *, iam_allowed: bool) -> None:
 def test_login_s3_grants_iam_capability_when_iam_client_succeeds(monkeypatch, client, db_session):
     _enable_access_key_login(monkeypatch)
     _mock_external(monkeypatch, iam_allowed=True)
+    monkeypatch.setattr(auth_router, "validate_custom_login_s3_endpoint", lambda value: value.rstrip("/"))
 
     response = client.post(
         "/api/auth/login-s3",
@@ -93,6 +94,7 @@ def test_login_s3_grants_iam_capability_when_iam_client_succeeds(monkeypatch, cl
 def test_login_s3_disables_iam_capability_when_iam_client_denied(monkeypatch, client, db_session):
     _enable_access_key_login(monkeypatch)
     _mock_external(monkeypatch, iam_allowed=False)
+    monkeypatch.setattr(auth_router, "validate_custom_login_s3_endpoint", lambda value: value.rstrip("/"))
 
     response = client.post(
         "/api/auth/login-s3",
@@ -109,6 +111,7 @@ def test_login_s3_disables_iam_capability_when_iam_client_denied(monkeypatch, cl
     "endpoint_url",
     [
         "ftp://s3.example.test",
+        "http://localhost:9000",
         "https://user:pass@s3.example.test",
         "https://s3.example.test?foo=1",
         "https://s3.example.test#fragment",
@@ -129,10 +132,11 @@ def test_login_s3_rejects_invalid_custom_endpoint(monkeypatch, client, endpoint_
 def test_login_s3_records_custom_endpoint_audit_event(monkeypatch, client, db_session):
     _enable_access_key_login(monkeypatch, allow_custom_endpoint=True)
     _mock_external(monkeypatch, iam_allowed=True)
+    monkeypatch.setattr(auth_router, "validate_custom_login_s3_endpoint", lambda value: value.rstrip("/"))
 
     response = client.post(
         "/api/auth/login-s3",
-        json={"access_key": "AKIA", "secret_key": "SECRET", "endpoint_url": "http://localhost:9000/"},
+        json={"access_key": "AKIA", "secret_key": "SECRET", "endpoint_url": "https://s3.example.test/"},
         headers={"X-Forwarded-For": "198.51.100.20", "User-Agent": "pytest-agent"},
     )
     assert response.status_code == 200, response.text
@@ -146,7 +150,7 @@ def test_login_s3_records_custom_endpoint_audit_event(monkeypatch, client, db_se
     assert event is not None
     assert event.ip_address == "198.51.100.20"
     assert event.user_agent == "pytest-agent"
-    assert "localhost:9000" in (event.metadata_json or "")
+    assert "https://s3.example.test" in (event.metadata_json or "")
 
 
 def _setup_account(db_session) -> S3Account:

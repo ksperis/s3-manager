@@ -16,6 +16,7 @@
 
 - Enforce TLS at ingress/reverse proxy.
 - Keep internal endpoints protected with `INTERNAL_CRON_TOKEN` and private network exposure.
+- End-user custom S3 endpoints are restricted to public `https://` targets. Only admin-managed endpoint flows may keep `http://` endpoints when an internal deployment explicitly requires them.
 
 ## Audit and traceability
 
