@@ -1,11 +1,11 @@
 image:
   backend:
     repository: ghcr.io/ksperis/s3-manager-backend
-    tag: "0.1.5"
+    tag: "0.1.6"
     pullPolicy: IfNotPresent
   frontend:
     repository: ghcr.io/ksperis/s3-manager-frontend
-    tag: "0.1.5"
+    tag: "0.1.6"
     pullPolicy: IfNotPresent
 
 backend:

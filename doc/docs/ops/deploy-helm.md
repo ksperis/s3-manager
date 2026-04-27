@@ -69,9 +69,9 @@ helm upgrade --install s3-manager helm/s3-manager \
 ```bash
 helm upgrade --install s3-manager helm/s3-manager \
   --set image.backend.repository=ghcr.io/ksperis/s3-manager-backend \
-  --set image.backend.tag=0.1.5 \
+  --set image.backend.tag=0.1.6 \
   --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend \
-  --set image.frontend.tag=0.1.5
+  --set image.frontend.tag=0.1.6
 ```
 
 ```bash
