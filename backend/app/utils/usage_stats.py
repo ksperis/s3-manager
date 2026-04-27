@@ -17,6 +17,18 @@ def _usage_bytes_from_entry(entry: Optional[Dict[str, Any]]) -> Optional[int]:
     return None
 
 
+def _usage_objects_from_entry(entry: Optional[Dict[str, Any]]) -> Optional[int]:
+    if not isinstance(entry, dict):
+        return None
+    value = entry.get("num_objects")
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def extract_usage_stats(usage: Optional[Dict[str, Any]]) -> Tuple[Optional[int], Optional[int]]:
     """
     Normalizes RGW usage payloads and returns (bytes, objects)
@@ -38,27 +50,11 @@ def extract_usage_stats(usage: Optional[Dict[str, Any]]) -> Tuple[Optional[int],
     if total_bytes is not None or total_objects is not None:
         return total_bytes, total_objects
 
-    bytes_acc = 0
-    objects_acc = 0
-    has_bytes = False
-    has_objects = False
+    main_usage = usage.get("rgw.main")
+    if isinstance(main_usage, dict):
+        return _usage_bytes_from_entry(main_usage), _usage_objects_from_entry(main_usage)
 
-    for stats in usage.values():
-        if not isinstance(stats, dict):
-            continue
-        size_bytes = _usage_bytes_from_entry(stats)
-        if size_bytes is not None:
-            bytes_acc += size_bytes
-            has_bytes = True
-        num_objects = stats.get("num_objects")
-        if num_objects is not None:
-            try:
-                objects_acc += int(num_objects)
-                has_objects = True
-            except (TypeError, ValueError):
-                pass
-
-    return (bytes_acc if has_bytes else None, objects_acc if has_objects else None)
+    return None, None
 
 
 def compute_usage_ratio_percent(used: object, quota: object) -> float | None:
