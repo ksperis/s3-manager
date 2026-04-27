@@ -31,7 +31,7 @@ def _usage_objects_from_entry(entry: Optional[Dict[str, Any]]) -> Optional[int]:
 
 def extract_usage_stats(usage: Optional[Dict[str, Any]]) -> Tuple[Optional[int], Optional[int]]:
     """
-    Normalizes RGW usage payloads and returns (bytes, objects)
+    Normalizes RGW usage payloads and returns quota-aligned (bytes, objects)
     regardless of the underlying field naming.
     """
     if not isinstance(usage, dict):
@@ -50,11 +50,24 @@ def extract_usage_stats(usage: Optional[Dict[str, Any]]) -> Tuple[Optional[int],
     if total_bytes is not None or total_objects is not None:
         return total_bytes, total_objects
 
-    main_usage = usage.get("rgw.main")
-    if isinstance(main_usage, dict):
-        return _usage_bytes_from_entry(main_usage), _usage_objects_from_entry(main_usage)
+    bytes_acc = 0
+    objects_acc = 0
+    has_bytes = False
+    has_objects = False
 
-    return None, None
+    for stats in usage.values():
+        if not isinstance(stats, dict):
+            continue
+        size_bytes = _usage_bytes_from_entry(stats)
+        if size_bytes is not None:
+            bytes_acc += size_bytes
+            has_bytes = True
+        num_objects = _usage_objects_from_entry(stats)
+        if num_objects is not None:
+            objects_acc += num_objects
+            has_objects = True
+
+    return (bytes_acc if has_bytes else None, objects_acc if has_objects else None)
 
 
 def compute_usage_ratio_percent(used: object, quota: object) -> float | None:

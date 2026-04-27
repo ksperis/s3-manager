@@ -15,7 +15,7 @@ def test_extract_usage_stats_keeps_zero_num_objects_fallback() -> None:
     assert object_count == 0
 
 
-def test_extract_usage_stats_uses_only_rgw_main_for_categorized_payload() -> None:
+def test_extract_usage_stats_aggregates_categorized_payload_for_quota_usage() -> None:
     used_bytes, object_count = extract_usage_stats(
         {
             "rgw.none": {
@@ -33,11 +33,11 @@ def test_extract_usage_stats_uses_only_rgw_main_for_categorized_payload() -> Non
         }
     )
 
-    assert used_bytes == 159508070400
-    assert object_count == 32328
+    assert used_bytes == 159509118976
+    assert object_count == 18446744073709583953
 
 
-def test_extract_usage_stats_ignores_categorized_payload_without_rgw_main() -> None:
+def test_extract_usage_stats_aggregates_categorized_payload_without_rgw_main() -> None:
     used_bytes, object_count = extract_usage_stats(
         {
             "rgw.none": {
@@ -51,5 +51,24 @@ def test_extract_usage_stats_ignores_categorized_payload_without_rgw_main() -> N
         }
     )
 
-    assert used_bytes is None
-    assert object_count is None
+    assert used_bytes == 3145728
+    assert object_count == 18446744073709551625
+
+
+def test_extract_usage_stats_ignores_invalid_categorized_values() -> None:
+    used_bytes, object_count = extract_usage_stats(
+        {
+            "rgw.main": {
+                "size_actual": "invalid",
+                "num_objects": "invalid",
+            },
+            "rgw.multimeta": {
+                "size_kb_actual": 2,
+                "num_objects": 3,
+            },
+            "unexpected": "ignored",
+        }
+    )
+
+    assert used_bytes == 2048
+    assert object_count == 3
