@@ -25,7 +25,7 @@ describe("streamStorageOpsBuckets", () => {
       "event: progress\n",
       'data: {"request_id":"r1","percent":57,"stage":"expensive_filters","processed":7,"total":10}\n\n',
       "event: result\n",
-      'data: {"items":[{"name":"ctx-1::bucket-a","bucket_name":"bucket-a","context_id":"ctx-1","context_name":"Context 1","context_kind":"account"}],"total":1,"page":1,"page_size":25,"has_next":false}\n\n',
+      'data: {"items":[{"name":"s3u-1::bucket-a","bucket_name":"bucket-a","context_id":"s3u-1","context_name":"User 1","context_kind":"s3_user"}],"total":1,"page":1,"page_size":25,"has_next":false}\n\n',
       "event: done\n",
       'data: {"request_id":"r1"}\n\n',
     ]);

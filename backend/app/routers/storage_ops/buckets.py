@@ -16,7 +16,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.database import get_db
 from app.db import S3Account, User
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketListingRequest
-from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
+from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary, StorageOpsContextKind
 from app.services.bucket_listing_shared import (
     _enrich_buckets,
     _format_sse_event,
@@ -53,7 +53,7 @@ OWNER_ENRICHED_FIELDS = {"owner_name"} | OWNER_QUOTA_FIELDS | OWNER_USAGE_FIELDS
 class _StorageOpsContextRef:
     context_id: str
     context_name: str
-    context_kind: Literal["account", "connection"]
+    context_kind: StorageOpsContextKind
     endpoint_name: str | None
 
 
@@ -99,16 +99,21 @@ def _collect_context_refs(user: User, db: Session) -> list[_StorageOpsContextRef
     refs: list[_StorageOpsContextRef] = []
     seen: set[str] = set()
     for context in contexts:
-        if context.kind not in {"account", "connection"}:
+        if context.kind not in {"account", "connection", "legacy_user"}:
             continue
         if context.id in seen:
             continue
         seen.add(context.id)
+        context_kind: StorageOpsContextKind
+        if context.kind == "legacy_user":
+            context_kind = "s3_user"
+        else:
+            context_kind = context.kind
         refs.append(
             _StorageOpsContextRef(
                 context_id=context.id,
                 context_name=context.display_name,
-                context_kind="account" if context.kind == "account" else "connection",
+                context_kind=context_kind,
                 endpoint_name=context.endpoint_name,
             )
         )

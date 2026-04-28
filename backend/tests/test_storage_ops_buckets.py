@@ -10,13 +10,14 @@ import time
 import pytest
 from fastapi import HTTPException
 
-from app.db import User, UserRole
+from app.db import S3Connection, User, UserRole
 from app.models.bucket import Bucket
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketSummary
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
 from app.routers import dependencies
 from app.routers.storage_ops import buckets as storage_ops_router
+from app.routers.storage_ops import summary as storage_ops_summary_router
 from app.services import app_settings_service
 from app.services.connection_identity_service import ConnectionIdentityResolution
 from app.main import app
@@ -91,6 +92,110 @@ def test_require_storage_ops_enabled_blocks_when_feature_is_disabled(monkeypatch
     assert exc.value.status_code == 403
 
 
+def test_storage_ops_summary_rejects_without_storage_ops_right(client):
+    def deny_storage_ops():
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = deny_storage_ops
+    try:
+        response = client.get("/api/storage-ops/summary")
+        assert response.status_code == 403
+    finally:
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
+        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+
+
+def test_storage_ops_summary_counts_authorized_accounts_connections_and_endpoints(db_session, client, monkeypatch):
+    db_session.add_all(
+        [
+            S3Connection(
+                id=2,
+                created_by_user_id=101,
+                name="Shared connection",
+                is_shared=True,
+                access_manager=True,
+                access_key_id="ak-shared",
+                secret_access_key="sk-shared",
+            ),
+            S3Connection(
+                id=3,
+                created_by_user_id=101,
+                name="Private connection",
+                is_shared=False,
+                access_manager=True,
+                access_key_id="ak-private",
+                secret_access_key="sk-private",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
+        assert workspace == "manager"
+        return [
+            ExecutionContext(
+                kind="account",
+                id="1",
+                display_name="Account A",
+                endpoint_id=10,
+                endpoint_name="Endpoint One",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+            ),
+            ExecutionContext(
+                kind="account",
+                id="1",
+                display_name="Account A duplicate",
+                endpoint_id=10,
+                endpoint_name="Endpoint One",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+            ),
+            ExecutionContext(
+                kind="connection",
+                id="conn-2",
+                display_name="Shared connection",
+                endpoint_id=10,
+                endpoint_name="Endpoint One",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
+            ),
+            ExecutionContext(
+                kind="connection",
+                id="conn-3",
+                display_name="Private connection",
+                endpoint_id=11,
+                endpoint_name="Endpoint Two",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
+            ),
+            ExecutionContext(
+                kind="legacy_user",
+                id="s3u-9",
+                display_name="Legacy user",
+                endpoint_id=12,
+                endpoint_name="Endpoint Three",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=False, sts_capable=False, admin_api_capable=False),
+            ),
+        ]
+
+    monkeypatch.setattr(storage_ops_summary_router, "list_execution_contexts", fake_list_execution_contexts)
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
+    try:
+        response = client.get("/api/storage-ops/summary")
+        assert response.status_code == 200
+        assert response.json() == {
+            "total_contexts": 4,
+            "total_accounts": 1,
+            "total_s3_users": 1,
+            "total_connections": 2,
+            "total_shared_connections": 1,
+            "total_private_connections": 1,
+            "total_endpoints": 3,
+        }
+    finally:
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
+        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+
+
 def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(client, monkeypatch):
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
@@ -109,6 +214,13 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
                 endpoint_name="Endpoint Two",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
             ),
+            ExecutionContext(
+                kind="legacy_user",
+                id="s3u-9",
+                display_name="Legacy User C",
+                endpoint_name="Endpoint Three",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=False, sts_capable=False, admin_api_capable=False),
+            ),
         ]
 
     def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
@@ -126,6 +238,8 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
                     Bucket(name="beta", used_bytes=30),
                     Bucket(name="shared", used_bytes=40),
                 ]
+            if account.context_id == "s3u-9":
+                return [Bucket(name="gamma", used_bytes=50)]
             return []
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
@@ -138,11 +252,14 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
         response = client.get("/api/storage-ops/buckets")
         assert response.status_code == 200
         payload = response.json()
-        assert payload["total"] == 4
+        assert payload["total"] == 5
         assert payload["has_next"] is False
         encoded_names = {item["name"] for item in payload["items"]}
         assert "1::shared" in encoded_names
         assert "conn-2::shared" in encoded_names
+        assert "s3u-9::gamma" in encoded_names
+        s3_user_item = next(item for item in payload["items"] if item["name"] == "s3u-9::gamma")
+        assert s3_user_item["context_kind"] == "s3_user"
         first = payload["items"][0]
         assert "context_id" in first
         assert "context_name" in first
@@ -421,6 +538,50 @@ def test_storage_ops_context_filters_match_context_kind_and_endpoint():
         account=SimpleNamespace(),
     )
     assert [bucket.bucket_name for bucket in result] == ["alpha"]
+
+
+def test_storage_ops_context_filters_match_s3_user_kind():
+    buckets = [
+        StorageOpsBucketSummary(
+            name="gamma",
+            bucket_name="gamma",
+            context_id="s3u-9",
+            context_name="Legacy User C",
+            context_kind="s3_user",
+            endpoint_name="Primary Endpoint",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+        StorageOpsBucketSummary(
+            name="beta",
+            bucket_name="beta",
+            context_id="conn-1",
+            context_name="Connection B",
+            context_kind="connection",
+            endpoint_name="Archive Endpoint",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+    ]
+    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+        {
+            "match": "all",
+            "rules": [
+                {"field": "context_kind", "op": "eq", "value": "s3_user"},
+                {"field": "context_name", "op": "contains", "value": "legacy"},
+                {"field": "endpoint_name", "op": "contains", "value": "primary"},
+            ],
+        }
+    )
+    result = storage_ops_router._apply_advanced_filter_for_context(
+        buckets,
+        parsed_filter,
+        service=SimpleNamespace(),
+        account=SimpleNamespace(),
+    )
+    assert [bucket.bucket_name for bucket in result] == ["gamma"]
 
 
 def test_storage_ops_list_and_stream_apply_context_advanced_filters(client, monkeypatch):

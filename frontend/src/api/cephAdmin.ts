@@ -473,7 +473,7 @@ export type CephAdminBucket = {
   owner_name?: string | null;
   context_id?: string | null;
   context_name?: string | null;
-  context_kind?: "account" | "connection" | null;
+  context_kind?: "account" | "connection" | "s3_user" | null;
   used_bytes?: number | null;
   object_count?: number | null;
   quota_max_size_bytes?: number | null;

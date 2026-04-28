@@ -60,9 +60,19 @@ export const STORAGE_OPS_SCOPE_ID = 1;
 export type StorageOpsBucket = CephAdminBucket & {
   context_id: string;
   context_name: string;
-  context_kind: "account" | "connection";
+  context_kind: "account" | "connection" | "s3_user";
   endpoint_name?: string | null;
   bucket_name?: string | null;
+};
+
+export type StorageOpsSummary = {
+  total_contexts: number;
+  total_accounts: number;
+  total_s3_users: number;
+  total_connections: number;
+  total_shared_connections: number;
+  total_private_connections: number;
+  total_endpoints: number;
 };
 
 export type PaginatedStorageOpsBucketsResponse = Omit<PaginatedCephAdminBucketsResponse, "items"> & {
@@ -95,6 +105,11 @@ export function decodeStorageOpsBucketRef(value: string): StorageOpsBucketRef | 
   const bucketName = text.slice(separatorIndex + STORAGE_OPS_BUCKET_REF_SEPARATOR.length).trim();
   if (!contextId || !bucketName) return null;
   return { contextId, bucketName };
+}
+
+export async function fetchStorageOpsSummary(): Promise<StorageOpsSummary> {
+  const { data } = await client.get<StorageOpsSummary>("/storage-ops/summary");
+  return data;
 }
 
 function resolveBucketTarget(bucketRef: string): StorageOpsBucketRef {

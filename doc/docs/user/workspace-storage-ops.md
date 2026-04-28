@@ -8,30 +8,33 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
 
 - UI role `ui_user`, `ui_admin`, or `ui_superadmin` with `can_access_storage_ops` entitlement.
 - `storage_ops_enabled` feature enabled.
-- At least one authorized manager context (`account` or `connection`).
+- At least one authorized manager context (`account`, legacy S3 user, or connection).
 
 ## Steps
 
 1. Open `/storage-ops`.
-2. Go to **Buckets**.
-3. Use the same workbench patterns as Ceph Admin Buckets:
+2. Review the dashboard summary card to see how many authorized accounts,
+   S3 users, and S3 connections are managed by Storage Ops, including
+   shared/private connection counts and unique endpoints.
+3. Go to **Buckets**.
+4. Use the same workbench patterns as Ceph Admin Buckets:
    - quick search,
    - advanced filter,
    - dynamic columns,
    - bulk preview/apply,
    - export.
    - quota and usage columns are available as single-line atomic columns so on-screen review and CSV export stay aligned.
-4. During long bulk actions (copy, preview, apply, and large exports), follow the in-page progress bars to track completion and failures.
-5. Use **Context** and **Kind** columns to distinguish identical bucket names across contexts.
+5. During long bulk actions (copy, preview, apply, and large exports), follow the in-page progress bars to track completion and failures.
+6. Use **Context** and **Kind** columns to distinguish identical bucket names across contexts.
 
 ## Expected result
 
-You can search and operate on large bucket sets across authorized accounts and connections from one operational surface.
+You can search and operate on large bucket sets across authorized accounts, S3 users, and connections from one operational surface.
 
 ## Limits / feature flags
 
 !!! note
-    In v1, Storage Ops aggregates `account` and `connection` contexts only. UI tags are local browser metadata (localStorage), namespaced separately from Ceph Admin.
+    UI tags are local browser metadata (localStorage), namespaced separately from Ceph Admin.
 
 ## Related pages
 

@@ -946,7 +946,7 @@ type FeatureKey =
   | "server_side_encryption";
 type FeatureFilterState = "any" | "enabled" | "disabled" | "suspended" | "disabled_or_suspended";
 type TextMatchMode = "contains" | "exact";
-type StorageOpsContextFilterKind = "any" | "account" | "connection";
+type StorageOpsContextFilterKind = "any" | "account" | "connection" | "s3_user";
 type AdvancedNumericField =
   | "minUsedBytes"
   | "maxUsedBytes"
@@ -1833,7 +1833,7 @@ export const sanitizeAdvancedFilter = (value: unknown): AdvancedFilterState => {
   const safeString = (input: unknown) => (typeof input === "string" ? input : "");
   const parseMatchMode = (input: unknown): TextMatchMode => (input === "exact" ? "exact" : "contains");
   const parseStorageOpsKind = (input: unknown): StorageOpsContextFilterKind => {
-    if (input === "account" || input === "connection") return input;
+    if (input === "account" || input === "connection" || input === "s3_user") return input;
     return "any";
   };
   const parseOwnerNameScope = (input: unknown): OwnerNameScope => {
@@ -3519,6 +3519,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             const kind = (bucket as { context_kind?: string | null }).context_kind;
             if (kind === "account") return "Account";
             if (kind === "connection") return "Connection";
+            if (kind === "s3_user") return "S3 user";
             return "-";
           },
         });
@@ -7003,6 +7004,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           const kind = (bucket as { context_kind?: string | null }).context_kind;
           if (kind === "account") return "Account";
           if (kind === "connection") return "Connection";
+          if (kind === "s3_user") return "S3 user";
           return "-";
         },
       });
@@ -7702,6 +7704,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                 >
                                   <option value="any">Any</option>
                                   <option value="account">Account</option>
+                                  <option value="s3_user">S3 user</option>
                                   <option value="connection">Connection</option>
                                 </select>
                               </div>

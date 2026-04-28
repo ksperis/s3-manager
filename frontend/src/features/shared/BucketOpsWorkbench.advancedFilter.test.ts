@@ -33,6 +33,19 @@ describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
     );
   });
 
+  it("emits the S3 user context kind in storage-ops mode", () => {
+    const advanced: AdvancedFilterState = {
+      ...baseAdvancedFilter(),
+      kind: "s3_user",
+    };
+
+    const rawPayload = buildAdvancedFilterPayload("", "contains", advanced, null, true);
+    expect(rawPayload).toBeTruthy();
+    const payload = JSON.parse(rawPayload ?? "{}") as { rules?: Array<Record<string, unknown>> };
+
+    expect(payload.rules).toEqual(expect.arrayContaining([{ field: "context_kind", op: "eq", value: "s3_user" }]));
+  });
+
   it("does not emit storage-ops identity rules in ceph-admin mode", () => {
     const advanced: AdvancedFilterState = {
       ...baseAdvancedFilter(),
