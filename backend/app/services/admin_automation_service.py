@@ -724,9 +724,12 @@ class AdminAutomationService:
                 diff["provider"] = {"from": endpoint.provider, "to": desired}
         if "features_config" in fields_set:
             provider = normalize_storage_provider(spec.provider if "provider" in fields_set else endpoint.provider)
-            desired_features = dump_features_config(normalize_features_config(provider, spec.features_config))
+            desired_region = spec.region if "region" in fields_set else endpoint.region
+            desired_features = dump_features_config(
+                normalize_features_config(provider, spec.features_config, desired_region)
+            )
             current_features = dump_features_config(
-                normalize_features_config(provider, endpoint.features_config)
+                normalize_features_config(provider, endpoint.features_config, endpoint.region)
             )
             if desired_features != current_features:
                 diff["features_config"] = {"from": current_features, "to": desired_features}

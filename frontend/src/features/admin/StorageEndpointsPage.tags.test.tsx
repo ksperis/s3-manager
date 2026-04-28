@@ -75,7 +75,7 @@ describe("StorageEndpointsPage tags", () => {
     vi.clearAllMocks();
     fetchStorageEndpointsMetaMock.mockResolvedValue({ managed_by_env: false });
     listStorageEndpointsMock.mockResolvedValue([makeEndpoint()]);
-    createStorageEndpointMock.mockResolvedValue(makeEndpoint({ id: 8, name: "AWS Global", provider: "aws", endpoint_url: "https://s3.amazonaws.com" }));
+    createStorageEndpointMock.mockResolvedValue(makeEndpoint({ id: 8, name: "AWS Regional", provider: "aws", endpoint_url: "https://s3.us-east-1.amazonaws.com" }));
     listAdminTagDefinitionsMock.mockResolvedValue([makeTag(801, "prod"), makeTag(802, "rgw-a")]);
     updateStorageEndpointTagsMock.mockResolvedValue(makeEndpoint({ tags: [makeTag(801, "prod"), makeTag(802, "rgw-a")] }));
   });
@@ -124,10 +124,10 @@ describe("StorageEndpointsPage tags", () => {
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
-    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "AWS Global" } });
+    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "AWS Regional" } });
     fireEvent.click(screen.getByLabelText("AWS"));
 
-    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.amazonaws.com");
+    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.us-east-1.amazonaws.com");
     expect(screen.getByLabelText("Region (optional)")).toHaveValue("us-east-1");
     expect(screen.queryByText("Management")).not.toBeInTheDocument();
 
@@ -136,8 +136,8 @@ describe("StorageEndpointsPage tags", () => {
     await waitFor(() => {
       expect(createStorageEndpointMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          name: "AWS Global",
-          endpoint_url: "https://s3.amazonaws.com",
+          name: "AWS Regional",
+          endpoint_url: "https://s3.us-east-1.amazonaws.com",
           region: "us-east-1",
           provider: "aws",
           verify_tls: true,
@@ -145,10 +145,49 @@ describe("StorageEndpointsPage tags", () => {
       );
     });
     const payload = createStorageEndpointMock.mock.calls[0][0] as { features_config?: string };
-    expect(payload.features_config).toContain("sts:\n    enabled: true\n    endpoint: https://sts.amazonaws.com");
+    expect(payload.features_config).toContain("sts:\n    enabled: true\n    endpoint: https://sts.us-east-1.amazonaws.com");
     expect(payload.features_config).toContain("iam:\n    enabled: true\n    endpoint: https://iam.amazonaws.com");
     expect(payload.features_config).toContain("static_website:\n    enabled: true");
     expect(payload.features_config).toContain("sse:\n    enabled: true");
     expect(payload.features_config).toContain("sns:\n    enabled: false");
+  });
+
+  it("syncs AWS generated endpoints when the region changes", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 4, role: "ui_superadmin" }));
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+
+    fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
+    await waitFor(() => expect(listAdminTagDefinitionsMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByLabelText("AWS"));
+    fireEvent.change(screen.getByLabelText("Region (optional)"), { target: { value: "eu-west-3" } });
+
+    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
+    expect(screen.getByLabelText("STS endpoint override (optional)")).toHaveValue("https://sts.eu-west-3.amazonaws.com");
+    expect(screen.getByLabelText("IAM endpoint override (optional)")).toHaveValue("https://iam.amazonaws.com");
+  });
+
+  it("keeps custom AWS endpoint overrides when the region changes", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 5, role: "ui_superadmin" }));
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+
+    fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
+    await waitFor(() => expect(listAdminTagDefinitionsMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByLabelText("AWS"));
+    fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://s3.proxy.example.test" } });
+    fireEvent.change(screen.getByLabelText("STS endpoint override (optional)"), {
+      target: { value: "https://sts.proxy.example.test" },
+    });
+    fireEvent.change(screen.getByLabelText("IAM endpoint override (optional)"), {
+      target: { value: "https://iam.proxy.example.test" },
+    });
+    fireEvent.change(screen.getByLabelText("Region (optional)"), { target: { value: "eu-west-3" } });
+
+    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.proxy.example.test");
+    expect(screen.getByLabelText("STS endpoint override (optional)")).toHaveValue("https://sts.proxy.example.test");
+    expect(screen.getByLabelText("IAM endpoint override (optional)")).toHaveValue("https://iam.proxy.example.test");
   });
 });

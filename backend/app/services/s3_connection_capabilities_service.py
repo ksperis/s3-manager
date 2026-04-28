@@ -8,7 +8,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.services.rgw_iam import get_iam_client
 from app.utils.s3_connection_capabilities import dump_s3_connection_capabilities
 from app.utils.s3_connection_endpoint import resolve_connection_details
-from app.utils.storage_endpoint_features import AWS_IAM_ENDPOINT, resolve_iam_endpoint
+from app.utils.storage_endpoint_features import aws_iam_endpoint_for_region, resolve_iam_endpoint
 
 
 def probe_connection_can_manage_iam(connection) -> bool:
@@ -19,7 +19,7 @@ def probe_connection_can_manage_iam(connection) -> bool:
         if iam_endpoint is None:
             return False
     elif (details.provider or "").strip().lower() == "aws":
-        iam_endpoint = AWS_IAM_ENDPOINT
+        iam_endpoint = aws_iam_endpoint_for_region(details.region)
     else:
         iam_endpoint = details.endpoint_url
     if not iam_endpoint or not connection.access_key_id or not connection.secret_access_key:

@@ -29,9 +29,13 @@ from app.utils.storage_endpoint_features import (
     AWS_IAM_ENDPOINT,
     AWS_S3_ENDPOINT,
     AWS_STS_ENDPOINT,
+    aws_iam_endpoint_for_region,
+    aws_s3_endpoint_for_region,
+    aws_sts_endpoint_for_region,
     normalize_features_config,
     resolve_feature_flags,
     resolve_iam_endpoint,
+    resolve_sts_endpoint,
 )
 from app.utils.time import utcnow
 
@@ -154,7 +158,7 @@ def test_aws_endpoint_defaults_enable_supported_aws_features_and_clear_ceph_cred
 
     created = service.create_endpoint(
         StorageEndpointCreate(
-            name="AWS Global",
+            name="AWS Regional",
             endpoint_url=AWS_S3_ENDPOINT,
             provider=StorageProvider.AWS,
             admin_access_key="AKIA-ADMIN",
@@ -196,6 +200,40 @@ def test_aws_endpoint_defaults_enable_supported_aws_features_and_clear_ceph_cred
     flags = resolve_feature_flags(persisted)
     assert flags.iam_enabled is True
     assert flags.iam_endpoint == AWS_IAM_ENDPOINT
+
+
+def test_aws_endpoint_defaults_follow_selected_region(db_session):
+    service = StorageEndpointsService(db_session)
+
+    created = service.create_endpoint(
+        StorageEndpointCreate(
+            name="AWS Paris",
+            endpoint_url=aws_s3_endpoint_for_region("eu-west-3"),
+            provider=StorageProvider.AWS,
+            region="eu-west-3",
+        )
+    )
+
+    assert created.region == "eu-west-3"
+    assert created.endpoint_url == "https://s3.eu-west-3.amazonaws.com"
+    assert created.features.sts.enabled is True
+    assert created.features.sts.endpoint == "https://sts.eu-west-3.amazonaws.com"
+    assert created.features.iam.enabled is True
+    assert created.features.iam.endpoint == AWS_IAM_ENDPOINT
+
+    persisted = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == created.id).first()
+    assert persisted is not None
+    assert resolve_sts_endpoint(persisted) == aws_sts_endpoint_for_region("eu-west-3")
+    assert resolve_iam_endpoint(persisted) == aws_iam_endpoint_for_region("eu-west-3")
+
+
+def test_aws_endpoint_helpers_are_partition_aware():
+    assert AWS_S3_ENDPOINT == aws_s3_endpoint_for_region(AWS_DEFAULT_REGION)
+    assert AWS_STS_ENDPOINT == aws_sts_endpoint_for_region(AWS_DEFAULT_REGION)
+    assert aws_s3_endpoint_for_region("cn-north-1") == "https://s3.cn-north-1.amazonaws.com.cn"
+    assert aws_sts_endpoint_for_region("cn-north-1") == "https://sts.cn-north-1.amazonaws.com.cn"
+    assert aws_iam_endpoint_for_region("cn-north-1") == "https://iam.cn-north-1.amazonaws.com.cn"
+    assert aws_iam_endpoint_for_region("us-gov-west-1") == "https://iam.us-gov.amazonaws.com"
 
 
 def test_aws_features_reject_ceph_only_capabilities():

@@ -135,8 +135,9 @@ class StorageEndpointsService:
         self,
         provider: StorageProvider,
         raw: Optional[str],
+        region: Optional[str] = None,
     ) -> tuple[dict[str, dict[str, object]], str]:
-        features = normalize_features_config(provider, raw)
+        features = normalize_features_config(provider, raw, region)
         return features, dump_features_config(features)
 
     @staticmethod
@@ -245,7 +246,7 @@ class StorageEndpointsService:
         include_admin_ops_permissions: bool = True,
     ) -> StorageEndpointSchema:
         provider = self._normalize_provider(endpoint.provider)
-        features, _ = self._normalize_features(provider, endpoint.features_config)
+        features, _ = self._normalize_features(provider, endpoint.features_config, endpoint.region)
         capabilities = features_to_capabilities(features)
         admin_ops_permissions = (
             self._resolve_admin_ops_permissions(endpoint, capabilities)
@@ -484,7 +485,7 @@ class StorageEndpointsService:
             raw_features = entry.features_config
             if entry.features is not None:
                 raw_features = dump_features_config(entry.features)
-            features, features_config = self._normalize_features(provider, raw_features)
+            features, features_config = self._normalize_features(provider, raw_features, region)
             admin_endpoint = features.get("admin", {}).get("endpoint")
 
             (
@@ -611,7 +612,7 @@ class StorageEndpointsService:
         supervision_secret = self._clean_optional(payload.supervision_secret_key)
         ceph_admin_access = self._clean_optional(payload.ceph_admin_access_key)
         ceph_admin_secret = self._clean_optional(payload.ceph_admin_secret_key)
-        features, features_config = self._normalize_features(provider, payload.features_config)
+        features, features_config = self._normalize_features(provider, payload.features_config, region)
         admin_endpoint = features.get("admin", {}).get("endpoint")
 
         if not endpoint_url:
@@ -729,7 +730,7 @@ class StorageEndpointsService:
         if "ceph_admin_access_key" in fields_set and not ceph_admin_access:
             ceph_admin_secret = None
         raw_features = payload.features_config if payload.features_config is not None else endpoint.features_config
-        features, features_config = self._normalize_features(provider, raw_features)
+        features, features_config = self._normalize_features(provider, raw_features, region)
         admin_endpoint = features.get("admin", {}).get("endpoint")
 
         if not endpoint_url:

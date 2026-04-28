@@ -25,9 +25,46 @@ FEATURE_KEYS: tuple[str, ...] = (
 )
 
 AWS_DEFAULT_REGION = "us-east-1"
-AWS_S3_ENDPOINT = "https://s3.amazonaws.com"
-AWS_STS_ENDPOINT = "https://sts.amazonaws.com"
 AWS_IAM_ENDPOINT = "https://iam.amazonaws.com"
+AWS_GOV_IAM_ENDPOINT = "https://iam.us-gov.amazonaws.com"
+AWS_CN_IAM_ENDPOINT = "https://iam.cn-north-1.amazonaws.com.cn"
+
+
+def _normalize_region(value: Optional[object]) -> str:
+    if value is None:
+        return AWS_DEFAULT_REGION
+    normalized = str(value).strip().lower()
+    return normalized or AWS_DEFAULT_REGION
+
+
+def _aws_dns_suffix_for_region(region: Optional[object]) -> str:
+    normalized = _normalize_region(region)
+    if normalized.startswith("cn-"):
+        return "amazonaws.com.cn"
+    return "amazonaws.com"
+
+
+def aws_s3_endpoint_for_region(region: Optional[object] = None) -> str:
+    normalized = _normalize_region(region)
+    return f"https://s3.{normalized}.{_aws_dns_suffix_for_region(normalized)}"
+
+
+def aws_sts_endpoint_for_region(region: Optional[object] = None) -> str:
+    normalized = _normalize_region(region)
+    return f"https://sts.{normalized}.{_aws_dns_suffix_for_region(normalized)}"
+
+
+def aws_iam_endpoint_for_region(region: Optional[object] = None) -> str:
+    normalized = _normalize_region(region)
+    if normalized.startswith("cn-"):
+        return AWS_CN_IAM_ENDPOINT
+    if normalized.startswith("us-gov-"):
+        return AWS_GOV_IAM_ENDPOINT
+    return AWS_IAM_ENDPOINT
+
+
+AWS_S3_ENDPOINT = aws_s3_endpoint_for_region(AWS_DEFAULT_REGION)
+AWS_STS_ENDPOINT = aws_sts_endpoint_for_region(AWS_DEFAULT_REGION)
 
 DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
     StorageProvider.CEPH: {
@@ -117,10 +154,15 @@ def parse_features_config(raw: Optional[str]) -> dict[str, Any]:
 def normalize_features_config(
     provider: Optional[object],
     raw: Optional[str],
+    region: Optional[object] = None,
 ) -> dict[str, dict[str, Any]]:
     normalized_provider = normalize_storage_provider(provider)
     base = DEFAULT_FEATURES.get(normalized_provider, DEFAULT_FEATURES[StorageProvider.CEPH])
     features: dict[str, dict[str, Any]] = {key: dict(value) for key, value in base.items()}
+    if normalized_provider == StorageProvider.AWS:
+        aws_region = _normalize_region(region)
+        features["sts"]["endpoint"] = aws_sts_endpoint_for_region(aws_region)
+        features["iam"]["endpoint"] = aws_iam_endpoint_for_region(aws_region)
     raw_features = parse_features_config(raw)
     for key, value in raw_features.items():
         if key not in features:
@@ -193,7 +235,7 @@ def dump_features_config(features: dict[str, dict[str, Any]]) -> str:
 
 
 def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
-    features = normalize_features_config(endpoint.provider, endpoint.features_config)
+    features = normalize_features_config(endpoint.provider, endpoint.features_config, endpoint.region)
     return EndpointFeatureFlags(
         admin_enabled=bool(features["admin"]["enabled"]),
         admin_endpoint=features["admin"].get("endpoint"),
@@ -229,6 +271,11 @@ def resolve_sts_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
     flags = resolve_feature_flags(endpoint)
     if not flags.sts_enabled:
         return None
+    provider = normalize_storage_provider(getattr(endpoint, "provider", None))
+    if flags.sts_endpoint:
+        return flags.sts_endpoint
+    if provider == StorageProvider.AWS:
+        return aws_sts_endpoint_for_region(getattr(endpoint, "region", None))
     return flags.sts_endpoint or _normalize_url(endpoint.endpoint_url)
 
 
@@ -240,7 +287,7 @@ def resolve_iam_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
         return flags.iam_endpoint
     provider = normalize_storage_provider(getattr(endpoint, "provider", None))
     if provider == StorageProvider.AWS:
-        return AWS_IAM_ENDPOINT
+        return aws_iam_endpoint_for_region(getattr(endpoint, "region", None))
     return _normalize_url(endpoint.endpoint_url)
 
 

@@ -13,12 +13,14 @@ s3-manager targets S3-compatible backends, with deeper integration for Ceph RGW 
 
 ## AWS preset
 
-The AWS storage endpoint type preconfigures the legacy global endpoints selected for this project:
+The AWS storage endpoint type preconfigures regional endpoints from the selected region. With the default `us-east-1` region, it uses:
 
-- S3 endpoint: `https://s3.amazonaws.com`
-- STS endpoint: `https://sts.amazonaws.com`
+- S3 endpoint: `https://s3.us-east-1.amazonaws.com`
+- STS endpoint: `https://sts.us-east-1.amazonaws.com`
 - IAM endpoint: `https://iam.amazonaws.com`
 - Default region: `us-east-1`
+
+For AWS commercial regions, IAM remains the official global commercial endpoint. S3 and STS endpoints are regenerated from the configured region by default.
 
 AWS endpoints keep Ceph-only capabilities disabled: Admin Ops, account API, usage logs, RGW metrics, and RGW SNS topics.
 
