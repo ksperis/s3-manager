@@ -280,31 +280,33 @@ export default function BrowserBucketsPanel({
                 )}
               </div>
 
-              <div className="mt-3 min-h-[6rem]">
-                {!hasS3AccountContext ? (
+              {!hasS3AccountContext ? (
+                <div className="mt-3 min-h-[6rem]">
                   <p className="ui-caption text-slate-500 dark:text-slate-400">Select a context to load buckets.</p>
-                ) : !currentBucket ? (
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
-                ) : currentBucketUnavailable ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 ui-caption text-amber-900 dark:border-amber-500/40 dark:bg-amber-900/30 dark:text-amber-100">
-                    <p className="font-semibold">Folder tree unavailable with current credentials.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {currentBucketLoading ? (
-                      <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                        Loading folders...
-                      </div>
-                    ) : currentBucketHasFolders ? (
-                      renderTreeNodes(currentBucketChildren, activePrefix, 0, onSelectPrefix, onToggleTreeNode)
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                        No folders found under this prefix.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                </div>
+              ) : currentBucket ? (
+                <div className="mt-3 min-h-[6rem]">
+                  {currentBucketUnavailable ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 ui-caption text-amber-900 dark:border-amber-500/40 dark:bg-amber-900/30 dark:text-amber-100">
+                      <p className="font-semibold">Folder tree unavailable with current credentials.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {currentBucketLoading ? (
+                        <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          Loading folders...
+                        </div>
+                      ) : currentBucketHasFolders ? (
+                        renderTreeNodes(currentBucketChildren, activePrefix, 0, onSelectPrefix, onToggleTreeNode)
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          No folders found under this prefix.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </section>
           )}
 

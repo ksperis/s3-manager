@@ -2034,6 +2034,27 @@ describe("BrowserPage interactions", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows a single current bucket prompt when no bucket is selected", async () => {
+    searchBrowserBucketsMock.mockResolvedValue({
+      items: [{ name: "bucket-1" }, { name: "bucket-2" }],
+      total: 2,
+      page: 1,
+      page_size: 50,
+      has_next: false,
+    });
+
+    renderPage({ defaultShowFolders: true });
+
+    await waitFor(() => {
+      expect(
+        getCurrentBucketPanel().getByText("Select a bucket to browse folders."),
+      ).toBeInTheDocument();
+    });
+    expect(
+      getCurrentBucketPanel().queryByText("Select a bucket to view folders."),
+    ).not.toBeInTheDocument();
+  });
+
   it("pins the current bucket above the list and only exposes folders for the active bucket", async () => {
     const user = userEvent.setup();
     searchBrowserBucketsMock.mockResolvedValue({
