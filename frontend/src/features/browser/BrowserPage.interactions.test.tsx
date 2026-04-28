@@ -704,6 +704,7 @@ describe("BrowserPage interactions", () => {
       expect(
         within(columnsMenu).getByRole("menuitemcheckbox", { name: /ETag/ }),
       ).toBeInTheDocument();
+      expect(within(columnsMenu).queryByText("Sort")).not.toBeInTheDocument();
       expect(
         within(columnsMenu).getByRole("menuitem", { name: "Reset columns" }),
       ).toBeInTheDocument();

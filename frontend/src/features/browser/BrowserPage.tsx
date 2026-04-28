@@ -12219,11 +12219,6 @@ export default function BrowserPage({
                 {checked ? "✓" : ""}
               </span>
               <span className="min-w-0 flex-1">{column.label}</span>
-              {column.sortable && (
-                <span className="ml-2 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                  Sort
-                </span>
-              )}
             </button>
           );
         })}
