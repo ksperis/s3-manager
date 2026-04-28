@@ -361,7 +361,7 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
             {tableStatus === "loading" && <TableEmptyState colSpan={6} message="Loading API tokens..." />}
             {tableStatus === "error" && <TableEmptyState colSpan={6} message="Unable to load API tokens." tone="error" />}
-            {tableStatus === "empty" && <TableEmptyState colSpan={6} message="No API token found." />}
+            {tableStatus === "empty" && <TableEmptyState colSpan={6} message="No API tokens." />}
             {sortedTokens.map((token) => {
               const status = resolveTokenStatus(token);
               const isBusy = busyTokenId === token.id;

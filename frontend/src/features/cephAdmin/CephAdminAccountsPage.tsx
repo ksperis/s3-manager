@@ -1326,7 +1326,7 @@ export default function CephAdminAccountsPage() {
                 {tableStatus === "error" && (
                   <TableEmptyState colSpan={accountTableColumns.length} message="Unable to load accounts." tone="error" />
                 )}
-                {tableStatus === "empty" && <TableEmptyState colSpan={accountTableColumns.length} message="No accounts found." />}
+                {tableStatus === "empty" && <TableEmptyState colSpan={accountTableColumns.length} message="No accounts." />}
                 {items.map((account) => (
                   <tr key={rowKey(account)} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     {accountTableColumns.map((col) => {

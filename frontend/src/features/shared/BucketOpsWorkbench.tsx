@@ -8800,7 +8800,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
               {tableStatus === "error" && (
                 <TableEmptyState colSpan={bucketTableColumns.length} message="Unable to load buckets." tone="error" />
               )}
-              {tableStatus === "empty" && <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets found." />}
+              {tableStatus === "empty" && <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets." />}
               {items.map((bucket) => (
                   <tr key={`${bucket.tenant ?? ""}:${bucket.name}`} className="group hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     {bucketTableColumns.map((col) => {

@@ -74,7 +74,7 @@ describe("CephAdminAccountsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("No accounts found.")).toBeInTheDocument();
+    expect(await screen.findByText("No accounts.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /advanced filter/i }));
     fireEvent.change(screen.getByLabelText("Quota usage size % >="), { target: { value: "80" } });
@@ -109,7 +109,7 @@ describe("CephAdminAccountsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("No accounts found.")).toBeInTheDocument();
+    expect(await screen.findByText("No accounts.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /advanced filter/i }));
 

@@ -284,7 +284,7 @@ export default function ManagerCephKeysPage() {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading keys..." />}
               {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load keys." tone="error" />}
-              {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No keys found." />}
+              {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No keys." />}
               {filteredKeys.map((key) => {
                 const active = isKeyActive(key);
                 const locked = Boolean(key.is_ui_managed);

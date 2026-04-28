@@ -690,9 +690,7 @@ export default function S3UsersPage() {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {tableStatus === "loading" && <TableEmptyState colSpan={5} message="Loading users..." />}
               {tableStatus === "error" && <TableEmptyState colSpan={5} message="Unable to load users." tone="error" />}
-              {tableStatus === "empty" && (
-                <TableEmptyState colSpan={5} title="No users" description="Import or create standalone RGW users to expose them to managers." />
-              )}
+              {tableStatus === "empty" && <TableEmptyState colSpan={5} message="No users." />}
               {users.map((user) => {
                 const deleteBusy = deleteBusyId === user.id;
                 const tagItems = buildUiTagItems(user.tags);

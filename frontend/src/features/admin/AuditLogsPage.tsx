@@ -311,7 +311,7 @@ export default function AuditLogsPage() {
                   colSpan={7}
                   message={
                     logs.length === 0 && !hasActiveFilters
-                      ? "No audit entries found."
+                      ? "No audit entries."
                       : "No audit entries match the current filters."
                   }
                 />

@@ -811,9 +811,7 @@ export default function S3ConnectionsPage() {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {tableStatus === "loading" && <TableEmptyState colSpan={7} message="Loading connections..." />}
               {tableStatus === "error" && <TableEmptyState colSpan={7} message="Unable to load connections." tone="error" />}
-              {tableStatus === "empty" && (
-                <TableEmptyState colSpan={7} title="No connections" description="Create a shared connection." />
-              )}
+              {tableStatus === "empty" && <TableEmptyState colSpan={7} message="No connections." />}
               {items.map((c) => {
                 const isActive = c.is_active !== false;
                 const tagItems = buildUiTagItems(c.tags);

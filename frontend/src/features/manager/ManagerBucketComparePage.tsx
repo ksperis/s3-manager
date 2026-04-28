@@ -230,7 +230,7 @@ export default function ManagerBucketComparePage() {
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                 {tableStatus === "loading" && <TableEmptyState colSpan={2} message="Loading source buckets..." />}
                 {tableStatus === "error" && <TableEmptyState colSpan={2} message="Unable to load buckets." tone="error" />}
-                {tableStatus === "empty" && <TableEmptyState colSpan={2} message="No buckets found." />}
+                {tableStatus === "empty" && <TableEmptyState colSpan={2} message="No buckets." />}
                 {filteredBuckets.map((bucket) => (
                     <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="px-3 py-2">

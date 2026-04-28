@@ -1459,7 +1459,7 @@ export default function S3AccountsPage() {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {tableStatus === "loading" && <TableEmptyState colSpan={columns.length} message="Loading accounts..." />}
               {tableStatus === "error" && <TableEmptyState colSpan={columns.length} message="Unable to load accounts." tone="error" />}
-              {tableStatus === "empty" && <TableEmptyState colSpan={columns.length} message="No accounts yet." />}
+              {tableStatus === "empty" && <TableEmptyState colSpan={columns.length} message="No accounts." />}
               {accounts.map((account) => {
                   const summaryDbId = accountDbId(account);
                   const deleteBusy = summaryDbId != null && deletingS3AccountId === summaryDbId;

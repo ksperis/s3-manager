@@ -126,6 +126,25 @@ describe("S3UsersPage modal tabs", () => {
     deleteS3UserMock.mockResolvedValue(undefined);
   });
 
+  it("shows the compact empty state when no RGW users exist", async () => {
+    listS3UsersMock.mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <S3UsersPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No users.")).toBeInTheDocument();
+    expect(screen.queryByText("Import or create standalone RGW users to expose them to managers.")).not.toBeInTheDocument();
+  });
+
   it("keeps Linked UI users changes across tabs and submits user_ids", async () => {
     render(
       <MemoryRouter>

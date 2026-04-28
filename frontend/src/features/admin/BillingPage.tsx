@@ -486,7 +486,7 @@ export default function BillingPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {subjectsTableStatus === "loading" && <TableEmptyState colSpan={6} message="Loading subjects..." />}
               {subjectsTableStatus === "error" && <TableEmptyState colSpan={6} message="Unable to load subjects." tone="error" />}
-              {subjectsTableStatus === "empty" && <TableEmptyState colSpan={6} message="No subjects found." />}
+              {subjectsTableStatus === "empty" && <TableEmptyState colSpan={6} message="No subjects." />}
               {subjects.map((subject) => (
                 <tr
                   key={`${subject.subject_type}-${subject.subject_id}`}

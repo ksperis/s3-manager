@@ -1462,7 +1462,7 @@ export default function CephAdminUsersPage() {
                 {tableStatus === "error" && (
                   <TableEmptyState colSpan={userTableColumns.length} message="Unable to load users." tone="error" />
                 )}
-                {tableStatus === "empty" && <TableEmptyState colSpan={userTableColumns.length} message="No users found." />}
+                {tableStatus === "empty" && <TableEmptyState colSpan={userTableColumns.length} message="No users." />}
                 {items.map((user) => (
                   <tr key={rowKey(user)} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     {userTableColumns.map((col) => {

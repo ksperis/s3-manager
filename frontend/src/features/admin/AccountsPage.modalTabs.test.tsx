@@ -141,6 +141,21 @@ describe("AccountsPage modal tabs", () => {
     importS3AccountsMock.mockResolvedValue([]);
   });
 
+  it("shows the compact empty state when no RGW accounts exist", async () => {
+    listS3AccountsMock.mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<AccountsPage />);
+
+    expect(await screen.findByText("No accounts.")).toBeInTheDocument();
+    expect(screen.queryByText("No accounts yet.")).not.toBeInTheDocument();
+  });
+
   it("shows General/Linked UI users tabs and submits updated user_links", async () => {
     render(<AccountsPage />);
 

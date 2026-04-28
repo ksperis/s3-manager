@@ -66,7 +66,7 @@ describe("CephAdminUsersPage list states", () => {
 
     pending.resolve({ items: [], total: 0 });
 
-    expect(await screen.findByText("No users found.")).toBeInTheDocument();
+    expect(await screen.findByText("No users.")).toBeInTheDocument();
   });
 
   it("shows empty state when endpoint returns no users", async () => {
@@ -74,7 +74,7 @@ describe("CephAdminUsersPage list states", () => {
 
     renderPage();
 
-    expect(await screen.findByText("No users found.")).toBeInTheDocument();
+    expect(await screen.findByText("No users.")).toBeInTheDocument();
   });
 
   it("shows error banner and error row when list loading fails with no rows", async () => {
@@ -107,7 +107,7 @@ describe("CephAdminUsersPage list states", () => {
 
     renderPage();
 
-    expect(await screen.findByText("No users found.")).toBeInTheDocument();
+    expect(await screen.findByText("No users.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /advanced filter/i }));
     fireEvent.change(screen.getByLabelText("Quota usage size % >="), { target: { value: "75" } });
@@ -140,7 +140,7 @@ describe("CephAdminUsersPage list states", () => {
 
     renderPage();
 
-    expect(await screen.findByText("No users found.")).toBeInTheDocument();
+    expect(await screen.findByText("No users.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /advanced filter/i }));
 

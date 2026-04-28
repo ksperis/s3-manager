@@ -814,7 +814,7 @@ export default function BucketsPage() {
                 {tableStatus === "error" && (
                   <TableEmptyState colSpan={bucketTableColumns.length} message="Unable to load buckets." tone="error" />
                 )}
-                {tableStatus === "empty" && <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets found." />}
+                {tableStatus === "empty" && <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets." />}
                 {filteredBuckets.map((bucket) => (
                     <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                       {bucketTableColumns.map((col) => {
