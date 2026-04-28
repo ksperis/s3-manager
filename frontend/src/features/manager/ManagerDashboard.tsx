@@ -15,6 +15,7 @@ import { useManagerStats } from "./useManagerStats";
 import { useIamOverview } from "./useIamOverview";
 import { extractApiError } from "../../utils/apiError";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import { listBuckets } from "../../api/buckets";
 
 export default function ManagerDashboard() {
   const { generalSettings } = useGeneralSettings();
@@ -27,7 +28,6 @@ export default function ManagerDashboard() {
     accountIdForApi,
     accessMode,
     managerStatsEnabled,
-    managerStatsMessage,
   } = useS3AccountContext();
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const isS3User = selectedS3AccountType === "s3_user";
@@ -57,13 +57,12 @@ export default function ManagerDashboard() {
     ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
     : sessionS3AccountName ?? "S3 session";
   const iamDisabled = isS3User || isConnection || !iamFeatureEnabled;
-  const metricsStatusMessage =
-    hasContext && !managerStatsEnabled
-      ? managerStatsMessage || "Metrics are unavailable for this context."
-      : null;
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
+  const [bucketCount, setBucketCount] = useState<number | null>(null);
+  const [bucketCountLoading, setBucketCountLoading] = useState(false);
+  const [bucketCountError, setBucketCountError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!generalSettings.endpoint_status_enabled || !hasContext) {
@@ -93,6 +92,34 @@ export default function ManagerDashboard() {
     };
   }, [accountIdForApi, generalSettings.endpoint_status_enabled, hasContext]);
 
+  useEffect(() => {
+    if (!hasContext) {
+      setBucketCount(null);
+      setBucketCountError(null);
+      setBucketCountLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setBucketCountLoading(true);
+    setBucketCountError(null);
+    listBuckets(accountIdForApi, { with_stats: false })
+      .then((buckets) => {
+        if (cancelled) return;
+        setBucketCount(buckets.length);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setBucketCount(null);
+        setBucketCountError(extractApiError(err, "Unable to load bucket count."));
+      })
+      .finally(() => {
+        if (!cancelled) setBucketCountLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, accessMode, hasContext]);
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -110,8 +137,6 @@ export default function ManagerDashboard() {
           tone="warning"
         />
       ) : null}
-
-      {hasContext && metricsStatusMessage ? <PageBanner tone="warning">{metricsStatusMessage}</PageBanner> : null}
 
       {hasContext && (
         <>
@@ -136,6 +161,9 @@ export default function ManagerDashboard() {
             iamOverview={iamOverview}
             iamLoading={iamLoading}
             iamError={iamError}
+            bucketCount={bucketCount}
+            bucketLoading={bucketCountLoading}
+            bucketError={bucketCountError}
           />
           {generalSettings.endpoint_status_enabled && (
             <WorkspaceEndpointHealthCards

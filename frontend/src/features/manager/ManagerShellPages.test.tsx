@@ -93,6 +93,109 @@ describe("manager shell pages", () => {
     expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
   });
 
+  it("hides the dashboard storage usage card and metrics banner when manager stats are unavailable", async () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "conn-1",
+          name: "User9001",
+          type: "connection",
+          storage_endpoint_capabilities: { iam: false, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "conn-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "connection",
+      hasS3AccountContext: true,
+      accountIdForApi: "conn-1",
+      accessMode: "default",
+      managerStatsEnabled: false,
+      managerStatsMessage: "Metrics are unavailable for this context.",
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByText("Metrics are unavailable for this context.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Storage Usage")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Storage usage for/)).not.toBeInTheDocument();
+    expect(await screen.findByText("0")).toBeInTheDocument();
+  });
+
+  it("keeps the manager dashboard overview grid width stable when storage usage is hidden", async () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: false,
+      managerStatsMessage: "Metrics are unavailable for this context.",
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    const overviewGrid = screen.getByText("IAM resources").closest("section")?.parentElement;
+    expect(overviewGrid).toHaveClass("lg:grid-cols-2");
+    expect(screen.queryByText("Storage Usage")).not.toBeInTheDocument();
+    expect(screen.queryByText("Metrics are unavailable for this context.")).not.toBeInTheDocument();
+    expect(await screen.findByText("0")).toBeInTheDocument();
+  });
+
+  it("renders a bucket summary card that links to the bucket list", async () => {
+    listBucketsMock.mockResolvedValue([{ name: "bucket-a" }, { name: "bucket-b" }]);
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "conn-1",
+          name: "User9001",
+          type: "connection",
+          storage_endpoint_capabilities: { iam: false, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "conn-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "connection",
+      hasS3AccountContext: true,
+      accountIdForApi: "conn-1",
+      accessMode: "default",
+      managerStatsEnabled: false,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Bucket overview")).toBeInTheDocument();
+    expect(await screen.findByText("2")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /View/ })).toHaveAttribute("href", "/manager/buckets");
+  });
+
   it("renders the manager browser page without a page-level context strip", () => {
     render(
       <MemoryRouter>

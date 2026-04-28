@@ -21,6 +21,9 @@ type UsageOverviewProps = {
   iamOverview?: IamOverview | null;
   iamLoading?: boolean;
   iamError?: string | null;
+  bucketCount?: number | null;
+  bucketLoading?: boolean;
+  bucketError?: string | null;
 };
 
 export default function UsageOverview({
@@ -35,7 +38,12 @@ export default function UsageOverview({
   iamOverview,
   iamLoading,
   iamError,
+  bucketCount,
+  bucketLoading,
+  bucketError,
 }: UsageOverviewProps) {
+  const showStorageUsage = !metricsDisabled;
+  const displayedBucketCount = bucketCount ?? stats?.total_buckets ?? null;
   const iamTiles = [
     {
       label: "IAM users",
@@ -63,15 +71,50 @@ export default function UsageOverview({
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <StorageUsageCard
-        accountName={accountName}
-        storage={storage}
-        objects={objects}
-        bucketOverview={stats?.bucket_overview}
-        loading={loading}
-        metricsDisabled={metricsDisabled}
-        errorMessage={metricsDisabled ? null : statsError}
-      />
+      {showStorageUsage && (
+        <StorageUsageCard
+          accountName={accountName}
+          storage={storage}
+          objects={objects}
+          bucketOverview={stats?.bucket_overview}
+          loading={loading}
+          metricsDisabled={metricsDisabled}
+          errorMessage={statsError}
+        />
+      )}
+
+      <section className={cx(uiCardClass, "space-y-4 p-4")}>
+        <header className="space-y-1">
+          <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Buckets</p>
+          <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Bucket overview</h3>
+        </header>
+
+        {bucketError && <PageBanner tone="error">{bucketError}</PageBanner>}
+
+        <div className="grid gap-2">
+          <Link
+            to="/manager/buckets"
+            className={cx(
+              uiCardMutedClass,
+              "flex items-center gap-3 p-3 text-left transition hover:-translate-y-[1px] hover:border-primary hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:hover:border-primary-700/60"
+            )}
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/80 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+              B
+            </div>
+            <div className="flex-1">
+              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Buckets</p>
+              <p className="mt-1 ui-title font-semibold text-slate-900 dark:text-white">
+                {bucketLoading || displayedBucketCount == null ? "—" : Number(displayedBucketCount).toLocaleString()}
+              </p>
+            </div>
+            <div className="ui-caption font-medium text-primary flex items-center gap-1 dark:text-primary-200">
+              <span>View</span>
+              <span aria-hidden>→</span>
+            </div>
+          </Link>
+        </div>
+      </section>
 
       {!iamDisabled && (
         <section className={cx(uiCardClass, "space-y-4 p-4")}>
