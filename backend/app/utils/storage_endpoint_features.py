@@ -63,6 +63,17 @@ def aws_iam_endpoint_for_region(region: Optional[object] = None) -> str:
     return AWS_IAM_ENDPOINT
 
 
+def aws_iam_signing_region_for_region(region: Optional[object] = None) -> str:
+    normalized = _normalize_region(region)
+    if normalized.startswith("cn-") or normalized.startswith("us-gov-"):
+        return normalized
+    return AWS_DEFAULT_REGION
+
+
+def aws_iam_client_options_for_region(region: Optional[object] = None) -> tuple[str, str]:
+    return aws_iam_endpoint_for_region(region), aws_iam_signing_region_for_region(region)
+
+
 AWS_S3_ENDPOINT = aws_s3_endpoint_for_region(AWS_DEFAULT_REGION)
 AWS_STS_ENDPOINT = aws_sts_endpoint_for_region(AWS_DEFAULT_REGION)
 
@@ -289,6 +300,14 @@ def resolve_iam_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
     if provider == StorageProvider.AWS:
         return aws_iam_endpoint_for_region(getattr(endpoint, "region", None))
     return _normalize_url(endpoint.endpoint_url)
+
+
+def resolve_iam_signing_region(endpoint: StorageEndpoint) -> Optional[str]:
+    provider = normalize_storage_provider(getattr(endpoint, "provider", None))
+    region = getattr(endpoint, "region", None)
+    if provider == StorageProvider.AWS:
+        return aws_iam_signing_region_for_region(region)
+    return region
 
 
 def features_to_capabilities(features: dict[str, dict[str, Any]]) -> dict[str, bool]:

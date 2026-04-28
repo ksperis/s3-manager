@@ -39,9 +39,29 @@ def test_resolve_iam_client_options_uses_aws_iam_endpoint_for_aws_storage_endpoi
         name="AWS",
         endpoint_url=AWS_S3_ENDPOINT,
         provider=StorageProvider.AWS.value,
-        region="us-east-1",
+        region="eu-west-1",
         verify_tls=True,
     )
     account = type("Account", (), {"storage_endpoint": endpoint})()
+
+    assert resolve_iam_client_options(account) == (AWS_IAM_ENDPOINT, "us-east-1", True)
+
+
+def test_resolve_iam_client_options_uses_aws_iam_signing_region_for_connection_context():
+    endpoint = StorageEndpoint(
+        name="AWS",
+        endpoint_url="https://s3.eu-west-1.amazonaws.com",
+        provider=StorageProvider.AWS.value,
+        region="eu-west-1",
+        verify_tls=True,
+    )
+    account = type(
+        "Account",
+        (),
+        {
+            "storage_endpoint": endpoint,
+            "_session_region": "eu-west-1",
+        },
+    )()
 
     assert resolve_iam_client_options(account) == (AWS_IAM_ENDPOINT, "us-east-1", True)

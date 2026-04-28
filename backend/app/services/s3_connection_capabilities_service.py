@@ -8,7 +8,11 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.services.rgw_iam import get_iam_client
 from app.utils.s3_connection_capabilities import dump_s3_connection_capabilities
 from app.utils.s3_connection_endpoint import resolve_connection_details
-from app.utils.storage_endpoint_features import aws_iam_endpoint_for_region, resolve_iam_endpoint
+from app.utils.storage_endpoint_features import (
+    aws_iam_client_options_for_region,
+    resolve_iam_endpoint,
+    resolve_iam_signing_region,
+)
 
 
 def probe_connection_can_manage_iam(connection) -> bool:
@@ -18,10 +22,12 @@ def probe_connection_can_manage_iam(connection) -> bool:
         iam_endpoint = resolve_iam_endpoint(endpoint_obj)
         if iam_endpoint is None:
             return False
+        iam_region = resolve_iam_signing_region(endpoint_obj)
     elif (details.provider or "").strip().lower() == "aws":
-        iam_endpoint = aws_iam_endpoint_for_region(details.region)
+        iam_endpoint, iam_region = aws_iam_client_options_for_region(details.region)
     else:
         iam_endpoint = details.endpoint_url
+        iam_region = details.region
     if not iam_endpoint or not connection.access_key_id or not connection.secret_access_key:
         return False
     try:
@@ -29,7 +35,7 @@ def probe_connection_can_manage_iam(connection) -> bool:
             access_key=connection.access_key_id,
             secret_key=connection.secret_access_key,
             endpoint=iam_endpoint,
-            region=details.region,
+            region=iam_region,
             verify_tls=details.verify_tls,
         )
         client.list_users(MaxItems=1)

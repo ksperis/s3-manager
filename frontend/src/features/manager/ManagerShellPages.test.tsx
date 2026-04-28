@@ -124,7 +124,47 @@ describe("manager shell pages", () => {
     expect(screen.queryByText("Metrics are unavailable for this context.")).not.toBeInTheDocument();
     expect(screen.queryByText("Storage Usage")).not.toBeInTheDocument();
     expect(screen.queryByText(/Storage usage for/)).not.toBeInTheDocument();
+    expect(screen.queryByText("IAM resources")).not.toBeInTheDocument();
     expect(await screen.findByText("0")).toBeInTheDocument();
+  });
+
+  it("shows IAM resources for IAM-capable connection contexts", async () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "conn-1",
+          name: "AWS/tests3",
+          type: "connection",
+          storage_endpoint_capabilities: { iam: true, metrics: false, usage: false },
+          capabilities: { can_manage_iam: true, sts_capable: false, admin_api_capable: false },
+        },
+      ],
+      selectedS3AccountId: "conn-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "connection",
+      hasS3AccountContext: true,
+      accountIdForApi: "conn-1",
+      accessMode: "connection",
+      managerStatsEnabled: false,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+    useIamOverviewMock.mockReturnValue({
+      overview: { iam_users: 1, iam_groups: 0, iam_roles: 0, iam_policies: 0 },
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("IAM resources")).toBeInTheDocument();
+    expect(useIamOverviewMock).toHaveBeenCalledWith("conn-1", true, true, "connection");
+    expect(await screen.findByText("1")).toBeInTheDocument();
   });
 
   it("keeps the manager dashboard overview grid width stable when storage usage is hidden", async () => {

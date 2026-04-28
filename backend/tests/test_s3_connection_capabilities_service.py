@@ -74,6 +74,51 @@ def test_probe_connection_can_manage_iam_uses_aws_iam_endpoint(monkeypatch):
     assert captured["region"] == "us-east-1"
 
 
+def test_probe_connection_can_manage_iam_signs_commercial_aws_iam_with_us_east_1(monkeypatch):
+    fake = _FakeIAMClient()
+    captured: dict[str, object] = {}
+
+    def fake_get_iam_client(**kwargs):
+        captured.update(kwargs)
+        return fake
+
+    monkeypatch.setattr(svc, "get_iam_client", fake_get_iam_client)
+    connection = _conn(
+        storage_endpoint=SimpleNamespace(
+            provider="aws",
+            endpoint_url="https://s3.eu-west-1.amazonaws.com",
+            region="eu-west-1",
+            verify_tls=True,
+            features_config=None,
+        )
+    )
+
+    assert svc.probe_connection_can_manage_iam(connection) is True
+    assert captured["endpoint"] == "https://iam.amazonaws.com"
+    assert captured["region"] == "us-east-1"
+
+
+def test_probe_connection_can_manage_iam_signs_custom_aws_connection_with_us_east_1(monkeypatch):
+    fake = _FakeIAMClient()
+    captured: dict[str, object] = {}
+
+    def fake_get_iam_client(**kwargs):
+        captured.update(kwargs)
+        return fake
+
+    monkeypatch.setattr(svc, "get_iam_client", fake_get_iam_client)
+    connection = _conn(
+        custom_endpoint_config=(
+            '{"endpoint_url":"https://s3.eu-west-1.amazonaws.com",'
+            '"region":"eu-west-1","verify_tls":true,"provider":"aws"}'
+        )
+    )
+
+    assert svc.probe_connection_can_manage_iam(connection) is True
+    assert captured["endpoint"] == "https://iam.amazonaws.com"
+    assert captured["region"] == "us-east-1"
+
+
 def test_probe_connection_can_manage_iam_respects_disabled_endpoint_iam(monkeypatch):
     calls = {"count": 0}
 

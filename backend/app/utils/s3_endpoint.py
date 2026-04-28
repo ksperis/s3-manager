@@ -98,15 +98,22 @@ def resolve_s3_client_options(account: object) -> tuple[Optional[str], Optional[
 def resolve_iam_client_options(account: object) -> tuple[Optional[str], Optional[str], bool]:
     """Resolve IAM client options for account-like manager contexts."""
     from app.utils.s3_connection_endpoint import resolve_connection_details
-    from app.utils.storage_endpoint_features import aws_iam_endpoint_for_region, resolve_iam_endpoint
+    from app.utils.storage_endpoint_features import (
+        aws_iam_client_options_for_region,
+        resolve_iam_endpoint,
+        resolve_iam_signing_region,
+    )
 
     endpoint_obj = getattr(account, "storage_endpoint", None)
     region: Optional[str] = getattr(account, "_session_region", None)
     verify_tls = True
     if endpoint_obj is not None:
         endpoint = resolve_iam_endpoint(endpoint_obj)
-        if region is None:
-            region = getattr(endpoint_obj, "region", None)
+        provider = str(getattr(getattr(endpoint_obj, "provider", None), "value", getattr(endpoint_obj, "provider", None)) or "").strip().lower()
+        if provider == "aws":
+            region = resolve_iam_signing_region(endpoint_obj)
+        elif region is None:
+            region = resolve_iam_signing_region(endpoint_obj)
         verify_tls = bool(getattr(endpoint_obj, "verify_tls", True))
         return endpoint, region, verify_tls
 
@@ -114,8 +121,12 @@ def resolve_iam_client_options(account: object) -> tuple[Optional[str], Optional
     if source_connection is not None:
         details = resolve_connection_details(source_connection)
         provider = (details.provider or "").strip().lower()
-        endpoint = aws_iam_endpoint_for_region(details.region) if provider == "aws" else details.endpoint_url
-        return endpoint, details.region, details.verify_tls
+        if provider == "aws":
+            endpoint, iam_region = aws_iam_client_options_for_region(details.region)
+        else:
+            endpoint = details.endpoint_url
+            iam_region = details.region
+        return endpoint, iam_region, details.verify_tls
 
     endpoint, region, _, verify_tls = resolve_s3_client_options(account)
     return endpoint, region, verify_tls

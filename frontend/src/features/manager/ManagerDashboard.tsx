@@ -31,7 +31,6 @@ export default function ManagerDashboard() {
   } = useS3AccountContext();
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const isS3User = selectedS3AccountType === "s3_user";
-  const isConnection = selectedS3AccountType === "connection";
   const selected = useMemo(
     () => accounts.find((a) => a.id === selectedS3AccountId),
     [accounts, selectedS3AccountId]
@@ -39,6 +38,7 @@ export default function ManagerDashboard() {
   const hasContext = hasS3AccountContext;
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
   const iamFeatureEnabled = endpointCaps ? endpointCaps.iam !== false : true;
+  const contextCanManageIam = selected?.capabilities?.can_manage_iam !== false;
   // Usage/traffic stats are backend-driven. We only enable the widgets when the backend says it is allowed.
   const usageFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.metrics !== false : true);
   const { stats, loading, error } = useManagerStats(
@@ -46,7 +46,7 @@ export default function ManagerDashboard() {
     usageFeatureEnabled && hasContext,
     accessMode ?? "default"
   );
-  const canManageIam = !isS3User && !isConnection && iamFeatureEnabled;
+  const canManageIam = !isS3User && contextCanManageIam && iamFeatureEnabled;
   const { overview: iamOverview, loading: iamLoading, error: iamError } = useIamOverview(
     accountIdForApi,
     canManageIam,
@@ -56,7 +56,7 @@ export default function ManagerDashboard() {
   const accountLabel = selected
     ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
     : sessionS3AccountName ?? "S3 session";
-  const iamDisabled = isS3User || isConnection || !iamFeatureEnabled;
+  const iamDisabled = isS3User || !contextCanManageIam || !iamFeatureEnabled;
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);

@@ -212,4 +212,32 @@ describe("ManagerLayout", () => {
     expect(metricsLink?.disabled).toBe(true);
     expect(metricsLink?.disabledHint).toBe("Metrics are unavailable for this endpoint capabilities.");
   });
+
+  it("shows IAM navigation for IAM-capable connection contexts", () => {
+    useS3AccountContextMock.mockReturnValue(
+      buildContext({
+        accounts: [
+          {
+            id: "conn-1",
+            display_name: "AWS/tests3",
+            storage_endpoint_capabilities: { iam: true, usage: false, metrics: false, sns: false },
+          },
+        ],
+        selectedS3AccountId: "conn-1",
+        selectedS3AccountType: "connection",
+        accessMode: "connection",
+        managerStatsEnabled: false,
+      })
+    );
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const iamSection = capturedNavSections.find((section) => section.label === "IAM");
+    expect(iamSection?.links.map((link) => link.label)).toEqual(["Users", "Groups", "Roles", "Policies"]);
+  });
 });
