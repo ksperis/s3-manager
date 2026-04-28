@@ -11,7 +11,7 @@ Use the dedicated **AWS** endpoint type when targeting native Amazon S3. It prec
 - `https://iam.amazonaws.com` for IAM
 - `us-east-1` as the default region
 
-For AWS commercial regions, IAM remains the official global commercial endpoint; the AWS preset keeps that value while making the fallback partition-aware.
+For AWS commercial regions, IAM remains the official global commercial endpoint; the AWS preset keeps that value while making the fallback partition-aware. In the admin UI, AWS endpoint URLs are derived from the selected region and are not manually edited; use the **Other** provider type for custom endpoints, proxies, or non-native AWS-compatible services.
 
 The AWS type enables S3, STS, IAM, static website, and SSE capabilities by default. Ceph-specific admin, account, usage, metrics, and RGW SNS capabilities remain disabled.
 

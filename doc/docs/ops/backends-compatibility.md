@@ -20,7 +20,7 @@ The AWS storage endpoint type preconfigures regional endpoints from the selected
 - IAM endpoint: `https://iam.amazonaws.com`
 - Default region: `us-east-1`
 
-For AWS commercial regions, IAM remains the official global commercial endpoint. S3 and STS endpoints are regenerated from the configured region by default.
+For AWS commercial regions, IAM remains the official global commercial endpoint. In the admin UI, the AWS preset exposes the region as the editable choice and derives S3, STS, and IAM endpoints automatically. Use the **Other** provider type for custom endpoints or proxies.
 
 AWS endpoints keep Ceph-only capabilities disabled: Admin Ops, account API, usage logs, RGW metrics, and RGW SNS topics.
 

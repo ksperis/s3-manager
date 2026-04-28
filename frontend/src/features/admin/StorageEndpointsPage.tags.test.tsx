@@ -164,11 +164,11 @@ describe("StorageEndpointsPage tags", () => {
     fireEvent.change(screen.getByLabelText("Region (optional)"), { target: { value: "eu-west-3" } });
 
     expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
-    expect(screen.getByLabelText("STS endpoint override (optional)")).toHaveValue("https://sts.eu-west-3.amazonaws.com");
-    expect(screen.getByLabelText("IAM endpoint override (optional)")).toHaveValue("https://iam.amazonaws.com");
+    expect(screen.getByLabelText("STS endpoint")).toHaveValue("https://sts.eu-west-3.amazonaws.com");
+    expect(screen.getByLabelText("IAM endpoint")).toHaveValue("https://iam.amazonaws.com");
   });
 
-  it("keeps custom AWS endpoint overrides when the region changes", async () => {
+  it("keeps AWS endpoint fields read-only and submits computed values", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 5, role: "ui_superadmin" }));
 
     render(<StorageEndpointsPage />);
@@ -176,18 +176,39 @@ describe("StorageEndpointsPage tags", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
     await waitFor(() => expect(listAdminTagDefinitionsMock).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "AWS Locked" } });
     fireEvent.click(screen.getByLabelText("AWS"));
+    expect(screen.getByLabelText("Endpoint S3")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("STS endpoint")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("IAM endpoint")).toHaveAttribute("readonly");
+
     fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://s3.proxy.example.test" } });
-    fireEvent.change(screen.getByLabelText("STS endpoint override (optional)"), {
+    fireEvent.change(screen.getByLabelText("STS endpoint"), {
       target: { value: "https://sts.proxy.example.test" },
     });
-    fireEvent.change(screen.getByLabelText("IAM endpoint override (optional)"), {
+    fireEvent.change(screen.getByLabelText("IAM endpoint"), {
       target: { value: "https://iam.proxy.example.test" },
     });
     fireEvent.change(screen.getByLabelText("Region (optional)"), { target: { value: "eu-west-3" } });
 
-    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.proxy.example.test");
-    expect(screen.getByLabelText("STS endpoint override (optional)")).toHaveValue("https://sts.proxy.example.test");
-    expect(screen.getByLabelText("IAM endpoint override (optional)")).toHaveValue("https://iam.proxy.example.test");
+    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
+    expect(screen.getByLabelText("STS endpoint")).toHaveValue("https://sts.eu-west-3.amazonaws.com");
+    expect(screen.getByLabelText("IAM endpoint")).toHaveValue("https://iam.amazonaws.com");
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createStorageEndpointMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "AWS Locked",
+          endpoint_url: "https://s3.eu-west-3.amazonaws.com",
+          region: "eu-west-3",
+          provider: "aws",
+        })
+      );
+    });
+    const payload = createStorageEndpointMock.mock.calls[0][0] as { features_config?: string };
+    expect(payload.features_config).toContain("endpoint: https://sts.eu-west-3.amazonaws.com");
+    expect(payload.features_config).toContain("endpoint: https://iam.amazonaws.com");
   });
 });
