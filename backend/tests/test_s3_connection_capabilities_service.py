@@ -50,6 +50,52 @@ def test_probe_connection_can_manage_iam_success(monkeypatch):
     assert fake.calls == [{"MaxItems": 1}]
 
 
+def test_probe_connection_can_manage_iam_uses_aws_iam_endpoint(monkeypatch):
+    fake = _FakeIAMClient()
+    captured: dict[str, object] = {}
+
+    def fake_get_iam_client(**kwargs):
+        captured.update(kwargs)
+        return fake
+
+    monkeypatch.setattr(svc, "get_iam_client", fake_get_iam_client)
+    connection = _conn(
+        storage_endpoint=SimpleNamespace(
+            provider="aws",
+            endpoint_url="https://s3.amazonaws.com",
+            region="us-east-1",
+            verify_tls=True,
+            features_config=None,
+        )
+    )
+
+    assert svc.probe_connection_can_manage_iam(connection) is True
+    assert captured["endpoint"] == "https://iam.amazonaws.com"
+    assert captured["region"] == "us-east-1"
+
+
+def test_probe_connection_can_manage_iam_respects_disabled_endpoint_iam(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_get_iam_client(**kwargs):
+        calls["count"] += 1
+        return _FakeIAMClient()
+
+    monkeypatch.setattr(svc, "get_iam_client", fake_get_iam_client)
+    connection = _conn(
+        storage_endpoint=SimpleNamespace(
+            provider="aws",
+            endpoint_url="https://s3.amazonaws.com",
+            region="us-east-1",
+            verify_tls=True,
+            features_config="features:\n  iam:\n    enabled: false\n",
+        )
+    )
+
+    assert svc.probe_connection_can_manage_iam(connection) is False
+    assert calls["count"] == 0
+
+
 def test_probe_connection_can_manage_iam_handles_errors(monkeypatch):
     monkeypatch.setattr(svc, "get_iam_client", lambda **kwargs: _FakeIAMClient(error=_client_error("AccessDenied")))
     assert svc.probe_connection_can_manage_iam(_conn()) is False

@@ -93,3 +93,29 @@ def resolve_s3_client_options(account: object) -> tuple[Optional[str], Optional[
     else:
         verify_tls = True
     return endpoint, region, force_path_style, verify_tls
+
+
+def resolve_iam_client_options(account: object) -> tuple[Optional[str], Optional[str], bool]:
+    """Resolve IAM client options for account-like manager contexts."""
+    from app.utils.s3_connection_endpoint import resolve_connection_details
+    from app.utils.storage_endpoint_features import AWS_IAM_ENDPOINT, resolve_iam_endpoint
+
+    endpoint_obj = getattr(account, "storage_endpoint", None)
+    region: Optional[str] = getattr(account, "_session_region", None)
+    verify_tls = True
+    if endpoint_obj is not None:
+        endpoint = resolve_iam_endpoint(endpoint_obj)
+        if region is None:
+            region = getattr(endpoint_obj, "region", None)
+        verify_tls = bool(getattr(endpoint_obj, "verify_tls", True))
+        return endpoint, region, verify_tls
+
+    source_connection = getattr(account, "_source_connection", None)
+    if source_connection is not None:
+        details = resolve_connection_details(source_connection)
+        provider = (details.provider or "").strip().lower()
+        endpoint = AWS_IAM_ENDPOINT if provider == "aws" else details.endpoint_url
+        return endpoint, details.region, details.verify_tls
+
+    endpoint, region, _, verify_tls = resolve_s3_client_options(account)
+    return endpoint, region, verify_tls

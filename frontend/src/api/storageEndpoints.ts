@@ -5,7 +5,7 @@
 import client from "./client";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 
-export type StorageProvider = "ceph" | "other";
+export type StorageProvider = "ceph" | "aws" | "other";
 
 export type StorageEndpointFeature = {
   enabled: boolean;

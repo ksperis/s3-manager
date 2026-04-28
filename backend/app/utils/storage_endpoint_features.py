@@ -24,6 +24,11 @@ FEATURE_KEYS: tuple[str, ...] = (
     "healthcheck",
 )
 
+AWS_DEFAULT_REGION = "us-east-1"
+AWS_S3_ENDPOINT = "https://s3.amazonaws.com"
+AWS_STS_ENDPOINT = "https://sts.amazonaws.com"
+AWS_IAM_ENDPOINT = "https://iam.amazonaws.com"
+
 DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
     StorageProvider.CEPH: {
         "admin": {"enabled": False, "endpoint": None},
@@ -35,6 +40,18 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "iam": {"enabled": False, "endpoint": None},
         "sns": {"enabled": False, "endpoint": None},
         "sse": {"enabled": False, "endpoint": None},
+        "healthcheck": {"enabled": True, "mode": "http", "url": None},
+    },
+    StorageProvider.AWS: {
+        "admin": {"enabled": False, "endpoint": None},
+        "account": {"enabled": False, "endpoint": None},
+        "sts": {"enabled": True, "endpoint": AWS_STS_ENDPOINT},
+        "usage": {"enabled": False, "endpoint": None},
+        "metrics": {"enabled": False, "endpoint": None},
+        "static_website": {"enabled": True, "endpoint": None},
+        "iam": {"enabled": True, "endpoint": AWS_IAM_ENDPOINT},
+        "sns": {"enabled": False, "endpoint": None},
+        "sse": {"enabled": True, "endpoint": None},
         "healthcheck": {"enabled": True, "mode": "http", "url": None},
     },
     StorageProvider.OTHER: {
@@ -63,6 +80,7 @@ class EndpointFeatureFlags:
     metrics_enabled: bool
     static_website_enabled: bool
     iam_enabled: bool
+    iam_endpoint: Optional[str]
     sns_enabled: bool
     sse_enabled: bool
     healthcheck_enabled: bool
@@ -161,7 +179,7 @@ def dump_features_config(features: dict[str, dict[str, Any]]) -> str:
     for key in FEATURE_KEYS:
         entry: dict[str, Any] = {"enabled": bool(features.get(key, {}).get("enabled"))}
         endpoint = features.get(key, {}).get("endpoint")
-        if key in {"admin", "sts"} and endpoint:
+        if key in {"admin", "sts", "iam"} and endpoint:
             entry["endpoint"] = endpoint
         if key == "healthcheck":
             mode = str(features.get(key, {}).get("mode") or "http").strip().lower()
@@ -186,6 +204,7 @@ def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
         metrics_enabled=bool(features["metrics"]["enabled"]),
         static_website_enabled=bool(features["static_website"]["enabled"]),
         iam_enabled=bool(features.get("iam", {}).get("enabled")),
+        iam_endpoint=features.get("iam", {}).get("endpoint"),
         sns_enabled=bool(features.get("sns", {}).get("enabled")),
         sse_enabled=bool(features.get("sse", {}).get("enabled")),
         healthcheck_enabled=bool(features.get("healthcheck", {}).get("enabled", True)),
@@ -211,6 +230,18 @@ def resolve_sts_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
     if not flags.sts_enabled:
         return None
     return flags.sts_endpoint or _normalize_url(endpoint.endpoint_url)
+
+
+def resolve_iam_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
+    flags = resolve_feature_flags(endpoint)
+    if not flags.iam_enabled:
+        return None
+    if flags.iam_endpoint:
+        return flags.iam_endpoint
+    provider = normalize_storage_provider(getattr(endpoint, "provider", None))
+    if provider == StorageProvider.AWS:
+        return AWS_IAM_ENDPOINT
+    return _normalize_url(endpoint.endpoint_url)
 
 
 def features_to_capabilities(features: dict[str, dict[str, Any]]) -> dict[str, bool]:

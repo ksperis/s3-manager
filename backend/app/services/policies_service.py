@@ -5,7 +5,7 @@ from typing import Optional
 from app.db import S3Account
 from app.models.policy import Policy
 from app.services.rgw_iam import RGWIAMService, get_iam_service
-from app.utils.s3_endpoint import resolve_s3_client_options
+from app.utils.s3_endpoint import resolve_iam_client_options
 
 
 class PoliciesService:
@@ -29,7 +29,7 @@ def get_policies_service(account: S3Account) -> PoliciesService:
     access_key, secret_key = account.effective_rgw_credentials()
     if not access_key or not secret_key:
         raise ValueError("S3Account root keys missing")
-    endpoint, region, _, verify_tls = resolve_s3_client_options(account)
+    endpoint, region, verify_tls = resolve_iam_client_options(account)
     iam_service = get_iam_service(
         access_key,
         secret_key,

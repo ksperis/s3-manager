@@ -1,6 +1,17 @@
 # Backends: Other S3 Implementations
 
-s3-manager can integrate with non-Ceph S3-compatible backends such as MinIO.
+s3-manager can integrate with non-Ceph S3-compatible backends such as AWS S3 and MinIO.
+
+## AWS
+
+Use the dedicated **AWS** endpoint type when targeting native Amazon S3. It preconfigures the validated global legacy mode:
+
+- `https://s3.amazonaws.com` for S3
+- `https://sts.amazonaws.com` for STS
+- `https://iam.amazonaws.com` for IAM
+- `us-east-1` as the default region
+
+The AWS type enables S3, STS, IAM, static website, and SSE capabilities by default. Ceph-specific admin, account, usage, metrics, and RGW SNS capabilities remain disabled.
 
 ## Expected behavior
 

@@ -12,7 +12,7 @@ def normalize_storage_provider(provider: Optional[object]) -> StorageProvider:
     if isinstance(provider, StorageProvider):
         return provider
     try:
-        return StorageProvider(str(provider))
+        return StorageProvider(str(provider).strip().lower())
     except Exception:
         return StorageProvider.CEPH
 

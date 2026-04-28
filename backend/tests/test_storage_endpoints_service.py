@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 import json
 
+import pytest
+
 from app.db import (
     EndpointHealthCheck,
     EndpointHealthLatest,
@@ -16,11 +18,21 @@ from app.db import (
 )
 from app.models.storage_endpoint import (
     StorageEndpointFeatureDetectionRequest,
+    StorageEndpointCreate,
     StorageEndpointTagsUpdate,
     StorageEndpointUpdate,
 )
 from app.services.rgw_admin import RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
+from app.utils.storage_endpoint_features import (
+    AWS_DEFAULT_REGION,
+    AWS_IAM_ENDPOINT,
+    AWS_S3_ENDPOINT,
+    AWS_STS_ENDPOINT,
+    normalize_features_config,
+    resolve_feature_flags,
+    resolve_iam_endpoint,
+)
 from app.utils.time import utcnow
 
 
@@ -135,6 +147,67 @@ def test_list_endpoints_orders_by_name_case_insensitive(db_session):
 
     assert [endpoint.name for endpoint in endpoints] == ["alpha", "Beta", "Zulu"]
     assert endpoints[0].is_default is False
+
+
+def test_aws_endpoint_defaults_enable_supported_aws_features_and_clear_ceph_credentials(db_session):
+    service = StorageEndpointsService(db_session)
+
+    created = service.create_endpoint(
+        StorageEndpointCreate(
+            name="AWS Global",
+            endpoint_url=AWS_S3_ENDPOINT,
+            provider=StorageProvider.AWS,
+            admin_access_key="AKIA-ADMIN",
+            admin_secret_key="SECRET-ADMIN",
+            supervision_access_key="AKIA-SUPERVISION",
+            supervision_secret_key="SECRET-SUPERVISION",
+            ceph_admin_access_key="AKIA-CEPH-ADMIN",
+            ceph_admin_secret_key="SECRET-CEPH-ADMIN",
+        )
+    )
+
+    assert created.provider == StorageProvider.AWS
+    assert created.region == AWS_DEFAULT_REGION
+    assert created.admin_access_key is None
+    assert created.supervision_access_key is None
+    assert created.ceph_admin_access_key is None
+    assert created.capabilities == {
+        "admin": False,
+        "account": False,
+        "sts": True,
+        "usage": False,
+        "metrics": False,
+        "static_website": True,
+        "iam": True,
+        "sns": False,
+        "sse": True,
+    }
+    assert created.features.sts.enabled is True
+    assert created.features.sts.endpoint == AWS_STS_ENDPOINT
+    assert created.features.iam.enabled is True
+    assert created.features.iam.endpoint == AWS_IAM_ENDPOINT
+
+    persisted = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == created.id).first()
+    assert persisted is not None
+    assert persisted.admin_secret_key is None
+    assert persisted.supervision_secret_key is None
+    assert persisted.ceph_admin_secret_key is None
+    assert resolve_iam_endpoint(persisted) == AWS_IAM_ENDPOINT
+    flags = resolve_feature_flags(persisted)
+    assert flags.iam_enabled is True
+    assert flags.iam_endpoint == AWS_IAM_ENDPOINT
+
+
+def test_aws_features_reject_ceph_only_capabilities():
+    with pytest.raises(ValueError, match="only available for Ceph"):
+        normalize_features_config(
+            StorageProvider.AWS,
+            "features:\n"
+            "  admin:\n"
+            "    enabled: true\n"
+            "  sns:\n"
+            "    enabled: true\n",
+        )
 
 
 def test_get_endpoint_exposes_admin_ops_permissions_from_caps(db_session, monkeypatch):

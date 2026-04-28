@@ -295,7 +295,7 @@ type BrowserPageProps = {
   accountIdForApi?: S3AccountSelector;
   hasContext?: boolean;
   storageEndpointCapabilities?: Record<string, boolean> | null;
-  contextEndpointProvider?: "ceph" | "other" | null;
+  contextEndpointProvider?: "ceph" | "aws" | "other" | null;
   contextQuotaMaxSizeGb?: number | null;
   contextQuotaMaxObjects?: number | null;
   allowFoldersPanel?: boolean;

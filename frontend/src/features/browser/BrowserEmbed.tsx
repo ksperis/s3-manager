@@ -9,7 +9,7 @@ type BrowserEmbedProps = {
   accountIdForApi: S3AccountSelector;
   hasContext: boolean;
   storageEndpointCapabilities?: Record<string, boolean> | null;
-  endpointProvider?: "ceph" | "other" | null;
+  endpointProvider?: "ceph" | "aws" | "other" | null;
   quotaMaxSizeGb?: number | null;
   quotaMaxObjects?: number | null;
 };

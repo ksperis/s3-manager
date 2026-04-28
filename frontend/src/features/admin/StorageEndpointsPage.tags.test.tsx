@@ -4,6 +4,7 @@ import StorageEndpointsPage from "./StorageEndpointsPage";
 
 const listStorageEndpointsMock = vi.fn();
 const fetchStorageEndpointsMetaMock = vi.fn();
+const createStorageEndpointMock = vi.fn();
 const updateStorageEndpointTagsMock = vi.fn();
 const listAdminTagDefinitionsMock = vi.fn();
 
@@ -27,7 +28,7 @@ vi.mock("../../api/storageEndpoints", () => ({
   fetchStorageEndpointsMeta: () => fetchStorageEndpointsMetaMock(),
   updateStorageEndpointTags: (id: number, payload: unknown) => updateStorageEndpointTagsMock(id, payload),
   detectStorageEndpointFeatures: vi.fn(),
-  createStorageEndpoint: vi.fn(),
+  createStorageEndpoint: (payload: unknown) => createStorageEndpointMock(payload),
   deleteStorageEndpoint: vi.fn(),
   getStorageEndpoint: vi.fn(),
   setDefaultStorageEndpoint: vi.fn(),
@@ -74,6 +75,7 @@ describe("StorageEndpointsPage tags", () => {
     vi.clearAllMocks();
     fetchStorageEndpointsMetaMock.mockResolvedValue({ managed_by_env: false });
     listStorageEndpointsMock.mockResolvedValue([makeEndpoint()]);
+    createStorageEndpointMock.mockResolvedValue(makeEndpoint({ id: 8, name: "AWS Global", provider: "aws", endpoint_url: "https://s3.amazonaws.com" }));
     listAdminTagDefinitionsMock.mockResolvedValue([makeTag(801, "prod"), makeTag(802, "rgw-a")]);
     updateStorageEndpointTagsMock.mockResolvedValue(makeEndpoint({ tags: [makeTag(801, "prod"), makeTag(802, "rgw-a")] }));
   });
@@ -113,5 +115,40 @@ describe("StorageEndpointsPage tags", () => {
     expect(screen.getByText("prod")).toBeInTheDocument();
     expect(screen.getByText("prod").parentElement?.className).toContain("text-[10px]");
     expect(screen.queryByRole("button", { name: "Edit tags" })).not.toBeInTheDocument();
+  });
+
+  it("preconfigures AWS endpoint defaults and submits AWS features", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 3, role: "ui_superadmin" }));
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+
+    fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
+    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "AWS Global" } });
+    fireEvent.click(screen.getByLabelText("AWS"));
+
+    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.amazonaws.com");
+    expect(screen.getByLabelText("Region (optional)")).toHaveValue("us-east-1");
+    expect(screen.queryByText("Management")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createStorageEndpointMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "AWS Global",
+          endpoint_url: "https://s3.amazonaws.com",
+          region: "us-east-1",
+          provider: "aws",
+          verify_tls: true,
+        })
+      );
+    });
+    const payload = createStorageEndpointMock.mock.calls[0][0] as { features_config?: string };
+    expect(payload.features_config).toContain("sts:\n    enabled: true\n    endpoint: https://sts.amazonaws.com");
+    expect(payload.features_config).toContain("iam:\n    enabled: true\n    endpoint: https://iam.amazonaws.com");
+    expect(payload.features_config).toContain("static_website:\n    enabled: true");
+    expect(payload.features_config).toContain("sse:\n    enabled: true");
+    expect(payload.features_config).toContain("sns:\n    enabled: false");
   });
 });

@@ -23,8 +23,10 @@ def is_admin_ui_role(role: str | None) -> bool:
 def is_superadmin_ui_role(role: str | None) -> bool:
     return role == UserRole.UI_SUPERADMIN.value
 
+
 class StorageProvider(str, Enum):
     CEPH = "ceph"
+    AWS = "aws"
     OTHER = "other"
 
 

@@ -2,8 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 import pytest
 
+from app.db import StorageEndpoint, StorageProvider
 from app.utils import s3_endpoint
-from app.utils.s3_endpoint import validate_custom_login_s3_endpoint
+from app.utils.s3_endpoint import resolve_iam_client_options, validate_custom_login_s3_endpoint
+from app.utils.storage_endpoint_features import AWS_IAM_ENDPOINT, AWS_S3_ENDPOINT
 
 
 @pytest.mark.parametrize(
@@ -30,3 +32,16 @@ def test_validate_custom_login_s3_endpoint_rejects_unsafe_urls(monkeypatch, raw:
     monkeypatch.setattr(s3_endpoint, "validate_outbound_url", lambda *args, **kwargs: None)
     with pytest.raises(ValueError):
         validate_custom_login_s3_endpoint(raw)
+
+
+def test_resolve_iam_client_options_uses_aws_iam_endpoint_for_aws_storage_endpoint():
+    endpoint = StorageEndpoint(
+        name="AWS",
+        endpoint_url=AWS_S3_ENDPOINT,
+        provider=StorageProvider.AWS.value,
+        region="us-east-1",
+        verify_tls=True,
+    )
+    account = type("Account", (), {"storage_endpoint": endpoint})()
+
+    assert resolve_iam_client_options(account) == (AWS_IAM_ENDPOINT, "us-east-1", True)

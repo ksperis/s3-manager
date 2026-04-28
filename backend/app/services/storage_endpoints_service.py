@@ -37,6 +37,7 @@ from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.services.tags_service import TagsService
 from app.utils.s3_endpoint import configured_s3_endpoint
 from app.utils.storage_endpoint_features import (
+    AWS_DEFAULT_REGION,
     dump_features_config,
     features_to_capabilities,
     normalize_features_config,
@@ -123,6 +124,12 @@ class StorageEndpointsService:
 
     def _normalize_provider(self, provider: Optional[StorageProvider]) -> StorageProvider:
         return normalize_storage_provider(provider)
+
+    def _normalize_region(self, provider: StorageProvider, value: Optional[str]) -> Optional[str]:
+        region = self._clean_optional(value)
+        if provider == StorageProvider.AWS and not region:
+            return AWS_DEFAULT_REGION
+        return region
 
     def _normalize_features(
         self,
@@ -466,7 +473,7 @@ class StorageEndpointsService:
         default_url: Optional[str] = None
         for entry, name, endpoint_url in normalized_entries:
             provider = self._normalize_provider(entry.provider)
-            region = self._clean_optional(entry.region)
+            region = self._normalize_region(provider, entry.region)
             verify_tls = bool(entry.verify_tls)
             admin_access = self._clean_optional(entry.admin_access_key)
             admin_secret = self._clean_optional(entry.admin_secret_key)
@@ -595,9 +602,9 @@ class StorageEndpointsService:
         self._ensure_env_editable()
         name = self._normalize_name(payload.name, fallback="Endpoint")
         endpoint_url = self._normalize_url(payload.endpoint_url)
-        region = self._clean_optional(payload.region)
         verify_tls = bool(payload.verify_tls)
         provider = self._normalize_provider(payload.provider)
+        region = self._normalize_region(provider, payload.region)
         admin_access = self._clean_optional(payload.admin_access_key)
         admin_secret = self._clean_optional(payload.admin_secret_key)
         supervision_access = self._clean_optional(payload.supervision_access_key)
@@ -682,6 +689,7 @@ class StorageEndpointsService:
             else bool(getattr(endpoint, "verify_tls", True))
         )
         provider = self._normalize_provider(payload.provider if "provider" in fields_set else endpoint.provider)
+        region = self._normalize_region(provider, region)
         admin_access = (
             self._clean_optional(payload.admin_access_key)
             if "admin_access_key" in fields_set

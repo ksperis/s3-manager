@@ -58,6 +58,10 @@ type FeatureState = {
 type FeaturesState = Record<FeatureKey, FeatureState>;
 
 const FEATURE_KEYS: FeatureKey[] = ["admin", "account", "sts", "usage", "metrics", "static_website", "iam", "sns", "sse", "healthcheck"];
+const AWS_DEFAULT_REGION = "us-east-1";
+const AWS_S3_ENDPOINT = "https://s3.amazonaws.com";
+const AWS_STS_ENDPOINT = "https://sts.amazonaws.com";
+const AWS_IAM_ENDPOINT = "https://iam.amazonaws.com";
 const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="s3m-admin" \\',
@@ -108,6 +112,16 @@ function defaultFeaturesForProvider(provider: StorageProvider): FeaturesState {
       sse: { ...base.sse, enabled: false },
     };
   }
+  if (provider === "aws") {
+    return {
+      ...base,
+      sts: { ...base.sts, enabled: true, endpoint: AWS_STS_ENDPOINT },
+      static_website: { ...base.static_website, enabled: true },
+      iam: { ...base.iam, enabled: true, endpoint: AWS_IAM_ENDPOINT },
+      sse: { ...base.sse, enabled: true },
+      healthcheck: { ...base.healthcheck, enabled: true, mode: "http" },
+    };
+  }
   return {
     ...base,
     sts: { ...base.sts, enabled: false },
@@ -144,6 +158,9 @@ function applyFeatureConstraints(features: FeaturesState, provider: StorageProvi
   if (!next.sts.enabled) {
     next.sts.endpoint = "";
   }
+  if (!next.iam.enabled) {
+    next.iam.endpoint = "";
+  }
   if (next.healthcheck.mode !== "s3") {
     next.healthcheck.mode = "http";
   }
@@ -156,7 +173,7 @@ function buildFeaturesYaml(features: FeaturesState): string {
     const entry = features[key];
     lines.push(`  ${key}:`);
     lines.push(`    enabled: ${entry.enabled ? "true" : "false"}`);
-    if ((key === "admin" || key === "sts") && entry.enabled && entry.endpoint.trim()) {
+    if ((key === "admin" || key === "sts" || key === "iam") && entry.enabled && entry.endpoint.trim()) {
       lines.push(`    endpoint: ${entry.endpoint.trim()}`);
     }
     if (key === "healthcheck") {
@@ -223,16 +240,18 @@ function isMethodNotAllowedError(message?: string | null): boolean {
 }
 
 function ProviderBadge({ provider }: { provider: StorageProvider }) {
-  const isCeph = provider === "ceph";
+  const classes =
+    provider === "ceph"
+      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100"
+      : provider === "aws"
+        ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100"
+        : "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100";
+  const label = provider === "ceph" ? "Ceph" : provider === "aws" ? "AWS" : "Other";
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ui-caption font-semibold ${
-        isCeph
-          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100"
-          : "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100"
-      }`}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ui-caption font-semibold ${classes}`}
     >
-      {isCeph ? "Ceph" : "Other"}
+      {label}
     </span>
   );
 }
@@ -287,7 +306,7 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
         },
         iam: {
           enabled: Boolean(endpoint.features.iam?.enabled),
-          endpoint: "",
+          endpoint: endpoint.features.iam?.endpoint ?? "",
         },
         sns: {
           enabled: Boolean(endpoint.features.sns?.enabled),
@@ -549,6 +568,9 @@ export default function StorageEndpointsPage() {
       return {
         ...prev,
         provider,
+        endpoint_url: provider === "aws" ? AWS_S3_ENDPOINT : prev.endpoint_url,
+        region: provider === "aws" ? AWS_DEFAULT_REGION : prev.region,
+        verify_tls: provider === "aws" ? true : prev.verify_tls,
         admin_access_key: provider === "ceph" ? prev.admin_access_key : "",
         admin_secret_key: provider === "ceph" ? prev.admin_secret_key : "",
         supervision_access_key: provider === "ceph" ? prev.supervision_access_key : "",
@@ -769,6 +791,7 @@ export default function StorageEndpointsPage() {
     const settingDefault = defaultBusyId === endpoint.id;
     const adminEndpointOverride = features.admin.endpoint.trim();
     const stsEndpointOverride = features.sts.endpoint.trim();
+    const iamEndpointOverride = features.iam.endpoint.trim();
     const showAdminEndpoint =
       adminEnabled &&
       Boolean(adminEndpointOverride) &&
@@ -777,6 +800,10 @@ export default function StorageEndpointsPage() {
       stsEnabled &&
       Boolean(stsEndpointOverride) &&
       stsEndpointOverride !== endpoint.endpoint_url;
+    const showIamEndpoint =
+      iamEnabled &&
+      Boolean(iamEndpointOverride) &&
+      iamEndpointOverride !== endpoint.endpoint_url;
     const readOnly = envManaged || !endpoint.is_editable || !canEditEndpoints;
 
     return (
@@ -823,6 +850,14 @@ export default function StorageEndpointsPage() {
                 <span className="font-semibold text-slate-700 dark:text-slate-100">STS endpoint:</span>
                 <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
                   {stsEndpointOverride}
+                </code>
+              </div>
+            )}
+            {showIamEndpoint && (
+              <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
+                <span className="font-semibold text-slate-700 dark:text-slate-100">IAM endpoint:</span>
+                <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                  {iamEndpointOverride}
                 </code>
               </div>
             )}
@@ -1154,6 +1189,16 @@ export default function StorageEndpointsPage() {
                     <input
                       type="radio"
                       name="provider"
+                      value="aws"
+                      checked={form.provider === "aws"}
+                      onChange={() => handleProviderChange("aws")}
+                    />
+                    <span>AWS</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100">
+                    <input
+                      type="radio"
+                      name="provider"
                       value="other"
                       checked={form.provider === "other"}
                       onChange={() => handleProviderChange("other")}
@@ -1172,7 +1217,7 @@ export default function StorageEndpointsPage() {
                   value={form.endpoint_url}
                   onChange={(e) => setForm((prev) => ({ ...prev, endpoint_url: e.target.value }))}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                  placeholder="https://s3.example.com"
+                  placeholder={form.provider === "aws" ? AWS_S3_ENDPOINT : "https://s3.example.com"}
                   required
                 />
               </label>
@@ -1546,9 +1591,26 @@ export default function StorageEndpointsPage() {
                         }))
                       }
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                      placeholder="https://sts.example.com"
+                      placeholder={form.provider === "aws" ? AWS_STS_ENDPOINT : "https://sts.example.com"}
                       disabled={!form.features.sts.enabled}
                       title={!form.features.sts.enabled ? "Enable STS first to define a dedicated STS endpoint." : undefined}
+                    />
+                  </label>
+                  <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
+                    IAM endpoint override (optional)
+                    <input
+                      type="text"
+                      value={form.features.iam.endpoint}
+                      onChange={(e) =>
+                        updateFeatures((current) => ({
+                          ...current,
+                          iam: { ...current.iam, endpoint: e.target.value },
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder={form.provider === "aws" ? AWS_IAM_ENDPOINT : "https://iam.example.com"}
+                      disabled={!form.features.iam.enabled}
+                      title={!form.features.iam.enabled ? "Enable IAM first to define a dedicated IAM endpoint." : undefined}
                     />
                   </label>
                   <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
