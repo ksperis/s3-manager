@@ -23,6 +23,7 @@ from app.models.bucket import (
     BucketProperties,
     BucketPublicAccessBlock,
     BucketVersioningUpdate,
+    BucketVersioningStatus,
     BucketQuotaUpdate,
     BucketTagsUpdate,
     BucketWebsiteConfiguration,
@@ -271,6 +272,20 @@ def bucket_properties(
     _: dict = Depends(get_current_account_admin),
 ) -> BucketProperties:
     return bucket_config_actions.get_bucket_properties_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+
+
+@router.get("/{bucket_name}/versioning", response_model=BucketVersioningStatus)
+def get_versioning(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: dict = Depends(get_current_account_admin),
+) -> BucketVersioningStatus:
+    return bucket_config_actions.get_bucket_versioning_config(
         service=service,
         account=account,
         bucket_name=bucket_name,

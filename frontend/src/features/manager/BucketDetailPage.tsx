@@ -17,7 +17,6 @@ import {
   BucketObjectLockConfiguration,
   BucketPolicy,
   BucketReplicationConfiguration,
-  BucketProperties,
   BucketPublicAccessBlock,
   BucketTag,
   BucketWebsiteConfiguration,
@@ -35,9 +34,10 @@ import {
   getBucketTags,
   getBucketLogging,
   getBucketNotifications,
+  getBucketObjectLock,
   getBucketPolicy,
   getBucketReplication,
-  getBucketProperties,
+  getBucketVersioning,
   getBucketWebsite,
   getBucketAcl,
   getBucketLifecycle,
@@ -74,9 +74,10 @@ import {
   getCephAdminBucketLifecycle,
   getCephAdminBucketLogging,
   getCephAdminBucketNotifications,
+  getCephAdminBucketObjectLock,
   getCephAdminBucketPolicy,
   getCephAdminBucketReplication,
-  getCephAdminBucketProperties,
+  getCephAdminBucketVersioning,
   getCephAdminBucketPublicAccessBlock,
   getCephAdminBucketTags,
   getCephAdminBucketWebsite,
@@ -333,9 +334,10 @@ export default function BucketDetailPage({
   const [bucket, setBucket] = useState<Bucket | null>(null);
   const [loadingBucket, setLoadingBucket] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
-  const [properties, setProperties] = useState<BucketProperties | null>(null);
-  const [propsError, setPropsError] = useState<string | null>(null);
-  const [propsLoading, setPropsLoading] = useState(false);
+  const [versioningStatus, setVersioningStatus] = useState<string | null>(null);
+  const [versioningLoading, setVersioningLoading] = useState(false);
+  const [versioningLoadError, setVersioningLoadError] = useState<string | null>(null);
+  const [versioningSaveError, setVersioningSaveError] = useState<string | null>(null);
   const [updatingVersioning, setUpdatingVersioning] = useState(false);
   const [versioningDraftEnabled, setVersioningDraftEnabled] = useState(false);
   const [policy, setPolicy] = useState<BucketPolicy | null>(null);
@@ -465,6 +467,8 @@ export default function BucketDetailPage({
   const [objectLockYears, setObjectLockYears] = useState("");
   const [objectLockStatus, setObjectLockStatus] = useState<string | null>(null);
   const [objectLockError, setObjectLockError] = useState<string | null>(null);
+  const [objectLockLoadError, setObjectLockLoadError] = useState<string | null>(null);
+  const [objectLockLoading, setObjectLockLoading] = useState(false);
   const [savingObjectLock, setSavingObjectLock] = useState(false);
   const [objectLockConfig, setObjectLockConfig] = useState<BucketObjectLockConfiguration | null>(null);
 
@@ -517,6 +521,7 @@ export default function BucketDetailPage({
     }
     return selectedS3Account?.storage_endpoint_capabilities?.metrics ?? true;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
+  const canViewBucketMetrics = Boolean(isCephEndpoint && usageFeatureEnabled);
   const accountId = accountIdOverride ?? accountIdForApi ?? null;
   const hasAccountContext = !requiresS3AccountSelection || accountId !== null;
   const endpointId = selectedEndpointId ?? null;
@@ -524,6 +529,12 @@ export default function BucketDetailPage({
   const hasContext = isCephAdmin ? hasCephContext : hasAccountContext;
   const staticWebsiteBlocked = !staticWebsiteEnabled;
   const exampleS3AccountId = selectedS3Account?.rgw_account_id || "ACCOUNT00000000000000001";
+
+  useEffect(() => {
+    if (activeTab === "metrics" && !canViewBucketMetrics) {
+      setActiveTab("overview");
+    }
+  }, [activeTab, canViewBucketMetrics]);
   const notificationExample = `{
   "TopicConfigurations": [
     {
@@ -544,10 +555,9 @@ export default function BucketDetailPage({
   const isAdmin = isAdminLikeRole(userRole);
   const canEditQuota = quotaFeatureEnabled && isCephAdmin && isAdmin && hasCephContext;
   const quotaSectionRestricted = quotaFeatureEnabled && !canEditQuota;
-  const objectLockPersistentlyEnabled =
-    (objectLockConfig?.enabled ?? null) === true || (properties?.object_lock_enabled ?? null) === true;
+  const objectLockPersistentlyEnabled = (objectLockConfig?.enabled ?? null) === true;
   const objectLockActive = (objectLockEnabled ?? null) === true || objectLockPersistentlyEnabled;
-  const versioningStatusRaw = (properties?.versioning_status ?? "").trim();
+  const versioningStatusRaw = (versioningStatus ?? "").trim();
   const versioningStatusNormalized = versioningStatusRaw.toLowerCase();
   const versioningIsEnabled = versioningStatusNormalized === "enabled";
   const versioningIsSuspended = versioningStatusNormalized === "suspended";
@@ -691,43 +701,65 @@ export default function BucketDetailPage({
     refreshBucketMeta();
   }, [activeTab, refreshBucketMeta]);
 
-  const loadProperties = useCallback(async () => {
+  const loadVersioning = useCallback(async () => {
     if (!bucketName || !hasContext) {
-      setProperties(null);
-      applyObjectLockState(null);
+      setVersioningStatus(null);
+      setVersioningLoadError(null);
+      setVersioningSaveError(null);
       return;
     }
-    setPropsLoading(true);
-    setPropsError(null);
+    setVersioningLoading(true);
+    setVersioningLoadError(null);
+    setVersioningSaveError(null);
+    try {
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketVersioning(endpointId, bucketName)
+          : { status: null, enabled: false }
+        : await getBucketVersioning(accountId, bucketName);
+      setVersioningStatus(data.status ?? null);
+    } catch (err) {
+      setVersioningStatus(null);
+      setVersioningLoadError(extractApiError(err, "Unable to load bucket versioning."));
+    } finally {
+      setVersioningLoading(false);
+    }
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
+
+  const loadObjectLock = useCallback(async () => {
+    if (!bucketName || !hasContext) {
+      applyObjectLockState(null);
+      setObjectLockLoadError(null);
+      setObjectLockError(null);
+      setObjectLockStatus(null);
+      return;
+    }
+    setObjectLockLoading(true);
+    setObjectLockLoadError(null);
     setObjectLockError(null);
     setObjectLockStatus(null);
     try {
-      let data: BucketProperties;
-      if (isCephAdmin) {
-        if (!endpointId) {
-          setProperties(null);
-          applyObjectLockState(null);
-          return;
-        }
-        data = await getCephAdminBucketProperties(endpointId, bucketName);
-      } else {
-        data = await getBucketProperties(accountId, bucketName);
-      }
-      setProperties(data);
-      const lockConfig = data.object_lock ?? (data.object_lock_enabled !== undefined ? { enabled: data.object_lock_enabled } : null);
-      applyObjectLockState(lockConfig);
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketObjectLock(endpointId, bucketName)
+          : null
+        : await getBucketObjectLock(accountId, bucketName);
+      applyObjectLockState(data);
     } catch (err) {
-      setProperties(null);
-      setPropsError(extractApiError(err, "Unable to load bucket properties."));
       applyObjectLockState(null);
+      setObjectLockLoadError(extractApiError(err, "Unable to load Object Lock configuration."));
     } finally {
-      setPropsLoading(false);
+      setObjectLockLoading(false);
     }
   }, [accountId, applyObjectLockState, bucketName, endpointId, hasContext, isCephAdmin]);
 
   useEffect(() => {
-    loadProperties();
-  }, [loadProperties]);
+    loadVersioning();
+  }, [loadVersioning]);
+
+  useEffect(() => {
+    loadObjectLock();
+  }, [loadObjectLock]);
 
   const loadLifecycle = useCallback(async () => {
     if (!bucketName || !hasContext) {
@@ -1109,13 +1141,11 @@ export default function BucketDetailPage({
     if (activeTab === "overview" || activeTab === "permissions") {
       loadPolicy();
       loadBucketAcl();
+      loadPublicAccessBlock();
     }
     if (activeTab === "overview" || activeTab === "advanced") {
       loadCors();
       loadReplication();
-    }
-    if (activeTab === "permissions") {
-      loadPublicAccessBlock();
     }
   }, [activeTab, loadBucketAcl, loadCors, loadPolicy, loadPublicAccessBlock, loadReplication]);
 
@@ -1154,17 +1184,20 @@ export default function BucketDetailPage({
     if (activeTab === "overview") {
       await Promise.all([
         refreshBucketMeta(),
-        loadProperties(),
+        loadVersioning(),
+        loadObjectLock(),
         loadLifecycle(),
         loadPolicy(),
         loadBucketAcl(),
         loadCors(),
         loadReplication(),
         loadEncryption(),
+        loadPublicAccessBlock(),
       ]);
       return;
     }
     if (activeTab === "metrics") {
+      if (!canViewBucketMetrics) return;
       await refreshBucketMeta();
       return;
     }
@@ -1175,7 +1208,7 @@ export default function BucketDetailPage({
       return;
     }
     if (activeTab === "properties") {
-      await Promise.all([loadProperties(), loadLifecycle(), loadBucketTags(), loadEncryption()]);
+      await Promise.all([loadVersioning(), loadObjectLock(), loadLifecycle(), loadBucketTags(), loadEncryption()]);
       return;
     }
     if (activeTab === "permissions") {
@@ -1187,10 +1220,11 @@ export default function BucketDetailPage({
       return;
     }
     if (activeTab === "ceph") {
-      await Promise.all([refreshBucketMeta(), loadProperties()]);
+      await Promise.all([refreshBucketMeta(), loadVersioning(), loadObjectLock()]);
     }
   }, [
     activeTab,
+    canViewBucketMetrics,
     currentPrefix,
     isCephAdmin,
     loadAccessLogging,
@@ -1200,11 +1234,12 @@ export default function BucketDetailPage({
     loadEncryption,
     loadLifecycle,
     loadNotifications,
+    loadObjectLock,
     loadObjects,
     loadPolicy,
-    loadProperties,
     loadPublicAccessBlock,
     loadReplication,
+    loadVersioning,
     loadWebsite,
     refreshBucketMeta,
   ]);
@@ -1218,13 +1253,15 @@ export default function BucketDetailPage({
     if (activeTab === "overview") {
       return (
         loadingBucket ||
-        propsLoading ||
+        versioningLoading ||
+        objectLockLoading ||
         lifecycleLoading ||
         policyLoading ||
         bucketAclLoading ||
         corsLoading ||
         replicationLoading ||
-        encryptionLoading
+        encryptionLoading ||
+        publicAccessLoading
       );
     }
     if (activeTab === "metrics") {
@@ -1234,7 +1271,7 @@ export default function BucketDetailPage({
       return objectsLoading;
     }
     if (activeTab === "properties") {
-      return propsLoading || lifecycleLoading || bucketTagsLoading || encryptionLoading;
+      return versioningLoading || objectLockLoading || lifecycleLoading || bucketTagsLoading || encryptionLoading;
     }
     if (activeTab === "permissions") {
       return publicAccessLoading || bucketAclLoading || policyLoading;
@@ -1243,7 +1280,7 @@ export default function BucketDetailPage({
       return websiteLoading || corsLoading || replicationLoading || accessLoggingLoading || notificationsLoading;
     }
     if (activeTab === "ceph") {
-      return loadingBucket || propsLoading;
+      return loadingBucket || versioningLoading || objectLockLoading;
     }
     return false;
   }, [
@@ -1256,20 +1293,24 @@ export default function BucketDetailPage({
     lifecycleLoading,
     loadingBucket,
     notificationsLoading,
+    objectLockLoading,
     objectsLoading,
     policyLoading,
-    propsLoading,
     publicAccessLoading,
     replicationLoading,
+    versioningLoading,
     websiteLoading,
   ]);
 
   const canRefreshActiveTab = useMemo(() => {
+    if (activeTab === "metrics") {
+      return hasContext && canViewBucketMetrics;
+    }
     if (activeTab === "objects") {
       return !isCephAdmin && hasAccountContext;
     }
     return hasContext;
-  }, [activeTab, hasAccountContext, hasContext, isCephAdmin]);
+  }, [activeTab, canViewBucketMetrics, hasAccountContext, hasContext, isCephAdmin]);
 
   const updateSimpleLifecycleRule = (index: number, patch: Partial<SimpleLifecycleRule>) => {
     setSimpleLifecycleRules((prev) => prev.map((rule, idx) => (idx === index ? { ...rule, ...patch } : rule)));
@@ -1340,7 +1381,6 @@ export default function BucketDetailPage({
           );
           setLifecycleStatus("Lifecycle updated");
         }
-        await loadProperties();
       } catch (err) {
         const message = axios.isAxiosError(err)
           ? ((err.response?.data as { detail?: string })?.detail || err.message || "Invalid or unsaved lifecycle.")
@@ -1352,7 +1392,7 @@ export default function BucketDetailPage({
         setSavingLifecycle(false);
       }
     },
-    [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin, loadProperties]
+    [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin]
   );
 
   const updateLifecycleRules = async (updater: (rules: Record<string, unknown>[]) => Record<string, unknown>[]) => {
@@ -1462,7 +1502,7 @@ export default function BucketDetailPage({
   const replicationConfiguration = replicationConfig.configuration ?? {};
   const replicationConfigured = isReplicationConfigurationConfigured(replicationConfiguration);
   const replicationBusy = replicationLoading || savingReplication || clearingReplication;
-  const publicAccessBlockConfig = properties?.public_access_block;
+  const publicAccessBlockConfig = publicAccessBlock;
   const publicAccessBlockEnabled = isPublicAccessFullyEnabled(publicAccessBlockConfig);
   const publicAccessBlockPartial =
     Boolean(publicAccessBlockConfig) &&
@@ -1586,6 +1626,7 @@ export default function BucketDetailPage({
   const quotaDirty = quotaDraftSignature !== quotaSnapshotSignature;
   const versioningDirty = versioningDraftEnabled !== versioningIsEnabled;
   const versioningCardState = resolveFeatureVisualState({
+    disabled: Boolean(versioningLoadError),
     configured: versioningIsEnabled,
     unsaved: versioningDirty,
   });
@@ -1595,6 +1636,7 @@ export default function BucketDetailPage({
     unsaved: encryptionDirty,
   });
   const objectLockCardState = resolveFeatureVisualState({
+    disabled: Boolean(objectLockLoadError),
     configured: objectLockPersistentlyEnabled,
     unsaved: objectLockDirty,
   });
@@ -1607,6 +1649,7 @@ export default function BucketDetailPage({
     unsaved: tagsDirty,
   });
   const publicAccessCardState = resolveFeatureVisualState({
+    disabled: Boolean(publicAccessError),
     configured: publicAccessBlockEnabled || publicAccessBlockPartial,
     unsaved: publicAccessDirty,
   });
@@ -1646,20 +1689,26 @@ export default function BucketDetailPage({
   });
 
   const propertySummary = useMemo<PropertySummary[]>(() => {
-    const versioningState = propsLoading
+    const versioningState = versioningLoading
       ? "Loading..."
-      : propsError
+      : versioningLoadError
         ? "Unavailable"
-        : properties?.versioning_status ?? "Disabled";
+        : versioningStatus ?? "Disabled";
     const versioningNormalized = String(versioningState || "").trim().toLowerCase();
     const versioningTone: PropertySummary["tone"] =
-      propsLoading || propsError ? "unknown" : versioningIsEnabled ? "active" : versioningNormalized === "suspended" ? "unknown" : "inactive";
+      versioningLoading || versioningLoadError
+        ? "unknown"
+        : versioningIsEnabled
+          ? "active"
+          : versioningNormalized === "suspended"
+            ? "unknown"
+            : "inactive";
 
-    const hasObjectLockData = !(propsLoading || propsError);
+    const hasObjectLockData = !(objectLockLoading || objectLockLoadError);
     let objectLockState = "Disabled";
     let objectLockTone: PropertySummary["tone"] = "inactive";
     if (!hasObjectLockData) {
-      objectLockState = propsLoading ? "Loading..." : "Unavailable";
+      objectLockState = objectLockLoading ? "Loading..." : "Unavailable";
       objectLockTone = "unknown";
     } else if (objectLockPersistentlyEnabled) {
       objectLockState = "Enabled";
@@ -1768,9 +1817,9 @@ export default function BucketDetailPage({
           ? "active"
           : "inactive";
 
-    const publicAccessState = propsLoading
+    const publicAccessState = publicAccessLoading
       ? "Loading..."
-      : propsError
+      : publicAccessError
         ? "Unavailable"
         : publicAccessBlockEnabled
           ? "Enabled"
@@ -1778,7 +1827,7 @@ export default function BucketDetailPage({
             ? "Partial"
             : "Disabled";
     const publicAccessTone: PropertySummary["tone"] =
-      propsLoading || propsError ? "unknown" : publicAccessBlockEnabled || publicAccessBlockPartial ? "active" : "inactive";
+      publicAccessLoading || publicAccessError ? "unknown" : publicAccessBlockEnabled || publicAccessBlockPartial ? "active" : "inactive";
 
     const summary: PropertySummary[] = [
       { label: "Versioning", state: versioningState, tone: versioningTone },
@@ -1817,19 +1866,23 @@ export default function BucketDetailPage({
     corsLoading,
     lifecycleError,
     lifecycleLoading,
+    objectLockLoadError,
+    objectLockLoading,
     objectLockPersistentlyEnabled,
     policyConfigured,
     policyError,
     policyLoading,
-    properties,
-    propsError,
-    propsLoading,
     quotaConfigured,
     quotaFeatureEnabled,
     publicAccessBlockEnabled,
     publicAccessBlockPartial,
+    publicAccessError,
+    publicAccessLoading,
     sseFeatureEnabled,
+    versioningLoadError,
     versioningIsEnabled,
+    versioningLoading,
+    versioningStatus,
     isCephEndpoint,
     replicationConfigured,
     replicationError,
@@ -1858,11 +1911,11 @@ export default function BucketDetailPage({
   };
 
   const saveVersioning = async () => {
-    if (!bucketName || !hasContext || !properties) return;
+    if (!bucketName || !hasContext || versioningLoading || versioningLoadError) return;
     if (versioningDisableBlocked && !versioningDraftEnabled) return;
     if (versioningDraftEnabled === versioningIsEnabled) return;
     setUpdatingVersioning(true);
-    setPropsError(null);
+    setVersioningSaveError(null);
     try {
       if (isCephAdmin) {
         if (!endpointId) return;
@@ -1870,9 +1923,9 @@ export default function BucketDetailPage({
       } else {
         await setBucketVersioning(accountId, bucketName, versioningDraftEnabled);
       }
-      await loadProperties();
+      await loadVersioning();
     } catch (err) {
-      setPropsError(extractApiError(err, "Failed to update versioning."));
+      setVersioningSaveError(extractApiError(err, "Failed to update versioning."));
     } finally {
       setUpdatingVersioning(false);
     }
@@ -1910,7 +1963,6 @@ export default function BucketDetailPage({
         restrict_public_buckets: Boolean(saved.restrict_public_buckets),
       });
       setPublicAccessStatus("Public access block updated.");
-      await loadProperties();
     } catch (err) {
       const message =
         (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
@@ -2629,7 +2681,7 @@ export default function BucketDetailPage({
 
   const handleSaveObjectLock = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bucketName || !hasContext) return;
+    if (!bucketName || !hasContext || objectLockLoading || objectLockLoadError) return;
     setSavingObjectLock(true);
     setObjectLockStatus(null);
     setObjectLockError(null);
@@ -2668,14 +2720,7 @@ export default function BucketDetailPage({
           await setBucketVersioning(accountId, bucketName, true);
         }
         setVersioningDraftEnabled(true);
-        setProperties((prev) =>
-          prev
-            ? {
-                ...prev,
-                versioning_status: "Enabled",
-              }
-            : prev
-        );
+        setVersioningStatus("Enabled");
       }
 
       const payload = {
@@ -2694,17 +2739,8 @@ export default function BucketDetailPage({
         return;
       }
       applyObjectLockState(updated);
-      setProperties((prev) =>
-        prev
-          ? {
-              ...prev,
-              object_lock: updated,
-              object_lock_enabled: updated.enabled ?? prev.object_lock_enabled,
-            }
-          : prev
-      );
       setObjectLockStatus("Object Lock updated");
-      await loadProperties();
+      await Promise.all([loadVersioning(), loadObjectLock()]);
     } catch (err) {
       setObjectLockError(extractApiError(err, "Unable to update the Object Lock configuration."));
     } finally {
@@ -2766,9 +2802,6 @@ export default function BucketDetailPage({
                   </h3>
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Owner: <span className="font-semibold text-slate-700 dark:text-slate-200">{bucketOwner ?? (loadingBucket || bucketAclLoading ? "Loading..." : "Unknown")}</span>
-                  </p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    High-level usage and which advanced properties are currently active.
                   </p>
                 </header>
                 <div className="grid gap-3 md:grid-cols-2">
@@ -2964,256 +2997,278 @@ export default function BucketDetailPage({
             label: "Properties",
             content: (
               <div className="space-y-4">
-                {propsLoading && (
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
-                    Loading properties...
-                  </div>
-                )}
-                {propsError && (
-                  <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                    {propsError}
-                  </div>
-                )}
-                {properties && (
-                  <>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <BucketFeatureCard
-                        title="Versioning"
-                        description="Enable or disable S3 object versioning."
-                        mode="graphical"
-                        visualState={versioningCardState}
-                        testId="bucket-feature-versioning"
-                        className="md:col-start-1"
-                        actions={
-                          <button
-                            type="button"
-                            onClick={saveVersioning}
-                            disabled={updatingVersioning || versioningDisableBlocked || !versioningDirty}
-                            title={versioningDisableBlocked ? "Disable Object Lock to change versioning." : undefined}
-                            className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                          >
-                            {updatingVersioning ? "Saving..." : "Save"}
-                          </button>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <BucketFeatureCard
+                    title="Versioning"
+                    description="Enable or disable S3 object versioning."
+                    mode="graphical"
+                    visualState={versioningCardState}
+                    testId="bucket-feature-versioning"
+                    className="md:col-start-1"
+                    actions={
+                      <button
+                        type="button"
+                        onClick={saveVersioning}
+                        disabled={
+                          updatingVersioning ||
+                          versioningLoading ||
+                          Boolean(versioningLoadError) ||
+                          versioningDisableBlocked ||
+                          !versioningDirty
                         }
+                        title={versioningDisableBlocked ? "Disable Object Lock to change versioning." : undefined}
+                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
-                        <div className="space-y-2">
-                          <div className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
-                            <div>
-                              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Enable versioning</p>
-                              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                Keeps object history for restores and is required for Object Lock.
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {versioningIsSuspended && (
-                                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 ui-caption font-semibold text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
-                                  Suspended
-                                </span>
-                              )}
-                              <PortalSettingsSwitch
-                                checked={versioningDraftEnabled}
-                                disabled={updatingVersioning || versioningDisableBlocked}
-                                ariaLabel="Enable versioning"
-                                onChange={(checked) => setVersioningDraftEnabled(checked)}
-                              />
-                            </div>
-                          </div>
+                        {updatingVersioning ? "Saving..." : "Save"}
+                      </button>
+                    }
+                  >
+                    <div className="space-y-2">
+                      {versioningLoading && (
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                          Loading versioning...
                         </div>
-                        {versioningDisableBlocked && (
-                          <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                            Versioning cannot be disabled while Object Lock is enabled.
+                      )}
+                      {versioningLoadError && (
+                        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                          {versioningLoadError}
+                        </div>
+                      )}
+                      {versioningSaveError && (
+                        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                          {versioningSaveError}
+                        </div>
+                      )}
+                      <div className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
+                        <div>
+                          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Enable versioning</p>
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">
+                            Keeps object history for restores and is required for Object Lock.
                           </p>
-                        )}
-                      </BucketFeatureCard>
-                      <BucketFeatureCard
-                        title="Server-side encryption"
-                        description="Bucket default encryption rules (S3 API Rules array)."
-                        mode="json"
-                        visualState={encryptionCardState}
-                        testId="bucket-feature-encryption"
-                        className="md:col-start-2 md:row-start-1 md:row-span-2 space-y-3"
-                        actions={
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={clearEncryption}
-                              disabled={!sseFeatureEnabled || deletingEncryption}
-                              className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                            >
-                              {deletingEncryption ? "Disabling..." : "Disable"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={saveEncryption}
-                              disabled={!sseFeatureEnabled || savingEncryption || encryptionLoading}
-                              className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                            >
-                              {savingEncryption ? "Saving..." : "Save"}
-                            </button>
-                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {versioningIsSuspended && (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 ui-caption font-semibold text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
+                              Suspended
+                            </span>
+                          )}
+                          <PortalSettingsSwitch
+                            checked={versioningDraftEnabled}
+                            disabled={updatingVersioning || versioningLoading || Boolean(versioningLoadError) || versioningDisableBlocked}
+                            ariaLabel="Enable versioning"
+                            onChange={(checked) => {
+                              setVersioningDraftEnabled(checked);
+                              setVersioningSaveError(null);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    {versioningDisableBlocked && (
+                      <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                        Versioning cannot be disabled while Object Lock is enabled.
+                      </p>
+                    )}
+                  </BucketFeatureCard>
+                  <BucketFeatureCard
+                    title="Server-side encryption"
+                    description="Bucket default encryption rules (S3 API Rules array)."
+                    mode="json"
+                    visualState={encryptionCardState}
+                    testId="bucket-feature-encryption"
+                    className="md:col-start-2 md:row-start-1 md:row-span-2 space-y-3"
+                    actions={
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={clearEncryption}
+                          disabled={!sseFeatureEnabled || deletingEncryption}
+                          className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                        >
+                          {deletingEncryption ? "Disabling..." : "Disable"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveEncryption}
+                          disabled={!sseFeatureEnabled || savingEncryption || encryptionLoading}
+                          className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        >
+                          {savingEncryption ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                    }
+                  >
+                    {!sseFeatureEnabled && <EndpointFeatureDisabledNotice featureLabel="Server-side encryption" />}
+                    {encryptionError && (
+                      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                        {encryptionError}
+                      </div>
+                    )}
+                    {encryptionStatus && (
+                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                        {encryptionStatus}
+                      </div>
+                    )}
+                    <textarea
+                      value={encryptionText}
+                      onChange={(e) => {
+                        setEncryptionText(e.target.value);
+                        if (encryptionStatus) {
+                          setEncryptionStatus(null);
                         }
-                      >
-                          {!sseFeatureEnabled && <EndpointFeatureDisabledNotice featureLabel="Server-side encryption" />}
-                          {encryptionError && (
-                            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                              {encryptionError}
-                            </div>
-                          )}
-                          {encryptionStatus && (
-                            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                              {encryptionStatus}
-                            </div>
-                          )}
-                          <textarea
-                            value={encryptionText}
-                            onChange={(e) => {
-                              setEncryptionText(e.target.value);
-                              if (encryptionStatus) {
-                                setEncryptionStatus(null);
+                      }}
+                      className="h-40 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      placeholder='[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]'
+                      spellCheck={false}
+                      disabled={!sseFeatureEnabled || encryptionLoading || savingEncryption || deletingEncryption}
+                    />
+                    <BucketFeatureJsonExample
+                      show={showEncryptionExample}
+                      onToggle={() => setShowEncryptionExample((prev) => !prev)}
+                      example={defaultEncryptionExample}
+                      onUseExample={() => setEncryptionText(defaultEncryptionExample)}
+                      helperText={
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">
+                          Leave <code>Rules</code> empty to disable default encryption.
+                        </span>
+                      }
+                    />
+                  </BucketFeatureCard>
+                  <BucketFeatureCard
+                    title="Object Lock"
+                    description="WORM / default retention."
+                    mode="graphical"
+                    visualState={objectLockCardState}
+                    testId="bucket-feature-object-lock"
+                    className="md:col-start-1 md:row-start-2"
+                    actions={
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => applyObjectLockState(objectLockConfig)}
+                          className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                          disabled={objectLockLoading || Boolean(objectLockLoadError) || savingObjectLock}
+                        >
+                          Reset
+                        </button>
+                        <button
+                          type="submit"
+                          form={objectLockFormId}
+                          disabled={savingObjectLock || objectLockLoading || Boolean(objectLockLoadError)}
+                          className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        >
+                          {savingObjectLock ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                    }
+                  >
+                    <div className="space-y-2">
+                      {objectLockLoading && (
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                          Loading Object Lock configuration...
+                        </div>
+                      )}
+                      {objectLockLoadError && (
+                        <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                          {objectLockLoadError}
+                        </div>
+                      )}
+                      {objectLockError && (
+                        <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                          {objectLockError}
+                        </div>
+                      )}
+                      {objectLockStatus && (
+                        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 ui-caption font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                          {objectLockStatus}
+                        </div>
+                      )}
+                      <form id={objectLockFormId} className="space-y-2" onSubmit={handleSaveObjectLock}>
+                        <div className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
+                          <div>
+                            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Enable Object Lock</p>
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">
+                              Write-once retention controls for bucket objects.
+                            </p>
+                          </div>
+                          <PortalSettingsSwitch
+                            checked={objectLockEnabled ?? false}
+                            disabled={objectLockPersistentlyEnabled || objectLockLoading || Boolean(objectLockLoadError)}
+                            ariaLabel="Enable object lock"
+                            onChange={(checked) => {
+                              if (objectLockPersistentlyEnabled) return;
+                              setObjectLockEnabled(checked);
+                              if (checked) {
+                                setVersioningDraftEnabled(true);
                               }
                             }}
-                            className="h-40 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                            placeholder='[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]'
-                            spellCheck={false}
-                            disabled={!sseFeatureEnabled || encryptionLoading || savingEncryption || deletingEncryption}
                           />
-                          <BucketFeatureJsonExample
-                            show={showEncryptionExample}
-                            onToggle={() => setShowEncryptionExample((prev) => !prev)}
-                            example={defaultEncryptionExample}
-                            onUseExample={() => setEncryptionText(defaultEncryptionExample)}
-                            helperText={
-                              <span className="ui-caption text-slate-500 dark:text-slate-400">
-                                Leave <code>Rules</code> empty to disable default encryption.
-                              </span>
-                            }
-                          />
-                      </BucketFeatureCard>
-                      <BucketFeatureCard
-                        title="Object Lock"
-                        description="WORM / default retention."
-                        mode="graphical"
-                        visualState={objectLockCardState}
-                        testId="bucket-feature-object-lock"
-                        className="md:col-start-1 md:row-start-2"
-                        actions={
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => applyObjectLockState(objectLockConfig)}
-                              className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                              disabled={propsLoading || savingObjectLock}
-                            >
-                              Reset
-                            </button>
-                            <button
-                              type="submit"
-                              form={objectLockFormId}
-                              disabled={savingObjectLock || propsLoading}
-                              className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                            >
-                              {savingObjectLock ? "Saving..." : "Save"}
-                            </button>
-                          </div>
-                        }
-                      >
-                        <div className="space-y-2">
-                          {objectLockError && (
-                            <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                              {objectLockError}
-                            </div>
-                          )}
-                          {objectLockStatus && (
-                            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 ui-caption font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                              {objectLockStatus}
-                            </div>
-                          )}
-                          <form id={objectLockFormId} className="space-y-2" onSubmit={handleSaveObjectLock}>
-                            <div className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
-                              <div>
-                                <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Enable Object Lock</p>
-                                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                  Write-once retention controls for bucket objects.
-                                </p>
-                              </div>
-                              <PortalSettingsSwitch
-                                checked={objectLockEnabled ?? false}
-                                disabled={objectLockPersistentlyEnabled}
-                                ariaLabel="Enable object lock"
-                                onChange={(checked) => {
-                                  if (objectLockPersistentlyEnabled) return;
-                                  setObjectLockEnabled(checked);
-                                  if (checked) {
-                                    setVersioningDraftEnabled(true);
-                                  }
-                                }}
-                              />
-                            </div>
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">
-                              Enabling Object Lock automatically enables bucket versioning.
-                            </p>
-                            {objectLockPersistentlyEnabled && (
-                              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                Object Lock cannot be disabled once it has been enabled on the bucket. Update only the default retention below.
-                              </p>
-                            )}
-                            {objectLockActive && (
-                              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-                                Warning: while Object Lock is enabled, objects cannot be deleted until the specified retention period ends. Review mode and retention before saving changes.
-                              </div>
-                            )}
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                              <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                                Mode
-                                <select
-                                  value={objectLockMode}
-                                  onChange={(e) => setObjectLockMode(e.target.value)}
-                                  className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                >
-                                  <option value="">(none)</option>
-                                  <option value="GOVERNANCE">Governance</option>
-                                  <option value="COMPLIANCE">Compliance</option>
-                                </select>
-                              </label>
-                              <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                                Retention (days)
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step="1"
-                                  value={objectLockDays}
-                                  onChange={(e) => setObjectLockDays(e.target.value)}
-                                  className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                  placeholder="e.g. 30"
-                                />
-                              </label>
-                              <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                                Retention (years)
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step="1"
-                                  value={objectLockYears}
-                                  onChange={(e) => setObjectLockYears(e.target.value)}
-                                  className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                  placeholder="e.g. 1"
-                                />
-                              </label>
-                            </div>
-                            {objectLockConfig?.mode && (objectLockConfig.days != null || objectLockConfig.years != null) && (
-                              <p className="ui-caption text-slate-600 dark:text-slate-300">
-                                Current retention: {objectLockConfig.mode}
-                                {objectLockConfig.days != null ? ` · ${objectLockConfig.days} day(s)` : ""}
-                                {objectLockConfig.years != null ? ` · ${objectLockConfig.years} year(s)` : ""}
-                              </p>
-                            )}
-                          </form>
                         </div>
-                        <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                          Choose a mode plus days or years. Leave it empty to remove the default retention (Object Lock must already be enabled on the bucket).
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Enabling Object Lock automatically enables bucket versioning.
                         </p>
-                      </BucketFeatureCard>
-                    <BucketFeatureCard
+                        {objectLockPersistentlyEnabled && (
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">
+                            Object Lock cannot be disabled once it has been enabled on the bucket. Update only the default retention below.
+                          </p>
+                        )}
+                        {objectLockActive && (
+                          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                            Warning: while Object Lock is enabled, objects cannot be deleted until the specified retention period ends. Review mode and retention before saving changes.
+                          </div>
+                        )}
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                            Mode
+                            <select
+                              value={objectLockMode}
+                              onChange={(e) => setObjectLockMode(e.target.value)}
+                              className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            >
+                              <option value="">(none)</option>
+                              <option value="GOVERNANCE">Governance</option>
+                              <option value="COMPLIANCE">Compliance</option>
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                            Retention (days)
+                            <input
+                              type="number"
+                              min={0}
+                              step="1"
+                              value={objectLockDays}
+                              onChange={(e) => setObjectLockDays(e.target.value)}
+                              className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              placeholder="e.g. 30"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                            Retention (years)
+                            <input
+                              type="number"
+                              min={0}
+                              step="1"
+                              value={objectLockYears}
+                              onChange={(e) => setObjectLockYears(e.target.value)}
+                              className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              placeholder="e.g. 1"
+                            />
+                          </label>
+                        </div>
+                        {objectLockConfig?.mode && (objectLockConfig.days != null || objectLockConfig.years != null) && (
+                          <p className="ui-caption text-slate-600 dark:text-slate-300">
+                            Current retention: {objectLockConfig.mode}
+                            {objectLockConfig.days != null ? ` · ${objectLockConfig.days} day(s)` : ""}
+                            {objectLockConfig.years != null ? ` · ${objectLockConfig.years} year(s)` : ""}
+                          </p>
+                        )}
+                      </form>
+                    </div>
+                    <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                      Choose a mode plus days or years. Leave it empty to remove the default retention (Object Lock must already be enabled on the bucket).
+                    </p>
+                  </BucketFeatureCard>
+                  <BucketFeatureCard
                       title="Lifecycle rules"
                       description="S3-side expiration/clean-up."
                       mode="hybrid"
@@ -3633,9 +3688,7 @@ export default function BucketDetailPage({
                         </div>
                       )}
                     </BucketFeatureCard>
-                    </div>
-                  </>
-                )}
+                </div>
               </div>
             ),
           },
@@ -4493,6 +4546,7 @@ export default function BucketDetailPage({
           {
             id: "metrics",
             label: "Metrics",
+            disabled: !canViewBucketMetrics,
             content: (
               <div className="space-y-4">
                 <section className="space-y-4 ui-surface-card p-5">
@@ -4525,21 +4579,22 @@ export default function BucketDetailPage({
                     />
                   </div>
                 </section>
-                {isCephAdmin ? (
-                  endpointId && bucketName ? (
-                    <TrafficAnalytics scope="ceph-admin" endpointId={endpointId} bucketName={bucketName} enabled={hasCephContext} />
+                {canViewBucketMetrics &&
+                  (isCephAdmin ? (
+                    endpointId && bucketName ? (
+                      <TrafficAnalytics scope="ceph-admin" endpointId={endpointId} bucketName={bucketName} enabled={hasCephContext} />
+                    ) : (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                        Select an endpoint and a bucket to view detailed metrics.
+                      </div>
+                    )
+                  ) : hasAccountContext && bucketName ? (
+                    <TrafficAnalytics accountId={accountIdForApi} bucketName={bucketName} enabled={hasAccountContext} />
                   ) : (
                     <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                      Select an endpoint and a bucket to view detailed metrics.
+                      Select an account and a bucket to view detailed metrics.
                     </div>
-                  )
-                ) : hasAccountContext && bucketName ? (
-                  <TrafficAnalytics accountId={accountIdForApi} bucketName={bucketName} enabled={hasAccountContext} />
-                ) : (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                    Select an account and a bucket to view detailed metrics.
-                  </div>
-                )}
+                  ))}
               </div>
             ),
           },

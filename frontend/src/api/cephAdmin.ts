@@ -657,6 +657,11 @@ export type BucketPublicAccessBlock = {
   restrict_public_buckets?: boolean | null;
 };
 
+export type BucketVersioningStatus = {
+  status?: string | null;
+  enabled: boolean;
+};
+
 export type BucketLifecycleRule = {
   id?: string | null;
   status?: string | null;
@@ -675,6 +680,13 @@ export type BucketProperties = {
 export async function getCephAdminBucketProperties(endpointId: number, bucketName: string): Promise<BucketProperties> {
   const { data } = await client.get<BucketProperties>(
     `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/properties`
+  );
+  return data;
+}
+
+export async function getCephAdminBucketVersioning(endpointId: number, bucketName: string): Promise<BucketVersioningStatus> {
+  const { data } = await client.get<BucketVersioningStatus>(
+    `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/versioning`
   );
   return data;
 }
@@ -928,6 +940,16 @@ export async function updateCephAdminBucketPublicAccessBlock(
   const { data } = await client.put<BucketPublicAccessBlock>(
     `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/public-access-block`,
     payload
+  );
+  return data;
+}
+
+export async function getCephAdminBucketObjectLock(
+  endpointId: number,
+  bucketName: string
+): Promise<BucketObjectLockConfiguration> {
+  const { data } = await client.get<BucketObjectLockConfiguration>(
+    `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/object-lock`
   );
   return data;
 }

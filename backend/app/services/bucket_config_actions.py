@@ -24,6 +24,7 @@ from app.models.bucket import (
     BucketProperties,
     BucketPublicAccessBlock,
     BucketQuotaUpdate,
+    BucketVersioningStatus,
     BucketReplicationConfiguration,
     BucketTagsUpdate,
     BucketVersioningUpdate,
@@ -133,6 +134,11 @@ def update_bucket_quota_config(
 
 def get_bucket_properties_config(*, service: BucketsService, account: S3Account, bucket_name: str) -> BucketProperties:
     return _map_runtime_error(lambda: service.get_bucket_properties(bucket_name, account))
+
+
+def get_bucket_versioning_config(*, service: BucketsService, account: S3Account, bucket_name: str) -> BucketVersioningStatus:
+    status_value = _map_runtime_error(lambda: service.get_bucket_versioning_status(bucket_name, account))
+    return BucketVersioningStatus(status=status_value, enabled=status_value == "Enabled")
 
 
 def update_bucket_versioning_config(
@@ -257,7 +263,7 @@ def delete_bucket_lifecycle_config(*, service: BucketsService, account: S3Accoun
 
 
 def get_bucket_cors_config(*, service: BucketsService, account: S3Account, bucket_name: str) -> dict[str, Any]:
-    cors = _map_runtime_error(lambda: service.get_bucket_properties(bucket_name, account).cors_rules)
+    cors = _map_runtime_error(lambda: service.get_bucket_cors(bucket_name, account))
     return {"rules": cors or []}
 
 

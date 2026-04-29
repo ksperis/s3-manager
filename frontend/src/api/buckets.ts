@@ -124,6 +124,11 @@ export type BucketPublicAccessBlock = {
   restrict_public_buckets?: boolean | null;
 };
 
+export type BucketVersioningStatus = {
+  status?: string | null;
+  enabled: boolean;
+};
+
 export type BucketWebsiteRedirectAllRequestsTo = {
   host_name: string;
   protocol?: string | null;
@@ -323,6 +328,17 @@ export async function updateBucketPublicAccessBlock(
   const { data } = await client.put<BucketPublicAccessBlock>(
     `${bucketPath(bucketName)}/public-access-block`,
     payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function getBucketVersioning(
+  accountId: S3AccountSelector,
+  bucketName: string
+): Promise<BucketVersioningStatus> {
+  const { data } = await client.get<BucketVersioningStatus>(
+    `${bucketPath(bucketName)}/versioning`,
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
@@ -593,6 +609,17 @@ export type BucketObjectLockUpdatePayload = {
   days?: number | null;
   years?: number | null;
 };
+
+export async function getBucketObjectLock(
+  accountId: S3AccountSelector,
+  bucketName: string
+): Promise<BucketObjectLockConfiguration> {
+  const { data } = await client.get<BucketObjectLockConfiguration>(
+    `${bucketPath(bucketName)}/object-lock`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
 
 export async function updateBucketObjectLock(
   accountId: S3AccountSelector,

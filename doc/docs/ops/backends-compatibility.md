@@ -8,6 +8,7 @@ s3-manager targets S3-compatible backends, with deeper integration for Ceph RGW 
 | Bucket versioning | Yes | N/A | N/A | Backend-specific edge cases may differ |
 | Object lock | Yes | N/A | N/A | Requires backend support |
 | Lifecycle | Yes | N/A | N/A | Behavior can vary across providers |
+| Public access block | Partial | N/A | N/A | Some S3-compatible backends, including StorageGRID endpoints, may return not implemented |
 | IAM users/roles/policies | N/A | Yes | N/A | Not universal among S3-compatible products |
 | Accounts model | N/A | Yes | Yes | Strongly aligned with Ceph RGW modern accounts |
 

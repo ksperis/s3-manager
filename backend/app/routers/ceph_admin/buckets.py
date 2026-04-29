@@ -41,6 +41,7 @@ from app.models.bucket import (
     BucketQuotaUpdate,
     BucketTagsUpdate,
     BucketVersioningUpdate,
+    BucketVersioningStatus,
     BucketWebsiteConfiguration,
 )
 from app.models.ceph_admin import (
@@ -2376,6 +2377,20 @@ def bucket_properties(
         raise_bad_gateway_from_runtime(exc)
 
 
+@router.get("/{bucket_name}/versioning", response_model=BucketVersioningStatus)
+def get_versioning(
+    bucket_name: str,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> BucketVersioningStatus:
+    service = BucketsService()
+    account = _build_endpoint_account(ctx)
+    try:
+        status_value = service.get_bucket_versioning_status(bucket_name, account)
+        return BucketVersioningStatus(status=status_value, enabled=status_value == "Enabled")
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
+
+
 @router.put("/{bucket_name}/versioning", status_code=status.HTTP_200_OK)
 def update_versioning(
     bucket_name: str,
@@ -2478,7 +2493,7 @@ def get_cors(
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
-        cors = service.get_bucket_properties(bucket_name, account).cors_rules
+        cors = service.get_bucket_cors(bucket_name, account)
         return {"rules": cors or []}
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)

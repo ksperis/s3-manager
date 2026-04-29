@@ -52,6 +52,11 @@ class BucketVersioningUpdate(BaseModel):
     enabled: bool
 
 
+class BucketVersioningStatus(BaseModel):
+    status: Optional[str] = None
+    enabled: bool = False
+
+
 class BucketPolicyIn(BaseModel):
     policy: dict
 

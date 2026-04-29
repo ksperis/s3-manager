@@ -248,6 +248,58 @@ def test_ceph_admin_bucket_query_endpoint_matches_get_for_same_payload(client):
         app.dependency_overrides.pop(ceph_admin_dependencies.get_ceph_admin_context, None)
 
 
+def test_ceph_admin_get_bucket_versioning_returns_status(client, monkeypatch):
+    ctx, _ = _build_ctx(endpoint_id=19, payload=[])
+    captured: dict[str, object] = {}
+
+    def fake_get_versioning(self, bucket_name, account):  # noqa: ANN001, ARG001
+        captured["bucket_name"] = bucket_name
+        captured["account_name"] = account.name
+        return "Suspended"
+
+    monkeypatch.setattr(BucketsService, "get_bucket_versioning_status", fake_get_versioning)
+
+    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
+    app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
+    try:
+        response = client.get("/api/ceph-admin/endpoints/19/buckets/demo-bucket/versioning")
+    finally:
+        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
+        app.dependency_overrides.pop(ceph_admin_dependencies.get_ceph_admin_context, None)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"status": "Suspended", "enabled": False}
+    assert captured == {"bucket_name": "demo-bucket", "account_name": "ceph-admin:19"}
+
+
+def test_ceph_admin_get_cors_uses_dedicated_cors_api(client, monkeypatch):
+    ctx, _ = _build_ctx(endpoint_id=20, payload=[])
+    calls: dict[str, int] = {"cors": 0}
+
+    def fake_get_cors(self, bucket_name, account):  # noqa: ANN001, ARG001
+        calls["cors"] += 1
+        assert bucket_name == "demo-bucket"
+        return [{"AllowedMethods": ["GET"], "AllowedOrigins": ["*"]}]
+
+    def fail_get_properties(self, bucket_name, account):  # noqa: ANN001, ARG001
+        raise AssertionError("get_bucket_properties should not be used for CORS")
+
+    monkeypatch.setattr(BucketsService, "get_bucket_cors", fake_get_cors)
+    monkeypatch.setattr(BucketsService, "get_bucket_properties", fail_get_properties)
+
+    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
+    app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
+    try:
+        response = client.get("/api/ceph-admin/endpoints/20/buckets/demo-bucket/cors")
+    finally:
+        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
+        app.dependency_overrides.pop(ceph_admin_dependencies.get_ceph_admin_context, None)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"rules": [{"AllowedMethods": ["GET"], "AllowedOrigins": ["*"]}]}
+    assert calls == {"cors": 1}
+
+
 def test_ceph_admin_bucket_query_endpoint_accepts_large_exact_name_list(client):
     payload = [
         {"name": "bucket-a", "owner": "owner-a"},

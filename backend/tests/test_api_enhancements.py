@@ -123,6 +123,33 @@ def test_manager_create_bucket_passes_versioning_and_location(client: TestClient
     }
 
 
+def test_manager_get_bucket_versioning_returns_status(client: TestClient):
+    captured: dict[str, object] = {}
+
+    class FakeBucketService:
+        def get_bucket_versioning_status(self, name, account):  # noqa: ANN001
+            captured["name"] = name
+            captured["account_id"] = account.id
+            return "Enabled"
+
+    account = S3Account(
+        name="acc",
+        rgw_account_id="RGW00000000000000012",
+        rgw_access_key="AK",
+        rgw_secret_key="SK",
+    )
+    account.id = 12
+
+    app.dependency_overrides[manager_buckets_router.get_account_context] = lambda: account
+    app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeBucketService()
+
+    response = client.get("/api/manager/buckets/demo-bucket/versioning")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"status": "Enabled", "enabled": True}
+    assert captured == {"name": "demo-bucket", "account_id": 12}
+
+
 def test_admin_create_user_requires_email_format(client: TestClient):
     response = client.post("/api/admin/users", json={"email": "not-an-email", "password": "x"})
     assert response.status_code == 422

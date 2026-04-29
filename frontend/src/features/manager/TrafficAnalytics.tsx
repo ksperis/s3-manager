@@ -116,10 +116,7 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Traffic</p>
-          <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Traffic visualization</h3>
-          {bucketName && (
-            <p className="ui-caption font-semibold text-primary-700 dark:text-primary-200">Bucket: {bucketName}</p>
-          )}
+          <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Traffic visualization</h3>
           <p className="ui-caption text-slate-500 dark:text-slate-400">
             Ingress/egress volume, request types, and busiest buckets.
           </p>

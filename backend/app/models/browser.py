@@ -11,11 +11,6 @@ class BrowserBucket(BaseModel):
     creation_date: Optional[datetime] = None
 
 
-class BucketVersioningStatus(BaseModel):
-    status: Optional[str] = None
-    enabled: bool = False
-
-
 class BrowserObject(BaseModel):
     key: str
     size: int
