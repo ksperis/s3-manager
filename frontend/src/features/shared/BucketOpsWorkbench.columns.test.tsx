@@ -241,6 +241,35 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     );
   });
 
+  it("groups bucket and owner quota picker options behind detail toggles", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+
+    expect(screen.getByText("Bucket quota")).toBeInTheDocument();
+    expect(screen.getByText("Owner quota")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Quota")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Owner quota")).not.toBeInTheDocument();
+
+    const bucketQuotaGroup = screen.getByText("Bucket quota").closest("div");
+    expect(bucketQuotaGroup).not.toBeNull();
+    fireEvent.click(within(bucketQuotaGroup as HTMLElement).getByRole("button", { name: "Details ▸" }));
+    expect(screen.getByLabelText("Quota")).toBeInTheDocument();
+    expect(screen.getByLabelText("Quota status")).toBeInTheDocument();
+
+    const ownerQuotaGroup = screen.getByText("Owner quota").closest("div");
+    expect(ownerQuotaGroup).not.toBeNull();
+    fireEvent.click(within(ownerQuotaGroup as HTMLElement).getByRole("button", { name: "Details ▸" }));
+    expect(screen.getByLabelText("Owner quota")).toBeInTheDocument();
+    expect(screen.getByLabelText("Owner object quota")).toBeInTheDocument();
+  });
+
   it("renders atomic single-line columns and exports flat CSV values", async () => {
     const blobs: Array<{ text: () => Promise<string> }> = [];
     class MockBlob {

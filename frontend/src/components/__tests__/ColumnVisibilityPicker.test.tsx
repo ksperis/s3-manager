@@ -1,14 +1,19 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useMemo, useState } from "react";
-import ColumnVisibilityPicker, { type ColumnPickerExpandableGroup, type ColumnPickerGroup } from "../ColumnVisibilityPicker";
+import ColumnVisibilityPicker, {
+  type ColumnPickerDetailGroup,
+  type ColumnPickerExpandableGroup,
+  type ColumnPickerGroup,
+} from "../ColumnVisibilityPicker";
 
-type ColumnId = "owner" | "tags" | "versioning" | "lifecycle_rules" | "lifecycle_expiration_days";
+type ColumnId = "owner" | "tags" | "quota_max_size_bytes" | "versioning" | "lifecycle_rules" | "lifecycle_expiration_days";
 
 function PickerHarness() {
   const [checked, setChecked] = useState<Record<ColumnId, boolean>>({
     owner: true,
     tags: false,
+    quota_max_size_bytes: false,
     versioning: false,
     lifecycle_rules: true,
     lifecycle_expiration_days: false,
@@ -20,6 +25,7 @@ function PickerHarness() {
     setChecked({
       owner: true,
       tags: false,
+      quota_max_size_bytes: false,
       versioning: false,
       lifecycle_rules: true,
       lifecycle_expiration_days: false,
@@ -32,6 +38,21 @@ function PickerHarness() {
       options: [
         { id: "owner", label: "Owner", checked: checked.owner, onToggle: () => toggle("owner") },
         { id: "tags", label: "S3 Tags", checked: checked.tags, onToggle: () => toggle("tags") },
+      ],
+    },
+  ];
+
+  const detailGroups: Array<ColumnPickerDetailGroup<ColumnId>> = [
+    {
+      id: "bucket_quota",
+      label: "Bucket quota",
+      details: [
+        {
+          id: "quota_max_size_bytes",
+          label: "Quota",
+          checked: checked.quota_max_size_bytes,
+          onToggle: () => toggle("quota_max_size_bytes"),
+        },
       ],
     },
   ];
@@ -64,6 +85,7 @@ function PickerHarness() {
       selectedCount={selectedCount}
       onReset={reset}
       coreGroups={coreGroups}
+      detailGroups={detailGroups}
       featureGroups={featureGroups}
       footerNote="Feature checks run only on enabled columns."
     />
@@ -76,9 +98,12 @@ describe("ColumnVisibilityPicker", () => {
 
     expect(screen.getByText("Visible columns")).toBeInTheDocument();
     expect(screen.getByText("Core")).toBeInTheDocument();
+    expect(screen.getByText("Details")).toBeInTheDocument();
     expect(screen.getByText("Features")).toBeInTheDocument();
     expect(screen.getByLabelText("Owner")).toBeInTheDocument();
     expect(screen.getByLabelText("Versioning")).toBeInTheDocument();
+    expect(screen.getByText("Bucket quota")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Quota")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Lifecycle expiration days")).not.toBeInTheDocument();
   });
 
@@ -91,11 +116,27 @@ describe("ColumnVisibilityPicker", () => {
     expect(screen.getByText("3 selected")).toBeInTheDocument();
   });
 
+  it("opens standalone detail groups without a parent checkbox", async () => {
+    const user = userEvent.setup();
+    render(<PickerHarness />);
+
+    expect(screen.queryByLabelText("Bucket quota")).not.toBeInTheDocument();
+    const bucketQuotaGroup = screen.getByText("Bucket quota").closest("div");
+    expect(bucketQuotaGroup).not.toBeNull();
+    await user.click(within(bucketQuotaGroup as HTMLElement).getByRole("button", { name: "Details ▸" }));
+
+    expect(screen.getByLabelText("Quota")).toBeInTheDocument();
+    await user.click(screen.getByLabelText("Quota"));
+    expect(screen.getByText("3 selected")).toBeInTheDocument();
+  });
+
   it("opens details and toggles a detail column", async () => {
     const user = userEvent.setup();
     render(<PickerHarness />);
 
-    await user.click(screen.getByRole("button", { name: "Details ▸" }));
+    const lifecycleGroup = screen.getByText("Lifecycle rules").closest("div");
+    expect(lifecycleGroup).not.toBeNull();
+    await user.click(within(lifecycleGroup as HTMLElement).getByRole("button", { name: "Details ▸" }));
     expect(screen.getByLabelText("Lifecycle expiration days")).toBeInTheDocument();
     await user.click(screen.getByLabelText("Lifecycle expiration days"));
     expect(screen.getByText("3 selected")).toBeInTheDocument();

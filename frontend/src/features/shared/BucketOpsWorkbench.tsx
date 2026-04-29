@@ -1506,19 +1506,33 @@ const BUCKET_CORE_COLUMN_OPTIONS: Array<{ id: ColumnId; label: string }> = [
   { id: "owner", label: "Owner" },
   { id: "owner_name", label: "Owner name" },
   { id: "used_bytes", label: "Used" },
-  { id: "quota_max_size_bytes", label: "Quota" },
-  { id: "quota_usage_size_percent", label: "Quota %" },
   { id: "object_count", label: "Objects" },
-  { id: "quota_max_objects", label: "Object quota" },
-  { id: "quota_usage_object_percent", label: "Object quota %" },
   { id: "owner_used_bytes", label: "Owner used" },
-  { id: "owner_quota_max_size_bytes", label: "Owner quota" },
-  { id: "owner_quota_usage_size_percent", label: "Owner quota %" },
   { id: "owner_object_count", label: "Owner objects" },
-  { id: "owner_quota_max_objects", label: "Owner object quota" },
-  { id: "owner_quota_usage_object_percent", label: "Owner object quota %" },
-  { id: "quota_status", label: "Quota status" },
   { id: "tags", label: "S3 Tags" },
+];
+const BUCKET_QUOTA_COLUMN_GROUPS: Array<{ id: string; label: string; options: Array<{ id: ColumnId; label: string }> }> = [
+  {
+    id: "bucket_quota",
+    label: "Bucket quota",
+    options: [
+      { id: "quota_max_size_bytes", label: "Quota" },
+      { id: "quota_usage_size_percent", label: "Quota %" },
+      { id: "quota_max_objects", label: "Object quota" },
+      { id: "quota_usage_object_percent", label: "Object quota %" },
+      { id: "quota_status", label: "Quota status" },
+    ],
+  },
+  {
+    id: "owner_quota",
+    label: "Owner quota",
+    options: [
+      { id: "owner_quota_max_size_bytes", label: "Owner quota" },
+      { id: "owner_quota_usage_size_percent", label: "Owner quota %" },
+      { id: "owner_quota_max_objects", label: "Owner object quota" },
+      { id: "owner_quota_usage_object_percent", label: "Owner object quota %" },
+    ],
+  },
 ];
 
 const loadVisibleColumns = (
@@ -7429,6 +7443,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                             })),
                           },
                         ]}
+                        detailGroups={BUCKET_QUOTA_COLUMN_GROUPS.map((group) => ({
+                          id: group.id,
+                          label: group.label,
+                          details: group.options.map((option) => ({
+                            id: option.id,
+                            label: option.label,
+                            checked: visibleColumns.includes(option.id),
+                            onToggle: () => toggleColumn(option.id),
+                          })),
+                        }))}
                         featureGroups={featureColumnOptions.map((option) => ({
                           id: option.id,
                           label: option.label,
