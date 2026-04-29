@@ -16,6 +16,10 @@ const listMinimalUsersMock = vi.fn();
 const listStorageEndpointsMock = vi.fn();
 const listAdminTagDefinitionsMock = vi.fn();
 
+function expectBefore(first: Element, second: Element) {
+  expect(Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+}
+
 const makeTag = (id: number, label: string, color_key = "neutral", scope = "standard") => ({
   id,
   label,
@@ -115,7 +119,14 @@ describe("S3ConnectionsPage modal tabs", () => {
     const generalTab = await screen.findByRole("button", { name: "General" });
     const usersTab = screen.getByRole("button", { name: "Linked UI users" });
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Add a tag for this shared connection" })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog");
+    const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this shared connection" });
+    expect(tagInput).toBeInTheDocument();
+    expectBefore(within(dialog).getByDisplayValue("connection-1"), tagInput);
+    expectBefore(tagInput, within(dialog).getByText("Endpoint"));
+    expect(within(dialog).getByRole("radio", { name: "Configured endpoint" })).toBeDisabled();
+    expect(within(dialog).getByRole("radio", { name: "Custom endpoint" })).toBeChecked();
+    expect(within(dialog).getByRole("combobox", { name: "Provider" })).toHaveValue("");
 
     fireEvent.click(usersTab);
 
@@ -184,7 +195,7 @@ describe("S3ConnectionsPage modal tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    await screen.findByText("Connection details");
+    await within(screen.getByRole("dialog")).findByText("Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "Linked UI users" }));
     expect(screen.getByRole("button", { name: "Add UI users" })).toBeInTheDocument();
@@ -205,11 +216,18 @@ describe("S3ConnectionsPage modal tabs", () => {
 
     fireEvent.change(nameInput, { target: { value: "tagged-shared-connection" } });
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this shared connection" });
+    expectBefore(nameInput, tagInput);
+    expectBefore(tagInput, within(dialog).getByText("Endpoint"));
+    expect(within(dialog).getByRole("radio", { name: "Configured endpoint" })).toBeDisabled();
+    expect(within(dialog).getByRole("radio", { name: "Custom endpoint" })).toBeChecked();
+    const providerSelect = within(dialog).getByRole("combobox", { name: "Provider" });
+    expect(providerSelect).toHaveValue("");
+    fireEvent.change(providerSelect, { target: { value: "aws" } });
     fireEvent.change(tagInput, {
       target: { value: "finance" },
     });
     fireEvent.keyDown(tagInput, { key: "Enter", code: "Enter" });
-    fireEvent.change(within(dialog).getByPlaceholderText("https://s3.amazonaws.com"), {
+    fireEvent.change(within(dialog).getByPlaceholderText("https://s3.example.com"), {
       target: { value: "https://tagged.example.test" },
     });
     const textInputs = dialog.querySelectorAll("input:not([type='radio']):not([type='checkbox'])");
@@ -223,8 +241,33 @@ describe("S3ConnectionsPage modal tabs", () => {
     expect(createAdminS3ConnectionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "tagged-shared-connection",
+        provider_hint: "aws",
         tags: [expect.objectContaining({ label: "finance", color_key: "neutral" })],
       })
     );
+  });
+
+  it("hides provider for admin connections using an existing endpoint", async () => {
+    listStorageEndpointsMock.mockResolvedValue([
+      { id: 7, name: "Endpoint A", endpoint_url: "https://endpoint-a.example.test", is_default: true },
+    ]);
+    listAdminS3ConnectionsMock.mockResolvedValue({
+      items: [makeConnection(7, { storage_endpoint_id: 7, endpoint_url: "https://endpoint-a.example.test" })],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<S3ConnectionsPage />);
+
+    await screen.findByText("connection-7");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    const dialog = screen.getByRole("dialog");
+    await within(dialog).findByText("Endpoint");
+    expect(within(dialog).getByRole("radio", { name: "Configured endpoint" })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: "Custom endpoint" })).not.toBeChecked();
+    expect(within(dialog).queryByRole("combobox", { name: "Provider" })).not.toBeInTheDocument();
   });
 });

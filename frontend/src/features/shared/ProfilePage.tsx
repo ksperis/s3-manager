@@ -42,6 +42,7 @@ import {
 } from "../../utils/selectorTagsPreference";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
+import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "./S3ConnectionEndpointFields";
 
 const defaultCreateConnectionForm = {
   name: "",
@@ -56,8 +57,6 @@ const defaultCreateConnectionForm = {
   force_path_style: false,
   verify_tls: true,
 };
-
-type CreateConnectionEndpointMode = "preset" | "custom";
 
 type ConnectionDraft = {
   name: string;
@@ -185,9 +184,9 @@ export default function ProfilePage({
   const [bulkDeletingConnections, setBulkDeletingConnections] = useState(false);
   const [editingConnectionId, setEditingConnectionId] = useState<number | null>(null);
   const [createConnectionForm, setCreateConnectionForm] = useState(defaultCreateConnectionForm);
-  const [createConnectionEndpointMode, setCreateConnectionEndpointMode] = useState<CreateConnectionEndpointMode>("custom");
+  const [createConnectionEndpointMode, setCreateConnectionEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [createConnectionEndpointId, setCreateConnectionEndpointId] = useState("");
-  const [editConnectionEndpointMode, setEditConnectionEndpointMode] = useState<CreateConnectionEndpointMode>("custom");
+  const [editConnectionEndpointMode, setEditConnectionEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [editConnectionEndpointId, setEditConnectionEndpointId] = useState("");
   const [availableStorageEndpoints, setAvailableStorageEndpoints] = useState<StorageEndpoint[]>([]);
   const [loadingStorageEndpoints, setLoadingStorageEndpoints] = useState(false);
@@ -1531,137 +1530,6 @@ export default function ProfilePage({
                     placeholder="Mon endpoint S3"
                   />
                 </label>
-                <div className="sm:col-span-2 space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-                  <div>
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Endpoint
-                    </p>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Choose a configured endpoint or enter a public HTTPS custom endpoint.
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                      <input
-                        type="radio"
-                        name="create-connection-endpoint-mode"
-                        checked={createConnectionEndpointMode === "preset"}
-                        onChange={() => setCreateConnectionEndpointMode("preset")}
-                        disabled={availableStorageEndpoints.length === 0}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
-                      />
-                      Configured endpoint
-                    </label>
-                    <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                      <input
-                        type="radio"
-                        name="create-connection-endpoint-mode"
-                        checked={createConnectionEndpointMode === "custom"}
-                        onChange={() => setCreateConnectionEndpointMode("custom")}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                      />
-                      Custom endpoint
-                    </label>
-                  </div>
-                  {createConnectionEndpointMode === "preset" ? (
-                    <label className="block">
-                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Configured endpoint
-                      </span>
-                      <select
-                        value={createConnectionEndpointId}
-                        onChange={(event) => setCreateConnectionEndpointId(event.target.value)}
-                        disabled={loadingStorageEndpoints || availableStorageEndpoints.length === 0}
-                        className={inputClasses}
-                      >
-                        <option value="">
-                          {loadingStorageEndpoints
-                            ? "Loading endpoints..."
-                            : availableStorageEndpoints.length === 0
-                              ? "No configured endpoint"
-                              : "Select endpoint"}
-                        </option>
-                        {availableStorageEndpoints.map((endpoint) => (
-                          <option key={endpoint.id} value={endpoint.id}>
-                            {endpoint.name} ({endpoint.endpoint_url})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block">
-                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Provider
-                        </span>
-                        <input
-                          type="text"
-                          value={createConnectionForm.provider_hint}
-                          onChange={(event) =>
-                            setCreateConnectionForm((prev) => ({ ...prev, provider_hint: event.target.value }))
-                          }
-                          className={inputClasses}
-                          placeholder="aws | minio | ceph ..."
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Region
-                        </span>
-                        <input
-                          type="text"
-                          value={createConnectionForm.region}
-                          onChange={(event) => setCreateConnectionForm((prev) => ({ ...prev, region: event.target.value }))}
-                          className={inputClasses}
-                          placeholder="us-east-1"
-                        />
-                      </label>
-                      <label className="block sm:col-span-2">
-                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Endpoint URL
-                        </span>
-                        <input
-                          type="url"
-                          value={createConnectionForm.endpoint_url}
-                          onChange={(event) =>
-                            setCreateConnectionForm((prev) => ({ ...prev, endpoint_url: event.target.value }))
-                          }
-                          className={inputClasses}
-                          placeholder="https://s3.example.com"
-                        />
-                      </label>
-                      <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
-                        <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                          <input
-                            type="checkbox"
-                            checked={createConnectionForm.force_path_style}
-                            onChange={(event) =>
-                              setCreateConnectionForm((prev) => ({ ...prev, force_path_style: event.target.checked }))
-                            }
-                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                          />
-                          Force path style
-                        </label>
-                        <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                          <input
-                            type="checkbox"
-                            checked={createConnectionForm.verify_tls}
-                            onChange={(event) =>
-                              setCreateConnectionForm((prev) => ({ ...prev, verify_tls: event.target.checked }))
-                            }
-                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                          />
-                          Verify TLS
-                        </label>
-                      </div>
-                    </div>
-                  )}
-                  {storageEndpointsError && (
-                    <p className="ui-caption text-amber-700 dark:text-amber-300">
-                      Unable to load configured endpoints ({storageEndpointsError}). Use custom mode.
-                    </p>
-                  )}
-                </div>
                 <div className="sm:col-span-2 space-y-3">
                   {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
                   <UiTagEditor
@@ -1675,6 +1543,29 @@ export default function ProfilePage({
                       privateTagCatalogLoading
                         ? "Loading existing private tags..."
                         : "Private tags are used for filtering and optional selector display."
+                    }
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <S3ConnectionEndpointFields
+                    mode={createConnectionEndpointMode}
+                    onModeChange={setCreateConnectionEndpointMode}
+                    modeInputName="create-connection-endpoint-mode"
+                    endpointId={createConnectionEndpointId}
+                    onEndpointIdChange={setCreateConnectionEndpointId}
+                    endpoints={availableStorageEndpoints}
+                    loadingEndpoints={loadingStorageEndpoints}
+                    form={createConnectionForm}
+                    onFormChange={(field, value) =>
+                      setCreateConnectionForm((prev) => ({
+                        ...prev,
+                        [field]: value,
+                      }))
+                    }
+                    errorMessage={
+                      storageEndpointsError
+                        ? `Unable to load configured endpoints (${storageEndpointsError}). Use custom mode.`
+                        : null
                     }
                   />
                 </div>
@@ -1836,143 +1727,22 @@ export default function ProfilePage({
                         />
                       </div>
 
-                      <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-                        <div>
-                          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            Endpoint
-                          </p>
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">
-                            Choose a configured endpoint or enter a public HTTPS custom endpoint.
-                          </p>
-                        </div>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                          <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                            <input
-                              type="radio"
-                              name={`edit-connection-endpoint-mode-${editingConnection.id}`}
-                              checked={editConnectionEndpointMode === "preset"}
-                              onChange={() => setEditConnectionEndpointMode("preset")}
-                              disabled={availableStorageEndpoints.length === 0}
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
-                            />
-                            Configured endpoint
-                          </label>
-                          <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                            <input
-                              type="radio"
-                              name={`edit-connection-endpoint-mode-${editingConnection.id}`}
-                              checked={editConnectionEndpointMode === "custom"}
-                              onChange={() => setEditConnectionEndpointMode("custom")}
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                            />
-                            Custom endpoint
-                          </label>
-                        </div>
-                        {editConnectionEndpointMode === "preset" ? (
-                          <label className="block">
-                            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Configured endpoint
-                            </span>
-                            <select
-                              value={editConnectionEndpointId}
-                              onChange={(event) => setEditConnectionEndpointId(event.target.value)}
-                              disabled={loadingStorageEndpoints || availableStorageEndpoints.length === 0}
-                              className={inputClasses}
-                            >
-                              <option value="">
-                                {loadingStorageEndpoints
-                                  ? "Loading endpoints..."
-                                  : availableStorageEndpoints.length === 0
-                                    ? "No configured endpoint"
-                                    : "Select endpoint"}
-                              </option>
-                              {availableStorageEndpoints.map((endpoint) => (
-                                <option key={endpoint.id} value={endpoint.id}>
-                                  {endpoint.name} ({endpoint.endpoint_url})
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        ) : (
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <label className="block">
-                              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                Provider
-                              </span>
-                              <input
-                                type="text"
-                                value={draft.provider_hint}
-                                onChange={(event) =>
-                                  handleUpdateConnectionDraft(editingConnection.id, "provider_hint", event.target.value)
-                                }
-                                className={inputClasses}
-                                placeholder="aws | minio | ceph ..."
-                              />
-                            </label>
-                            <label className="block">
-                              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                Region
-                              </span>
-                              <input
-                                type="text"
-                                value={draft.region}
-                                onChange={(event) =>
-                                  handleUpdateConnectionDraft(editingConnection.id, "region", event.target.value)
-                                }
-                                className={inputClasses}
-                                placeholder="us-east-1"
-                              />
-                            </label>
-                            <label className="block sm:col-span-2">
-                              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                Endpoint URL
-                              </span>
-                              <input
-                                type="url"
-                                value={draft.endpoint_url}
-                                onChange={(event) =>
-                                  handleUpdateConnectionDraft(editingConnection.id, "endpoint_url", event.target.value)
-                                }
-                                className={inputClasses}
-                                placeholder="https://s3.example.com"
-                              />
-                            </label>
-                            <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
-                              <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(draft.force_path_style)}
-                                  onChange={(event) =>
-                                    handleUpdateConnectionDraft(
-                                      editingConnection.id,
-                                      "force_path_style",
-                                      event.target.checked
-                                    )
-                                  }
-                                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                                />
-                                Force path style
-                              </label>
-                              <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(draft.verify_tls)}
-                                  onChange={(event) =>
-                                    handleUpdateConnectionDraft(editingConnection.id, "verify_tls", event.target.checked)
-                                  }
-                                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                                />
-                                Verify TLS
-                              </label>
-                            </div>
-                          </div>
-                        )}
-                        {storageEndpointsError && (
-                          <p className="ui-caption text-amber-700 dark:text-amber-300">
-                            Unable to load configured endpoints ({storageEndpointsError}). Use custom mode.
-                          </p>
-                        )}
-                      </div>
+                      <S3ConnectionEndpointFields
+                        mode={editConnectionEndpointMode}
+                        onModeChange={setEditConnectionEndpointMode}
+                        modeInputName={`edit-connection-endpoint-mode-${editingConnection.id}`}
+                        endpointId={editConnectionEndpointId}
+                        onEndpointIdChange={setEditConnectionEndpointId}
+                        endpoints={availableStorageEndpoints}
+                        loadingEndpoints={loadingStorageEndpoints}
+                        form={draft}
+                        onFormChange={(field, value) => handleUpdateConnectionDraft(editingConnection.id, field, value)}
+                        errorMessage={
+                          storageEndpointsError
+                            ? `Unable to load configured endpoints (${storageEndpointsError}). Use custom mode.`
+                            : null
+                        }
+                      />
 
                       <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
                         <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">

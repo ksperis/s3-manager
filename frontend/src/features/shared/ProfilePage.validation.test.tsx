@@ -15,6 +15,10 @@ const setThemeMock = vi.fn();
 const setLanguagePreferenceMock = vi.fn();
 const listPrivateConnectionTagDefinitionsMock = vi.fn();
 
+function expectBefore(first: Element, second: Element) {
+  expect(Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+}
+
 vi.mock("../../components/GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({
     generalSettings: {
@@ -131,6 +135,16 @@ describe("ProfilePage live validation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
     await screen.findByText("Add private S3 connection");
 
+    const dialog = screen.getByRole("dialog");
+    const nameInput = within(dialog).getByLabelText("Name");
+    const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this private connection" });
+    const endpointHeading = within(dialog).getByText("Endpoint");
+    expectBefore(nameInput, tagInput);
+    expectBefore(tagInput, endpointHeading);
+    expect(within(dialog).getByRole("radio", { name: "Configured endpoint" })).toBeDisabled();
+    expect(within(dialog).getByRole("radio", { name: "Custom endpoint" })).toBeChecked();
+    expect(within(dialog).getByRole("combobox", { name: "Provider" })).toHaveValue("");
+
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "private-connection" } });
     fireEvent.change(screen.getByLabelText("Endpoint URL"), { target: { value: "https://s3.private.example.test" } });
     fireEvent.change(screen.getByLabelText("Access Key"), { target: { value: "AKIA-INVALID" } });
@@ -169,6 +183,11 @@ describe("ProfilePage live validation", () => {
     const dialog = screen.getByRole("dialog");
     const presetRadio = within(dialog).getByRole("radio", { name: "Configured endpoint" }) as HTMLInputElement;
     expect(presetRadio.checked).toBe(true);
+    expect(within(dialog).getByRole("radio", { name: "Custom endpoint" })).not.toBeChecked();
+    const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this private connection" });
+    expectBefore(within(dialog).getByLabelText("Name"), tagInput);
+    expectBefore(tagInput, within(dialog).getByText("Endpoint"));
+    expect(within(dialog).queryByRole("combobox", { name: "Provider" })).not.toBeInTheDocument();
 
     fireEvent.change(within(dialog).getByRole("combobox", { name: "Configured endpoint" }), { target: { value: "3" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
@@ -204,6 +223,9 @@ describe("ProfilePage live validation", () => {
 
     const dialog = screen.getByRole("dialog");
     fireEvent.click(within(dialog).getByLabelText("Custom endpoint"));
+    const providerSelect = within(dialog).getByRole("combobox", { name: "Provider" });
+    expect(providerSelect).toHaveValue("ceph");
+    fireEvent.change(providerSelect, { target: { value: "minio" } });
     fireEvent.change(within(dialog).getByLabelText("Endpoint URL"), { target: { value: "https://custom.example.test" } });
     fireEvent.change(within(dialog).getByLabelText("Access key ID"), { target: { value: "AKIA-NEW" } });
     fireEvent.change(within(dialog).getByLabelText("Secret access key"), { target: { value: "SECRET-NEW" } });
@@ -221,6 +243,7 @@ describe("ProfilePage live validation", () => {
     const [, payload] = updateConnectionMock.mock.calls[0] as [number, Record<string, unknown>];
     expect(payload).toMatchObject({
       storage_endpoint_id: null,
+      provider_hint: "minio",
       endpoint_url: "https://custom.example.test",
       access_key_id: "AKIA-NEW",
       secret_access_key: "SECRET-NEW",

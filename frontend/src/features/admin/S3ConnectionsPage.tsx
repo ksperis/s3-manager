@@ -32,16 +32,9 @@ import { listMinimalUsers, UserSummary } from "../../api/users";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { extractApiError } from "../../utils/apiError";
 import { buildUiTagItems, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
+import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
 
-const providerHintOptions = [
-  { value: "", label: "(auto)" },
-  { value: "aws", label: "AWS" },
-  { value: "ceph", label: "Ceph RGW" },
-  { value: "scality", label: "Scality" },
-  { value: "minio", label: "MinIO" },
-  { value: "other", label: "Other" },
-];
 const credentialOwnerTypeOptions = [
   { value: "", label: "(none)" },
   { value: "iam_user", label: "IAM user" },
@@ -66,6 +59,7 @@ export default function S3ConnectionsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [createEndpointMode, setCreateEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [createEndpointPresetId, setCreateEndpointPresetId] = useState("");
   const [createPresetTouched, setCreatePresetTouched] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -85,6 +79,7 @@ export default function S3ConnectionsPage() {
   const [editing, setEditing] = useState<S3ConnectionAdminItem | null>(null);
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [editEndpointMode, setEditEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [editEndpointPresetId, setEditEndpointPresetId] = useState("");
   const [editForm, setEditForm] = useState({
     name: "",
@@ -157,6 +152,7 @@ export default function S3ConnectionsPage() {
   }, [resetEditUsersState]);
 
   const resetCreateForm = () => {
+    setCreateEndpointMode("custom");
     setCreateEndpointPresetId("");
     setCreatePresetTouched(false);
     setCreateError(null);
@@ -177,6 +173,17 @@ export default function S3ConnectionsPage() {
 
   const openCreateModal = () => {
     resetCreateForm();
+    if (defaultEndpoint) {
+      setCreateEndpointMode("preset");
+      setCreateEndpointPresetId(String(defaultEndpoint.id));
+      setCreateForm((prev) => ({
+        ...prev,
+        endpoint_url: defaultEndpoint.endpoint_url,
+        region: defaultEndpoint.region || "",
+        force_path_style: false,
+        verify_tls: true,
+      }));
+    }
     setShowCreateModal(true);
   };
 
@@ -236,8 +243,8 @@ export default function S3ConnectionsPage() {
     loadPortalUsers();
   }, []);
 
-  const createHasPreset = Boolean(createEndpointPresetId);
-  const editHasPreset = Boolean(editEndpointPresetId);
+  const createHasPreset = createEndpointMode === "preset";
+  const editHasPreset = editEndpointMode === "preset";
 
   const createValidationPayload = useMemo(() => {
     const accessKeyId = createForm.access_key_id.trim();
@@ -373,6 +380,7 @@ export default function S3ConnectionsPage() {
     if (!defaultEndpoint) return;
     if (createForm.endpoint_url.trim()) return;
     const defaultId = String(defaultEndpoint.id);
+    setCreateEndpointMode("preset");
     setCreateEndpointPresetId(defaultId);
     setCreateForm((prev) => ({
       ...prev,
@@ -450,8 +458,10 @@ export default function S3ConnectionsPage() {
         ? storageEndpoints.find((ep) => ep.id === conn.storage_endpoint_id)
         : storageEndpoints.find((ep) => ep.endpoint_url === conn.endpoint_url);
     if (conn.storage_endpoint_id != null) {
+      setEditEndpointMode("preset");
       setEditEndpointPresetId(String(conn.storage_endpoint_id));
     } else {
+      setEditEndpointMode(presetMatch ? "preset" : "custom");
       setEditEndpointPresetId(presetMatch ? String(presetMatch.id) : "");
     }
     setEditing(conn);
@@ -497,6 +507,14 @@ export default function S3ConnectionsPage() {
 
   const submitCreate = async (e: FormEvent) => {
     e.preventDefault();
+    if (createHasPreset && !createEndpointPresetId) {
+      setCreateError("Select a configured endpoint.");
+      return;
+    }
+    if (!createHasPreset && !createForm.endpoint_url.trim()) {
+      setCreateError("Endpoint URL is required.");
+      return;
+    }
     if (!createForm.access_manager && !createForm.access_browser) {
       setCreateError("Enable access to manager and/or browser.");
       return;
@@ -539,6 +557,14 @@ export default function S3ConnectionsPage() {
   const submitEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (!editing) return;
+    if (editHasPreset && !editEndpointPresetId) {
+      setEditError("Select a configured endpoint.");
+      return;
+    }
+    if (!editHasPreset && !editForm.endpoint_url.trim()) {
+      setEditError("Endpoint URL is required.");
+      return;
+    }
     if (!editForm.access_manager && !editForm.access_browser) {
       setEditError("Enable access to manager and/or browser.");
       return;
@@ -946,30 +972,6 @@ export default function S3ConnectionsPage() {
                   required
                 />
               </div>
-              {!createHasPreset && (
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Provider</label>
-                  <select
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={createForm.provider_hint}
-                    onChange={(e) => setCreateForm((p) => ({ ...p, provider_hint: e.target.value }))}
-                  >
-                    {providerHintOptions.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div className="rounded-lg border border-slate-200 px-3 py-2 sm:col-span-2 dark:border-slate-700 dark:bg-slate-900/50">
-                <div className="ui-body text-slate-700 dark:text-slate-200">
-                  Visibility: <span className="font-semibold">Shared</span>
-                </div>
-                <p className="ui-caption text-slate-500 dark:text-slate-300">
-                  Admin connections are always shared with linked UI users.
-                </p>
-              </div>
               <div className="space-y-3 sm:col-span-2">
                 {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
                 <UiTagEditor
@@ -984,6 +986,41 @@ export default function S3ConnectionsPage() {
                       : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
                   }
                 />
+              </div>
+              <div className="sm:col-span-2">
+                <S3ConnectionEndpointFields
+                  mode={createEndpointMode}
+                  onModeChange={(mode) => {
+                    setCreatePresetTouched(true);
+                    setCreateEndpointMode(mode);
+                  }}
+                  modeInputName="create-admin-s3-connection-endpoint-mode"
+                  endpointId={createEndpointPresetId}
+                  onEndpointIdChange={(endpointId) => {
+                    setCreateEndpointPresetId(endpointId);
+                    setCreatePresetTouched(true);
+                    if (endpointId) {
+                      applyEndpointPreset(endpointId, setCreateForm);
+                    }
+                  }}
+                  endpoints={storageEndpoints}
+                  loadingEndpoints={loadingEndpoints}
+                  form={createForm}
+                  onFormChange={(field, value) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      [field]: value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="rounded-lg border border-slate-200 px-3 py-2 sm:col-span-2 dark:border-slate-700 dark:bg-slate-900/50">
+                <div className="ui-body text-slate-700 dark:text-slate-200">
+                  Visibility: <span className="font-semibold">Shared</span>
+                </div>
+                <p className="ui-caption text-slate-500 dark:text-slate-300">
+                  Admin connections are always shared with linked UI users.
+                </p>
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <div className="ui-body font-medium text-slate-700 dark:text-slate-200">Workspace access</div>
@@ -1015,69 +1052,6 @@ export default function S3ConnectionsPage() {
                 </div>
                 <div className="ui-caption text-slate-500 dark:text-slate-300">At least one access must be enabled.</div>
               </div>
-              <div className="flex flex-col gap-1 sm:col-span-2">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Existing endpoint</label>
-                <select
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={createEndpointPresetId}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setCreateEndpointPresetId(next);
-                    setCreatePresetTouched(true);
-                    if (next) {
-                      applyEndpointPreset(next, setCreateForm);
-                    }
-                  }}
-                  disabled={loadingEndpoints}
-                >
-                  <option value="">{loadingEndpoints ? "Loading endpoints..." : "Custom endpoint"}</option>
-                  {storageEndpoints.map((ep) => (
-                    <option key={ep.id} value={ep.id}>
-                      {ep.name} {ep.is_default ? "(default)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {!createHasPreset && (
-                <>
-                  <div className="flex flex-col gap-1 sm:col-span-2">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Endpoint URL *</label>
-                    <input
-                      className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      placeholder="https://s3.amazonaws.com"
-                      value={createForm.endpoint_url}
-                      onChange={(e) => setCreateForm((p) => ({ ...p, endpoint_url: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Region (optional)</label>
-                    <input
-                      className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      value={createForm.region}
-                      onChange={(e) => setCreateForm((p) => ({ ...p, region: e.target.value }))}
-                    />
-                  </div>
-                  <div className="flex items-center gap-4 pt-6">
-                    <label className="ui-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={createForm.force_path_style}
-                        onChange={(e) => setCreateForm((p) => ({ ...p, force_path_style: e.target.checked }))}
-                      />
-                      <span>Force path-style</span>
-                    </label>
-                    <label className="ui-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={createForm.verify_tls}
-                        onChange={(e) => setCreateForm((p) => ({ ...p, verify_tls: e.target.checked }))}
-                      />
-                      <span>Verify TLS</span>
-                    </label>
-                  </div>
-                </>
-              )}
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1">
@@ -1174,12 +1148,15 @@ export default function S3ConnectionsPage() {
 
             {showEditGeneralTab && (
               <>
-                <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                  <div className="ui-body text-slate-700 dark:text-slate-200">
-                    Visibility: <span className="font-semibold">Shared</span>
-                  </div>
-                  <div className="ui-caption text-slate-500 dark:text-slate-300">
-                    {`Created by: ${editing.created_by_email || editing.created_by_user_id}`}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Name *</label>
+                    <input
+                      className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+                      required
+                    />
                   </div>
                 </div>
 
@@ -1199,100 +1176,34 @@ export default function S3ConnectionsPage() {
                   />
                 </div>
 
-                <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
-                  <div>
-                    <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Connection details</div>
-                    <div className="ui-caption text-slate-500 dark:text-slate-300">
-                      Update the endpoint and transport options.
-                    </div>
+                <S3ConnectionEndpointFields
+                  mode={editEndpointMode}
+                  onModeChange={setEditEndpointMode}
+                  modeInputName={`edit-admin-s3-connection-endpoint-mode-${editing.id}`}
+                  endpointId={editEndpointPresetId}
+                  onEndpointIdChange={(endpointId) => {
+                    setEditEndpointPresetId(endpointId);
+                    if (endpointId) {
+                      applyEndpointPreset(endpointId, setEditForm);
+                    }
+                  }}
+                  endpoints={storageEndpoints}
+                  loadingEndpoints={loadingEndpoints}
+                  form={editForm}
+                  onFormChange={(field, value) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      [field]: value,
+                    }))
+                  }
+                />
+
+                <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div className="ui-body text-slate-700 dark:text-slate-200">
+                    Visibility: <span className="font-semibold">Shared</span>
                   </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Name *</label>
-                      <input
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        value={editForm.name}
-                        onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
-                        required
-                      />
-                    </div>
-                    {!editHasPreset && (
-                      <div className="flex flex-col gap-1">
-                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Provider</label>
-                        <select
-                          className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                          value={editForm.provider_hint}
-                          onChange={(e) => setEditForm((p) => ({ ...p, provider_hint: e.target.value }))}
-                        >
-                          {providerHintOptions.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div className="flex flex-col gap-1 sm:col-span-2">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Existing endpoint</label>
-                      <select
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        value={editEndpointPresetId}
-                        onChange={(e) => {
-                          const next = e.target.value;
-                          setEditEndpointPresetId(next);
-                          if (next) {
-                            applyEndpointPreset(next, setEditForm);
-                          }
-                        }}
-                        disabled={loadingEndpoints}
-                      >
-                        <option value="">{loadingEndpoints ? "Loading endpoints..." : "Custom endpoint"}</option>
-                        {storageEndpoints.map((ep) => (
-                          <option key={ep.id} value={ep.id}>
-                            {ep.name} {ep.is_default ? "(default)" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {!editHasPreset && (
-                      <>
-                        <div className="flex flex-col gap-1 sm:col-span-2">
-                          <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Endpoint URL *</label>
-                          <input
-                            className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                            value={editForm.endpoint_url}
-                            onChange={(e) => setEditForm((p) => ({ ...p, endpoint_url: e.target.value }))}
-                            required
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Region (optional)</label>
-                          <input
-                            className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                            value={editForm.region}
-                            onChange={(e) => setEditForm((p) => ({ ...p, region: e.target.value }))}
-                          />
-                        </div>
-                        <div className="flex items-center gap-4 pt-6">
-                          <label className="ui-checkbox">
-                            <input
-                              type="checkbox"
-                              checked={editForm.force_path_style}
-                              onChange={(e) => setEditForm((p) => ({ ...p, force_path_style: e.target.checked }))}
-                            />
-                            <span>Force path-style</span>
-                          </label>
-                          <label className="ui-checkbox">
-                            <input
-                              type="checkbox"
-                              checked={editForm.verify_tls}
-                              onChange={(e) => setEditForm((p) => ({ ...p, verify_tls: e.target.checked }))}
-                            />
-                            <span>Verify TLS</span>
-                          </label>
-                        </div>
-                      </>
-                    )}
+                  <div className="ui-caption text-slate-500 dark:text-slate-300">
+                    {`Created by: ${editing.created_by_email || editing.created_by_user_id}`}
                   </div>
                 </div>
 
