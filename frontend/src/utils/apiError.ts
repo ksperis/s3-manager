@@ -20,3 +20,8 @@ export function extractApiError(error: unknown, fallback: string): string {
   }
   return fallback;
 }
+
+export function isApiFeatureNotImplemented(message: string | null | undefined): boolean {
+  const normalized = String(message ?? "").toLowerCase();
+  return normalized.includes("xnotimplemented") || normalized.includes("notimplemented") || normalized.includes("not implemented");
+}

@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { InlinePolicy } from "../../api/managerIamPolicies";
 import { confirmAction } from "../../utils/confirm";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { summarizeInlinePolicyDocument } from "./inlinePolicySummary";
 
@@ -263,19 +264,15 @@ export default function InlinePolicyEditor({
 
       <div className="space-y-4 p-4">
         {disabled ? (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+          <UiInlineMessage tone="warning">
             {disabledReason ?? "Select an account before editing inline policies."}
-          </div>
+          </UiInlineMessage>
         ) : null}
         {error ? (
-          <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-caption text-rose-700 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-100">
-            {error}
-          </div>
+          <UiInlineMessage tone="error">{error}</UiInlineMessage>
         ) : null}
         {message ? (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-caption text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
-            {message}
-          </div>
+          <UiInlineMessage tone="success">{message}</UiInlineMessage>
         ) : null}
 
         <div className="space-y-2 rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-950/30">
@@ -362,14 +359,14 @@ export default function InlinePolicyEditor({
             </div>
 
             {replacementTarget ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+              <UiInlineMessage tone="warning">
                 Saving with the name "{replacementTarget.name}" will replace that existing inline policy. The currently selected
                 policy will remain unchanged.
-              </div>
+              </UiInlineMessage>
             ) : createsNewFromExisting ? (
-              <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 ui-caption text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-100">
+              <UiInlineMessage tone="info">
                 Changing the name from "{activePolicyName}" will create a new inline policy instead of editing the selected one.
-              </div>
+              </UiInlineMessage>
             ) : null}
 
             <div className="flex flex-col gap-2">

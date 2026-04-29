@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extractApiError } from "./apiError";
+import { extractApiError, isApiFeatureNotImplemented } from "./apiError";
 
 describe("extractApiError", () => {
   it("prefers backend detail when available", () => {
@@ -25,5 +25,12 @@ describe("extractApiError", () => {
 
   it("falls back to provided fallback when error is unstructured", () => {
     expect(extractApiError({ foo: "bar" }, "Fallback message")).toBe("Fallback message");
+  });
+
+  it("detects not implemented feature errors from extracted messages", () => {
+    expect(isApiFeatureNotImplemented("An error occurred (XNotImplemented) when calling the GetBucketLogging operation")).toBe(true);
+    expect(isApiFeatureNotImplemented("The request you provided implies functionality that is not implemented.")).toBe(true);
+    expect(isApiFeatureNotImplemented("AccessDenied")).toBe(false);
+    expect(isApiFeatureNotImplemented(null)).toBe(false);
   });
 });

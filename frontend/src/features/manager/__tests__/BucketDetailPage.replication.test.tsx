@@ -349,6 +349,88 @@ describe("BucketDetailPage replication state", () => {
     expect(screen.getByTestId("bucket-feature-tags")).toBeInTheDocument();
   });
 
+  it("disables server access logging when the endpoint does not implement it", async () => {
+    const user = userEvent.setup();
+    getCephAdminBucketLoggingMock.mockRejectedValueOnce(
+      new Error(
+        "Unable to fetch bucket logging for 'demo-bucket': An error occurred (XNotImplemented) when calling the GetBucketLogging operation: The request you provided implies functionality that is not implemented."
+      )
+    );
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getCephAdminBucketLoggingMock).toHaveBeenCalled();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+
+    const accessLoggingCard = await screen.findByTestId("bucket-feature-access-logging");
+    const accessLoggingShell = accessLoggingCard.parentElement?.parentElement as HTMLElement;
+    expect(accessLoggingCard).toHaveAttribute("data-feature-state", "disabled");
+    expect(within(accessLoggingShell).getByRole("button", { name: "Disable" })).toBeDisabled();
+    expect(within(accessLoggingShell).getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(within(accessLoggingCard).getByLabelText("Enable server access logging")).toBeDisabled();
+    expect(within(accessLoggingCard).getByLabelText("Target bucket")).toBeDisabled();
+    expect(within(accessLoggingCard).getByLabelText("Target prefix (optional)")).toBeDisabled();
+  });
+
+  it("disables JSON feature cards when the endpoint returns XNotImplemented", async () => {
+    const user = userEvent.setup();
+    getCephAdminBucketNotificationsMock.mockRejectedValueOnce(
+      new Error("An error occurred (XNotImplemented) when calling the GetBucketNotificationConfiguration operation.")
+    );
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getCephAdminBucketNotificationsMock).toHaveBeenCalled();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+
+    const notificationsCard = await screen.findByTestId("bucket-feature-notifications");
+    const notificationsShell = notificationsCard.parentElement?.parentElement as HTMLElement;
+    expect(notificationsCard).toHaveAttribute("data-feature-state", "disabled");
+    expect(within(notificationsShell).getByRole("button", { name: "Clear" })).toBeDisabled();
+    expect(within(notificationsShell).getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(within(notificationsCard).getByRole("textbox")).toBeDisabled();
+    expect(within(notificationsCard).getByRole("button", { name: "Show example" })).toBeDisabled();
+  });
+
+  it("does not disable feature cards for non-implementation-unrelated errors", async () => {
+    const user = userEvent.setup();
+    getCephAdminBucketLoggingMock.mockRejectedValueOnce(new Error("AccessDenied"));
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getCephAdminBucketLoggingMock).toHaveBeenCalled();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+
+    const accessLoggingCard = await screen.findByTestId("bucket-feature-access-logging");
+    const accessLoggingShell = accessLoggingCard.parentElement?.parentElement as HTMLElement;
+    const accessDeniedMessage = within(accessLoggingCard).getByText("AccessDenied");
+    expect(accessDeniedMessage).toBeInTheDocument();
+    expect(accessDeniedMessage).toHaveClass("ui-caption");
+    expect(accessLoggingCard).toHaveAttribute("data-feature-state", "neutral");
+    expect(within(accessLoggingShell).getByRole("button", { name: "Save" })).not.toBeDisabled();
+  });
+
   it("keeps bucket Metrics disabled for non-Ceph manager endpoints", async () => {
     const user = userEvent.setup();
     useS3AccountContextMock.mockReturnValue({

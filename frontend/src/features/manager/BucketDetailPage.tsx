@@ -105,6 +105,7 @@ import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
 import SplitView from "../../components/SplitView";
 import UsageTile from "../../components/UsageTile";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { formatCompactNumber } from "../../utils/format";
 import { isAdminLikeRole } from "../../utils/workspaces";
 import { useS3AccountContext } from "./S3AccountContext";
@@ -139,7 +140,7 @@ import {
   resolveFeatureVisualState,
   stableBucketJsonSignature,
 } from "./bucketDetail";
-import { extractApiError } from "../../utils/apiError";
+import { extractApiError, isApiFeatureNotImplemented } from "../../utils/apiError";
 
 function getUserRole(): string | null {
   if (typeof window === "undefined") return null;
@@ -1625,60 +1626,81 @@ export default function BucketDetailPage({
   const quotaDraftSignature = stableBucketJsonSignature(normalizeQuotaDraft(quotaSizeGb, quotaSizeUnit, quotaObjects));
   const quotaDirty = quotaDraftSignature !== quotaSnapshotSignature;
   const versioningDirty = versioningDraftEnabled !== versioningIsEnabled;
+  const versioningNotImplemented = isApiFeatureNotImplemented(versioningLoadError);
+  const objectLockNotImplemented = isApiFeatureNotImplemented(objectLockLoadError);
+  const lifecycleNotImplemented = isApiFeatureNotImplemented(lifecycleError);
+  const tagsNotImplemented = isApiFeatureNotImplemented(bucketTagsError);
+  const publicAccessNotImplemented = isApiFeatureNotImplemented(publicAccessError);
+  const aclNotImplemented = isApiFeatureNotImplemented(bucketAclError);
+  const policyNotImplemented = isApiFeatureNotImplemented(policyError);
+  const corsNotImplemented = isApiFeatureNotImplemented(corsError);
+  const encryptionNotImplemented = isApiFeatureNotImplemented(encryptionError);
+  const websiteNotImplemented = isApiFeatureNotImplemented(websiteError);
+  const replicationNotImplemented = isApiFeatureNotImplemented(replicationError);
+  const accessLoggingNotImplemented = isApiFeatureNotImplemented(accessLoggingError);
+  const notificationsNotImplemented = isApiFeatureNotImplemented(notificationsError);
   const versioningCardState = resolveFeatureVisualState({
-    disabled: Boolean(versioningLoadError),
+    disabled: versioningNotImplemented,
     configured: versioningIsEnabled,
     unsaved: versioningDirty,
   });
   const encryptionCardState = resolveFeatureVisualState({
-    disabled: !sseFeatureEnabled,
+    disabled: !sseFeatureEnabled || encryptionNotImplemented,
     configured: encryptionConfigured,
     unsaved: encryptionDirty,
   });
   const objectLockCardState = resolveFeatureVisualState({
-    disabled: Boolean(objectLockLoadError),
+    disabled: objectLockNotImplemented,
     configured: objectLockPersistentlyEnabled,
     unsaved: objectLockDirty,
   });
   const lifecycleCardState = resolveFeatureVisualState({
+    disabled: lifecycleNotImplemented,
     configured: hasLifecycleRules,
     unsaved: lifecycleDirty,
   });
   const tagsCardState = resolveFeatureVisualState({
+    disabled: tagsNotImplemented,
     configured: bucketTags.length > 0,
     unsaved: tagsDirty,
   });
   const publicAccessCardState = resolveFeatureVisualState({
-    disabled: Boolean(publicAccessError),
+    disabled: publicAccessNotImplemented,
     configured: publicAccessBlockEnabled || publicAccessBlockPartial,
     unsaved: publicAccessDirty,
   });
   const aclCardState = resolveFeatureVisualState({
+    disabled: aclNotImplemented,
     configured: inferBucketAclPreset(bucketAcl) !== "private",
     unsaved: aclDirty,
   });
   const policyCardState = resolveFeatureVisualState({
+    disabled: policyNotImplemented,
     configured: policyConfigured,
     unsaved: policyDirty,
   });
   const websiteCardState = resolveFeatureVisualState({
-    disabled: staticWebsiteBlocked,
+    disabled: staticWebsiteBlocked || websiteNotImplemented,
     configured: websiteConfigured,
     unsaved: websiteDirty,
   });
   const replicationCardState = resolveFeatureVisualState({
+    disabled: replicationNotImplemented,
     configured: replicationConfigured,
     unsaved: replicationDirty,
   });
   const corsCardState = resolveFeatureVisualState({
+    disabled: corsNotImplemented,
     configured: corsConfigured,
     unsaved: corsDirty,
   });
   const accessLoggingCardState = resolveFeatureVisualState({
+    disabled: accessLoggingNotImplemented,
     configured: accessLoggingConfigured,
     unsaved: accessLoggingDirty,
   });
   const notificationsCardState = resolveFeatureVisualState({
+    disabled: notificationsNotImplemented,
     configured: notificationsConfigured,
     unsaved: notificationsDirty,
   });
@@ -2915,9 +2937,7 @@ export default function BucketDetailPage({
                       </div>
                     </div>
                     {objectsError && (
-                      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                        {objectsError}
-                      </div>
+                      <UiInlineMessage tone="error">{objectsError}</UiInlineMessage>
                     )}
 
                     <div className="rounded-xl border border-slate-200 dark:border-slate-800">
@@ -3025,19 +3045,13 @@ export default function BucketDetailPage({
                   >
                     <div className="space-y-2">
                       {versioningLoading && (
-                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
-                          Loading versioning...
-                        </div>
+                        <UiInlineMessage>Loading versioning...</UiInlineMessage>
                       )}
                       {versioningLoadError && (
-                        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                          {versioningLoadError}
-                        </div>
+                        <UiInlineMessage tone="error">{versioningLoadError}</UiInlineMessage>
                       )}
                       {versioningSaveError && (
-                        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                          {versioningSaveError}
-                        </div>
+                        <UiInlineMessage tone="error">{versioningSaveError}</UiInlineMessage>
                       )}
                       <div className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
                         <div>
@@ -3082,7 +3096,7 @@ export default function BucketDetailPage({
                         <button
                           type="button"
                           onClick={clearEncryption}
-                          disabled={!sseFeatureEnabled || deletingEncryption}
+                          disabled={!sseFeatureEnabled || encryptionNotImplemented || deletingEncryption}
                           className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                         >
                           {deletingEncryption ? "Disabling..." : "Disable"}
@@ -3090,7 +3104,7 @@ export default function BucketDetailPage({
                         <button
                           type="button"
                           onClick={saveEncryption}
-                          disabled={!sseFeatureEnabled || savingEncryption || encryptionLoading}
+                          disabled={!sseFeatureEnabled || encryptionNotImplemented || savingEncryption || encryptionLoading}
                           className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         >
                           {savingEncryption ? "Saving..." : "Save"}
@@ -3100,14 +3114,10 @@ export default function BucketDetailPage({
                   >
                     {!sseFeatureEnabled && <EndpointFeatureDisabledNotice featureLabel="Server-side encryption" />}
                     {encryptionError && (
-                      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                        {encryptionError}
-                      </div>
+                      <UiInlineMessage tone="error">{encryptionError}</UiInlineMessage>
                     )}
                     {encryptionStatus && (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                        {encryptionStatus}
-                      </div>
+                      <UiInlineMessage tone="success">{encryptionStatus}</UiInlineMessage>
                     )}
                     <textarea
                       value={encryptionText}
@@ -3120,13 +3130,14 @@ export default function BucketDetailPage({
                       className="h-40 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       placeholder='[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]'
                       spellCheck={false}
-                      disabled={!sseFeatureEnabled || encryptionLoading || savingEncryption || deletingEncryption}
+                      disabled={!sseFeatureEnabled || encryptionNotImplemented || encryptionLoading || savingEncryption || deletingEncryption}
                     />
                     <BucketFeatureJsonExample
                       show={showEncryptionExample}
                       onToggle={() => setShowEncryptionExample((prev) => !prev)}
                       example={defaultEncryptionExample}
                       onUseExample={() => setEncryptionText(defaultEncryptionExample)}
+                      disabled={!sseFeatureEnabled || encryptionNotImplemented}
                       helperText={
                         <span className="ui-caption text-slate-500 dark:text-slate-400">
                           Leave <code>Rules</code> empty to disable default encryption.
@@ -3164,24 +3175,16 @@ export default function BucketDetailPage({
                   >
                     <div className="space-y-2">
                       {objectLockLoading && (
-                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
-                          Loading Object Lock configuration...
-                        </div>
+                        <UiInlineMessage>Loading Object Lock configuration...</UiInlineMessage>
                       )}
                       {objectLockLoadError && (
-                        <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                          {objectLockLoadError}
-                        </div>
+                        <UiInlineMessage tone="error">{objectLockLoadError}</UiInlineMessage>
                       )}
                       {objectLockError && (
-                        <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                          {objectLockError}
-                        </div>
+                        <UiInlineMessage tone="error">{objectLockError}</UiInlineMessage>
                       )}
                       {objectLockStatus && (
-                        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 ui-caption font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                          {objectLockStatus}
-                        </div>
+                        <UiInlineMessage tone="success">{objectLockStatus}</UiInlineMessage>
                       )}
                       <form id={objectLockFormId} className="space-y-2" onSubmit={handleSaveObjectLock}>
                         <div className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
@@ -3193,7 +3196,7 @@ export default function BucketDetailPage({
                           </div>
                           <PortalSettingsSwitch
                             checked={objectLockEnabled ?? false}
-                            disabled={objectLockPersistentlyEnabled || objectLockLoading || Boolean(objectLockLoadError)}
+                            disabled={objectLockPersistentlyEnabled || objectLockLoading || Boolean(objectLockLoadError) || objectLockNotImplemented}
                             ariaLabel="Enable object lock"
                             onChange={(checked) => {
                               if (objectLockPersistentlyEnabled) return;
@@ -3213,9 +3216,9 @@ export default function BucketDetailPage({
                           </p>
                         )}
                         {objectLockActive && (
-                          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                          <UiInlineMessage tone="warning">
                             Warning: while Object Lock is enabled, objects cannot be deleted until the specified retention period ends. Review mode and retention before saving changes.
-                          </div>
+                          </UiInlineMessage>
                         )}
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                           <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -3224,6 +3227,7 @@ export default function BucketDetailPage({
                               value={objectLockMode}
                               onChange={(e) => setObjectLockMode(e.target.value)}
                               className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              disabled={objectLockNotImplemented}
                             >
                               <option value="">(none)</option>
                               <option value="GOVERNANCE">Governance</option>
@@ -3240,6 +3244,7 @@ export default function BucketDetailPage({
                               onChange={(e) => setObjectLockDays(e.target.value)}
                               className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                               placeholder="e.g. 30"
+                              disabled={objectLockNotImplemented}
                             />
                           </label>
                           <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -3252,6 +3257,7 @@ export default function BucketDetailPage({
                               onChange={(e) => setObjectLockYears(e.target.value)}
                               className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                               placeholder="e.g. 1"
+                              disabled={objectLockNotImplemented}
                             />
                           </label>
                         </div>
@@ -3282,13 +3288,14 @@ export default function BucketDetailPage({
                             type="button"
                             onClick={() => setShowLifecycleEditor((prev) => !prev)}
                             className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                            disabled={lifecycleNotImplemented}
                           >
                             {showLifecycleEditor ? "Hide editor" : "Show editor"}
                           </button>
                           <button
                             type="button"
                             onClick={saveLifecycle}
-                            disabled={savingLifecycle || lifecycleLoading}
+                            disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                             className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                           >
                             {savingLifecycle ? "Saving..." : "Save"}
@@ -3297,19 +3304,13 @@ export default function BucketDetailPage({
                       }
                     >
                       {lifecycleLoading && (
-                        <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
-                          Loading lifecycle rules...
-                        </div>
+                        <UiInlineMessage className="mt-2">Loading lifecycle rules...</UiInlineMessage>
                       )}
                       {lifecycleError && (
-                        <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                          {lifecycleError}
-                        </div>
+                        <UiInlineMessage tone="error" className="mt-2">{lifecycleError}</UiInlineMessage>
                       )}
                       {lifecycleStatus && (
-                        <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                          {lifecycleStatus}
-                        </div>
+                        <UiInlineMessage tone="success" className="mt-2">{lifecycleStatus}</UiInlineMessage>
                       )}
                       <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/40">
                         {(lifecycle.rules?.length ?? 0) === 0 ? (
@@ -3367,7 +3368,7 @@ export default function BucketDetailPage({
                                               ? "border border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-200"
                                               : "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
                                           }`}
-                                          disabled={savingLifecycle || lifecycleLoading}
+                                          disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                         >
                                           {(rule as any).Status === "Disabled" ? "Disabled" : "Enabled"}
                                         </button>
@@ -3380,7 +3381,7 @@ export default function BucketDetailPage({
                                             type="button"
                                             onClick={() => deleteRuleAt(idx)}
                                             className="rounded border border-rose-200 px-2 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-300 hover:text-rose-800 dark:border-rose-900/40 dark:text-rose-100"
-                                            disabled={savingLifecycle || lifecycleLoading}
+                                            disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                           >
                                             Delete
                                           </button>
@@ -3405,14 +3406,13 @@ export default function BucketDetailPage({
                                 { value: "simple", label: "Quick add" },
                               ]}
                               onChange={(value) => setLifecycleMode(value)}
+                              disabled={lifecycleNotImplemented}
                             />
                           </div>
                           {lifecycleMode === "simple" ? (
                             <div className="mt-3 space-y-3">
                               {simpleLifecycleWarning && (
-                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
-                                  {simpleLifecycleWarning}
-                                </div>
+                                <UiInlineMessage tone="warning">{simpleLifecycleWarning}</UiInlineMessage>
                               )}
                               <p className="ui-caption text-slate-600 dark:text-slate-300">
                                 Quickly add one of the preconfigured rules below (appended to the existing configuration).
@@ -3438,7 +3438,7 @@ export default function BucketDetailPage({
                                         })
                                       }
                                       className="ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
-                                      disabled={savingLifecycle || lifecycleLoading}
+                                      disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                     >
                                       Add
                                     </button>
@@ -3456,6 +3456,7 @@ export default function BucketDetailPage({
                                         value={transitionCurrentDays}
                                         onChange={(e) => setTransitionCurrentDays(e.target.value)}
                                         className="w-28 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        disabled={lifecycleNotImplemented}
                                       />
                                     </label>
                                     <label className="flex flex-col gap-1">
@@ -3466,6 +3467,7 @@ export default function BucketDetailPage({
                                         value={transitionNoncurrentDays}
                                         onChange={(e) => setTransitionNoncurrentDays(e.target.value)}
                                         className="w-28 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        disabled={lifecycleNotImplemented}
                                       />
                                     </label>
                                     <label className="flex flex-col gap-1">
@@ -3476,6 +3478,7 @@ export default function BucketDetailPage({
                                         onChange={(e) => setTransitionStorageClass(e.target.value)}
                                         className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                         placeholder="GLACIER"
+                                        disabled={lifecycleNotImplemented}
                                       />
                                     </label>
                                     <label className="flex flex-col gap-1">
@@ -3486,6 +3489,7 @@ export default function BucketDetailPage({
                                         onChange={(e) => setTransitionPrefix(e.target.value)}
                                         className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                         placeholder="logs/"
+                                        disabled={lifecycleNotImplemented}
                                       />
                                     </label>
                                   </div>
@@ -3508,7 +3512,7 @@ export default function BucketDetailPage({
                                         })
                                       }
                                       className="ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
-                                      disabled={savingLifecycle || lifecycleLoading}
+                                      disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                     >
                                       Add
                                     </button>
@@ -3526,6 +3530,7 @@ export default function BucketDetailPage({
                                         value={expireCurrentDays}
                                         onChange={(e) => setExpireCurrentDays(e.target.value)}
                                         className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        disabled={lifecycleNotImplemented}
                                       />
                                     </label>
                                     <label className="flex flex-col gap-1">
@@ -3536,6 +3541,7 @@ export default function BucketDetailPage({
                                         value={expireNoncurrentDays}
                                         onChange={(e) => setExpireNoncurrentDays(e.target.value)}
                                         className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        disabled={lifecycleNotImplemented}
                                       />
                                     </label>
                                     <label className="flex flex-col gap-1">
@@ -3546,6 +3552,7 @@ export default function BucketDetailPage({
                                         onChange={(e) => setExpirePrefix(e.target.value)}
                                         className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                         placeholder="archive/"
+                                        disabled={lifecycleNotImplemented}
                                       />
                                     </label>
                                   </div>
@@ -3561,7 +3568,7 @@ export default function BucketDetailPage({
                                         })
                                       }
                                       className="ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
-                                      disabled={savingLifecycle || lifecycleLoading}
+                                      disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                     >
                                       Add
                                     </button>
@@ -3582,12 +3589,14 @@ export default function BucketDetailPage({
                                 onChange={(e) => setLifecycleText(e.target.value)}
                                 rows={10}
                                 className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={lifecycleNotImplemented}
                               />
                               <BucketFeatureJsonExample
                                 show={showLifecycleJsonExample}
                                 onToggle={() => setShowLifecycleJsonExample((prev) => !prev)}
                                 example={defaultLifecycleJsonExample}
                                 onUseExample={() => setLifecycleText(defaultLifecycleJsonExample)}
+                                disabled={lifecycleNotImplemented}
                               />
                             </div>
                           )}
@@ -3607,7 +3616,7 @@ export default function BucketDetailPage({
                             type="button"
                             onClick={clearBucketTags}
                             className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                            disabled={bucketTagsLoading || savingBucketTags || deletingBucketTags || bucketTags.length === 0}
+                            disabled={tagsNotImplemented || bucketTagsLoading || savingBucketTags || deletingBucketTags || bucketTags.length === 0}
                           >
                             {deletingBucketTags ? "Clearing..." : "Clear"}
                           </button>
@@ -3615,7 +3624,7 @@ export default function BucketDetailPage({
                             type="button"
                             onClick={saveBucketTags}
                             className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                            disabled={bucketTagsLoading || savingBucketTags || deletingBucketTags}
+                            disabled={tagsNotImplemented || bucketTagsLoading || savingBucketTags || deletingBucketTags}
                           >
                             {savingBucketTags ? "Saving..." : "Save"}
                           </button>
@@ -3623,19 +3632,13 @@ export default function BucketDetailPage({
                       }
                     >
                       {bucketTagsError && (
-                        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                          {bucketTagsError}
-                        </div>
+                        <UiInlineMessage tone="error">{bucketTagsError}</UiInlineMessage>
                       )}
                       {bucketTagsStatus && (
-                        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                          {bucketTagsStatus}
-                        </div>
+                        <UiInlineMessage tone="success">{bucketTagsStatus}</UiInlineMessage>
                       )}
                       {bucketTagsLoading ? (
-                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
-                          Loading bucket tags...
-                        </div>
+                        <UiInlineMessage>Loading bucket tags...</UiInlineMessage>
                       ) : (
                         <div className="space-y-2">
                           {bucketTags.length === 0 && (
@@ -3652,7 +3655,7 @@ export default function BucketDetailPage({
                                 onChange={(e) => updateBucketTagAt(index, { key: e.target.value })}
                                 className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 placeholder="Tag key"
-                                disabled={savingBucketTags || deletingBucketTags}
+                                disabled={tagsNotImplemented || savingBucketTags || deletingBucketTags}
                               />
                               <input
                                 type="text"
@@ -3660,13 +3663,13 @@ export default function BucketDetailPage({
                                 onChange={(e) => updateBucketTagAt(index, { value: e.target.value })}
                                 className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 placeholder="Tag value"
-                                disabled={savingBucketTags || deletingBucketTags}
+                                disabled={tagsNotImplemented || savingBucketTags || deletingBucketTags}
                               />
                               <button
                                 type="button"
                                 onClick={() => removeBucketTagAt(index)}
                                 className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                                disabled={savingBucketTags || deletingBucketTags}
+                                disabled={tagsNotImplemented || savingBucketTags || deletingBucketTags}
                               >
                                 Remove
                               </button>
@@ -3677,7 +3680,7 @@ export default function BucketDetailPage({
                               type="button"
                               onClick={addBucketTag}
                               className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                              disabled={savingBucketTags || deletingBucketTags}
+                              disabled={tagsNotImplemented || savingBucketTags || deletingBucketTags}
                             >
                               Add tag
                             </button>
@@ -3708,7 +3711,7 @@ export default function BucketDetailPage({
                     <button
                       type="button"
                       onClick={savePublicAccessBlock}
-                      disabled={publicAccessLoading || savingPublicAccess}
+                      disabled={publicAccessNotImplemented || publicAccessLoading || savingPublicAccess}
                       className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                     >
                       {savingPublicAccess ? "Saving..." : "Save"}
@@ -3716,14 +3719,10 @@ export default function BucketDetailPage({
                   }
                 >
                   {publicAccessStatus && (
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                      {publicAccessStatus}
-                    </div>
+                    <UiInlineMessage tone="success">{publicAccessStatus}</UiInlineMessage>
                   )}
                   {publicAccessError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                      {publicAccessError}
-                    </div>
+                    <UiInlineMessage tone="error">{publicAccessError}</UiInlineMessage>
                   )}
                   <div className="grid gap-3 md:grid-cols-2">
                     {publicAccessOptions.map((option) => (
@@ -3739,7 +3738,7 @@ export default function BucketDetailPage({
                           type="checkbox"
                           checked={Boolean(publicAccessBlock[option.key])}
                           onChange={(e) => handleTogglePublicAccessField(option.key, e.target.checked)}
-                          disabled={publicAccessLoading || savingPublicAccess}
+                          disabled={publicAccessNotImplemented || publicAccessLoading || savingPublicAccess}
                           className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                         />
                       </label>
@@ -3759,21 +3758,17 @@ export default function BucketDetailPage({
                       type="button"
                       onClick={saveBucketAcl}
                       className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                      disabled={savingBucketAcl || bucketAclLoading}
+                      disabled={aclNotImplemented || savingBucketAcl || bucketAclLoading}
                     >
                       {savingBucketAcl ? "Saving..." : "Save"}
                     </button>
                   }
                 >
                   {bucketAclError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                      {bucketAclError}
-                    </div>
+                    <UiInlineMessage tone="error">{bucketAclError}</UiInlineMessage>
                   )}
                   {bucketAclStatus && (
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                      {bucketAclStatus}
-                    </div>
+                    <UiInlineMessage tone="success">{bucketAclStatus}</UiInlineMessage>
                   )}
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -3786,7 +3781,7 @@ export default function BucketDetailPage({
                           setBucketAclError(null);
                         }}
                         className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        disabled={bucketAclLoading || savingBucketAcl}
+                        disabled={aclNotImplemented || bucketAclLoading || savingBucketAcl}
                       >
                         {bucketAclOptions.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -3807,7 +3802,7 @@ export default function BucketDetailPage({
                           }}
                           className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           placeholder="e.g. private"
-                          disabled={bucketAclLoading || savingBucketAcl}
+                          disabled={aclNotImplemented || bucketAclLoading || savingBucketAcl}
                         />
                       </label>
                     )}
@@ -3816,9 +3811,7 @@ export default function BucketDetailPage({
                     Saving a canned ACL replaces the current ACL grants.
                   </p>
                   {bucketAclLoading ? (
-                    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
-                      Loading ACL...
-                    </div>
+                    <UiInlineMessage>Loading ACL...</UiInlineMessage>
                   ) : (
                     <div className="space-y-3">
                       <p className="ui-caption text-slate-500 dark:text-slate-400">
@@ -3872,7 +3865,7 @@ export default function BucketDetailPage({
                       <button
                         type="button"
                         onClick={removePolicy}
-                        disabled={deletingPolicy}
+                        disabled={policyNotImplemented || deletingPolicy}
                         className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
                         {deletingPolicy ? "Deleting..." : "Delete"}
@@ -3880,7 +3873,7 @@ export default function BucketDetailPage({
                       <button
                         type="button"
                         onClick={savePolicy}
-                        disabled={savingPolicy || policyLoading}
+                        disabled={policyNotImplemented || savingPolicy || policyLoading}
                         className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingPolicy ? "Saving..." : "Save"}
@@ -3889,9 +3882,7 @@ export default function BucketDetailPage({
                   }
                 >
                   {policyError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                      {policyError}
-                    </div>
+                    <UiInlineMessage tone="error">{policyError}</UiInlineMessage>
                   )}
                   <textarea
                     value={policyText}
@@ -3899,6 +3890,7 @@ export default function BucketDetailPage({
                     className="h-72 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     placeholder='{"Version":"2012-10-17","Statement":[...]}'
                     spellCheck={false}
+                    disabled={policyNotImplemented}
                   />
                   <BucketFeatureJsonExample
                     show={showPolicyExample}
@@ -3927,6 +3919,7 @@ export default function BucketDetailPage({
   ]
 }`)
                     }
+                    disabled={policyNotImplemented}
                   />
                 </BucketFeatureCard>
 
@@ -3942,7 +3935,7 @@ export default function BucketDetailPage({
                       <button
                         type="button"
                         onClick={removeCors}
-                        disabled={deletingCors}
+                        disabled={corsNotImplemented || deletingCors}
                         className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
                         {deletingCors ? "Deleting..." : "Delete"}
@@ -3950,7 +3943,7 @@ export default function BucketDetailPage({
                       <button
                         type="button"
                         onClick={saveCors}
-                        disabled={savingCors || corsLoading}
+                        disabled={corsNotImplemented || savingCors || corsLoading}
                         className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingCors ? "Saving..." : "Save"}
@@ -3959,9 +3952,7 @@ export default function BucketDetailPage({
                   }
                 >
                   {corsError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                      {corsError}
-                    </div>
+                    <UiInlineMessage tone="error">{corsError}</UiInlineMessage>
                   )}
                   <textarea
                     value={corsText}
@@ -3969,12 +3960,14 @@ export default function BucketDetailPage({
                     className="h-56 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     placeholder='[{"AllowedMethods":["GET"],"AllowedOrigins":["*"]}]'
                     spellCheck={false}
+                    disabled={corsNotImplemented}
                   />
                   <BucketFeatureJsonExample
                     show={showCorsExample}
                     onToggle={() => setShowCorsExample((prev) => !prev)}
                     example={defaultCorsExample}
                     onUseExample={() => setCorsText(defaultCorsExample)}
+                    disabled={corsNotImplemented}
                   />
                 </BucketFeatureCard>
 
@@ -3998,7 +3991,7 @@ export default function BucketDetailPage({
                       <button
                         type="button"
                         onClick={clearWebsite}
-                        disabled={clearingWebsite || staticWebsiteBlocked}
+                        disabled={websiteNotImplemented || clearingWebsite || staticWebsiteBlocked}
                         className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
                         {clearingWebsite ? "Deleting..." : "Delete"}
@@ -4006,7 +3999,7 @@ export default function BucketDetailPage({
                       <button
                         type="button"
                         onClick={saveWebsite}
-                        disabled={savingWebsite || websiteLoading || staticWebsiteBlocked}
+                        disabled={websiteNotImplemented || savingWebsite || websiteLoading || staticWebsiteBlocked}
                         className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingWebsite ? "Saving..." : "Save"}
@@ -4016,14 +4009,10 @@ export default function BucketDetailPage({
                 >
                   {staticWebsiteBlocked && <EndpointFeatureDisabledNotice featureLabel="Static website" />}
                   {websiteError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                      {websiteError}
-                    </div>
+                    <UiInlineMessage tone="error">{websiteError}</UiInlineMessage>
                   )}
                   {websiteStatus && (
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                      {websiteStatus}
-                    </div>
+                    <UiInlineMessage tone="success">{websiteStatus}</UiInlineMessage>
                   )}
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
@@ -4035,7 +4024,7 @@ export default function BucketDetailPage({
                           setWebsiteStatus(null);
                           setWebsiteError(null);
                         }}
-                        disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                        disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
                       />
                       <div>
@@ -4054,7 +4043,7 @@ export default function BucketDetailPage({
                           setWebsiteStatus(null);
                           setWebsiteError(null);
                         }}
-                        disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                        disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
                       />
                       <div>
@@ -4079,7 +4068,7 @@ export default function BucketDetailPage({
                             }}
                             className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                             placeholder="index.html"
-                            disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                            disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                           />
                         </label>
                         <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4093,7 +4082,7 @@ export default function BucketDetailPage({
                             }}
                             className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                             placeholder="error.html"
-                            disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                            disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                           />
                         </label>
                       </div>
@@ -4111,7 +4100,7 @@ export default function BucketDetailPage({
                           className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           placeholder="[]"
                           spellCheck={false}
-                          disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                          disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         />
                         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
                           <BucketFeatureJsonExample
@@ -4123,6 +4112,7 @@ export default function BucketDetailPage({
                               setWebsiteStatus(null);
                               setWebsiteError(null);
                             }}
+                            disabled={websiteNotImplemented}
                           />
                         </div>
                       </div>
@@ -4140,7 +4130,7 @@ export default function BucketDetailPage({
                           }}
                           className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           placeholder="www.example.com"
-                          disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                          disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         />
                       </label>
                       <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4154,7 +4144,7 @@ export default function BucketDetailPage({
                           }}
                           className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           placeholder="https"
-                          disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                          disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         />
                       </label>
                       <p className="md:col-span-2 ui-caption text-slate-500 dark:text-slate-400">
@@ -4176,7 +4166,7 @@ export default function BucketDetailPage({
                         <button
                           type="button"
                           onClick={clearReplication}
-                          disabled={replicationBusy}
+                          disabled={replicationNotImplemented || replicationBusy}
                           className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                         >
                           {clearingReplication ? "Clearing..." : "Clear"}
@@ -4184,7 +4174,7 @@ export default function BucketDetailPage({
                         <button
                           type="button"
                           onClick={saveReplication}
-                          disabled={replicationBusy}
+                          disabled={replicationNotImplemented || replicationBusy}
                           className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         >
                           {savingReplication ? "Saving..." : "Save"}
@@ -4203,27 +4193,19 @@ export default function BucketDetailPage({
                         setReplicationStatus(null);
                         setReplicationError(null);
                       }}
-                      disabled={replicationBusy}
+                      disabled={replicationNotImplemented || replicationBusy}
                     />
                     {replicationError && (
-                      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                        {replicationError}
-                      </div>
+                      <UiInlineMessage tone="error">{replicationError}</UiInlineMessage>
                     )}
                     {replicationWarning && (
-                      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
-                        {replicationWarning}
-                      </div>
+                      <UiInlineMessage tone="warning">{replicationWarning}</UiInlineMessage>
                     )}
                     {replicationStatus && (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                        {replicationStatus}
-                      </div>
+                      <UiInlineMessage tone="success">{replicationStatus}</UiInlineMessage>
                     )}
                     {replicationLoading ? (
-                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
-                        Loading replication configuration...
-                      </div>
+                      <UiInlineMessage>Loading replication configuration...</UiInlineMessage>
                     ) : replicationMode === "graphical" ? (
                       <div className="space-y-3">
                         <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4237,7 +4219,7 @@ export default function BucketDetailPage({
                             }}
                             className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                             placeholder="arn:aws:iam::123456789012:role/replication-role"
-                            disabled={replicationBusy}
+                            disabled={replicationNotImplemented || replicationBusy}
                           />
                         </label>
                         <div className="space-y-3">
@@ -4251,7 +4233,7 @@ export default function BucketDetailPage({
                                 <button
                                   type="button"
                                   onClick={() => removeReplicationRule(index)}
-                                  disabled={replicationBusy || replicationRules.length <= 1}
+                                  disabled={replicationNotImplemented || replicationBusy || replicationRules.length <= 1}
                                   className="rounded-md border border-rose-200 px-2 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                                 >
                                   Remove
@@ -4266,7 +4248,7 @@ export default function BucketDetailPage({
                                     onChange={(e) => updateReplicationRule(index, { id: e.target.value })}
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                     placeholder={`rule-${index + 1}`}
-                                    disabled={replicationBusy}
+                                    disabled={replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
                                 <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4275,7 +4257,7 @@ export default function BucketDetailPage({
                                     value={rule.status}
                                     onChange={(e) => updateReplicationRule(index, { status: e.target.value as "Enabled" | "Disabled" })}
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                    disabled={replicationBusy}
+                                    disabled={replicationNotImplemented || replicationBusy}
                                   >
                                     <option value="Enabled">Enabled</option>
                                     <option value="Disabled">Disabled</option>
@@ -4291,7 +4273,7 @@ export default function BucketDetailPage({
                                     onChange={(e) => updateReplicationRule(index, { priority: e.target.value })}
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                     placeholder="1"
-                                    disabled={replicationBusy}
+                                    disabled={replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
                                 <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4302,7 +4284,7 @@ export default function BucketDetailPage({
                                     onChange={(e) => updateReplicationRule(index, { prefix: e.target.value })}
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                     placeholder="logs/"
-                                    disabled={replicationBusy}
+                                    disabled={replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
                                 <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4313,7 +4295,7 @@ export default function BucketDetailPage({
                                     onChange={(e) => updateReplicationRule(index, { destinationBucket: e.target.value })}
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                     placeholder="arn:aws:s3:::target-bucket"
-                                    disabled={replicationBusy}
+                                    disabled={replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
                                 <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4326,7 +4308,7 @@ export default function BucketDetailPage({
                                       })
                                     }
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                    disabled={replicationBusy}
+                                    disabled={replicationNotImplemented || replicationBusy}
                                   >
                                     <option value="Disabled">Disabled</option>
                                     <option value="Enabled">Enabled</option>
@@ -4340,7 +4322,7 @@ export default function BucketDetailPage({
                           <button
                             type="button"
                             onClick={addReplicationRule}
-                            disabled={replicationBusy}
+                            disabled={replicationNotImplemented || replicationBusy}
                             className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
                           >
                             Add rule
@@ -4358,7 +4340,7 @@ export default function BucketDetailPage({
                           rows={14}
                           className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           spellCheck={false}
-                          disabled={replicationBusy}
+                          disabled={replicationNotImplemented || replicationBusy}
                         />
                         {containsUnsupportedReplicationZone(replicationConfiguration) && (
                           <p className="ui-caption text-rose-700 dark:text-rose-200">
@@ -4374,6 +4356,7 @@ export default function BucketDetailPage({
                             setReplicationStatus(null);
                             setReplicationError(null);
                           }}
+                          disabled={replicationNotImplemented}
                         />
                       </div>
                     )}
@@ -4391,7 +4374,7 @@ export default function BucketDetailPage({
                       <button
                         type="button"
                         onClick={clearAccessLogging}
-                        disabled={clearingAccessLogging}
+                        disabled={accessLoggingNotImplemented || clearingAccessLogging}
                         className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
                         {clearingAccessLogging ? "Disabling..." : "Disable"}
@@ -4399,7 +4382,7 @@ export default function BucketDetailPage({
                       <button
                         type="button"
                         onClick={saveAccessLogging}
-                        disabled={savingAccessLogging || accessLoggingLoading}
+                        disabled={accessLoggingNotImplemented || savingAccessLogging || accessLoggingLoading}
                         className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingAccessLogging ? "Saving..." : "Save"}
@@ -4408,14 +4391,10 @@ export default function BucketDetailPage({
                   }
                 >
                   {accessLoggingError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                      {accessLoggingError}
-                    </div>
+                    <UiInlineMessage tone="error">{accessLoggingError}</UiInlineMessage>
                   )}
                   {accessLoggingStatus && (
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                      {accessLoggingStatus}
-                    </div>
+                    <UiInlineMessage tone="success">{accessLoggingStatus}</UiInlineMessage>
                   )}
                   <label className="flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
                     <input
@@ -4426,7 +4405,7 @@ export default function BucketDetailPage({
                         setAccessLoggingStatus(null);
                         setAccessLoggingError(null);
                       }}
-                      disabled={accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
+                      disabled={accessLoggingNotImplemented || accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
                       className={uiCheckboxClass}
                     />
                     Enable server access logging
@@ -4444,7 +4423,7 @@ export default function BucketDetailPage({
                         }}
                         className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         placeholder="logs-bucket"
-                        disabled={accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
+                        disabled={accessLoggingNotImplemented || accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
                       />
                     </label>
                     <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4459,7 +4438,7 @@ export default function BucketDetailPage({
                         }}
                         className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         placeholder="access-logs/"
-                        disabled={accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
+                        disabled={accessLoggingNotImplemented || accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
                       />
                     </label>
                   </div>
@@ -4482,7 +4461,7 @@ export default function BucketDetailPage({
                       <button
                         type="button"
                         onClick={clearNotifications}
-                        disabled={clearingNotifications}
+                        disabled={notificationsNotImplemented || clearingNotifications}
                         className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
                         {clearingNotifications ? "Clearing..." : "Clear"}
@@ -4490,7 +4469,7 @@ export default function BucketDetailPage({
                       <button
                         type="button"
                         onClick={saveNotifications}
-                        disabled={savingNotifications || notificationsLoading}
+                        disabled={notificationsNotImplemented || savingNotifications || notificationsLoading}
                         className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingNotifications ? "Saving..." : "Save"}
@@ -4499,14 +4478,10 @@ export default function BucketDetailPage({
                   }
                 >
                   {notificationsError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                      {notificationsError}
-                    </div>
+                    <UiInlineMessage tone="error">{notificationsError}</UiInlineMessage>
                   )}
                   {notificationsStatus && (
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                      {notificationsStatus}
-                    </div>
+                    <UiInlineMessage tone="success">{notificationsStatus}</UiInlineMessage>
                   )}
                   <textarea
                     value={notificationText}
@@ -4519,6 +4494,7 @@ export default function BucketDetailPage({
                     className="h-64 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     placeholder={defaultNotificationTemplate}
                     spellCheck={false}
+                    disabled={notificationsNotImplemented}
                   />
                   <BucketFeatureJsonExample
                     show={showNotificationExample}
@@ -4528,6 +4504,7 @@ export default function BucketDetailPage({
                       setNotificationText(notificationExample);
                       setNotificationsStatus(null);
                     }}
+                    disabled={notificationsNotImplemented}
                     helperText={
                       <span className="ui-caption text-slate-500 dark:text-slate-400">
                         Need a topic? Create it in the Topics section.
@@ -4676,14 +4653,10 @@ export default function BucketDetailPage({
                       </label>
                     </div>
                     {quotaStatus && (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 ui-caption font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                        {quotaStatus}
-                      </div>
+                      <UiInlineMessage tone="success">{quotaStatus}</UiInlineMessage>
                     )}
                     {quotaError && (
-                      <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                        {quotaError}
-                      </div>
+                      <UiInlineMessage tone="error">{quotaError}</UiInlineMessage>
                     )}
                   </form>
                   <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
@@ -4706,8 +4679,8 @@ export default function BucketDetailPage({
 
 function EndpointFeatureDisabledNotice({ featureLabel }: { featureLabel: string }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+    <UiInlineMessage>
       {featureLabel} is disabled on this endpoint.
-    </div>
+    </UiInlineMessage>
   );
 }

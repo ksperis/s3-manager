@@ -21,6 +21,7 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
@@ -539,9 +540,7 @@ export default function TopicsPage() {
               />
             </div>
             {createError && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                {createError}
-              </div>
+              <UiInlineMessage tone="error">{createError}</UiInlineMessage>
             )}
             <div className="flex items-center justify-end gap-2">
               <button
@@ -567,14 +566,10 @@ export default function TopicsPage() {
         <Modal title={`Topic attributes · ${attributesTopicName ?? ""}`} onClose={closeAttributesModal}>
           <div className="space-y-4">
             {attributesError && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                {attributesError}
-              </div>
+              <UiInlineMessage tone="error">{attributesError}</UiInlineMessage>
             )}
             {attributesStatus && (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                {attributesStatus}
-              </div>
+              <UiInlineMessage tone="success">{attributesStatus}</UiInlineMessage>
             )}
             <div className="space-y-1">
               <label className="ui-body font-semibold text-slate-700 dark:text-slate-100">Push endpoint URL</label>
@@ -692,14 +687,10 @@ export default function TopicsPage() {
         <Modal title={`Topic policy · ${policyTopicName ?? ""}`} onClose={closePolicyModal}>
           <div className="space-y-3">
             {policyError && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                {policyError}
-              </div>
+              <UiInlineMessage tone="error">{policyError}</UiInlineMessage>
             )}
             {policyStatus && (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                {policyStatus}
-              </div>
+              <UiInlineMessage tone="success">{policyStatus}</UiInlineMessage>
             )}
             <textarea
               value={policyText}
