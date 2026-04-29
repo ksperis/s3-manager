@@ -4,7 +4,7 @@ import pytest
 
 from app.db import StorageEndpoint, StorageProvider
 from app.utils import s3_endpoint
-from app.utils.s3_endpoint import resolve_iam_client_options, validate_custom_login_s3_endpoint
+from app.utils.s3_endpoint import resolve_iam_client_options, resolve_s3_client_options, validate_custom_login_s3_endpoint
 from app.utils.storage_endpoint_features import AWS_IAM_ENDPOINT, AWS_S3_ENDPOINT
 
 
@@ -45,6 +45,51 @@ def test_resolve_iam_client_options_uses_aws_iam_endpoint_for_aws_storage_endpoi
     account = type("Account", (), {"storage_endpoint": endpoint})()
 
     assert resolve_iam_client_options(account) == (AWS_IAM_ENDPOINT, "us-east-1", True)
+
+
+def test_resolve_s3_client_options_uses_storage_endpoint_force_path_style():
+    endpoint = StorageEndpoint(
+        name="Path Style",
+        endpoint_url="https://s3.path-style.example.test",
+        provider=StorageProvider.OTHER.value,
+        region="eu-west-1",
+        force_path_style=True,
+        verify_tls=True,
+    )
+    account = type("Account", (), {"storage_endpoint": endpoint})()
+
+    assert resolve_s3_client_options(account) == (
+        "https://s3.path-style.example.test",
+        "eu-west-1",
+        True,
+        True,
+    )
+
+
+def test_resolve_s3_client_options_session_force_path_style_overrides_endpoint():
+    endpoint = StorageEndpoint(
+        name="Path Style",
+        endpoint_url="https://s3.path-style.example.test",
+        provider=StorageProvider.OTHER.value,
+        region="eu-west-1",
+        force_path_style=True,
+        verify_tls=True,
+    )
+    account = type(
+        "Account",
+        (),
+        {
+            "storage_endpoint": endpoint,
+            "_session_force_path_style": False,
+        },
+    )()
+
+    assert resolve_s3_client_options(account) == (
+        "https://s3.path-style.example.test",
+        "eu-west-1",
+        False,
+        True,
+    )
 
 
 def test_resolve_iam_client_options_uses_aws_iam_signing_region_for_connection_context():

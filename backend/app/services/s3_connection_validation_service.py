@@ -101,7 +101,7 @@ class S3ConnectionValidationService:
             endpoint_url = (endpoint.endpoint_url or "").strip().rstrip("/")
             if not endpoint_url:
                 raise ValueError("Endpoint URL is required.")
-            return endpoint_url, endpoint.region, False, True
+            return endpoint_url, endpoint.region, bool(getattr(endpoint, "force_path_style", False)), True
 
         endpoint_url = (payload.endpoint_url or "").strip().rstrip("/")
         if not endpoint_url:

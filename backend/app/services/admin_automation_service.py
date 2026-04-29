@@ -713,6 +713,11 @@ class AdminAutomationService:
             desired = self._normalize_optional_str(spec.region)
             if desired != self._normalize_optional_str(endpoint.region):
                 diff["region"] = {"from": endpoint.region, "to": desired}
+        if "force_path_style" in fields_set and spec.force_path_style is not None:
+            desired_force_path_style = bool(spec.force_path_style)
+            current_force_path_style = bool(getattr(endpoint, "force_path_style", False))
+            if desired_force_path_style != current_force_path_style:
+                diff["force_path_style"] = {"from": current_force_path_style, "to": desired_force_path_style}
         if "verify_tls" in fields_set and spec.verify_tls is not None:
             desired_verify_tls = bool(spec.verify_tls)
             current_verify_tls = bool(getattr(endpoint, "verify_tls", True))
@@ -957,6 +962,7 @@ class AdminAutomationService:
             name=name,
             endpoint_url=endpoint_url,
             region=self._normalize_optional_str(spec.region),
+            force_path_style=bool(spec.force_path_style if spec.force_path_style is not None else False),
             verify_tls=bool(spec.verify_tls if spec.verify_tls is not None else True),
             provider=spec.provider or StorageProvider.CEPH,
             admin_access_key=spec.admin_access_key,

@@ -70,6 +70,7 @@ class EndpointCheckTarget:
     endpoint_id: int
     name: str
     endpoint_url: str
+    force_path_style: bool
     verify_tls: bool
     region: Optional[str]
     supervision_access_key: Optional[str]
@@ -222,6 +223,7 @@ class HealthCheckService:
             endpoint_id=endpoint.id,
             name=endpoint.name,
             endpoint_url=(endpoint.endpoint_url or "").strip(),
+            force_path_style=bool(getattr(endpoint, "force_path_style", False)),
             verify_tls=bool(getattr(endpoint, "verify_tls", True)),
             region=endpoint.region,
             supervision_access_key=endpoint.supervision_access_key,
@@ -1003,6 +1005,7 @@ class HealthCheckService:
                 secret_key=secret_key,
                 endpoint=url,
                 region=target.region,
+                force_path_style=target.force_path_style,
                 verify_tls=self._resolve_verify_ssl(target),
             )
             response = s3_client.list_buckets()

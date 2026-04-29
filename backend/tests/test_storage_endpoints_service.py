@@ -227,6 +227,33 @@ def test_aws_endpoint_defaults_follow_selected_region(db_session):
     assert resolve_iam_endpoint(persisted) == aws_iam_endpoint_for_region("eu-west-3")
 
 
+def test_create_update_and_serialize_endpoint_force_path_style(db_session):
+    service = StorageEndpointsService(db_session)
+
+    created = service.create_endpoint(
+        StorageEndpointCreate(
+            name="Path Style",
+            endpoint_url="https://path-style.example.test",
+            provider=StorageProvider.OTHER,
+            force_path_style=True,
+        )
+    )
+
+    assert created.force_path_style is True
+    persisted = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == created.id).first()
+    assert persisted is not None
+    assert persisted.force_path_style is True
+
+    updated = service.update_endpoint(
+        created.id,
+        StorageEndpointUpdate(force_path_style=False),
+    )
+
+    assert updated.force_path_style is False
+    db_session.refresh(persisted)
+    assert persisted.force_path_style is False
+
+
 def test_aws_endpoint_helpers_are_partition_aware():
     assert AWS_S3_ENDPOINT == aws_s3_endpoint_for_region(AWS_DEFAULT_REGION)
     assert AWS_STS_ENDPOINT == aws_sts_endpoint_for_region(AWS_DEFAULT_REGION)
@@ -308,6 +335,7 @@ def test_sync_env_endpoints_skips_admin_ops_permissions_resolution(db_session, m
                     "name": "ceph-env",
                     "endpoint_url": "https://ceph-env.example.test",
                     "provider": "ceph",
+                    "force_path_style": True,
                     "admin_access_key": "AKIA-ADMIN",
                     "admin_secret_key": "SECRET-ADMIN",
                     "features_config": "features:\n  admin:\n    enabled: true\n",
@@ -336,6 +364,7 @@ def test_sync_env_endpoints_skips_admin_ops_permissions_resolution(db_session, m
     service = StorageEndpointsService(db_session)
     synced = service.sync_env_endpoints()
     assert len(synced) == 1
+    assert synced[0].force_path_style is True
     assert calls["count"] == 0
 
 

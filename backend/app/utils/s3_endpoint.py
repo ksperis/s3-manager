@@ -84,7 +84,13 @@ def resolve_s3_client_options(account: object) -> tuple[Optional[str], Optional[
     if region is None:
         if endpoint_obj is not None:
             region = getattr(endpoint_obj, "region", None)
-    force_path_style = bool(getattr(account, "_session_force_path_style", False))
+    session_force_path_style = getattr(account, "_session_force_path_style", None)
+    if session_force_path_style is not None:
+        force_path_style = bool(session_force_path_style)
+    elif endpoint_obj is not None:
+        force_path_style = bool(getattr(endpoint_obj, "force_path_style", False))
+    else:
+        force_path_style = False
     session_verify_tls = getattr(account, "_session_verify_tls", None)
     if session_verify_tls is not None:
         verify_tls = bool(session_verify_tls)

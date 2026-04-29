@@ -32,6 +32,7 @@ type FormState = {
   name: string;
   endpoint_url: string;
   region: string;
+  force_path_style: boolean;
   verify_tls: boolean;
   provider: StorageProvider;
   tags: UiTagDefinition[];
@@ -219,6 +220,7 @@ function createEmptyForm(): FormState {
     name: "",
     endpoint_url: "",
     region: "",
+    force_path_style: false,
     verify_tls: true,
     provider: "ceph",
     tags: [],
@@ -241,6 +243,7 @@ function createFormFromEndpoint(endpoint: StorageEndpoint): FormState {
     name: endpoint.name ?? "",
     endpoint_url: endpoint.endpoint_url ?? "",
     region: endpoint.region ?? "",
+    force_path_style: Boolean(endpoint.force_path_style),
     verify_tls: endpoint.verify_tls !== false,
     provider: endpoint.provider,
     tags: normalizeUiTags(endpoint.tags),
@@ -739,6 +742,7 @@ export default function StorageEndpointsPage() {
       name: trimmedName,
       endpoint_url: trimmedEndpoint,
       region: trimmedRegion || null,
+      force_path_style: Boolean(form.force_path_style),
       verify_tls: Boolean(form.verify_tls),
       provider: form.provider,
       features_config: featuresConfig,
@@ -842,6 +846,7 @@ export default function StorageEndpointsPage() {
     const showCephAdmin = endpoint.ceph_admin_access_key || endpoint.has_ceph_admin_secret;
     const tagItems = buildUiTagItems(endpoint.tags);
     const verifyTls = endpoint.verify_tls !== false;
+    const forcePathStyle = Boolean(endpoint.force_path_style);
     const features = resolveFeatureState(endpoint, endpoint.provider);
     const adminEnabled = features.admin.enabled;
     const stsEnabled = features.sts.enabled;
@@ -998,6 +1003,10 @@ export default function StorageEndpointsPage() {
             <p className={`font-semibold ${verifyTls ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
               {verifyTls ? "Enabled" : "Disabled (insecure)"}
             </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Path style</p>
+            <p className="font-semibold">{forcePathStyle ? "Forced" : "Virtual-host style"}</p>
           </div>
           <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Admin key</p>
@@ -1300,6 +1309,18 @@ export default function StorageEndpointsPage() {
                   onChange={(e) => handleRegionChange(e.target.value)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   placeholder="us-east-1"
+                />
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/60">
+              <label className="flex items-center justify-between gap-4 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                Force path style
+                <input
+                  type="checkbox"
+                  checked={form.force_path_style}
+                  onChange={(e) => setForm((prev) => ({ ...prev, force_path_style: e.target.checked }))}
+                  className={uiCheckboxClass}
                 />
               </label>
             </div>

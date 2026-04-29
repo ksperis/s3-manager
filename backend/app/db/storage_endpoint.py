@@ -30,6 +30,7 @@ class StorageEndpoint(Base):
     ceph_admin_secret_key = Column(EncryptedString, nullable=True)
     features_config = Column(Text, nullable=True)
     tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    force_path_style = Column(Boolean, default=False, nullable=False, server_default="0")
     verify_tls = Column(Boolean, default=True, nullable=False, server_default="1")
     is_default = Column(Boolean, default=False, nullable=False, server_default="0")
     is_editable = Column(Boolean, default=True, nullable=False, server_default="1")

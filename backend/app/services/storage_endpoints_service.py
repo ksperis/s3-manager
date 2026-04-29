@@ -56,6 +56,7 @@ class EnvStorageEndpoint(BaseModel):
     name: str
     endpoint_url: str
     region: Optional[str] = None
+    force_path_style: bool = False
     verify_tls: bool = True
     provider: Optional[StorageProvider] = None
     admin_access_key: Optional[str] = None
@@ -259,6 +260,7 @@ class StorageEndpointsService:
             endpoint_url=endpoint.endpoint_url,
             admin_endpoint=features.get("admin", {}).get("endpoint"),
             region=endpoint.region,
+            force_path_style=bool(getattr(endpoint, "force_path_style", False)),
             verify_tls=bool(getattr(endpoint, "verify_tls", True)),
             provider=provider,
             admin_access_key=endpoint.admin_access_key,
@@ -475,6 +477,7 @@ class StorageEndpointsService:
         for entry, name, endpoint_url in normalized_entries:
             provider = self._normalize_provider(entry.provider)
             region = self._normalize_region(provider, entry.region)
+            force_path_style = bool(entry.force_path_style)
             verify_tls = bool(entry.verify_tls)
             admin_access = self._clean_optional(entry.admin_access_key)
             admin_secret = self._clean_optional(entry.admin_secret_key)
@@ -514,6 +517,7 @@ class StorageEndpointsService:
                 endpoint.endpoint_url = endpoint_url
                 endpoint.admin_endpoint = admin_endpoint
                 endpoint.region = region
+                endpoint.force_path_style = force_path_style
                 endpoint.verify_tls = verify_tls
                 endpoint.provider = provider.value
                 endpoint.admin_access_key = admin_access
@@ -534,6 +538,7 @@ class StorageEndpointsService:
                     endpoint_url=endpoint_url,
                     admin_endpoint=admin_endpoint,
                     region=region,
+                    force_path_style=force_path_style,
                     verify_tls=verify_tls,
                     provider=provider.value,
                     admin_access_key=admin_access,
@@ -603,6 +608,7 @@ class StorageEndpointsService:
         self._ensure_env_editable()
         name = self._normalize_name(payload.name, fallback="Endpoint")
         endpoint_url = self._normalize_url(payload.endpoint_url)
+        force_path_style = bool(payload.force_path_style)
         verify_tls = bool(payload.verify_tls)
         provider = self._normalize_provider(payload.provider)
         region = self._normalize_region(provider, payload.region)
@@ -643,6 +649,7 @@ class StorageEndpointsService:
             endpoint_url=endpoint_url,
             admin_endpoint=admin_endpoint,
             region=region,
+            force_path_style=force_path_style,
             verify_tls=verify_tls,
             provider=provider.value,
             admin_access_key=admin_access,
@@ -683,6 +690,11 @@ class StorageEndpointsService:
             self._clean_optional(payload.region)
             if "region" in fields_set
             else endpoint.region
+        )
+        force_path_style = (
+            bool(payload.force_path_style)
+            if "force_path_style" in fields_set and payload.force_path_style is not None
+            else bool(getattr(endpoint, "force_path_style", False))
         )
         verify_tls = (
             bool(payload.verify_tls)
@@ -762,6 +774,7 @@ class StorageEndpointsService:
         endpoint.endpoint_url = endpoint_url
         endpoint.admin_endpoint = admin_endpoint
         endpoint.region = region
+        endpoint.force_path_style = force_path_style
         endpoint.verify_tls = verify_tls
         endpoint.provider = provider.value
         endpoint.admin_access_key = admin_access
@@ -861,6 +874,7 @@ class StorageEndpointsService:
         if self.db.query(StorageEndpoint).count() > 0:
             return None
         region = settings.seed_s3_region
+        force_path_style = False
         verify_tls = True
         admin_access = settings.seed_rgw_admin_access_key or settings.seed_s3_access_key
         admin_secret = settings.seed_rgw_admin_secret_key or settings.seed_s3_secret_key
@@ -897,6 +911,7 @@ class StorageEndpointsService:
             endpoint_url=endpoint_url,
             admin_endpoint=admin_endpoint,
             region=region,
+            force_path_style=force_path_style,
             verify_tls=verify_tls,
             provider=provider.value,
             admin_access_key=admin_access,

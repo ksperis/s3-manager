@@ -7,11 +7,12 @@ from app.services import healthcheck_service
 from app.services.healthcheck_service import EndpointCheckTarget, HealthCheckProfile, HealthCheckService, HealthWindow
 
 
-def _build_target(*, verify_tls: bool) -> EndpointCheckTarget:
+def _build_target(*, verify_tls: bool, force_path_style: bool = False) -> EndpointCheckTarget:
     return EndpointCheckTarget(
         endpoint_id=1,
         name="endpoint-1",
         endpoint_url="https://endpoint.example.test",
+        force_path_style=force_path_style,
         verify_tls=verify_tls,
         region="us-east-1",
         supervision_access_key="AKIA-TEST",
@@ -83,6 +84,31 @@ def test_s3_healthcheck_honors_endpoint_insecure_tls(monkeypatch):
     result = service._check_endpoint(target, profile=profile, baseline_latency_ms=None)
 
     assert captured["verify_tls"] is False
+    assert result.status == HealthCheckStatus.UP
+    assert result.error_message is None
+
+
+def test_s3_healthcheck_honors_endpoint_force_path_style(monkeypatch):
+    service = HealthCheckService(db=None)
+    target = _build_target(verify_tls=True, force_path_style=True)
+    profile = HealthCheckProfile(mode="s3", target_url="https://path-style.example.test")
+
+    captured: dict[str, object] = {}
+
+    class FakeS3Client:
+        @staticmethod
+        def list_buckets():
+            return {"ResponseMetadata": {"HTTPStatusCode": 200}}
+
+    def fake_get_s3_client(**kwargs):
+        captured["force_path_style"] = kwargs.get("force_path_style")
+        return FakeS3Client()
+
+    monkeypatch.setattr(healthcheck_service, "get_s3_client", fake_get_s3_client)
+
+    result = service._check_endpoint(target, profile=profile, baseline_latency_ms=None)
+
+    assert captured["force_path_style"] is True
     assert result.status == HealthCheckStatus.UP
     assert result.error_message is None
 

@@ -170,6 +170,11 @@ def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session
     assert custom.capabilities["can_manage_iam"] is True
     assert custom.access_key_id.startswith("AKIA***")
 
+    endpoint.force_path_style = True
+    db_session.add(endpoint)
+    db_session.commit()
+    db_session.refresh(endpoint)
+
     preset_conn = service.create(
         user.id,
         S3ConnectionCreate(
@@ -184,7 +189,7 @@ def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session
     assert preset_conn.is_shared is False
     assert preset_conn.storage_endpoint_id == endpoint.id
     assert preset_conn.endpoint_url == endpoint.endpoint_url
-    assert preset_conn.force_path_style is False
+    assert preset_conn.force_path_style is True
     assert preset_conn.verify_tls is True
 
 

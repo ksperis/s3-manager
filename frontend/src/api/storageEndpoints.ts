@@ -44,6 +44,7 @@ export type StorageEndpoint = {
   endpoint_url: string;
   admin_endpoint?: string | null;
   region?: string | null;
+  force_path_style: boolean;
   verify_tls: boolean;
   provider: StorageProvider;
   admin_access_key?: string | null;
@@ -76,6 +77,7 @@ export type StorageEndpointPayload = {
   endpoint_url: string;
   admin_endpoint?: string | null;
   region?: string | null;
+  force_path_style?: boolean;
   verify_tls?: boolean;
   provider?: StorageProvider;
   admin_access_key?: string | null;

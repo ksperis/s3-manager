@@ -5,6 +5,7 @@ import StorageEndpointsPage from "./StorageEndpointsPage";
 const listStorageEndpointsMock = vi.fn();
 const fetchStorageEndpointsMetaMock = vi.fn();
 const createStorageEndpointMock = vi.fn();
+const updateStorageEndpointMock = vi.fn();
 const updateStorageEndpointTagsMock = vi.fn();
 const listAdminTagDefinitionsMock = vi.fn();
 
@@ -32,7 +33,7 @@ vi.mock("../../api/storageEndpoints", () => ({
   deleteStorageEndpoint: vi.fn(),
   getStorageEndpoint: vi.fn(),
   setDefaultStorageEndpoint: vi.fn(),
-  updateStorageEndpoint: vi.fn(),
+  updateStorageEndpoint: (id: number, payload: unknown) => updateStorageEndpointMock(id, payload),
 }));
 
 vi.mock("../../api/tags", () => ({
@@ -48,6 +49,7 @@ function makeEndpoint(overrides?: Partial<Record<string, unknown>>) {
     provider: "ceph",
     is_default: true,
     is_editable: true,
+    force_path_style: false,
     verify_tls: true,
     tags: [makeTag(801, "prod")],
     capabilities: {
@@ -78,6 +80,7 @@ describe("StorageEndpointsPage tags", () => {
     createStorageEndpointMock.mockResolvedValue(makeEndpoint({ id: 8, name: "AWS Regional", provider: "aws", endpoint_url: "https://s3.us-east-1.amazonaws.com" }));
     listAdminTagDefinitionsMock.mockResolvedValue([makeTag(801, "prod"), makeTag(802, "rgw-a")]);
     updateStorageEndpointTagsMock.mockResolvedValue(makeEndpoint({ tags: [makeTag(801, "prod"), makeTag(802, "rgw-a")] }));
+    updateStorageEndpointMock.mockResolvedValue(makeEndpoint());
   });
 
   afterEach(() => {
@@ -140,6 +143,7 @@ describe("StorageEndpointsPage tags", () => {
           endpoint_url: "https://s3.us-east-1.amazonaws.com",
           region: "us-east-1",
           provider: "aws",
+          force_path_style: false,
           verify_tls: true,
         })
       );
@@ -204,11 +208,58 @@ describe("StorageEndpointsPage tags", () => {
           endpoint_url: "https://s3.eu-west-3.amazonaws.com",
           region: "eu-west-3",
           provider: "aws",
+          force_path_style: false,
         })
       );
     });
     const payload = createStorageEndpointMock.mock.calls[0][0] as { features_config?: string };
     expect(payload.features_config).toContain("endpoint: https://sts.eu-west-3.amazonaws.com");
     expect(payload.features_config).toContain("endpoint: https://iam.amazonaws.com");
+  });
+
+  it("submits force path style when creating an endpoint", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+
+    fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
+    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "Path Style" } });
+    fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://path-style.example.test" } });
+    fireEvent.click(screen.getByLabelText("Force path style"));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createStorageEndpointMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Path Style",
+          endpoint_url: "https://path-style.example.test",
+          force_path_style: true,
+        })
+      );
+    });
+  });
+
+  it("preloads and updates force path style when editing an endpoint", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 7, role: "ui_superadmin" }));
+    listStorageEndpointsMock.mockResolvedValue([makeEndpoint({ force_path_style: true })]);
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+    expect(screen.getByText("Forced")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByLabelText("Force path style")).toBeChecked();
+    fireEvent.click(screen.getByLabelText("Force path style"));
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => {
+      expect(updateStorageEndpointMock).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({
+          force_path_style: false,
+        })
+      );
+    });
   });
 });
