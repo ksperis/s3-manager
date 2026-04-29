@@ -972,7 +972,7 @@ export default function S3ConnectionsPage() {
                   required
                 />
               </div>
-              <div className="space-y-3 sm:col-span-2">
+              <div className="space-y-3 sm:pt-6">
                 {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
                 <UiTagEditor
                   label="Tags"
@@ -980,11 +980,9 @@ export default function S3ConnectionsPage() {
                   catalog={adminTagCatalog}
                   onChange={(tags) => setCreateForm((current) => ({ ...current, tags }))}
                   placeholder="Add a tag for this shared connection"
-                  hint={
-                    adminTagCatalogLoading
-                      ? "Loading existing tag catalog..."
-                      : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-                  }
+                  hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
+                  hideLabel
+                  compact
                 />
               </div>
               <div className="sm:col-span-2">
@@ -1158,22 +1156,19 @@ export default function S3ConnectionsPage() {
                       required
                     />
                   </div>
-                </div>
-
-                <div className="space-y-3">
-                  {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
-                  <UiTagEditor
-                    label="Tags"
-                    tags={editForm.tags}
-                    catalog={adminTagCatalog}
-                    onChange={(tags) => setEditForm((current) => ({ ...current, tags }))}
-                    placeholder="Add a tag for this shared connection"
-                    hint={
-                      adminTagCatalogLoading
-                        ? "Loading existing tag catalog..."
-                        : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-                    }
-                  />
+                  <div className="space-y-3 sm:pt-6">
+                    {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                    <UiTagEditor
+                      label="Tags"
+                      tags={editForm.tags}
+                      catalog={adminTagCatalog}
+                      onChange={(tags) => setEditForm((current) => ({ ...current, tags }))}
+                      placeholder="Add a tag for this shared connection"
+                      hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
+                      hideLabel
+                      compact
+                    />
+                  </div>
                 </div>
 
                 <S3ConnectionEndpointFields

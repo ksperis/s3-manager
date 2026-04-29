@@ -1223,64 +1223,68 @@ export default function StorageEndpointsPage() {
               </PageBanner>
             )}
             {endpointTagCatalogError && <PageBanner tone="warning">{endpointTagCatalogError}</PageBanner>}
-            <UiTagEditor
-              label="Endpoint tags"
-              tags={form.tags}
-              catalog={endpointTagCatalog}
-              onChange={(tags) => setForm((prev) => ({ ...prev, tags }))}
-              placeholder="Add a tag for this endpoint"
-              hint={
-                endpointTagCatalogLoading
-                  ? "Loading existing endpoint tags..."
-                  : "Endpoint tags can be shown in endpoint and context selectors when users enable the preference."
-              }
-            />
-            <fieldset disabled={tagsOnlyMode} className={tagsOnlyMode ? "space-y-4 opacity-70" : "space-y-4"}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                Storage name
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                  required
+              <fieldset disabled={tagsOnlyMode} className={tagsOnlyMode ? "opacity-70" : undefined}>
+                <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                  Storage name
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    required
+                  />
+                </label>
+              </fieldset>
+
+              <div className="sm:pt-6">
+                <UiTagEditor
+                  label="Endpoint tags"
+                  tags={form.tags}
+                  catalog={endpointTagCatalog}
+                  onChange={(tags) => setForm((prev) => ({ ...prev, tags }))}
+                  placeholder="Add a tag for this endpoint"
+                  hint={endpointTagCatalogLoading ? "Loading existing endpoint tags..." : undefined}
+                  hideLabel
+                  compact
                 />
-              </label>
-              <div className="space-y-2">
-                <span className="ui-body font-semibold text-slate-700 dark:text-slate-100">Type</span>
-                <div className="flex gap-3">
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100">
-                    <input
-                      type="radio"
-                      name="provider"
-                      value="ceph"
-                      checked={form.provider === "ceph"}
-                      onChange={() => handleProviderChange("ceph")}
-                    />
-                    <span>Ceph</span>
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100">
-                    <input
-                      type="radio"
-                      name="provider"
-                      value="aws"
-                      checked={form.provider === "aws"}
-                      onChange={() => handleProviderChange("aws")}
-                    />
-                    <span>AWS</span>
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100">
-                    <input
-                      type="radio"
-                      name="provider"
-                      value="other"
-                      checked={form.provider === "other"}
-                      onChange={() => handleProviderChange("other")}
-                    />
-                    <span>Other</span>
-                  </label>
-                </div>
+              </div>
+            </div>
+
+            <fieldset disabled={tagsOnlyMode} className={tagsOnlyMode ? "space-y-4 opacity-70" : "space-y-4"}>
+            <div className="space-y-2">
+              <span className="ui-body font-semibold text-slate-700 dark:text-slate-100">Type</span>
+              <div className="flex gap-3">
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100">
+                  <input
+                    type="radio"
+                    name="provider"
+                    value="ceph"
+                    checked={form.provider === "ceph"}
+                    onChange={() => handleProviderChange("ceph")}
+                  />
+                  <span>Ceph</span>
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100">
+                  <input
+                    type="radio"
+                    name="provider"
+                    value="aws"
+                    checked={form.provider === "aws"}
+                    onChange={() => handleProviderChange("aws")}
+                  />
+                  <span>AWS</span>
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100">
+                  <input
+                    type="radio"
+                    name="provider"
+                    value="other"
+                    checked={form.provider === "other"}
+                    onChange={() => handleProviderChange("other")}
+                  />
+                  <span>Other</span>
+                </label>
               </div>
             </div>
 

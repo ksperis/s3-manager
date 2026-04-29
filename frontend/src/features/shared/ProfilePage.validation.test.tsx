@@ -139,6 +139,9 @@ describe("ProfilePage live validation", () => {
     const nameInput = within(dialog).getByLabelText("Name");
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this private connection" });
     const endpointHeading = within(dialog).getByText("Endpoint");
+    expect(tagInput.parentElement?.parentElement?.className).toContain("min-h-10");
+    expect(within(dialog).queryByText("Tags")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Private tags are used for filtering and optional selector display.")).not.toBeInTheDocument();
     expectBefore(nameInput, tagInput);
     expectBefore(tagInput, endpointHeading);
     expect(within(dialog).getByRole("radio", { name: "Configured endpoint" })).toBeDisabled();
@@ -185,6 +188,9 @@ describe("ProfilePage live validation", () => {
     expect(presetRadio.checked).toBe(true);
     expect(within(dialog).getByRole("radio", { name: "Custom endpoint" })).not.toBeChecked();
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this private connection" });
+    expect(tagInput.parentElement?.parentElement?.className).toContain("min-h-10");
+    expect(within(dialog).queryByText("Tags")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Private tags are used for filtering and optional selector display.")).not.toBeInTheDocument();
     expectBefore(within(dialog).getByLabelText("Name"), tagInput);
     expectBefore(tagInput, within(dialog).getByText("Endpoint"));
     expect(within(dialog).queryByRole("combobox", { name: "Provider" })).not.toBeInTheDocument();

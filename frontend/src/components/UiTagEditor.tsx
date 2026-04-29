@@ -18,6 +18,8 @@ type UiTagEditorProps = {
   placeholder?: string;
   hint?: string;
   catalogMode?: "shared" | "private";
+  hideLabel?: boolean;
+  compact?: boolean;
 };
 
 const SCOPE_OPTIONS: Array<{ key: TagScope; label: string; description: string }> = [
@@ -49,6 +51,8 @@ export default function UiTagEditor({
   placeholder = "Add a tag",
   hint,
   catalogMode = "shared",
+  hideLabel = false,
+  compact = false,
 }: UiTagEditorProps) {
   const [draft, setDraft] = useState("");
   const [activeTagKey, setActiveTagKey] = useState<string | null>(null);
@@ -187,11 +191,16 @@ export default function UiTagEditor({
       : "Administrative tags stay in management views. Standard tags can also appear in selectors.";
 
   return (
-    <div className="space-y-2">
-      <label className={uiLabelClass}>{label}</label>
+    <div className={compact && hideLabel ? "space-y-1" : "space-y-2"}>
+      {!hideLabel && <label className={uiLabelClass}>{label}</label>}
       <div className="space-y-2">
         <div className="relative">
-          <div className="group flex min-h-11 flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/40">
+          <div
+            className={cx(
+              "group flex flex-wrap items-center gap-2 border border-slate-200/80 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-900/40",
+              compact ? "min-h-10 rounded-lg px-2.5 py-1.5" : "min-h-11 rounded-xl px-3 py-2"
+            )}
+          >
             {normalizedTags.map((tag) => {
               const tagKey = getLabelKey(tag.label);
               const colorOption = getTagColorOption(tag.color_key);

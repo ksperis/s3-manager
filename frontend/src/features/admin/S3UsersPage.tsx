@@ -879,11 +879,7 @@ export default function S3UsersPage() {
               catalog={adminTagCatalog}
               onChange={(tags) => setCreateForm((prev) => ({ ...prev, tags }))}
               placeholder="Add a tag for this RGW user"
-              hint={
-                adminTagCatalogLoading
-                  ? "Loading existing tag catalog..."
-                  : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-              }
+              hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
             />
             <div className="flex items-center justify-end gap-3">
               <button
@@ -1056,11 +1052,7 @@ export default function S3UsersPage() {
                     catalog={adminTagCatalog}
                     onChange={(tags) => setEditForm((prev) => ({ ...prev, tags }))}
                     placeholder="Add a tag for this RGW user"
-                    hint={
-                      adminTagCatalogLoading
-                        ? "Loading existing tag catalog..."
-                        : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-                    }
+                    hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
                   />
                 </div>
                 <div className="flex flex-col gap-1">

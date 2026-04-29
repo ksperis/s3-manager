@@ -1530,7 +1530,7 @@ export default function ProfilePage({
                     placeholder="Mon endpoint S3"
                   />
                 </label>
-                <div className="sm:col-span-2 space-y-3">
+                <div className="space-y-3 sm:pt-6">
                   {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
                   <UiTagEditor
                     label="Tags"
@@ -1539,11 +1539,9 @@ export default function ProfilePage({
                     onChange={(tags) => setCreateConnectionForm((prev) => ({ ...prev, tags }))}
                     catalogMode="private"
                     placeholder="Add a tag for this private connection"
-                    hint={
-                      privateTagCatalogLoading
-                        ? "Loading existing private tags..."
-                        : "Private tags are used for filtering and optional selector display."
-                    }
+                    hint={privateTagCatalogLoading ? "Loading existing private tags..." : undefined}
+                    hideLabel
+                    compact
                   />
                 </div>
                 <div className="sm:col-span-2">
@@ -1708,23 +1706,20 @@ export default function ProfilePage({
                             className={inputClasses}
                           />
                         </label>
-                      </div>
-
-                      <div className="space-y-3">
-                        {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
-                        <UiTagEditor
-                          label="Tags"
-                          tags={draft.tags}
-                          catalog={privateTagCatalog}
-                          onChange={(tags) => handleUpdateConnectionDraft(editingConnection.id, "tags", tags)}
-                          catalogMode="private"
-                          placeholder="Add a tag for this private connection"
-                          hint={
-                            privateTagCatalogLoading
-                              ? "Loading existing private tags..."
-                              : "Private tags are used for filtering and optional selector display."
-                          }
-                        />
+                        <div className="space-y-3 sm:pt-6">
+                          {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
+                          <UiTagEditor
+                            label="Tags"
+                            tags={draft.tags}
+                            catalog={privateTagCatalog}
+                            onChange={(tags) => handleUpdateConnectionDraft(editingConnection.id, "tags", tags)}
+                            catalogMode="private"
+                            placeholder="Add a tag for this private connection"
+                            hint={privateTagCatalogLoading ? "Loading existing private tags..." : undefined}
+                            hideLabel
+                            compact
+                          />
+                        </div>
                       </div>
 
                       <S3ConnectionEndpointFields

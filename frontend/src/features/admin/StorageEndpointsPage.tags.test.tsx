@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import StorageEndpointsPage from "./StorageEndpointsPage";
 
@@ -15,6 +15,10 @@ const makeTag = (id: number, label: string, color_key = "neutral", scope = "stan
   color_key,
   scope,
 });
+
+function expectBefore(first: Element, second: Element) {
+  expect(Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+}
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({
@@ -120,8 +124,28 @@ describe("StorageEndpointsPage tags", () => {
     expect(screen.queryByRole("button", { name: "Edit tags" })).not.toBeInTheDocument();
   });
 
-  it("preconfigures AWS endpoint defaults and submits AWS features", async () => {
+  it("keeps endpoint tag editing visible on the identity row", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 3, role: "ui_superadmin" }));
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+
+    fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
+    await waitFor(() => expect(listAdminTagDefinitionsMock).toHaveBeenCalled());
+
+    const dialog = screen.getByRole("dialog");
+    const storageName = within(dialog).getByLabelText("Storage name");
+    const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this endpoint" });
+    expect(tagInput).toBeInTheDocument();
+    expect(tagInput.parentElement?.parentElement?.className).toContain("min-h-10");
+    expect(within(dialog).queryByText("Endpoint tags")).not.toBeInTheDocument();
+    expectBefore(storageName, tagInput);
+    expectBefore(tagInput, within(dialog).getByText("Type"));
+    expectBefore(within(dialog).getByText("Type"), within(dialog).getByText("Endpoint S3"));
+  });
+
+  it("preconfigures AWS endpoint defaults and submits AWS features", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 4, role: "ui_superadmin" }));
 
     render(<StorageEndpointsPage />);
     await screen.findByText("Ceph Endpoint");
@@ -157,7 +181,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("syncs AWS generated endpoints when the region changes", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 4, role: "ui_superadmin" }));
+    localStorage.setItem("user", JSON.stringify({ id: 5, role: "ui_superadmin" }));
 
     render(<StorageEndpointsPage />);
     await screen.findByText("Ceph Endpoint");
@@ -173,7 +197,7 @@ describe("StorageEndpointsPage tags", () => {
   });
 
   it("keeps AWS endpoint fields read-only and submits computed values", async () => {
-    localStorage.setItem("user", JSON.stringify({ id: 5, role: "ui_superadmin" }));
+    localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
 
     render(<StorageEndpointsPage />);
     await screen.findByText("Ceph Endpoint");

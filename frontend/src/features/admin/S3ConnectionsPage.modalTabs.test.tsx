@@ -122,6 +122,11 @@ describe("S3ConnectionsPage modal tabs", () => {
     const dialog = screen.getByRole("dialog");
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this shared connection" });
     expect(tagInput).toBeInTheDocument();
+    expect(tagInput.parentElement?.parentElement?.className).toContain("min-h-10");
+    expect(within(dialog).queryByText("Tags")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain.")
+    ).not.toBeInTheDocument();
     expectBefore(within(dialog).getByDisplayValue("connection-1"), tagInput);
     expectBefore(tagInput, within(dialog).getByText("Endpoint"));
     expect(within(dialog).getByRole("radio", { name: "Configured endpoint" })).toBeDisabled();
@@ -216,6 +221,11 @@ describe("S3ConnectionsPage modal tabs", () => {
 
     fireEvent.change(nameInput, { target: { value: "tagged-shared-connection" } });
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this shared connection" });
+    expect(tagInput.parentElement?.parentElement?.className).toContain("min-h-10");
+    expect(within(dialog).queryByText("Tags")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain.")
+    ).not.toBeInTheDocument();
     expectBefore(nameInput, tagInput);
     expectBefore(tagInput, within(dialog).getByText("Endpoint"));
     expect(within(dialog).getByRole("radio", { name: "Configured endpoint" })).toBeDisabled();

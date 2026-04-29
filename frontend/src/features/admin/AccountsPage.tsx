@@ -794,11 +794,7 @@ export default function S3AccountsPage() {
                     catalog={adminTagCatalog}
                     onChange={(tags) => setForm((current) => ({ ...current, tags }))}
                     placeholder="Add a tag for this account"
-                    hint={
-                      adminTagCatalogLoading
-                        ? "Loading existing tag catalog..."
-                        : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-                    }
+                    hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
                   />
                 </div>
               </div>
@@ -1105,11 +1101,7 @@ export default function S3AccountsPage() {
                       catalog={adminTagCatalog}
                       onChange={(tags) => setEditForm((prev) => ({ ...prev, tags }))}
                       placeholder="Add a tag for this account"
-                      hint={
-                        adminTagCatalogLoading
-                          ? "Loading existing tag catalog..."
-                          : "Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain."
-                      }
+                      hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
                     />
                   </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
