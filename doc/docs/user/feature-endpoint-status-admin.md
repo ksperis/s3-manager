@@ -17,6 +17,12 @@ Use this page when you need a global healthcheck view across the storage endpoin
 4. Use timelines and the incidents table to understand stability over time.
 5. Use `Check now` when you need an immediate healthcheck refresh before investigating further.
 
+!!! note
+    In the latency overview, an orange current-latency bar means the current
+    sample is significantly above the 24h average. It is a comparison signal,
+    not an incident by itself; use the status pill and timeline for health
+    state.
+
 ## Expected result
 
 You can assess current backend health quickly and identify which endpoints require follow-up.

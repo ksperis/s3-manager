@@ -53,6 +53,17 @@ function latencyBarClass(status: HealthCheckStatus) {
   return "bg-slate-400";
 }
 
+const LATENCY_WARNING_MIN_RATIO_PERCENT = 110;
+const LATENCY_WARNING_MIN_DELTA_MS = 10;
+
+export function isLatencyMeaningfullyAboveAverage(currentLatency?: number | null, avgLatency?: number | null) {
+  if (currentLatency == null || avgLatency == null) return false;
+  return (
+    currentLatency - avgLatency >= LATENCY_WARNING_MIN_DELTA_MS &&
+    currentLatency * 100 >= avgLatency * LATENCY_WARNING_MIN_RATIO_PERCENT
+  );
+}
+
 function buildStatusCounts(endpoints: EndpointHealthLatencyOverviewEndpoint[]) {
   return endpoints.reduce(
     (acc, endpoint) => {
@@ -274,7 +285,7 @@ export default function EndpointStatusPage() {
                 const minLatency = endpoint.min_latency_ms ?? null;
                 const avgLatency = endpoint.avg_latency_ms ?? null;
                 const maxLatency = endpoint.max_latency_ms ?? null;
-                const currentAboveAverage = currentLatency != null && avgLatency != null ? currentLatency > avgLatency : false;
+                const currentAboveAverage = isLatencyMeaningfullyAboveAverage(currentLatency, avgLatency);
                 const relativePct = currentLatency == null ? null : Math.round((currentLatency / maxOverviewLatency) * 100);
                 const relativeWidth = relativePct == null ? 0 : Math.max(8, Math.min(100, relativePct));
                 const minMarkerPct = minLatency == null ? null : Math.max(0, Math.min(100, (minLatency / maxOverviewLatency) * 100));
