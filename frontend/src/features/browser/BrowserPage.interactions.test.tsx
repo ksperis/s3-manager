@@ -3943,6 +3943,10 @@ describe("BrowserPage interactions", () => {
 
   it("shows Stop all for multi-object delete and marks remaining items as cancelled", async () => {
     const user = userEvent.setup();
+    seedBrowserRootUiState({
+      layout: { showFolders: false, showInspector: false, showActionBar: true },
+      contextSelections: {},
+    });
     fetchBrowserSettingsMock.mockResolvedValue({
       allow_proxy_transfers: false,
       direct_upload_parallelism: 3,
@@ -3962,7 +3966,8 @@ describe("BrowserPage interactions", () => {
     );
 
     renderPage();
-    await enableActionBar(user);
+    await findRowByLabel("a.txt");
+    await screen.findByRole("toolbar", { name: "Browser actions bar" });
     await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
     await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
 
