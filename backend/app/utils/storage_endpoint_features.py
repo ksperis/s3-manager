@@ -246,7 +246,11 @@ def dump_features_config(features: dict[str, dict[str, Any]]) -> str:
 
 
 def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
-    features = normalize_features_config(endpoint.provider, endpoint.features_config, endpoint.region)
+    features = normalize_features_config(
+        endpoint.provider,
+        endpoint.features_config,
+        getattr(endpoint, "region", None),
+    )
     return EndpointFeatureFlags(
         admin_enabled=bool(features["admin"]["enabled"]),
         admin_endpoint=features["admin"].get("endpoint"),

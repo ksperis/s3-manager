@@ -86,6 +86,7 @@ describe("S3ConnectionsPage live validation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
     await screen.findByText("Add S3 Connection");
+    fireEvent.click(screen.getByLabelText("Custom endpoint"));
 
     const createButton = screen.getByRole("button", { name: "Create" });
     const form = createButton.closest("form");
@@ -96,7 +97,7 @@ describe("S3ConnectionsPage live validation", () => {
       (input) => input.type !== "radio" && input.type !== "checkbox"
     );
     const nameInput = textInputs[0];
-    const endpointInput = textInputs.find((input) => input.placeholder === "https://s3.amazonaws.com");
+    const endpointInput = textInputs.find((input) => input.placeholder === "https://s3.example.com");
     const accessKeyInput = textInputs[textInputs.length - 2];
     const secretKeyInput = textInputs[textInputs.length - 1];
     if (!nameInput || !endpointInput || !accessKeyInput || !secretKeyInput) {
