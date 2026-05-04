@@ -11,7 +11,7 @@ import {
 } from "../../api/cephAdmin";
 import { TrafficWindow } from "../../api/stats";
 import MetricsTrafficOverview, { MetricsSnapshotCard } from "../../components/MetricsTrafficOverview";
-import PageBanner from "../../components/PageBanner";
+import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import UsageBreakdown from "../../components/UsageBreakdown";
@@ -166,7 +166,6 @@ export default function CephAdminMetricsPage() {
         description="Cluster-wide Ceph RGW storage and traffic metrics."
         breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Metrics" }]}
       />
-      {storageError && <PageBanner tone="error">{storageError}</PageBanner>}
 
       {endpointRequired ? (
         <PageEmptyState
@@ -191,10 +190,22 @@ export default function CephAdminMetricsPage() {
         />
       ) : (
         <>
-          {storageDisabledMessage && <PageBanner tone="info">{storageDisabledMessage}</PageBanner>}
-          {trafficDisabledMessage && <PageBanner tone="info">{trafficDisabledMessage}</PageBanner>}
-
-          {storageFeatureEnabled && (
+          {storageDisabledMessage ? (
+            <MetricsUnavailableCard
+              eyebrow="Storage snapshot"
+              title="Stored volume & objects"
+              description="Aggregated stats across the entire RGW cluster."
+              message={storageDisabledMessage}
+            />
+          ) : storageError ? (
+            <MetricsUnavailableCard
+              eyebrow="Storage snapshot"
+              title="Stored volume & objects"
+              description="Aggregated stats across the entire RGW cluster."
+              message={storageError}
+              tone="error"
+            />
+          ) : storageFeatureEnabled ? (
             <>
               <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
                 <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
@@ -282,9 +293,16 @@ export default function CephAdminMetricsPage() {
                 </div>
               </section>
             </>
-          )}
+          ) : null}
 
-          {usageLogFeatureEnabled && (
+          {trafficDisabledMessage ? (
+            <MetricsUnavailableCard
+              eyebrow="RGW traffic"
+              title="Bandwidth & requests"
+              description="Reading cluster-wide RGW logs for the selected window."
+              message={trafficDisabledMessage}
+            />
+          ) : usageLogFeatureEnabled ? (
             <MetricsTrafficOverview
               traffic={traffic}
               window={window}
@@ -295,7 +313,7 @@ export default function CephAdminMetricsPage() {
               description="Reading cluster-wide RGW logs for the selected window."
               userRankingTitle="Most active owners"
             />
-          )}
+          ) : null}
         </>
       )}
     </div>

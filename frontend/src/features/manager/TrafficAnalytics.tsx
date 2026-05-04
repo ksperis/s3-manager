@@ -13,6 +13,7 @@ import {
   fetchManagerTraffic,
 } from "../../api/stats";
 import { fetchCephAdminClusterTraffic } from "../../api/cephAdmin";
+import PageBanner from "../../components/PageBanner";
 import TrafficBytesChart from "../../components/TrafficBytesChart";
 import { cx, uiCardClass, uiCardMutedClass } from "../../components/ui/styles";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
@@ -106,6 +107,7 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
 
   const totals = traffic?.totals;
   const hasSeries = (traffic?.series ?? []).length > 0;
+  const hideMetrics = Boolean(error);
 
   const primaryBuckets = useMemo(() => (traffic?.bucket_rankings ?? []).slice(0, 5), [traffic]);
   const topCategories = useMemo(() => (traffic?.category_breakdown ?? []).slice(0, 6), [traffic]);
@@ -139,89 +141,89 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
         </div>
       </header>
 
-      {error && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-          {error}
+      {error && <PageBanner tone="warning">{error}</PageBanner>}
+
+      {!hideMetrics && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <TrafficTotalCard
+            label="Egress traffic"
+            value={formatBytes(totals?.bytes_out ?? 0)}
+            hint="Bytes sent"
+            loading={loading}
+          />
+          <TrafficTotalCard
+            label="Ingress traffic"
+            value={formatBytes(totals?.bytes_in ?? 0)}
+            hint="Bytes received"
+            loading={loading}
+          />
+          <TrafficTotalCard
+            label="Success rate"
+            value={totals?.success_rate != null ? formatPercentage(totals.success_rate * 100) : "—"}
+            hint={`${formatCompactNumber(totals?.ops ?? 0)} requests`}
+            loading={loading}
+          />
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <TrafficTotalCard
-          label="Egress traffic"
-          value={formatBytes(totals?.bytes_out ?? 0)}
-          hint="Bytes sent"
-          loading={loading}
-        />
-        <TrafficTotalCard
-          label="Ingress traffic"
-          value={formatBytes(totals?.bytes_in ?? 0)}
-          hint="Bytes received"
-          loading={loading}
-        />
-        <TrafficTotalCard
-          label="Success rate"
-          value={totals?.success_rate != null ? formatPercentage(totals.success_rate * 100) : "—"}
-          hint={`${formatCompactNumber(totals?.ops ?? 0)} requests`}
-          loading={loading}
-        />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <ChartCard
-            title={window === "week" || window === "month" ? "Daily traffic" : "Hourly traffic"}
-            subtitle="Ingress vs egress comparison"
-            loading={loading}
-            hasData={hasSeries}
-          >
-            <TrafficBytesChart
-              window={window}
-              series={traffic?.series ?? []}
-              start={traffic?.start}
-              end={traffic?.end}
-              chartKey={`${traffic?.start ?? ""}-${traffic?.end ?? ""}-${window}-${bucketName ?? "all"}`}
-            />
-          </ChartCard>
+      {!hideMetrics && (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <ChartCard
+              title={window === "week" || window === "month" ? "Daily traffic" : "Hourly traffic"}
+              subtitle="Ingress vs egress comparison"
+              loading={loading}
+              hasData={hasSeries}
+            >
+              <TrafficBytesChart
+                window={window}
+                series={traffic?.series ?? []}
+                start={traffic?.start}
+                end={traffic?.end}
+                chartKey={`${traffic?.start ?? ""}-${traffic?.end ?? ""}-${window}-${bucketName ?? "all"}`}
+              />
+            </ChartCard>
+          </div>
+          <div>
+            <ChartCard title="Request breakdown" subtitle="By functional group" loading={loading} hasData={requestPieData.length > 0}>
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+                <ResponsiveContainer width="60%" height={280}>
+                  <PieChart>
+                    <Pie
+                      data={requestPieData}
+                      dataKey="value"
+                      nameKey="label"
+                      innerRadius={45}
+                      outerRadius={80}
+                    >
+                      {requestPieData.map((entry, index) => (
+                        <Cell key={entry.label} fill={REQUEST_COLORS[entry.label] ?? CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => formatBytes(Number(value))} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <ul className="flex-1 space-y-2 ui-body">
+                  {(traffic?.request_breakdown ?? []).map((entry) => (
+                    <li key={entry.group} className={cx(uiCardMutedClass, "flex items-center justify-between px-3 py-2")}>
+                      <span className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: REQUEST_COLORS[entry.group] ?? "#94A3B8" }}
+                        />
+                        {entry.group}
+                      </span>
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">{formatCompactNumber(entry.ops)} ops</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </ChartCard>
+          </div>
         </div>
-        <div>
-          <ChartCard title="Request breakdown" subtitle="By functional group" loading={loading} hasData={requestPieData.length > 0}>
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-              <ResponsiveContainer width="60%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={requestPieData}
-                    dataKey="value"
-                    nameKey="label"
-                    innerRadius={45}
-                    outerRadius={80}
-                  >
-                    {requestPieData.map((entry, index) => (
-                      <Cell key={entry.label} fill={REQUEST_COLORS[entry.label] ?? CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatBytes(Number(value))} />
-                </PieChart>
-              </ResponsiveContainer>
-              <ul className="flex-1 space-y-2 ui-body">
-                {(traffic?.request_breakdown ?? []).map((entry) => (
-                  <li key={entry.group} className={cx(uiCardMutedClass, "flex items-center justify-between px-3 py-2")}>
-                    <span className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                      <span
-                        className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: REQUEST_COLORS[entry.group] ?? "#94A3B8" }}
-                      />
-                      {entry.group}
-                    </span>
-                    <span className="ui-caption text-slate-500 dark:text-slate-400">{formatCompactNumber(entry.ops)} ops</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </ChartCard>
-        </div>
-      </div>
+      )}
 
-      {!bucketName && (
+      {!bucketName && !hideMetrics && (
         <div className="grid gap-4 lg:grid-cols-2">
           <BucketRanking rankings={primaryBuckets} loading={loading} />
           <CategoryChart categories={topCategories} loading={loading} />

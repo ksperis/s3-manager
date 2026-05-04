@@ -12,7 +12,7 @@ import {
 } from "../../api/stats";
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import MetricsTrafficOverview, { MetricsSnapshotCard } from "../../components/MetricsTrafficOverview";
-import PageBanner from "../../components/PageBanner";
+import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
@@ -178,14 +178,14 @@ export default function AdminMetricsPage() {
     [storage?.s3_user_usage]
   );
 
-  const pageError = storageError;
   const missingTraffic = selectedEndpointId != null && !traffic && !trafficLoading && !trafficError;
+  const showStorageMetrics = !storageError;
 
   return (
     <div className="space-y-4 ui-caption leading-relaxed">
       <PageHeader
         title="Metrics"
-        description={pageError || "Centralized view of platform storage and traffic."}
+        description="Centralized view of platform storage and traffic."
         breadcrumbs={[{ label: "Admin" }, { label: "Overview", to: "/admin" }, { label: "Metrics" }]}
       />
       <PageControlStrip
@@ -224,8 +224,6 @@ export default function AdminMetricsPage() {
         alerts={endpointError ? [{ tone: "warning", message: endpointError }] : []}
       />
 
-      {pageError && <PageBanner tone="warning">{pageError}</PageBanner>}
-
       {!endpointLoading && selectedEndpointId == null ? (
         <PageEmptyState
           title="No Ceph endpoint available for metrics"
@@ -237,100 +235,112 @@ export default function AdminMetricsPage() {
 
       {selectedEndpointId != null && (
         <>
-      <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
-        <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
-          <div>
-            <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage snapshot</p>
-            <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Stored volume & objects</h3>
-            <p className="ui-body text-slate-500 dark:text-slate-400">Aggregated stats across known S3 accounts.</p>
-          </div>
-          {storage?.generated_at && (
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Updated:&nbsp;{new Date(storage.generated_at).toLocaleString()}
-            </p>
+          {storageError ? (
+            <MetricsUnavailableCard
+              eyebrow="Storage snapshot"
+              title="Stored volume & objects"
+              description="Aggregated stats across known S3 accounts."
+              message={storageError}
+              tone="warning"
+            />
+          ) : (
+            <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
+              <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
+                <div>
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage snapshot</p>
+                  <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Stored volume & objects</h3>
+                  <p className="ui-body text-slate-500 dark:text-slate-400">Aggregated stats across known S3 accounts.</p>
+                </div>
+                {storage?.generated_at && (
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    Updated:&nbsp;{new Date(storage.generated_at).toLocaleString()}
+                  </p>
+                )}
+              </header>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <MetricsSnapshotCard
+                  label="Stored volume"
+                  value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
+                  hint="Sum of known buckets"
+                  loading={storageLoading}
+                />
+                <MetricsSnapshotCard
+                  label="Objects"
+                  value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
+                  hint="Instant count"
+                  loading={storageLoading}
+                />
+                <MetricsSnapshotCard
+                  label="Visible buckets"
+                  value={storageTotals?.bucket_count != null ? formatCompactNumber(storageTotals.bucket_count) : "—"}
+                  hint="Based on root credentials"
+                  loading={storageLoading}
+                />
+                <MetricsSnapshotCard
+                  label="S3 accounts"
+                  value={storage ? formatCompactNumber(storage.total_accounts) : "—"}
+                  hint={`${formatCompactNumber(storage?.total_s3_users ?? 0)} S3 users`}
+                  loading={storageLoading}
+                />
+              </div>
+            </section>
           )}
-        </header>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricsSnapshotCard
-            label="Stored volume"
-            value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
-            hint="Sum of known buckets"
-            loading={storageLoading}
+          <MetricsTrafficOverview
+            traffic={traffic}
+            window={window}
+            onWindowChange={setWindow}
+            loading={trafficLoading}
+            error={trafficError}
+            showEmpty={missingTraffic}
           />
-          <MetricsSnapshotCard
-            label="Objects"
-            value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
-            hint="Instant count"
-            loading={storageLoading}
-          />
-          <MetricsSnapshotCard
-            label="Visible buckets"
-            value={storageTotals?.bucket_count != null ? formatCompactNumber(storageTotals.bucket_count) : "—"}
-            hint="Based on root credentials"
-            loading={storageLoading}
-          />
-          <MetricsSnapshotCard
-            label="S3 accounts"
-            value={storage ? formatCompactNumber(storage.total_accounts) : "—"}
-            hint={`${formatCompactNumber(storage?.total_s3_users ?? 0)} S3 users`}
-            loading={storageLoading}
-          />
-        </div>
-      </section>
 
-      <MetricsTrafficOverview
-        traffic={traffic}
-        window={window}
-        onWindowChange={setWindow}
-        loading={trafficLoading}
-        error={trafficError}
-        showEmpty={missingTraffic}
-      />
-
-      <section className="space-y-4 ui-surface-card p-5">
-        <header className="space-y-1">
-          <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage breakdown</p>
-          <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Accounts & users</h3>
-          <p className="ui-body text-slate-500 dark:text-slate-400">Account scan with graphical breakdown.</p>
-        </header>
-        <div className="grid gap-6 xl:grid-cols-2">
-          <UsageBreakdown
-            title="Accounts (volume)"
-            subtitle="Volume used per account (top 8)."
-            loading={storageLoading}
-            metric="bytes"
-            items={accountUsageItems}
-            emptyMessage="No volume data available."
-          />
-          <UsageBreakdown
-            title="Accounts (objects)"
-            subtitle="Object count per account (top 8)."
-            loading={storageLoading}
-            metric="objects"
-            items={accountUsageItems}
-            emptyMessage="No object data available."
-          />
-        </div>
-        <div className="grid gap-6 xl:grid-cols-2">
-          <UsageBreakdown
-            title="S3 users (volume)"
-            subtitle="Volume consumed per user."
-            loading={storageLoading}
-            metric="bytes"
-            items={userUsageItems}
-            emptyMessage="No S3 users with metrics."
-          />
-          <UsageBreakdown
-            title="S3 users (objects)"
-            subtitle="Object count per user."
-            loading={storageLoading}
-            metric="objects"
-            items={userUsageItems}
-            emptyMessage="No S3 users with metrics."
-          />
-        </div>
-      </section>
+          {showStorageMetrics && (
+            <section className="space-y-4 ui-surface-card p-5">
+              <header className="space-y-1">
+                <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage breakdown</p>
+                <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Accounts & users</h3>
+                <p className="ui-body text-slate-500 dark:text-slate-400">Account scan with graphical breakdown.</p>
+              </header>
+              <div className="grid gap-6 xl:grid-cols-2">
+                <UsageBreakdown
+                  title="Accounts (volume)"
+                  subtitle="Volume used per account (top 8)."
+                  loading={storageLoading}
+                  metric="bytes"
+                  items={accountUsageItems}
+                  emptyMessage="No volume data available."
+                />
+                <UsageBreakdown
+                  title="Accounts (objects)"
+                  subtitle="Object count per account (top 8)."
+                  loading={storageLoading}
+                  metric="objects"
+                  items={accountUsageItems}
+                  emptyMessage="No object data available."
+                />
+              </div>
+              <div className="grid gap-6 xl:grid-cols-2">
+                <UsageBreakdown
+                  title="S3 users (volume)"
+                  subtitle="Volume consumed per user."
+                  loading={storageLoading}
+                  metric="bytes"
+                  items={userUsageItems}
+                  emptyMessage="No S3 users with metrics."
+                />
+                <UsageBreakdown
+                  title="S3 users (objects)"
+                  subtitle="Object count per user."
+                  loading={storageLoading}
+                  metric="objects"
+                  items={userUsageItems}
+                  emptyMessage="No S3 users with metrics."
+                />
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>

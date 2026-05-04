@@ -4,7 +4,7 @@
  */
 import { useMemo } from "react";
 import PageHeader from "../../components/PageHeader";
-import PageBanner from "../../components/PageBanner";
+import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageEmptyState from "../../components/PageEmptyState";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import TrafficAnalytics from "./TrafficAnalytics";
@@ -30,7 +30,7 @@ export default function ManagerMetricsPage() {
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
   const usageFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.metrics !== false : true);
   const metricsFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.usage !== false : true);
-  const showUsageBreakdowns = usageFeatureEnabled && hasContext;
+  const canShowUsageBreakdowns = usageFeatureEnabled && hasContext;
   const showTrafficAnalytics = metricsFeatureEnabled && hasContext;
   const showMetricsDisabledBanner = hasContext && !usageFeatureEnabled && !metricsFeatureEnabled;
   const showUsageDisabledBanner = hasContext && managerStatsEnabled && !usageFeatureEnabled && metricsFeatureEnabled;
@@ -42,9 +42,10 @@ export default function ManagerMetricsPage() {
 
   const { stats, loading, error } = useManagerStats(
     accountIdForApi,
-    showUsageBreakdowns,
+    canShowUsageBreakdowns,
     accessMode ?? "default"
   );
+  const showUsageBreakdowns = canShowUsageBreakdowns && !error;
 
   return (
     <div className="space-y-4">
@@ -53,8 +54,6 @@ export default function ManagerMetricsPage() {
         description="Storage and traffic analytics for the active execution context."
         breadcrumbs={[{ label: "Manager" }, { label: "Overview" }, { label: "Metrics" }]}
       />
-
-      {error && <PageBanner tone="error">{error}</PageBanner>}
 
       {!hasContext ? (
         <PageEmptyState
@@ -79,8 +78,23 @@ export default function ManagerMetricsPage() {
         />
       ) : (
         <>
-          {showUsageDisabledBanner && <PageBanner tone="info">Storage analytics are disabled for this endpoint.</PageBanner>}
-          {showTrafficDisabledBanner && <PageBanner tone="info">Traffic analytics are disabled for this endpoint.</PageBanner>}
+          {showUsageDisabledBanner && (
+            <MetricsUnavailableCard
+              eyebrow="Storage analytics"
+              title="Bucket breakdown"
+              description="Stored volume and object counts for buckets in the active context."
+              message="Storage analytics are disabled for this endpoint."
+            />
+          )}
+          {error && (
+            <MetricsUnavailableCard
+              eyebrow="Storage analytics"
+              title="Bucket breakdown"
+              description="Stored volume and object counts for buckets in the active context."
+              message={error}
+              tone="error"
+            />
+          )}
           {showUsageBreakdowns && (
             <div className="grid gap-6 lg:grid-cols-2">
               <UsageBreakdown
@@ -112,6 +126,14 @@ export default function ManagerMetricsPage() {
             </div>
           )}
 
+          {showTrafficDisabledBanner && (
+            <MetricsUnavailableCard
+              eyebrow="Traffic"
+              title="Traffic visualization"
+              description="Ingress/egress volume, request types, and busiest buckets."
+              message="Traffic analytics are disabled for this endpoint."
+            />
+          )}
           {showTrafficAnalytics && <TrafficAnalytics accountId={accountIdForApi} enabled={showTrafficAnalytics} />}
         </>
       )}

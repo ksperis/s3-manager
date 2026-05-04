@@ -163,6 +163,7 @@ export default function MetricsTrafficOverview({
   }, [timeline, window]);
   const helperText = WINDOW_OPTIONS.find((option) => option.value === window)?.helper ?? "Selected range";
   const subtitle = description ?? `Reading RGW logs (${helperText}) for the selected window.`;
+  const hideMetrics = Boolean(error);
 
   return (
     <section className="space-y-5 ui-surface-card p-5">
@@ -192,24 +193,26 @@ export default function MetricsTrafficOverview({
 
       {error && <PageBanner tone="warning">{error}</PageBanner>}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricsSnapshotCard label="Egress" value={formatBytes(totals?.bytes_out ?? 0)} hint="Outgoing bytes" loading={loading} />
-        <MetricsSnapshotCard label="Ingress" value={formatBytes(totals?.bytes_in ?? 0)} hint="Incoming bytes" loading={loading} />
-        <MetricsSnapshotCard
-          label="Success rate"
-          value={totals?.success_rate != null ? formatPercentage(totals.success_rate * 100) : "—"}
-          hint={`${formatCompactNumber(totals?.ops ?? 0)} requests`}
-          loading={loading}
-        />
-      </div>
+      {!hideMetrics && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <MetricsSnapshotCard label="Egress" value={formatBytes(totals?.bytes_out ?? 0)} hint="Outgoing bytes" loading={loading} />
+          <MetricsSnapshotCard label="Ingress" value={formatBytes(totals?.bytes_in ?? 0)} hint="Incoming bytes" loading={loading} />
+          <MetricsSnapshotCard
+            label="Success rate"
+            value={totals?.success_rate != null ? formatPercentage(totals.success_rate * 100) : "—"}
+            hint={`${formatCompactNumber(totals?.ops ?? 0)} requests`}
+            loading={loading}
+          />
+        </div>
+      )}
 
-      {showEmpty && !error && (
+      {showEmpty && !hideMetrics && (
         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
           No traffic data available for this window.
         </div>
       )}
 
-      {!showEmpty && (
+      {!showEmpty && !hideMetrics && (
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <ChartCard
@@ -251,7 +254,7 @@ export default function MetricsTrafficOverview({
         </div>
       )}
 
-      {!showEmpty && (
+      {!showEmpty && !hideMetrics && (
         <div className="grid gap-4 lg:grid-cols-3">
           <RankingCard title={bucketRankingTitle} items={(traffic?.bucket_rankings ?? []).slice(0, 5)} loading={loading} />
           <RankingCard
