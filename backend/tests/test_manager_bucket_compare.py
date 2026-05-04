@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -30,12 +31,21 @@ def _build_account(account_id: int):
     return SimpleNamespace(id=account_id)
 
 
+class _RecordingAudit:
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    def record_action(self, **kwargs):
+        self.calls.append(kwargs)
+
+
 def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
     payload = ManagerBucketCompareRequest(
         target_context_id="2",
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         include_config=True,
+        ignore_modified_after=datetime(2026, 3, 2, 10, 0, tzinfo=timezone.utc),
     )
     source_account = _build_account(1)
     target_account = _build_account(2)
@@ -49,6 +59,7 @@ def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
         assert target_bucket == "bucket-b"
         assert source_ctx is source_account
         assert target_ctx is target_account
+        assert kwargs["ignore_modified_after"] == payload.ignore_modified_after
         return CephAdminBucketContentDiff(
             source_count=10,
             target_count=9,
@@ -306,6 +317,8 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
         captured["target_ctx"] = target_ctx
         captured["action"] = kwargs.get("action")
         captured["parallelism"] = kwargs.get("parallelism")
+        captured["object_key"] = kwargs.get("object_key")
+        captured["ignore_modified_after"] = kwargs.get("ignore_modified_after")
         return SimpleNamespace(
             action="sync_source_only",
             planned_count=3,
@@ -315,6 +328,7 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
         )
 
     monkeypatch.setattr(buckets_router.BucketsService, "run_compare_content_remediation", fake_run_action)
+    audit = _RecordingAudit()
 
     response = buckets_router.run_compare_bucket_action(
         payload=payload,
@@ -323,6 +337,7 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
         source_account=source_account,
         actor=SimpleNamespace(),
         service=buckets_router.BucketsService(),
+        audit_service=audit,
     )
 
     assert response.action == "sync_source_only"
@@ -339,6 +354,10 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
     assert captured["target_ctx"] is target_account
     assert captured["action"] == "sync_source_only"
     assert captured["parallelism"] == 8
+    assert captured["object_key"] is None
+    assert captured["ignore_modified_after"] is None
+    assert audit.calls[0]["action"] == "bucket_compare_remediation"
+    assert audit.calls[0]["metadata"]["planned_count"] == 3
 
 
 def test_compare_bucket_action_runs_sync_different(monkeypatch):
@@ -372,10 +391,57 @@ def test_compare_bucket_action_runs_sync_different(monkeypatch):
         source_account=source_account,
         actor=SimpleNamespace(),
         service=buckets_router.BucketsService(),
+        audit_service=_RecordingAudit(),
     )
 
     assert response.action == "sync_different"
     assert captured["action"] == "sync_different"
+
+
+def test_compare_bucket_action_forwards_single_object_and_cutoff(monkeypatch):
+    cutoff = datetime(2026, 3, 2, 10, 0, tzinfo=timezone.utc)
+    payload = ManagerBucketCompareActionRequest(
+        target_context_id="2",
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        action="sync_source_only",
+        object_key="logs/a.txt",
+        ignore_modified_after=cutoff,
+    )
+    source_account = _build_account(1)
+    target_account = _build_account(2)
+    monkeypatch.setattr(buckets_router, "get_account_context", lambda **_kwargs: target_account)
+    captured: dict[str, object] = {}
+
+    def fake_run_action(self, *_args, **kwargs):
+        captured["object_key"] = kwargs.get("object_key")
+        captured["ignore_modified_after"] = kwargs.get("ignore_modified_after")
+        return SimpleNamespace(
+            action="sync_source_only",
+            planned_count=1,
+            succeeded_count=1,
+            failed_count=0,
+            failed_keys_sample=[],
+        )
+
+    monkeypatch.setattr(buckets_router.BucketsService, "run_compare_content_remediation", fake_run_action)
+    audit = _RecordingAudit()
+
+    response = buckets_router.run_compare_bucket_action(
+        payload=payload,
+        request=_build_request(account_id="1", path="/api/manager/buckets/compare/action"),
+        db=SimpleNamespace(),
+        source_account=source_account,
+        actor=SimpleNamespace(),
+        service=buckets_router.BucketsService(),
+        audit_service=audit,
+    )
+
+    assert response.planned_count == 1
+    assert captured["object_key"] == "logs/a.txt"
+    assert captured["ignore_modified_after"] == cutoff
+    assert audit.calls[0]["metadata"]["object_key"] == "logs/a.txt"
+    assert audit.calls[0]["metadata"]["ignore_modified_after"] == cutoff.isoformat()
 
 
 def test_compare_bucket_action_delete_returns_partial_failure(monkeypatch):
@@ -408,6 +474,7 @@ def test_compare_bucket_action_delete_returns_partial_failure(monkeypatch):
         source_account=source_account,
         actor=SimpleNamespace(),
         service=buckets_router.BucketsService(),
+        audit_service=_RecordingAudit(),
     )
 
     assert response.action == "delete_target_only"

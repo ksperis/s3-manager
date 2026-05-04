@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -50,12 +51,14 @@ def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         include_config=True,
+        ignore_modified_after=datetime(2026, 3, 2, 10, 0, tzinfo=timezone.utc),
     )
     monkeypatch.setattr(buckets_router, "_resolve_storage_endpoint", lambda _db, _endpoint_id: _build_target_endpoint(2))
 
     def fake_compare_content(self, source_bucket, source_account, target_bucket, target_account, **kwargs):
         assert source_bucket == "bucket-a"
         assert target_bucket == "bucket-b"
+        assert kwargs["ignore_modified_after"] == payload.ignore_modified_after
         return CephAdminBucketContentDiff(
             source_count=10,
             target_count=9,

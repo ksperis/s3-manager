@@ -185,6 +185,15 @@ export type ManagerBucketCompareRequest = {
   include_config?: boolean;
   config_features?: ManagerBucketCompareConfigFeature[];
   diff_sample_limit?: number;
+  ignore_modified_after?: string | null;
+};
+
+export type ManagerBucketObjectDetail = {
+  key: string;
+  size?: number | null;
+  etag?: string | null;
+  last_modified?: string | null;
+  storage_class?: string | null;
 };
 
 export type ManagerBucketObjectDiffEntry = {
@@ -193,6 +202,10 @@ export type ManagerBucketObjectDiffEntry = {
   target_size?: number | null;
   source_etag?: string | null;
   target_etag?: string | null;
+  source_last_modified?: string | null;
+  target_last_modified?: string | null;
+  source_storage_class?: string | null;
+  target_storage_class?: string | null;
   compare_by: "md5" | "size";
 };
 
@@ -203,8 +216,11 @@ export type ManagerBucketContentDiff = {
   different_count: number;
   only_source_count: number;
   only_target_count: number;
+  ignored_after_cutoff_count?: number;
   only_source_sample: string[];
   only_target_sample: string[];
+  only_source_details?: ManagerBucketObjectDetail[];
+  only_target_details?: ManagerBucketObjectDetail[];
   different_sample: ManagerBucketObjectDiffEntry[];
 };
 
@@ -239,6 +255,8 @@ export type ManagerBucketCompareActionRequest = {
   target_bucket: string;
   action: ManagerBucketCompareAction;
   parallelism?: number;
+  object_key?: string | null;
+  ignore_modified_after?: string | null;
 };
 
 export type ManagerBucketCompareActionResult = {

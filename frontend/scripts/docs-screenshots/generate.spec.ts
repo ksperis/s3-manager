@@ -76,6 +76,12 @@ async function runAction(page: Page, action: ScenarioAction) {
     await locator.selectOption(action.value);
     return;
   }
+  if (action.type === "fill") {
+    const locator = page.locator(action.selector).first();
+    await locator.waitFor({ state: "visible" });
+    await locator.fill(action.value);
+    return;
+  }
   const locator = page.locator(action.selector).first();
   await locator.waitFor({ state: "visible" });
   await locator.press(action.key);

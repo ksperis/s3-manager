@@ -160,6 +160,7 @@ def compare_bucket_pair(
                 payload.target_bucket,
                 target_account,
                 diff_sample_limit=payload.diff_sample_limit,
+                ignore_modified_after=payload.ignore_modified_after,
             )
         if payload.include_config:
             config_diff = service.compare_bucket_configuration(
@@ -200,8 +201,9 @@ def run_compare_bucket_action(
     request: Request,
     db: Session = Depends(get_db),
     source_account: S3Account = Depends(get_account_context),
-    actor=Depends(get_current_account_admin),
+    actor: User = Depends(get_current_account_admin),
     service: BucketsService = Depends(get_buckets_service),
+    audit_service: AuditService = Depends(get_audit_logger),
     _: None = Depends(require_bucket_compare_enabled),
 ) -> ManagerBucketCompareActionResult:
     target_account = get_account_context(
@@ -228,12 +230,35 @@ def run_compare_bucket_action(
             target_account,
             action=payload.action,
             parallelism=payload.parallelism,
+            object_key=payload.object_key,
+            ignore_modified_after=payload.ignore_modified_after,
         )
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
     _invalidate_bucket_listing_for_account(source_account)
     _invalidate_bucket_listing_for_account(target_account)
+    audit_service.record_action(
+        user=actor,
+        scope="manager",
+        action="bucket_compare_remediation",
+        entity_type="bucket",
+        entity_id=payload.target_bucket,
+        account=source_account,
+        metadata={
+            "compare_action": payload.action,
+            "source_context_id": source_context_id,
+            "target_context_id": target_context_id,
+            "source_bucket": payload.source_bucket,
+            "target_bucket": payload.target_bucket,
+            "object_key": payload.object_key,
+            "ignore_modified_after": payload.ignore_modified_after.isoformat() if payload.ignore_modified_after else None,
+            "planned_count": action_result.planned_count,
+            "succeeded_count": action_result.succeeded_count,
+            "failed_count": action_result.failed_count,
+            "failed_keys_sample": action_result.failed_keys_sample,
+        },
+    )
 
     if action_result.planned_count == 0:
         message = "No object matched this remediation action."

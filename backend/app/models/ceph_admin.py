@@ -475,6 +475,7 @@ class CephAdminBucketCompareRequest(BaseModel):
     include_config: bool = False
     config_features: Optional[list[BucketCompareConfigFeature]] = None
     diff_sample_limit: int = Field(default=200, ge=1, le=2000)
+    ignore_modified_after: Optional[datetime] = None
 
     @model_validator(mode="after")
     def validate_names(self):
@@ -493,12 +494,24 @@ class CephAdminBucketCompareRequest(BaseModel):
         return self
 
 
+class CephAdminBucketObjectDetail(BaseModel):
+    key: str
+    size: Optional[int] = None
+    etag: Optional[str] = None
+    last_modified: Optional[datetime] = None
+    storage_class: Optional[str] = None
+
+
 class CephAdminBucketObjectDiffEntry(BaseModel):
     key: str
     source_size: Optional[int] = None
     target_size: Optional[int] = None
     source_etag: Optional[str] = None
     target_etag: Optional[str] = None
+    source_last_modified: Optional[datetime] = None
+    target_last_modified: Optional[datetime] = None
+    source_storage_class: Optional[str] = None
+    target_storage_class: Optional[str] = None
     compare_by: Literal["md5", "size"]
 
 
@@ -509,8 +522,11 @@ class CephAdminBucketContentDiff(BaseModel):
     different_count: int = 0
     only_source_count: int = 0
     only_target_count: int = 0
+    ignored_after_cutoff_count: int = 0
     only_source_sample: list[str] = Field(default_factory=list)
     only_target_sample: list[str] = Field(default_factory=list)
+    only_source_details: list[CephAdminBucketObjectDetail] = Field(default_factory=list)
+    only_target_details: list[CephAdminBucketObjectDetail] = Field(default_factory=list)
     different_sample: list[CephAdminBucketObjectDiffEntry] = Field(default_factory=list)
 
 

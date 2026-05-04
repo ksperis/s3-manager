@@ -2,6 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import axios from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
 import UiBadge from "../../components/ui/UiBadge";
@@ -14,6 +15,7 @@ import {
   ManagerBucketCompareAction,
   ManagerBucketCompareActionResult,
   ManagerBucketCompareResult,
+  ManagerBucketObjectDetail,
   runManagerBucketCompareAction,
   type ManagerBucketCompareConfigFeature,
 } from "../../api/buckets";
@@ -22,9 +24,12 @@ import {
   BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS,
   extractCompareError,
   formatUnknown,
+  getObjectParentPrefix,
   getChangedTone,
+  getRunStatusLabel,
   getRunStatusTone,
   parseRawMappingText,
+  renderCompareObjectDetails,
   renderDiffLines,
   runWithConcurrencySettled,
   triggerDownload,
@@ -53,6 +58,7 @@ type CompareRunOptionsSnapshot = {
   includeContent: boolean;
   includeConfig: boolean;
   configFeatures: ManagerBucketCompareConfigFeature[];
+  ignoreModifiedAfterIso: string | null;
 };
 
 type RemediationSectionKey = "source_only" | "different" | "target_only";
@@ -61,6 +67,12 @@ type PendingRemediationAction = {
   itemIndex: number;
   action: ManagerBucketCompareAction;
   objectCount: number;
+  objectKey?: string | null;
+};
+
+type PendingExploreNavigation = {
+  href: string;
+  objectKey: string;
 };
 
 type ManagerBucketCompareModalProps = {
@@ -68,6 +80,7 @@ type ManagerBucketCompareModalProps = {
   sourceContextName?: string | null;
   sourceBuckets: string[];
   contexts: ExecutionContext[];
+  managerBrowserEnabled?: boolean;
   onClose: () => void;
 };
 
@@ -86,15 +99,21 @@ const feedbackToneClass: Record<UiTone, string> = {
 };
 
 const remediationActionLabel: Record<ManagerBucketCompareAction, string> = {
-  sync_source_only: "Sync missing",
-  sync_different: "Sync different",
-  delete_target_only: "Delete extra",
+  sync_source_only: "Re-run and sync all missing",
+  sync_different: "Re-run and sync all different",
+  delete_target_only: "Re-run and delete all extra",
 };
 
 const remediationActionTitle: Record<ManagerBucketCompareAction, string> = {
-  sync_source_only: "Confirm sync missing objects",
-  sync_different: "Confirm sync different objects",
-  delete_target_only: "Confirm delete extra objects",
+  sync_source_only: "Confirm re-run and sync missing objects",
+  sync_different: "Confirm re-run and sync different objects",
+  delete_target_only: "Confirm re-run and delete extra objects",
+};
+
+const remediationSingleActionLabel: Record<ManagerBucketCompareAction, string> = {
+  sync_source_only: "Sync this object",
+  sync_different: "Sync this object",
+  delete_target_only: "Delete this object",
 };
 
 const remediationSectionActionMap: Record<RemediationSectionKey, ManagerBucketCompareAction> = {
@@ -111,11 +130,48 @@ const CONFIG_FEATURE_OPTIONS: Array<{ key: ManagerBucketCompareConfigFeature; la
 
 const ALL_CONFIG_FEATURE_KEYS = CONFIG_FEATURE_OPTIONS.map((option) => option.key);
 
+function detailsFromKeys(keys: string[]): ManagerBucketObjectDetail[] {
+  return keys.map((key) => ({ key }));
+}
+
+function sourceDetailFromDifferent(diff: {
+  key: string;
+  source_size?: number | null;
+  source_etag?: string | null;
+  source_last_modified?: string | null;
+  source_storage_class?: string | null;
+}): ManagerBucketObjectDetail {
+  return {
+    key: diff.key,
+    size: diff.source_size,
+    etag: diff.source_etag,
+    last_modified: diff.source_last_modified,
+    storage_class: diff.source_storage_class,
+  };
+}
+
+function targetDetailFromDifferent(diff: {
+  key: string;
+  target_size?: number | null;
+  target_etag?: string | null;
+  target_last_modified?: string | null;
+  target_storage_class?: string | null;
+}): ManagerBucketObjectDetail {
+  return {
+    key: diff.key,
+    size: diff.target_size,
+    etag: diff.target_etag,
+    last_modified: diff.target_last_modified,
+    storage_class: diff.target_storage_class,
+  };
+}
+
 export default function ManagerBucketCompareModal({
   sourceContextId,
   sourceContextName,
   sourceBuckets,
   contexts,
+  managerBrowserEnabled = true,
   onClose,
 }: ManagerBucketCompareModalProps) {
   const sortedSourceBuckets = useMemo(() => [...sourceBuckets].sort((a, b) => a.localeCompare(b)), [sourceBuckets]);
@@ -133,6 +189,7 @@ export default function ManagerBucketCompareModal({
   const [selectedConfigFeatures, setSelectedConfigFeatures] = useState<ManagerBucketCompareConfigFeature[]>(
     () => [...ALL_CONFIG_FEATURE_KEYS]
   );
+  const [ignoreModifiedAfter, setIgnoreModifiedAfter] = useState("");
   const [parallelism, setParallelism] = useState(4);
   const [running, setRunning] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -141,6 +198,7 @@ export default function ManagerBucketCompareModal({
   const [items, setItems] = useState<CompareRunItem[]>([]);
   const [lastRunOptions, setLastRunOptions] = useState<CompareRunOptionsSnapshot | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingRemediationAction | null>(null);
+  const [pendingExplore, setPendingExplore] = useState<PendingExploreNavigation | null>(null);
   const [resultSearch, setResultSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CompareRunItem["status"]>("all");
   const [diffFilter, setDiffFilter] = useState<"all" | "with_diff" | "no_diff">("all");
@@ -358,6 +416,14 @@ export default function ManagerBucketCompareModal({
   }, [progress.completed, progress.total]);
   const hasScopeSelected = includeContent || includeConfig;
   const hasConfigFeatureSelected = selectedConfigFeatures.length > 0;
+  const ignoreModifiedAfterIso = useMemo(() => {
+    const value = ignoreModifiedAfter.trim();
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toISOString();
+  }, [ignoreModifiedAfter]);
+  const ignoreModifiedAfterInvalid = Boolean(ignoreModifiedAfter.trim()) && !ignoreModifiedAfterIso;
   const hasActionInFlight = useMemo(() => items.some((item) => Boolean(item.actionRunning)), [items]);
   const canRunComparison =
     !running &&
@@ -365,12 +431,20 @@ export default function ManagerBucketCompareModal({
     !comparePlan.error &&
     Boolean(targetContextId) &&
     hasScopeSelected &&
-    (!includeConfig || hasConfigFeatureSelected);
+    (!includeConfig || hasConfigFeatureSelected) &&
+    !ignoreModifiedAfterInvalid;
 
-  useEffect(() => {
-    if (includeContent) return;
-    setSizeOnly(false);
-  }, [includeContent]);
+  const buildManagerBrowserHref = useCallback((contextId: string, bucket: string, key: string) => {
+    const params = new URLSearchParams();
+    params.set("ctx", contextId);
+    params.set("bucket", bucket);
+    const prefix = getObjectParentPrefix(key);
+    if (prefix) params.set("prefix", prefix);
+    return `/manager/browser?${params.toString()}`;
+  }, []);
+  const managerBrowserDisabledReason = managerBrowserEnabled
+    ? null
+    : "Manager Browser is disabled for this surface.";
 
   const toggleConfigFeature = (feature: ManagerBucketCompareConfigFeature, enabled: boolean) => {
     setSelectedConfigFeatures((prev) => {
@@ -397,6 +471,10 @@ export default function ManagerBucketCompareModal({
       setRunError("Select at least one configuration feature or disable configuration scope.");
       return;
     }
+    if (ignoreModifiedAfterInvalid) {
+      setRunError("Enter a valid modified-after cutoff or clear the field.");
+      return;
+    }
     if (comparePlan.error) {
       setRunError(comparePlan.error);
       return;
@@ -408,6 +486,7 @@ export default function ManagerBucketCompareModal({
       includeContent,
       includeConfig,
       configFeatures: includeConfig ? [...selectedConfigFeatures] : [],
+      ignoreModifiedAfterIso,
     };
     setLastRunOptions(snapshot);
     setRunError(null);
@@ -425,90 +504,108 @@ export default function ManagerBucketCompareModal({
       }))
     );
 
-    await runWithConcurrencySettled(
-      mappings,
-      safeParallelism,
-      async (mapping, index) => {
-        if (cancelRequestedRef.current) {
-          throw new DOMException("Comparison cancelled", "AbortError");
-        }
-        setItems((prev) =>
-          prev.map((item, itemIdx) =>
-            itemIdx === index
-              ? {
-                  ...item,
-                  status: "running",
-                }
-              : item
-          )
-        );
-        const controller = new AbortController();
-        requestControllersRef.current.add(controller);
-        try {
-          return await compareManagerBucketPair(
-            sourceContextId,
-            {
-              target_context_id: snapshot.targetContextId,
-              source_bucket: mapping.sourceBucket,
-              target_bucket: mapping.targetBucket,
-              include_content: snapshot.includeContent,
-              include_config: snapshot.includeConfig,
-              config_features: snapshot.includeConfig ? snapshot.configFeatures : undefined,
-            },
-            { signal: controller.signal }
-          );
-        } finally {
-          requestControllersRef.current.delete(controller);
-        }
-      },
-      (result, index) => {
-        const cancelled =
-          cancelRequestedRef.current ||
-          (result.status === "rejected" && axios.isAxiosError(result.reason) && result.reason.code === "ERR_CANCELED") ||
-          (result.status === "rejected" && result.reason instanceof DOMException && result.reason.name === "AbortError");
-        setProgress((prev) => ({
-          completed: prev.completed + 1,
-          total: prev.total,
-          failed: prev.failed + (!cancelled && result.status === "rejected" ? 1 : 0),
-          cancelled: prev.cancelled + (cancelled ? 1 : 0),
-        }));
-        if (result.status === "fulfilled" && !cancelRequestedRef.current) {
-          setItems((prev) =>
-            prev.map((item, itemIdx) => (itemIdx === index ? { ...item, status: "success", result: result.value } : item))
-          );
-          return;
-        }
-        if (cancelled) {
+    try {
+      await runWithConcurrencySettled(
+        mappings,
+        safeParallelism,
+        async (mapping, index) => {
+          if (cancelRequestedRef.current) {
+            throw new DOMException("Comparison cancelled", "AbortError");
+          }
           setItems((prev) =>
             prev.map((item, itemIdx) =>
               itemIdx === index
                 ? {
                     ...item,
-                    status: "cancelled",
-                    error: "Comparison cancelled.",
+                    status: "running",
                   }
                 : item
             )
           );
-          return;
+          const controller = new AbortController();
+          requestControllersRef.current.add(controller);
+          try {
+            return await compareManagerBucketPair(
+              sourceContextId,
+              {
+                target_context_id: snapshot.targetContextId,
+                source_bucket: mapping.sourceBucket,
+                target_bucket: mapping.targetBucket,
+                include_content: snapshot.includeContent,
+                include_config: snapshot.includeConfig,
+                config_features: snapshot.includeConfig ? snapshot.configFeatures : undefined,
+                ignore_modified_after: snapshot.ignoreModifiedAfterIso,
+              },
+              { signal: controller.signal }
+            );
+          } finally {
+            requestControllersRef.current.delete(controller);
+          }
+        },
+        (result, index) => {
+          const cancelled =
+            cancelRequestedRef.current ||
+            (result.status === "rejected" && axios.isAxiosError(result.reason) && result.reason.code === "ERR_CANCELED") ||
+            (result.status === "rejected" && result.reason instanceof DOMException && result.reason.name === "AbortError");
+          setProgress((prev) => ({
+            completed: prev.completed + 1,
+            total: prev.total,
+            failed: prev.failed + (!cancelled && result.status === "rejected" ? 1 : 0),
+            cancelled: prev.cancelled + (cancelled ? 1 : 0),
+          }));
+          if (result.status === "fulfilled" && !cancelRequestedRef.current) {
+            setItems((prev) =>
+              prev.map((item, itemIdx) => (itemIdx === index ? { ...item, status: "success", result: result.value } : item))
+            );
+            return;
+          }
+          if (cancelled) {
+            setItems((prev) =>
+              prev.map((item, itemIdx) =>
+                itemIdx === index
+                  ? {
+                      ...item,
+                      status: "cancelled",
+                      error: "Comparison cancelled.",
+                    }
+                  : item
+              )
+            );
+            return;
+          }
+          setItems((prev) =>
+            prev.map((item, itemIdx) =>
+              itemIdx === index
+                ? {
+                    ...item,
+                    status: "failed",
+                    error: extractError(result.reason),
+                  }
+                : item
+            )
+          );
         }
-        setItems((prev) =>
-          prev.map((item, itemIdx) =>
-            itemIdx === index
-              ? {
-                  ...item,
-                  status: "failed",
-                  error: extractError(result.reason),
-                }
-              : item
-          )
-        );
-      }
-    );
-    requestControllersRef.current.forEach((controller) => controller.abort());
-    requestControllersRef.current.clear();
-    setRunning(false);
-    setStopping(false);
+      );
+    } catch (err) {
+      const error = extractError(err);
+      setRunError(error);
+      setItems((prev) =>
+        prev.map((item) =>
+          item.status === "pending" || item.status === "running"
+            ? {
+                ...item,
+                status: "failed",
+                error,
+              }
+            : item
+        )
+      );
+    } finally {
+      requestControllersRef.current.forEach((controller) => controller.abort());
+      requestControllersRef.current.clear();
+      setRunning(false);
+      setStopping(false);
+    }
   };
 
   const resultSummary = useMemo(() => {
@@ -598,6 +695,7 @@ export default function ManagerBucketCompareModal({
         include_content: includeContent,
         include_config: includeConfig,
         config_features: includeConfig ? selectedConfigFeatures : [],
+        ignore_modified_after: ignoreModifiedAfterIso,
         parallelism,
       },
       summary: {
@@ -665,6 +763,8 @@ export default function ManagerBucketCompareModal({
           target_bucket: currentItem.targetBucket,
           action: pending.action,
           parallelism: safeActionParallelism,
+          object_key: pending.objectKey ?? null,
+          ignore_modified_after: lastRunOptions?.ignoreModifiedAfterIso ?? ignoreModifiedAfterIso,
         });
       } catch (err) {
         const error = extractError(err);
@@ -707,6 +807,7 @@ export default function ManagerBucketCompareModal({
         includeContent: true,
         includeConfig: false,
         configFeatures: [],
+        ignoreModifiedAfterIso: ignoreModifiedAfterIso,
       };
       try {
         const refreshedResult = await compareManagerBucketPair(sourceContextId, {
@@ -716,6 +817,7 @@ export default function ManagerBucketCompareModal({
           include_content: refreshOptions.includeContent,
           include_config: refreshOptions.includeConfig,
           config_features: refreshOptions.includeConfig ? refreshOptions.configFeatures : undefined,
+          ignore_modified_after: refreshOptions.ignoreModifiedAfterIso,
         });
         setItems((prev) =>
           prev.map((item, index) =>
@@ -746,11 +848,11 @@ export default function ManagerBucketCompareModal({
         );
       }
     },
-    [items, lastRunOptions, parallelism, sourceContextId, targetContextId]
+    [ignoreModifiedAfterIso, items, lastRunOptions, parallelism, sourceContextId, targetContextId]
   );
 
   const openRemediationConfirm = useCallback(
-    (itemIndex: number, sectionKey: RemediationSectionKey, objectCount: number) => {
+    (itemIndex: number, sectionKey: RemediationSectionKey, objectCount: number, objectKey?: string | null) => {
       const item = items[itemIndex];
       if (!item) return;
       if (item.status !== "success") return;
@@ -759,7 +861,8 @@ export default function ManagerBucketCompareModal({
       setPendingAction({
         itemIndex,
         action: remediationSectionActionMap[sectionKey],
-        objectCount,
+        objectCount: objectKey ? 1 : objectCount,
+        objectKey: objectKey ?? null,
       });
     },
     [items, running]
@@ -771,6 +874,15 @@ export default function ManagerBucketCompareModal({
     setPendingAction(null);
     await startRemediationAction(action);
   }, [pendingAction, startRemediationAction]);
+
+  const openExploreConfirm = useCallback((href: string, detail: { key: string }) => {
+    setPendingExplore({ href, objectKey: detail.key });
+  }, []);
+
+  const confirmExploreNavigation = useCallback(() => {
+    if (!pendingExplore) return;
+    window.location.assign(pendingExplore.href);
+  }, [pendingExplore]);
 
   const pendingActionItem = pendingAction ? items[pendingAction.itemIndex] : null;
   const pendingActionSourceContextId = pendingActionItem?.result?.source_context_id ?? sourceContextId;
@@ -860,7 +972,24 @@ export default function ManagerBucketCompareModal({
               className={compactControlClass}
             />
           </label>
+          <label className="space-y-1 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
+            <span className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Ignore objects modified after
+            </span>
+            <input
+              type="datetime-local"
+              value={ignoreModifiedAfter}
+              onChange={(event) => setIgnoreModifiedAfter(event.target.value)}
+              disabled={running}
+              className={compactControlClass}
+            />
+          </label>
         </div>
+        {ignoreModifiedAfterInvalid && (
+          <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
+            Enter a valid modified-after cutoff or clear the field.
+          </p>
+        )}
         {targetBucketsLoading && <p className="ui-caption text-slate-500 dark:text-slate-400">Loading target buckets...</p>}
         {targetBucketsError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{targetBucketsError}</p>}
         {mappingMode === "by_name" && missingByName.length > 0 && (
@@ -1013,7 +1142,7 @@ export default function ManagerBucketCompareModal({
           <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
             <div className="flex flex-wrap items-center justify-between gap-2 ui-caption text-slate-600 dark:text-slate-300">
               <span>
-                Processing {progress.completed} / {progress.total} mappings
+                {running ? "Processing" : "Completed"} {progress.completed} / {progress.total} mappings
               </span>
               <span>{progressPercent}%</span>
             </div>
@@ -1046,7 +1175,7 @@ export default function ManagerBucketCompareModal({
           </UiButton>
           {items.length > 0 && !running && (
             <p className="ui-caption text-slate-600 dark:text-slate-300">
-              Success: {resultSummary.success} / Failed: {resultSummary.failed} / Cancelled: {resultSummary.cancelled} / With
+              Done: {resultSummary.success} / Failed: {resultSummary.failed} / Cancelled: {resultSummary.cancelled} / With
               differences: {resultSummary.withDiff}
             </p>
           )}
@@ -1069,7 +1198,7 @@ export default function ManagerBucketCompareModal({
                 <option value="all">All statuses</option>
                 <option value="pending">Pending</option>
                 <option value="running">Running</option>
-                <option value="success">Success</option>
+                <option value="success">Done</option>
                 <option value="failed">Failed</option>
                 <option value="cancelled">Cancelled</option>
               </select>
@@ -1108,13 +1237,11 @@ export default function ManagerBucketCompareModal({
                               label: remediationActionLabel.sync_source_only,
                             }
                           : null,
-                      before:
+                      sourceDetails:
                         content.only_source_count > 0
-                          ? content.only_source_sample.length > 0
-                            ? content.only_source_sample.map((key) => ({ text: key, tone: "removed" as const }))
-                            : [{ text: "(sample not available)", tone: "removed" as const }]
-                          : [{ text: "(none)" }],
-                      after: [{ text: "(none)" }],
+                          ? (content.only_source_details?.length ? content.only_source_details : detailsFromKeys(content.only_source_sample))
+                          : [],
+                      targetDetails: [],
                     },
                     {
                       key: "target_only" as const,
@@ -1128,13 +1255,11 @@ export default function ManagerBucketCompareModal({
                               label: remediationActionLabel.delete_target_only,
                             }
                           : null,
-                      before: [{ text: "(none)" }],
-                      after:
+                      sourceDetails: [],
+                      targetDetails:
                         content.only_target_count > 0
-                          ? content.only_target_sample.length > 0
-                            ? content.only_target_sample.map((key) => ({ text: key, tone: "added" as const }))
-                            : [{ text: "(sample not available)", tone: "added" as const }]
-                          : [{ text: "(none)" }],
+                          ? (content.only_target_details?.length ? content.only_target_details : detailsFromKeys(content.only_target_sample))
+                          : [],
                     },
                     {
                       key: "different" as const,
@@ -1148,24 +1273,10 @@ export default function ManagerBucketCompareModal({
                               label: remediationActionLabel.sync_different,
                             }
                           : null,
-                      before:
-                        content.different_count > 0
-                          ? content.different_sample.length > 0
-                            ? content.different_sample.map((diff) => ({
-                                text: `${diff.key}: ${diff.compare_by} | size=${diff.source_size ?? "-"} | etag=${diff.source_etag ?? "-"}`,
-                                tone: "removed" as const,
-                              }))
-                            : [{ text: "(sample not available)", tone: "removed" as const }]
-                          : [{ text: "(none)" }],
-                      after:
-                        content.different_count > 0
-                          ? content.different_sample.length > 0
-                            ? content.different_sample.map((diff) => ({
-                                text: `${diff.key}: ${diff.compare_by} | size=${diff.target_size ?? "-"} | etag=${diff.target_etag ?? "-"}`,
-                                tone: "added" as const,
-                              }))
-                            : [{ text: "(sample not available)", tone: "added" as const }]
-                          : [{ text: "(none)" }],
+                      sourceDetails:
+                        content.different_count > 0 ? content.different_sample.map((diff) => sourceDetailFromDifferent(diff)) : [],
+                      targetDetails:
+                        content.different_count > 0 ? content.different_sample.map((diff) => targetDetailFromDifferent(diff)) : [],
                     },
                   ]
                 : [];
@@ -1183,7 +1294,7 @@ export default function ManagerBucketCompareModal({
               return (
                 <UiDetails
                   key={`${item.sourceBucket}->${item.targetBucket}:${item.status}:${bucketHasDifferences ? "diff" : "same"}`}
-                  defaultOpen={item.status === "failed" || bucketHasDifferences}
+                  defaultOpen={false}
                   className="rounded-lg border border-slate-200 dark:border-slate-800"
                 >
                   <summary className="cursor-pointer list-none px-3 py-2">
@@ -1192,12 +1303,13 @@ export default function ManagerBucketCompareModal({
                         {item.sourceBucket} {"->"} {item.targetBucket}
                       </span>
                       <UiBadge tone={getRunStatusTone(item)} className="px-2 text-[10px]">
-                        {item.status}
+                        {getRunStatusLabel(item)}
                       </UiBadge>
                       {content && (
                         <span className="ui-caption text-slate-500 dark:text-slate-400">
                           Matched {content.matched_count} | Different {content.different_count} | Source only{" "}
                           {content.only_source_count} | Target only {content.only_target_count}
+                          {content.ignored_after_cutoff_count ? ` | Ignored after cutoff ${content.ignored_after_cutoff_count}` : ""}
                         </span>
                       )}
                     </div>
@@ -1216,7 +1328,7 @@ export default function ManagerBucketCompareModal({
                     )}
                     {content && (
                       <UiDetails
-                        defaultOpen={contentHasDifferences}
+                        defaultOpen={false}
                         className="rounded-md border border-slate-200 dark:border-slate-800"
                       >
                         <summary className="cursor-pointer list-none px-2.5 py-2">
@@ -1233,7 +1345,7 @@ export default function ManagerBucketCompareModal({
                           {contentSections.map((section) => (
                             <UiDetails
                               key={`${item.sourceBucket}:${item.targetBucket}:content:${section.key}`}
-                              defaultOpen={section.changed}
+                              defaultOpen={false}
                               className="rounded-md border border-slate-200 dark:border-slate-800"
                             >
                               <summary className="cursor-pointer list-none px-2 py-1.5">
@@ -1271,13 +1383,69 @@ export default function ManagerBucketCompareModal({
                                   <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     Source
                                   </p>
-                                  {renderDiffLines(section.before)}
+                                  {renderCompareObjectDetails(section.sourceDetails, {
+                                    browserDisabledReason: managerBrowserDisabledReason,
+                                    onExplore: openExploreConfirm,
+                                    buildBrowserHref: (detail) =>
+                                      buildManagerBrowserHref(
+                                        item.result?.source_context_id ?? sourceContextId,
+                                        item.sourceBucket,
+                                        detail.key
+                                      ),
+                                    renderAction:
+                                      section.action && section.key !== "target_only"
+                                        ? (detail) => (
+                                            <UiButton
+                                              variant="secondary"
+                                              disabled={running || item.status !== "success" || Boolean(item.actionRunning)}
+                                              className="py-1 ui-caption"
+                                              onClick={(event) => {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                openRemediationConfirm(itemIndex, section.key, 1, detail.key);
+                                              }}
+                                            >
+                                              {item.actionRunning === section.action.type
+                                                ? "Running..."
+                                                : remediationSingleActionLabel[section.action.type]}
+                                            </UiButton>
+                                          )
+                                        : undefined,
+                                  })}
                                 </div>
                                 <div className="space-y-1">
                                   <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     Target
                                   </p>
-                                  {renderDiffLines(section.after)}
+                                  {renderCompareObjectDetails(section.targetDetails, {
+                                    browserDisabledReason: managerBrowserDisabledReason,
+                                    onExplore: openExploreConfirm,
+                                    buildBrowserHref: (detail) =>
+                                      buildManagerBrowserHref(
+                                        item.result?.target_context_id || lastRunOptions?.targetContextId || targetContextId || "",
+                                        item.targetBucket,
+                                        detail.key
+                                      ),
+                                    renderAction:
+                                      section.action && section.key === "target_only"
+                                        ? (detail) => (
+                                            <UiButton
+                                              variant="danger"
+                                              disabled={running || item.status !== "success" || Boolean(item.actionRunning)}
+                                              className="py-1 ui-caption"
+                                              onClick={(event) => {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                openRemediationConfirm(itemIndex, section.key, 1, detail.key);
+                                              }}
+                                            >
+                                              {item.actionRunning === section.action.type
+                                                ? "Running..."
+                                                : remediationSingleActionLabel[section.action.type]}
+                                            </UiButton>
+                                          )
+                                        : undefined,
+                                  })}
                                 </div>
                               </div>
                             </UiDetails>
@@ -1287,7 +1455,7 @@ export default function ManagerBucketCompareModal({
                     )}
                     {item.result?.config_diff && (
                       <UiDetails
-                        defaultOpen={configHasDifferences}
+                        defaultOpen={false}
                         className="rounded-md border border-slate-200 dark:border-slate-800"
                       >
                         <summary className="cursor-pointer list-none px-2.5 py-2">
@@ -1302,7 +1470,7 @@ export default function ManagerBucketCompareModal({
                           {configSections.map((section) => (
                             <UiDetails
                               key={`${item.sourceBucket}:${item.targetBucket}:config:${section.key}`}
-                              defaultOpen={section.changed}
+                              defaultOpen={false}
                               className="rounded-md border border-slate-200 dark:border-slate-800"
                             >
                               <summary className="cursor-pointer list-none px-2 py-1.5">
@@ -1344,6 +1512,30 @@ export default function ManagerBucketCompareModal({
           </div>
         )}
       </div>
+      {pendingExplore && (
+        <Modal
+          title="Leave comparison page?"
+          onClose={() => setPendingExplore(null)}
+          maxWidthClass="max-w-lg"
+          maxBodyHeightClass="max-h-[70vh]"
+          zIndexClass="z-[60]"
+        >
+          <div className="space-y-3">
+            <p className="ui-body text-slate-700 dark:text-slate-200">
+              This will leave the bucket comparison page and open this object in Browser.
+            </p>
+            <p className="break-all rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-100">
+              {pendingExplore.objectKey}
+            </p>
+            <div className="flex justify-end gap-2">
+              <UiButton variant="secondary" onClick={() => setPendingExplore(null)}>
+                Cancel
+              </UiButton>
+              <UiButton onClick={confirmExploreNavigation}>Open Browser</UiButton>
+            </div>
+          </div>
+        </Modal>
+      )}
       {pendingAction && pendingActionItem && (
         <Modal
           title={remediationActionTitle[pendingAction.action]}
@@ -1354,8 +1546,13 @@ export default function ManagerBucketCompareModal({
         >
           <div className="space-y-3">
             <p className="ui-body text-slate-700 dark:text-slate-200">
-              This will run <span className="font-semibold">{remediationActionLabel[pendingAction.action]}</span> on the full
-              object set for this pair.
+              This will run{" "}
+              <span className="font-semibold">
+                {pendingAction.objectKey
+                  ? remediationSingleActionLabel[pendingAction.action]
+                  : remediationActionLabel[pendingAction.action]}
+              </span>{" "}
+              after re-comparing this pair.
             </p>
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
               <p className="ui-caption text-slate-700 dark:text-slate-200">
@@ -1373,6 +1570,17 @@ export default function ManagerBucketCompareModal({
               <p className="ui-caption text-slate-700 dark:text-slate-200">
                 Estimated objects impacted: <span className="font-semibold">{pendingAction.objectCount}</span>
               </p>
+              {pendingAction.objectKey && (
+                <p className="ui-caption text-slate-700 dark:text-slate-200">
+                  Object key: <span className="break-all font-mono font-semibold">{pendingAction.objectKey}</span>
+                </p>
+              )}
+              {(lastRunOptions?.ignoreModifiedAfterIso ?? ignoreModifiedAfterIso) && (
+                <p className="ui-caption text-slate-700 dark:text-slate-200">
+                  Cutoff:{" "}
+                  <span className="font-semibold">{lastRunOptions?.ignoreModifiedAfterIso ?? ignoreModifiedAfterIso}</span>
+                </p>
+              )}
             </div>
             {pendingAction.action === "delete_target_only" && (
               <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">

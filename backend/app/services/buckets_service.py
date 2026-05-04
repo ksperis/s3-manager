@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, List, Literal, Optional, Set
 import logging
 import json
@@ -39,6 +40,7 @@ from app.models.ceph_admin import (
     CephAdminBucketConfigDiff,
     CephAdminBucketConfigDiffSection,
     CephAdminBucketContentDiff,
+    CephAdminBucketObjectDetail,
     CephAdminBucketObjectDiffEntry,
 )
 from app.utils.rgw import (
@@ -673,6 +675,17 @@ class BucketsService:
             **self._client_kwargs(account),
         )
 
+    def _format_storage_operation_error(self, exc: Exception) -> str:
+        if isinstance(exc, ClientError):
+            error = exc.response.get("Error", {}) if hasattr(exc, "response") else {}
+            code = str(error.get("Code") or "").strip()
+            message = str(error.get("Message") or "").strip()
+            operation = str(getattr(exc, "operation_name", "") or "").strip()
+            parts = [part for part in (code, message) if part and part.lower() != "none"]
+            detail = ": ".join(parts) if parts else str(exc)
+            return f"{operation} failed with {detail}" if operation else detail
+        return str(exc)
+
     def _list_bucket_objects_for_compare(self, bucket_name: str, account: S3Account) -> dict[str, dict[str, Any]]:
         client = self._compare_client(account)
         continuation_token: Optional[str] = None
@@ -683,8 +696,9 @@ class BucketsService:
                 kwargs["ContinuationToken"] = continuation_token
             try:
                 page = client.list_objects_v2(**kwargs)
-            except RuntimeError as exc:
-                raise RuntimeError(f"Unable to list objects in bucket '{bucket_name}': {exc}") from exc
+            except (RuntimeError, ClientError, BotoCoreError) as exc:
+                detail = self._format_storage_operation_error(exc)
+                raise RuntimeError(f"Unable to list objects in bucket '{bucket_name}': {detail}") from exc
             for entry in page.get("Contents", []) or []:
                 key = entry.get("Key")
                 if not isinstance(key, str) or not key:
@@ -694,11 +708,61 @@ class BucketsService:
                 objects_by_key[key] = {
                     "size": int(entry.get("Size") or 0),
                     "etag": etag or None,
+                    "last_modified": entry.get("LastModified"),
+                    "storage_class": entry.get("StorageClass"),
                 }
             continuation_token = page.get("NextContinuationToken")
             if not continuation_token:
                 break
         return objects_by_key
+
+    def _datetime_timestamp(self, value: datetime) -> float:
+        normalized = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+        return normalized.astimezone(timezone.utc).timestamp()
+
+    def _object_modified_after(self, entry: Optional[dict[str, Any]], cutoff: Optional[datetime]) -> bool:
+        if entry is None or cutoff is None:
+            return False
+        last_modified = entry.get("last_modified")
+        if not isinstance(last_modified, datetime):
+            return False
+        return self._datetime_timestamp(last_modified) > self._datetime_timestamp(cutoff)
+
+    def _filter_compare_objects_by_cutoff(
+        self,
+        source_objects: dict[str, dict[str, Any]],
+        target_objects: dict[str, dict[str, Any]],
+        *,
+        ignore_modified_after: Optional[datetime] = None,
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], int]:
+        if ignore_modified_after is None:
+            return source_objects, target_objects, 0
+
+        ignored_keys = {
+            key
+            for key in set(source_objects.keys()) | set(target_objects.keys())
+            if self._object_modified_after(source_objects.get(key), ignore_modified_after)
+            or self._object_modified_after(target_objects.get(key), ignore_modified_after)
+        }
+        if not ignored_keys:
+            return source_objects, target_objects, 0
+
+        return (
+            {key: value for key, value in source_objects.items() if key not in ignored_keys},
+            {key: value for key, value in target_objects.items() if key not in ignored_keys},
+            len(ignored_keys),
+        )
+
+    def _compare_object_detail(self, key: str, entry: dict[str, Any]) -> CephAdminBucketObjectDetail:
+        last_modified = entry.get("last_modified")
+        storage_class = entry.get("storage_class")
+        return CephAdminBucketObjectDetail(
+            key=key,
+            size=int(entry.get("size") or 0),
+            etag=entry.get("etag") if isinstance(entry.get("etag"), str) else None,
+            last_modified=last_modified if isinstance(last_modified, datetime) else None,
+            storage_class=storage_class if isinstance(storage_class, str) else None,
+        )
 
     def _etag_md5(self, etag: Optional[str]) -> Optional[str]:
         if not etag:
@@ -724,9 +788,15 @@ class BucketsService:
         target_account: S3Account,
         *,
         diff_sample_limit: int = 200,
+        ignore_modified_after: Optional[datetime] = None,
     ) -> CephAdminBucketContentDiff:
-        source_objects = self._list_bucket_objects_for_compare(source_bucket, source_account)
-        target_objects = self._list_bucket_objects_for_compare(target_bucket, target_account)
+        source_objects_raw = self._list_bucket_objects_for_compare(source_bucket, source_account)
+        target_objects_raw = self._list_bucket_objects_for_compare(target_bucket, target_account)
+        source_objects, target_objects, ignored_after_cutoff_count = self._filter_compare_objects_by_cutoff(
+            source_objects_raw,
+            target_objects_raw,
+            ignore_modified_after=ignore_modified_after,
+        )
 
         source_keys = set(source_objects.keys())
         target_keys = set(target_objects.keys())
@@ -756,10 +826,24 @@ class BucketsService:
                     target_size=comparison.target_size,
                     source_etag=comparison.source_etag,
                     target_etag=comparison.target_etag,
+                    source_last_modified=source_entry.get("last_modified")
+                    if isinstance(source_entry.get("last_modified"), datetime)
+                    else None,
+                    target_last_modified=target_entry.get("last_modified")
+                    if isinstance(target_entry.get("last_modified"), datetime)
+                    else None,
+                    source_storage_class=source_entry.get("storage_class")
+                    if isinstance(source_entry.get("storage_class"), str)
+                    else None,
+                    target_storage_class=target_entry.get("storage_class")
+                    if isinstance(target_entry.get("storage_class"), str)
+                    else None,
                     compare_by=comparison.compare_by,
                 )
             )
 
+        only_source_sample = only_source[:diff_sample_limit]
+        only_target_sample = only_target[:diff_sample_limit]
         return CephAdminBucketContentDiff(
             source_count=len(source_keys),
             target_count=len(target_keys),
@@ -767,8 +851,11 @@ class BucketsService:
             different_count=different_count,
             only_source_count=len(only_source),
             only_target_count=len(only_target),
-            only_source_sample=only_source[:diff_sample_limit],
-            only_target_sample=only_target[:diff_sample_limit],
+            ignored_after_cutoff_count=ignored_after_cutoff_count,
+            only_source_sample=only_source_sample,
+            only_target_sample=only_target_sample,
+            only_source_details=[self._compare_object_detail(key, source_objects[key]) for key in only_source_sample],
+            only_target_details=[self._compare_object_detail(key, target_objects[key]) for key in only_target_sample],
             different_sample=different_sample,
         )
 
@@ -803,9 +890,16 @@ class BucketsService:
         source_account: S3Account,
         target_bucket: str,
         target_account: S3Account,
+        *,
+        ignore_modified_after: Optional[datetime] = None,
     ) -> BucketCompareContentKeySets:
-        source_objects = self._list_bucket_objects_for_compare(source_bucket, source_account)
-        target_objects = self._list_bucket_objects_for_compare(target_bucket, target_account)
+        source_objects_raw = self._list_bucket_objects_for_compare(source_bucket, source_account)
+        target_objects_raw = self._list_bucket_objects_for_compare(target_bucket, target_account)
+        source_objects, target_objects, _ignored_after_cutoff_count = self._filter_compare_objects_by_cutoff(
+            source_objects_raw,
+            target_objects_raw,
+            ignore_modified_after=ignore_modified_after,
+        )
         return self._build_compare_content_key_sets(source_objects, target_objects)
 
     def _account_client(self, account: S3Account):
@@ -931,12 +1025,15 @@ class BucketsService:
         action: BucketCompareRemediationAction,
         parallelism: int = 4,
         failed_keys_sample_limit: int = 50,
+        object_key: Optional[str] = None,
+        ignore_modified_after: Optional[datetime] = None,
     ) -> BucketCompareRemediationResult:
         key_sets = self.get_compare_content_key_sets(
             source_bucket,
             source_account,
             target_bucket,
             target_account,
+            ignore_modified_after=ignore_modified_after,
         )
         keys_by_action: dict[BucketCompareRemediationAction, list[str]] = {
             "sync_source_only": key_sets.only_source_keys,
@@ -944,6 +1041,8 @@ class BucketsService:
             "delete_target_only": key_sets.only_target_keys,
         }
         selected_keys = keys_by_action[action]
+        if object_key is not None:
+            selected_keys = [object_key] if object_key in set(selected_keys) else []
         planned_count = len(selected_keys)
         if planned_count == 0:
             return BucketCompareRemediationResult(

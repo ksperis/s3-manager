@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from datetime import datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -21,6 +22,7 @@ class ManagerBucketCompareRequest(BaseModel):
     include_config: bool = False
     config_features: Optional[list[BucketCompareConfigFeature]] = None
     diff_sample_limit: int = Field(default=200, ge=1, le=2000)
+    ignore_modified_after: Optional[datetime] = None
 
     @model_validator(mode="after")
     def validate_names(self):
@@ -58,12 +60,16 @@ class ManagerBucketCompareActionRequest(BaseModel):
     target_bucket: str
     action: ManagerBucketCompareAction
     parallelism: int = Field(default=4, ge=1, le=32)
+    object_key: Optional[str] = None
+    ignore_modified_after: Optional[datetime] = None
 
     @model_validator(mode="after")
     def validate_names(self):
         self.target_context_id = (self.target_context_id or "").strip()
         self.source_bucket = (self.source_bucket or "").strip()
         self.target_bucket = (self.target_bucket or "").strip()
+        if self.object_key is not None:
+            self.object_key = self.object_key.strip() or None
         if not self.target_context_id:
             raise ValueError("target_context_id is required.")
         if not self.source_bucket:

@@ -13,6 +13,7 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
 import { useS3AccountContext } from "./S3AccountContext";
 
@@ -24,7 +25,8 @@ function extractError(error: unknown): string {
 }
 
 export default function ManagerBucketComparePage() {
-  const { selectedS3AccountId, requiresS3AccountSelection } = useS3AccountContext();
+  const { selectedS3AccountId, requiresS3AccountSelection, managerBrowserEnabled } = useS3AccountContext();
+  const { generalSettings } = useGeneralSettings();
   const sourceContextId = selectedS3AccountId ?? "";
   const [contexts, setContexts] = useState<ExecutionContext[]>([]);
   const [contextsLoading, setContextsLoading] = useState(true);
@@ -108,6 +110,8 @@ export default function ManagerBucketComparePage() {
   const selectedBucketList = useMemo(() => {
     return [...selectedBuckets].sort((a, b) => a.localeCompare(b));
   }, [selectedBuckets]);
+  const managerBrowserAvailable =
+    generalSettings.browser_enabled && generalSettings.browser_manager_enabled && managerBrowserEnabled !== false;
 
   const toggleBucket = (bucketName: string) => {
     setSelectedBuckets((current) => {
@@ -256,6 +260,7 @@ export default function ManagerBucketComparePage() {
           sourceContextName={sourceContext?.display_name ?? sourceContextId}
           sourceBuckets={selectedBucketList}
           contexts={contexts}
+          managerBrowserEnabled={managerBrowserAvailable}
           onClose={() => setShowCompareModal(false)}
         />
       )}

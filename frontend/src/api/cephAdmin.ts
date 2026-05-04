@@ -567,6 +567,7 @@ export type CephAdminBucketCompareRequest = {
   include_config?: boolean;
   config_features?: CephAdminBucketCompareConfigFeature[];
   diff_sample_limit?: number;
+  ignore_modified_after?: string | null;
 };
 
 export type CephAdminBucketCompareConfigFeature =
@@ -579,12 +580,24 @@ export type CephAdminBucketCompareConfigFeature =
   | "access_logging"
   | "tags";
 
+export type CephAdminBucketObjectDetail = {
+  key: string;
+  size?: number | null;
+  etag?: string | null;
+  last_modified?: string | null;
+  storage_class?: string | null;
+};
+
 export type CephAdminBucketObjectDiffEntry = {
   key: string;
   source_size?: number | null;
   target_size?: number | null;
   source_etag?: string | null;
   target_etag?: string | null;
+  source_last_modified?: string | null;
+  target_last_modified?: string | null;
+  source_storage_class?: string | null;
+  target_storage_class?: string | null;
   compare_by: "md5" | "size";
 };
 
@@ -595,8 +608,11 @@ export type CephAdminBucketContentDiff = {
   different_count: number;
   only_source_count: number;
   only_target_count: number;
+  ignored_after_cutoff_count?: number;
   only_source_sample: string[];
   only_target_sample: string[];
+  only_source_details?: CephAdminBucketObjectDetail[];
+  only_target_details?: CephAdminBucketObjectDetail[];
   different_sample: CephAdminBucketObjectDiffEntry[];
 };
 

@@ -1,5 +1,10 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from datetime import datetime, timezone
+
+import pytest
+from botocore.exceptions import ClientError
+
 from app.db import S3Account
 from app.models.bucket import (
     BucketLoggingConfiguration,
@@ -25,16 +30,27 @@ def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
     service = BucketsService()
     source = _build_account("source")
     target = _build_account("target")
+    older = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
     payloads = {
         "source-bucket": {
             "same-md5": {"size": 10, "etag": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
             "fallback-size": {"size": 20, "etag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-2"},
-            "only-source": {"size": 30, "etag": "cccccccccccccccccccccccccccccccc"},
+            "only-source": {
+                "size": 30,
+                "etag": "cccccccccccccccccccccccccccccccc",
+                "last_modified": older,
+                "storage_class": "STANDARD",
+            },
         },
         "target-bucket": {
             "same-md5": {"size": 10, "etag": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
             "fallback-size": {"size": 20, "etag": "dddddddddddddddddddddddddddddddd-3"},
-            "only-target": {"size": 40, "etag": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+            "only-target": {
+                "size": 40,
+                "etag": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "last_modified": older,
+                "storage_class": "GLACIER",
+            },
         },
     }
 
@@ -54,6 +70,11 @@ def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
     assert diff.only_target_count == 1
     assert diff.only_source_sample == ["only-source"]
     assert diff.only_target_sample == ["only-target"]
+    assert diff.only_source_details[0].key == "only-source"
+    assert diff.only_source_details[0].size == 30
+    assert diff.only_source_details[0].last_modified == older
+    assert diff.only_source_details[0].storage_class == "STANDARD"
+    assert diff.only_target_details[0].storage_class == "GLACIER"
 
 
 def test_compare_bucket_content_detects_md5_mismatch(monkeypatch):
@@ -88,12 +109,23 @@ def test_compare_bucket_content_reports_different_sample(monkeypatch):
     service = BucketsService()
     source = _build_account("source")
     target = _build_account("target")
+    older = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
     payloads = {
         "source-bucket": {
-            "object-a": {"size": 1024, "etag": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-2"},
+            "object-a": {
+                "size": 1024,
+                "etag": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-2",
+                "last_modified": older,
+                "storage_class": "STANDARD",
+            },
         },
         "target-bucket": {
-            "object-a": {"size": 2048, "etag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-2"},
+            "object-a": {
+                "size": 2048,
+                "etag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-2",
+                "last_modified": older,
+                "storage_class": "STANDARD_IA",
+            },
         },
     }
     monkeypatch.setattr(
@@ -108,6 +140,135 @@ def test_compare_bucket_content_reports_different_sample(monkeypatch):
     assert len(diff.different_sample) == 1
     assert diff.different_sample[0].key == "object-a"
     assert diff.different_sample[0].compare_by == "size"
+    assert diff.different_sample[0].source_last_modified == older
+    assert diff.different_sample[0].target_last_modified == older
+    assert diff.different_sample[0].source_storage_class == "STANDARD"
+    assert diff.different_sample[0].target_storage_class == "STANDARD_IA"
+
+
+def test_compare_bucket_content_excludes_entire_key_after_cutoff(monkeypatch):
+    service = BucketsService()
+    source = _build_account("source")
+    target = _build_account("target")
+    older = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
+    newer = datetime(2026, 3, 3, 10, 0, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 3, 2, 10, 0, tzinfo=timezone.utc)
+    payloads = {
+        "source-bucket": {
+            "old-only-source": {"size": 1, "etag": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "last_modified": older},
+            "new-only-source": {"size": 1, "etag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "last_modified": newer},
+            "new-common": {"size": 1, "etag": "cccccccccccccccccccccccccccccccc", "last_modified": newer},
+        },
+        "target-bucket": {
+            "new-common": {"size": 2, "etag": "dddddddddddddddddddddddddddddddd", "last_modified": older},
+            "new-only-target": {"size": 1, "etag": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "last_modified": newer},
+        },
+    }
+    monkeypatch.setattr(
+        service,
+        "_list_bucket_objects_for_compare",
+        lambda bucket_name, _account: payloads[bucket_name],
+    )
+
+    diff = service.compare_bucket_content(
+        "source-bucket",
+        source,
+        "target-bucket",
+        target,
+        diff_sample_limit=20,
+        ignore_modified_after=cutoff,
+    )
+
+    assert diff.source_count == 1
+    assert diff.target_count == 0
+    assert diff.only_source_sample == ["old-only-source"]
+    assert diff.only_target_sample == []
+    assert diff.different_count == 0
+    assert diff.ignored_after_cutoff_count == 3
+
+
+def test_compare_bucket_content_wraps_list_objects_client_error(monkeypatch):
+    service = BucketsService()
+    source = _build_account("source")
+    target = _build_account("target")
+
+    class DeniedClient:
+        def list_objects_v2(self, **_kwargs):
+            raise ClientError(
+                {"Error": {"Code": "AccessDenied", "Message": None}},
+                "ListObjectsV2",
+            )
+
+    monkeypatch.setattr(service, "_compare_client", lambda _account: DeniedClient())
+
+    with pytest.raises(RuntimeError) as exc:
+        service.compare_bucket_content(
+            "source-bucket",
+            source,
+            "target-bucket",
+            target,
+        )
+
+    message = str(exc.value)
+    assert "Unable to list objects in bucket 'source-bucket'" in message
+    assert "ListObjectsV2 failed with AccessDenied" in message
+
+
+def test_compare_remediation_supports_single_object_and_cutoff(monkeypatch):
+    service = BucketsService()
+    source = _build_account("source")
+    target = _build_account("target")
+    older = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
+    newer = datetime(2026, 3, 3, 10, 0, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 3, 2, 10, 0, tzinfo=timezone.utc)
+    payloads = {
+        "source-bucket": {
+            "old-only-source": {"size": 1, "etag": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "last_modified": older},
+            "new-only-source": {"size": 1, "etag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "last_modified": newer},
+        },
+        "target-bucket": {},
+    }
+    copied_keys: list[str] = []
+    monkeypatch.setattr(
+        service,
+        "_list_bucket_objects_for_compare",
+        lambda bucket_name, _account: payloads[bucket_name],
+    )
+    monkeypatch.setattr(service, "_account_client", lambda _account: object())
+    monkeypatch.setattr(service, "_accounts_share_storage_endpoint", lambda _source, _target: True)
+    monkeypatch.setattr(
+        service,
+        "_copy_single_object_for_remediation",
+        lambda *_args, key, **_kwargs: copied_keys.append(key),
+    )
+
+    result = service.run_compare_content_remediation(
+        "source-bucket",
+        source,
+        "target-bucket",
+        target,
+        action="sync_source_only",
+        object_key="old-only-source",
+        ignore_modified_after=cutoff,
+    )
+
+    assert result.planned_count == 1
+    assert result.succeeded_count == 1
+    assert copied_keys == ["old-only-source"]
+
+    skipped = service.run_compare_content_remediation(
+        "source-bucket",
+        source,
+        "target-bucket",
+        target,
+        action="sync_source_only",
+        object_key="new-only-source",
+        ignore_modified_after=cutoff,
+    )
+
+    assert skipped.planned_count == 0
+    assert skipped.succeeded_count == 0
+    assert copied_keys == ["old-only-source"]
 
 
 def test_compare_bucket_configuration_detects_changes(monkeypatch):

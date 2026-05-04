@@ -14,13 +14,18 @@ Use this guide when you need to compare bucket states before migration or remedi
 
 1. Open **Manager > Tools > Compare**.
 2. Select source and target bucket scope.
-3. Run comparison.
-4. Review differences and proposed remediation actions.
-5. Apply remediation actions only after validation.
+3. Optionally set **Ignore objects modified after** to exclude recently changed objects from the diff and remediation scope.
+4. Run comparison.
+5. Expand only the result rows you need to inspect; results stay collapsed by default.
+6. Review object-level details: key, size, modification date, ETag, storage class, and Browser links.
+   Browser links ask for confirmation because they leave the comparison page.
+7. Apply remediation actions only after validation.
 
 ## Expected result
 
-You get an actionable diff view to support controlled bucket alignment.
+You get an actionable diff view to support controlled bucket alignment. Manager
+remediation buttons re-run the comparison before acting; object-row actions
+apply the same safeguard to a single key.
 
 ## Limits / feature flags
 

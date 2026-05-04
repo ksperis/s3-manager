@@ -1101,6 +1101,10 @@ export default function BrowserPage({
     () => searchParams.get("bucket")?.trim() ?? "",
     [searchParams],
   );
+  const requestedPrefix = useMemo(
+    () => normalizePrefix(searchParams.get("prefix")?.trim() ?? ""),
+    [searchParams],
+  );
   const [prefix, setPrefix] = useState("");
   const [objects, setObjects] = useState<BrowserObject[]>([]);
   const [deletedObjects, setDeletedObjects] = useState<BrowserObject[]>([]);
@@ -2929,13 +2933,11 @@ export default function BrowserPage({
           bucketSource = "single";
         }
         if (bucketSource !== "stored") {
-          nextPrefix =
-            bucketSource === "preferred" ||
-            bucketSource === "requested" ||
-            bucketSource === "ceph-requested" ||
-            nextBucket !== previousBucket
-              ? ""
-              : previousPrefix;
+          if (bucketSource === "requested" || bucketSource === "ceph-requested") {
+            nextPrefix = requestedPrefix;
+          } else {
+            nextPrefix = bucketSource === "preferred" || nextBucket !== previousBucket ? "" : previousPrefix;
+          }
         }
         setBucketName(nextBucket);
         setPrefix(nextPrefix);
@@ -2976,6 +2978,7 @@ export default function BrowserPage({
       isCephAdminContext,
       isMainBrowserPath,
       requestedBucket,
+      requestedPrefix,
       resetBucketAccessQueue,
     ],
   );
