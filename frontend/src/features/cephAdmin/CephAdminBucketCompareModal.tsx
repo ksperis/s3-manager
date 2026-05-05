@@ -18,6 +18,7 @@ import {
 } from "../../api/cephAdmin";
 import {
   BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS,
+  CompareObjectSampleNotice,
   extractCompareError,
   formatUnknown,
   getObjectParentPrefix,
@@ -1052,6 +1053,7 @@ export default function CephAdminBucketCompareModal({
                           </div>
                         </summary>
                         <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
+                          {contentHasDifferences && <CompareObjectSampleNotice />}
                           {contentSections.map((section) => (
                             <UiDetails
                               key={`${item.sourceBucket}:${item.targetBucket}:content:${section.key}`}

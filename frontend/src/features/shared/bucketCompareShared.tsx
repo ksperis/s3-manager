@@ -198,6 +198,15 @@ export const renderCompareObjectDetails = (
   );
 };
 
+export function CompareObjectSampleNotice() {
+  return (
+    <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 ui-caption font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+      Object rows below are a sample of the comparison result and may not include every key. Use the counters in each
+      section for totals.
+    </p>
+  );
+}
+
 const diffToneClasses = (tone?: CompareDiffTone) => {
   if (tone === "added") {
     return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100";

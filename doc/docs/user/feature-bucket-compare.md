@@ -32,6 +32,11 @@ apply the same safeguard to a single key.
 !!! note
     Tool visibility depends on global feature flag and context requirements.
 
+!!! note
+    Object rows shown in content diff sections are samples of the comparison
+    result, not guaranteed exhaustive lists. Section counters remain the source
+    of truth for totals.
+
 ## Related pages
 
 - [Workspace: Manager](workspace-manager.md)

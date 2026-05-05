@@ -359,6 +359,7 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     const user = await runInitialComparison();
     await openSourceOnlyDetails(user);
 
+    expect(screen.getByText(/Object rows below are a sample of the comparison result/i)).toBeInTheDocument();
     expect(await screen.findByText("source-only-1")).toBeInTheDocument();
     expect(screen.getByText("1.0 KB")).toBeInTheDocument();
     expect(screen.getAllByText(/Storage STANDARD/i).length).toBeGreaterThan(0);
