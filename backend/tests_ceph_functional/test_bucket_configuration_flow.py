@@ -23,6 +23,10 @@ def _topic_name(prefix: str, label: str = "topic") -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}-{label}"
 
 
+def _iam_name(prefix: str, label: str) -> str:
+    return f"{prefix}-{uuid.uuid4().hex[:8]}-{label}"
+
+
 def _account_params(account_id: int) -> dict[str, int]:
     return {"account_id": account_id}
 
@@ -600,74 +604,186 @@ def test_manager_bucket_replication_roundtrip(
     manager_session: BackendSession = provisioned_account.manager_session
     account_id = provisioned_account.account_id
 
-    source_bucket = _bucket_name(ceph_test_settings.test_prefix, "replication-src")
-    target_bucket = _bucket_name(ceph_test_settings.test_prefix, "replication-dst")
+    bucket_name = _bucket_name(ceph_test_settings.test_prefix, "replication")
+    role_name = _iam_name(ceph_test_settings.test_prefix, "replication-role")
+    policy_name = _iam_name(ceph_test_settings.test_prefix, "replication-policy")
 
-    for created_bucket in (source_bucket, target_bucket):
-        _create_bucket(manager_session, account_id, created_bucket)
-        resource_tracker.track_bucket(account_id, created_bucket)
+    _create_bucket(manager_session, account_id, bucket_name, versioning=True)
+    resource_tracker.track_bucket(account_id, bucket_name)
 
+    role_created = False
+    role_inline_policy_created = False
+    replication_configured = False
     try:
-        for created_bucket in (source_bucket, target_bucket):
-            manager_session.put(
-                f"/manager/buckets/{created_bucket}/versioning",
+        _wait_for_value(
+            f"bucket versioning for {bucket_name}",
+            lambda: manager_session.get(
+                f"/manager/buckets/{bucket_name}/properties",
                 params=_account_params(account_id),
-                json={"enabled": True},
+            ),
+            lambda current: current.get("versioning_status") == "Enabled",
+        )
+
+        root_user_uid = str(getattr(provisioned_account, "root_user_uid", "") or "").strip()
+        principal: str | list[str] = [f"arn:aws:iam:::user/{root_user_uid}"] if root_user_uid else "*"
+        try:
+            role = manager_session.post(
+                "/manager/iam/roles",
+                params=_account_params(account_id),
+                json={
+                    "name": role_name,
+                    "assume_role_policy_document": {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Principal": {"AWS": principal},
+                                "Action": ["sts:AssumeRole"],
+                            }
+                        ],
+                    },
+                },
+                expected_status=201,
             )
-            _wait_for_value(
-                f"bucket versioning for {created_bucket}",
-                lambda bucket_name=created_bucket: manager_session.get(
-                    f"/manager/buckets/{bucket_name}/properties",
-                    params=_account_params(account_id),
-                ),
-                lambda current: current.get("versioning_status") == "Enabled",
+        except BackendAPIError as exc:
+            _skip_if_cluster_unavailable(
+                "manager IAM role creation",
+                exc,
+                extra_markers=("feature is disabled", "iam feature is disabled"),
             )
+            raise
+        role_created = True
+        role_arn = str(role.get("arn") or "").strip()
+        assert role_arn, "Created replication role should expose an ARN"
+
+        role_policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:GetReplicationConfiguration",
+                        "s3:GetBucketVersioning",
+                        "s3:ListBucket",
+                    ],
+                    "Resource": [f"arn:aws:s3:::{bucket_name}"],
+                },
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:GetObjectVersion",
+                        "s3:GetObjectVersionAcl",
+                        "s3:GetObjectVersionTagging",
+                        "s3:PutObject",
+                        "s3:PutObjectAcl",
+                        "s3:PutObjectTagging",
+                        "s3:DeleteObject",
+                    ],
+                    "Resource": [f"arn:aws:s3:::{bucket_name}/*"],
+                },
+            ],
+        }
+        try:
+            manager_session.put(
+                f"/manager/iam/roles/{role_name}/inline-policies/{policy_name}",
+                params=_account_params(account_id),
+                json={"name": policy_name, "document": role_policy},
+            )
+        except BackendAPIError as exc:
+            _skip_if_cluster_unavailable(
+                "manager IAM role inline policy",
+                exc,
+                extra_markers=("feature is disabled", "iam feature is disabled"),
+            )
+            raise
+        role_inline_policy_created = True
+
+        expected_rules = [
+            {
+                "ID": "replicate-to-lab-z2",
+                "Status": "Enabled",
+                "Priority": 1,
+                "Filter": {"Prefix": ""},
+                "DeleteMarkerReplication": {"Status": "Disabled"},
+                "Destination": {"Bucket": f"arn:aws:s3:::{bucket_name}"},
+            }
+        ]
 
         replication_payload = {
             "configuration": {
-                "Role": "arn:aws:iam::000000000000:role/manager-functional-replication",
-                "Rules": [
-                    {
-                        "ID": "replicate-all",
-                        "Status": "Enabled",
-                        "Priority": 1,
-                        "Filter": {"Prefix": ""},
-                        "DeleteMarkerReplication": {"Status": "Disabled"},
-                        "Destination": {"Bucket": f"arn:aws:s3:::{target_bucket}"},
-                    }
-                ],
+                "Role": role_arn,
+                "Rules": expected_rules,
             }
         }
-        run_or_skip(
-            "manager bucket replication update",
-            lambda: manager_session.put(
-                f"/manager/buckets/{source_bucket}/replication",
-                params=_account_params(account_id),
-                json=replication_payload,
-            ),
+
+        manager_session.put(
+            f"/manager/buckets/{bucket_name}/replication",
+            params=_account_params(account_id),
+            json=replication_payload,
         )
-        _wait_for_equal(
+        replication_configured = True
+
+        def _replication_matches(current: Any) -> bool:
+            configuration = current.get("configuration") if isinstance(current, dict) else {}
+            if not isinstance(configuration, dict):
+                return False
+            if _normalize_value(configuration.get("Rules") or []) != _normalize_value(expected_rules):
+                return False
+            returned_role = str(configuration.get("Role") or "").strip()
+            return returned_role in {"", role_arn}
+
+        fetched_replication = _wait_for_value(
             "bucket replication configuration",
             lambda: manager_session.get(
-                f"/manager/buckets/{source_bucket}/replication",
+                f"/manager/buckets/{bucket_name}/replication",
                 params=_account_params(account_id),
             ),
-            replication_payload,
+            _replication_matches,
         )
+        fetched_configuration = fetched_replication["configuration"]
+        assert _normalize_value(fetched_configuration["Rules"]) == _normalize_value(expected_rules)
+        assert str(fetched_configuration.get("Role") or "").strip() in {"", role_arn}
 
         manager_session.delete(
-            f"/manager/buckets/{source_bucket}/replication",
+            f"/manager/buckets/{bucket_name}/replication",
             params=_account_params(account_id),
             expected_status=(204,),
         )
+        replication_configured = False
         _wait_for_equal(
             "bucket replication deletion",
             lambda: manager_session.get(
-                f"/manager/buckets/{source_bucket}/replication",
+                f"/manager/buckets/{bucket_name}/replication",
                 params=_account_params(account_id),
             ),
             {"configuration": {}},
         )
     finally:
-        for created_bucket in (source_bucket, target_bucket):
-            _delete_bucket(manager_session, resource_tracker, account_id, created_bucket)
+        if replication_configured:
+            try:
+                manager_session.delete(
+                    f"/manager/buckets/{bucket_name}/replication",
+                    params=_account_params(account_id),
+                    expected_status=(204, 404),
+                )
+            except BackendAPIError:
+                pass
+        if role_inline_policy_created:
+            try:
+                manager_session.delete(
+                    f"/manager/iam/roles/{role_name}/inline-policies/{policy_name}",
+                    params=_account_params(account_id),
+                    expected_status=(204, 404),
+                )
+            except BackendAPIError:
+                pass
+        if role_created:
+            try:
+                manager_session.delete(
+                    f"/manager/iam/roles/{role_name}",
+                    params=_account_params(account_id),
+                    expected_status=(204, 404),
+                )
+            except BackendAPIError:
+                pass
+        _delete_bucket(manager_session, resource_tracker, account_id, bucket_name)
