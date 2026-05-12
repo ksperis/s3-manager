@@ -87,6 +87,7 @@ from app.routers.browser_common import (
     EnsureCorsPayload,
     ProxyUploadResponse,
     record_browser_action as _common_record_browser_action,
+    require_replication_feature as _common_require_replication_feature,
     require_sse_feature as _common_require_sse_feature,
 )
 from app.routers.http_errors import raise_bad_gateway_from_runtime
@@ -871,6 +872,7 @@ def get_bucket_replication_config(
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketReplicationConfiguration:
+    _common_require_replication_feature(account)
     return bucket_config_actions.get_bucket_replication_config(
         service=service,
         account=account,
@@ -888,6 +890,7 @@ def put_bucket_replication_config(
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketReplicationConfiguration:
+    _common_require_replication_feature(account)
     result, audit_metadata = bucket_config_actions.put_bucket_replication_config(
         service=service,
         account=account,
@@ -917,6 +920,7 @@ def delete_bucket_replication_config(
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
+    _common_require_replication_feature(account)
     bucket_config_actions.delete_bucket_replication_config(
         service=service,
         account=account,

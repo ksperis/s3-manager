@@ -66,6 +66,15 @@ def _require_sse_feature(account: S3Account) -> None:
         )
 
 
+def _require_replication_feature(account: S3Account) -> None:
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint is None or not resolve_feature_flags(endpoint).replication_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bucket replication is disabled for this endpoint",
+        )
+
+
 def _context_id_from_account(account: S3Account) -> str:
     connection_id = getattr(account, "s3_connection_id", None)
     if isinstance(connection_id, int) and connection_id > 0:
@@ -811,6 +820,7 @@ def get_replication(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketReplicationConfiguration:
+    _require_replication_feature(account)
     return bucket_config_actions.get_bucket_replication_config(
         service=service,
         account=account,
@@ -827,6 +837,7 @@ def put_replication(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketReplicationConfiguration:
+    _require_replication_feature(account)
     result, audit_metadata = bucket_config_actions.put_bucket_replication_config(
         service=service,
         account=account,
@@ -854,6 +865,7 @@ def delete_replication(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
+    _require_replication_feature(account)
     bucket_config_actions.delete_bucket_replication_config(
         service=service,
         account=account,

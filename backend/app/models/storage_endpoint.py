@@ -30,6 +30,7 @@ class StorageEndpointFeatures(BaseModel):
     iam: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     sns: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     sse: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
+    replication: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     healthcheck: StorageEndpointHealthcheckFeature = Field(default_factory=StorageEndpointHealthcheckFeature)
 
 

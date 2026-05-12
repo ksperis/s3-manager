@@ -66,6 +66,7 @@ function makeEndpoint(overrides?: Partial<Record<string, unknown>>) {
       static_website: false,
       sns: false,
       sse: false,
+      replication: false,
     },
     has_admin_secret: false,
     has_supervision_secret: false,
@@ -144,8 +145,33 @@ describe("StorageEndpointsPage tags", () => {
     expectBefore(within(dialog).getByText("Type"), within(dialog).getByText("Endpoint S3"));
   });
 
-  it("preconfigures AWS endpoint defaults and submits AWS features", async () => {
+  it("submits Ceph bucket replication feature when enabled", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 4, role: "ui_superadmin" }));
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+
+    fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
+    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "Ceph Replication" } });
+    fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://ceph-repl.example.test" } });
+    fireEvent.click(screen.getByLabelText("Bucket replication enabled"));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createStorageEndpointMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Ceph Replication",
+          endpoint_url: "https://ceph-repl.example.test",
+          provider: "ceph",
+        })
+      );
+    });
+    const payload = createStorageEndpointMock.mock.calls[0][0] as { features_config?: string };
+    expect(payload.features_config).toContain("replication:\n    enabled: true");
+  });
+
+  it("preconfigures AWS endpoint defaults and submits AWS features", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 5, role: "ui_superadmin" }));
 
     render(<StorageEndpointsPage />);
     await screen.findByText("Ceph Endpoint");
@@ -178,6 +204,7 @@ describe("StorageEndpointsPage tags", () => {
     expect(payload.features_config).toContain("static_website:\n    enabled: true");
     expect(payload.features_config).toContain("sse:\n    enabled: true");
     expect(payload.features_config).toContain("sns:\n    enabled: false");
+    expect(payload.features_config).toContain("replication:\n    enabled: false");
   });
 
   it("syncs AWS generated endpoints when the region changes", async () => {

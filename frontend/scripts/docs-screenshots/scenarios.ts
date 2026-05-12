@@ -191,7 +191,7 @@ const noManagerContextsRule: MockRule = {
         endpoint_name: "Default",
         endpoint_provider: "ceph",
         endpoint_url: "https://s3-default.docs.example.com",
-        storage_endpoint_capabilities: { iam: true, sns: true, usage: true, metrics: true, static_website: true, sts: false },
+        storage_endpoint_capabilities: { iam: true, sns: true, usage: true, metrics: true, static_website: true, sts: false, replication: true },
         capabilities: { can_manage_iam: true, sts_capable: false, admin_api_capable: true },
       },
     ];

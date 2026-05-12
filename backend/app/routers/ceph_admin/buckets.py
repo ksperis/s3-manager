@@ -1689,6 +1689,14 @@ def _require_sse_feature(ctx: CephAdminContext) -> None:
         )
 
 
+def _require_replication_feature(ctx: CephAdminContext) -> None:
+    if not resolve_feature_flags(ctx.endpoint).replication_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bucket replication is disabled for this endpoint",
+        )
+
+
 @router.get("", response_model=PaginatedCephAdminBucketsResponse)
 def list_buckets(
     page: int = Query(1, ge=1),
@@ -2626,6 +2634,7 @@ def get_replication(
     bucket_name: str,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketReplicationConfiguration:
+    _require_replication_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
@@ -2640,6 +2649,7 @@ def put_replication(
     payload: BucketReplicationConfiguration,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketReplicationConfiguration:
+    _require_replication_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
@@ -2657,6 +2667,7 @@ def delete_replication(
     bucket_name: str,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> Response:
+    _require_replication_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:

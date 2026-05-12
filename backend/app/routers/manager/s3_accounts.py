@@ -202,6 +202,7 @@ def list_manager_accounts(
                     "iam": can_manage_iam,
                     "sns": sns_enabled,
                     "sse": False,
+                    "replication": False,
                 },
             )
         )

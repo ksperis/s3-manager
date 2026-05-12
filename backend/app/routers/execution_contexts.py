@@ -124,6 +124,7 @@ def _build_connection_context(
             "iam": can_manage_iam,
             "sns": False,
             "sse": False,
+            "replication": False,
         }
 
     return ExecutionContext(
