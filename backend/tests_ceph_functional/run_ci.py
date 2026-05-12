@@ -78,6 +78,7 @@ def _build_endpoint_payload() -> str:
                 "static_website": {"enabled": True},
                 "iam": {"enabled": True},
                 "sns": {"enabled": True},
+                "replication": {"enabled": True},
                 "sse": {"enabled": True},
                 "healthcheck": {"enabled": True, "mode": "s3"},
             },
