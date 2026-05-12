@@ -34,6 +34,7 @@ import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinit
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
 type TextMatchMode = "contains" | "exact";
+type SortField = "name" | "uid";
 type EditTab = "general" | "users";
 
 export default function S3UsersPage() {
@@ -57,6 +58,10 @@ export default function S3UsersPage() {
   const [totalUsers, setTotalUsers] = useState(0);
   const [filter, setFilter] = useState("");
   const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
+  const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>({
+    field: "name",
+    direction: "asc",
+  });
   const MAX_LINK_OPTIONS = 10;
   const [storageEndpoints, setStorageEndpoints] = useState<StorageEndpoint[]>([]);
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
@@ -116,6 +121,15 @@ export default function S3UsersPage() {
     setQuickFilterMode((prev) => (prev === "contains" ? "exact" : "contains"));
     setPage(1);
   };
+  const toggleSort = (field: SortField) => {
+    setSort((prev) => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
+      }
+      return { field, direction: "desc" };
+    });
+    setPage(1);
+  };
   const quickFilterActive = filter.trim().length > 0;
   const handlePageChange = (nextPage: number) => {
     if (nextPage === page) return;
@@ -166,6 +180,8 @@ export default function S3UsersPage() {
             page: nextPage,
             page_size: 200,
             search: quick,
+            sort_by: sort.field,
+            sort_dir: sort.direction,
             include_quota: false,
           });
           allMatches.push(...response.items);
@@ -192,6 +208,8 @@ export default function S3UsersPage() {
           page,
           page_size: pageSize,
           search: quick || undefined,
+          sort_by: sort.field,
+          sort_dir: sort.direction,
           include_quota: false,
         });
         const totalPages = Math.max(1, Math.ceil((response.total || 0) / pageSize));
@@ -207,7 +225,7 @@ export default function S3UsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [filter, quickFilterMode, page, pageSize]);
+  }, [filter, quickFilterMode, page, pageSize, sort.direction, sort.field]);
 
   useEffect(() => {
     fetchUsers();
@@ -557,6 +575,13 @@ export default function S3UsersPage() {
   const importEndpointCanWrite = selectedImportEndpointId ? endpointUsersWrite[selectedImportEndpointId] === true : false;
   const createPermissionError = selectedCreateEndpointId ? endpointPermissionErrors[selectedCreateEndpointId] ?? null : null;
   const importPermissionError = selectedImportEndpointId ? endpointPermissionErrors[selectedImportEndpointId] ?? null : null;
+  const columns: { label: string; field?: SortField | null; align?: "left" | "right" }[] = [
+    { label: "Name", field: "name" },
+    { label: "UID", field: "uid" },
+    { label: "Endpoint", field: null },
+    { label: "UI Users", field: null },
+    { label: "Actions", field: null, align: "right" },
+  ];
   const tableStatus = resolveListTableStatus({
     loading,
     error,
@@ -667,38 +692,52 @@ export default function S3UsersPage() {
           <table className="compact-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-                {["Name", "UID", "Endpoint", "UI Users", "Actions"].map((label, idx) => (
+                {columns.map((col, idx) => (
                   <th
-                    key={label}
+                    key={col.label}
+                    onClick={col.field ? () => toggleSort(col.field) : undefined}
                     className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
                       idx === 0
-                        ? "sticky left-0 z-20 min-w-[14rem] bg-slate-50 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"
+                        ? "sticky left-0 z-20 min-w-[16rem] bg-slate-50 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"
                         : idx === 1
                           ? "w-56 min-w-[11rem]"
                           : idx === 2
                             ? "w-48 min-w-[10rem]"
                             : idx === 3
-                              ? "min-w-[14rem] max-w-[24rem]"
-                              : "w-44 min-w-[9rem] text-right"
+                              ? "min-w-[14rem] max-w-[26rem]"
+                              : "w-44 min-w-[9rem]"
+                    } ${
+                      col.field ? "cursor-pointer hover:text-primary-700 dark:hover:text-primary-100" : col.align === "right" ? "text-right" : ""
                     }`}
                   >
-                    {label}
+                    <div className={`flex items-center ${col.align === "right" ? "justify-end" : "gap-1"}`}>
+                      <span>{col.label}</span>
+                      {col.field && sort.field === col.field && (
+                        <span className="ui-caption">{sort.direction === "asc" ? "▲" : "▼"}</span>
+                      )}
+                    </div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={5} message="Loading users..." />}
-              {tableStatus === "error" && <TableEmptyState colSpan={5} message="Unable to load users." tone="error" />}
-              {tableStatus === "empty" && <TableEmptyState colSpan={5} message="No users." />}
+              {tableStatus === "loading" && <TableEmptyState colSpan={columns.length} message="Loading users..." />}
+              {tableStatus === "error" && <TableEmptyState colSpan={columns.length} message="Unable to load users." tone="error" />}
+              {tableStatus === "empty" && <TableEmptyState colSpan={columns.length} message="No users." />}
               {users.map((user) => {
                 const deleteBusy = deleteBusyId === user.id;
                 const tagItems = buildUiTagItems(user.tags);
                 return (
                   <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className="sticky left-0 z-10 min-w-[14rem] bg-white px-6 py-4 ui-body font-semibold text-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:text-slate-100 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]">
+                    <td className="sticky left-0 z-10 min-w-[16rem] bg-white px-6 py-4 ui-body font-semibold text-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:text-slate-100 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <p className="min-w-0 flex-1 truncate">{user.name}</p>
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(user)}
+                          className="min-w-0 flex-1 truncate text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
+                        >
+                          {user.name}
+                        </button>
                         {tagItems.length > 0 && (
                           <UiTagBadgeList
                             items={tagItems}
@@ -716,7 +755,7 @@ export default function S3UsersPage() {
                         {user.storage_endpoint_name || "—"}
                       </span>
                     </td>
-                    <td className="min-w-[14rem] max-w-[24rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                    <td className="min-w-[14rem] max-w-[26rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       {user.user_ids && user.user_ids.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                           {user.user_ids.map((id) => (
