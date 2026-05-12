@@ -24,6 +24,7 @@ type BucketSelectionActionsBarProps = {
   selectionActionProgress?: ActionProgressState | null;
   isStorageOps: boolean;
   onShowCompareModal: () => void;
+  onShowIntegrityModal: () => void;
   openBulkUpdateModal: () => void;
 };
 
@@ -43,6 +44,7 @@ export default function BucketSelectionActionsBar({
   selectionActionProgress,
   isStorageOps,
   onShowCompareModal,
+  onShowIntegrityModal,
   openBulkUpdateModal,
 }: BucketSelectionActionsBarProps) {
   if (selectedCount <= 0) return null;
@@ -202,6 +204,13 @@ export default function BucketSelectionActionsBar({
               </button>
             </div>
           </details>
+          <button
+            type="button"
+            onClick={onShowIntegrityModal}
+            className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+          >
+            Check integrity
+          </button>
           {!isStorageOps && (
             <button
               type="button"

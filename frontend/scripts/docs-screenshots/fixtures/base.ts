@@ -184,6 +184,7 @@ const GENERAL_SETTINGS = {
   endpoint_status_enabled: true,
   bucket_migration_enabled: true,
   bucket_compare_enabled: true,
+  bucket_integrity_check_enabled: true,
   allow_ui_user_bucket_migration: true,
   allow_login_access_keys: false,
   allow_login_endpoint_list: true,

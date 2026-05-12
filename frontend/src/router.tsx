@@ -58,6 +58,7 @@ const loadManagerMigrationsPage = () => import("./features/manager/ManagerMigrat
 const loadManagerMigrationDetailPage = () => import("./features/manager/ManagerMigrationDetailPage");
 const loadManagerMigrationWizardPage = () => import("./features/manager/ManagerMigrationWizardPage");
 const loadManagerBucketComparePage = () => import("./features/manager/ManagerBucketComparePage");
+const loadManagerBucketIntegrityPage = () => import("./features/manager/ManagerBucketIntegrityPage");
 const loadManagerCephKeysPage = () => import("./features/manager/ManagerCephKeysPage");
 const loadBrowserLayout = () => import("./features/browser/BrowserLayout");
 const loadCephAdminLayout = () => import("./features/cephAdmin/CephAdminLayout");
@@ -114,6 +115,7 @@ const ManagerMigrationsPage = lazy(loadManagerMigrationsPage);
 const ManagerMigrationDetailPage = lazy(loadManagerMigrationDetailPage);
 const ManagerMigrationWizardPage = lazy(loadManagerMigrationWizardPage);
 const ManagerBucketComparePage = lazy(loadManagerBucketComparePage);
+const ManagerBucketIntegrityPage = lazy(loadManagerBucketIntegrityPage);
 const ManagerCephKeysPage = lazy(loadManagerCephKeysPage);
 const BrowserLayout = lazy(loadBrowserLayout);
 const CephAdminLayout = lazy(loadCephAdminLayout);
@@ -359,6 +361,15 @@ function canAccessManagerBucketCompare(
   return user.capabilities?.can_manage_buckets !== false;
 }
 
+function canAccessManagerBucketIntegrity(
+  generalSettings: ReturnType<typeof useGeneralSettings>["generalSettings"],
+  user: SessionUser | null
+): boolean {
+  if (!generalSettings.bucket_integrity_check_enabled || !user?.role) return false;
+  if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
+  return user.capabilities?.can_manage_buckets !== false;
+}
+
 function RequireManagerMigrationFeature() {
   const { generalSettings } = useGeneralSettings();
   const user = getStoredUser();
@@ -382,6 +393,22 @@ function RequireManagerBucketCompareFeature() {
     return <Navigate to="/unauthorized" replace />;
   }
   if (canAccessManagerBucketCompare(generalSettings, user)) {
+    return <Outlet />;
+  }
+  return <Navigate to="/unauthorized" replace />;
+}
+
+function RequireManagerBucketIntegrityFeature() {
+  const { generalSettings } = useGeneralSettings();
+  const { requiresS3AccountSelection } = useS3AccountContext();
+  const user = getStoredUser();
+  if (!generalSettings.bucket_integrity_check_enabled) {
+    return <FeatureDisabledPage feature="Bucket Integrity" />;
+  }
+  if (!requiresS3AccountSelection) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  if (canAccessManagerBucketIntegrity(generalSettings, user)) {
     return <Outlet />;
   }
   return <Navigate to="/unauthorized" replace />;
@@ -470,6 +497,9 @@ export function createAppRoutes() {
               <Route path="ceph/keys" element={<ManagerCephKeysPage />} />
               <Route element={<RequireManagerBucketCompareFeature />}>
                 <Route path="bucket-compare" element={<ManagerBucketComparePage />} />
+              </Route>
+              <Route element={<RequireManagerBucketIntegrityFeature />}>
+                <Route path="bucket-integrity" element={<ManagerBucketIntegrityPage />} />
               </Route>
               <Route element={<RequireManagerMigrationFeature />}>
                 <Route path="migrations" element={<ManagerMigrationsPage />} />

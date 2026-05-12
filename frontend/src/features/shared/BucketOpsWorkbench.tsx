@@ -82,6 +82,8 @@ import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
+import type { BucketIntegrityUiTarget } from "./BucketIntegrityCheckModal";
 import BucketOpsBulkUpdateModal from "./BucketOpsBulkUpdateModal";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
@@ -2188,6 +2190,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [orphanedTagBuckets, setOrphanedTagBuckets] = useState<string[]>([]);
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
+  const [showIntegrityModal, setShowIntegrityModal] = useState(false);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
   const [bulkConfigClipboard, setBulkConfigClipboard] = useState<BulkConfigClipboard | null>(() =>
     loadBulkConfigClipboard(bulkClipboardStorageKey)
@@ -3171,6 +3174,35 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     () => Array.from(selectedBuckets.values()).sort((a, b) => a.localeCompare(b)),
     [selectedBuckets]
   );
+  const selectedBucketItemByName = useMemo(() => {
+    const next = new Map<string, CephAdminBucket>();
+    items.forEach((bucket) => {
+      next.set(bucket.name, bucket);
+    });
+    return next;
+  }, [items]);
+  const selectedIntegrityTargets = useMemo<BucketIntegrityUiTarget[]>(() => {
+    if (!isStorageOps) {
+      return selectedBucketList.map((bucketName) => ({ bucketName }));
+    }
+    return selectedBucketList
+      .map((selectedName) => {
+        const bucket = selectedBucketItemByName.get(selectedName);
+        if (bucket) {
+          return {
+            bucketName: getStorageOpsBucketName(bucket),
+            contextId: getStorageOpsContextId(bucket),
+            contextName: (bucket as { context_name?: string | null }).context_name ?? null,
+          };
+        }
+        const decoded = decodeStorageOpsBucketRef(selectedName);
+        return {
+          bucketName: decoded?.bucketName ?? selectedName,
+          contextId: decoded?.contextId ?? "",
+        };
+      })
+      .filter((target) => target.bucketName.trim().length > 0);
+  }, [isStorageOps, selectedBucketItemByName, selectedBucketList]);
   const selectedUiTagSuggestions = useMemo(() => {
     if (selectedBucketList.length === 0) return [];
     const selectedNames = new Set(selectedBucketList.map(normalizeBucketName));
@@ -8744,6 +8776,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             selectionActionProgress={selectionActionProgress}
             isStorageOps={isStorageOps}
             onShowCompareModal={() => setShowCompareModal(true)}
+            onShowIntegrityModal={() => setShowIntegrityModal(true)}
             openBulkUpdateModal={openBulkUpdateModal}
           />
 
@@ -8917,6 +8950,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           sourceBuckets={selectedBucketList}
           endpoints={endpoints}
           onClose={() => setShowCompareModal(false)}
+        />
+      )}
+      {!isStorageOps && showIntegrityModal && selectedEndpointId && selectedIntegrityTargets.length > 0 && (
+        <BucketIntegrityCheckModal
+          mode="ceph-admin"
+          endpointId={selectedEndpointId}
+          endpointName={selectedEndpoint?.name}
+          targets={selectedIntegrityTargets}
+          onClose={() => setShowIntegrityModal(false)}
+        />
+      )}
+      {isStorageOps && showIntegrityModal && selectedIntegrityTargets.length > 0 && (
+        <BucketIntegrityCheckModal
+          mode="storage-ops"
+          targets={selectedIntegrityTargets}
+          onClose={() => setShowIntegrityModal(false)}
         />
       )}
       <BucketOpsBulkUpdateModal open={showBulkUpdateModal} onClose={closeBulkUpdateModal}>

@@ -1,0 +1,390 @@
+/*
+ * Copyright (c) 2026 Laurent Barbe
+ * Licensed under the Apache License, Version 2.0
+ */
+import { useMemo, useRef, useState } from "react";
+
+import {
+  streamCephAdminBucketIntegrityCheck,
+  streamManagerBucketIntegrityCheck,
+  streamStorageOpsBucketIntegrityCheck,
+  type BucketIntegrityCheckPayload,
+  type BucketIntegrityProgress,
+  type BucketIntegrityResult,
+} from "../../api/bucketIntegrity";
+import Modal from "../../components/Modal";
+import PageBanner from "../../components/PageBanner";
+import { extractApiError } from "../../utils/apiError";
+
+export type BucketIntegrityUiTarget = {
+  bucketName: string;
+  contextId?: string | null;
+  contextName?: string | null;
+};
+
+type CommonProps = {
+  targets: BucketIntegrityUiTarget[];
+  onClose: () => void;
+};
+
+type BucketIntegrityCheckModalProps =
+  | (CommonProps & {
+      mode: "manager";
+      contextId: string;
+      contextName?: string | null;
+    })
+  | (CommonProps & {
+      mode: "ceph-admin";
+      endpointId: number;
+      endpointName?: string | null;
+    })
+  | (CommonProps & {
+      mode: "storage-ops";
+    });
+
+function formatBytes(value?: number | null): string {
+  if (value === undefined || value === null) return "-";
+  if (value === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let size = value;
+  let idx = 0;
+  while (size >= 1024 && idx < units.length - 1) {
+    size /= 1024;
+    idx += 1;
+  }
+  const decimals = size >= 10 || idx === 0 ? 0 : 1;
+  return `${size.toFixed(decimals)} ${units[idx]}`;
+}
+
+function formatNumber(value?: number | null): string {
+  if (value === undefined || value === null) return "-";
+  return value.toLocaleString();
+}
+
+function formatSeconds(value?: number | null): string {
+  if (value === undefined || value === null) return "-";
+  if (value < 1) return `${Math.round(value * 1000)} ms`;
+  return `${value.toFixed(value >= 10 ? 0 : 1)} s`;
+}
+
+function statusLabel(status: BucketIntegrityResult["status"]): string {
+  if (status === "passed") return "Passed";
+  if (status === "completed_with_errors") return "Completed with errors";
+  if (status === "canceled") return "Canceled";
+  return "Failed";
+}
+
+function bucketStatusClasses(status: BucketIntegrityResult["status"]): string {
+  if (status === "passed") return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-100 dark:border-emerald-500/30";
+  if (status === "completed_with_errors") return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-100 dark:border-amber-500/30";
+  return "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-100 dark:border-rose-500/30";
+}
+
+function parseOptionalSince(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("Since must be a valid date.");
+  }
+  return parsed.toISOString();
+}
+
+function parseOptionalMaxMb(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error("Max MB per object must be greater than zero.");
+  }
+  return parsed;
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
+export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckModalProps) {
+  const [parallelism, setParallelism] = useState(10);
+  const [allVersions, setAllVersions] = useState(false);
+  const [since, setSince] = useState("");
+  const [maxMb, setMaxMb] = useState("");
+  const [progress, setProgress] = useState<BucketIntegrityProgress | null>(null);
+  const [result, setResult] = useState<BucketIntegrityResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const targetCount = props.targets.length;
+  const targetLabel = `${targetCount} bucket${targetCount > 1 ? "s" : ""}`;
+  const progressPercent = useMemo(() => {
+    if (!progress || progress.listed_count <= 0) return null;
+    return Math.max(0, Math.min(100, Math.round((progress.checked_count / progress.listed_count) * 100)));
+  }, [progress]);
+
+  const buildPayload = (): BucketIntegrityCheckPayload => {
+    const maxMbPerObject = parseOptionalMaxMb(maxMb);
+    const sinceIso = parseOptionalSince(since);
+    const basePayload: BucketIntegrityCheckPayload = {
+      parallelism: Math.max(1, Math.min(64, Math.trunc(parallelism || 10))),
+      all_versions: allVersions,
+      since: sinceIso || undefined,
+      max_mb_per_object: maxMbPerObject || undefined,
+    };
+    if (props.mode === "storage-ops") {
+      const targets = props.targets.map((target) => {
+        const contextId = target.contextId?.trim();
+        if (!contextId) {
+          throw new Error(`Missing context for bucket ${target.bucketName}.`);
+        }
+        return {
+          context_id: contextId,
+          bucket_name: target.bucketName,
+        };
+      });
+      return { ...basePayload, targets };
+    }
+    return {
+      ...basePayload,
+      buckets: props.targets.map((target) => target.bucketName),
+    };
+  };
+
+  const runCheck = async () => {
+    if (running || targetCount === 0) return;
+    setError(null);
+    setMessage(null);
+    setResult(null);
+    setProgress(null);
+    let payload: BucketIntegrityCheckPayload;
+    try {
+      payload = buildPayload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid options.");
+      return;
+    }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setRunning(true);
+    try {
+      const streamOptions = {
+        signal: controller.signal,
+        onProgress: (event: BucketIntegrityProgress) => setProgress(event),
+      };
+      const nextResult =
+        props.mode === "manager"
+          ? await streamManagerBucketIntegrityCheck(props.contextId, payload, streamOptions)
+          : props.mode === "ceph-admin"
+            ? await streamCephAdminBucketIntegrityCheck(props.endpointId, payload, streamOptions)
+            : await streamStorageOpsBucketIntegrityCheck(payload, streamOptions);
+      setResult(nextResult);
+      setMessage(`Check ${statusLabel(nextResult.status).toLowerCase()}.`);
+    } catch (err) {
+      if (isAbortError(err)) {
+        setMessage("Check canceled.");
+      } else {
+        setError(extractApiError(err, "Bucket integrity check failed."));
+      }
+    } finally {
+      setRunning(false);
+      abortRef.current = null;
+    }
+  };
+
+  const cancelCheck = () => {
+    abortRef.current?.abort();
+  };
+
+  const closeModal = () => {
+    abortRef.current?.abort();
+    props.onClose();
+  };
+
+  return (
+    <Modal title="Check bucket integrity" onClose={closeModal} maxWidthClass="max-w-7xl" maxBodyHeightClass="max-h-[85vh]">
+      <div className="space-y-4">
+        {error && <PageBanner tone="error">{error}</PageBanner>}
+        {message && <PageBanner tone={result?.status === "passed" ? "success" : result?.status === "failed" ? "error" : "warning"}>{message}</PageBanner>}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+          <div>
+            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{targetLabel}</p>
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
+              {props.mode === "manager"
+                ? props.contextName || props.contextId
+                : props.mode === "ceph-admin"
+                  ? props.endpointName || `Endpoint ${props.endpointId}`
+                  : "Storage Ops"}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {running ? (
+              <button
+                type="button"
+                onClick={cancelCheck}
+                className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+              >
+                Cancel
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={runCheck}
+                disabled={targetCount === 0}
+                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Run check
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-4">
+          <label className="space-y-1 ui-caption">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Parallelism</span>
+            <input
+              type="number"
+              min={1}
+              max={64}
+              value={parallelism}
+              disabled={running}
+              onChange={(event) => setParallelism(Number(event.target.value))}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            />
+          </label>
+          <label className="space-y-1 ui-caption">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Since</span>
+            <input
+              type="datetime-local"
+              value={since}
+              disabled={running}
+              onChange={(event) => setSince(event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            />
+          </label>
+          <label className="space-y-1 ui-caption">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Max MB per object</span>
+            <input
+              type="number"
+              min={0}
+              step="0.1"
+              value={maxMb}
+              disabled={running}
+              onChange={(event) => setMaxMb(event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            />
+          </label>
+          <label className="flex items-center gap-2 self-end rounded-md border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">
+            <input
+              type="checkbox"
+              checked={allVersions}
+              disabled={running}
+              onChange={(event) => setAllVersions(event.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 dark:border-slate-600"
+            />
+            All versions
+          </label>
+        </div>
+
+        {progress && (
+          <div className="border-y border-slate-200 py-3 dark:border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                {progress.bucket_name ? `${progress.bucket_name} - ${progress.stage}` : progress.stage}
+              </p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                {formatNumber(progress.checked_count)} / {formatNumber(progress.listed_count)} objects - {formatBytes(progress.bytes_read)}
+              </p>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" role="progressbar">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-150 ease-out"
+                style={{ width: `${progressPercent ?? 100}%` }}
+              />
+            </div>
+            <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+              {formatNumber(progress.completed_buckets)} / {formatNumber(progress.total_buckets)} buckets completed
+              {progress.failed_count > 0 ? ` - ${formatNumber(progress.failed_count)} errors` : ""}
+            </p>
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-4">
+              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
+                <p className="ui-caption text-slate-500 dark:text-slate-400">Objects listed</p>
+                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatNumber(result.listed_count)}</p>
+              </div>
+              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
+                <p className="ui-caption text-slate-500 dark:text-slate-400">Objects checked</p>
+                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatNumber(result.checked_count)}</p>
+              </div>
+              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
+                <p className="ui-caption text-slate-500 dark:text-slate-400">Errors</p>
+                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatNumber(result.failed_count)}</p>
+              </div>
+              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
+                <p className="ui-caption text-slate-500 dark:text-slate-400">Bytes read</p>
+                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatBytes(result.bytes_read)}</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                <thead className="bg-slate-50 dark:bg-slate-900/70">
+                  <tr>
+                    <th className="px-3 py-2 text-left ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Bucket</th>
+                    <th className="px-3 py-2 text-left ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Status</th>
+                    <th className="px-3 py-2 text-right ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Listed</th>
+                    <th className="px-3 py-2 text-right ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Checked</th>
+                    <th className="px-3 py-2 text-right ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Errors</th>
+                    <th className="px-3 py-2 text-right ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Read</th>
+                    <th className="px-3 py-2 text-right ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Duration</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {result.buckets.map((bucket) => (
+                    <tr key={`${bucket.context_id ?? ""}:${bucket.bucket_name}`} className="align-top">
+                      <td className="px-3 py-2">
+                        <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{bucket.bucket_name}</p>
+                        {(bucket.context_name || bucket.context_id) && (
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">{bucket.context_name || bucket.context_id}</p>
+                        )}
+                        {bucket.failures_sample.length > 0 && (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer ui-caption font-semibold text-primary">Error sample</summary>
+                            <div className="mt-2 max-h-40 overflow-auto rounded-md bg-slate-950 p-2 text-xs text-slate-100">
+                              {bucket.failures_sample.map((failure, index) => (
+                                <pre key={`${failure.key ?? "bucket"}:${failure.version_id ?? ""}:${index}`} className="whitespace-pre-wrap">
+                                  {failure.stage}
+                                  {failure.key ? ` ${failure.key}` : ""}
+                                  {failure.version_id ? ` (${failure.version_id})` : ""}: {failure.message}
+                                </pre>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 ui-caption font-semibold ${bucketStatusClasses(bucket.status)}`}>
+                          {statusLabel(bucket.status)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right ui-body text-slate-700 dark:text-slate-200">{formatNumber(bucket.listed_count)}</td>
+                      <td className="px-3 py-2 text-right ui-body text-slate-700 dark:text-slate-200">{formatNumber(bucket.checked_count)}</td>
+                      <td className="px-3 py-2 text-right ui-body text-slate-700 dark:text-slate-200">{formatNumber(bucket.failed_count)}</td>
+                      <td className="px-3 py-2 text-right ui-body text-slate-700 dark:text-slate-200">{formatBytes(bucket.bytes_read)}</td>
+                      <td className="px-3 py-2 text-right ui-body text-slate-700 dark:text-slate-200">{formatSeconds(bucket.duration_seconds)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}

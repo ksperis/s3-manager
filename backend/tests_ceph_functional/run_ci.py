@@ -103,6 +103,7 @@ def _build_app_settings_payload() -> str:
             "usage_history_enabled": False,
             "bucket_migration_enabled": True,
             "bucket_compare_enabled": True,
+            "bucket_integrity_check_enabled": False,
             "manager_ceph_s3_user_keys_enabled": True,
             "allow_ui_user_bucket_migration": False,
             "allow_login_access_keys": False,

@@ -869,6 +869,12 @@ def require_bucket_compare_enabled() -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket compare feature is disabled")
 
 
+def require_bucket_integrity_check_enabled() -> None:
+    app_settings = load_app_settings()
+    if not app_settings.general.bucket_integrity_check_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket integrity check feature is disabled")
+
+
 def is_manager_ceph_s3_user_keys_available(account: S3Account) -> bool:
     app_settings = load_app_settings()
     if not bool(app_settings.general.manager_ceph_s3_user_keys_enabled):
