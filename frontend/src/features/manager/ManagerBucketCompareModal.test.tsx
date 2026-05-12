@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,7 @@ import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
 const listBucketsMock = vi.fn<(contextId: string, options?: { with_stats?: boolean }) => Promise<Bucket[]>>();
 const compareManagerBucketPairMock = vi.fn();
 const runManagerBucketCompareActionMock = vi.fn();
+const clipboardWriteTextMock = vi.fn<(value: string) => Promise<void>>();
 
 vi.mock("../../api/buckets", async () => {
   const actual = await vi.importActual<typeof import("../../api/buckets")>("../../api/buckets");
@@ -173,6 +174,16 @@ async function openSourceOnlyDetails(user: ReturnType<typeof userEvent.setup>) {
 describe("ManagerBucketCompareModal remediation actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clipboardWriteTextMock.mockResolvedValue(undefined);
+    const clipboard = window.navigator.clipboard ?? { writeText: clipboardWriteTextMock };
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: clipboard,
+    });
+    Object.defineProperty(clipboard, "writeText", {
+      configurable: true,
+      value: clipboardWriteTextMock,
+    });
     listBucketsMock.mockResolvedValue([{ name: "bucket-a" } as Bucket]);
     compareManagerBucketPairMock.mockResolvedValue(buildCompareResult());
     runManagerBucketCompareActionMock.mockResolvedValue(buildActionResult());
@@ -359,7 +370,7 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     const user = await runInitialComparison();
     await openSourceOnlyDetails(user);
 
-    expect(screen.getByText(/Object rows below are a sample of the comparison result/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Only \d+ of \d+ objects are visible in this section/i)).not.toBeInTheDocument();
     expect(await screen.findByText("source-only-1")).toBeInTheDocument();
     expect(screen.getByText("1.0 KB")).toBeInTheDocument();
     expect(screen.getAllByText(/Storage STANDARD/i).length).toBeGreaterThan(0);
@@ -373,6 +384,49 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Leave comparison page?" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows a section warning only when visible object rows are incomplete", async () => {
+    compareManagerBucketPairMock.mockResolvedValueOnce(
+      buildCompareResult({
+        content_diff: {
+          ...buildCompareResult().content_diff!,
+          source_count: 11,
+          only_source_count: 3,
+        },
+      })
+    );
+
+    const user = await runInitialComparison();
+    await openContentDetails(user);
+    await openDetailsByLabel(user, "Source only (3)");
+
+    expect(screen.getByText("Only 2 of 3 objects are visible in this section. Use the section counter for the total.")).toBeInTheDocument();
+  });
+
+  it("copies visible object keys from a content section", async () => {
+    const user = await runInitialComparison();
+    await openSourceOnlyDetails(user);
+
+    const sourceOnlyDetails = closestDetails(await screen.findByText("Source only (2)"));
+    await user.click(within(sourceOnlyDetails).getByRole("button", { name: "Copy visible keys" }));
+
+    await waitFor(() => {
+      expect(clipboardWriteTextMock).toHaveBeenCalledWith("source-only-1\nsource-only-2");
+    });
+    expect(await within(sourceOnlyDetails).findByText("Copied 2 visible keys to clipboard.")).toBeInTheDocument();
+  });
+
+  it("copies each visible different object key once", async () => {
+    const user = await runInitialComparison();
+    await openContentDetails(user);
+
+    const differentDetails = closestDetails(await screen.findByText("Different objects (1)"));
+    await user.click(within(differentDetails).getByRole("button", { name: "Copy visible keys" }));
+
+    await waitFor(() => {
+      expect(clipboardWriteTextMock).toHaveBeenCalledWith("different-1");
     });
   });
 
