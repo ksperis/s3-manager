@@ -31,6 +31,7 @@ def clear_ceph_admin_caches():
         buckets_router._BUCKET_LIST_CACHE.clear()
     with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+        buckets_router._RGW_BUCKET_PAYLOAD_INFLIGHT.clear()
     yield
     with accounts_router._ACCOUNTS_LIST_CACHE_LOCK:
         accounts_router._ACCOUNTS_LIST_CACHE.clear()
@@ -44,6 +45,7 @@ def clear_ceph_admin_caches():
         buckets_router._BUCKET_LIST_CACHE.clear()
     with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+        buckets_router._RGW_BUCKET_PAYLOAD_INFLIGHT.clear()
 
 
 class FakeAccountsAdmin:

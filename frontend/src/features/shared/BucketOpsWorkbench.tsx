@@ -45,6 +45,7 @@ import {
   putCephAdminBucketCors,
   putCephAdminBucketLifecycle,
   putCephAdminBucketPolicy,
+  refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning,
   streamCephAdminBuckets,
   updateCephAdminBucketObjectLock,
@@ -71,12 +72,14 @@ import {
   putStorageOpsBucketLifecycle,
   putStorageOpsBucketLogging,
   putStorageOpsBucketPolicy,
+  refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning,
   streamStorageOpsBuckets,
   updateStorageOpsBucketObjectLock,
   updateStorageOpsBucketPublicAccessBlock,
   updateStorageOpsBucketQuota,
 } from "../../api/storageOps";
+import { RefreshIcon } from "../browser/browserIcons";
 import { parseCorsRules, parseLifecycleRules, parsePolicyStatements, parseRuleIds, stableStringify } from "../cephAdmin/bucketJsonParsers";
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
@@ -2105,6 +2108,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
   const listBuckets = isStorageOps ? listStorageOpsBuckets : listCephAdminBuckets;
   const streamBuckets = isStorageOps ? streamStorageOpsBuckets : streamCephAdminBuckets;
+  const refreshBucketListingCache = isStorageOps
+    ? refreshStorageOpsBucketListingCache
+    : refreshCephAdminBucketListingCache;
   const getBucketProperties = isStorageOps ? getStorageOpsBucketProperties : getCephAdminBucketProperties;
   const getBucketPublicAccessBlock = isStorageOps
     ? getStorageOpsBucketPublicAccessBlock
@@ -2254,6 +2260,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [selectionTagActionLoading, setSelectionTagActionLoading] = useState<"add" | "remove" | null>(null);
   const [selectionTagAddInput, setSelectionTagAddInput] = useState("");
   const [selectionExportLoading, setSelectionExportLoading] = useState<SelectionExportFormat | null>(null);
+  const [cacheRefreshLoading, setCacheRefreshLoading] = useState(false);
   const [selectionActionProgress, setSelectionActionProgress] = useState<ActionProgressState | null>(null);
   const [tagSuggestionBucket, setTagSuggestionBucket] = useState<string | null>(null);
   const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
@@ -2793,6 +2800,38 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     listBuckets,
     streamBuckets,
   });
+
+  const clearBucketListingUiCaches = () => {
+    ownerNameCacheRef.current = {};
+    ownerTooltipInflightRef.current = {};
+    setOwnerTooltipState({});
+    setActiveOwnerTooltipKey(null);
+    featureTooltipInflightRef.current = {};
+    setFeatureTooltipState({});
+    setActiveFeatureTooltipKey(null);
+    bucketPropertiesCacheRef.current = {};
+    bucketPropertiesInflightRef.current = {};
+    setAllFilteredBucketNames(null);
+    setAllFilteredBucketNamesKey(null);
+    setSelectAllProgress(null);
+  };
+
+  const refreshBucketListing = async () => {
+    if (!selectedEndpointId || cacheRefreshLoading) return;
+    setCacheRefreshLoading(true);
+    setError(null);
+    try {
+      await refreshBucketListingCache(selectedEndpointId);
+      clearBucketListingUiCaches();
+      refreshBuckets();
+    } catch (err) {
+      console.error(err);
+      setError(extractError(err));
+    } finally {
+      setCacheRefreshLoading(false);
+    }
+  };
+
   const usageUnavailableBadge = statsWarning ? "Bucket stats unavailable" : "Storage metrics unavailable";
   const usageUnavailableDescription = statsWarning
     ? statsWarning
@@ -7446,6 +7485,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                 <p className="ui-caption text-slate-500 dark:text-slate-400">{total} result(s)</p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => void refreshBucketListing()}
+                  disabled={
+                    !selectedEndpointId ||
+                    cacheRefreshLoading ||
+                    loading ||
+                    loadingDetails ||
+                    advancedProgress.active
+                  }
+                  className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                  title="Flush cached bucket listings and reload"
+                >
+                  <RefreshIcon className={`h-3.5 w-3.5 ${cacheRefreshLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </button>
                 <div className="relative" ref={columnPickerRef}>
                   <button
                     type="button"

@@ -29,11 +29,14 @@ from app.services.bucket_listing_shared import (
     _filter_requires_stats,
     parse_includes,
 )
-from app.services.bucket_owner_enrichment import BucketOwnerMetadataService
+from app.services.bucket_owner_enrichment import BucketOwnerMetadataService, invalidate_bucket_owner_metadata_cache
 from app.routers.ceph_admin.listing_common import normalize_text, sort_value
 from app.routers.dependencies import get_account_context, get_current_storage_ops_admin
 from app.routers.execution_contexts import list_execution_contexts
-from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account
+from app.services.bucket_listing_cache import (
+    get_cached_bucket_listing_for_account,
+    invalidate_bucket_listing_cache_for_account,
+)
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.connection_identity_service import ConnectionIdentityService
 
@@ -623,6 +626,25 @@ def _compute_storage_ops_listing(
         page_size=page_size,
         has_next=end < total,
     )
+
+
+@router.post("/cache/refresh")
+def refresh_storage_ops_bucket_listing_cache(
+    request: Request,
+    user: User = Depends(get_current_storage_ops_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    refs = _collect_context_refs(user, db)
+    resolved_contexts = _resolve_context_accounts(refs=refs, request=request, db=db, user=user)
+    endpoint_ids: set[int] = set()
+    for context in resolved_contexts:
+        invalidate_bucket_listing_cache_for_account(context.account)
+        endpoint_id = int(getattr(getattr(context.account, "storage_endpoint", None), "id", 0) or 0)
+        if endpoint_id > 0:
+            endpoint_ids.add(endpoint_id)
+    for endpoint_id in endpoint_ids:
+        invalidate_bucket_owner_metadata_cache(endpoint_id)
+    return {"refreshed": True, "contexts": len(resolved_contexts), "endpoints": len(endpoint_ids)}
 
 
 @router.get("", response_model=PaginatedStorageOpsBucketsResponse)

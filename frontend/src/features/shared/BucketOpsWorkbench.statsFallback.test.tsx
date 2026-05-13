@@ -5,6 +5,8 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 const mocks = vi.hoisted(() => ({
   listCephAdminBuckets: vi.fn(),
   streamCephAdminBuckets: vi.fn(),
+  refreshCephAdminBucketListingCache: vi.fn(),
+  refreshStorageOpsBucketListingCache: vi.fn(),
   noopAsync: vi.fn(async () => ({})),
   navigate: vi.fn(),
 }));
@@ -36,6 +38,7 @@ vi.mock("../../api/cephAdmin", () => ({
   putCephAdminBucketCors: mocks.noopAsync,
   putCephAdminBucketLifecycle: mocks.noopAsync,
   putCephAdminBucketPolicy: mocks.noopAsync,
+  refreshCephAdminBucketListingCache: mocks.refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning: mocks.noopAsync,
   streamCephAdminBuckets: mocks.streamCephAdminBuckets,
   updateCephAdminBucketObjectLock: mocks.noopAsync,
@@ -63,6 +66,7 @@ vi.mock("../../api/storageOps", () => ({
   putStorageOpsBucketLifecycle: mocks.noopAsync,
   putStorageOpsBucketLogging: mocks.noopAsync,
   putStorageOpsBucketPolicy: mocks.noopAsync,
+  refreshStorageOpsBucketListingCache: mocks.refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning: mocks.noopAsync,
   streamStorageOpsBuckets: vi.fn(),
   updateStorageOpsBucketObjectLock: mocks.noopAsync,
@@ -128,6 +132,10 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
   beforeEach(() => {
     mocks.listCephAdminBuckets.mockReset();
     mocks.streamCephAdminBuckets.mockReset();
+    mocks.refreshCephAdminBucketListingCache.mockReset();
+    mocks.refreshStorageOpsBucketListingCache.mockReset();
+    mocks.refreshCephAdminBucketListingCache.mockResolvedValue({ refreshed: true });
+    mocks.refreshStorageOpsBucketListingCache.mockResolvedValue({ refreshed: true });
     mocks.noopAsync.mockClear();
     mocks.navigate.mockReset();
     window.localStorage.clear();

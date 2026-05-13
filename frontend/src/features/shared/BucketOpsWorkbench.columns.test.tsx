@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   streamCephAdminBuckets: vi.fn(),
   listStorageOpsBuckets: vi.fn(),
   streamStorageOpsBuckets: vi.fn(),
+  refreshCephAdminBucketListingCache: vi.fn(),
+  refreshStorageOpsBucketListingCache: vi.fn(),
   noopAsync: vi.fn(async () => ({})),
   navigate: vi.fn(),
 }));
@@ -38,6 +40,7 @@ vi.mock("../../api/cephAdmin", () => ({
   putCephAdminBucketCors: mocks.noopAsync,
   putCephAdminBucketLifecycle: mocks.noopAsync,
   putCephAdminBucketPolicy: mocks.noopAsync,
+  refreshCephAdminBucketListingCache: mocks.refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning: mocks.noopAsync,
   streamCephAdminBuckets: mocks.streamCephAdminBuckets,
   updateCephAdminBucketObjectLock: mocks.noopAsync,
@@ -65,6 +68,7 @@ vi.mock("../../api/storageOps", () => ({
   putStorageOpsBucketLifecycle: mocks.noopAsync,
   putStorageOpsBucketLogging: mocks.noopAsync,
   putStorageOpsBucketPolicy: mocks.noopAsync,
+  refreshStorageOpsBucketListingCache: mocks.refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning: mocks.noopAsync,
   streamStorageOpsBuckets: mocks.streamStorageOpsBuckets,
   updateStorageOpsBucketObjectLock: mocks.noopAsync,
@@ -157,6 +161,10 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     mocks.streamCephAdminBuckets.mockReset();
     mocks.listStorageOpsBuckets.mockReset();
     mocks.streamStorageOpsBuckets.mockReset();
+    mocks.refreshCephAdminBucketListingCache.mockReset();
+    mocks.refreshStorageOpsBucketListingCache.mockReset();
+    mocks.refreshCephAdminBucketListingCache.mockResolvedValue({ refreshed: true });
+    mocks.refreshStorageOpsBucketListingCache.mockResolvedValue({ refreshed: true });
     mocks.noopAsync.mockClear();
     mocks.navigate.mockReset();
     window.localStorage.clear();
@@ -192,6 +200,29 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     expect(await screen.findByText("bucket-a")).toBeInTheDocument();
     expect(screen.getByText("UI tags")).toBeInTheDocument();
     expect(screen.queryByText("Owner quota")).not.toBeInTheDocument();
+  });
+
+  it("flushes the backend cache before reloading storage ops buckets", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+
+    const refreshButton = screen.getByRole("button", { name: "Refresh" });
+    await waitFor(() => expect(refreshButton).not.toBeDisabled());
+    fireEvent.click(refreshButton);
+
+    await waitFor(() => expect(mocks.refreshStorageOpsBucketListingCache).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(mocks.listStorageOpsBuckets.mock.calls.length).toBeGreaterThanOrEqual(2));
+    const refreshOrder = mocks.refreshStorageOpsBucketListingCache.mock.invocationCallOrder[0];
+    const lastListOrder = mocks.listStorageOpsBuckets.mock.invocationCallOrder.at(-1);
+    expect(refreshOrder).toBeDefined();
+    expect(lastListOrder).toBeDefined();
+    expect(refreshOrder as number).toBeLessThan(lastListOrder as number);
   });
 
   it("loads owner quota columns without enabling stats in storage ops", async () => {

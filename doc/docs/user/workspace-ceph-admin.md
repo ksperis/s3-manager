@@ -23,6 +23,7 @@ Use **Ceph Admin** for Ceph RGW cluster-level operations.
    - **Metrics**: endpoint metrics.
    - **Browser**: object navigation when enabled.
 4. In **Buckets**, long-running bulk actions show progress bars with completion and failure counters.
+5. Bucket listings are cached for up to 30 minutes to reduce RGW load. Use **Refresh** in the bucket workbench to flush the cache and reload the current listing.
 
 ## Expected result
 

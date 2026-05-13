@@ -41,6 +41,7 @@ import type {
 import type {
   CephAdminBucket,
   CephAdminBucketsStreamProgress,
+  BucketListingCacheRefreshResponse,
   ListCephAdminBucketsParams,
   PaginatedCephAdminBucketsResponse,
 } from "./cephAdmin";
@@ -138,6 +139,13 @@ export async function listStorageOpsBuckets(
         params: buildBucketListingQuery(params),
         signal: options?.signal,
       });
+  return data;
+}
+
+export async function refreshStorageOpsBucketListingCache(
+  _scopeId: number
+): Promise<BucketListingCacheRefreshResponse> {
+  const { data } = await client.post<BucketListingCacheRefreshResponse>("/storage-ops/buckets/cache/refresh");
   return data;
 }
 
