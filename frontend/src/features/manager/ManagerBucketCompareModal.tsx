@@ -89,6 +89,7 @@ type ManagerBucketCompareModalProps = {
 };
 
 const extractError = extractCompareError;
+const DIFF_SAMPLE_LIMIT = 500;
 
 const feedbackToneClass: Record<UiTone, string> = {
   neutral: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200",
@@ -539,6 +540,7 @@ export default function ManagerBucketCompareModal({
                 include_content: snapshot.includeContent,
                 include_config: snapshot.includeConfig,
                 config_features: snapshot.includeConfig ? snapshot.configFeatures : undefined,
+                diff_sample_limit: DIFF_SAMPLE_LIMIT,
                 ignore_modified_after: snapshot.ignoreModifiedAfterIso,
               },
               { signal: controller.signal }
@@ -822,6 +824,7 @@ export default function ManagerBucketCompareModal({
           include_content: refreshOptions.includeContent,
           include_config: refreshOptions.includeConfig,
           config_features: refreshOptions.includeConfig ? refreshOptions.configFeatures : undefined,
+          diff_sample_limit: DIFF_SAMPLE_LIMIT,
           ignore_modified_after: refreshOptions.ignoreModifiedAfterIso,
         });
         setItems((prev) =>
