@@ -24,9 +24,13 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
    - bulk preview/apply,
    - export.
    - quota and usage columns are available as single-line atomic columns so on-screen review and CSV export stay aligned.
-5. During long bulk actions (copy, preview, apply, and large exports), follow the in-page progress bars to track completion and failures.
-6. Use **Context** and **Kind** columns to distinguish identical bucket names across contexts.
-7. Bucket listings are cached for up to 30 minutes per authorized context. Use **Refresh** in the bucket workbench to flush cached listings and reload the current view.
+5. In **Advanced filter**, use the compact **Context** and **Endpoint**
+   selectors to pick authorized scopes directly. Their quick filters match
+   names, types, and standard tags, and **Select filtered** / **Deselect
+   filtered** apply to the currently filtered list.
+6. During long bulk actions (copy, preview, apply, and large exports), follow the in-page progress bars to track completion and failures.
+7. Use **Context**, **Kind**, and **Endpoint** columns to distinguish identical bucket names across contexts.
+8. Bucket listings are cached for up to 30 minutes per authorized context. Use **Refresh** in the bucket workbench to flush cached listings and reload the current view.
 
 ## Expected result
 

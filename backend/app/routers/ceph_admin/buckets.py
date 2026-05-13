@@ -654,7 +654,17 @@ def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilte
     if value is None:
         return False
 
-    string_fields = {"name", "tenant", "owner", "owner_name", "owner_kind", "context_name", "context_kind", "endpoint_name"}
+    string_fields = {
+        "name",
+        "tenant",
+        "owner",
+        "owner_name",
+        "owner_kind",
+        "context_id",
+        "context_name",
+        "context_kind",
+        "endpoint_name",
+    }
     if field in string_fields:
         left = _normalize_text(str(value))
         if field == "owner_kind":

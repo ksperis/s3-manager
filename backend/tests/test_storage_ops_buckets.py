@@ -486,6 +486,7 @@ def test_storage_ops_advanced_filter_parsing_accepts_context_fields():
         {
             "match": "all",
             "rules": [
+                {"field": "context_id", "op": "in", "value": ["1", "conn-2"]},
                 {"field": "context_name", "op": "contains", "value": "Account"},
                 {"field": "context_kind", "op": "eq", "value": "account"},
                 {"field": "endpoint_name", "op": "contains", "value": "Primary"},
@@ -493,7 +494,7 @@ def test_storage_ops_advanced_filter_parsing_accepts_context_fields():
         }
     )
     assert parsed.rules is not None
-    assert [rule.field for rule in parsed.rules] == ["context_name", "context_kind", "endpoint_name"]
+    assert [rule.field for rule in parsed.rules] == ["context_id", "context_name", "context_kind", "endpoint_name"]
 
 
 def test_storage_ops_context_filters_match_context_kind_and_endpoint():
@@ -538,6 +539,48 @@ def test_storage_ops_context_filters_match_context_kind_and_endpoint():
         account=SimpleNamespace(),
     )
     assert [bucket.bucket_name for bucket in result] == ["alpha"]
+
+
+def test_storage_ops_context_filters_match_context_id():
+    buckets = [
+        StorageOpsBucketSummary(
+            name="alpha",
+            bucket_name="alpha",
+            context_id="1",
+            context_name="Account A",
+            context_kind="account",
+            endpoint_name="Primary Endpoint",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+        StorageOpsBucketSummary(
+            name="beta",
+            bucket_name="beta",
+            context_id="conn-1",
+            context_name="Connection B",
+            context_kind="connection",
+            endpoint_name="Archive Endpoint",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+    ]
+    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+        {
+            "match": "all",
+            "rules": [
+                {"field": "context_id", "op": "in", "value": ["conn-1"]},
+            ],
+        }
+    )
+    result = storage_ops_router._apply_advanced_filter_for_context(
+        buckets,
+        parsed_filter,
+        service=SimpleNamespace(),
+        account=SimpleNamespace(),
+    )
+    assert [bucket.bucket_name for bucket in result] == ["beta"]
 
 
 def test_storage_ops_context_filters_match_s3_user_kind():
@@ -707,6 +750,64 @@ def test_storage_ops_context_prefilter_skips_non_matching_contexts_for_match_all
         assert payload["total"] == 1
         assert [item["name"] for item in payload["items"]] == ["1::bucket-1"]
         assert resolved_contexts == ["1"]
+    finally:
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
+        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+        app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
+
+
+def test_storage_ops_context_id_prefilter_skips_non_matching_contexts(client, monkeypatch):
+    resolved_contexts: list[str] = []
+
+    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
+        assert workspace == "manager"
+        return [
+            ExecutionContext(
+                kind="account",
+                id="1",
+                display_name="Account A",
+                endpoint_name="Primary",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+            ),
+            ExecutionContext(
+                kind="connection",
+                id="conn-2",
+                display_name="Connection B",
+                endpoint_name="Archive",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
+            ),
+        ]
+
+    def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
+        resolved_contexts.append(account_ref)
+        return SimpleNamespace(context_id=account_ref)
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            return [Bucket(name=f"bucket-{account.context_id}", used_bytes=1)]
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"field": "context_id", "op": "in", "value": ["conn-2"]},
+            ],
+        }
+    )
+
+    monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
+    monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
+
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
+    app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
+    try:
+        response = client.get("/api/storage-ops/buckets", params={"advanced_filter": advanced_filter})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["total"] == 1
+        assert [item["name"] for item in payload["items"]] == ["conn-2::bucket-conn-2"]
+        assert resolved_contexts == ["conn-2"]
     finally:
         app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)

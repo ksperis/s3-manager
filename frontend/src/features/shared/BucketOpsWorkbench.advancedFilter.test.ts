@@ -10,14 +10,25 @@ import {
 const baseAdvancedFilter = (): AdvancedFilterState => sanitizeAdvancedFilter({});
 
 describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
-  it("emits context/kind/endpoint rules in storage-ops mode", () => {
+  it("emits selected context id rules in storage-ops mode", () => {
     const advanced: AdvancedFilterState = {
       ...baseAdvancedFilter(),
-      context: "Account A",
-      contextMatchMode: "contains",
-      kind: "account",
-      endpoint: "Primary Endpoint",
-      endpointMatchMode: "exact",
+      contextIds: ["1", "conn-2"],
+    };
+
+    const rawPayload = buildAdvancedFilterPayload("", "contains", advanced, null, true);
+    expect(rawPayload).toBeTruthy();
+    const payload = JSON.parse(rawPayload ?? "{}") as { rules?: Array<Record<string, unknown>> };
+
+    expect(payload.rules).toEqual(expect.arrayContaining([{ field: "context_id", op: "in", value: ["1", "conn-2"] }]));
+    expect(payload.rules).not.toEqual(expect.arrayContaining([{ field: "context_name", op: expect.any(String) }]));
+  });
+
+  it("emits selected context and endpoint rules in storage-ops mode", () => {
+    const advanced: AdvancedFilterState = {
+      ...baseAdvancedFilter(),
+      contextIds: ["1"],
+      endpointNames: ["Primary Endpoint", "Archive Endpoint"],
     };
 
     const rawPayload = buildAdvancedFilterPayload("", "contains", advanced, null, true);
@@ -26,32 +37,19 @@ describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
 
     expect(payload.rules).toEqual(
       expect.arrayContaining([
-        { field: "context_name", op: "contains", value: "Account A" },
-        { field: "context_kind", op: "eq", value: "account" },
-        { field: "endpoint_name", op: "eq", value: "Primary Endpoint" },
+        { field: "context_id", op: "eq", value: "1" },
+        { field: "endpoint_name", op: "in", value: ["Primary Endpoint", "Archive Endpoint"] },
       ])
     );
-  });
-
-  it("emits the S3 user context kind in storage-ops mode", () => {
-    const advanced: AdvancedFilterState = {
-      ...baseAdvancedFilter(),
-      kind: "s3_user",
-    };
-
-    const rawPayload = buildAdvancedFilterPayload("", "contains", advanced, null, true);
-    expect(rawPayload).toBeTruthy();
-    const payload = JSON.parse(rawPayload ?? "{}") as { rules?: Array<Record<string, unknown>> };
-
-    expect(payload.rules).toEqual(expect.arrayContaining([{ field: "context_kind", op: "eq", value: "s3_user" }]));
+    expect(payload.rules).not.toEqual(expect.arrayContaining([{ field: "context_name", op: expect.any(String) }]));
+    expect(payload.rules).not.toEqual(expect.arrayContaining([{ field: "context_kind", op: expect.any(String) }]));
   });
 
   it("does not emit storage-ops identity rules in ceph-admin mode", () => {
     const advanced: AdvancedFilterState = {
       ...baseAdvancedFilter(),
-      context: "Account A",
-      kind: "connection",
-      endpoint: "Archive Endpoint",
+      contextIds: ["1"],
+      endpointNames: ["Archive Endpoint"],
     };
 
     const payload = buildAdvancedFilterPayload("", "contains", advanced, null, false);
@@ -61,12 +59,21 @@ describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
   it("counts storage-ops identity rules as active only in storage-ops mode", () => {
     const advanced: AdvancedFilterState = {
       ...baseAdvancedFilter(),
-      context: "Account A",
-      kind: "account",
+      endpointNames: ["Archive Endpoint"],
     };
 
     expect(hasAdvancedFilters(advanced, true)).toBe(true);
     expect(hasAdvancedFilters(advanced, false)).toBe(false);
+  });
+
+  it("sanitizes persisted selected context ids and endpoint names", () => {
+    const sanitized = sanitizeAdvancedFilter({
+      contextIds: ["1", "conn-2", "1", "", 8],
+      endpointNames: ["Primary Endpoint", "Archive Endpoint", "Primary Endpoint", "", 7],
+    });
+
+    expect(sanitized.contextIds).toEqual(["1", "conn-2"]);
+    expect(sanitized.endpointNames).toEqual(["Primary Endpoint", "Archive Endpoint"]);
   });
 
   it("serializes owner quota and owner usage filters with the correct backend fields", () => {

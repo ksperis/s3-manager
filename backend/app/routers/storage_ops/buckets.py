@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 BUCKET_REF_SEPARATOR = "::"
 STORAGE_OPS_CONTEXT_LISTING_MAX_WORKERS = 6
-CONTEXT_IDENTITY_FIELDS = {"context_name", "context_kind", "endpoint_name"}
+CONTEXT_IDENTITY_FIELDS = {"context_id", "context_name", "context_kind", "endpoint_name"}
 OWNER_QUOTA_FIELDS = {"owner_quota_max_size_bytes", "owner_quota_max_objects"}
 OWNER_USAGE_FIELDS = {"owner_used_bytes", "owner_object_count"}
 OWNER_USAGE_PERCENT_FIELDS = {"owner_quota_usage_size_percent", "owner_quota_usage_object_percent"}
