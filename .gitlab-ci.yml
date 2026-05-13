@@ -73,30 +73,15 @@ variables:
     - test -n "$TARGET_GHCR_IMAGE"
     - test -n "$GHCR_USERNAME"
     - test -n "$GHCR_TOKEN"
+    - test -n "$RELEASE_GHCR_TAGS"
     - |
-      if [ "$PROMOTION_KIND" = "main" ]; then
-        promotion_tags="latest"
-      elif [ "$PROMOTION_KIND" = "release" ]; then
-        normalized_release_tag="${CI_COMMIT_TAG#v}"
-        if [ -z "$CI_COMMIT_TAG" ] || [ "$normalized_release_tag" = "$CI_COMMIT_TAG" ]; then
-          echo "Release promotion requires a Git tag matching vX.Y.Z"
-          exit 1
-        fi
-        case "$normalized_release_tag" in
-          *.*.*) ;;
-          *)
-            echo "Release promotion requires a semver tag matching vX.Y.Z"
-            exit 1
-            ;;
-        esac
-        release_major_minor="${normalized_release_tag%.*}"
-        if [ -z "$release_major_minor" ] || [ "$release_major_minor" = "$normalized_release_tag" ]; then
-          echo "Unable to derive X.Y alias from release tag $CI_COMMIT_TAG"
-          exit 1
-        fi
-        promotion_tags="$normalized_release_tag $release_major_minor"
-      else
+      if [ "$PROMOTION_KIND" != "release" ]; then
         echo "Unsupported PROMOTION_KIND: $PROMOTION_KIND"
+        exit 1
+      fi
+      promotion_tags="$(printf '%s' "$RELEASE_GHCR_TAGS" | tr ',' ' ')"
+      if [ -z "$promotion_tags" ]; then
+        echo "Release promotion requires at least one GHCR tag"
         exit 1
       fi
     - |
@@ -114,11 +99,69 @@ variables:
         test "$ghcr_digest" = "$source_digest"
       done
 
+release-tag-metadata:
+  stage: test
+  image: alpine:3.20
+  needs: []
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: on_success
+    - when: never
+  before_script:
+    - apk add --no-cache coreutils git
+  script:
+    - |
+      release_tag="${CI_COMMIT_TAG:-}"
+      if ! printf '%s\n' "$release_tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+        echo "Release tag must match vX.Y.Z"
+        exit 1
+      fi
+
+      release_version="${release_tag#v}"
+      release_minor="${release_version%.*}"
+      git fetch --quiet origin "$CI_DEFAULT_BRANCH"
+      if ! git merge-base --is-ancestor "$CI_COMMIT_SHA" FETCH_HEAD; then
+        echo "Release tag must point to a commit included in $CI_DEFAULT_BRANCH"
+        exit 1
+      fi
+
+      remote_refs="$(git ls-remote --tags --refs "$CI_REPOSITORY_URL" 'v[0-9]*.[0-9]*.[0-9]*')"
+      remote_versions="$(printf '%s\n' "$remote_refs" | awk '{print $2}' | sed 's#refs/tags/v##' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)"
+      all_versions="$(printf '%s\n%s\n' "$remote_versions" "$release_version" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | uniq)"
+      highest_version="$(printf '%s\n' "$all_versions" | tail -n 1)"
+      highest_minor_version="$(printf '%s\n' "$all_versions" | awk -v minor="$release_minor" 'index($0, minor ".") == 1 { print }' | sort -V | tail -n 1)"
+
+      ghcr_tags="$release_version"
+      if [ "$release_version" = "$highest_minor_version" ]; then
+        ghcr_tags="$ghcr_tags,$release_minor"
+      fi
+      if [ "$release_version" = "$highest_version" ]; then
+        ghcr_tags="$ghcr_tags,latest"
+      fi
+
+      {
+        printf 'RELEASE_VERSION=%s\n' "$release_version"
+        printf 'RELEASE_MINOR=%s\n' "$release_minor"
+        printf 'RELEASE_GHCR_TAGS=%s\n' "$ghcr_tags"
+      } > release-tags.env
+      echo "Release GHCR tags: $(printf '%s' "$ghcr_tags" | tr ',' ' ')"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - release-tags.env
+    reports:
+      dotenv: release-tags.env
+
 backend-tests:
   stage: test
   image: python:3.12-slim
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
       when: never
     - when: on_success
   before_script:
@@ -146,6 +189,8 @@ backend-deadcode:
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: never
     - when: on_success
   before_script:
     - python -m pip install --upgrade pip
@@ -160,6 +205,8 @@ backend-vuln-scan:
   needs: []
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
       when: never
     - when: on_success
   script:
@@ -198,6 +245,8 @@ frontend-quality:
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: never
     - when: on_success
   script:
     - cd frontend
@@ -210,6 +259,8 @@ frontend-tests:
   needs: []
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
       when: never
     - when: on_success
   before_script:
@@ -237,6 +288,8 @@ frontend-browser-e2e:
         S3_IGNORE_SUBDOMAIN_BUCKETNAME: "true"
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
       when: never
     - when: on_success
   variables:
@@ -290,6 +343,8 @@ frontend-vuln-scan:
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: never
     - when: on_success
   script:
     - |
@@ -327,6 +382,8 @@ ceph-functional-tests:
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: never
     - if: '$CEPH_TEST_LAB_S3_ENDPOINT && $CEPH_TEST_RGW_ADMIN_ENDPOINT && $CEPH_TEST_RGW_ADMIN_ACCESS_KEY && $CEPH_TEST_RGW_ADMIN_SECRET_KEY && $CEPH_TEST_SUPERVISION_ACCESS_KEY && $CEPH_TEST_SUPERVISION_SECRET_KEY && $CEPH_TEST_CEPH_ADMIN_ACCESS_KEY && $CEPH_TEST_CEPH_ADMIN_SECRET_KEY'
       when: on_success
     - when: never
@@ -354,7 +411,11 @@ build-backend:
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
-    - when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - docker build -t "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" backend
@@ -368,11 +429,54 @@ build-frontend:
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
-    - when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - docker build --build-arg VITE_API_URL="$VITE_API_URL" -t "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" frontend
     - docker push "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
+
+release-source-images-ready:
+  stage: build
+  image:
+    name: $SKOPEO_IMAGE
+    entrypoint: [""]
+  needs:
+    - job: release-tag-metadata
+      artifacts: true
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: on_success
+    - when: never
+  variables:
+    RELEASE_SOURCE_IMAGE_RETRIES: "60"
+    RELEASE_SOURCE_IMAGE_RETRY_SECONDS: "30"
+  script:
+    - |
+      for source_image in "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"; do
+        attempt=1
+        while [ "$attempt" -le "$RELEASE_SOURCE_IMAGE_RETRIES" ]; do
+          if skopeo inspect --creds "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" "docker://$source_image" >/dev/null 2>&1; then
+            echo "Release source image is ready: $source_image"
+            break
+          fi
+
+          if [ "$attempt" -eq "$RELEASE_SOURCE_IMAGE_RETRIES" ]; then
+            echo "Release source image is not available: $source_image"
+            echo "Ensure the main pipeline built and pushed this commit before creating or rerunning the release tag."
+            exit 1
+          fi
+
+          echo "Waiting for release source image: $source_image ($attempt/$RELEASE_SOURCE_IMAGE_RETRIES)"
+          sleep "$RELEASE_SOURCE_IMAGE_RETRY_SECONDS"
+          attempt=$((attempt + 1))
+        done
+      done
 
 secret_detection:
   stage: security
@@ -397,7 +501,11 @@ backend-image-vuln-scan:
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
-    - when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
   script:
     - |
       trivy image \
@@ -441,7 +549,11 @@ frontend-image-vuln-scan:
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
-    - when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: on_success
+    - when: never
   script:
     - |
       trivy image \
@@ -477,6 +589,98 @@ frontend-image-vuln-scan:
     paths:
       - gl-security-reports/frontend-image-trivy.json
 
+backend-release-image-vuln-scan:
+  extends: .trivy-job
+  stage: security
+  needs:
+    - release-source-images-ready
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: on_success
+    - when: never
+  script:
+    - |
+      trivy image \
+        --scanners vuln \
+        --pkg-types os,library \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format json \
+        --output gl-security-reports/backend-release-image-trivy.json \
+        "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" || scan_exit=$?
+    - |
+      trivy image \
+        --scanners vuln \
+        --pkg-types os,library \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format table \
+        "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
+    - test -z "${scan_exit:-}"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gl-security-reports/backend-release-image-trivy.json
+
+frontend-release-image-vuln-scan:
+  extends: .trivy-job
+  stage: security
+  needs:
+    - release-source-images-ready
+  rules:
+    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: on_success
+    - when: never
+  script:
+    - |
+      trivy image \
+        --scanners vuln \
+        --pkg-types os,library \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format json \
+        --output gl-security-reports/frontend-release-image-trivy.json \
+        "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" || scan_exit=$?
+    - |
+      trivy image \
+        --scanners vuln \
+        --pkg-types os,library \
+        --severity "$TRIVY_SEVERITY" \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        --timeout "$TRIVY_TIMEOUT" \
+        $TRIVY_NO_PROGRESS \
+        --username "$TRIVY_USERNAME" \
+        --password "$TRIVY_PASSWORD" \
+        --format table \
+        "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
+    - test -z "${scan_exit:-}"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gl-security-reports/frontend-release-image-trivy.json
+
 promote-backend-dev:
   extends: .promote-internal-image
   rules:
@@ -500,39 +704,17 @@ promote-frontend-dev:
   variables:
     SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
     TARGET_GITLAB_IMAGE: "$CI_REGISTRY_IMAGE/frontend"
- 
-promote-backend-main:
-  extends: .promote-public-image
-  rules:
-    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
-      when: never
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: on_success
-    - when: never
-  variables:
-    PROMOTION_KIND: "main"
-    SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
-    TARGET_GHCR_IMAGE: "$GHCR_BACKEND_IMAGE"
-
-promote-frontend-main:
-  extends: .promote-public-image
-  rules:
-    - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
-      when: never
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: on_success
-    - when: never
-  variables:
-    PROMOTION_KIND: "main"
-    SOURCE_IMAGE: "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
-    TARGET_GHCR_IMAGE: "$GHCR_FRONTEND_IMAGE"
 
 promote-backend-release:
   extends: .promote-public-image
+  needs:
+    - job: release-tag-metadata
+      artifacts: true
+    - backend-release-image-vuln-scan
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
-    - if: '$CI_COMMIT_TAG =~ /^v.+$/'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
       when: on_success
     - when: never
   variables:
@@ -542,10 +724,14 @@ promote-backend-release:
 
 promote-frontend-release:
   extends: .promote-public-image
+  needs:
+    - job: release-tag-metadata
+      artifacts: true
+    - frontend-release-image-vuln-scan
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
-    - if: '$CI_COMMIT_TAG =~ /^v.+$/'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
       when: on_success
     - when: never
   variables:

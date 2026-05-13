@@ -89,9 +89,10 @@ Registry/tag policy:
 - GitLab Container Registry:
   - `dev` and `dev-<short-sha>` from branch `dev`
 - GHCR:
-  - `latest` from the default branch
-  - `X.Y.Z` and `X.Y` from Git tags `vX.Y.Z`
+  - `X.Y.Z` from Git tags `vX.Y.Z`
+  - `X.Y` from the highest `X.Y.Z` tag in that minor series
+  - `latest` from the highest stable Git tag
 
-Use `X.Y.Z` when you need an immutable release, `X.Y` when you want the latest patch in a minor series, and `latest` when you want the current validated build from `main`.
+Use `X.Y.Z` when you need an immutable release, `X.Y` when you want the latest patch in a minor series, and `latest` when you want the latest stable release. The default branch validates and builds immutable internal SHA images, but it does not publish public GHCR tags directly.
 
 If a separate GitHub-side workflow still publishes images, disable it or restrict it to release metadata only. Do not rebuild official images in two CI systems.

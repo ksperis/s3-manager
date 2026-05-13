@@ -88,6 +88,8 @@ wget https://raw.githubusercontent.com/ksperis/s3-manager/refs/heads/main/docker
 S3_MANAGER_TAG=latest docker compose up -d frontend backend
 ```
 
+`latest` points to the latest stable release published from a Git tag.
+
 Default endpoints:
 
 - Frontend: `http://localhost:8080`
