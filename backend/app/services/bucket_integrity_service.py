@@ -25,7 +25,7 @@ ProgressCallback = Callable[[BucketIntegrityCheckProgress], None]
 CancelCheck = Callable[[], None]
 
 _READ_CHUNK_SIZE = 8 * 1024 * 1024
-_FAILURE_SAMPLE_LIMIT = 100
+_FAILURE_SAMPLE_LIMIT = 500
 _PROGRESS_EVERY_CHECKED = 25
 _PROGRESS_MIN_INTERVAL_SECONDS = 0.5
 

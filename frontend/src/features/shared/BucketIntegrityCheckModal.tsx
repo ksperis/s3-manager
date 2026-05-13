@@ -80,6 +80,31 @@ function bucketStatusClasses(status: BucketIntegrityResult["status"]): string {
   return "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-100 dark:border-rose-500/30";
 }
 
+function formatFailureTarget(failure: BucketIntegrityFailure): string {
+  if (failure.key) return failure.key;
+  return failure.stage === "list" ? "Bucket listing" : "Object";
+}
+
+function bucketMatchesSearch(bucket: BucketIntegrityBucketResult, needle: string): boolean {
+  if (!needle) return true;
+  const haystack = [
+    bucket.bucket_name,
+    bucket.context_name ?? "",
+    bucket.context_id ?? "",
+    bucket.status,
+    statusLabel(bucket.status),
+    ...bucket.failures_sample.flatMap((failure) => [
+      failure.stage,
+      failure.key ?? "",
+      failure.version_id ?? "",
+      failure.message,
+    ]),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(needle);
+}
+
 function parseOptionalSince(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -113,6 +138,9 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
   const [result, setResult] = useState<BucketIntegrityResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [resultSearch, setResultSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | BucketIntegrityResult["status"]>("all");
+  const [errorFilter, setErrorFilter] = useState<"all" | "with_errors" | "without_errors">("all");
   const [running, setRunning] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -122,6 +150,16 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
     if (!progress || progress.listed_count <= 0) return null;
     return Math.max(0, Math.min(100, Math.round((progress.checked_count / progress.listed_count) * 100)));
   }, [progress]);
+  const filteredBucketResults = useMemo(() => {
+    if (!result) return [];
+    const needle = resultSearch.trim().toLowerCase();
+    return result.buckets.filter((bucket) => {
+      if (statusFilter !== "all" && bucket.status !== statusFilter) return false;
+      if (errorFilter === "with_errors" && bucket.failed_count === 0) return false;
+      if (errorFilter === "without_errors" && bucket.failed_count > 0) return false;
+      return bucketMatchesSearch(bucket, needle);
+    });
+  }, [errorFilter, result, resultSearch, statusFilter]);
 
   const buildPayload = (): BucketIntegrityCheckPayload => {
     const maxMbPerObject = parseOptionalMaxMb(maxMb);
@@ -331,56 +369,144 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
                 <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatBytes(result.bytes_read)}</p>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                <thead className="bg-slate-50 dark:bg-slate-900/70">
-                  <tr>
-                    <th className="px-3 py-2 text-left ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Bucket</th>
-                    <th className="px-3 py-2 text-left ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Status</th>
-                    <th className="px-3 py-2 text-right ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Listed</th>
-                    <th className="px-3 py-2 text-right ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Checked</th>
-                    <th className="px-3 py-2 text-right ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Errors</th>
-                    <th className="px-3 py-2 text-right ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Read</th>
-                    <th className="px-3 py-2 text-right ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Duration</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {result.buckets.map((bucket) => (
-                    <tr key={`${bucket.context_id ?? ""}:${bucket.bucket_name}`} className="align-top">
-                      <td className="px-3 py-2">
-                        <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{bucket.bucket_name}</p>
+            <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40 lg:grid-cols-[minmax(0,1fr)_220px_220px_auto]">
+              <input
+                type="text"
+                value={resultSearch}
+                onChange={(event) => setResultSearch(event.target.value)}
+                placeholder="Filter by bucket, context, object, or error"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+              <select
+                aria-label="Filter integrity status"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as "all" | BucketIntegrityResult["status"])}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              >
+                <option value="all">All statuses</option>
+                <option value="passed">Passed</option>
+                <option value="completed_with_errors">Completed with errors</option>
+                <option value="failed">Failed</option>
+                <option value="canceled">Canceled</option>
+              </select>
+              <select
+                aria-label="Filter integrity errors"
+                value={errorFilter}
+                onChange={(event) => setErrorFilter(event.target.value as "all" | "with_errors" | "without_errors")}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              >
+                <option value="all">All error states</option>
+                <option value="with_errors">With errors</option>
+                <option value="without_errors">Without errors</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  setResultSearch("");
+                  setStatusFilter("all");
+                  setErrorFilter("all");
+                }}
+                className="rounded-md border border-slate-300 px-3 py-2 ui-caption font-semibold text-slate-700 transition hover:border-slate-400 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500"
+              >
+                Reset filters
+              </button>
+            </div>
+            <p className="ui-caption text-slate-600 dark:text-slate-300">
+              Showing {formatNumber(filteredBucketResults.length)} / {formatNumber(result.buckets.length)} bucket result(s).
+            </p>
+            <div className="space-y-2">
+              {filteredBucketResults.map((bucket) => (
+                <details
+                  key={`${bucket.context_id ?? ""}:${bucket.bucket_name}`}
+                  className="rounded-lg border border-slate-200 dark:border-slate-800"
+                >
+                  <summary className="cursor-pointer list-none px-3 py-2">
+                    <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_170px_repeat(5,minmax(86px,auto))] lg:items-center">
+                      <div className="min-w-0">
+                        <p className="break-all ui-body font-semibold text-slate-900 dark:text-slate-100">{bucket.bucket_name}</p>
                         {(bucket.context_name || bucket.context_id) && (
                           <p className="ui-caption text-slate-500 dark:text-slate-400">{bucket.context_name || bucket.context_id}</p>
                         )}
-                        {bucket.failures_sample.length > 0 && (
-                          <details className="mt-2">
-                            <summary className="cursor-pointer ui-caption font-semibold text-primary">Error sample</summary>
-                            <div className="mt-2 max-h-40 overflow-auto rounded-md bg-slate-950 p-2 text-xs text-slate-100">
-                              {bucket.failures_sample.map((failure, index) => (
-                                <pre key={`${failure.key ?? "bucket"}:${failure.version_id ?? ""}:${index}`} className="whitespace-pre-wrap">
-                                  {failure.stage}
-                                  {failure.key ? ` ${failure.key}` : ""}
-                                  {failure.version_id ? ` (${failure.version_id})` : ""}: {failure.message}
-                                </pre>
-                              ))}
-                            </div>
-                          </details>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
+                      </div>
+                      <div>
                         <span className={`inline-flex rounded-full border px-2 py-0.5 ui-caption font-semibold ${bucketStatusClasses(bucket.status)}`}>
                           {statusLabel(bucket.status)}
                         </span>
-                      </td>
-                      <td className="px-3 py-2 text-right ui-body text-slate-700 dark:text-slate-200">{formatNumber(bucket.listed_count)}</td>
-                      <td className="px-3 py-2 text-right ui-body text-slate-700 dark:text-slate-200">{formatNumber(bucket.checked_count)}</td>
-                      <td className="px-3 py-2 text-right ui-body text-slate-700 dark:text-slate-200">{formatNumber(bucket.failed_count)}</td>
-                      <td className="px-3 py-2 text-right ui-body text-slate-700 dark:text-slate-200">{formatBytes(bucket.bytes_read)}</td>
-                      <td className="px-3 py-2 text-right ui-body text-slate-700 dark:text-slate-200">{formatSeconds(bucket.duration_seconds)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                      <div className="ui-caption text-slate-600 dark:text-slate-300">
+                        <span className="font-semibold text-slate-500 dark:text-slate-400">Listed </span>
+                        {formatNumber(bucket.listed_count)}
+                      </div>
+                      <div className="ui-caption text-slate-600 dark:text-slate-300">
+                        <span className="font-semibold text-slate-500 dark:text-slate-400">Checked </span>
+                        {formatNumber(bucket.checked_count)}
+                      </div>
+                      <div className="ui-caption text-slate-600 dark:text-slate-300">
+                        <span className="font-semibold text-slate-500 dark:text-slate-400">Errors </span>
+                        {formatNumber(bucket.failed_count)}
+                      </div>
+                      <div className="ui-caption text-slate-600 dark:text-slate-300">
+                        <span className="font-semibold text-slate-500 dark:text-slate-400">Read </span>
+                        {formatBytes(bucket.bytes_read)}
+                      </div>
+                      <div className="ui-caption text-slate-600 dark:text-slate-300">
+                        <span className="font-semibold text-slate-500 dark:text-slate-400">Duration </span>
+                        {formatSeconds(bucket.duration_seconds)}
+                      </div>
+                    </div>
+                  </summary>
+                  <div className="space-y-2 border-t border-slate-200 px-3 py-3 dark:border-slate-800">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="ui-caption font-semibold uppercase text-slate-500 dark:text-slate-400">Affected objects</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        {formatNumber(bucket.failures_sample.length)} visible / {formatNumber(bucket.failed_count)} total error(s)
+                      </p>
+                    </div>
+                    {bucket.failed_count > bucket.failures_sample.length && (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 ui-caption font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+                        Only {formatNumber(bucket.failures_sample.length)} of {formatNumber(bucket.failed_count)} affected object(s) are visible.
+                      </p>
+                    )}
+                    {bucket.failures_sample.length > 0 ? (
+                      <div className="max-h-72 overflow-auto rounded-md border border-slate-200 dark:border-slate-800">
+                        <table className="min-w-full divide-y divide-slate-200 ui-caption dark:divide-slate-800">
+                          <thead className="bg-slate-50 dark:bg-slate-900/70">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-semibold uppercase text-slate-500 dark:text-slate-400">Stage</th>
+                              <th className="px-3 py-2 text-left font-semibold uppercase text-slate-500 dark:text-slate-400">Object</th>
+                              <th className="px-3 py-2 text-left font-semibold uppercase text-slate-500 dark:text-slate-400">Version</th>
+                              <th className="px-3 py-2 text-left font-semibold uppercase text-slate-500 dark:text-slate-400">Message</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                            {bucket.failures_sample.map((failure, index) => (
+                              <tr key={`${failure.key ?? "bucket"}:${failure.version_id ?? ""}:${index}`}>
+                                <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-700 dark:text-slate-200">{failure.stage}</td>
+                                <td className="break-all px-3 py-2 font-mono text-[11px] text-slate-900 dark:text-slate-100">
+                                  {formatFailureTarget(failure)}
+                                </td>
+                                <td className="break-all px-3 py-2 font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                                  {failure.version_id || "-"}
+                                </td>
+                                <td className="min-w-[18rem] px-3 py-2 text-slate-700 dark:text-slate-200">{failure.message}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200">
+                        No affected objects reported for this bucket.
+                      </p>
+                    )}
+                  </div>
+                </details>
+              ))}
+              {filteredBucketResults.length === 0 && (
+                <div className="rounded-lg border border-dashed border-slate-300 px-3 py-4 ui-body text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                  No bucket result matches the current filters.
+                </div>
+              )}
             </div>
           </div>
         )}

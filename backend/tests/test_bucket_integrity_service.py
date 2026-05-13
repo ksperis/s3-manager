@@ -189,6 +189,23 @@ def test_integrity_service_reports_get_object_errors_as_object_failures():
     assert "AccessDenied" in bucket.failures_sample[0].message
 
 
+def test_integrity_service_keeps_large_failure_sample_bounded():
+    object_names = [f"broken-{idx}.txt" for idx in range(501)]
+    client = FakeS3Client(
+        {"list_objects_v2": FakePaginator([{"Contents": [{"Key": name} for name in object_names]}])},
+        {(name, None): b"" for name in object_names},
+    )
+    for name in object_names:
+        client.get_errors[(name, None)] = _client_error("AccessDenied", "denied")
+    service = FakeIntegrityService(client)
+
+    result = service.run([_target()], BucketIntegrityOptions(parallelism=1))
+
+    bucket = result.buckets[0]
+    assert bucket.failed_count == 501
+    assert len(bucket.failures_sample) == 500
+
+
 def test_integrity_service_reports_listing_errors_as_bucket_failures():
     client = FakeS3Client(
         {"list_objects_v2": FakePaginator(error=_client_error("NoSuchBucket", "missing", "ListObjectsV2"))},

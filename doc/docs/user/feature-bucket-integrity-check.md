@@ -17,7 +17,8 @@ Use this diagnostic tool when you need to verify that selected buckets can be li
 2. Open **Check integrity**.
 3. Set parallelism, optional **Since**, optional **Max MB per object**, and **All versions** if noncurrent object versions must be checked.
 4. Run the check and monitor progress.
-5. Review the per-bucket status, counters, bytes read, duration, and error sample.
+5. Filter the result list by bucket, context, status, error state, object key, or error message.
+6. Expand a bucket result to review affected object details, including stage, key, version, and error message.
 
 ## Expected result
 
@@ -36,6 +37,9 @@ The report shows whether each bucket passed, completed with object errors, or fa
 
 !!! note
     `Max MB per object` limits how many bytes are read from each object. Leave it empty for a complete read.
+
+!!! note
+    Bucket result details show up to 500 affected object errors per bucket. The per-bucket error counter remains the source of truth for totals.
 
 ## Related pages
 
