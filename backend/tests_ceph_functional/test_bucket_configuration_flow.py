@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import io
 import json
 import time
 import uuid
@@ -144,6 +145,28 @@ def _delete_topic(manager_session: BackendSession, account_id: int, topic_arn: s
         )
     except BackendAPIError:
         return
+
+
+def _find_replication_target_endpoint(super_admin_session: BackendSession) -> int:
+    endpoints = super_admin_session.get("/ceph-admin/endpoints")
+    if not isinstance(endpoints, list):
+        pytest.skip("Bucket replication validation requires Ceph Admin endpoint discovery")
+
+    replication_endpoints = [
+        endpoint
+        for endpoint in endpoints
+        if isinstance(endpoint, dict)
+        and bool((endpoint.get("capabilities") or {}).get("replication"))
+        and endpoint.get("id") is not None
+    ]
+    source = next((endpoint for endpoint in replication_endpoints if bool(endpoint.get("is_default"))), None)
+    if source is None:
+        pytest.skip("Bucket replication validation requires a default replication-capable endpoint")
+    source_id = int(source["id"])
+    target = next((endpoint for endpoint in replication_endpoints if int(endpoint["id"]) != source_id), None)
+    if target is None:
+        pytest.skip("Bucket replication validation requires a second replication-capable Ceph endpoint")
+    return int(target["id"])
 
 
 @pytest.mark.ceph_functional
@@ -598,11 +621,13 @@ def test_manager_bucket_notifications_roundtrip(
 @pytest.mark.ceph_functional
 def test_manager_bucket_replication_roundtrip(
     ceph_test_settings: CephTestSettings,
+    super_admin_session: BackendSession,
     provisioned_account,
     resource_tracker: ResourceTracker,
 ) -> None:
     manager_session: BackendSession = provisioned_account.manager_session
     account_id = provisioned_account.account_id
+    target_endpoint_id = _find_replication_target_endpoint(super_admin_session)
 
     bucket_name = _bucket_name(ceph_test_settings.test_prefix, "replication")
     role_name = _iam_name(ceph_test_settings.test_prefix, "replication-role")
@@ -625,7 +650,13 @@ def test_manager_bucket_replication_roundtrip(
         )
 
         root_user_uid = str(getattr(provisioned_account, "root_user_uid", "") or "").strip()
-        principal: str | list[str] = [f"arn:aws:iam:::user/{root_user_uid}"] if root_user_uid else "*"
+        rgw_account_id = str(getattr(provisioned_account, "rgw_account_id", "") or "").strip()
+        if root_user_uid and rgw_account_id:
+            principal: str | list[str] = [f"arn:aws:iam::{rgw_account_id}:user/{root_user_uid}"]
+        elif root_user_uid:
+            principal = [f"arn:aws:iam:::user/{root_user_uid}"]
+        else:
+            principal = "*"
         try:
             role = manager_session.post(
                 "/manager/iam/roles",
@@ -743,6 +774,32 @@ def test_manager_bucket_replication_roundtrip(
         fetched_configuration = fetched_replication["configuration"]
         assert _normalize_value(fetched_configuration["Rules"]) == _normalize_value(expected_rules)
         assert str(fetched_configuration.get("Role") or "").strip() in {"", role_arn}
+
+        object_key = f"replication/{uuid.uuid4().hex}.txt"
+        object_body = f"same-zonegroup {uuid.uuid4().hex}\n".encode("utf-8")
+        upload_response = manager_session.request(
+            "POST",
+            f"/manager/buckets/{bucket_name}/objects/upload",
+            params=_account_params(account_id),
+            data={"prefix": "", "key": object_key},
+            files={"file": ("replication.txt", io.BytesIO(object_body), "text/plain")},
+            expected_status=201,
+        ).json()
+        assert upload_response["key"] == object_key
+
+        replicated_object = _wait_for_value(
+            "replicated object on target zone",
+            lambda: super_admin_session.get(
+                f"/browser/buckets/{bucket_name}/object-meta",
+                params={"account_id": f"ceph-admin-{target_endpoint_id}", "key": object_key},
+            ),
+            lambda current: isinstance(current, dict)
+            and current.get("key") == object_key
+            and int(current.get("size") or -1) == len(object_body),
+            timeout=300.0,
+            interval=5.0,
+        )
+        assert replicated_object["key"] == object_key
 
         manager_session.delete(
             f"/manager/buckets/{bucket_name}/replication",
