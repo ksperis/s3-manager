@@ -321,6 +321,11 @@ export const parseRawMappingText = (value: string): ParsedRawMappingResult => {
 export const triggerDownload = (filename: string, content: string, mimeType: string) => {
   if (typeof window === "undefined") return;
   const blob = new Blob([content], { type: mimeType });
+  triggerBlobDownload(filename, blob);
+};
+
+export const triggerBlobDownload = (filename: string, blob: Blob) => {
+  if (typeof window === "undefined") return;
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

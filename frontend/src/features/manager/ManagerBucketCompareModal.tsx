@@ -9,6 +9,7 @@ import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiDetails from "../../components/ui/UiDetails";
 import { UiTone, uiCheckboxClass, uiInputClass, uiLabelClass } from "../../components/ui/styles";
+import { proxyDownload } from "../../api/browser";
 import {
   compareManagerBucketPair,
   listBuckets,
@@ -35,6 +36,7 @@ import {
   parseRawMappingText,
   renderCompareObjectDetails,
   renderDiffLines,
+  triggerBlobDownload,
   runWithConcurrencySettled,
   triggerDownload,
 } from "../shared/bucketCompareShared";
@@ -74,11 +76,6 @@ type PendingRemediationAction = {
   objectKey?: string | null;
 };
 
-type PendingExploreNavigation = {
-  href: string;
-  objectKey: string;
-};
-
 type ManagerBucketCompareModalProps = {
   sourceContextId: string;
   sourceContextName?: string | null;
@@ -90,6 +87,11 @@ type ManagerBucketCompareModalProps = {
 
 const extractError = extractCompareError;
 const DIFF_SAMPLE_LIMIT = 500;
+
+const downloadFilenameFromKey = (key: string) => {
+  const filename = key.split("/").filter(Boolean).pop();
+  return filename || "download";
+};
 
 const feedbackToneClass: Record<UiTone, string> = {
   neutral: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200",
@@ -203,8 +205,9 @@ export default function ManagerBucketCompareModal({
   const [items, setItems] = useState<CompareRunItem[]>([]);
   const [lastRunOptions, setLastRunOptions] = useState<CompareRunOptionsSnapshot | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingRemediationAction | null>(null);
-  const [pendingExplore, setPendingExplore] = useState<PendingExploreNavigation | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<(CompareVisibleKeysCopyFeedback & { id: string }) | null>(null);
+  const [downloadFeedback, setDownloadFeedback] = useState<(CompareVisibleKeysCopyFeedback & { id: string }) | null>(null);
+  const [downloadInFlight, setDownloadInFlight] = useState<string | null>(null);
   const [resultSearch, setResultSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CompareRunItem["status"]>("all");
   const [diffFilter, setDiffFilter] = useState<"all" | "with_diff" | "no_diff">("all");
@@ -883,10 +886,6 @@ export default function ManagerBucketCompareModal({
     await startRemediationAction(action);
   }, [pendingAction, startRemediationAction]);
 
-  const openExploreConfirm = useCallback((href: string, detail: { key: string }) => {
-    setPendingExplore({ href, objectKey: detail.key });
-  }, []);
-
   const copyVisibleKeys = useCallback(async (id: string, keys: string[]) => {
     if (keys.length === 0) return;
     try {
@@ -905,10 +904,32 @@ export default function ManagerBucketCompareModal({
     }
   }, []);
 
-  const confirmExploreNavigation = useCallback(() => {
-    if (!pendingExplore) return;
-    window.location.assign(pendingExplore.href);
-  }, [pendingExplore]);
+  const downloadCompareObject = useCallback(
+    async (params: { contextId: string; bucket: string; key: string; feedbackId: string }) => {
+      if (managerBrowserDisabledReason || downloadInFlight) return;
+      const downloadId = `${params.contextId}:${params.bucket}:${params.key}`;
+      setDownloadInFlight(downloadId);
+      setDownloadFeedback(null);
+      try {
+        const blob = await proxyDownload(params.contextId, params.bucket, params.key);
+        triggerBlobDownload(downloadFilenameFromKey(params.key), blob);
+        setDownloadFeedback({
+          id: params.feedbackId,
+          tone: "success",
+          message: `Download started for ${params.key}.`,
+        });
+      } catch {
+        setDownloadFeedback({
+          id: params.feedbackId,
+          tone: "danger",
+          message: `Unable to download ${params.key}.`,
+        });
+      } finally {
+        setDownloadInFlight(null);
+      }
+    },
+    [downloadInFlight, managerBrowserDisabledReason]
+  );
 
   const pendingActionItem = pendingAction ? items[pendingAction.itemIndex] : null;
   const pendingActionSourceContextId = pendingActionItem?.result?.source_context_id ?? sourceContextId;
@@ -1380,6 +1401,59 @@ export default function ManagerBucketCompareModal({
                           {contentSections.map((section) => {
                             const sectionFeedbackId = `${item.sourceBucket}:${item.targetBucket}:content:${section.key}`;
                             const sectionCopyFeedback = copyFeedback?.id === sectionFeedbackId ? copyFeedback : null;
+                            const sectionDownloadFeedback =
+                              downloadFeedback?.id === sectionFeedbackId ? downloadFeedback : null;
+                            const sourceContextForRow = item.result?.source_context_id ?? sourceContextId;
+                            const targetContextForRow =
+                              item.result?.target_context_id || lastRunOptions?.targetContextId || targetContextId || "";
+                            const renderObjectActions = (
+                              contextId: string,
+                              bucket: string,
+                              includeRemediation: boolean,
+                              remediationVariant: "secondary" | "danger"
+                            ) => (detail: ManagerBucketObjectDetail) => {
+                              const downloadId = `${contextId}:${bucket}:${detail.key}`;
+                              const downloadDisabled =
+                                Boolean(managerBrowserDisabledReason) || Boolean(downloadInFlight) || running;
+                              return (
+                                <>
+                                  <UiButton
+                                    variant="secondary"
+                                    disabled={downloadDisabled}
+                                    title={managerBrowserDisabledReason ?? undefined}
+                                    className="py-1 ui-caption"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      void downloadCompareObject({
+                                        contextId,
+                                        bucket,
+                                        key: detail.key,
+                                        feedbackId: sectionFeedbackId,
+                                      });
+                                    }}
+                                  >
+                                    {downloadInFlight === downloadId ? "Downloading..." : "Download"}
+                                  </UiButton>
+                                  {section.action && includeRemediation && (
+                                    <UiButton
+                                      variant={remediationVariant}
+                                      disabled={running || item.status !== "success" || Boolean(item.actionRunning)}
+                                      className="py-1 ui-caption"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        openRemediationConfirm(itemIndex, section.key, 1, detail.key);
+                                      }}
+                                    >
+                                      {item.actionRunning === section.action.type
+                                        ? "Running..."
+                                        : remediationSingleActionLabel[section.action.type]}
+                                    </UiButton>
+                                  )}
+                                </>
+                              );
+                            };
                             return (
                               <UiDetails
                                 key={sectionFeedbackId}
@@ -1443,6 +1517,13 @@ export default function ManagerBucketCompareModal({
                                       {sectionCopyFeedback.message}
                                     </p>
                                   )}
+                                  {sectionDownloadFeedback && (
+                                    <p
+                                      className={`rounded-md border px-2 py-1 ui-caption font-semibold ${feedbackToneClass[sectionDownloadFeedback.tone]}`}
+                                    >
+                                      {sectionDownloadFeedback.message}
+                                    </p>
+                                  )}
                                   <div className="grid gap-2 lg:grid-cols-2">
                                     <div className="space-y-1">
                                       <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1450,30 +1531,19 @@ export default function ManagerBucketCompareModal({
                                       </p>
                                       {renderCompareObjectDetails(section.sourceDetails, {
                                         browserDisabledReason: managerBrowserDisabledReason,
-                                        onExplore: openExploreConfirm,
                                         buildBrowserHref: (detail) =>
                                           buildManagerBrowserHref(
-                                            item.result?.source_context_id ?? sourceContextId,
+                                            sourceContextForRow,
                                             item.sourceBucket,
                                             detail.key
                                           ),
                                         renderAction:
-                                          section.action && section.key !== "target_only"
-                                            ? (detail) => (
-                                                <UiButton
-                                                  variant="secondary"
-                                                  disabled={running || item.status !== "success" || Boolean(item.actionRunning)}
-                                                  className="py-1 ui-caption"
-                                                  onClick={(event) => {
-                                                    event.preventDefault();
-                                                    event.stopPropagation();
-                                                    openRemediationConfirm(itemIndex, section.key, 1, detail.key);
-                                                  }}
-                                                >
-                                                  {item.actionRunning === section.action.type
-                                                    ? "Running..."
-                                                    : remediationSingleActionLabel[section.action.type]}
-                                                </UiButton>
+                                          section.sourceDetails.length > 0
+                                            ? renderObjectActions(
+                                                sourceContextForRow,
+                                                item.sourceBucket,
+                                                section.key !== "target_only",
+                                                "secondary"
                                               )
                                             : undefined,
                                       })}
@@ -1484,30 +1554,19 @@ export default function ManagerBucketCompareModal({
                                       </p>
                                       {renderCompareObjectDetails(section.targetDetails, {
                                         browserDisabledReason: managerBrowserDisabledReason,
-                                        onExplore: openExploreConfirm,
                                         buildBrowserHref: (detail) =>
                                           buildManagerBrowserHref(
-                                            item.result?.target_context_id || lastRunOptions?.targetContextId || targetContextId || "",
+                                            targetContextForRow,
                                             item.targetBucket,
                                             detail.key
                                           ),
                                         renderAction:
-                                          section.action && section.key === "target_only"
-                                            ? (detail) => (
-                                                <UiButton
-                                                  variant="danger"
-                                                  disabled={running || item.status !== "success" || Boolean(item.actionRunning)}
-                                                  className="py-1 ui-caption"
-                                                  onClick={(event) => {
-                                                    event.preventDefault();
-                                                    event.stopPropagation();
-                                                    openRemediationConfirm(itemIndex, section.key, 1, detail.key);
-                                                  }}
-                                                >
-                                                  {item.actionRunning === section.action.type
-                                                    ? "Running..."
-                                                    : remediationSingleActionLabel[section.action.type]}
-                                                </UiButton>
+                                          section.targetDetails.length > 0
+                                            ? renderObjectActions(
+                                                targetContextForRow,
+                                                item.targetBucket,
+                                                section.key === "target_only",
+                                                "danger"
                                               )
                                             : undefined,
                                       })}
@@ -1579,30 +1638,6 @@ export default function ManagerBucketCompareModal({
           </div>
         )}
       </div>
-      {pendingExplore && (
-        <Modal
-          title="Leave comparison page?"
-          onClose={() => setPendingExplore(null)}
-          maxWidthClass="max-w-lg"
-          maxBodyHeightClass="max-h-[70vh]"
-          zIndexClass="z-[60]"
-        >
-          <div className="space-y-3">
-            <p className="ui-body text-slate-700 dark:text-slate-200">
-              This will leave the bucket comparison page and open this object in Browser.
-            </p>
-            <p className="break-all rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-100">
-              {pendingExplore.objectKey}
-            </p>
-            <div className="flex justify-end gap-2">
-              <UiButton variant="secondary" onClick={() => setPendingExplore(null)}>
-                Cancel
-              </UiButton>
-              <UiButton onClick={confirmExploreNavigation}>Open Browser</UiButton>
-            </div>
-          </div>
-        </Modal>
-      )}
       {pendingAction && pendingActionItem && (
         <Modal
           title={remediationActionTitle[pendingAction.action]}

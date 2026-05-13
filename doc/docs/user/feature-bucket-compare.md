@@ -17,8 +17,8 @@ Use this guide when you need to compare bucket states before migration or remedi
 3. Optionally set **Ignore objects modified after** to exclude recently changed objects from the diff and remediation scope.
 4. Run comparison.
 5. Expand only the result rows you need to inspect; results stay collapsed by default.
-6. Review object-level details: key, size, modification date, ETag, storage class, and Browser links.
-   Browser links ask for confirmation because they leave the comparison page.
+6. Review object-level details: key, size, modification date, ETag, storage class, Browser links, and direct download actions.
+   Browser links open in a new tab so the comparison result stays available.
 7. Apply remediation actions only after validation.
 
 ## Expected result
