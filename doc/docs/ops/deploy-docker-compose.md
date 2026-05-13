@@ -10,6 +10,8 @@ cd s3-manager
 S3_MANAGER_TAG=latest docker compose up
 ```
 
+`latest` resolves to the latest stable release published from a Git tag.
+
 ## Build from source
 
 From repository root:

@@ -51,7 +51,7 @@ Tag conventions:
 
 - lab and rolling internal validation: `dev`
 - pinned lab validation build: `dev-<short-sha>`
-- default-branch rolling release: `latest`
+- latest stable release: `latest`
 - stable image release: plain semver such as `0.2.0`
 - stable minor series alias: `0.2` for the latest `0.2.x` release
 - Git release tag: `v0.2.0`

@@ -42,8 +42,10 @@ Promotion rules:
 - GitLab CI is the single image publisher; GitHub must not rebuild official images.
 - Public tag policy:
   - branch `dev`: GitLab Container Registry only, tags `dev` and `dev-$CI_COMMIT_SHORT_SHA`
-  - default branch: GHCR only, tag `latest`
-  - Git tags matching `vX.Y.Z`: GHCR only, image tags `X.Y.Z` and `X.Y`
+  - default branch: GitLab Container Registry SHA images only, no public GHCR tag
+  - Git tags matching `vX.Y.Z`: GHCR only, image tag `X.Y.Z`
+  - highest patch in a minor series: GHCR alias `X.Y`
+  - highest stable release tag: GHCR alias `latest`
 - Promotion never rebuilds images; it copies the validated digest to the target registry.
 
 Required CI variables for GHCR publication:
