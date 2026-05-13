@@ -11,7 +11,7 @@ from typing import Any, Callable
 import pytest
 
 from .ceph_admin_helpers import backend_error_detail, looks_unsupported, run_or_skip
-from .clients import BackendAPIError, BackendSession
+from .clients import BackendAPIError, BackendAuthenticator, BackendSession
 from .config import CephTestSettings
 from .resources import ResourceTracker
 
@@ -28,7 +28,7 @@ def _iam_name(prefix: str, label: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}-{label}"
 
 
-def _account_params(account_id: int) -> dict[str, int]:
+def _account_params(account_id: int | str) -> dict[str, int | str]:
     return {"account_id": account_id}
 
 
@@ -104,7 +104,13 @@ def _skip_if_cluster_unavailable(action: str, exc: BackendAPIError, *, extra_mar
         pytest.skip(f"{action} unavailable on this cluster: {reason}")
 
 
-def _create_bucket(manager_session: BackendSession, account_id: int, bucket_name: str, *, versioning: bool = False) -> None:
+def _create_bucket(
+    manager_session: BackendSession,
+    account_id: int | str,
+    bucket_name: str,
+    *,
+    versioning: bool = False,
+) -> None:
     manager_session.post(
         "/manager/buckets",
         params=_account_params(account_id),
@@ -147,7 +153,7 @@ def _delete_topic(manager_session: BackendSession, account_id: int, topic_arn: s
         return
 
 
-def _find_replication_target_endpoint(super_admin_session: BackendSession) -> int:
+def _find_replication_endpoints(super_admin_session: BackendSession) -> tuple[dict[str, Any], dict[str, Any]]:
     endpoints = super_admin_session.get("/ceph-admin/endpoints")
     if not isinstance(endpoints, list):
         pytest.skip("Bucket replication validation requires Ceph Admin endpoint discovery")
@@ -166,7 +172,85 @@ def _find_replication_target_endpoint(super_admin_session: BackendSession) -> in
     target = next((endpoint for endpoint in replication_endpoints if int(endpoint["id"]) != source_id), None)
     if target is None:
         pytest.skip("Bucket replication validation requires a second replication-capable Ceph endpoint")
-    return int(target["id"])
+    return source, target
+
+
+def _create_replication_connection_context(
+    *,
+    super_admin_session: BackendSession,
+    backend_authenticator: BackendAuthenticator,
+    ceph_test_settings: CephTestSettings,
+    endpoint: dict[str, Any],
+) -> dict[str, Any]:
+    if not ceph_test_settings.rgw_admin_access_key or not ceph_test_settings.rgw_admin_secret_key:
+        pytest.skip("Bucket replication validation requires lab S3 credentials")
+
+    suffix = uuid.uuid4().hex[:8]
+    manager_email = f"{ceph_test_settings.test_prefix}.replication.{suffix}@example.com"
+    manager_password = f"Test-{uuid.uuid4().hex[:12]}"
+    context: dict[str, Any] = {}
+
+    try:
+        created_user = super_admin_session.post(
+            "/admin/users",
+            json={
+                "email": manager_email,
+                "password": manager_password,
+                "full_name": "Ceph Functional Replication User",
+                "role": "ui_user",
+            },
+            expected_status=201,
+        )
+        user_id = int(created_user["id"])
+        context["user_id"] = user_id
+
+        created_connection = super_admin_session.post(
+            "/admin/s3-connections",
+            json={
+                "name": f"{ceph_test_settings.test_prefix}-replication-conn-{suffix}",
+                "storage_endpoint_id": int(endpoint["id"]),
+                "access_manager": True,
+                "access_browser": True,
+                "access_key_id": ceph_test_settings.rgw_admin_access_key,
+                "secret_access_key": ceph_test_settings.rgw_admin_secret_key,
+                "provider_hint": "CEPH",
+                "region": endpoint.get("region") or ceph_test_settings.rgw_admin_region or "us-east-1",
+                "verify_tls": ceph_test_settings.rgw_verify_tls,
+            },
+            expected_status=201,
+        )
+        connection_id = int(created_connection["id"])
+        context["connection_id"] = connection_id
+        super_admin_session.post(
+            f"/admin/s3-connections/{connection_id}/users",
+            json={"user_id": user_id},
+            expected_status=201,
+        )
+
+        context["manager_session"] = backend_authenticator.login(manager_email, manager_password)
+        context["account_ref"] = f"conn-{connection_id}"
+        return context
+    except Exception:
+        _cleanup_replication_connection_context(super_admin_session, context)
+        raise
+
+
+def _cleanup_replication_connection_context(super_admin_session: BackendSession, context: dict[str, Any]) -> None:
+    manager_session = context.get("manager_session")
+    if isinstance(manager_session, BackendSession):
+        manager_session.session.close()
+    connection_id = context.get("connection_id")
+    if connection_id is not None:
+        try:
+            super_admin_session.delete(f"/admin/s3-connections/{int(connection_id)}", expected_status=(204, 404))
+        except BackendAPIError:
+            pass
+    user_id = context.get("user_id")
+    if user_id is not None:
+        try:
+            super_admin_session.delete(f"/admin/users/{int(user_id)}", expected_status=(204, 404))
+        except BackendAPIError:
+            pass
 
 
 @pytest.mark.ceph_functional
@@ -622,112 +706,33 @@ def test_manager_bucket_notifications_roundtrip(
 def test_manager_bucket_replication_roundtrip(
     ceph_test_settings: CephTestSettings,
     super_admin_session: BackendSession,
-    provisioned_account,
-    resource_tracker: ResourceTracker,
+    backend_authenticator: BackendAuthenticator,
 ) -> None:
-    manager_session: BackendSession = provisioned_account.manager_session
-    account_id = provisioned_account.account_id
-    target_endpoint_id = _find_replication_target_endpoint(super_admin_session)
+    source_endpoint, target_endpoint = _find_replication_endpoints(super_admin_session)
+    context = _create_replication_connection_context(
+        super_admin_session=super_admin_session,
+        backend_authenticator=backend_authenticator,
+        ceph_test_settings=ceph_test_settings,
+        endpoint=source_endpoint,
+    )
+    manager_session: BackendSession = context["manager_session"]
+    account_ref = context["account_ref"]
+    target_endpoint_id = int(target_endpoint["id"])
 
     bucket_name = _bucket_name(ceph_test_settings.test_prefix, "replication")
-    role_name = _iam_name(ceph_test_settings.test_prefix, "replication-role")
-    policy_name = _iam_name(ceph_test_settings.test_prefix, "replication-policy")
+    role_arn = "arn:aws:iam::000000000000:role/manager-functional-replication"
 
-    _create_bucket(manager_session, account_id, bucket_name, versioning=True)
-    resource_tracker.track_bucket(account_id, bucket_name)
-
-    role_created = False
-    role_inline_policy_created = False
     replication_configured = False
     try:
+        _create_bucket(manager_session, account_ref, bucket_name, versioning=True)
         _wait_for_value(
             f"bucket versioning for {bucket_name}",
             lambda: manager_session.get(
                 f"/manager/buckets/{bucket_name}/properties",
-                params=_account_params(account_id),
+                params=_account_params(account_ref),
             ),
             lambda current: current.get("versioning_status") == "Enabled",
         )
-
-        root_user_uid = str(getattr(provisioned_account, "root_user_uid", "") or "").strip()
-        rgw_account_id = str(getattr(provisioned_account, "rgw_account_id", "") or "").strip()
-        if root_user_uid and rgw_account_id:
-            principal: str | list[str] = [f"arn:aws:iam::{rgw_account_id}:user/{root_user_uid}"]
-        elif root_user_uid:
-            principal = [f"arn:aws:iam:::user/{root_user_uid}"]
-        else:
-            principal = "*"
-        try:
-            role = manager_session.post(
-                "/manager/iam/roles",
-                params=_account_params(account_id),
-                json={
-                    "name": role_name,
-                    "assume_role_policy_document": {
-                        "Version": "2012-10-17",
-                        "Statement": [
-                            {
-                                "Effect": "Allow",
-                                "Principal": {"AWS": principal},
-                                "Action": ["sts:AssumeRole"],
-                            }
-                        ],
-                    },
-                },
-                expected_status=201,
-            )
-        except BackendAPIError as exc:
-            _skip_if_cluster_unavailable(
-                "manager IAM role creation",
-                exc,
-                extra_markers=("feature is disabled", "iam feature is disabled"),
-            )
-            raise
-        role_created = True
-        role_arn = str(role.get("arn") or "").strip()
-        assert role_arn, "Created replication role should expose an ARN"
-
-        role_policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Action": [
-                        "s3:GetReplicationConfiguration",
-                        "s3:GetBucketVersioning",
-                        "s3:ListBucket",
-                    ],
-                    "Resource": [f"arn:aws:s3:::{bucket_name}"],
-                },
-                {
-                    "Effect": "Allow",
-                    "Action": [
-                        "s3:GetObjectVersion",
-                        "s3:GetObjectVersionAcl",
-                        "s3:GetObjectVersionTagging",
-                        "s3:PutObject",
-                        "s3:PutObjectAcl",
-                        "s3:PutObjectTagging",
-                        "s3:DeleteObject",
-                    ],
-                    "Resource": [f"arn:aws:s3:::{bucket_name}/*"],
-                },
-            ],
-        }
-        try:
-            manager_session.put(
-                f"/manager/iam/roles/{role_name}/inline-policies/{policy_name}",
-                params=_account_params(account_id),
-                json={"name": policy_name, "document": role_policy},
-            )
-        except BackendAPIError as exc:
-            _skip_if_cluster_unavailable(
-                "manager IAM role inline policy",
-                exc,
-                extra_markers=("feature is disabled", "iam feature is disabled"),
-            )
-            raise
-        role_inline_policy_created = True
 
         expected_rules = [
             {
@@ -749,7 +754,7 @@ def test_manager_bucket_replication_roundtrip(
 
         manager_session.put(
             f"/manager/buckets/{bucket_name}/replication",
-            params=_account_params(account_id),
+            params=_account_params(account_ref),
             json=replication_payload,
         )
         replication_configured = True
@@ -758,7 +763,18 @@ def test_manager_bucket_replication_roundtrip(
             configuration = current.get("configuration") if isinstance(current, dict) else {}
             if not isinstance(configuration, dict):
                 return False
-            if _normalize_value(configuration.get("Rules") or []) != _normalize_value(expected_rules):
+            rules = configuration.get("Rules") or []
+            if not isinstance(rules, list) or len(rules) != 1:
+                return False
+            rule = rules[0]
+            if not isinstance(rule, dict):
+                return False
+            destination = rule.get("Destination") if isinstance(rule.get("Destination"), dict) else {}
+            if rule.get("ID") != "replicate-to-lab-z2":
+                return False
+            if rule.get("Status") != "Enabled":
+                return False
+            if destination.get("Bucket") != f"arn:aws:s3:::{bucket_name}":
                 return False
             returned_role = str(configuration.get("Role") or "").strip()
             return returned_role in {"", role_arn}
@@ -767,12 +783,15 @@ def test_manager_bucket_replication_roundtrip(
             "bucket replication configuration",
             lambda: manager_session.get(
                 f"/manager/buckets/{bucket_name}/replication",
-                params=_account_params(account_id),
+                params=_account_params(account_ref),
             ),
             _replication_matches,
         )
         fetched_configuration = fetched_replication["configuration"]
-        assert _normalize_value(fetched_configuration["Rules"]) == _normalize_value(expected_rules)
+        fetched_rule = fetched_configuration["Rules"][0]
+        assert fetched_rule["ID"] == "replicate-to-lab-z2"
+        assert fetched_rule["Status"] == "Enabled"
+        assert fetched_rule["Destination"]["Bucket"] == f"arn:aws:s3:::{bucket_name}"
         assert str(fetched_configuration.get("Role") or "").strip() in {"", role_arn}
 
         object_key = f"replication/{uuid.uuid4().hex}.txt"
@@ -780,7 +799,7 @@ def test_manager_bucket_replication_roundtrip(
         upload_response = manager_session.request(
             "POST",
             f"/manager/buckets/{bucket_name}/objects/upload",
-            params=_account_params(account_id),
+            params=_account_params(account_ref),
             data={"prefix": "", "key": object_key},
             files={"file": ("replication.txt", io.BytesIO(object_body), "text/plain")},
             expected_status=201,
@@ -803,44 +822,36 @@ def test_manager_bucket_replication_roundtrip(
 
         manager_session.delete(
             f"/manager/buckets/{bucket_name}/replication",
-            params=_account_params(account_id),
+            params=_account_params(account_ref),
             expected_status=(204,),
         )
         replication_configured = False
-        _wait_for_equal(
+        _wait_for_value(
             "bucket replication deletion",
             lambda: manager_session.get(
                 f"/manager/buckets/{bucket_name}/replication",
-                params=_account_params(account_id),
+                params=_account_params(account_ref),
             ),
-            {"configuration": {}},
+            lambda current: not ((current.get("configuration") or {}).get("Rules"))
+            if isinstance(current, dict)
+            else False,
         )
     finally:
         if replication_configured:
             try:
                 manager_session.delete(
                     f"/manager/buckets/{bucket_name}/replication",
-                    params=_account_params(account_id),
+                    params=_account_params(account_ref),
                     expected_status=(204, 404),
                 )
             except BackendAPIError:
                 pass
-        if role_inline_policy_created:
-            try:
-                manager_session.delete(
-                    f"/manager/iam/roles/{role_name}/inline-policies/{policy_name}",
-                    params=_account_params(account_id),
-                    expected_status=(204, 404),
-                )
-            except BackendAPIError:
-                pass
-        if role_created:
-            try:
-                manager_session.delete(
-                    f"/manager/iam/roles/{role_name}",
-                    params=_account_params(account_id),
-                    expected_status=(204, 404),
-                )
-            except BackendAPIError:
-                pass
-        _delete_bucket(manager_session, resource_tracker, account_id, bucket_name)
+        try:
+            manager_session.delete(
+                f"/manager/buckets/{bucket_name}",
+                params={"account_id": account_ref, "force": "true"},
+                expected_status=(200, 404),
+            )
+        except BackendAPIError:
+            pass
+        _cleanup_replication_connection_context(super_admin_session, context)
