@@ -4064,6 +4064,10 @@ describe("BrowserPage interactions", () => {
 
   it("supports Stop for restore-to-date batches", async () => {
     const user = userEvent.setup();
+    seedBrowserRootUiState({
+      layout: { showFolders: false, showInspector: false, showActionBar: true },
+      contextSelections: {},
+    });
     getBucketVersioningMock.mockResolvedValue({
       enabled: true,
       status: "Enabled",
@@ -4117,7 +4121,8 @@ describe("BrowserPage interactions", () => {
     );
 
     renderPage();
-    await enableActionBar(user);
+    await findRowByLabel("a.txt");
+    await screen.findByRole("toolbar", { name: "Browser actions bar" });
     await user.click(screen.getByRole("checkbox", { name: "Select a.txt" }));
     await user.click(screen.getByRole("checkbox", { name: "Select b.txt" }));
     const menu = await openActionsMoreMenu(user);

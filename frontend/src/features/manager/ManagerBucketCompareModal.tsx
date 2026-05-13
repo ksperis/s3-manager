@@ -9,6 +9,7 @@ import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiDetails from "../../components/ui/UiDetails";
 import { UiTone, uiCheckboxClass, uiInputClass, uiLabelClass } from "../../components/ui/styles";
+import { proxyDownload } from "../../api/browser";
 import {
   compareManagerBucketPair,
   listBuckets,
@@ -23,15 +24,19 @@ import type { ExecutionContext } from "../../api/executionContexts";
 import {
   BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS,
   CompareObjectSampleNotice,
+  CompareVisibleKeysCopyFeedback,
+  copyCompareObjectKeysToClipboard,
   extractCompareError,
   formatUnknown,
-  getObjectParentPrefix,
   getChangedTone,
+  getObjectParentPrefix,
   getRunStatusLabel,
   getRunStatusTone,
+  getVisibleCompareObjectKeys,
   parseRawMappingText,
   renderCompareObjectDetails,
   renderDiffLines,
+  triggerBlobDownload,
   runWithConcurrencySettled,
   triggerDownload,
 } from "../shared/bucketCompareShared";
@@ -71,11 +76,6 @@ type PendingRemediationAction = {
   objectKey?: string | null;
 };
 
-type PendingExploreNavigation = {
-  href: string;
-  objectKey: string;
-};
-
 type ManagerBucketCompareModalProps = {
   sourceContextId: string;
   sourceContextName?: string | null;
@@ -86,6 +86,12 @@ type ManagerBucketCompareModalProps = {
 };
 
 const extractError = extractCompareError;
+const DIFF_SAMPLE_LIMIT = 500;
+
+const downloadFilenameFromKey = (key: string) => {
+  const filename = key.split("/").filter(Boolean).pop();
+  return filename || "download";
+};
 
 const feedbackToneClass: Record<UiTone, string> = {
   neutral: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200",
@@ -199,7 +205,9 @@ export default function ManagerBucketCompareModal({
   const [items, setItems] = useState<CompareRunItem[]>([]);
   const [lastRunOptions, setLastRunOptions] = useState<CompareRunOptionsSnapshot | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingRemediationAction | null>(null);
-  const [pendingExplore, setPendingExplore] = useState<PendingExploreNavigation | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<(CompareVisibleKeysCopyFeedback & { id: string }) | null>(null);
+  const [downloadFeedback, setDownloadFeedback] = useState<(CompareVisibleKeysCopyFeedback & { id: string }) | null>(null);
+  const [downloadInFlight, setDownloadInFlight] = useState<string | null>(null);
   const [resultSearch, setResultSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CompareRunItem["status"]>("all");
   const [diffFilter, setDiffFilter] = useState<"all" | "with_diff" | "no_diff">("all");
@@ -535,6 +543,7 @@ export default function ManagerBucketCompareModal({
                 include_content: snapshot.includeContent,
                 include_config: snapshot.includeConfig,
                 config_features: snapshot.includeConfig ? snapshot.configFeatures : undefined,
+                diff_sample_limit: DIFF_SAMPLE_LIMIT,
                 ignore_modified_after: snapshot.ignoreModifiedAfterIso,
               },
               { signal: controller.signal }
@@ -818,6 +827,7 @@ export default function ManagerBucketCompareModal({
           include_content: refreshOptions.includeContent,
           include_config: refreshOptions.includeConfig,
           config_features: refreshOptions.includeConfig ? refreshOptions.configFeatures : undefined,
+          diff_sample_limit: DIFF_SAMPLE_LIMIT,
           ignore_modified_after: refreshOptions.ignoreModifiedAfterIso,
         });
         setItems((prev) =>
@@ -876,14 +886,50 @@ export default function ManagerBucketCompareModal({
     await startRemediationAction(action);
   }, [pendingAction, startRemediationAction]);
 
-  const openExploreConfirm = useCallback((href: string, detail: { key: string }) => {
-    setPendingExplore({ href, objectKey: detail.key });
+  const copyVisibleKeys = useCallback(async (id: string, keys: string[]) => {
+    if (keys.length === 0) return;
+    try {
+      await copyCompareObjectKeysToClipboard(keys);
+      setCopyFeedback({
+        id,
+        tone: "success",
+        message: `Copied ${keys.length} visible key${keys.length === 1 ? "" : "s"} to clipboard.`,
+      });
+    } catch {
+      setCopyFeedback({
+        id,
+        tone: "danger",
+        message: "Unable to copy visible keys to clipboard.",
+      });
+    }
   }, []);
 
-  const confirmExploreNavigation = useCallback(() => {
-    if (!pendingExplore) return;
-    window.location.assign(pendingExplore.href);
-  }, [pendingExplore]);
+  const downloadCompareObject = useCallback(
+    async (params: { contextId: string; bucket: string; key: string; feedbackId: string }) => {
+      if (managerBrowserDisabledReason || downloadInFlight) return;
+      const downloadId = `${params.contextId}:${params.bucket}:${params.key}`;
+      setDownloadInFlight(downloadId);
+      setDownloadFeedback(null);
+      try {
+        const blob = await proxyDownload(params.contextId, params.bucket, params.key);
+        triggerBlobDownload(downloadFilenameFromKey(params.key), blob);
+        setDownloadFeedback({
+          id: params.feedbackId,
+          tone: "success",
+          message: `Download started for ${params.key}.`,
+        });
+      } catch {
+        setDownloadFeedback({
+          id: params.feedbackId,
+          tone: "danger",
+          message: `Unable to download ${params.key}.`,
+        });
+      } finally {
+        setDownloadInFlight(null);
+      }
+    },
+    [downloadInFlight, managerBrowserDisabledReason]
+  );
 
   const pendingActionItem = pendingAction ? items[pendingAction.itemIndex] : null;
   const pendingActionSourceContextId = pendingActionItem?.result?.source_context_id ?? sourceContextId;
@@ -1225,61 +1271,70 @@ export default function ManagerBucketCompareModal({
                 content && (content.different_count > 0 || content.only_source_count > 0 || content.only_target_count > 0)
               );
               const contentSections = content
-                ? [
-                    {
-                      key: "source_only" as const,
-                      label: `Source only (${content.only_source_count})`,
-                      changed: content.only_source_count > 0,
-                      objectCount: content.only_source_count,
-                      action:
-                        content.only_source_count > 0
-                          ? {
-                              type: "sync_source_only" as const,
-                              label: remediationActionLabel.sync_source_only,
-                            }
-                          : null,
-                      sourceDetails:
-                        content.only_source_count > 0
-                          ? (content.only_source_details?.length ? content.only_source_details : detailsFromKeys(content.only_source_sample))
-                          : [],
-                      targetDetails: [],
-                    },
-                    {
-                      key: "target_only" as const,
-                      label: `Target only (${content.only_target_count})`,
-                      changed: content.only_target_count > 0,
-                      objectCount: content.only_target_count,
-                      action:
-                        content.only_target_count > 0
-                          ? {
-                              type: "delete_target_only" as const,
-                              label: remediationActionLabel.delete_target_only,
-                            }
-                          : null,
-                      sourceDetails: [],
-                      targetDetails:
-                        content.only_target_count > 0
-                          ? (content.only_target_details?.length ? content.only_target_details : detailsFromKeys(content.only_target_sample))
-                          : [],
-                    },
-                    {
-                      key: "different" as const,
-                      label: `Different objects (${content.different_count})`,
-                      changed: content.different_count > 0,
-                      objectCount: content.different_count,
-                      action:
-                        content.different_count > 0
-                          ? {
-                              type: "sync_different" as const,
-                              label: remediationActionLabel.sync_different,
-                            }
-                          : null,
-                      sourceDetails:
-                        content.different_count > 0 ? content.different_sample.map((diff) => sourceDetailFromDifferent(diff)) : [],
-                      targetDetails:
-                        content.different_count > 0 ? content.different_sample.map((diff) => targetDetailFromDifferent(diff)) : [],
-                    },
-                  ]
+                ? (() => {
+                    const onlySourceDetails =
+                      content.only_source_count > 0
+                        ? (content.only_source_details?.length ? content.only_source_details : detailsFromKeys(content.only_source_sample))
+                        : [];
+                    const onlyTargetDetails =
+                      content.only_target_count > 0
+                        ? (content.only_target_details?.length ? content.only_target_details : detailsFromKeys(content.only_target_sample))
+                        : [];
+                    const differentSourceDetails =
+                      content.different_count > 0 ? content.different_sample.map((diff) => sourceDetailFromDifferent(diff)) : [];
+                    const differentTargetDetails =
+                      content.different_count > 0 ? content.different_sample.map((diff) => targetDetailFromDifferent(diff)) : [];
+                    return [
+                      {
+                        key: "source_only" as const,
+                        label: `Source only (${content.only_source_count})`,
+                        changed: content.only_source_count > 0,
+                        objectCount: content.only_source_count,
+                        copyKeys: getVisibleCompareObjectKeys(onlySourceDetails),
+                        action:
+                          content.only_source_count > 0
+                            ? {
+                                type: "sync_source_only" as const,
+                                label: remediationActionLabel.sync_source_only,
+                              }
+                            : null,
+                        sourceDetails: onlySourceDetails,
+                        targetDetails: [],
+                      },
+                      {
+                        key: "target_only" as const,
+                        label: `Target only (${content.only_target_count})`,
+                        changed: content.only_target_count > 0,
+                        objectCount: content.only_target_count,
+                        copyKeys: getVisibleCompareObjectKeys(onlyTargetDetails),
+                        action:
+                          content.only_target_count > 0
+                            ? {
+                                type: "delete_target_only" as const,
+                                label: remediationActionLabel.delete_target_only,
+                              }
+                            : null,
+                        sourceDetails: [],
+                        targetDetails: onlyTargetDetails,
+                      },
+                      {
+                        key: "different" as const,
+                        label: `Different objects (${content.different_count})`,
+                        changed: content.different_count > 0,
+                        objectCount: content.different_count,
+                        copyKeys: getVisibleCompareObjectKeys(differentSourceDetails),
+                        action:
+                          content.different_count > 0
+                            ? {
+                                type: "sync_different" as const,
+                                label: remediationActionLabel.sync_different,
+                              }
+                            : null,
+                        sourceDetails: differentSourceDetails,
+                        targetDetails: differentTargetDetails,
+                      },
+                    ];
+                  })()
                 : [];
               const configSections =
                 item.result?.config_diff?.sections.map((section) => ({
@@ -1343,115 +1398,184 @@ export default function ManagerBucketCompareModal({
                           </div>
                         </summary>
                         <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
-                          {contentHasDifferences && <CompareObjectSampleNotice />}
-                          {contentSections.map((section) => (
-                            <UiDetails
-                              key={`${item.sourceBucket}:${item.targetBucket}:content:${section.key}`}
-                              defaultOpen={false}
-                              className="rounded-md border border-slate-200 dark:border-slate-800"
-                            >
-                              <summary className="cursor-pointer list-none px-2 py-1.5">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
-                                    <UiBadge tone={getChangedTone(section.changed)} className="px-2 text-[10px]">
-                                      {section.changed ? "Different" : "Identical"}
-                                    </UiBadge>
-                                  </div>
-                                  {section.action && (
+                          {contentSections.map((section) => {
+                            const sectionFeedbackId = `${item.sourceBucket}:${item.targetBucket}:content:${section.key}`;
+                            const sectionCopyFeedback = copyFeedback?.id === sectionFeedbackId ? copyFeedback : null;
+                            const sectionDownloadFeedback =
+                              downloadFeedback?.id === sectionFeedbackId ? downloadFeedback : null;
+                            const sourceContextForRow = item.result?.source_context_id ?? sourceContextId;
+                            const targetContextForRow =
+                              item.result?.target_context_id || lastRunOptions?.targetContextId || targetContextId || "";
+                            const renderObjectActions = (
+                              contextId: string,
+                              bucket: string,
+                              includeRemediation: boolean,
+                              remediationVariant: "secondary" | "danger"
+                            ) => (detail: ManagerBucketObjectDetail) => {
+                              const downloadId = `${contextId}:${bucket}:${detail.key}`;
+                              const downloadDisabled =
+                                Boolean(managerBrowserDisabledReason) || Boolean(downloadInFlight) || running;
+                              return (
+                                <>
+                                  <UiButton
+                                    variant="secondary"
+                                    disabled={downloadDisabled}
+                                    title={managerBrowserDisabledReason ?? undefined}
+                                    className="py-1 ui-caption"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      void downloadCompareObject({
+                                        contextId,
+                                        bucket,
+                                        key: detail.key,
+                                        feedbackId: sectionFeedbackId,
+                                      });
+                                    }}
+                                  >
+                                    {downloadInFlight === downloadId ? "Downloading..." : "Download"}
+                                  </UiButton>
+                                  {section.action && includeRemediation && (
                                     <UiButton
-                                      variant={section.action.type === "delete_target_only" ? "danger" : "secondary"}
-                                      disabled={
-                                        running ||
-                                        item.status !== "success" ||
-                                        !content ||
-                                        Boolean(item.actionRunning) ||
-                                        item.actionRunning === section.action.type
-                                      }
+                                      variant={remediationVariant}
+                                      disabled={running || item.status !== "success" || Boolean(item.actionRunning)}
                                       className="py-1 ui-caption"
                                       onClick={(event) => {
                                         event.preventDefault();
                                         event.stopPropagation();
-                                        openRemediationConfirm(itemIndex, section.key, section.objectCount);
+                                        openRemediationConfirm(itemIndex, section.key, 1, detail.key);
                                       }}
                                     >
-                                      {item.actionRunning === section.action.type ? "Running..." : section.action.label}
+                                      {item.actionRunning === section.action.type
+                                        ? "Running..."
+                                        : remediationSingleActionLabel[section.action.type]}
                                     </UiButton>
                                   )}
+                                </>
+                              );
+                            };
+                            return (
+                              <UiDetails
+                                key={sectionFeedbackId}
+                                defaultOpen={false}
+                                className="rounded-md border border-slate-200 dark:border-slate-800"
+                              >
+                                <summary className="cursor-pointer list-none px-2 py-1.5">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
+                                      <UiBadge tone={getChangedTone(section.changed)} className="px-2 text-[10px]">
+                                        {section.changed ? "Different" : "Identical"}
+                                      </UiBadge>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {section.changed && section.copyKeys.length > 0 && (
+                                        <UiButton
+                                          variant="secondary"
+                                          className="py-1 ui-caption"
+                                          onClick={(event) => {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                            void copyVisibleKeys(sectionFeedbackId, section.copyKeys);
+                                          }}
+                                        >
+                                          Copy visible keys
+                                        </UiButton>
+                                      )}
+                                      {section.action && (
+                                        <UiButton
+                                          variant={section.action.type === "delete_target_only" ? "danger" : "secondary"}
+                                          disabled={
+                                            running ||
+                                            item.status !== "success" ||
+                                            !content ||
+                                            Boolean(item.actionRunning) ||
+                                            item.actionRunning === section.action.type
+                                          }
+                                          className="py-1 ui-caption"
+                                          onClick={(event) => {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                            openRemediationConfirm(itemIndex, section.key, section.objectCount);
+                                          }}
+                                        >
+                                          {item.actionRunning === section.action.type ? "Running..." : section.action.label}
+                                        </UiButton>
+                                      )}
+                                    </div>
+                                  </div>
+                                </summary>
+                                <div className="space-y-2 border-t border-slate-200 px-2 py-2 dark:border-slate-800">
+                                  <CompareObjectSampleNotice
+                                    visibleCount={section.copyKeys.length}
+                                    totalCount={section.objectCount}
+                                  />
+                                  {sectionCopyFeedback && (
+                                    <p
+                                      className={`rounded-md border px-2 py-1 ui-caption font-semibold ${feedbackToneClass[sectionCopyFeedback.tone]}`}
+                                    >
+                                      {sectionCopyFeedback.message}
+                                    </p>
+                                  )}
+                                  {sectionDownloadFeedback && (
+                                    <p
+                                      className={`rounded-md border px-2 py-1 ui-caption font-semibold ${feedbackToneClass[sectionDownloadFeedback.tone]}`}
+                                    >
+                                      {sectionDownloadFeedback.message}
+                                    </p>
+                                  )}
+                                  <div className="grid gap-2 lg:grid-cols-2">
+                                    <div className="space-y-1">
+                                      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                        Source
+                                      </p>
+                                      {renderCompareObjectDetails(section.sourceDetails, {
+                                        browserDisabledReason: managerBrowserDisabledReason,
+                                        buildBrowserHref: (detail) =>
+                                          buildManagerBrowserHref(
+                                            sourceContextForRow,
+                                            item.sourceBucket,
+                                            detail.key
+                                          ),
+                                        renderAction:
+                                          section.sourceDetails.length > 0
+                                            ? renderObjectActions(
+                                                sourceContextForRow,
+                                                item.sourceBucket,
+                                                section.key !== "target_only",
+                                                "secondary"
+                                              )
+                                            : undefined,
+                                      })}
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                        Target
+                                      </p>
+                                      {renderCompareObjectDetails(section.targetDetails, {
+                                        browserDisabledReason: managerBrowserDisabledReason,
+                                        buildBrowserHref: (detail) =>
+                                          buildManagerBrowserHref(
+                                            targetContextForRow,
+                                            item.targetBucket,
+                                            detail.key
+                                          ),
+                                        renderAction:
+                                          section.targetDetails.length > 0
+                                            ? renderObjectActions(
+                                                targetContextForRow,
+                                                item.targetBucket,
+                                                section.key === "target_only",
+                                                "danger"
+                                              )
+                                            : undefined,
+                                      })}
+                                    </div>
+                                  </div>
                                 </div>
-                              </summary>
-                              <div className="grid gap-2 border-t border-slate-200 px-2 py-2 lg:grid-cols-2 dark:border-slate-800">
-                                <div className="space-y-1">
-                                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                    Source
-                                  </p>
-                                  {renderCompareObjectDetails(section.sourceDetails, {
-                                    browserDisabledReason: managerBrowserDisabledReason,
-                                    onExplore: openExploreConfirm,
-                                    buildBrowserHref: (detail) =>
-                                      buildManagerBrowserHref(
-                                        item.result?.source_context_id ?? sourceContextId,
-                                        item.sourceBucket,
-                                        detail.key
-                                      ),
-                                    renderAction:
-                                      section.action && section.key !== "target_only"
-                                        ? (detail) => (
-                                            <UiButton
-                                              variant="secondary"
-                                              disabled={running || item.status !== "success" || Boolean(item.actionRunning)}
-                                              className="py-1 ui-caption"
-                                              onClick={(event) => {
-                                                event.preventDefault();
-                                                event.stopPropagation();
-                                                openRemediationConfirm(itemIndex, section.key, 1, detail.key);
-                                              }}
-                                            >
-                                              {item.actionRunning === section.action.type
-                                                ? "Running..."
-                                                : remediationSingleActionLabel[section.action.type]}
-                                            </UiButton>
-                                          )
-                                        : undefined,
-                                  })}
-                                </div>
-                                <div className="space-y-1">
-                                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                    Target
-                                  </p>
-                                  {renderCompareObjectDetails(section.targetDetails, {
-                                    browserDisabledReason: managerBrowserDisabledReason,
-                                    onExplore: openExploreConfirm,
-                                    buildBrowserHref: (detail) =>
-                                      buildManagerBrowserHref(
-                                        item.result?.target_context_id || lastRunOptions?.targetContextId || targetContextId || "",
-                                        item.targetBucket,
-                                        detail.key
-                                      ),
-                                    renderAction:
-                                      section.action && section.key === "target_only"
-                                        ? (detail) => (
-                                            <UiButton
-                                              variant="danger"
-                                              disabled={running || item.status !== "success" || Boolean(item.actionRunning)}
-                                              className="py-1 ui-caption"
-                                              onClick={(event) => {
-                                                event.preventDefault();
-                                                event.stopPropagation();
-                                                openRemediationConfirm(itemIndex, section.key, 1, detail.key);
-                                              }}
-                                            >
-                                              {item.actionRunning === section.action.type
-                                                ? "Running..."
-                                                : remediationSingleActionLabel[section.action.type]}
-                                            </UiButton>
-                                          )
-                                        : undefined,
-                                  })}
-                                </div>
-                              </div>
-                            </UiDetails>
-                          ))}
+                              </UiDetails>
+                            );
+                          })}
                         </div>
                       </UiDetails>
                     )}
@@ -1514,30 +1638,6 @@ export default function ManagerBucketCompareModal({
           </div>
         )}
       </div>
-      {pendingExplore && (
-        <Modal
-          title="Leave comparison page?"
-          onClose={() => setPendingExplore(null)}
-          maxWidthClass="max-w-lg"
-          maxBodyHeightClass="max-h-[70vh]"
-          zIndexClass="z-[60]"
-        >
-          <div className="space-y-3">
-            <p className="ui-body text-slate-700 dark:text-slate-200">
-              This will leave the bucket comparison page and open this object in Browser.
-            </p>
-            <p className="break-all rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-100">
-              {pendingExplore.objectKey}
-            </p>
-            <div className="flex justify-end gap-2">
-              <UiButton variant="secondary" onClick={() => setPendingExplore(null)}>
-                Cancel
-              </UiButton>
-              <UiButton onClick={confirmExploreNavigation}>Open Browser</UiButton>
-            </div>
-          </div>
-        </Modal>
-      )}
       {pendingAction && pendingActionItem && (
         <Modal
           title={remediationActionTitle[pendingAction.action]}

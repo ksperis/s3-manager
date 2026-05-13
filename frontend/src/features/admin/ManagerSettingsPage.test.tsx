@@ -35,6 +35,7 @@ function buildSettings(): AppSettings {
       usage_history_enabled: false,
       bucket_migration_enabled: true,
       bucket_compare_enabled: true,
+      bucket_integrity_check_enabled: false,
       manager_ceph_s3_user_keys_enabled: false,
       allow_ui_user_bucket_migration: false,
       allow_login_access_keys: false,
@@ -105,6 +106,25 @@ describe("ManagerSettingsPage", () => {
     expect(payload.general.manager_ceph_s3_user_keys_enabled).toBe(true);
   });
 
+  it("renders bucket integrity toggle and sends it in save payload", async () => {
+    const user = userEvent.setup();
+    render(<ManagerSettingsPage />);
+
+    const toggle = (await screen.findByLabelText("Bucket integrity check tool")) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+
+    await user.click(toggle);
+    expect(toggle.checked).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
+    expect(payload.general.bucket_integrity_check_enabled).toBe(true);
+  });
+
   it("resets Ceph S3 User keys toggle from defaults", async () => {
     const user = userEvent.setup();
     const defaults = buildSettings();
@@ -122,6 +142,25 @@ describe("ManagerSettingsPage", () => {
       expect(toggle.checked).toBe(true);
     });
   });
+
+  it("resets bucket integrity toggle from defaults", async () => {
+    const user = userEvent.setup();
+    const defaults = buildSettings();
+    defaults.general.bucket_integrity_check_enabled = true;
+    fetchDefaultAppSettingsMock.mockResolvedValue(defaults);
+
+    render(<ManagerSettingsPage />);
+
+    const toggle = (await screen.findByLabelText("Bucket integrity check tool")) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
+
+    await waitFor(() => {
+      expect(toggle.checked).toBe(true);
+    });
+  });
+
 
   it("shows Experimental badge on bucket migration tool toggle", async () => {
     render(<ManagerSettingsPage />);

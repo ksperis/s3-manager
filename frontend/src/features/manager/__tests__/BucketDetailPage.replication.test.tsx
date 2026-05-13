@@ -121,6 +121,7 @@ describe("BucketDetailPage replication state", () => {
           static_website: true,
           sse: true,
           metrics: true,
+          replication: true,
         },
       },
     });
@@ -222,6 +223,39 @@ describe("BucketDetailPage replication state", () => {
       screen.getByText("Configure Ceph RGW multisite bucket replication across zones within this bucket's zonegroup.")
     ).toBeInTheDocument();
     expect(screen.queryByText(/cross-zonegroup/i)).not.toBeInTheDocument();
+  });
+
+  it("disables replication when the endpoint capability is disabled", async () => {
+    const user = userEvent.setup();
+    useCephAdminEndpointMock.mockReturnValue({
+      selectedEndpointId: 1,
+      selectedEndpoint: {
+        name: "endpoint-1",
+        capabilities: {
+          static_website: true,
+          sse: true,
+          metrics: true,
+          replication: false,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+
+    expect(getCephAdminBucketReplicationMock).not.toHaveBeenCalled();
+    const replicationCard = await screen.findByTestId("bucket-feature-replication");
+    const replicationShell = replicationCard.parentElement?.parentElement as HTMLElement;
+    expect(replicationCard).toHaveAttribute("data-feature-state", "disabled");
+    expect(within(replicationCard).getByText("Bucket replication is disabled on this endpoint.")).toBeInTheDocument();
+    expect(within(replicationShell).getByRole("button", { name: "Clear" })).toBeDisabled();
+    expect(within(replicationShell).getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(within(replicationCard).getByLabelText("Role ARN")).toBeDisabled();
   });
 
   it("keeps notifications card neutral for TopicConfigurations empty draft-equivalent payload", async () => {

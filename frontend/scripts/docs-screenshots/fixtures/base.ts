@@ -106,6 +106,7 @@ const ADMIN_STORAGE_ENDPOINTS = [
       iam: true,
       sns: true,
       sse: true,
+      replication: true,
     },
     features: {
       admin: { enabled: true, endpoint: "https://rgw-admin.docs.example.com" },
@@ -117,6 +118,7 @@ const ADMIN_STORAGE_ENDPOINTS = [
       iam: { enabled: true },
       sns: { enabled: true },
       sse: { enabled: true },
+      replication: { enabled: true },
       healthcheck: { enabled: true, mode: "http", url: "https://s3-default.docs.example.com/health" },
     },
     is_default: true,
@@ -152,6 +154,7 @@ const ADMIN_STORAGE_ENDPOINTS = [
       iam: true,
       sns: false,
       sse: true,
+      replication: false,
     },
     features: {
       admin: { enabled: false, endpoint: null },
@@ -163,6 +166,7 @@ const ADMIN_STORAGE_ENDPOINTS = [
       iam: { enabled: true },
       sns: { enabled: false },
       sse: { enabled: true },
+      replication: { enabled: false },
       healthcheck: { enabled: true, mode: "http", url: "https://s3-archive.docs.example.com/health" },
     },
     is_default: false,
@@ -184,6 +188,7 @@ const GENERAL_SETTINGS = {
   endpoint_status_enabled: true,
   bucket_migration_enabled: true,
   bucket_compare_enabled: true,
+  bucket_integrity_check_enabled: true,
   allow_ui_user_bucket_migration: true,
   allow_login_access_keys: false,
   allow_login_endpoint_list: true,
@@ -226,6 +231,7 @@ const EXECUTION_CONTEXTS = [
       metrics: true,
       static_website: true,
       sts: false,
+      replication: true,
     },
     capabilities: {
       can_manage_iam: true,
@@ -249,6 +255,7 @@ const EXECUTION_CONTEXTS = [
       metrics: false,
       static_website: false,
       sts: false,
+      replication: false,
     },
     capabilities: {
       can_manage_iam: false,
@@ -603,6 +610,7 @@ const CEPH_ENDPOINTS = [
       metrics: true,
       static_website: true,
       sns: true,
+      replication: true,
     },
   },
 ];

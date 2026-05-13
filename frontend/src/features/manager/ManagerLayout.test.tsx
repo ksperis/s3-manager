@@ -78,6 +78,7 @@ function buildGeneralSettings(overrides?: Record<string, unknown>) {
     usage_history_enabled: false,
     bucket_migration_enabled: false,
     bucket_compare_enabled: true,
+    bucket_integrity_check_enabled: false,
     manager_ceph_s3_user_keys_enabled: true,
     allow_ui_user_bucket_migration: false,
     allow_login_access_keys: false,
@@ -127,6 +128,25 @@ describe("ManagerLayout", () => {
 
     const labels = capturedNavSections.map((section) => section.label);
     expect(labels).not.toContain("Ceph");
+  });
+
+  it("shows Integrity tool when bucket integrity flag is enabled", () => {
+    useS3AccountContextMock.mockReturnValue(buildContext());
+    useGeneralSettingsMock.mockReturnValue({
+      generalSettings: buildGeneralSettings({
+        bucket_compare_enabled: false,
+        bucket_integrity_check_enabled: true,
+      }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const toolsSection = capturedNavSections.find((section) => section.label === "Tools");
+    expect(toolsSection?.links.map((link) => link.label)).toEqual(["Integrity"]);
   });
 
   it("shows a loading hint for disabled Metrics while manager context is loading", () => {

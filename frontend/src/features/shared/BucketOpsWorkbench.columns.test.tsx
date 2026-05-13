@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
   streamCephAdminBuckets: vi.fn(),
   listStorageOpsBuckets: vi.fn(),
   streamStorageOpsBuckets: vi.fn(),
+  refreshCephAdminBucketListingCache: vi.fn(),
+  refreshStorageOpsBucketListingCache: vi.fn(),
+  listExecutionContexts: vi.fn(),
   noopAsync: vi.fn(async () => ({})),
   navigate: vi.fn(),
 }));
@@ -38,6 +41,7 @@ vi.mock("../../api/cephAdmin", () => ({
   putCephAdminBucketCors: mocks.noopAsync,
   putCephAdminBucketLifecycle: mocks.noopAsync,
   putCephAdminBucketPolicy: mocks.noopAsync,
+  refreshCephAdminBucketListingCache: mocks.refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning: mocks.noopAsync,
   streamCephAdminBuckets: mocks.streamCephAdminBuckets,
   updateCephAdminBucketObjectLock: mocks.noopAsync,
@@ -65,11 +69,16 @@ vi.mock("../../api/storageOps", () => ({
   putStorageOpsBucketLifecycle: mocks.noopAsync,
   putStorageOpsBucketLogging: mocks.noopAsync,
   putStorageOpsBucketPolicy: mocks.noopAsync,
+  refreshStorageOpsBucketListingCache: mocks.refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning: mocks.noopAsync,
   streamStorageOpsBuckets: mocks.streamStorageOpsBuckets,
   updateStorageOpsBucketObjectLock: mocks.noopAsync,
   updateStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
   updateStorageOpsBucketQuota: mocks.noopAsync,
+}));
+
+vi.mock("../../api/executionContexts", () => ({
+  listExecutionContexts: mocks.listExecutionContexts,
 }));
 
 vi.mock("../cephAdmin/CephAdminEndpointContext", () => ({
@@ -157,6 +166,40 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     mocks.streamCephAdminBuckets.mockReset();
     mocks.listStorageOpsBuckets.mockReset();
     mocks.streamStorageOpsBuckets.mockReset();
+    mocks.refreshCephAdminBucketListingCache.mockReset();
+    mocks.refreshStorageOpsBucketListingCache.mockReset();
+    mocks.listExecutionContexts.mockReset();
+    mocks.refreshCephAdminBucketListingCache.mockResolvedValue({ refreshed: true });
+    mocks.refreshStorageOpsBucketListingCache.mockResolvedValue({ refreshed: true });
+    mocks.listExecutionContexts.mockResolvedValue([
+      {
+        kind: "account",
+        id: "1",
+        display_name: "Account A",
+        endpoint_name: "Primary",
+        tags: [{ id: 1, label: "finance", color_key: "amber", scope: "standard" }],
+        endpoint_tags: [],
+        capabilities: { can_manage_iam: true, sts_capable: false, admin_api_capable: true },
+      },
+      {
+        kind: "connection",
+        id: "conn-2",
+        display_name: "Connection B",
+        endpoint_name: "Archive",
+        tags: [{ id: 2, label: "shared", color_key: "sky", scope: "standard" }],
+        endpoint_tags: [{ id: 3, label: "cold", color_key: "slate", scope: "standard" }],
+        capabilities: { can_manage_iam: false, sts_capable: false, admin_api_capable: false },
+      },
+      {
+        kind: "legacy_user",
+        id: "s3u-3",
+        display_name: "Legacy User C",
+        endpoint_name: "Primary",
+        tags: [],
+        endpoint_tags: [],
+        capabilities: { can_manage_iam: false, sts_capable: false, admin_api_capable: false },
+      },
+    ]);
     mocks.noopAsync.mockClear();
     mocks.navigate.mockReset();
     window.localStorage.clear();
@@ -192,6 +235,102 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     expect(await screen.findByText("bucket-a")).toBeInTheDocument();
     expect(screen.getByText("UI tags")).toBeInTheDocument();
     expect(screen.queryByText("Owner quota")).not.toBeInTheDocument();
+  });
+
+  it("selects and deselects filtered storage ops contexts in the compact advanced filter", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+    mocks.streamStorageOpsBuckets.mockResolvedValue({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
+
+    const contextFilter = await screen.findByLabelText("Filter contexts");
+    fireEvent.change(contextFilter, { target: { value: "Account" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[0]);
+
+    fireEvent.change(contextFilter, { target: { value: "shared" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[0]);
+
+    fireEvent.change(contextFilter, { target: { value: "s3 user" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Deselect filtered" })[0]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+
+    await waitFor(() => expect(mocks.streamStorageOpsBuckets).toHaveBeenCalled());
+    const params = mocks.streamStorageOpsBuckets.mock.calls.at(-1)?.[1] as { advanced_filter?: string } | undefined;
+    const payload = JSON.parse(params?.advanced_filter ?? "{}") as {
+      rules?: Array<{ field?: string; op?: string; value?: unknown }>;
+    };
+    expect(payload.rules).toEqual(
+      expect.arrayContaining([{ field: "context_id", op: "in", value: ["1", "conn-2"] }])
+    );
+  });
+
+  it("selects and deselects filtered storage ops endpoints in the compact advanced filter", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+    mocks.streamStorageOpsBuckets.mockResolvedValue({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
+
+    const endpointFilter = await screen.findByLabelText("Filter endpoints");
+    fireEvent.change(endpointFilter, { target: { value: "Primary" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[1]);
+
+    fireEvent.change(endpointFilter, { target: { value: "cold" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[1]);
+
+    fireEvent.change(endpointFilter, { target: { value: "legacy user" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Deselect filtered" })[1]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+
+    await waitFor(() => expect(mocks.streamStorageOpsBuckets).toHaveBeenCalled());
+    const params = mocks.streamStorageOpsBuckets.mock.calls.at(-1)?.[1] as { advanced_filter?: string } | undefined;
+    const payload = JSON.parse(params?.advanced_filter ?? "{}") as {
+      rules?: Array<{ field?: string; op?: string; value?: unknown }>;
+    };
+    expect(payload.rules).toEqual(expect.arrayContaining([{ field: "endpoint_name", op: "eq", value: "Archive" }]));
+  });
+
+  it("flushes the backend cache before reloading storage ops buckets", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+
+    const refreshButton = screen.getByRole("button", { name: "Refresh" });
+    await waitFor(() => expect(refreshButton).not.toBeDisabled());
+    fireEvent.click(refreshButton);
+
+    await waitFor(() => expect(mocks.refreshStorageOpsBucketListingCache).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(mocks.listStorageOpsBuckets.mock.calls.length).toBeGreaterThanOrEqual(2));
+    const refreshOrder = mocks.refreshStorageOpsBucketListingCache.mock.invocationCallOrder[0];
+    const lastListOrder = mocks.listStorageOpsBuckets.mock.invocationCallOrder.at(-1);
+    expect(refreshOrder).toBeDefined();
+    expect(lastListOrder).toBeDefined();
+    expect(refreshOrder as number).toBeLessThan(lastListOrder as number);
   });
 
   it("loads owner quota columns without enabling stats in storage ops", async () => {

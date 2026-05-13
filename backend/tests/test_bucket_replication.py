@@ -3,9 +3,10 @@
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.db import S3Account
+from app.db import S3Account, StorageEndpoint
 from app.main import app
 from app.models.bucket import BucketReplicationConfiguration
 from app.routers.ceph_admin import buckets as ceph_admin_buckets_router
@@ -18,7 +19,22 @@ class _FakeAuditService:
         return None
 
 
-def _build_account() -> S3Account:
+def _build_endpoint(endpoint_id: int = 1, *, replication_enabled: bool = True) -> StorageEndpoint:
+    endpoint = StorageEndpoint(
+        name="endpoint",
+        endpoint_url="https://ceph.example.test",
+        provider="ceph",
+        features_config=(
+            "features:\n"
+            "  replication:\n"
+            f"    enabled: {'true' if replication_enabled else 'false'}\n"
+        ),
+    )
+    endpoint.id = endpoint_id
+    return endpoint
+
+
+def _build_account(*, replication_enabled: bool = True) -> S3Account:
     account = S3Account(
         name="acc",
         rgw_account_id="RGW00000000000000011",
@@ -26,6 +42,7 @@ def _build_account() -> S3Account:
         rgw_secret_key="SK",
     )
     account.id = 11
+    account.storage_endpoint = _build_endpoint(replication_enabled=replication_enabled)
     return account
 
 
@@ -98,6 +115,27 @@ def test_manager_put_bucket_replication_rejects_zone(client: TestClient):
     assert response.json()["detail"] == "Destination.Zone is not supported in V1."
 
 
+def test_manager_put_bucket_replication_requires_endpoint_feature(client: TestClient):
+    class FakeService:
+        def set_bucket_replication(self, name: str, account: S3Account, payload: BucketReplicationConfiguration):
+            raise AssertionError("service should not be called")
+
+    app.dependency_overrides[manager_buckets_router.get_account_context] = lambda: _build_account(replication_enabled=False)
+    app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeService()
+    app.dependency_overrides[manager_buckets_router.get_audit_logger] = lambda: _FakeAuditService()
+
+    payload = {
+        "configuration": {
+            "Role": "arn:aws:iam::123456789012:role/replication",
+            "Rules": [{"Status": "Enabled", "Destination": {"Bucket": "arn:aws:s3:::target-bucket"}}],
+        }
+    }
+    response = client.put("/api/manager/buckets/demo-bucket/replication", json=payload)
+
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "Bucket replication is disabled for this endpoint"
+
+
 def test_manager_delete_bucket_replication_returns_204(client: TestClient):
     captured: dict[str, object] = {}
 
@@ -152,7 +190,7 @@ def test_ceph_admin_put_bucket_replication_invalidates_listing_cache(monkeypatch
 
     monkeypatch.setattr(BucketsService, "set_bucket_replication", fake_set_bucket_replication)
 
-    ctx = SimpleNamespace(endpoint=SimpleNamespace(id=99), access_key="AK", secret_key="SK")
+    ctx = SimpleNamespace(endpoint=_build_endpoint(endpoint_id=99), access_key="AK", secret_key="SK")
     payload = BucketReplicationConfiguration(
         configuration={
             "Role": "arn:aws:iam::123456789012:role/replication",
@@ -164,6 +202,35 @@ def test_ceph_admin_put_bucket_replication_invalidates_listing_cache(monkeypatch
 
     assert result.configuration == payload.configuration
     assert invalidated == [99]
+
+
+def test_ceph_admin_put_bucket_replication_requires_endpoint_feature(monkeypatch: pytest.MonkeyPatch):
+    calls = {"count": 0}
+
+    def fake_set_bucket_replication(self, name: str, account: S3Account, payload: BucketReplicationConfiguration):
+        calls["count"] += 1
+        return BucketReplicationConfiguration(configuration=payload.configuration)
+
+    monkeypatch.setattr(BucketsService, "set_bucket_replication", fake_set_bucket_replication)
+
+    ctx = SimpleNamespace(
+        endpoint=_build_endpoint(endpoint_id=99, replication_enabled=False),
+        access_key="AK",
+        secret_key="SK",
+    )
+    payload = BucketReplicationConfiguration(
+        configuration={
+            "Role": "arn:aws:iam::123456789012:role/replication",
+            "Rules": [{"Status": "Enabled", "Destination": {"Bucket": "arn:aws:s3:::target-bucket"}}],
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        ceph_admin_buckets_router.put_replication("demo-bucket", payload, ctx=ctx)
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "Bucket replication is disabled for this endpoint"
+    assert calls["count"] == 0
 
 
 def test_ceph_admin_delete_bucket_replication_invalidates_listing_cache(monkeypatch: pytest.MonkeyPatch):
@@ -181,7 +248,7 @@ def test_ceph_admin_delete_bucket_replication_invalidates_listing_cache(monkeypa
 
     monkeypatch.setattr(BucketsService, "delete_bucket_replication", fake_delete_bucket_replication)
 
-    ctx = SimpleNamespace(endpoint=SimpleNamespace(id=100), access_key="AK", secret_key="SK")
+    ctx = SimpleNamespace(endpoint=_build_endpoint(endpoint_id=100), access_key="AK", secret_key="SK")
     response = ceph_admin_buckets_router.delete_replication("demo-bucket", ctx=ctx)
 
     assert response.status_code == 204

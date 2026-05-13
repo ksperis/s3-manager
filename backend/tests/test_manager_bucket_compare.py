@@ -59,6 +59,7 @@ def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
         assert target_bucket == "bucket-b"
         assert source_ctx is source_account
         assert target_ctx is target_account
+        assert kwargs["diff_sample_limit"] == 500
         assert kwargs["ignore_modified_after"] == payload.ignore_modified_after
         return CephAdminBucketContentDiff(
             source_count=10,

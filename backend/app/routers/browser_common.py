@@ -39,6 +39,15 @@ def require_sse_feature(account: S3Account) -> None:
         )
 
 
+def require_replication_feature(account: S3Account) -> None:
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint is None or not resolve_feature_flags(endpoint).replication_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bucket replication is disabled for this endpoint",
+        )
+
+
 def record_browser_action(
     audit_service: AuditService,
     *,

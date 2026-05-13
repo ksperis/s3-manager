@@ -292,6 +292,7 @@ BucketFilterField = Literal[
     "owner",
     "owner_name",
     "owner_kind",
+    "context_id",
     "context_name",
     "context_kind",
     "endpoint_name",

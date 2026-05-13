@@ -27,6 +27,11 @@ export type CompareObjectDetailLike = {
   storage_class?: string | null;
 };
 
+export type CompareVisibleKeysCopyFeedback = {
+  tone: "success" | "danger";
+  message: string;
+};
+
 type RunItemStatus = "pending" | "running" | "success" | "failed" | "cancelled";
 
 type RunStatusItem = {
@@ -118,6 +123,30 @@ export const getObjectParentPrefix = (key: string): string => {
   return key.slice(0, index + 1);
 };
 
+export const getVisibleCompareObjectKeys = (rows: CompareObjectDetailLike[]): string[] => {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  rows.forEach((row) => {
+    if (seen.has(row.key)) return;
+    seen.add(row.key);
+    keys.push(row.key);
+  });
+  return keys;
+};
+
+export const copyCompareObjectKeysToClipboard = async (keys: string[]): Promise<void> => {
+  const clipboard =
+    typeof window !== "undefined"
+      ? window.navigator.clipboard
+      : typeof navigator !== "undefined"
+        ? navigator.clipboard
+        : null;
+  if (!clipboard?.writeText) {
+    throw new Error("Clipboard API is unavailable.");
+  }
+  await clipboard.writeText(keys.join("\n"));
+};
+
 export const renderCompareObjectDetails = (
   rows: CompareObjectDetailLike[],
   options?: {
@@ -198,11 +227,17 @@ export const renderCompareObjectDetails = (
   );
 };
 
-export function CompareObjectSampleNotice() {
+export function CompareObjectSampleNotice({
+  visibleCount,
+  totalCount,
+}: {
+  visibleCount: number;
+  totalCount: number;
+}) {
+  if (visibleCount >= totalCount) return null;
   return (
     <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 ui-caption font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
-      Object rows below are a sample of the comparison result and may not include every key. Use the counters in each
-      section for totals.
+      Only {visibleCount} of {totalCount} objects are visible in this section. Use the section counter for the total.
     </p>
   );
 }
@@ -286,6 +321,11 @@ export const parseRawMappingText = (value: string): ParsedRawMappingResult => {
 export const triggerDownload = (filename: string, content: string, mimeType: string) => {
   if (typeof window === "undefined") return;
   const blob = new Blob([content], { type: mimeType });
+  triggerBlobDownload(filename, blob);
+};
+
+export const triggerBlobDownload = (filename: string, blob: Blob) => {
+  if (typeof window === "undefined") return;
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

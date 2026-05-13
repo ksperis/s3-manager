@@ -141,6 +141,52 @@ def test_manager_mutation_invalidates_shared_cache_for_storage_ops(client, monke
         invalidate_bucket_listing_cache()
 
 
+def test_storage_ops_bucket_listing_cache_refresh_endpoint_invalidates_shared_cache(client, monkeypatch):
+    invalidate_bucket_listing_cache()
+    account = _build_account()
+    service = _FakeBucketsService()
+
+    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
+        assert workspace == "manager"
+        return [
+            ExecutionContext(
+                kind="account",
+                id="1",
+                display_name="Account One",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+            )
+        ]
+
+    def fake_get_account_context(*, request=None, account_ref=None, actor=None, db=None):  # noqa: ARG001
+        return account
+
+    monkeypatch.setattr(storage_ops_buckets_router, "list_execution_contexts", fake_list_execution_contexts)
+    monkeypatch.setattr(storage_ops_buckets_router, "get_account_context", fake_get_account_context)
+
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
+    app.dependency_overrides[storage_ops_buckets_router.get_buckets_service] = lambda: service
+    try:
+        first = client.get("/api/storage-ops/buckets")
+        second = client.get("/api/storage-ops/buckets")
+        assert first.status_code == 200, first.text
+        assert second.status_code == 200, second.text
+        assert service.list_calls == 1
+
+        refresh = client.post("/api/storage-ops/buckets/cache/refresh")
+        assert refresh.status_code == 200, refresh.text
+        assert refresh.json()["contexts"] == 1
+
+        after_refresh = client.get("/api/storage-ops/buckets")
+        assert after_refresh.status_code == 200, after_refresh.text
+        assert service.list_calls == 2
+    finally:
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
+        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+        app.dependency_overrides.pop(storage_ops_buckets_router.get_buckets_service, None)
+        invalidate_bucket_listing_cache()
+
+
 def test_shared_bucket_listing_cache_coalesces_parallel_misses():
     invalidate_bucket_listing_cache()
     account = _build_account()
@@ -203,7 +249,7 @@ def test_shared_bucket_listing_cache_expires_after_ttl(monkeypatch):
     assert len(first) == 1
     assert service.list_calls == 1
 
-    now = 1299.0
+    now = 2799.0
     second = get_cached_bucket_listing_for_account(
         account=account,
         include=set(),
@@ -213,7 +259,7 @@ def test_shared_bucket_listing_cache_expires_after_ttl(monkeypatch):
     assert len(second) == 1
     assert service.list_calls == 1
 
-    now = 1301.0
+    now = 2801.0
     third = get_cached_bucket_listing_for_account(
         account=account,
         include=set(),

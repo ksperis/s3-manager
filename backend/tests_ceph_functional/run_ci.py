@@ -52,38 +52,51 @@ def _generate_secret() -> str:
 
 def _build_endpoint_payload() -> str:
     s3_endpoint = _require_env("CEPH_TEST_LAB_S3_ENDPOINT")
+    s3_endpoint_z2 = _env_str("CEPH_TEST_LAB_S3_ENDPOINT_Z2")
     admin_endpoint = _require_env("CEPH_TEST_RGW_ADMIN_ENDPOINT")
     region = _env_str("CEPH_TEST_RGW_REGION", "us-east-1") or "us-east-1"
     verify_tls = _env_bool("CEPH_TEST_LAB_VERIFY_TLS", True)
 
-    payload = [
-        {
-            "name": "Lab Ceph",
-            "endpoint_url": s3_endpoint,
+    common_credentials = {
+        "admin_access_key": _require_env("CEPH_TEST_RGW_ADMIN_ACCESS_KEY"),
+        "admin_secret_key": _require_env("CEPH_TEST_RGW_ADMIN_SECRET_KEY"),
+        "supervision_access_key": _require_env("CEPH_TEST_SUPERVISION_ACCESS_KEY"),
+        "supervision_secret_key": _require_env("CEPH_TEST_SUPERVISION_SECRET_KEY"),
+        "ceph_admin_access_key": _require_env("CEPH_TEST_CEPH_ADMIN_ACCESS_KEY"),
+        "ceph_admin_secret_key": _require_env("CEPH_TEST_CEPH_ADMIN_SECRET_KEY"),
+    }
+
+    def _entry(name: str, endpoint_url: str, *, is_default: bool) -> dict[str, object]:
+        return {
+            "name": name,
+            "endpoint_url": endpoint_url,
             "region": region,
             "verify_tls": verify_tls,
             "provider": "ceph",
-            "admin_access_key": _require_env("CEPH_TEST_RGW_ADMIN_ACCESS_KEY"),
-            "admin_secret_key": _require_env("CEPH_TEST_RGW_ADMIN_SECRET_KEY"),
-            "supervision_access_key": _require_env("CEPH_TEST_SUPERVISION_ACCESS_KEY"),
-            "supervision_secret_key": _require_env("CEPH_TEST_SUPERVISION_SECRET_KEY"),
-            "ceph_admin_access_key": _require_env("CEPH_TEST_CEPH_ADMIN_ACCESS_KEY"),
-            "ceph_admin_secret_key": _require_env("CEPH_TEST_CEPH_ADMIN_SECRET_KEY"),
+            **common_credentials,
             "features": {
                 "admin": {"enabled": True, "endpoint": admin_endpoint},
                 "account": {"enabled": True, "endpoint": admin_endpoint},
-                "sts": {"enabled": True, "endpoint": s3_endpoint},
+                "sts": {"enabled": True, "endpoint": endpoint_url},
                 "usage": {"enabled": True},
                 "metrics": {"enabled": True},
                 "static_website": {"enabled": True},
                 "iam": {"enabled": True},
                 "sns": {"enabled": True},
+                "replication": {"enabled": True},
                 "sse": {"enabled": True},
                 "healthcheck": {"enabled": True, "mode": "s3"},
             },
-            "is_default": True,
+            "is_default": is_default,
         }
-    ]
+
+    if s3_endpoint_z2:
+        payload = [
+            _entry("s3-z1", s3_endpoint, is_default=True),
+            _entry("s3-z2", s3_endpoint_z2, is_default=False),
+        ]
+    else:
+        payload = [_entry("Lab Ceph", s3_endpoint, is_default=True)]
     return json.dumps(payload)
 
 
@@ -103,6 +116,7 @@ def _build_app_settings_payload() -> str:
             "usage_history_enabled": False,
             "bucket_migration_enabled": True,
             "bucket_compare_enabled": True,
+            "bucket_integrity_check_enabled": False,
             "manager_ceph_s3_user_keys_enabled": True,
             "allow_ui_user_bucket_migration": False,
             "allow_login_access_keys": False,

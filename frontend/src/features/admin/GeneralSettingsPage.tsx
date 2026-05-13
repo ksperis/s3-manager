@@ -229,6 +229,7 @@ export default function GeneralSettingsPage() {
                 ...defaults.general,
                 bucket_migration_enabled: prev.general.bucket_migration_enabled,
                 bucket_compare_enabled: prev.general.bucket_compare_enabled,
+                bucket_integrity_check_enabled: prev.general.bucket_integrity_check_enabled,
                 allow_ui_user_bucket_migration: prev.general.allow_ui_user_bucket_migration,
               },
               quota_notifications: defaults.quota_notifications,

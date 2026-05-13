@@ -185,6 +185,7 @@ def test_aws_endpoint_defaults_enable_supported_aws_features_and_clear_ceph_cred
         "iam": True,
         "sns": False,
         "sse": True,
+        "replication": False,
     }
     assert created.features.sts.enabled is True
     assert created.features.sts.endpoint == AWS_STS_ENDPOINT
@@ -263,6 +264,19 @@ def test_aws_endpoint_helpers_are_partition_aware():
     assert aws_iam_endpoint_for_region("us-gov-west-1") == "https://iam.us-gov.amazonaws.com"
 
 
+def test_replication_feature_defaults_to_disabled_and_can_be_enabled_for_ceph():
+    default_features = normalize_features_config(StorageProvider.CEPH, None)
+    assert default_features["replication"]["enabled"] is False
+
+    enabled_features = normalize_features_config(
+        StorageProvider.CEPH,
+        "features:\n"
+        "  replication:\n"
+        "    enabled: true\n",
+    )
+    assert enabled_features["replication"]["enabled"] is True
+
+
 def test_aws_features_reject_ceph_only_capabilities():
     with pytest.raises(ValueError, match="only available for Ceph"):
         normalize_features_config(
@@ -271,6 +285,14 @@ def test_aws_features_reject_ceph_only_capabilities():
             "  admin:\n"
             "    enabled: true\n"
             "  sns:\n"
+            "    enabled: true\n",
+        )
+
+    with pytest.raises(ValueError, match="Feature 'replication' is only available for Ceph"):
+        normalize_features_config(
+            StorageProvider.AWS,
+            "features:\n"
+            "  replication:\n"
             "    enabled: true\n",
         )
 

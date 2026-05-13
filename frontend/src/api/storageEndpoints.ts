@@ -28,6 +28,7 @@ export type StorageEndpointFeatures = {
   iam: StorageEndpointFeature;
   sns: StorageEndpointFeature;
   sse: StorageEndpointFeature;
+  replication: StorageEndpointFeature;
   healthcheck: StorageEndpointHealthcheckFeature;
 };
 

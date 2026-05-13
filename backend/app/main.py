@@ -35,9 +35,11 @@ from app.routers.ceph_admin import endpoints as ceph_admin_endpoints
 from app.routers.ceph_admin import accounts as ceph_admin_accounts
 from app.routers.ceph_admin import users as ceph_admin_users
 from app.routers.ceph_admin import buckets as ceph_admin_buckets
+from app.routers.ceph_admin import integrity as ceph_admin_integrity
 from app.routers.ceph_admin import metrics as ceph_admin_metrics
 from app.routers.storage_ops import summary as storage_ops_summary
 from app.routers.storage_ops import buckets as storage_ops_buckets
+from app.routers.storage_ops import integrity as storage_ops_integrity
 from app.routers.internal import billing_collect as internal_billing
 from app.routers.internal import healthchecks as internal_healthchecks
 from app.routers.internal import quota_monitor as internal_quota_monitor
@@ -53,6 +55,7 @@ from app.routers.manager import iam_policies as manager_iam_policies
 from app.routers.manager import topics as manager_topics
 from app.routers.manager import stats as manager_stats
 from app.routers.manager import migrations as manager_migrations
+from app.routers.manager import integrity as manager_integrity
 from app.services.bucket_migration_service import get_bucket_migration_worker
 from app.routers.dependencies import (
     require_browser_enabled,
@@ -145,9 +148,11 @@ app.include_router(ceph_admin_endpoints.router, prefix=settings.api_v1_prefix, d
 app.include_router(ceph_admin_accounts.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_users.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_integrity.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_metrics.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(storage_ops_summary.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
 app.include_router(storage_ops_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
+app.include_router(storage_ops_integrity.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
 app.include_router(internal_billing.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_healthchecks.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_quota_monitor.router, prefix=settings.api_v1_prefix)
@@ -219,6 +224,11 @@ app.include_router(
 )
 app.include_router(
     manager_migrations.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_integrity.router,
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_manager_enabled)],
 )

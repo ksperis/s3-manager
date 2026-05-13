@@ -78,6 +78,20 @@ export default function ManagerSettingsPage() {
     );
   };
 
+  const handleToggleBucketIntegrityCheckTool = (value: boolean) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            general: {
+              ...prev.general,
+              bucket_integrity_check_enabled: value,
+            },
+          }
+        : prev
+    );
+  };
+
   const handleToggleManagerCephS3UserKeysTool = (value: boolean) => {
     setSettings((prev) =>
       prev
@@ -176,6 +190,7 @@ export default function ManagerSettingsPage() {
                     ...prev.general,
                     bucket_migration_enabled: defaults.general.bucket_migration_enabled,
                     bucket_compare_enabled: defaults.general.bucket_compare_enabled,
+                    bucket_integrity_check_enabled: defaults.general.bucket_integrity_check_enabled,
                     manager_ceph_s3_user_keys_enabled: defaults.general.manager_ceph_s3_user_keys_enabled,
                     allow_ui_user_bucket_migration: defaults.general.allow_ui_user_bucket_migration,
                   },
@@ -265,6 +280,17 @@ export default function ManagerSettingsPage() {
                       checked={Boolean(settings.general.bucket_compare_enabled)}
                       onChange={(value) => handleToggleBucketCompareTool(value)}
                       ariaLabel="Bucket compare tool"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Bucket integrity check tool"
+                  description="Enables the Manager bucket integrity diagnostic tool."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={Boolean(settings.general.bucket_integrity_check_enabled)}
+                      onChange={(value) => handleToggleBucketIntegrityCheckTool(value)}
+                      ariaLabel="Bucket integrity check tool"
                     />
                   }
                 />

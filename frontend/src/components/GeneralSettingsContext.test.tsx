@@ -49,6 +49,7 @@ describe("GeneralSettingsProvider fallbacks", () => {
       usage_history_enabled: true,
       bucket_migration_enabled: true,
       bucket_compare_enabled: true,
+      bucket_integrity_check_enabled: true,
       manager_ceph_s3_user_keys_enabled: true,
       allow_ui_user_bucket_migration: true,
       allow_login_access_keys: true,

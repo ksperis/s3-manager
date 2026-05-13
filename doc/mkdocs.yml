@@ -84,6 +84,7 @@ nav:
       - "How-to: Ceph Admin UI tags": user/howto-ceph-ui-tags.md
       - "How-to: Storage Ops UI tags": user/howto-storage-ops-ui-tags.md
       - "Feature: Bucket compare": user/feature-bucket-compare.md
+      - "Feature: Bucket integrity check": user/feature-bucket-integrity-check.md
       - "Feature: Bucket migration": user/feature-bucket-migration.md
       - Troubleshooting: user/troubleshooting.md
   - Ops / Sysadmin Guide:

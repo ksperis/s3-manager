@@ -15,6 +15,7 @@ import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
+import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiDetails from "../../components/ui/UiDetails";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
@@ -45,6 +46,7 @@ import {
   putCephAdminBucketCors,
   putCephAdminBucketLifecycle,
   putCephAdminBucketPolicy,
+  refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning,
   streamCephAdminBuckets,
   updateCephAdminBucketObjectLock,
@@ -71,23 +73,29 @@ import {
   putStorageOpsBucketLifecycle,
   putStorageOpsBucketLogging,
   putStorageOpsBucketPolicy,
+  refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning,
   streamStorageOpsBuckets,
   updateStorageOpsBucketObjectLock,
   updateStorageOpsBucketPublicAccessBlock,
   updateStorageOpsBucketQuota,
 } from "../../api/storageOps";
+import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
+import { RefreshIcon } from "../browser/browserIcons";
 import { parseCorsRules, parseLifecycleRules, parsePolicyStatements, parseRuleIds, stableStringify } from "../cephAdmin/bucketJsonParsers";
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
+import type { BucketIntegrityUiTarget } from "./BucketIntegrityCheckModal";
 import BucketOpsBulkUpdateModal from "./BucketOpsBulkUpdateModal";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
 import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
+import { buildUiTagItems, extractUiTagLabels, filterSelectorVisibleUiTags } from "../../utils/uiTags";
 import {
   buildFeatureDetailRules,
   clearFeatureDetailField,
@@ -973,13 +981,14 @@ type AdvancedNumericField =
   | "minOwnerQuotaUsageObjectPercent"
   | "maxOwnerQuotaUsageObjectPercent";
 type OwnerNameScope = "any" | "account" | "user";
-type AdvancedTextOrNumericField = "context" | "endpoint" | "tenant" | "owner" | "ownerName" | "s3Tags" | AdvancedNumericField;
+type AdvancedTextOrNumericField = "tenant" | "owner" | "ownerName" | "s3Tags" | AdvancedNumericField;
 type ActiveFilterRemoveAction =
   | { type: "quick" }
   | { type: "tag_mode" }
   | { type: "tag"; tag: string }
-  | { type: "advanced_text"; field: "context" | "endpoint" | "tenant" | "owner" | "ownerName" | "s3Tags" }
-  | { type: "advanced_kind" }
+  | { type: "advanced_context_ids" }
+  | { type: "advanced_endpoint_names" }
+  | { type: "advanced_text"; field: "tenant" | "owner" | "ownerName" | "s3Tags" }
   | { type: "advanced_owner_scope" }
   | { type: "advanced_numeric"; field: AdvancedNumericField }
   | { type: "advanced_feature"; feature: FeatureKey }
@@ -1000,12 +1009,19 @@ type OwnerTooltipState =
   | { status: "ready"; ownerName: string | null }
   | { status: "error"; message: string };
 
+const formatStorageOpsContextKindLabel = (kind: StorageOpsContextFilterKind | ExecutionContext["kind"]) => {
+  if (kind === "account") return "Account";
+  if (kind === "connection") return "Connection";
+  if (kind === "s3_user" || kind === "legacy_user") return "S3 user";
+  return "Any";
+};
+
+const toStorageOpsContextKind = (kind: ExecutionContext["kind"]): StorageOpsContextFilterKind =>
+  kind === "legacy_user" ? "s3_user" : kind;
+
 export type AdvancedFilterState = {
-  context: string;
-  contextMatchMode: TextMatchMode;
-  endpoint: string;
-  endpointMatchMode: TextMatchMode;
-  kind: StorageOpsContextFilterKind;
+  contextIds: string[];
+  endpointNames: string[];
   tenant: string;
   tenantMatchMode: TextMatchMode;
   owner: string;
@@ -1044,11 +1060,8 @@ export type AdvancedFilterState = {
 };
 
 const defaultAdvancedFilter: AdvancedFilterState = {
-  context: "",
-  contextMatchMode: "contains",
-  endpoint: "",
-  endpointMatchMode: "contains",
-  kind: "any",
+  contextIds: [],
+  endpointNames: [],
   tenant: "",
   tenantMatchMode: "contains",
   owner: "",
@@ -1315,6 +1328,35 @@ const serializeS3TagExpressions = (values: string[]) =>
     .sort((a, b) => a.localeCompare(b))
     .join("\u001f");
 
+const normalizeAdvancedSelectionValues = (values?: string[] | null) => {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  values.forEach((value) => {
+    const id = value.trim();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  });
+  return ids;
+};
+
+const serializeAdvancedSelectionValues = (values?: string[] | null) =>
+  normalizeAdvancedSelectionValues(values)
+    .slice()
+    .sort((a, b) => a.localeCompare(b))
+    .join("\u001f");
+
+const addExactStringListRule = (rules: Array<Record<string, unknown>>, field: string, values: string[]) => {
+  if (values.length === 1) {
+    rules.push({ field, op: "eq", value: values[0] });
+    return;
+  }
+  if (values.length > 1) {
+    rules.push({ field, op: "in", value: values });
+  }
+};
+
 export const buildAdvancedFilterPayload = (
   basicFilter: string,
   basicFilterMode: TextMatchMode,
@@ -1344,11 +1386,8 @@ export const buildAdvancedFilterPayload = (
   rules.push(...buildTextFieldRules("name", basicFilter, basicFilterMode));
   if (advanced) {
     if (isStorageOps) {
-      rules.push(...buildTextFieldRules("context_name", advanced.context, advanced.contextMatchMode));
-      rules.push(...buildTextFieldRules("endpoint_name", advanced.endpoint, advanced.endpointMatchMode));
-      if (advanced.kind !== "any") {
-        rules.push({ field: "context_kind", op: "eq", value: advanced.kind });
-      }
+      addExactStringListRule(rules, "context_id", normalizeAdvancedSelectionValues(advanced.contextIds));
+      addExactStringListRule(rules, "endpoint_name", normalizeAdvancedSelectionValues(advanced.endpointNames));
     }
     rules.push(...buildTextFieldRules("tenant", advanced.tenant, advanced.tenantMatchMode));
     rules.push(...buildTextFieldRules("owner", advanced.owner, advanced.ownerMatchMode));
@@ -1425,7 +1464,11 @@ export const hasAdvancedFilters = (
   featureSupport: Partial<Record<FeatureKey, boolean>> = {}
 ) => {
   if (!advanced) return false;
-  if (isStorageOps && (advanced.context.trim() || advanced.endpoint.trim() || advanced.kind !== "any")) {
+  if (
+    isStorageOps &&
+    (normalizeAdvancedSelectionValues(advanced.contextIds).length > 0 ||
+      normalizeAdvancedSelectionValues(advanced.endpointNames).length > 0)
+  ) {
     return true;
   }
   if (
@@ -1846,20 +1889,13 @@ export const sanitizeAdvancedFilter = (value: unknown): AdvancedFilterState => {
   }
   const safeString = (input: unknown) => (typeof input === "string" ? input : "");
   const parseMatchMode = (input: unknown): TextMatchMode => (input === "exact" ? "exact" : "contains");
-  const parseStorageOpsKind = (input: unknown): StorageOpsContextFilterKind => {
-    if (input === "account" || input === "connection" || input === "s3_user") return input;
-    return "any";
-  };
   const parseOwnerNameScope = (input: unknown): OwnerNameScope => {
     if (input === "account" || input === "user") return input;
     return "any";
   };
   return {
-    context: safeString(data.context),
-    contextMatchMode: parseMatchMode(data.contextMatchMode),
-    endpoint: safeString(data.endpoint),
-    endpointMatchMode: parseMatchMode(data.endpointMatchMode),
-    kind: parseStorageOpsKind(data.kind),
+    contextIds: normalizeAdvancedSelectionValues(sanitizeStringArray(data.contextIds)),
+    endpointNames: normalizeAdvancedSelectionValues(sanitizeStringArray(data.endpointNames)),
     tenant: safeString(data.tenant),
     tenantMatchMode: parseMatchMode(data.tenantMatchMode),
     owner: safeString(data.owner),
@@ -2103,6 +2139,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
   const listBuckets = isStorageOps ? listStorageOpsBuckets : listCephAdminBuckets;
   const streamBuckets = isStorageOps ? streamStorageOpsBuckets : streamCephAdminBuckets;
+  const refreshBucketListingCache = isStorageOps
+    ? refreshStorageOpsBucketListingCache
+    : refreshCephAdminBucketListingCache;
   const getBucketProperties = isStorageOps ? getStorageOpsBucketProperties : getCephAdminBucketProperties;
   const getBucketPublicAccessBlock = isStorageOps
     ? getStorageOpsBucketPublicAccessBlock
@@ -2174,6 +2213,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(defaultAdvancedFilter);
   const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(null);
+  const [storageOpsContexts, setStorageOpsContexts] = useState<ExecutionContext[]>([]);
+  const [storageOpsContextsLoading, setStorageOpsContextsLoading] = useState(false);
+  const [storageOpsContextsError, setStorageOpsContextsError] = useState<string | null>(null);
+  const [storageOpsContextFilter, setStorageOpsContextFilter] = useState("");
+  const [storageOpsEndpointFilter, setStorageOpsEndpointFilter] = useState("");
   const [uiTags, setUiTags] = useState<BucketUiTags>(() =>
     loadUiTags(selectedEndpointId, uiTagsNamespace, legacyUiTagsStorageKey)
   );
@@ -2188,6 +2232,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [orphanedTagBuckets, setOrphanedTagBuckets] = useState<string[]>([]);
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
+  const [showIntegrityModal, setShowIntegrityModal] = useState(false);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
   const [bulkConfigClipboard, setBulkConfigClipboard] = useState<BulkConfigClipboard | null>(() =>
     loadBulkConfigClipboard(bulkClipboardStorageKey)
@@ -2251,6 +2296,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [selectionTagActionLoading, setSelectionTagActionLoading] = useState<"add" | "remove" | null>(null);
   const [selectionTagAddInput, setSelectionTagAddInput] = useState("");
   const [selectionExportLoading, setSelectionExportLoading] = useState<SelectionExportFormat | null>(null);
+  const [cacheRefreshLoading, setCacheRefreshLoading] = useState(false);
   const [selectionActionProgress, setSelectionActionProgress] = useState<ActionProgressState | null>(null);
   const [tagSuggestionBucket, setTagSuggestionBucket] = useState<string | null>(null);
   const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
@@ -2294,6 +2340,142 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     [taggedBucketTargets]
   );
   const ownerQueryFilter = useMemo(() => ownerFilterFromSearch(location.search), [location.search]);
+  const storageOpsContextItems = useMemo(
+    () =>
+      storageOpsContexts
+        .filter((context) => context.kind === "account" || context.kind === "connection" || context.kind === "legacy_user")
+        .map((context) => {
+          const kind = toStorageOpsContextKind(context.kind);
+          const typeLabel = formatStorageOpsContextKindLabel(kind);
+          const entityTags = filterSelectorVisibleUiTags(context.tags);
+          const endpointTags = filterSelectorVisibleUiTags(context.endpoint_tags);
+          const tagItems = buildUiTagItems(entityTags, endpointTags);
+          const haystack = [
+            context.id,
+            context.display_name,
+            context.endpoint_name,
+            typeLabel,
+            context.kind,
+            kind,
+            ...extractUiTagLabels(entityTags),
+            ...extractUiTagLabels(endpointTags),
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return {
+            id: context.id,
+            name: context.display_name,
+            kind,
+            typeLabel,
+            endpointName: context.endpoint_name ?? null,
+            tagItems,
+            haystack,
+          };
+        })
+        .sort((a, b) => {
+          const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+          if (byName !== 0) return byName;
+          return a.id.localeCompare(b.id, undefined, { sensitivity: "base" });
+        }),
+    [storageOpsContexts]
+  );
+  const storageOpsContextLabelById = useMemo(() => {
+    const labels = new Map<string, string>();
+    storageOpsContextItems.forEach((context) => {
+      labels.set(context.id, context.name);
+    });
+    return labels;
+  }, [storageOpsContextItems]);
+  const filteredStorageOpsContextItems = useMemo(() => {
+    const query = storageOpsContextFilter.trim().toLowerCase();
+    if (!query) return storageOpsContextItems;
+    return storageOpsContextItems.filter((context) => context.haystack.includes(query));
+  }, [storageOpsContextFilter, storageOpsContextItems]);
+  const storageOpsContextSelectionSet = useMemo(
+    () => new Set(normalizeAdvancedSelectionValues(advancedDraft.contextIds)),
+    [advancedDraft.contextIds]
+  );
+  const allFilteredStorageOpsContextsSelected =
+    filteredStorageOpsContextItems.length > 0 &&
+    filteredStorageOpsContextItems.every((context) => storageOpsContextSelectionSet.has(context.id));
+  const hasFilteredStorageOpsContextSelection = filteredStorageOpsContextItems.some((context) =>
+    storageOpsContextSelectionSet.has(context.id)
+  );
+  const storageOpsEndpointItems = useMemo(() => {
+    const byName = new Map<
+      string,
+      {
+        name: string;
+        contextNames: string[];
+        tagItems: ReturnType<typeof buildUiTagItems>;
+        haystack: string;
+      }
+    >();
+    storageOpsContexts.forEach((context) => {
+      const endpointName = (context.endpoint_name ?? "").trim();
+      if (!endpointName) return;
+      const existing = byName.get(endpointName);
+      const entityTags = filterSelectorVisibleUiTags(context.tags);
+      const endpointTags = filterSelectorVisibleUiTags(context.endpoint_tags);
+      const tagItems = buildUiTagItems(entityTags, endpointTags);
+      if (existing) {
+        if (!existing.contextNames.includes(context.display_name)) {
+          existing.contextNames.push(context.display_name);
+        }
+        const knownTagKeys = new Set(existing.tagItems.map((tag) => tag.key));
+        tagItems.forEach((tag) => {
+          if (!knownTagKeys.has(tag.key)) {
+            existing.tagItems.push(tag);
+          }
+        });
+        existing.haystack = [
+          existing.haystack,
+          context.display_name,
+          formatStorageOpsContextKindLabel(context.kind),
+          context.kind,
+          ...extractUiTagLabels(entityTags),
+          ...extractUiTagLabels(endpointTags),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return;
+      }
+      byName.set(endpointName, {
+        name: endpointName,
+        contextNames: [context.display_name],
+        tagItems,
+        haystack: [
+          endpointName,
+          context.display_name,
+          formatStorageOpsContextKindLabel(context.kind),
+          context.kind,
+          ...extractUiTagLabels(entityTags),
+          ...extractUiTagLabels(endpointTags),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase(),
+      });
+    });
+    return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }, [storageOpsContexts]);
+  const filteredStorageOpsEndpointItems = useMemo(() => {
+    const query = storageOpsEndpointFilter.trim().toLowerCase();
+    if (!query) return storageOpsEndpointItems;
+    return storageOpsEndpointItems.filter((endpoint) => endpoint.haystack.includes(query));
+  }, [storageOpsEndpointFilter, storageOpsEndpointItems]);
+  const storageOpsEndpointSelectionSet = useMemo(
+    () => new Set(normalizeAdvancedSelectionValues(advancedDraft.endpointNames)),
+    [advancedDraft.endpointNames]
+  );
+  const allFilteredStorageOpsEndpointsSelected =
+    filteredStorageOpsEndpointItems.length > 0 &&
+    filteredStorageOpsEndpointItems.every((endpoint) => storageOpsEndpointSelectionSet.has(endpoint.name));
+  const hasFilteredStorageOpsEndpointSelection = filteredStorageOpsEndpointItems.some((endpoint) =>
+    storageOpsEndpointSelectionSet.has(endpoint.name)
+  );
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -2318,6 +2500,36 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setAdvancedDraft((prev) => stripUnsupportedAdvancedFeatureFilters(prev, featureSupport));
     setAdvancedApplied((prev) => (prev ? stripUnsupportedAdvancedFeatureFilters(prev, featureSupport) : prev));
   }, [featureSupport]);
+
+  useEffect(() => {
+    if (!isStorageOps) {
+      setStorageOpsContexts([]);
+      setStorageOpsContextsLoading(false);
+      setStorageOpsContextsError(null);
+      return;
+    }
+
+    let canceled = false;
+    setStorageOpsContextsLoading(true);
+    setStorageOpsContextsError(null);
+    listExecutionContexts("manager")
+      .then((items) => {
+        if (canceled) return;
+        setStorageOpsContexts(items);
+      })
+      .catch((error) => {
+        if (canceled) return;
+        setStorageOpsContexts([]);
+        setStorageOpsContextsError(extractError(error));
+      })
+      .finally(() => {
+        if (!canceled) setStorageOpsContextsLoading(false);
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [isStorageOps]);
 
   useEffect(() => {
     if (!activeActionMenuKey) {
@@ -2790,6 +3002,38 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     listBuckets,
     streamBuckets,
   });
+
+  const clearBucketListingUiCaches = () => {
+    ownerNameCacheRef.current = {};
+    ownerTooltipInflightRef.current = {};
+    setOwnerTooltipState({});
+    setActiveOwnerTooltipKey(null);
+    featureTooltipInflightRef.current = {};
+    setFeatureTooltipState({});
+    setActiveFeatureTooltipKey(null);
+    bucketPropertiesCacheRef.current = {};
+    bucketPropertiesInflightRef.current = {};
+    setAllFilteredBucketNames(null);
+    setAllFilteredBucketNamesKey(null);
+    setSelectAllProgress(null);
+  };
+
+  const refreshBucketListing = async () => {
+    if (!selectedEndpointId || cacheRefreshLoading) return;
+    setCacheRefreshLoading(true);
+    setError(null);
+    try {
+      await refreshBucketListingCache(selectedEndpointId);
+      clearBucketListingUiCaches();
+      refreshBuckets();
+    } catch (err) {
+      console.error(err);
+      setError(extractError(err));
+    } finally {
+      setCacheRefreshLoading(false);
+    }
+  };
+
   const usageUnavailableBadge = statsWarning ? "Bucket stats unavailable" : "Storage metrics unavailable";
   const usageUnavailableDescription = statsWarning
     ? statsWarning
@@ -3171,6 +3415,35 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     () => Array.from(selectedBuckets.values()).sort((a, b) => a.localeCompare(b)),
     [selectedBuckets]
   );
+  const selectedBucketItemByName = useMemo(() => {
+    const next = new Map<string, CephAdminBucket>();
+    items.forEach((bucket) => {
+      next.set(bucket.name, bucket);
+    });
+    return next;
+  }, [items]);
+  const selectedIntegrityTargets = useMemo<BucketIntegrityUiTarget[]>(() => {
+    if (!isStorageOps) {
+      return selectedBucketList.map((bucketName) => ({ bucketName }));
+    }
+    return selectedBucketList
+      .map((selectedName) => {
+        const bucket = selectedBucketItemByName.get(selectedName);
+        if (bucket) {
+          return {
+            bucketName: getStorageOpsBucketName(bucket),
+            contextId: getStorageOpsContextId(bucket),
+            contextName: (bucket as { context_name?: string | null }).context_name ?? null,
+          };
+        }
+        const decoded = decodeStorageOpsBucketRef(selectedName);
+        return {
+          bucketName: decoded?.bucketName ?? selectedName,
+          contextId: decoded?.contextId ?? "",
+        };
+      })
+      .filter((target) => target.bucketName.trim().length > 0);
+  }, [isStorageOps, selectedBucketItemByName, selectedBucketList]);
   const selectedUiTagSuggestions = useMemo(() => {
     if (selectedBucketList.length === 0) return [];
     const selectedNames = new Set(selectedBucketList.map(normalizeBucketName));
@@ -5419,8 +5692,69 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
   };
 
+  const updateAdvancedContextIds = (values: string[]) => {
+    const contextIds = normalizeAdvancedSelectionValues(values);
+    setAdvancedDraft((prev) => ({ ...prev, contextIds }));
+  };
+
+  const toggleAdvancedContextId = (contextId: string) => {
+    const current = normalizeAdvancedSelectionValues(advancedDraft.contextIds);
+    if (current.includes(contextId)) {
+      updateAdvancedContextIds(current.filter((id) => id !== contextId));
+      return;
+    }
+    updateAdvancedContextIds([...current, contextId]);
+  };
+
+  const selectFilteredStorageOpsContexts = () => {
+    const seen = new Set(normalizeAdvancedSelectionValues(advancedDraft.contextIds));
+    const next = [...seen];
+    filteredStorageOpsContextItems.forEach((context) => {
+      if (seen.has(context.id)) return;
+      seen.add(context.id);
+      next.push(context.id);
+    });
+    updateAdvancedContextIds(next);
+  };
+
+  const deselectFilteredStorageOpsContexts = () => {
+    const filteredIds = new Set(filteredStorageOpsContextItems.map((context) => context.id));
+    updateAdvancedContextIds(normalizeAdvancedSelectionValues(advancedDraft.contextIds).filter((id) => !filteredIds.has(id)));
+  };
+
+  const updateAdvancedEndpointNames = (values: string[]) => {
+    setAdvancedDraft((prev) => ({ ...prev, endpointNames: normalizeAdvancedSelectionValues(values) }));
+  };
+
+  const toggleAdvancedEndpointName = (endpointName: string) => {
+    const current = normalizeAdvancedSelectionValues(advancedDraft.endpointNames);
+    if (current.includes(endpointName)) {
+      updateAdvancedEndpointNames(current.filter((name) => name !== endpointName));
+      return;
+    }
+    updateAdvancedEndpointNames([...current, endpointName]);
+  };
+
+  const selectFilteredStorageOpsEndpoints = () => {
+    const seen = new Set(normalizeAdvancedSelectionValues(advancedDraft.endpointNames));
+    const next = [...seen];
+    filteredStorageOpsEndpointItems.forEach((endpoint) => {
+      if (seen.has(endpoint.name)) return;
+      seen.add(endpoint.name);
+      next.push(endpoint.name);
+    });
+    updateAdvancedEndpointNames(next);
+  };
+
+  const deselectFilteredStorageOpsEndpoints = () => {
+    const filteredNames = new Set(filteredStorageOpsEndpointItems.map((endpoint) => endpoint.name));
+    updateAdvancedEndpointNames(
+      normalizeAdvancedSelectionValues(advancedDraft.endpointNames).filter((name) => !filteredNames.has(name))
+    );
+  };
+
   const updateAdvancedMatchMode = (
-    field: "contextMatchMode" | "endpointMatchMode" | "tenantMatchMode" | "ownerMatchMode" | "ownerNameMatchMode" | "s3TagsMatchMode",
+    field: "tenantMatchMode" | "ownerMatchMode" | "ownerNameMatchMode" | "s3TagsMatchMode",
     value: TextMatchMode
   ) => {
     setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
@@ -5519,79 +5853,61 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       fieldClass: uiFeatureStateHighlightFieldClasses[tone],
     };
   };
-  const contextAppliedValue = (advancedApplied?.context ?? "").trim();
-  const endpointAppliedValue = (advancedApplied?.endpoint ?? "").trim();
-  const kindAppliedValue = advancedApplied?.kind ?? "any";
+  const contextAppliedIds = normalizeAdvancedSelectionValues(advancedApplied?.contextIds);
+  const contextAppliedIdsSerialized = serializeAdvancedSelectionValues(contextAppliedIds);
+  const endpointAppliedNames = normalizeAdvancedSelectionValues(advancedApplied?.endpointNames);
+  const endpointAppliedNamesSerialized = serializeAdvancedSelectionValues(endpointAppliedNames);
   const tenantAppliedValue = (advancedApplied?.tenant ?? "").trim();
   const ownerAppliedValue = (advancedApplied?.owner ?? "").trim();
   const ownerNameAppliedValue = (advancedApplied?.ownerName ?? "").trim();
   const s3TagsAppliedExpressions = parseS3TagExpressions(advancedApplied?.s3Tags ?? "");
   const s3TagsAppliedSerialized = serializeS3TagExpressions(s3TagsAppliedExpressions);
-  const contextAppliedMatchMode = advancedApplied?.contextMatchMode ?? "contains";
-  const endpointAppliedMatchMode = advancedApplied?.endpointMatchMode ?? "contains";
   const tenantAppliedMatchMode = advancedApplied?.tenantMatchMode ?? "contains";
   const ownerAppliedMatchMode = advancedApplied?.ownerMatchMode ?? "contains";
   const ownerNameAppliedMatchMode = advancedApplied?.ownerNameMatchMode ?? "contains";
   const s3TagsAppliedMatchMode = advancedApplied?.s3TagsMatchMode ?? "contains";
-  const contextAppliedParsed = parseExactListInput(advancedApplied?.context ?? "");
-  const endpointAppliedParsed = parseExactListInput(advancedApplied?.endpoint ?? "");
   const tenantAppliedParsed = parseExactListInput(advancedApplied?.tenant ?? "");
   const ownerAppliedParsed = parseExactListInput(advancedApplied?.owner ?? "");
   const ownerNameAppliedParsed = parseExactListInput(advancedApplied?.ownerName ?? "");
   const s3TagsAppliedParsed = parseExactListInput(advancedApplied?.s3Tags ?? "");
-  const contextAppliedForcesExact = contextAppliedParsed.listProvided && contextAppliedParsed.values.length > 0;
-  const endpointAppliedForcesExact = endpointAppliedParsed.listProvided && endpointAppliedParsed.values.length > 0;
   const tenantAppliedForcesExact = tenantAppliedParsed.listProvided && tenantAppliedParsed.values.length > 0;
   const ownerAppliedForcesExact = ownerAppliedParsed.listProvided && ownerAppliedParsed.values.length > 0;
   const ownerNameAppliedForcesExact = ownerNameAppliedParsed.listProvided && ownerNameAppliedParsed.values.length > 0;
   const s3TagsAppliedForcesExact = s3TagsAppliedParsed.listProvided && s3TagsAppliedParsed.values.length > 0;
-  const contextAppliedEffectiveMatchMode: TextMatchMode = contextAppliedForcesExact ? "exact" : contextAppliedMatchMode;
-  const endpointAppliedEffectiveMatchMode: TextMatchMode = endpointAppliedForcesExact ? "exact" : endpointAppliedMatchMode;
   const tenantAppliedEffectiveMatchMode: TextMatchMode = tenantAppliedForcesExact ? "exact" : tenantAppliedMatchMode;
   const ownerAppliedEffectiveMatchMode: TextMatchMode = ownerAppliedForcesExact ? "exact" : ownerAppliedMatchMode;
   const ownerNameAppliedEffectiveMatchMode: TextMatchMode = ownerNameAppliedForcesExact ? "exact" : ownerNameAppliedMatchMode;
   const s3TagsAppliedEffectiveMatchMode: TextMatchMode = s3TagsAppliedForcesExact ? "exact" : s3TagsAppliedMatchMode;
   const ownerNameAppliedScope = advancedApplied?.ownerNameScope ?? "any";
-  const contextDraftValue = advancedDraft.context.trim();
-  const endpointDraftValue = advancedDraft.endpoint.trim();
-  const kindDraftValue = advancedDraft.kind;
+  const contextDraftIds = normalizeAdvancedSelectionValues(advancedDraft.contextIds);
+  const contextDraftIdsSerialized = serializeAdvancedSelectionValues(contextDraftIds);
+  const endpointDraftNames = normalizeAdvancedSelectionValues(advancedDraft.endpointNames);
+  const endpointDraftNamesSerialized = serializeAdvancedSelectionValues(endpointDraftNames);
   const tenantDraftValue = advancedDraft.tenant.trim();
   const ownerDraftValue = advancedDraft.owner.trim();
   const ownerNameDraftValue = advancedDraft.ownerName.trim();
   const s3TagsDraftExpressions = parseS3TagExpressions(advancedDraft.s3Tags);
   const s3TagsDraftSerialized = serializeS3TagExpressions(s3TagsDraftExpressions);
-  const contextDraftMatchMode = advancedDraft.contextMatchMode;
-  const endpointDraftMatchMode = advancedDraft.endpointMatchMode;
   const tenantDraftMatchMode = advancedDraft.tenantMatchMode;
   const ownerDraftMatchMode = advancedDraft.ownerMatchMode;
   const ownerNameDraftMatchMode = advancedDraft.ownerNameMatchMode;
   const s3TagsDraftMatchMode = advancedDraft.s3TagsMatchMode;
-  const contextDraftParsed = parseExactListInput(advancedDraft.context);
-  const endpointDraftParsed = parseExactListInput(advancedDraft.endpoint);
   const tenantDraftParsed = parseExactListInput(advancedDraft.tenant);
   const ownerDraftParsed = parseExactListInput(advancedDraft.owner);
   const ownerNameDraftParsed = parseExactListInput(advancedDraft.ownerName);
   const s3TagsDraftParsed = parseExactListInput(advancedDraft.s3Tags);
-  const contextDraftForcesExact = contextDraftParsed.listProvided && contextDraftParsed.values.length > 0;
-  const endpointDraftForcesExact = endpointDraftParsed.listProvided && endpointDraftParsed.values.length > 0;
   const tenantDraftForcesExact = tenantDraftParsed.listProvided && tenantDraftParsed.values.length > 0;
   const ownerDraftForcesExact = ownerDraftParsed.listProvided && ownerDraftParsed.values.length > 0;
   const ownerNameDraftForcesExact = ownerNameDraftParsed.listProvided && ownerNameDraftParsed.values.length > 0;
   const s3TagsDraftForcesExact = s3TagsDraftParsed.listProvided && s3TagsDraftParsed.values.length > 0;
-  const contextDraftEffectiveMatchMode: TextMatchMode = contextDraftForcesExact ? "exact" : contextDraftMatchMode;
-  const endpointDraftEffectiveMatchMode: TextMatchMode = endpointDraftForcesExact ? "exact" : endpointDraftMatchMode;
   const tenantDraftEffectiveMatchMode: TextMatchMode = tenantDraftForcesExact ? "exact" : tenantDraftMatchMode;
   const ownerDraftEffectiveMatchMode: TextMatchMode = ownerDraftForcesExact ? "exact" : ownerDraftMatchMode;
   const ownerNameDraftEffectiveMatchMode: TextMatchMode = ownerNameDraftForcesExact ? "exact" : ownerNameDraftMatchMode;
   const s3TagsDraftEffectiveMatchMode: TextMatchMode = s3TagsDraftForcesExact ? "exact" : s3TagsDraftMatchMode;
   const ownerNameDraftScope = advancedDraft.ownerNameScope;
   const contextPending =
-    contextDraftValue !== contextAppliedValue ||
-    (contextDraftValue.length > 0 && contextDraftEffectiveMatchMode !== contextAppliedEffectiveMatchMode);
-  const endpointPending =
-    endpointDraftValue !== endpointAppliedValue ||
-    (endpointDraftValue.length > 0 && endpointDraftEffectiveMatchMode !== endpointAppliedEffectiveMatchMode);
-  const kindPending = kindDraftValue !== kindAppliedValue;
+    contextDraftIdsSerialized !== contextAppliedIdsSerialized;
+  const endpointPending = endpointDraftNamesSerialized !== endpointAppliedNamesSerialized;
   const tenantPending =
     tenantDraftValue !== tenantAppliedValue || (tenantDraftValue.length > 0 && tenantDraftEffectiveMatchMode !== tenantAppliedEffectiveMatchMode);
   const ownerPending =
@@ -5604,16 +5920,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     s3TagsDraftSerialized !== s3TagsAppliedSerialized ||
     (s3TagsDraftExpressions.length > 0 && s3TagsDraftEffectiveMatchMode !== s3TagsAppliedEffectiveMatchMode);
   const contextFieldState = fieldHighlight(
-    Boolean(contextAppliedValue),
+    contextAppliedIds.length > 0,
     contextPending
   );
   const endpointFieldState = fieldHighlight(
-    Boolean(endpointAppliedValue),
+    endpointAppliedNames.length > 0,
     endpointPending
-  );
-  const kindFieldState = fieldHighlight(
-    kindAppliedValue !== "any",
-    kindPending
   );
   const tenantFieldState = fieldHighlight(
     Boolean(tenantAppliedValue),
@@ -5649,16 +5961,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   );
   const featureDetailFiltersActive = featureDetailDraftLabels.length > 0;
   const ownerPrefilterActive =
-    contextDraftValue.length > 0 ||
-    endpointDraftValue.length > 0 ||
-    kindDraftValue !== "any" ||
+    contextDraftIds.length > 0 ||
+    endpointDraftNames.length > 0 ||
     tenantDraftValue.length > 0 ||
     ownerDraftValue.length > 0 ||
     ownerNameDraftScope !== "any";
   const advancedDraftIdentityCount =
-    Number(isStorageOps && contextDraftValue.length > 0) +
-    Number(isStorageOps && endpointDraftValue.length > 0) +
-    Number(isStorageOps && kindDraftValue !== "any") +
+    Number(isStorageOps && contextDraftIds.length > 0) +
+    Number(isStorageOps && endpointDraftNames.length > 0) +
     Number(tenantDraftValue.length > 0) +
     Number(ownerDraftValue.length > 0) +
     Number(ownerNameLookupActive) +
@@ -5781,14 +6091,19 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setAdvancedApplied((prev) => (prev ? { ...prev, [field]: "" } : prev));
     setPage(1);
   };
+  const clearAdvancedContextIds = () => {
+    setAdvancedDraft((prev) => ({ ...prev, contextIds: [] }));
+    setAdvancedApplied((prev) => (prev ? { ...prev, contextIds: [] } : prev));
+    setPage(1);
+  };
+  const clearAdvancedEndpointNames = () => {
+    setAdvancedDraft((prev) => ({ ...prev, endpointNames: [] }));
+    setAdvancedApplied((prev) => (prev ? { ...prev, endpointNames: [] } : prev));
+    setPage(1);
+  };
   const clearAdvancedOwnerScope = () => {
     setAdvancedDraft((prev) => ({ ...prev, ownerNameScope: "any" }));
     setAdvancedApplied((prev) => (prev ? { ...prev, ownerNameScope: "any" } : prev));
-    setPage(1);
-  };
-  const clearAdvancedKind = () => {
-    setAdvancedDraft((prev) => ({ ...prev, kind: "any" }));
-    setAdvancedApplied((prev) => (prev ? { ...prev, kind: "any" } : prev));
     setPage(1);
   };
   const clearAdvancedFeatureField = (feature: FeatureKey) => {
@@ -5823,8 +6138,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       clearAdvancedOwnerScope();
       return;
     }
-    if (action.type === "advanced_kind") {
-      clearAdvancedKind();
+    if (action.type === "advanced_context_ids") {
+      clearAdvancedContextIds();
+      return;
+    }
+    if (action.type === "advanced_endpoint_names") {
+      clearAdvancedEndpointNames();
       return;
     }
     if (action.type === "advanced_text" || action.type === "advanced_numeric") {
@@ -5871,34 +6190,20 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
     if (advancedApplied && hasAdvancedFilters(advancedApplied, isStorageOps, usageFeatureEnabled, featureSupport)) {
       if (isStorageOps) {
-        const context = advancedApplied.context.trim();
-        if (context) {
-          const label = formatTextFilterSummary("Context", advancedApplied.context, contextAppliedEffectiveMatchMode);
-          if (label) {
-            items.push({
-              id: "context",
-              label,
-              remove: { type: "advanced_text", field: "context" },
-            });
-          }
-        }
-        if (advancedApplied.kind !== "any") {
+        if (contextAppliedIds.length > 0) {
+          const labels = contextAppliedIds.map((id) => storageOpsContextLabelById.get(id) ?? id);
           items.push({
-            id: "context-kind",
-            label: `Kind: ${advancedApplied.kind === "account" ? "Account" : "Connection"}`,
-            remove: { type: "advanced_kind" },
+            id: "context-ids",
+            label: `Contexts: ${formatBucketNamesPreview(labels, 2)}`,
+            remove: { type: "advanced_context_ids" },
           });
         }
-        const endpoint = advancedApplied.endpoint.trim();
-        if (endpoint) {
-          const label = formatTextFilterSummary("Endpoint", advancedApplied.endpoint, endpointAppliedEffectiveMatchMode);
-          if (label) {
-            items.push({
-              id: "endpoint",
-              label,
-              remove: { type: "advanced_text", field: "endpoint" },
-            });
-          }
+        if (endpointAppliedNames.length > 0) {
+          items.push({
+            id: "endpoint-names",
+            label: `Endpoints: ${formatBucketNamesPreview(endpointAppliedNames, 2)}`,
+            remove: { type: "advanced_endpoint_names" },
+          });
         }
       }
 
@@ -6025,8 +6330,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     isStorageOps,
     usageFeatureEnabled,
     featureSupport,
-    contextAppliedEffectiveMatchMode,
-    endpointAppliedEffectiveMatchMode,
+    contextAppliedIds,
+    endpointAppliedNames,
+    storageOpsContextLabelById,
     tenantAppliedEffectiveMatchMode,
     ownerAppliedEffectiveMatchMode,
     ownerNameAppliedEffectiveMatchMode,
@@ -6044,16 +6350,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const advancedDraftSummaryItems = useMemo(() => {
     const items: Array<{ id: string; label: string }> = [];
     if (isStorageOps) {
-      const contextLabel = formatTextFilterSummary("Context", advancedDraft.context, contextDraftEffectiveMatchMode);
-      if (contextLabel) items.push({ id: "draft-context", label: contextLabel });
-      if (advancedDraft.kind !== "any") {
-        items.push({
-          id: "draft-context-kind",
-          label: `Kind: ${advancedDraft.kind === "account" ? "Account" : "Connection"}`,
-        });
+      if (contextDraftIds.length > 0) {
+        const labels = contextDraftIds.map((id) => storageOpsContextLabelById.get(id) ?? id);
+        items.push({ id: "draft-context-ids", label: `Contexts: ${formatBucketNamesPreview(labels, 2)}` });
       }
-      const endpointLabel = formatTextFilterSummary("Endpoint", advancedDraft.endpoint, endpointDraftEffectiveMatchMode);
-      if (endpointLabel) items.push({ id: "draft-endpoint", label: endpointLabel });
+      if (endpointDraftNames.length > 0) {
+        items.push({ id: "draft-endpoint-names", label: `Endpoints: ${formatBucketNamesPreview(endpointDraftNames, 2)}` });
+      }
     }
 
     const tenantLabel = formatTextFilterSummary("Tenant", advancedDraft.tenant, tenantDraftEffectiveMatchMode);
@@ -6142,8 +6445,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     isStorageOps,
     usageFeatureEnabled,
     featureSupport,
-    contextDraftEffectiveMatchMode,
-    endpointDraftEffectiveMatchMode,
+    contextDraftIds,
+    endpointDraftNames,
+    storageOpsContextLabelById,
     tenantDraftEffectiveMatchMode,
     ownerDraftEffectiveMatchMode,
     ownerNameDraftEffectiveMatchMode,
@@ -7414,6 +7718,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                 <p className="ui-caption text-slate-500 dark:text-slate-400">{total} result(s)</p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => void refreshBucketListing()}
+                  disabled={
+                    !selectedEndpointId ||
+                    cacheRefreshLoading ||
+                    loading ||
+                    loadingDetails ||
+                    advancedProgress.active
+                  }
+                  className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                  title="Flush cached bucket listings and reload"
+                >
+                  <RefreshIcon className={`h-3.5 w-3.5 ${cacheRefreshLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </button>
                 <div className="relative" ref={columnPickerRef}>
                   <button
                     type="button"
@@ -7664,7 +7984,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           </div>
                           <div className="grid gap-3 md:grid-cols-2">
                             {isStorageOps && (
-                              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 md:col-span-2">
                                 <div className="flex items-center justify-between gap-2">
                                   <label
                                     className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${contextFieldState.labelClass}`}
@@ -7674,63 +7994,88 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                       {renderFilterCostIndicator("low", "Low cost: context filter runs on direct listing metadata.")}
                                     </span>
                                   </label>
-                                  <div className="inline-flex items-center gap-1">
-                                    <button
-                                      type="button"
-                                      disabled={contextDraftForcesExact}
-                                      onClick={() => updateAdvancedMatchMode("contextMatchMode", "contains")}
-                                      className={matchModeButtonClass(contextDraftEffectiveMatchMode === "contains", contextDraftForcesExact)}
-                                    >
-                                      Contains
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={contextDraftForcesExact}
-                                      onClick={() => updateAdvancedMatchMode("contextMatchMode", "exact")}
-                                      className={matchModeButtonClass(contextDraftEffectiveMatchMode === "exact", contextDraftForcesExact)}
-                                    >
-                                      Exact
-                                    </button>
-                                  </div>
-                                </div>
-                                <textarea
-                                  value={advancedDraft.context}
-                                  onChange={(e) => updateAdvancedField("context", e.target.value)}
-                                  onKeyDown={(event) => event.stopPropagation()}
-                                  placeholder="Account A, Connection B"
-                                  rows={2}
-                                  className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                    contextFieldState.fieldClass
-                                  }`}
-                                />
-                              </div>
-                            )}
-
-                            {isStorageOps && (
-                              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                                <label
-                                  className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${kindFieldState.labelClass}`}
-                                >
-                                  <span className="inline-flex items-center gap-1">
-                                    <span>Kind</span>
-                                    {renderFilterCostIndicator("low", "Low cost: kind filter runs on direct listing metadata.")}
+                                  <span className="ui-caption text-slate-500 dark:text-slate-400">
+                                    {contextDraftIds.length}/{storageOpsContextItems.length}
                                   </span>
-                                </label>
-                                <select
-                                  value={advancedDraft.kind}
-                                  onChange={(e) =>
-                                    setAdvancedDraft((prev) => ({ ...prev, kind: e.target.value as StorageOpsContextFilterKind }))
-                                  }
-                                  className={`mt-2 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                    kindFieldState.fieldClass
-                                  }`}
-                                  title="Context kind"
-                                >
-                                  <option value="any">Any</option>
-                                  <option value="account">Account</option>
-                                  <option value="s3_user">S3 user</option>
-                                  <option value="connection">Connection</option>
-                                </select>
+                                </div>
+                                <div className="mt-2 flex items-center gap-1.5">
+                                  <input
+                                    value={storageOpsContextFilter}
+                                    onChange={(event) => setStorageOpsContextFilter(event.target.value)}
+                                    onKeyDown={(event) => event.stopPropagation()}
+                                    aria-label="Filter contexts"
+                                    placeholder="Filter contexts"
+                                    className={`min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                                      contextFieldState.fieldClass
+                                    }`}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={selectFilteredStorageOpsContexts}
+                                    disabled={filteredStorageOpsContextItems.length === 0 || allFilteredStorageOpsContextsSelected}
+                                    className="rounded-md border border-slate-200 px-1.5 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 dark:disabled:text-slate-500"
+                                  >
+                                    Select filtered
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={deselectFilteredStorageOpsContexts}
+                                    disabled={!hasFilteredStorageOpsContextSelection}
+                                    className="rounded-md border border-slate-200 px-1.5 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 dark:disabled:text-slate-500"
+                                  >
+                                    Deselect filtered
+                                  </button>
+                                </div>
+                                <div className="mt-2 max-h-36 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700">
+                                  {storageOpsContextsLoading ? (
+                                    <p className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">Loading contexts...</p>
+                                  ) : storageOpsContextsError ? (
+                                    <p className="px-2 py-2 ui-caption text-rose-600 dark:text-rose-300">{storageOpsContextsError}</p>
+                                  ) : filteredStorageOpsContextItems.length === 0 ? (
+                                    <p className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">No matching context.</p>
+                                  ) : (
+                                    filteredStorageOpsContextItems.map((context) => {
+                                      const selected = storageOpsContextSelectionSet.has(context.id);
+                                      return (
+                                        <label
+                                          key={context.id}
+                                          className={`flex cursor-pointer items-center gap-2 border-b border-slate-100 px-2 py-1 last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/70 ${
+                                            selected ? "bg-primary/5 dark:bg-primary-500/10" : ""
+                                          }`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={selected}
+                                            onChange={() => toggleAdvancedContextId(context.id)}
+                                            className={uiCheckboxClass}
+                                          />
+                                          <div className="min-w-0 flex-1">
+                                            <span className="flex min-w-0 items-center gap-1.5">
+                                              <span className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">
+                                                {context.name}
+                                              </span>
+                                              <span className="shrink-0 rounded border border-slate-200 bg-slate-100 px-1 py-0 text-[10px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                                {context.typeLabel}
+                                              </span>
+                                            </span>
+                                            <div className="mt-0.5 flex min-w-0 items-center gap-1">
+                                              <span className="truncate text-[10px] text-slate-500 dark:text-slate-400">
+                                                {context.endpointName ?? context.id}
+                                              </span>
+                                              <UiTagBadgeList
+                                                items={context.tagItems}
+                                                maxVisible={2}
+                                                variant="listing-compact"
+                                                layout="inline-compact"
+                                                className="max-w-[9rem]"
+                                              />
+                                            </div>
+                                          </div>
+                                        </label>
+                                      );
+                                    })
+                                  )}
+                                </div>
                               </div>
                             )}
 
@@ -7745,35 +8090,88 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                       {renderFilterCostIndicator("low", "Low cost: endpoint filter runs on direct listing metadata.")}
                                     </span>
                                   </label>
-                                  <div className="inline-flex items-center gap-1">
-                                    <button
-                                      type="button"
-                                      disabled={endpointDraftForcesExact}
-                                      onClick={() => updateAdvancedMatchMode("endpointMatchMode", "contains")}
-                                      className={matchModeButtonClass(endpointDraftEffectiveMatchMode === "contains", endpointDraftForcesExact)}
-                                    >
-                                      Contains
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={endpointDraftForcesExact}
-                                      onClick={() => updateAdvancedMatchMode("endpointMatchMode", "exact")}
-                                      className={matchModeButtonClass(endpointDraftEffectiveMatchMode === "exact", endpointDraftForcesExact)}
-                                    >
-                                      Exact
-                                    </button>
-                                  </div>
+                                  <span className="ui-caption text-slate-500 dark:text-slate-400">
+                                    {endpointDraftNames.length}/{storageOpsEndpointItems.length}
+                                  </span>
                                 </div>
-                                <textarea
-                                  value={advancedDraft.endpoint}
-                                  onChange={(e) => updateAdvancedField("endpoint", e.target.value)}
-                                  onKeyDown={(event) => event.stopPropagation()}
-                                  placeholder="Default, Archive"
-                                  rows={2}
-                                  className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                    endpointFieldState.fieldClass
-                                  }`}
-                                />
+                                <div className="mt-2 flex items-center gap-1.5">
+                                  <input
+                                    value={storageOpsEndpointFilter}
+                                    onChange={(event) => setStorageOpsEndpointFilter(event.target.value)}
+                                    onKeyDown={(event) => event.stopPropagation()}
+                                    aria-label="Filter endpoints"
+                                    placeholder="Filter endpoints"
+                                    className={`min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                                      endpointFieldState.fieldClass
+                                    }`}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={selectFilteredStorageOpsEndpoints}
+                                    disabled={filteredStorageOpsEndpointItems.length === 0 || allFilteredStorageOpsEndpointsSelected}
+                                    className="rounded-md border border-slate-200 px-1.5 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 dark:disabled:text-slate-500"
+                                  >
+                                    Select filtered
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={deselectFilteredStorageOpsEndpoints}
+                                    disabled={!hasFilteredStorageOpsEndpointSelection}
+                                    className="rounded-md border border-slate-200 px-1.5 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 dark:disabled:text-slate-500"
+                                  >
+                                    Deselect filtered
+                                  </button>
+                                </div>
+                                <div className="mt-2 max-h-36 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700">
+                                  {storageOpsContextsLoading ? (
+                                    <p className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">Loading endpoints...</p>
+                                  ) : storageOpsContextsError ? (
+                                    <p className="px-2 py-2 ui-caption text-rose-600 dark:text-rose-300">{storageOpsContextsError}</p>
+                                  ) : filteredStorageOpsEndpointItems.length === 0 ? (
+                                    <p className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">No matching endpoint.</p>
+                                  ) : (
+                                    filteredStorageOpsEndpointItems.map((endpoint) => {
+                                      const selected = storageOpsEndpointSelectionSet.has(endpoint.name);
+                                      return (
+                                        <label
+                                          key={endpoint.name}
+                                          className={`flex cursor-pointer items-center gap-2 border-b border-slate-100 px-2 py-1 last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/70 ${
+                                            selected ? "bg-primary/5 dark:bg-primary-500/10" : ""
+                                          }`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={selected}
+                                            onChange={() => toggleAdvancedEndpointName(endpoint.name)}
+                                            className={uiCheckboxClass}
+                                          />
+                                          <div className="min-w-0 flex-1">
+                                            <span className="flex min-w-0 items-center gap-1.5">
+                                              <span className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">
+                                                {endpoint.name}
+                                              </span>
+                                              <span className="shrink-0 rounded border border-slate-200 bg-slate-100 px-1 py-0 text-[10px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                                {endpoint.contextNames.length}
+                                              </span>
+                                            </span>
+                                            <div className="mt-0.5 flex min-w-0 items-center gap-1">
+                                              <span className="truncate text-[10px] text-slate-500 dark:text-slate-400">
+                                                {formatBucketNamesPreview(endpoint.contextNames, 2)}
+                                              </span>
+                                              <UiTagBadgeList
+                                                items={endpoint.tagItems}
+                                                maxVisible={2}
+                                                variant="listing-compact"
+                                                layout="inline-compact"
+                                                className="max-w-[9rem]"
+                                              />
+                                            </div>
+                                          </div>
+                                        </label>
+                                      );
+                                    })
+                                  )}
+                                </div>
                               </div>
                             )}
 
@@ -8744,6 +9142,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             selectionActionProgress={selectionActionProgress}
             isStorageOps={isStorageOps}
             onShowCompareModal={() => setShowCompareModal(true)}
+            onShowIntegrityModal={() => setShowIntegrityModal(true)}
             openBulkUpdateModal={openBulkUpdateModal}
           />
 
@@ -8917,6 +9316,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           sourceBuckets={selectedBucketList}
           endpoints={endpoints}
           onClose={() => setShowCompareModal(false)}
+        />
+      )}
+      {!isStorageOps && showIntegrityModal && selectedEndpointId && selectedIntegrityTargets.length > 0 && (
+        <BucketIntegrityCheckModal
+          mode="ceph-admin"
+          endpointId={selectedEndpointId}
+          endpointName={selectedEndpoint?.name}
+          targets={selectedIntegrityTargets}
+          onClose={() => setShowIntegrityModal(false)}
+        />
+      )}
+      {isStorageOps && showIntegrityModal && selectedIntegrityTargets.length > 0 && (
+        <BucketIntegrityCheckModal
+          mode="storage-ops"
+          targets={selectedIntegrityTargets}
+          onClose={() => setShowIntegrityModal(false)}
         />
       )}
       <BucketOpsBulkUpdateModal open={showBulkUpdateModal} onClose={closeBulkUpdateModal}>

@@ -21,6 +21,7 @@ FEATURE_KEYS: tuple[str, ...] = (
     "iam",
     "sns",
     "sse",
+    "replication",
     "healthcheck",
 )
 
@@ -88,6 +89,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "iam": {"enabled": False, "endpoint": None},
         "sns": {"enabled": False, "endpoint": None},
         "sse": {"enabled": False, "endpoint": None},
+        "replication": {"enabled": False, "endpoint": None},
         "healthcheck": {"enabled": True, "mode": "http", "url": None},
     },
     StorageProvider.AWS: {
@@ -100,6 +102,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "iam": {"enabled": True, "endpoint": AWS_IAM_ENDPOINT},
         "sns": {"enabled": False, "endpoint": None},
         "sse": {"enabled": True, "endpoint": None},
+        "replication": {"enabled": False, "endpoint": None},
         "healthcheck": {"enabled": True, "mode": "http", "url": None},
     },
     StorageProvider.OTHER: {
@@ -112,6 +115,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "iam": {"enabled": False, "endpoint": None},
         "sns": {"enabled": False, "endpoint": None},
         "sse": {"enabled": False, "endpoint": None},
+        "replication": {"enabled": False, "endpoint": None},
         "healthcheck": {"enabled": True, "mode": "http", "url": None},
     },
 }
@@ -131,6 +135,7 @@ class EndpointFeatureFlags:
     iam_endpoint: Optional[str]
     sns_enabled: bool
     sse_enabled: bool
+    replication_enabled: bool
     healthcheck_enabled: bool
     healthcheck_mode: str
     healthcheck_url: Optional[str]
@@ -218,7 +223,7 @@ def normalize_features_config(
         features["account"]["enabled"] = bool(features.get("admin", {}).get("enabled"))
 
     if normalized_provider != StorageProvider.CEPH:
-        for key in ("admin", "account", "usage", "metrics", "sns"):
+        for key in ("admin", "account", "usage", "metrics", "sns", "replication"):
             if features[key]["enabled"]:
                 raise ValueError(
                     f"Feature '{key}' is only available for Ceph endpoints."
@@ -264,6 +269,7 @@ def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
         iam_endpoint=features.get("iam", {}).get("endpoint"),
         sns_enabled=bool(features.get("sns", {}).get("enabled")),
         sse_enabled=bool(features.get("sse", {}).get("enabled")),
+        replication_enabled=bool(features.get("replication", {}).get("enabled")),
         healthcheck_enabled=bool(features.get("healthcheck", {}).get("enabled", True)),
         healthcheck_mode=str(features.get("healthcheck", {}).get("mode") or "http").strip().lower(),
         healthcheck_url=features.get("healthcheck", {}).get("url"),
@@ -325,4 +331,5 @@ def features_to_capabilities(features: dict[str, dict[str, Any]]) -> dict[str, b
         "iam": bool(features.get("iam", {}).get("enabled")),
         "sns": bool(features.get("sns", {}).get("enabled")),
         "sse": bool(features.get("sse", {}).get("enabled")),
+        "replication": bool(features.get("replication", {}).get("enabled")),
     }

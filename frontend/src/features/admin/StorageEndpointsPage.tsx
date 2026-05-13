@@ -48,7 +48,18 @@ type FormState = {
 };
 
 type HealthcheckMode = "http" | "s3";
-type FeatureKey = "admin" | "account" | "sts" | "usage" | "metrics" | "static_website" | "iam" | "sns" | "sse" | "healthcheck";
+type FeatureKey =
+  | "admin"
+  | "account"
+  | "sts"
+  | "usage"
+  | "metrics"
+  | "static_website"
+  | "iam"
+  | "sns"
+  | "sse"
+  | "replication"
+  | "healthcheck";
 
 type FeatureState = {
   enabled: boolean;
@@ -58,7 +69,19 @@ type FeatureState = {
 
 type FeaturesState = Record<FeatureKey, FeatureState>;
 
-const FEATURE_KEYS: FeatureKey[] = ["admin", "account", "sts", "usage", "metrics", "static_website", "iam", "sns", "sse", "healthcheck"];
+const FEATURE_KEYS: FeatureKey[] = [
+  "admin",
+  "account",
+  "sts",
+  "usage",
+  "metrics",
+  "static_website",
+  "iam",
+  "sns",
+  "sse",
+  "replication",
+  "healthcheck",
+];
 const AWS_DEFAULT_REGION = "us-east-1";
 const AWS_IAM_ENDPOINT = "https://iam.amazonaws.com";
 const AWS_GOV_IAM_ENDPOINT = "https://iam.us-gov.amazonaws.com";
@@ -120,6 +143,7 @@ function createEmptyFeatures(): FeaturesState {
     iam: { enabled: false, endpoint: "" },
     sns: { enabled: false, endpoint: "" },
     sse: { enabled: false, endpoint: "" },
+    replication: { enabled: false, endpoint: "" },
     healthcheck: { enabled: true, endpoint: "", mode: "http" },
   };
 }
@@ -138,6 +162,7 @@ function defaultFeaturesForProvider(provider: StorageProvider, region = AWS_DEFA
       iam: { ...base.iam, enabled: true },
       sns: { ...base.sns, enabled: false },
       sse: { ...base.sse, enabled: false },
+      replication: { ...base.replication, enabled: false },
     };
   }
   if (provider === "aws") {
@@ -147,6 +172,7 @@ function defaultFeaturesForProvider(provider: StorageProvider, region = AWS_DEFA
       static_website: { ...base.static_website, enabled: true },
       iam: { ...base.iam, enabled: true, endpoint: awsIamEndpointForRegion(region) },
       sse: { ...base.sse, enabled: true },
+      replication: { ...base.replication, enabled: false },
       healthcheck: { ...base.healthcheck, enabled: true, mode: "http" },
     };
   }
@@ -156,6 +182,7 @@ function defaultFeaturesForProvider(provider: StorageProvider, region = AWS_DEFA
     static_website: { ...base.static_website, enabled: false },
     iam: { ...base.iam, enabled: true },
     sse: { ...base.sse, enabled: false },
+    replication: { ...base.replication, enabled: false },
   };
 }
 
@@ -170,6 +197,7 @@ function applyFeatureConstraints(features: FeaturesState, provider: StorageProvi
     iam: { ...features.iam },
     sns: { ...features.sns },
     sse: { ...features.sse },
+    replication: { ...features.replication },
     healthcheck: { ...features.healthcheck, mode: features.healthcheck.mode === "s3" ? "s3" : "http" },
   };
   if (provider !== "ceph") {
@@ -178,6 +206,7 @@ function applyFeatureConstraints(features: FeaturesState, provider: StorageProvi
     next.usage.enabled = false;
     next.metrics.enabled = false;
     next.sns.enabled = false;
+    next.replication.enabled = false;
     next.healthcheck.mode = "http";
   }
   if (!next.admin.enabled) {
@@ -346,6 +375,10 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
           enabled: Boolean(endpoint.features.sse?.enabled),
           endpoint: "",
         },
+        replication: {
+          enabled: Boolean(endpoint.features.replication?.enabled),
+          endpoint: "",
+        },
         healthcheck: {
           enabled: endpoint.features.healthcheck?.enabled !== false,
           endpoint: endpoint.features.healthcheck?.url ?? "",
@@ -365,6 +398,7 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
     iam: { enabled: resolveCapability(endpoint, "iam"), endpoint: "" },
     sns: { enabled: resolveCapability(endpoint, "sns"), endpoint: "" },
     sse: { enabled: resolveCapability(endpoint, "sse"), endpoint: "" },
+    replication: { enabled: resolveCapability(endpoint, "replication"), endpoint: "" },
     healthcheck: { enabled: true, endpoint: "", mode: "http" },
   };
   return applyFeatureConstraints(fallback, provider);
@@ -857,6 +891,7 @@ export default function StorageEndpointsPage() {
     const iamEnabled = features.iam.enabled;
     const snsEnabled = features.sns.enabled;
     const sseEnabled = features.sse.enabled;
+    const replicationEnabled = features.replication.enabled;
     const healthcheckMode = features.healthcheck.mode === "s3" ? "s3" : "http";
     const healthcheckUrl = features.healthcheck.endpoint.trim();
     const settingDefault = defaultBusyId === endpoint.id;
@@ -1132,6 +1167,15 @@ export default function StorageEndpointsPage() {
                 }`}
               >
                 SSE {sseEnabled ? "on" : "off"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  replicationEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                Replication {replicationEnabled ? "on" : "off"}
               </span>
               <span className="rounded-full bg-sky-100 px-2 py-0.5 ui-caption font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-100">
                 Check mode {healthcheckMode.toUpperCase()}
@@ -1586,6 +1630,21 @@ export default function StorageEndpointsPage() {
                               }))
                             }
                             className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
+                            disabled={!cephMode}
+                          />
+                        </label>
+                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                          Bucket replication enabled
+                          <input
+                            type="checkbox"
+                            checked={form.features.replication.enabled}
+                            onChange={(e) =>
+                              updateFeatures((current) => ({
+                                ...current,
+                                replication: { ...current.replication, enabled: e.target.checked },
+                              }))
+                            }
+                            className={uiCheckboxClass}
                             disabled={!cephMode}
                           />
                         </label>

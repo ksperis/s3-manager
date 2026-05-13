@@ -27,6 +27,7 @@ const generalSettingsState = {
   usage_history_enabled: false,
   bucket_migration_enabled: false,
   bucket_compare_enabled: false,
+  bucket_integrity_check_enabled: false,
   manager_ceph_s3_user_keys_enabled: true,
   allow_ui_user_bucket_migration: false,
   allow_login_access_keys: false,

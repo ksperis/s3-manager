@@ -20,6 +20,7 @@ const baseProps = {
   selectionActionProgress: null as ActionProgressState | null,
   isStorageOps: false,
   onShowCompareModal: vi.fn(),
+  onShowIntegrityModal: vi.fn(),
   openBulkUpdateModal: vi.fn(),
 };
 
@@ -53,5 +54,12 @@ describe("BucketSelectionActionsBar progress", () => {
     render(<BucketSelectionActionsBar {...baseProps} openBulkUpdateModal={openBulkUpdateModal} />);
     fireEvent.click(screen.getByRole("button", { name: "Bulk update" }));
     expect(openBulkUpdateModal).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the integrity action from selection", () => {
+    const onShowIntegrityModal = vi.fn();
+    render(<BucketSelectionActionsBar {...baseProps} onShowIntegrityModal={onShowIntegrityModal} />);
+    fireEvent.click(screen.getByRole("button", { name: "Check integrity" }));
+    expect(onShowIntegrityModal).toHaveBeenCalledTimes(1);
   });
 });

@@ -30,6 +30,8 @@ The target bucket reflects the new configuration and the updated status is visib
 
 !!! note
     Available controls depend on backend capabilities and account-level permissions.
+    Replication is available only when the selected endpoint capability
+    `replication` is enabled.
 
 ## Related pages
 

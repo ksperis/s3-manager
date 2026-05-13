@@ -3,6 +3,7 @@
 import json
 import time
 import asyncio
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -84,12 +85,14 @@ def clear_buckets_listing_cache():
         buckets_router._BUCKET_LIST_CACHE.clear()
     with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+        buckets_router._RGW_BUCKET_PAYLOAD_INFLIGHT.clear()
     invalidate_bucket_owner_metadata_cache()
     yield
     with buckets_router._BUCKET_LIST_CACHE_LOCK:
         buckets_router._BUCKET_LIST_CACHE.clear()
     with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+        buckets_router._RGW_BUCKET_PAYLOAD_INFLIGHT.clear()
     invalidate_bucket_owner_metadata_cache()
 
 
@@ -153,6 +156,62 @@ def test_ceph_admin_bucket_listing_cache_is_reused_across_pages():
     assert rgw_admin.get_all_buckets_calls == 1
 
 
+def test_ceph_admin_rgw_bucket_payload_cache_coalesces_parallel_misses():
+    payload = [{"name": "bucket-a", "owner": "owner-a"}]
+    started = threading.Event()
+    unblock = threading.Event()
+
+    class BlockingRGWAdmin(FakeRGWAdmin):
+        def get_all_buckets(self, with_stats: bool = True):
+            self.get_all_buckets_calls += 1
+            started.set()
+            assert unblock.wait(timeout=1.0)
+            return self._payload
+
+    rgw_admin = BlockingRGWAdmin(payload)
+    ctx = SimpleNamespace(
+        endpoint=SimpleNamespace(id=177),
+        rgw_admin=rgw_admin,
+        access_key="AKIA_TEST",
+        secret_key="SECRET_TEST",
+    )
+    results = []
+    errors: list[Exception] = []
+
+    def worker() -> None:
+        try:
+            results.append(
+                buckets_router.list_buckets(
+                    page=1,
+                    page_size=25,
+                    filter=None,
+                    advanced_filter=None,
+                    sort_by="name",
+                    sort_dir="asc",
+                    include=[],
+                    with_stats=False,
+                    ctx=ctx,
+                )
+            )
+        except Exception as exc:  # pragma: no cover - defensive capture for thread boundary
+            errors.append(exc)
+
+    first = threading.Thread(target=worker)
+    second = threading.Thread(target=worker)
+    first.start()
+    assert started.wait(timeout=1.0)
+    second.start()
+    time.sleep(0.05)
+    unblock.set()
+    first.join(timeout=2.0)
+    second.join(timeout=2.0)
+
+    assert not errors
+    assert rgw_admin.get_all_buckets_calls == 1
+    assert len(results) == 2
+    assert all(result.items[0].name == "bucket-a" for result in results)
+
+
 def test_ceph_admin_bucket_listing_cache_expires_after_ttl(monkeypatch: pytest.MonkeyPatch):
     payload = [
         {"name": "bucket-a", "owner": "owner-a"},
@@ -177,7 +236,7 @@ def test_ceph_admin_bucket_listing_cache_expires_after_ttl(monkeypatch: pytest.M
     assert [item.name for item in first.items] == ["bucket-a", "bucket-b"]
     assert rgw_admin.get_all_buckets_calls == 1
 
-    now = 799.0
+    now = 2299.0
     second = buckets_router.list_buckets(
         page=1,
         page_size=25,
@@ -192,7 +251,7 @@ def test_ceph_admin_bucket_listing_cache_expires_after_ttl(monkeypatch: pytest.M
     assert [item.name for item in second.items] == ["bucket-a", "bucket-b"]
     assert rgw_admin.get_all_buckets_calls == 1
 
-    now = 801.0
+    now = 2301.0
     third = buckets_router.list_buckets(
         page=1,
         page_size=25,
@@ -369,6 +428,31 @@ def test_ceph_admin_bucket_listing_cache_can_be_invalidated_per_endpoint():
     )
 
     assert rgw_admin.get_all_buckets_calls == 2
+
+
+def test_ceph_admin_bucket_listing_cache_refresh_endpoint_invalidates_endpoint_cache(client):
+    payload = [{"name": "bucket-a", "owner": "owner-a"}, {"name": "bucket-b", "owner": "owner-b"}]
+    ctx, rgw_admin = _build_ctx(endpoint_id=43, payload=payload)
+
+    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
+    app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
+    try:
+        first = client.get("/api/ceph-admin/endpoints/43/buckets", params={"with_stats": "false"})
+        second = client.get("/api/ceph-admin/endpoints/43/buckets", params={"with_stats": "false"})
+        assert first.status_code == 200, first.text
+        assert second.status_code == 200, second.text
+        assert rgw_admin.get_all_buckets_calls == 1
+
+        refresh = client.post("/api/ceph-admin/endpoints/43/buckets/cache/refresh")
+        assert refresh.status_code == 200, refresh.text
+        assert refresh.json() == {"refreshed": True, "endpoint_id": 43}
+
+        after_refresh = client.get("/api/ceph-admin/endpoints/43/buckets", params={"with_stats": "false"})
+        assert after_refresh.status_code == 200, after_refresh.text
+        assert rgw_admin.get_all_buckets_calls == 2
+    finally:
+        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
+        app.dependency_overrides.pop(ceph_admin_dependencies.get_ceph_admin_context, None)
 
 
 def test_ceph_admin_bucket_listing_cache_does_not_leak_owner_name_mutations():

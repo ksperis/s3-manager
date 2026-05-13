@@ -145,6 +145,84 @@ describe("S3UsersPage modal tabs", () => {
     expect(screen.queryByText("Import or create standalone RGW users to expose them to managers.")).not.toBeInTheDocument();
   });
 
+  it("requests default sorting and toggles RGW user table headers", async () => {
+    listS3UsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 5,
+          name: "rgw-user-1",
+          rgw_user_uid: "rgw-uid-1",
+          tags: [],
+          email: "rgw-user-1@example.com",
+          storage_endpoint_id: 10,
+          storage_endpoint_name: "ceph-main",
+          storage_endpoint_url: "https://ceph.example.test",
+          user_ids: [],
+          quota_max_size_gb: 1,
+          quota_max_objects: 100,
+          bucket_count: 0,
+        },
+      ],
+      total: 30,
+      page: 1,
+      page_size: 25,
+      has_next: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <S3UsersPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("rgw-user-1");
+    await waitFor(() => {
+      expect(listS3UsersMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          page: 1,
+          sort_by: "name",
+          sort_dir: "asc",
+        })
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => {
+      expect(listS3UsersMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          page: 2,
+          sort_by: "name",
+          sort_dir: "asc",
+        })
+      );
+    });
+
+    fireEvent.click(screen.getByRole("columnheader", { name: /Name/ }));
+
+    await waitFor(() => {
+      expect(listS3UsersMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          page: 1,
+          sort_by: "name",
+          sort_dir: "desc",
+        })
+      );
+    });
+
+    fireEvent.click(screen.getByRole("columnheader", { name: /UID/ }));
+
+    await waitFor(() => {
+      expect(listS3UsersMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          page: 1,
+          sort_by: "uid",
+          sort_dir: "desc",
+        })
+      );
+    });
+  });
+
   it("keeps Linked UI users changes across tabs and submits user_ids", async () => {
     render(
       <MemoryRouter>
@@ -153,7 +231,7 @@ describe("S3UsersPage modal tabs", () => {
     );
 
     await screen.findByText("rgw-user-1");
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
 
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Add a tag for this RGW user" })).toBeInTheDocument();
@@ -278,6 +356,8 @@ describe("S3UsersPage modal tabs", () => {
       expect(listS3UsersMock).toHaveBeenLastCalledWith(
         expect.objectContaining({
           search: "legacy",
+          sort_by: "name",
+          sort_dir: "asc",
         })
       );
     });

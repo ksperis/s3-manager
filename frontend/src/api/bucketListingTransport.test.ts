@@ -19,8 +19,8 @@ import {
   buildBucketListingQuery,
   shouldUsePostBucketListing,
 } from "./bucketListingTransport";
-import { listCephAdminBuckets } from "./cephAdmin";
-import { listStorageOpsBuckets } from "./storageOps";
+import { listCephAdminBuckets, refreshCephAdminBucketListingCache } from "./cephAdmin";
+import { listStorageOpsBuckets, refreshStorageOpsBucketListingCache } from "./storageOps";
 
 const emptyResponse = {
   items: [],
@@ -120,6 +120,20 @@ describe("bucket listing transport", () => {
       }),
       expect.any(Object)
     );
+    expect(clientMock.get).not.toHaveBeenCalled();
+  });
+
+  it("flushes Ceph Admin bucket listing cache via POST", async () => {
+    await refreshCephAdminBucketListingCache(7);
+
+    expect(clientMock.post).toHaveBeenCalledWith("/ceph-admin/endpoints/7/buckets/cache/refresh");
+    expect(clientMock.get).not.toHaveBeenCalled();
+  });
+
+  it("flushes Storage Ops bucket listing cache via POST", async () => {
+    await refreshStorageOpsBucketListingCache(1);
+
+    expect(clientMock.post).toHaveBeenCalledWith("/storage-ops/buckets/cache/refresh");
     expect(clientMock.get).not.toHaveBeenCalled();
   });
 });

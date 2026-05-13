@@ -52,6 +52,7 @@ _ENDPOINT_CAPABILITY_BY_FEATURE = {
     "website": "static_website",
     "notifications": "sns",
     "encryption": "sse",
+    "replication": "replication",
 }
 _FEATURE_LABELS = {
     "versioning": "Versioning",

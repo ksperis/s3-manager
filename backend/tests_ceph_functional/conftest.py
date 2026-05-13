@@ -26,6 +26,7 @@ class S3AccountTestContext:
     account_id: int
     account_name: str
     rgw_account_id: str | None
+    root_user_uid: str | None
     manager_session: BackendSession
     manager_user_id: int
     manager_email: str
@@ -273,6 +274,7 @@ def _provision_account(
         account_id=account_id,
         account_name=default_payload["name"],
         rgw_account_id=created_account.get("rgw_account_id"),
+        root_user_uid=created_account.get("rgw_user_uid") or created_account.get("root_user_email"),
         manager_session=manager_session,
         manager_user_id=manager_user_id,
         manager_email=manager_email,

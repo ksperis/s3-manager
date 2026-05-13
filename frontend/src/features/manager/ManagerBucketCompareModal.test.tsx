@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,10 @@ import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
 const listBucketsMock = vi.fn<(contextId: string, options?: { with_stats?: boolean }) => Promise<Bucket[]>>();
 const compareManagerBucketPairMock = vi.fn();
 const runManagerBucketCompareActionMock = vi.fn();
+const proxyDownloadMock = vi.fn();
+const clipboardWriteTextMock = vi.fn<(value: string) => Promise<void>>();
+const createObjectUrlMock = vi.fn(() => "blob:compare-download");
+const revokeObjectUrlMock = vi.fn();
 
 vi.mock("../../api/buckets", async () => {
   const actual = await vi.importActual<typeof import("../../api/buckets")>("../../api/buckets");
@@ -17,6 +21,14 @@ vi.mock("../../api/buckets", async () => {
     listBuckets: (contextId: string, options?: { with_stats?: boolean }) => listBucketsMock(contextId, options),
     compareManagerBucketPair: (...args: unknown[]) => compareManagerBucketPairMock(...args),
     runManagerBucketCompareAction: (...args: unknown[]) => runManagerBucketCompareActionMock(...args),
+  };
+});
+
+vi.mock("../../api/browser", async () => {
+  const actual = await vi.importActual<typeof import("../../api/browser")>("../../api/browser");
+  return {
+    ...actual,
+    proxyDownload: (...args: unknown[]) => proxyDownloadMock(...args),
   };
 });
 
@@ -136,6 +148,11 @@ async function runInitialComparison() {
   await waitFor(() => {
     expect(compareManagerBucketPairMock).toHaveBeenCalledTimes(1);
   });
+  expect(compareManagerBucketPairMock).toHaveBeenCalledWith(
+    "ctx-source",
+    expect.objectContaining({ diff_sample_limit: 500 }),
+    expect.anything()
+  );
   return user;
 }
 
@@ -172,7 +189,31 @@ async function openSourceOnlyDetails(user: ReturnType<typeof userEvent.setup>) {
 
 describe("ManagerBucketCompareModal remediation actions", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
+    clipboardWriteTextMock.mockResolvedValue(undefined);
+    proxyDownloadMock.mockResolvedValue(new Blob(["object-data"], { type: "text/plain" }));
+    createObjectUrlMock.mockReturnValue("blob:compare-download");
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: createObjectUrlMock,
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: revokeObjectUrlMock,
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const clipboard = window.navigator.clipboard ?? { writeText: clipboardWriteTextMock };
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: clipboard,
+    });
+    Object.defineProperty(clipboard, "writeText", {
+      configurable: true,
+      value: clipboardWriteTextMock,
+    });
     listBucketsMock.mockResolvedValue([{ name: "bucket-a" } as Bucket]);
     compareManagerBucketPairMock.mockResolvedValue(buildCompareResult());
     runManagerBucketCompareActionMock.mockResolvedValue(buildActionResult());
@@ -282,6 +323,7 @@ describe("ManagerBucketCompareModal remediation actions", () => {
         source_bucket: "bucket-a",
         target_bucket: "bucket-a",
         include_content: true,
+        diff_sample_limit: 500,
       })
     );
   });
@@ -355,24 +397,80 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     );
   });
 
-  it("renders object details and asks for confirmation before opening Browser", async () => {
+  it("renders object details and opens Browser links in a new tab", async () => {
     const user = await runInitialComparison();
     await openSourceOnlyDetails(user);
 
-    expect(screen.getByText(/Object rows below are a sample of the comparison result/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Only \d+ of \d+ objects are visible in this section/i)).not.toBeInTheDocument();
     expect(await screen.findByText("source-only-1")).toBeInTheDocument();
     expect(screen.getByText("1.0 KB")).toBeInTheDocument();
     expect(screen.getAllByText(/Storage STANDARD/i).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("link", { name: "Explore" })).not.toBeInTheDocument();
+    const exploreLinks = screen.getAllByRole("link", { name: "Explore" });
+    expect(exploreLinks.length).toBeGreaterThan(0);
+    expect(exploreLinks[0]).toHaveAttribute("target", "_blank");
+    expect(exploreLinks[0]).toHaveAttribute("rel", "noreferrer");
+    expect(exploreLinks[0]).toHaveAttribute(
+      "href",
+      expect.stringContaining("/manager/browser?ctx=ctx-source&bucket=bucket-a")
+    );
+    expect(screen.queryByRole("dialog", { name: "Leave comparison page?" })).not.toBeInTheDocument();
+  });
 
-    await user.click(screen.getAllByRole("button", { name: "Explore" })[0]);
+  it("downloads object rows directly from the comparison result", async () => {
+    const user = await runInitialComparison();
+    const sourceOnlyDetails = await openSourceOnlyDetails(user);
 
-    expect(await screen.findByRole("dialog", { name: "Leave comparison page?" })).toBeInTheDocument();
-    expect(screen.getAllByText("source-only-1").length).toBeGreaterThan(1);
-    expect(screen.getByRole("button", { name: "Open Browser" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(within(sourceOnlyDetails).getAllByRole("button", { name: "Download" })[0]);
+
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Leave comparison page?" })).not.toBeInTheDocument();
+      expect(proxyDownloadMock).toHaveBeenCalledWith("ctx-source", "bucket-a", "source-only-1");
+    });
+    expect(createObjectUrlMock).toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+    expect(revokeObjectUrlMock).toHaveBeenCalledWith("blob:compare-download");
+    expect(await screen.findByText("Download started for source-only-1.")).toBeInTheDocument();
+  });
+
+  it("shows a section warning only when visible object rows are incomplete", async () => {
+    compareManagerBucketPairMock.mockResolvedValueOnce(
+      buildCompareResult({
+        content_diff: {
+          ...buildCompareResult().content_diff!,
+          source_count: 11,
+          only_source_count: 3,
+        },
+      })
+    );
+
+    const user = await runInitialComparison();
+    await openContentDetails(user);
+    await openDetailsByLabel(user, "Source only (3)");
+
+    expect(screen.getByText("Only 2 of 3 objects are visible in this section. Use the section counter for the total.")).toBeInTheDocument();
+  });
+
+  it("copies visible object keys from a content section", async () => {
+    const user = await runInitialComparison();
+    await openSourceOnlyDetails(user);
+
+    const sourceOnlyDetails = closestDetails(await screen.findByText("Source only (2)"));
+    await user.click(within(sourceOnlyDetails).getByRole("button", { name: "Copy visible keys" }));
+
+    await waitFor(() => {
+      expect(clipboardWriteTextMock).toHaveBeenCalledWith("source-only-1\nsource-only-2");
+    });
+    expect(await within(sourceOnlyDetails).findByText("Copied 2 visible keys to clipboard.")).toBeInTheDocument();
+  });
+
+  it("copies each visible different object key once", async () => {
+    const user = await runInitialComparison();
+    await openContentDetails(user);
+
+    const differentDetails = closestDetails(await screen.findByText("Different objects (1)"));
+    await user.click(within(differentDetails).getByRole("button", { name: "Copy visible keys" }));
+
+    await waitFor(() => {
+      expect(clipboardWriteTextMock).toHaveBeenCalledWith("different-1");
     });
   });
 
@@ -403,6 +501,10 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     expect(exploreButtons.length).toBeGreaterThan(0);
     expect(exploreButtons.every((button) => button.hasAttribute("disabled"))).toBe(true);
     expect(exploreButtons[0]).toHaveAttribute("title", "Manager Browser is disabled for this surface.");
+    const downloadButtons = screen.getAllByRole("button", { name: "Download" });
+    expect(downloadButtons.length).toBeGreaterThan(0);
+    expect(downloadButtons.every((button) => button.hasAttribute("disabled"))).toBe(true);
+    expect(downloadButtons[0]).toHaveAttribute("title", "Manager Browser is disabled for this surface.");
   });
 
   it("marks a rejected comparison as failed and leaves the running state", async () => {

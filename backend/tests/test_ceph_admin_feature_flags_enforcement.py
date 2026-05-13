@@ -25,11 +25,13 @@ def _clear_buckets_caches():
         buckets_router._BUCKET_LIST_CACHE.clear()
     with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+        buckets_router._RGW_BUCKET_PAYLOAD_INFLIGHT.clear()
     yield
     with buckets_router._BUCKET_LIST_CACHE_LOCK:
         buckets_router._BUCKET_LIST_CACHE.clear()
     with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
+        buckets_router._RGW_BUCKET_PAYLOAD_INFLIGHT.clear()
 
 
 def _build_endpoint(*, endpoint_id: int = 1, metrics_enabled: bool = True, sse_enabled: bool = False):

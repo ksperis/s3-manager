@@ -515,6 +515,13 @@ export default function BucketDetailPage({
     }
     return selectedS3Account?.storage_endpoint_capabilities?.sse === true;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
+  const replicationFeatureEnabled = useMemo(() => {
+    if (!isCephEndpoint) return false;
+    if (isCephAdmin) {
+      return selectedEndpoint?.capabilities?.replication === true;
+    }
+    return selectedS3Account?.storage_endpoint_capabilities?.replication === true;
+  }, [isCephAdmin, isCephEndpoint, selectedEndpoint, selectedS3Account]);
   const quotaFeatureEnabled = isCephEndpoint;
   const usageFeatureEnabled = useMemo(() => {
     if (isCephAdmin) {
@@ -1001,7 +1008,7 @@ export default function BucketDetailPage({
   }, [accountId, applyWebsiteState, bucketName, endpointId, hasContext, isCephAdmin, staticWebsiteEnabled]);
 
   const loadReplication = useCallback(async () => {
-    if (!bucketName || !hasContext || !isCephEndpoint) {
+    if (!bucketName || !hasContext || !isCephEndpoint || !replicationFeatureEnabled) {
       setReplicationConfig({ configuration: {} });
       setReplicationText("{}");
       setReplicationRole("");
@@ -1048,7 +1055,7 @@ export default function BucketDetailPage({
     } finally {
       setReplicationLoading(false);
     }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, isCephEndpoint]);
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, isCephEndpoint, replicationFeatureEnabled]);
 
   const loadBucketAcl = useCallback(async () => {
     if (!bucketName || !hasContext) {
@@ -1503,6 +1510,7 @@ export default function BucketDetailPage({
   const replicationConfiguration = replicationConfig.configuration ?? {};
   const replicationConfigured = isReplicationConfigurationConfigured(replicationConfiguration);
   const replicationBusy = replicationLoading || savingReplication || clearingReplication;
+  const replicationBlocked = !replicationFeatureEnabled;
   const publicAccessBlockConfig = publicAccessBlock;
   const publicAccessBlockEnabled = isPublicAccessFullyEnabled(publicAccessBlockConfig);
   const publicAccessBlockPartial =
@@ -1685,7 +1693,7 @@ export default function BucketDetailPage({
     unsaved: websiteDirty,
   });
   const replicationCardState = resolveFeatureVisualState({
-    disabled: replicationNotImplemented,
+    disabled: replicationBlocked || replicationNotImplemented,
     configured: replicationConfigured,
     unsaved: replicationDirty,
   });
@@ -1805,7 +1813,7 @@ export default function BucketDetailPage({
     const accessLoggingTone: PropertySummary["tone"] =
       accessLoggingLoading || accessLoggingError ? "unknown" : accessLoggingConfigured ? "active" : "inactive";
 
-    const replicationState = !isCephEndpoint
+    const replicationState = !isCephEndpoint || !replicationFeatureEnabled
       ? "Unavailable"
       : replicationLoading
         ? "Loading..."
@@ -1814,7 +1822,7 @@ export default function BucketDetailPage({
           : replicationConfigured
             ? "Configured"
             : "Not set";
-    const replicationTone: PropertySummary["tone"] = !isCephEndpoint
+    const replicationTone: PropertySummary["tone"] = !isCephEndpoint || !replicationFeatureEnabled
       ? "unknown"
       : replicationLoading || replicationError
         ? "unknown"
@@ -1908,6 +1916,7 @@ export default function BucketDetailPage({
     isCephEndpoint,
     replicationConfigured,
     replicationError,
+    replicationFeatureEnabled,
     replicationLoading,
     staticWebsiteEnabled,
     websiteConfigured,
@@ -2333,7 +2342,7 @@ export default function BucketDetailPage({
   };
 
   const saveReplication = async () => {
-    if (!bucketName || !hasContext || !isCephEndpoint) return;
+    if (!bucketName || !hasContext || !isCephEndpoint || !replicationFeatureEnabled) return;
     setReplicationError(null);
     setReplicationStatus(null);
 
@@ -2397,7 +2406,7 @@ export default function BucketDetailPage({
   };
 
   const clearReplication = async () => {
-    if (!bucketName || !hasContext || !isCephEndpoint) return;
+    if (!bucketName || !hasContext || !isCephEndpoint || !replicationFeatureEnabled) return;
     const confirmDelete = window.confirm("Delete the bucket replication configuration?");
     if (!confirmDelete) return;
     setClearingReplication(true);
@@ -4166,7 +4175,7 @@ export default function BucketDetailPage({
                         <button
                           type="button"
                           onClick={clearReplication}
-                          disabled={replicationNotImplemented || replicationBusy}
+                          disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                           className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                         >
                           {clearingReplication ? "Clearing..." : "Clear"}
@@ -4174,7 +4183,7 @@ export default function BucketDetailPage({
                         <button
                           type="button"
                           onClick={saveReplication}
-                          disabled={replicationNotImplemented || replicationBusy}
+                          disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                           className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         >
                           {savingReplication ? "Saving..." : "Save"}
@@ -4193,8 +4202,9 @@ export default function BucketDetailPage({
                         setReplicationStatus(null);
                         setReplicationError(null);
                       }}
-                      disabled={replicationNotImplemented || replicationBusy}
+                      disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                     />
+                    {replicationBlocked && <EndpointFeatureDisabledNotice featureLabel="Bucket replication" />}
                     {replicationError && (
                       <UiInlineMessage tone="error">{replicationError}</UiInlineMessage>
                     )}
@@ -4219,7 +4229,7 @@ export default function BucketDetailPage({
                             }}
                             className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                             placeholder="arn:aws:iam::123456789012:role/replication-role"
-                            disabled={replicationNotImplemented || replicationBusy}
+                            disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                           />
                         </label>
                         <div className="space-y-3">
@@ -4233,7 +4243,7 @@ export default function BucketDetailPage({
                                 <button
                                   type="button"
                                   onClick={() => removeReplicationRule(index)}
-                                  disabled={replicationNotImplemented || replicationBusy || replicationRules.length <= 1}
+                                  disabled={replicationBlocked || replicationNotImplemented || replicationBusy || replicationRules.length <= 1}
                                   className="rounded-md border border-rose-200 px-2 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                                 >
                                   Remove
@@ -4248,7 +4258,7 @@ export default function BucketDetailPage({
                                     onChange={(e) => updateReplicationRule(index, { id: e.target.value })}
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                     placeholder={`rule-${index + 1}`}
-                                    disabled={replicationNotImplemented || replicationBusy}
+                                    disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
                                 <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4257,7 +4267,7 @@ export default function BucketDetailPage({
                                     value={rule.status}
                                     onChange={(e) => updateReplicationRule(index, { status: e.target.value as "Enabled" | "Disabled" })}
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                    disabled={replicationNotImplemented || replicationBusy}
+                                    disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   >
                                     <option value="Enabled">Enabled</option>
                                     <option value="Disabled">Disabled</option>
@@ -4273,7 +4283,7 @@ export default function BucketDetailPage({
                                     onChange={(e) => updateReplicationRule(index, { priority: e.target.value })}
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                     placeholder="1"
-                                    disabled={replicationNotImplemented || replicationBusy}
+                                    disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
                                 <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4284,7 +4294,7 @@ export default function BucketDetailPage({
                                     onChange={(e) => updateReplicationRule(index, { prefix: e.target.value })}
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                     placeholder="logs/"
-                                    disabled={replicationNotImplemented || replicationBusy}
+                                    disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
                                 <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4295,7 +4305,7 @@ export default function BucketDetailPage({
                                     onChange={(e) => updateReplicationRule(index, { destinationBucket: e.target.value })}
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                     placeholder="arn:aws:s3:::target-bucket"
-                                    disabled={replicationNotImplemented || replicationBusy}
+                                    disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
                                 </label>
                                 <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
@@ -4308,7 +4318,7 @@ export default function BucketDetailPage({
                                       })
                                     }
                                     className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                    disabled={replicationNotImplemented || replicationBusy}
+                                    disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   >
                                     <option value="Disabled">Disabled</option>
                                     <option value="Enabled">Enabled</option>
@@ -4322,7 +4332,7 @@ export default function BucketDetailPage({
                           <button
                             type="button"
                             onClick={addReplicationRule}
-                            disabled={replicationNotImplemented || replicationBusy}
+                            disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                             className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
                           >
                             Add rule
@@ -4340,7 +4350,7 @@ export default function BucketDetailPage({
                           rows={14}
                           className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           spellCheck={false}
-                          disabled={replicationNotImplemented || replicationBusy}
+                          disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                         />
                         {containsUnsupportedReplicationZone(replicationConfiguration) && (
                           <p className="ui-caption text-rose-700 dark:text-rose-200">
@@ -4356,7 +4366,7 @@ export default function BucketDetailPage({
                             setReplicationStatus(null);
                             setReplicationError(null);
                           }}
-                          disabled={replicationNotImplemented}
+                          disabled={replicationBlocked || replicationNotImplemented}
                         />
                       </div>
                     )}

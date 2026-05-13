@@ -80,6 +80,8 @@ function ManagerShell() {
   const canManageBuckets = capabilities.can_manage_buckets !== false;
   const canAccessBucketCompare =
     canManageBuckets && Boolean(generalSettings.bucket_compare_enabled) && Boolean(requiresS3AccountSelection);
+  const canAccessBucketIntegrity =
+    canManageBuckets && Boolean(generalSettings.bucket_integrity_check_enabled) && Boolean(requiresS3AccountSelection);
   const userRole = getUserRole();
   const canAccessMigration =
     Boolean(generalSettings.bucket_migration_enabled) &&
@@ -233,10 +235,13 @@ function ManagerShell() {
     });
   }
 
-  if (canManageBuckets && (canAccessBucketCompare || canAccessMigration)) {
+  if (canManageBuckets && (canAccessBucketCompare || canAccessBucketIntegrity || canAccessMigration)) {
     const toolsLinks: SidebarSection[number]["links"] = [];
     if (canAccessBucketCompare) {
       toolsLinks.push({ to: "/manager/bucket-compare", label: "Compare" });
+    }
+    if (canAccessBucketIntegrity) {
+      toolsLinks.push({ to: "/manager/bucket-integrity", label: "Integrity" });
     }
     if (canAccessMigration) {
       toolsLinks.push({ to: "/manager/migrations", label: "Migration" });

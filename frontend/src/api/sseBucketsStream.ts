@@ -10,6 +10,7 @@ type StreamBucketsParams<TProgress> = {
   options?: StreamBucketsOptions<TProgress>;
   streamFailedLabel: string;
   missingResultMessage: string;
+  requestInit?: RequestInit;
 };
 
 export function resolveApiBaseUrl(): string {
@@ -25,8 +26,9 @@ function isCancelledError(err: unknown): boolean {
   return name === "CanceledError" || code === "ERR_CANCELED";
 }
 
-function buildHeaders(): Headers {
-  const headers = new Headers({ Accept: "text/event-stream" });
+function buildHeaders(extraHeaders?: HeadersInit): Headers {
+  const headers = new Headers(extraHeaders);
+  headers.set("Accept", "text/event-stream");
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
@@ -34,10 +36,11 @@ function buildHeaders(): Headers {
   return headers;
 }
 
-async function fetchStream(url: string, signal?: AbortSignal): Promise<Response> {
+async function fetchStream(url: string, signal?: AbortSignal, requestInit?: RequestInit): Promise<Response> {
   let response = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(),
+    ...requestInit,
+    method: requestInit?.method ?? "GET",
+    headers: buildHeaders(requestInit?.headers),
     credentials: "include",
     signal,
   });
@@ -49,8 +52,9 @@ async function fetchStream(url: string, signal?: AbortSignal): Promise<Response>
         localStorage.setItem("token", refresh.data.access_token);
       }
       response = await fetch(url, {
-        method: "GET",
-        headers: buildHeaders(),
+        ...requestInit,
+        method: requestInit?.method ?? "GET",
+        headers: buildHeaders(requestInit?.headers),
         credentials: "include",
         signal,
       });
@@ -67,8 +71,9 @@ export async function streamBucketsWithSse<TProgress, TResult>({
   options,
   streamFailedLabel,
   missingResultMessage,
+  requestInit,
 }: StreamBucketsParams<TProgress>): Promise<TResult> {
-  const response = await fetchStream(url, options?.signal);
+  const response = await fetchStream(url, options?.signal, requestInit);
 
   if (!response.ok) {
     const text = await response.text();

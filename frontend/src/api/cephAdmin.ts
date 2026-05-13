@@ -521,6 +521,13 @@ type ListCephAdminBucketsOptions = {
   signal?: AbortSignal;
 };
 
+export type BucketListingCacheRefreshResponse = {
+  refreshed: boolean;
+  endpoint_id?: number;
+  contexts?: number;
+  endpoints?: number;
+};
+
 export async function listCephAdminBuckets(
   endpointId: number,
   params?: ListCephAdminBucketsParams,
@@ -539,6 +546,15 @@ export async function listCephAdminBuckets(
         params: buildBucketListingQuery(params),
         signal: options?.signal,
       });
+  return data;
+}
+
+export async function refreshCephAdminBucketListingCache(
+  endpointId: number
+): Promise<BucketListingCacheRefreshResponse> {
+  const { data } = await client.post<BucketListingCacheRefreshResponse>(
+    `/ceph-admin/endpoints/${endpointId}/buckets/cache/refresh`
+  );
   return data;
 }
 

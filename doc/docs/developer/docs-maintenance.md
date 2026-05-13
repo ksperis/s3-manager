@@ -28,6 +28,7 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/manager/users|groups|roles|iam/policies` | `user/feature-iam.md` | Covered |
 | `/manager/topics` | `user/feature-topics.md` | Covered |
 | `/manager/bucket-compare` | `user/feature-bucket-compare.md` | Covered |
+| `/manager/bucket-integrity` | `user/feature-bucket-integrity-check.md` | Covered |
 | `/manager/migrations*` | `user/feature-bucket-migration.md` | Covered |
 | `/browser` | `user/workspace-browser.md` + `user/feature-objects-browser.md` | Covered |
 | `/browser` object versions modal | `user/feature-object-versions-browser.md` | Covered |

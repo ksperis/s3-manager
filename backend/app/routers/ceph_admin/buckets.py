@@ -8,7 +8,7 @@ import json
 import threading
 import uuid
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from contextlib import suppress
 from threading import Lock
@@ -66,6 +66,7 @@ from app.services.bucket_owner_enrichment import (
     BucketOwnerMetadataService,
     BucketOwnerUsage,
     compute_bucket_owner_usage,
+    invalidate_bucket_owner_metadata_cache,
 )
 from app.services.buckets_service import BucketsService
 from app.services.rgw_admin import RGWAdminError
@@ -76,7 +77,7 @@ from app.utils.usage_stats import compute_usage_ratio_percent, extract_usage_sta
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/buckets", tags=["ceph-admin-buckets"])
 logger = logging.getLogger(__name__)
 
-BUCKET_LIST_CACHE_TTL_SECONDS = 300.0
+BUCKET_LIST_CACHE_TTL_SECONDS = 1800.0
 BUCKET_LIST_CACHE_MAX_ENTRIES = 64
 RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES = 16
 BUCKET_ENRICH_MAX_WORKERS = 6
@@ -202,6 +203,7 @@ _BUCKET_LIST_CACHE: OrderedDict[_BucketListCacheKey, _BucketListCacheEntry] = Or
 _BUCKET_LIST_CACHE_LOCK = Lock()
 _RGW_BUCKET_PAYLOAD_CACHE: OrderedDict[_RgwBucketPayloadCacheKey, _RgwBucketPayloadCacheEntry] = OrderedDict()
 _RGW_BUCKET_PAYLOAD_CACHE_LOCK = Lock()
+_RGW_BUCKET_PAYLOAD_INFLIGHT: dict[_RgwBucketPayloadCacheKey, Future[list[dict]]] = {}
 _FEATURE_PARAM_UNAVAILABLE = object()
 _FEATURE_PARAM_SOURCE_BY_PARAM: dict[str, str] = {
     "lifecycle_rule_id": "lifecycle",
@@ -652,7 +654,17 @@ def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilte
     if value is None:
         return False
 
-    string_fields = {"name", "tenant", "owner", "owner_name", "owner_kind", "context_name", "context_kind", "endpoint_name"}
+    string_fields = {
+        "name",
+        "tenant",
+        "owner",
+        "owner_name",
+        "owner_kind",
+        "context_id",
+        "context_name",
+        "context_kind",
+        "endpoint_name",
+    }
     if field in string_fields:
         left = _normalize_text(str(value))
         if field == "owner_kind":
@@ -1622,26 +1634,45 @@ def _prune_rgw_bucket_payload_cache(now: float) -> None:
 def _get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> list[dict]:
     key = _RgwBucketPayloadCacheKey(endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0), with_stats=with_stats)
     now = monotonic()
+    is_owner = False
+    in_flight: Future[list[dict]] | None = None
     with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         _prune_rgw_bucket_payload_cache(now)
         cached = _RGW_BUCKET_PAYLOAD_CACHE.get(key)
         if cached is not None:
             _RGW_BUCKET_PAYLOAD_CACHE.move_to_end(key)
             return cached.entries
+        in_flight = _RGW_BUCKET_PAYLOAD_INFLIGHT.get(key)
+        if in_flight is None:
+            in_flight = Future()
+            _RGW_BUCKET_PAYLOAD_INFLIGHT[key] = in_flight
+            is_owner = True
 
-    payload = ctx.rgw_admin.get_all_buckets(with_stats=with_stats)
-    entries = extract_bucket_list(payload)
-    expires_at = monotonic() + BUCKET_LIST_CACHE_TTL_SECONDS
-    with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
-        _prune_rgw_bucket_payload_cache(monotonic())
-        _RGW_BUCKET_PAYLOAD_CACHE[key] = _RgwBucketPayloadCacheEntry(
-            endpoint_id=key.endpoint_id,
-            expires_at=expires_at,
-            entries=entries,
-        )
-        _RGW_BUCKET_PAYLOAD_CACHE.move_to_end(key)
-        _prune_rgw_bucket_payload_cache(monotonic())
-    return entries
+    if not is_owner:
+        return in_flight.result()
+
+    try:
+        payload = ctx.rgw_admin.get_all_buckets(with_stats=with_stats)
+        entries = extract_bucket_list(payload)
+        expires_at = monotonic() + BUCKET_LIST_CACHE_TTL_SECONDS
+        with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
+            _prune_rgw_bucket_payload_cache(monotonic())
+            _RGW_BUCKET_PAYLOAD_CACHE[key] = _RgwBucketPayloadCacheEntry(
+                endpoint_id=key.endpoint_id,
+                expires_at=expires_at,
+                entries=entries,
+            )
+            _RGW_BUCKET_PAYLOAD_CACHE.move_to_end(key)
+            _prune_rgw_bucket_payload_cache(monotonic())
+        in_flight.set_result(entries)
+        return entries
+    except Exception as exc:
+        in_flight.set_exception(exc)
+        raise
+    finally:
+        with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
+            if _RGW_BUCKET_PAYLOAD_INFLIGHT.get(key) is in_flight:
+                _RGW_BUCKET_PAYLOAD_INFLIGHT.pop(key, None)
 
 
 def _get_cached_bucket_listing(
@@ -1679,6 +1710,9 @@ def _invalidate_bucket_listing_cache(endpoint_id: int) -> None:
         invalid_keys = [key for key, entry in _RGW_BUCKET_PAYLOAD_CACHE.items() if entry.endpoint_id == endpoint_id]
         for key in invalid_keys:
             _RGW_BUCKET_PAYLOAD_CACHE.pop(key, None)
+        inflight_keys = [key for key in _RGW_BUCKET_PAYLOAD_INFLIGHT.keys() if key.endpoint_id == endpoint_id]
+        for key in inflight_keys:
+            _RGW_BUCKET_PAYLOAD_INFLIGHT.pop(key, None)
 
 
 def _require_sse_feature(ctx: CephAdminContext) -> None:
@@ -1686,6 +1720,14 @@ def _require_sse_feature(ctx: CephAdminContext) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Server-side encryption is disabled for this endpoint",
+        )
+
+
+def _require_replication_feature(ctx: CephAdminContext) -> None:
+    if not resolve_feature_flags(ctx.endpoint).replication_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bucket replication is disabled for this endpoint",
         )
 
 
@@ -2296,6 +2338,17 @@ async def stream_buckets(
     )
 
 
+@router.post("/cache/refresh")
+def refresh_bucket_listing_cache(
+    endpoint_id: int,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> dict[str, object]:
+    resolved_endpoint_id = int(getattr(ctx.endpoint, "id", endpoint_id) or endpoint_id)
+    _invalidate_bucket_listing_cache(resolved_endpoint_id)
+    invalidate_bucket_owner_metadata_cache(resolved_endpoint_id)
+    return {"refreshed": True, "endpoint_id": resolved_endpoint_id}
+
+
 @router.post("/compare", response_model=CephAdminBucketCompareResult)
 def compare_bucket_pair(
     endpoint_id: int,
@@ -2626,6 +2679,7 @@ def get_replication(
     bucket_name: str,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketReplicationConfiguration:
+    _require_replication_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
@@ -2640,6 +2694,7 @@ def put_replication(
     payload: BucketReplicationConfiguration,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketReplicationConfiguration:
+    _require_replication_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
@@ -2657,6 +2712,7 @@ def delete_replication(
     bucket_name: str,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> Response:
+    _require_replication_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
