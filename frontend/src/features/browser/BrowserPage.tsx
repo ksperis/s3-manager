@@ -26,6 +26,7 @@ import { ZipWriter } from "@zip.js/zip.js";
 import axios from "axios";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import {
   toolbarCompactInputClasses,
   toolbarCompactSelectClasses,
@@ -46,6 +47,7 @@ import {
   normalizeS3BucketName,
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
+import { stableSignature } from "../../utils/stableSignature";
 import {
   withS3AccountParam,
   type S3AccountSelector,
@@ -1249,6 +1251,9 @@ export default function BrowserPage({
   >({});
   const [showSseCustomerModal, setShowSseCustomerModal] = useState(false);
   const [sseCustomerKeyInput, setSseCustomerKeyInput] = useState("");
+  const [sseCustomerInitialSignature, setSseCustomerInitialSignature] = useState(() =>
+    stableSignature({ sseCustomerKeyInput: "" })
+  );
   const [sseCustomerKeyError, setSseCustomerKeyError] = useState<string | null>(
     null,
   );
@@ -1348,6 +1353,9 @@ export default function BrowserPage({
   const [showCreateBucketModal, setShowCreateBucketModal] = useState(false);
   const [createBucketNameValue, setCreateBucketNameValue] = useState("");
   const [createBucketVersioning, setCreateBucketVersioning] = useState(false);
+  const [createBucketInitialSignature, setCreateBucketInitialSignature] = useState(() =>
+    stableSignature({ createBucketNameValue: "", createBucketVersioning: false })
+  );
   const [createBucketLoading, setCreateBucketLoading] = useState(false);
   const [createBucketError, setCreateBucketError] = useState<string | null>(
     null,
@@ -1356,6 +1364,9 @@ export default function BrowserPage({
     "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.";
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderInitialSignature, setNewFolderInitialSignature] = useState(() =>
+    stableSignature({ newFolderName: "" })
+  );
   const [newFolderError, setNewFolderError] = useState<string | null>(null);
   const [newFolderLoading, setNewFolderLoading] = useState(false);
   const [confirmDialog, setConfirmDialog] =
@@ -2040,7 +2051,9 @@ export default function BrowserPage({
 
   const openSseCustomerModal = useCallback(() => {
     if (!sseFeatureEnabled || !sseCustomerScopeKey) return;
-    setSseCustomerKeyInput(sseCustomerKeyBase64 ?? "");
+    const nextInput = sseCustomerKeyBase64 ?? "";
+    setSseCustomerKeyInput(nextInput);
+    setSseCustomerInitialSignature(stableSignature({ sseCustomerKeyInput: nextInput }));
     setSseCustomerKeyError(null);
     setSseCustomerKeyNotice(null);
     setSseCustomerKeyVisible(false);
@@ -2055,6 +2068,7 @@ export default function BrowserPage({
         sseCustomerKeyInput,
       );
       setSseCustomerKeysByScope(result.next);
+      setSseCustomerInitialSignature(stableSignature({ sseCustomerKeyInput }));
       setSseCustomerKeyError(null);
       setSseCustomerKeyNotice(null);
       setShowSseCustomerModal(false);
@@ -2078,6 +2092,7 @@ export default function BrowserPage({
       generatedKey = result.normalizedKey;
       setSseCustomerKeysByScope(result.next);
       setSseCustomerKeyInput(generatedKey);
+      setSseCustomerInitialSignature(stableSignature({ sseCustomerKeyInput: generatedKey }));
       setSseCustomerKeyError(null);
       setSseCustomerKeyVisible(false);
     } catch (err) {
@@ -2125,6 +2140,7 @@ export default function BrowserPage({
       return next;
     });
     setSseCustomerKeyInput("");
+    setSseCustomerInitialSignature(stableSignature({ sseCustomerKeyInput: "" }));
     setSseCustomerKeyError(null);
     setSseCustomerKeyNotice(null);
     setSseCustomerKeyVisible(false);
@@ -6168,6 +6184,7 @@ export default function BrowserPage({
     setBucketFilter("");
     setCreateBucketNameValue("");
     setCreateBucketVersioning(false);
+    setCreateBucketInitialSignature(stableSignature({ createBucketNameValue: "", createBucketVersioning: false }));
     setCreateBucketError(null);
     setShowCreateBucketModal(true);
   };
@@ -6175,6 +6192,9 @@ export default function BrowserPage({
   const closeCreateBucketDialog = () => {
     if (createBucketLoading) return;
     setShowCreateBucketModal(false);
+    setCreateBucketNameValue("");
+    setCreateBucketVersioning(false);
+    setCreateBucketInitialSignature(stableSignature({ createBucketNameValue: "", createBucketVersioning: false }));
     setCreateBucketError(null);
   };
 
@@ -6217,6 +6237,9 @@ export default function BrowserPage({
         }
       }
       setShowCreateBucketModal(false);
+      setCreateBucketNameValue("");
+      setCreateBucketVersioning(false);
+      setCreateBucketInitialSignature(stableSignature({ createBucketNameValue: "", createBucketVersioning: false }));
       setStatusMessage(
         uiOrigin
           ? corsApplied
@@ -7227,12 +7250,15 @@ export default function BrowserPage({
   const closeNewFolderDialog = () => {
     if (newFolderLoading) return;
     setShowNewFolderModal(false);
+    setNewFolderName("");
+    setNewFolderInitialSignature(stableSignature({ newFolderName: "" }));
     setNewFolderError(null);
   };
 
   const handleNewFolder = () => {
     if (!bucketName || !hasS3AccountContext) return;
     setNewFolderName("");
+    setNewFolderInitialSignature(stableSignature({ newFolderName: "" }));
     setNewFolderError(null);
     setNewFolderLoading(false);
     setShowNewFolderModal(true);
@@ -7254,6 +7280,7 @@ export default function BrowserPage({
       setStatusMessage(`Folder ${clean} created`);
       setShowNewFolderModal(false);
       setNewFolderName("");
+      setNewFolderInitialSignature(stableSignature({ newFolderName: "" }));
       await loadObjects({ prefixOverride: prefix });
       loadTreeChildren(prefix);
     } catch {
@@ -11636,6 +11663,41 @@ export default function BrowserPage({
   }`;
   const isCreateBucketNameValid =
     !createBucketNameValue || isValidS3BucketName(createBucketNameValue);
+  const createBucketCurrentSignature = useMemo(
+    () => stableSignature({ createBucketNameValue, createBucketVersioning }),
+    [createBucketNameValue, createBucketVersioning],
+  );
+  const newFolderCurrentSignature = useMemo(
+    () => stableSignature({ newFolderName }),
+    [newFolderName],
+  );
+  const sseCustomerCurrentSignature = useMemo(
+    () => stableSignature({ sseCustomerKeyInput }),
+    [sseCustomerKeyInput],
+  );
+  const closeSseCustomerModal = () => {
+    const nextInput = sseCustomerKeyBase64 ?? "";
+    setShowSseCustomerModal(false);
+    setSseCustomerKeyInput(nextInput);
+    setSseCustomerInitialSignature(stableSignature({ sseCustomerKeyInput: nextInput }));
+    setSseCustomerKeyError(null);
+    setSseCustomerKeyNotice(null);
+    setSseCustomerKeyVisible(false);
+  };
+  const createBucketCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showCreateBucketModal && createBucketCurrentSignature !== createBucketInitialSignature,
+    onClose: closeCreateBucketDialog,
+    disabled: createBucketLoading,
+  });
+  const newFolderCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showNewFolderModal && newFolderCurrentSignature !== newFolderInitialSignature,
+    onClose: closeNewFolderDialog,
+    disabled: newFolderLoading,
+  });
+  const sseCustomerCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showSseCustomerModal && sseCustomerCurrentSignature !== sseCustomerInitialSignature,
+    onClose: closeSseCustomerModal,
+  });
   const showFolderToggle = showPanelToggles && canUseFoldersPanel;
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
   const isActionBarVisible = isMainBrowserPath && showActionBar;
@@ -14590,7 +14652,7 @@ export default function BrowserPage({
       {showCreateBucketModal && (
         <Modal
           title="Create bucket"
-          onClose={closeCreateBucketDialog}
+          onClose={createBucketCloseGuard.requestClose}
           maxWidthClass="max-w-lg"
         >
           <form
@@ -14656,7 +14718,7 @@ export default function BrowserPage({
               <button
                 type="button"
                 className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
-                onClick={closeCreateBucketDialog}
+                onClick={createBucketCloseGuard.requestClose}
                 disabled={createBucketLoading}
               >
                 Cancel
@@ -14675,12 +14737,13 @@ export default function BrowserPage({
               </button>
             </div>
           </form>
+          {createBucketCloseGuard.confirmationDialog}
         </Modal>
       )}
       {showSseCustomerModal && (
         <Modal
           title="SSE-C key"
-          onClose={() => setShowSseCustomerModal(false)}
+          onClose={sseCustomerCloseGuard.requestClose}
           maxWidthClass="max-w-lg"
         >
           <form
@@ -14742,7 +14805,7 @@ export default function BrowserPage({
               <button
                 type="button"
                 className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
-                onClick={() => setShowSseCustomerModal(false)}
+                onClick={sseCustomerCloseGuard.requestClose}
               >
                 Cancel
               </button>
@@ -14770,6 +14833,7 @@ export default function BrowserPage({
               </button>
             </div>
           </form>
+          {sseCustomerCloseGuard.confirmationDialog}
         </Modal>
       )}
       {showMultipartUploadsModal && bucketName && hasS3AccountContext && (
@@ -14893,7 +14957,7 @@ export default function BrowserPage({
       {showNewFolderModal && (
         <Modal
           title="Create folder"
-          onClose={closeNewFolderDialog}
+          onClose={newFolderCloseGuard.requestClose}
           maxWidthClass="max-w-md"
           initialFocusRef={newFolderInputRef}
           closeOnBackdropClick={!newFolderLoading}
@@ -14933,7 +14997,7 @@ export default function BrowserPage({
               <button
                 type="button"
                 className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
-                onClick={closeNewFolderDialog}
+                onClick={newFolderCloseGuard.requestClose}
                 disabled={newFolderLoading}
               >
                 Cancel
@@ -14949,6 +15013,7 @@ export default function BrowserPage({
               </button>
             </div>
           </form>
+          {newFolderCloseGuard.confirmationDialog}
         </Modal>
       )}
       {confirmDialog && (

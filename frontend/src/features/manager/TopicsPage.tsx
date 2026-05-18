@@ -21,10 +21,12 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
+import { stableSignature } from "../../utils/stableSignature";
 import { useS3AccountContext } from "./S3AccountContext";
 
 const defaultPolicyTemplate = `{
@@ -77,6 +79,17 @@ const buildAttributeDrafts = (configuration: Record<string, unknown> | null | un
     .map(([key, value]) => ({ key, value: formatAttributeValue(value) }));
 };
 
+const buildAttributesSignature = (
+  pushEndpointValue: string,
+  verifySslValue: boolean,
+  attributeItems: AttributeDraft[]
+) =>
+  stableSignature({
+    pushEndpointValue,
+    verifySslValue,
+    attributeItems,
+  });
+
 export default function TopicsPage() {
   const {
     accounts,
@@ -102,12 +115,16 @@ export default function TopicsPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTopicName, setNewTopicName] = useState("");
+  const [createInitialSignature, setCreateInitialSignature] = useState(() => stableSignature({ newTopicName: "" }));
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
   const [policyTopicArn, setPolicyTopicArn] = useState<string | null>(null);
   const [policyTopicName, setPolicyTopicName] = useState<string | null>(null);
   const [policyText, setPolicyText] = useState(defaultPolicyTemplate);
+  const [policyInitialSignature, setPolicyInitialSignature] = useState(() =>
+    stableSignature({ policyText: defaultPolicyTemplate })
+  );
   const [policyLoading, setPolicyLoading] = useState(false);
   const [policySaving, setPolicySaving] = useState(false);
   const [policyError, setPolicyError] = useState<string | null>(null);
@@ -119,6 +136,9 @@ export default function TopicsPage() {
   const [pushEndpointValue, setPushEndpointValue] = useState("");
   const [verifySslValue, setVerifySslValue] = useState(true);
   const [attributeItems, setAttributeItems] = useState<AttributeDraft[]>([]);
+  const [attributesInitialSignature, setAttributesInitialSignature] = useState(() =>
+    buildAttributesSignature("", true, [])
+  );
   const [attributesLoading, setAttributesLoading] = useState(false);
   const [attributesSaving, setAttributesSaving] = useState(false);
   const [attributesError, setAttributesError] = useState<string | null>(null);
@@ -171,8 +191,17 @@ export default function TopicsPage() {
   }, [accountIdForApi, needsS3AccountSelection, accessMode]);
 
   const openCreateModal = () => {
+    setNewTopicName("");
+    setCreateInitialSignature(stableSignature({ newTopicName: "" }));
     setShowCreateModal(true);
     setCreateError(null);
+  };
+
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    setNewTopicName("");
+    setCreateError(null);
+    setCreateInitialSignature(stableSignature({ newTopicName: "" }));
   };
 
   const handleCreateTopic = async (event: FormEvent) => {
@@ -225,7 +254,9 @@ export default function TopicsPage() {
     try {
       const data = await getTopicPolicy(accountIdForApi, topicArn);
       const policy = data.policy ?? {};
-      setPolicyText(Object.keys(policy).length > 0 ? JSON.stringify(policy, null, 2) : defaultPolicyTemplate);
+      const nextPolicyText = Object.keys(policy).length > 0 ? JSON.stringify(policy, null, 2) : defaultPolicyTemplate;
+      setPolicyText(nextPolicyText);
+      setPolicyInitialSignature(stableSignature({ policyText: nextPolicyText }));
     } catch (err) {
       setPolicyError(extractError(err));
     } finally {
@@ -248,6 +279,7 @@ export default function TopicsPage() {
     try {
       await updateTopicPolicy(accountIdForApi, policyTopicArn, parsed);
       setPolicyStatus("Policy updated.");
+      setPolicyInitialSignature(stableSignature({ policyText }));
     } catch (err) {
       setPolicyError(extractError(err));
     } finally {
@@ -262,6 +294,7 @@ export default function TopicsPage() {
     setPolicyStatus(null);
     setPolicyError(null);
     setShowPolicyExample(false);
+    setPolicyInitialSignature(stableSignature({ policyText: defaultPolicyTemplate }));
   };
 
   const openAttributesModal = (topic: Topic) => {
@@ -272,11 +305,26 @@ export default function TopicsPage() {
     setAttributesError(null);
     setAttributesStatus(null);
     applyAttributesConfiguration(topic.configuration ?? {});
+    setAttributesInitialSignature(
+      buildAttributesSignature(
+        typeof topic.configuration?.["push-endpoint"] === "string" ? (topic.configuration["push-endpoint"] as string) : "",
+        typeof topic.configuration?.["verify-ssl"] === "boolean" ? Boolean(topic.configuration["verify-ssl"]) : true,
+        buildAttributeDrafts(topic.configuration ?? {})
+      )
+    );
     setAttributesLoading(true);
     (async () => {
       try {
         const data = await getTopicConfiguration(accountIdForApi, topic.arn);
-        applyAttributesConfiguration(data.configuration ?? {});
+        const configuration = data.configuration ?? {};
+        applyAttributesConfiguration(configuration);
+        setAttributesInitialSignature(
+          buildAttributesSignature(
+            typeof configuration["push-endpoint"] === "string" ? (configuration["push-endpoint"] as string) : "",
+            typeof configuration["verify-ssl"] === "boolean" ? Boolean(configuration["verify-ssl"]) : true,
+            buildAttributeDrafts(configuration)
+          )
+        );
       } catch (err) {
         setAttributesError(extractError(err));
       } finally {
@@ -332,6 +380,13 @@ export default function TopicsPage() {
       const updated = await updateTopicConfiguration(accountIdForApi, attributesTopicArn, configuration);
       const newConfig = updated.configuration ?? {};
       applyAttributesConfiguration(newConfig);
+      setAttributesInitialSignature(
+        buildAttributesSignature(
+          typeof newConfig["push-endpoint"] === "string" ? (newConfig["push-endpoint"] as string) : "",
+          typeof newConfig["verify-ssl"] === "boolean" ? Boolean(newConfig["verify-ssl"]) : true,
+          buildAttributeDrafts(newConfig)
+        )
+      );
       setAttributesStatus("Attributes updated.");
       setTopics((prev) =>
         prev.map((topic) =>
@@ -356,6 +411,7 @@ export default function TopicsPage() {
     setPushEndpointValue("");
     setVerifySslValue(true);
     setAttributeItems([]);
+    setAttributesInitialSignature(buildAttributesSignature("", true, []));
   };
 
   const handlePushEndpointChange = (value: string) => {
@@ -399,6 +455,27 @@ export default function TopicsPage() {
     if (!needle) return topics;
     return topics.filter((topic) => topic.name.toLowerCase().includes(needle) || topic.arn.toLowerCase().includes(needle));
   }, [topicFilter, topics]);
+  const createCurrentSignature = useMemo(() => stableSignature({ newTopicName }), [newTopicName]);
+  const policyCurrentSignature = useMemo(() => stableSignature({ policyText }), [policyText]);
+  const attributesCurrentSignature = useMemo(
+    () => buildAttributesSignature(pushEndpointValue, verifySslValue, attributeItems),
+    [attributeItems, pushEndpointValue, verifySslValue]
+  );
+  const createCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showCreateModal && createCurrentSignature !== createInitialSignature,
+    onClose: closeCreateModal,
+    disabled: creating,
+  });
+  const policyCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: policyModalOpen && !policyLoading && policyCurrentSignature !== policyInitialSignature,
+    onClose: closePolicyModal,
+    disabled: policySaving,
+  });
+  const attributesCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: attributesModalOpen && !attributesLoading && attributesCurrentSignature !== attributesInitialSignature,
+    onClose: closeAttributesModal,
+    disabled: attributesSaving,
+  });
   const filteredTableStatus = resolveListTableStatus({
     loading,
     error,
@@ -527,7 +604,7 @@ export default function TopicsPage() {
       )}
 
       {showCreateModal && (
-        <Modal title="Create SNS topic" onClose={() => setShowCreateModal(false)}>
+        <Modal title="Create SNS topic" onClose={createCloseGuard.requestClose}>
           <form className="space-y-4" onSubmit={handleCreateTopic}>
             <div className="space-y-1">
               <label className="ui-body font-semibold text-slate-700 dark:text-slate-100">Topic name</label>
@@ -545,7 +622,7 @@ export default function TopicsPage() {
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={createCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
@@ -559,11 +636,12 @@ export default function TopicsPage() {
               </button>
             </div>
           </form>
+          {createCloseGuard.confirmationDialog}
         </Modal>
       )}
 
       {attributesModalOpen && (
-        <Modal title={`Topic attributes · ${attributesTopicName ?? ""}`} onClose={closeAttributesModal}>
+        <Modal title={`Topic attributes · ${attributesTopicName ?? ""}`} onClose={attributesCloseGuard.requestClose}>
           <div className="space-y-4">
             {attributesError && (
               <UiInlineMessage tone="error">{attributesError}</UiInlineMessage>
@@ -665,7 +743,7 @@ export default function TopicsPage() {
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={closeAttributesModal}
+                onClick={attributesCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Close
@@ -680,11 +758,12 @@ export default function TopicsPage() {
               </button>
             </div>
           </div>
+          {attributesCloseGuard.confirmationDialog}
         </Modal>
       )}
 
       {policyModalOpen && (
-        <Modal title={`Topic policy · ${policyTopicName ?? ""}`} onClose={closePolicyModal}>
+        <Modal title={`Topic policy · ${policyTopicName ?? ""}`} onClose={policyCloseGuard.requestClose}>
           <div className="space-y-3">
             {policyError && (
               <UiInlineMessage tone="error">{policyError}</UiInlineMessage>
@@ -767,7 +846,7 @@ export default function TopicsPage() {
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={closePolicyModal}
+                onClick={policyCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Close
@@ -782,6 +861,7 @@ export default function TopicsPage() {
               </button>
             </div>
           </div>
+          {policyCloseGuard.confirmationDialog}
         </Modal>
       )}
     </div>

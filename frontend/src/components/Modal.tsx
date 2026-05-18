@@ -2,10 +2,21 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ReactNode, RefObject, useEffect, useId, useRef } from "react";
+import { ReactNode, RefObject, useEffect, useId, useRef, useState } from "react";
 import UiButton from "./ui/UiButton";
 import { getFocusableElements, trapFocusWithin } from "./ui/focusTrap";
 import { cx, uiCardClass } from "./ui/styles";
+
+const modalStack: string[] = [];
+const modalStackListeners = new Set<() => void>();
+
+function notifyModalStackListeners() {
+  modalStackListeners.forEach((listener) => listener());
+}
+
+function isTopModal(modalId: string) {
+  return modalStack[modalStack.length - 1] === modalId;
+}
 
 type ModalProps = {
   title: string;
@@ -39,9 +50,25 @@ export default function Modal({
   trapFocus = true,
 }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleId = useId();
-  const fallbackTitleId = `${titleId}-title`;
+  const modalId = useId();
+  const fallbackTitleId = `${modalId}-title`;
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const [, setModalStackVersion] = useState(0);
+
+  useEffect(() => {
+    const rerenderOnModalStackChange = () => setModalStackVersion((version) => version + 1);
+    modalStackListeners.add(rerenderOnModalStackChange);
+    modalStack.push(modalId);
+    notifyModalStackListeners();
+    return () => {
+      modalStackListeners.delete(rerenderOnModalStackChange);
+      const index = modalStack.indexOf(modalId);
+      if (index >= 0) {
+        modalStack.splice(index, 1);
+        notifyModalStackListeners();
+      }
+    };
+  }, [modalId]);
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement as HTMLElement | null;
@@ -76,6 +103,7 @@ export default function Modal({
     if (!container) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isTopModal(modalId)) return;
       if (event.key === "Escape" && closeOnEscape) {
         event.preventDefault();
         onClose();
@@ -90,13 +118,14 @@ export default function Modal({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [closeOnEscape, onClose, trapFocus]);
+  }, [closeOnEscape, modalId, onClose, trapFocus]);
 
   return (
     <div
       className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm`}
       role="presentation"
       onMouseDown={(event) => {
+        if (!isTopModal(modalId)) return;
         if (!closeOnBackdropClick) return;
         if (event.target === event.currentTarget) {
           onClose();

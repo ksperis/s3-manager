@@ -10,6 +10,7 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
@@ -5804,6 +5805,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   );
   const hasPendingAdvancedChanges = advancedDraftPayload !== advancedAppliedPayload;
   const hasAnyAdvancedToClear = advancedDraftPayload !== undefined || advancedAppliedPayload !== undefined;
+  const advancedFilterCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showAdvancedFilter && hasPendingAdvancedChanges,
+    onClose: closeAdvancedFilterDrawer,
+    zIndexClass: "z-[70]",
+  });
   const quickFilterActive = filterValue.trim().length > 0;
   const columnsCustomized = useMemo(() => {
     if (visibleColumns.length !== defaultVisibleColumns.length) return true;
@@ -7910,7 +7916,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                 <div className="fixed inset-x-0 bottom-0 top-14 z-40">
                   <button
                     type="button"
-                    onClick={closeAdvancedFilterDrawer}
+                    onClick={advancedFilterCloseGuard.requestClose}
                     className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
                     aria-label="Close advanced filter drawer"
                   />
@@ -7944,7 +7950,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                         </div>
                         <button
                           type="button"
-                          onClick={closeAdvancedFilterDrawer}
+                          onClick={advancedFilterCloseGuard.requestClose}
                           className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                         >
                           Close
@@ -9069,7 +9075,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           </button>
                           <button
                             type="button"
-                            onClick={closeAdvancedFilterDrawer}
+                            onClick={advancedFilterCloseGuard.requestClose}
                             className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
                           >
                             Close
@@ -10021,6 +10027,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             </div>
         </div>
       </BucketOpsBulkUpdateModal>
+      {advancedFilterCloseGuard.confirmationDialog}
     </div>
   );
 }

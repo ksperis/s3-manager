@@ -10,6 +10,7 @@ import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
@@ -609,6 +610,11 @@ export default function CephAdminAccountsPage() {
   );
   const hasPendingAdvancedChanges = advancedDraftPayload !== advancedAppliedPayload;
   const hasAnyAdvancedToClear = advancedDraftPayload !== undefined || advancedAppliedPayload !== undefined;
+  const advancedFilterCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showAdvancedFilter && hasPendingAdvancedChanges,
+    onClose: closeAdvancedFilterDrawer,
+    zIndexClass: "z-[70]",
+  });
 
   const resetAllFilters = () => {
     setFilter("");
@@ -1071,7 +1077,7 @@ export default function CephAdminAccountsPage() {
                   <div className="fixed inset-x-0 bottom-0 top-14 z-40">
                     <button
                       type="button"
-                      onClick={closeAdvancedFilterDrawer}
+                      onClick={advancedFilterCloseGuard.requestClose}
                       className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
                       aria-label="Close advanced filter drawer"
                     />
@@ -1105,7 +1111,7 @@ export default function CephAdminAccountsPage() {
                           </div>
                           <button
                             type="button"
-                            onClick={closeAdvancedFilterDrawer}
+                            onClick={advancedFilterCloseGuard.requestClose}
                             className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                           >
                             Close
@@ -1380,6 +1386,7 @@ export default function CephAdminAccountsPage() {
           }}
         />
       )}
+      {advancedFilterCloseGuard.confirmationDialog}
     </div>
   );
 }

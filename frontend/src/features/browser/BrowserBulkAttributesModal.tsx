@@ -2,9 +2,11 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { Dispatch, SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import Modal from "../../components/Modal";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import { stableSignature } from "../../utils/stableSignature";
 import {
   aclOptions,
   bulkActionClasses,
@@ -95,8 +97,52 @@ export default function BrowserBulkAttributesModal({
   onApply,
   onClose,
 }: BrowserBulkAttributesModalProps) {
+  const currentSignature = useMemo(
+    () =>
+      stableSignature({
+        bulkApplyMetadata,
+        bulkMetadataDraft,
+        bulkMetadataEntries,
+        bulkApplyTags,
+        bulkTagsDraft,
+        bulkApplyStorageClass,
+        bulkStorageClass,
+        bulkApplyAcl,
+        bulkAclValue,
+        bulkApplyLegalHold,
+        bulkLegalHoldStatus,
+        bulkApplyRetention,
+        bulkRetentionMode,
+        bulkRetentionDate,
+        bulkRetentionBypass,
+      }),
+    [
+      bulkAclValue,
+      bulkApplyAcl,
+      bulkApplyLegalHold,
+      bulkApplyMetadata,
+      bulkApplyRetention,
+      bulkApplyStorageClass,
+      bulkApplyTags,
+      bulkLegalHoldStatus,
+      bulkMetadataDraft,
+      bulkMetadataEntries,
+      bulkRetentionBypass,
+      bulkRetentionDate,
+      bulkRetentionMode,
+      bulkStorageClass,
+      bulkTagsDraft,
+    ]
+  );
+  const [initialSignature] = useState(currentSignature);
+  const closeGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: currentSignature !== initialSignature,
+    onClose,
+    disabled: bulkAttributesLoading,
+  });
+
   return (
-    <Modal title="Bulk attributes" onClose={onClose} maxWidthClass="max-w-3xl">
+    <Modal title="Bulk attributes" onClose={closeGuard.requestClose} maxWidthClass="max-w-3xl">
       <div className="space-y-4 ui-caption text-slate-600 dark:text-slate-300">
         <div className="space-y-1">
           <p className="font-semibold text-slate-800 dark:text-slate-100">Targets</p>
@@ -305,7 +351,7 @@ export default function BrowserBulkAttributesModal({
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <button type="button" className={bulkActionClasses} onClick={onClose}>
+          <button type="button" className={bulkActionClasses} onClick={closeGuard.requestClose}>
             Cancel
           </button>
           <button
@@ -318,6 +364,7 @@ export default function BrowserBulkAttributesModal({
           </button>
         </div>
       </div>
+      {closeGuard.confirmationDialog}
     </Modal>
   );
 }

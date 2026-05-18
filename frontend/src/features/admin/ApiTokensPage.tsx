@@ -15,10 +15,12 @@ import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
+import { stableSignature } from "../../utils/stableSignature";
 
 type TokenStatus = "active" | "expired" | "revoked";
 
@@ -93,6 +95,9 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
   const [expiresInDays, setExpiresInDays] = useState(String(DEFAULT_EXPIRY_DAYS));
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [createInitialSignature, setCreateInitialSignature] = useState(() =>
+    stableSignature({ tokenName: "", expiresInDays: String(DEFAULT_EXPIRY_DAYS) })
+  );
 
   const [busyTokenId, setBusyTokenId] = useState<string | null>(null);
   const [revealedToken, setRevealedToken] = useState<RevealedToken | null>(null);
@@ -142,6 +147,7 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
     setExpiresInDays(String(DEFAULT_EXPIRY_DAYS));
     setFormError(null);
     setCreating(false);
+    setCreateInitialSignature(stableSignature({ tokenName: "", expiresInDays: String(DEFAULT_EXPIRY_DAYS) }));
   };
 
   const openCreateModal = () => {
@@ -153,6 +159,16 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
     setShowCreateModal(false);
     setFormError(null);
   };
+
+  const createCurrentSignature = useMemo(
+    () => stableSignature({ tokenName, expiresInDays }),
+    [expiresInDays, tokenName]
+  );
+  const createCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showCreateModal && createCurrentSignature !== createInitialSignature,
+    onClose: closeCreateModal,
+    disabled: creating,
+  });
 
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();
@@ -396,7 +412,7 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
       </div>
 
       {showCreateModal && (
-        <Modal title="Create API token" onClose={closeCreateModal} maxWidthClass="max-w-xl">
+        <Modal title="Create API token" onClose={createCloseGuard.requestClose} maxWidthClass="max-w-xl">
           <form className="space-y-4" onSubmit={handleCreate}>
             <p className="ui-caption text-slate-500 dark:text-slate-400">
               Create a long-lived JWT token for automation (Ansible, CI, scripts). The token secret will be shown once.
@@ -431,7 +447,7 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={closeCreateModal}
+                onClick={createCloseGuard.requestClose}
                 className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
                 disabled={creating}
               >
@@ -446,6 +462,7 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
               </button>
             </div>
           </form>
+          {createCloseGuard.confirmationDialog}
         </Modal>
       )}
     </div>

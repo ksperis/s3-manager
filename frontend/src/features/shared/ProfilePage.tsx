@@ -10,6 +10,7 @@ import PageHeader from "../../components/PageHeader";
 import PaginationControls from "../../components/PaginationControls";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useTheme } from "../../components/theme";
@@ -27,6 +28,7 @@ import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoint
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "./useLiveS3CredentialsValidation";
 import { notifyExecutionContextsRefresh } from "../../utils/executionContextRefresh";
+import { stableSignature } from "../../utils/stableSignature";
 import {
   WORKSPACE_STORAGE_KEY,
   isAdminLikeRole,
@@ -57,6 +59,8 @@ const defaultCreateConnectionForm = {
   force_path_style: false,
   verify_tls: true,
 };
+
+type CreateConnectionForm = typeof defaultCreateConnectionForm;
 
 type ConnectionDraft = {
   name: string;
@@ -120,6 +124,38 @@ function buildConnectionDraft(connection: S3Connection): ConnectionDraft {
   };
 }
 
+function buildCreateConnectionSignature(
+  form: CreateConnectionForm,
+  endpointMode: S3ConnectionEndpointMode,
+  endpointId: string
+): string {
+  return stableSignature({
+    endpointMode,
+    endpointId,
+    form: {
+      ...form,
+      tags: normalizeUiTags(form.tags),
+    },
+  });
+}
+
+function buildEditConnectionSignature(
+  draft: ConnectionDraft,
+  credentialDraft: ConnectionCredentialDraft,
+  endpointMode: S3ConnectionEndpointMode,
+  endpointId: string
+): string {
+  return stableSignature({
+    endpointMode,
+    endpointId,
+    draft: {
+      ...draft,
+      tags: normalizeUiTags(draft.tags),
+    },
+    credentialDraft,
+  });
+}
+
 function formatDateTime(value?: string | null): string {
   if (!value) return "-";
   const parsed = new Date(value);
@@ -138,12 +174,14 @@ type ProfilePageProps = {
   showPageHeader?: boolean;
   showSettingsCards?: boolean;
   showConnectionsSection?: boolean;
+  onUnsavedChangesChange?: (dirty: boolean) => void;
 };
 
 export default function ProfilePage({
   showPageHeader = true,
   showSettingsCards = true,
   showConnectionsSection = false,
+  onUnsavedChangesChange,
 }: ProfilePageProps) {
   const storedUser = useMemo<SessionUser | null>(() => readStoredUser(), []);
   const authType = storedUser?.authType ?? null;
@@ -157,6 +195,8 @@ export default function ProfilePage({
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [fullName, setFullName] = useState("");
+  const [profileTouched, setProfileTouched] = useState(false);
+  const [profileInitialSignature, setProfileInitialSignature] = useState(() => stableSignature({ fullName: "" }));
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
@@ -167,6 +207,7 @@ export default function ProfilePage({
   const [preferencesTheme, setPreferencesTheme] = useState<"light" | "dark">(theme);
   const [preferencesLanguage, setPreferencesLanguage] = useState<UiLanguagePreference>(languagePreference);
   const [preferencesShowSelectorTags, setPreferencesShowSelectorTags] = useState<boolean>(() => readSelectorTagsPreference());
+  const [preferencesTouched, setPreferencesTouched] = useState(false);
   const [quotaAlertsEnabled, setQuotaAlertsEnabled] = useState(true);
   const [quotaAlertsGlobalWatch, setQuotaAlertsGlobalWatch] = useState(false);
   const [connections, setConnections] = useState<S3Connection[]>([]);
@@ -188,6 +229,12 @@ export default function ProfilePage({
   const [createConnectionEndpointId, setCreateConnectionEndpointId] = useState("");
   const [editConnectionEndpointMode, setEditConnectionEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [editConnectionEndpointId, setEditConnectionEndpointId] = useState("");
+  const [createConnectionInitialSignature, setCreateConnectionInitialSignature] = useState(() =>
+    buildCreateConnectionSignature(defaultCreateConnectionForm, "custom", "")
+  );
+  const [editConnectionInitialSignature, setEditConnectionInitialSignature] = useState(() =>
+    buildEditConnectionSignature(buildConnectionDraft({ id: 0 } as S3Connection), { access_key_id: "", secret_access_key: "" }, "custom", "")
+  );
   const [availableStorageEndpoints, setAvailableStorageEndpoints] = useState<StorageEndpoint[]>([]);
   const [loadingStorageEndpoints, setLoadingStorageEndpoints] = useState(false);
   const [storageEndpointsError, setStorageEndpointsError] = useState<string | null>(null);
@@ -207,11 +254,63 @@ export default function ProfilePage({
     [generalSettings, storedUser]
   );
   const [preferredWorkspace, setPreferredWorkspace] = useState<WorkspaceId | null>(() => readStoredWorkspaceId());
+  const [preferencesInitialSignature, setPreferencesInitialSignature] = useState(() =>
+    stableSignature({
+      preferencesTheme: theme,
+      preferencesLanguage: languagePreference,
+      preferredWorkspace: readStoredWorkspaceId(),
+      preferencesShowSelectorTags: readSelectorTagsPreference(),
+      quotaAlertsEnabled: true,
+      quotaAlertsGlobalWatch: false,
+    })
+  );
   const canConfigureGlobalQuotaWatch = isAdminLikeRole(storedUser?.role);
   const canManagePrivateConnections =
     !isS3Session &&
     (isAdminLikeRole(storedUser?.role) ||
       (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
+
+  const profileCurrentSignature = useMemo(() => stableSignature({ fullName }), [fullName]);
+  const preferencesCurrentSignature = useMemo(
+    () =>
+      stableSignature({
+        preferencesTheme,
+        preferencesLanguage,
+        preferredWorkspace,
+        preferencesShowSelectorTags,
+        quotaAlertsEnabled,
+        quotaAlertsGlobalWatch: canConfigureGlobalQuotaWatch ? quotaAlertsGlobalWatch : false,
+      }),
+    [
+      canConfigureGlobalQuotaWatch,
+      preferencesLanguage,
+      preferencesShowSelectorTags,
+      preferencesTheme,
+      preferredWorkspace,
+      quotaAlertsEnabled,
+      quotaAlertsGlobalWatch,
+    ]
+  );
+  const passwordHasUnsavedChanges = Boolean(currentPassword || newPassword || confirmPassword);
+  const settingsHaveUnsavedChanges =
+    showSettingsCards &&
+    ((profileTouched && profileCurrentSignature !== profileInitialSignature) ||
+      passwordHasUnsavedChanges ||
+      (preferencesTouched && preferencesCurrentSignature !== preferencesInitialSignature));
+
+  useEffect(() => {
+    onUnsavedChangesChange?.(settingsHaveUnsavedChanges);
+  }, [onUnsavedChangesChange, settingsHaveUnsavedChanges]);
+
+  useEffect(() => {
+    if (!showSettingsCards || profileTouched) return;
+    setProfileInitialSignature(profileCurrentSignature);
+  }, [profileCurrentSignature, profileTouched, showSettingsCards]);
+
+  useEffect(() => {
+    if (!showSettingsCards || preferencesTouched) return;
+    setPreferencesInitialSignature(preferencesCurrentSignature);
+  }, [preferencesCurrentSignature, preferencesTouched, showSettingsCards]);
 
   const createConnectionValidationPayload = useMemo(() => {
     const accessKeyId = createConnectionForm.access_key_id.trim();
@@ -321,6 +420,75 @@ export default function ProfilePage({
     [connections, editingConnectionId]
   );
 
+  const createConnectionCurrentSignature = useMemo(
+    () =>
+      buildCreateConnectionSignature(
+        createConnectionForm,
+        createConnectionEndpointMode,
+        createConnectionEndpointId
+      ),
+    [createConnectionEndpointId, createConnectionEndpointMode, createConnectionForm]
+  );
+
+  const closeCreateConnectionModal = useCallback(() => {
+    if (creatingConnection) return;
+    setShowCreateConnectionModal(false);
+    setCreateConnectionForm(defaultCreateConnectionForm);
+    setCreateConnectionEndpointMode("custom");
+    setCreateConnectionEndpointId("");
+  }, [creatingConnection]);
+
+  const closeEditConnectionModal = useCallback(() => {
+    if (editingConnection && savingConnectionBusyId === editingConnection.id) return;
+    if (editingConnection) {
+      setConnectionDrafts((prev) => ({
+        ...prev,
+        [editingConnection.id]: buildConnectionDraft(editingConnection),
+      }));
+      setConnectionCredentialDrafts((prev) => ({
+        ...prev,
+        [editingConnection.id]: { access_key_id: "", secret_access_key: "" },
+      }));
+    }
+    setEditingConnectionId(null);
+  }, [editingConnection, savingConnectionBusyId]);
+
+  const editConnectionCurrentSignature = useMemo(() => {
+    if (!editingConnection) return editConnectionInitialSignature;
+    const draft = connectionDrafts[editingConnection.id] ?? buildConnectionDraft(editingConnection);
+    const credentialDraft = connectionCredentialDrafts[editingConnection.id] ?? {
+      access_key_id: "",
+      secret_access_key: "",
+    };
+    return buildEditConnectionSignature(
+      draft,
+      credentialDraft,
+      editConnectionEndpointMode,
+      editConnectionEndpointId
+    );
+  }, [
+    connectionCredentialDrafts,
+    connectionDrafts,
+    editConnectionEndpointId,
+    editConnectionEndpointMode,
+    editConnectionInitialSignature,
+    editingConnection,
+  ]);
+
+  const createConnectionCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showCreateConnectionModal && createConnectionCurrentSignature !== createConnectionInitialSignature,
+    onClose: closeCreateConnectionModal,
+    disabled: creatingConnection,
+    zIndexClass: "z-[70]",
+  });
+
+  const editConnectionCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: Boolean(editingConnection) && editConnectionCurrentSignature !== editConnectionInitialSignature,
+    onClose: closeEditConnectionModal,
+    disabled: editingConnection ? savingConnectionBusyId === editingConnection.id : false,
+    zIndexClass: "z-[70]",
+  });
+
   useEffect(() => {
     setPreferencesTheme(theme);
   }, [theme]);
@@ -349,10 +517,17 @@ export default function ProfilePage({
     setProfileError(null);
     fetchCurrentUser()
       .then((user) => {
-        setFullName(user.full_name ?? "");
-        setLanguagePreference(user.ui_language ?? "auto");
-        setQuotaAlertsEnabled(user.quota_alerts_enabled !== false);
-        setQuotaAlertsGlobalWatch(Boolean(user.quota_alerts_global_watch));
+        const nextFullName = user.full_name ?? "";
+        const nextLanguage = user.ui_language ?? "auto";
+        const nextQuotaAlertsEnabled = user.quota_alerts_enabled !== false;
+        const nextQuotaAlertsGlobalWatch = Boolean(user.quota_alerts_global_watch);
+        setFullName(nextFullName);
+        setProfileTouched(false);
+        setLanguagePreference(nextLanguage);
+        setPreferencesLanguage(nextLanguage);
+        setQuotaAlertsEnabled(nextQuotaAlertsEnabled);
+        setQuotaAlertsGlobalWatch(nextQuotaAlertsGlobalWatch);
+        setPreferencesTouched(false);
         persistStoredUser({ uiLanguage: user.ui_language ?? null });
       })
       .catch((error) => {
@@ -549,36 +724,45 @@ export default function ProfilePage({
   const openCreateConnectionModal = () => {
     setConnectionsError(null);
     setConnectionsMessage(null);
-    setCreateConnectionForm(defaultCreateConnectionForm);
+    const nextForm: CreateConnectionForm = { ...defaultCreateConnectionForm, tags: [] };
+    let nextEndpointMode: S3ConnectionEndpointMode = "custom";
+    let nextEndpointId = "";
     if (availableStorageEndpoints.length > 0) {
       const preferred = availableStorageEndpoints.find((item) => item.is_default) ?? availableStorageEndpoints[0];
-      setCreateConnectionEndpointMode("preset");
-      setCreateConnectionEndpointId(String(preferred.id));
-    } else {
-      setCreateConnectionEndpointMode("custom");
-      setCreateConnectionEndpointId("");
+      nextEndpointMode = "preset";
+      nextEndpointId = String(preferred.id);
     }
+    setCreateConnectionForm(nextForm);
+    setCreateConnectionEndpointMode(nextEndpointMode);
+    setCreateConnectionEndpointId(nextEndpointId);
+    setCreateConnectionInitialSignature(buildCreateConnectionSignature(nextForm, nextEndpointMode, nextEndpointId));
     setShowCreateConnectionModal(true);
   };
 
   const openEditConnectionModal = (connection: S3Connection) => {
     setConnectionsError(null);
     setConnectionsMessage(null);
+    const nextDraft = buildConnectionDraft(connection);
+    const nextCredentialDraft = { access_key_id: "", secret_access_key: "" };
     setConnectionDrafts((prev) => ({
       ...prev,
-      [connection.id]: prev[connection.id] ?? buildConnectionDraft(connection),
+      [connection.id]: nextDraft,
     }));
+    let nextEndpointMode: S3ConnectionEndpointMode = "custom";
+    let nextEndpointId = "";
     if (connection.storage_endpoint_id != null) {
-      setEditConnectionEndpointMode("preset");
-      setEditConnectionEndpointId(String(connection.storage_endpoint_id));
-    } else {
-      setEditConnectionEndpointMode("custom");
-      setEditConnectionEndpointId("");
+      nextEndpointMode = "preset";
+      nextEndpointId = String(connection.storage_endpoint_id);
     }
+    setEditConnectionEndpointMode(nextEndpointMode);
+    setEditConnectionEndpointId(nextEndpointId);
     setConnectionCredentialDrafts((prev) => ({
       ...prev,
-      [connection.id]: { access_key_id: "", secret_access_key: "" },
+      [connection.id]: nextCredentialDraft,
     }));
+    setEditConnectionInitialSignature(
+      buildEditConnectionSignature(nextDraft, nextCredentialDraft, nextEndpointMode, nextEndpointId)
+    );
     setEditingConnectionId(connection.id);
   };
 
@@ -592,6 +776,8 @@ export default function ProfilePage({
       const updated = await updateCurrentUser({ full_name: fullName.trim() || null });
       const updatedName = updated.full_name ?? null;
       setFullName(updatedName ?? "");
+      setProfileInitialSignature(stableSignature({ fullName: updatedName ?? "" }));
+      setProfileTouched(false);
       persistStoredUser({ fullName: updatedName });
       setProfileMessage("Profile updated.");
     } catch (error) {
@@ -649,8 +835,8 @@ export default function ProfilePage({
         persistStoredUser({ uiLanguage: updated.ui_language ?? null });
       } catch (error) {
         console.error(error);
-        setPreferencesMessage(getErrorMessage(error, "Unable to save language preference."));
-        return;
+      setPreferencesMessage(getErrorMessage(error, "Unable to save language preference."));
+      return;
       }
     } else {
       setLanguagePreference(preferencesLanguage);
@@ -661,6 +847,8 @@ export default function ProfilePage({
       localStorage.removeItem(WORKSPACE_STORAGE_KEY);
     }
     writeSelectorTagsPreference(preferencesShowSelectorTags);
+    setPreferencesInitialSignature(preferencesCurrentSignature);
+    setPreferencesTouched(false);
     setPreferencesMessage("Preferences saved.");
   };
 
@@ -1052,7 +1240,10 @@ export default function ProfilePage({
                 <input
                   type="text"
                   value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
+                  onChange={(event) => {
+                    setProfileTouched(true);
+                    setFullName(event.target.value);
+                  }}
                   disabled={isS3Session}
                   className={`${inputClasses} ${isS3Session ? "cursor-not-allowed opacity-70" : ""}`}
                   placeholder="Your name"
@@ -1150,7 +1341,10 @@ export default function ProfilePage({
                 </span>
                 <select
                   value={preferencesLanguage}
-                  onChange={(event) => setPreferencesLanguage(event.target.value as UiLanguagePreference)}
+                  onChange={(event) => {
+                    setPreferencesTouched(true);
+                    setPreferencesLanguage(event.target.value as UiLanguagePreference);
+                  }}
                   className={inputClasses}
                 >
                   <option value="en">English</option>
@@ -1165,7 +1359,10 @@ export default function ProfilePage({
                 </span>
                 <select
                   value={preferencesTheme}
-                  onChange={(event) => setPreferencesTheme(event.target.value as "light" | "dark")}
+                  onChange={(event) => {
+                    setPreferencesTouched(true);
+                    setPreferencesTheme(event.target.value as "light" | "dark");
+                  }}
                   className={inputClasses}
                 >
                   <option value="light">Light</option>
@@ -1178,7 +1375,10 @@ export default function ProfilePage({
                 </span>
                 <select
                   value={preferredWorkspace ?? ""}
-                  onChange={(event) => setPreferredWorkspace((event.target.value as WorkspaceId) || null)}
+                  onChange={(event) => {
+                    setPreferencesTouched(true);
+                    setPreferredWorkspace((event.target.value as WorkspaceId) || null);
+                  }}
                   className={inputClasses}
                   disabled={availableWorkspaces.length === 0}
                 >
@@ -1195,7 +1395,10 @@ export default function ProfilePage({
               <input
                 type="checkbox"
                 checked={preferencesShowSelectorTags}
-                onChange={(event) => setPreferencesShowSelectorTags(event.target.checked)}
+                onChange={(event) => {
+                  setPreferencesTouched(true);
+                  setPreferencesShowSelectorTags(event.target.checked);
+                }}
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
               />
               <span>
@@ -1211,7 +1414,10 @@ export default function ProfilePage({
                   <input
                     type="checkbox"
                     checked={quotaAlertsEnabled}
-                    onChange={(event) => setQuotaAlertsEnabled(event.target.checked)}
+                    onChange={(event) => {
+                      setPreferencesTouched(true);
+                      setQuotaAlertsEnabled(event.target.checked);
+                    }}
                   />
                   <span className="ui-body text-slate-700 dark:text-slate-200">Receive quota alert emails</span>
                 </label>
@@ -1220,7 +1426,10 @@ export default function ProfilePage({
                     <input
                       type="checkbox"
                       checked={quotaAlertsGlobalWatch}
-                      onChange={(event) => setQuotaAlertsGlobalWatch(event.target.checked)}
+                      onChange={(event) => {
+                        setPreferencesTouched(true);
+                        setQuotaAlertsGlobalWatch(event.target.checked);
+                      }}
                     />
                     <span className="ui-body text-slate-700 dark:text-slate-200">
                       Global quota watch (all storage spaces)
@@ -1504,11 +1713,7 @@ export default function ProfilePage({
       {showConnectionsSection && showCreateConnectionModal && (
         <Modal
           title="Add private S3 connection"
-          onClose={() => {
-            if (creatingConnection) return null;
-            setShowCreateConnectionModal(false);
-            return null;
-          }}
+          onClose={createConnectionCloseGuard.requestClose}
           maxWidthClass="max-w-3xl"
         >
           {connectionsError && (
@@ -1648,9 +1853,7 @@ export default function ProfilePage({
               <button
                 type="button"
                 className={secondaryButtonClasses}
-                onClick={() => {
-                  setShowCreateConnectionModal(false);
-                }}
+                onClick={createConnectionCloseGuard.requestClose}
                 disabled={creatingConnection}
               >
                 Cancel
@@ -1660,17 +1863,14 @@ export default function ProfilePage({
               </button>
             </div>
           </form>
+          {createConnectionCloseGuard.confirmationDialog}
         </Modal>
       )}
 
       {showConnectionsSection && editingConnection && (
         <Modal
           title={`Edit connection - ${editingConnection.name}`}
-          onClose={() => {
-            if (savingConnectionBusyId === editingConnection.id) return null;
-            setEditingConnectionId(null);
-            return null;
-          }}
+          onClose={editConnectionCloseGuard.requestClose}
           maxWidthClass="max-w-3xl"
         >
           {connectionsError && (
@@ -1683,7 +1883,7 @@ export default function ProfilePage({
             onSubmit={async (event) => {
               event.preventDefault();
               const success = await handleUpdatePrivateConnection(editingConnection.id);
-              if (success) setEditingConnectionId(null);
+              if (success) closeEditConnectionModal();
             }}
           >
             {(() => {
@@ -1838,9 +2038,7 @@ export default function ProfilePage({
               <button
                 type="button"
                 className={secondaryButtonClasses}
-                onClick={() => {
-                  setEditingConnectionId(null);
-                }}
+                onClick={editConnectionCloseGuard.requestClose}
                 disabled={savingConnectionBusyId === editingConnection.id}
               >
                 Cancel
@@ -1854,6 +2052,7 @@ export default function ProfilePage({
               </button>
             </div>
           </form>
+          {editConnectionCloseGuard.confirmationDialog}
         </Modal>
       )}
     </div>

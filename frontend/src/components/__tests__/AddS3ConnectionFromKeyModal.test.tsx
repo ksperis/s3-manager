@@ -69,4 +69,35 @@ describe("AddS3ConnectionFromKeyModal", () => {
 
     window.removeEventListener(EXECUTION_CONTEXTS_REFRESH_EVENT, refreshListener);
   });
+
+  it("asks before closing when connection fields changed", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    listStorageEndpointsMock.mockResolvedValue([]);
+
+    render(
+      <AddS3ConnectionFromKeyModal
+        isOpen
+        lockEndpoint
+        accessKeyId="AKIA-EXAMPLE"
+        secretAccessKey="SECRET-EXAMPLE"
+        defaultName="private-connection"
+        defaultEndpointUrl="https://s3.example.test"
+        defaultAccessManager
+        defaultAccessBrowser
+        onClose={onClose}
+      />
+    );
+
+    const nameInput = screen.getByDisplayValue("private-connection");
+    await user.clear(nameInput);
+    await user.type(nameInput, "changed-connection");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByRole("dialog", { name: "Discard changes?" })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

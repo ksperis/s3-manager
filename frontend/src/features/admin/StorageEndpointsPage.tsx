@@ -24,7 +24,9 @@ import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
+import { stableSignature } from "../../utils/stableSignature";
 import { buildUiTagItems, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
@@ -415,6 +417,7 @@ export default function StorageEndpointsPage() {
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<"full" | "tags_only">("full");
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [formInitialSignature, setFormInitialSignature] = useState("");
   const [showOpsHelp, setShowOpsHelp] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -437,6 +440,7 @@ export default function StorageEndpointsPage() {
   const resetForm = useCallback(() => {
     setForm(createEmptyForm());
     setFormMode("full");
+    setFormInitialSignature("");
     setShowOpsHelp(false);
     setFormError(null);
     setFeatureDetectBusy(false);
@@ -678,25 +682,37 @@ export default function StorageEndpointsPage() {
 
   const startCreate = () => {
     if (envManaged || !canEditEndpoints) return;
-    resetForm();
+    const nextForm = createEmptyForm();
+    setForm(nextForm);
     setFormMode("full");
+    setFormInitialSignature(stableSignature({ formMode: "full", form: { ...nextForm, tags: normalizeUiTags(nextForm.tags) } }));
+    setShowOpsHelp(false);
+    setFormError(null);
+    setFeatureDetectBusy(false);
+    setFeatureDetectError(null);
+    setFeatureDetectWarnings([]);
+    setEditingId(null);
     setShowForm(true);
   };
 
   const startEdit = (endpoint: StorageEndpoint) => {
     if (envManaged || !canEditEndpoints) return;
+    const nextForm = createFormFromEndpoint(endpoint);
     setEditingId(endpoint.id);
     setFormMode("full");
-    setForm(createFormFromEndpoint(endpoint));
+    setForm(nextForm);
+    setFormInitialSignature(stableSignature({ formMode: "full", form: { ...nextForm, tags: normalizeUiTags(nextForm.tags) } }));
     setFormError(null);
     setShowForm(true);
   };
 
   const openTagsOnly = (endpoint: StorageEndpoint) => {
     if (!canEditEndpoints) return;
+    const nextForm = createFormFromEndpoint(endpoint);
     setEditingId(endpoint.id);
     setFormMode("tags_only");
-    setForm(createFormFromEndpoint(endpoint));
+    setForm(nextForm);
+    setFormInitialSignature(stableSignature({ formMode: "tags_only", form: { ...nextForm, tags: normalizeUiTags(nextForm.tags) } }));
     setFormError(null);
     setShowForm(true);
   };
@@ -705,6 +721,15 @@ export default function StorageEndpointsPage() {
     setShowForm(false);
     resetForm();
   };
+  const formCurrentSignature = useMemo(
+    () => stableSignature({ formMode, form: { ...form, tags: normalizeUiTags(form.tags) } }),
+    [form, formMode]
+  );
+  const formCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: Boolean(formInitialSignature) && formCurrentSignature !== formInitialSignature,
+    disabled: saving,
+    onClose: onCloseForm,
+  });
 
   const handleDelete = async () => {
     if (envManaged || !canEditEndpoints) return;
@@ -1258,7 +1283,7 @@ export default function StorageEndpointsPage() {
       )}
 
       {showForm && (
-        <Modal title={editingId ? (tagsOnlyMode ? "Edit endpoint tags" : "Edit endpoint") : "New endpoint"} onClose={onCloseForm}>
+        <Modal title={editingId ? (tagsOnlyMode ? "Edit endpoint tags" : "Edit endpoint") : "New endpoint"} onClose={formCloseGuard.requestClose}>
           <form onSubmit={handleSubmit} className="space-y-4">
             {formError && <PageBanner tone="error">{formError}</PageBanner>}
             {tagsOnlyMode && (
@@ -1824,7 +1849,7 @@ export default function StorageEndpointsPage() {
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
-                onClick={onCloseForm}
+                onClick={formCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
               >
                 Cancel
@@ -1838,6 +1863,7 @@ export default function StorageEndpointsPage() {
                 {saving ? "Saving..." : editingId ? (tagsOnlyMode ? "Save tags" : "Update") : "Create"}
               </button>
             </div>
+            {formCloseGuard.confirmationDialog}
           </form>
         </Modal>
       )}

@@ -17,6 +17,8 @@ import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import UsageTile from "../../components/UsageTile";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { stableSignature } from "../../utils/stableSignature";
 import { buildCephAdminQuotaPatch } from "./quotaPatch";
 
 type Props = {
@@ -120,6 +122,49 @@ export default function CephAdminAccountEditModal({
   const [bucketQuotaSize, setBucketQuotaSize] = useState("");
   const [bucketQuotaUnit, setBucketQuotaUnit] = useState<QuotaUnit>("GiB");
   const [bucketQuotaObjects, setBucketQuotaObjects] = useState("");
+  const currentSignature = useMemo(
+    () =>
+      stableSignature({
+        accountName,
+        email,
+        maxUsers,
+        maxBuckets,
+        maxRoles,
+        maxGroups,
+        maxAccessKeys,
+        quotaEnabled,
+        quotaSize,
+        quotaUnit,
+        quotaObjects,
+        bucketQuotaEnabled,
+        bucketQuotaSize,
+        bucketQuotaUnit,
+        bucketQuotaObjects,
+      }),
+    [
+      accountName,
+      bucketQuotaEnabled,
+      bucketQuotaObjects,
+      bucketQuotaSize,
+      bucketQuotaUnit,
+      email,
+      maxAccessKeys,
+      maxBuckets,
+      maxGroups,
+      maxRoles,
+      maxUsers,
+      quotaEnabled,
+      quotaObjects,
+      quotaSize,
+      quotaUnit,
+    ]
+  );
+  const [initialSignature, setInitialSignature] = useState(currentSignature);
+  const closeGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: !detailLoading && currentSignature !== initialSignature,
+    onClose,
+    disabled: saving,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -153,6 +198,25 @@ export default function CephAdminAccountEditModal({
         setBucketQuotaSize(bucketQuotaForm.value);
         setBucketQuotaUnit(bucketQuotaForm.unit);
         setBucketQuotaObjects(payload.bucket_quota?.max_objects != null ? String(payload.bucket_quota.max_objects) : "");
+        setInitialSignature(
+          stableSignature({
+            accountName: payload.account_name ?? "",
+            email: payload.email ?? "",
+            maxUsers: payload.max_users != null ? String(payload.max_users) : "",
+            maxBuckets: payload.max_buckets != null ? String(payload.max_buckets) : "",
+            maxRoles: payload.max_roles != null ? String(payload.max_roles) : "",
+            maxGroups: payload.max_groups != null ? String(payload.max_groups) : "",
+            maxAccessKeys: payload.max_access_keys != null ? String(payload.max_access_keys) : "",
+            quotaEnabled: payload.quota?.enabled ?? quotaConfigured,
+            quotaSize: quotaForm.value,
+            quotaUnit: quotaForm.unit,
+            quotaObjects: payload.quota?.max_objects != null ? String(payload.quota.max_objects) : "",
+            bucketQuotaEnabled: payload.bucket_quota?.enabled ?? bucketQuotaConfigured,
+            bucketQuotaSize: bucketQuotaForm.value,
+            bucketQuotaUnit: bucketQuotaForm.unit,
+            bucketQuotaObjects: payload.bucket_quota?.max_objects != null ? String(payload.bucket_quota.max_objects) : "",
+          })
+        );
       } catch (err) {
         if (!cancelled) {
           setDetailError(extractError(err));
@@ -296,6 +360,7 @@ export default function CephAdminAccountEditModal({
       };
       const updated = await updateCephAdminAccountConfig(endpointId, accountId, payload);
       setDetail(updated);
+      setInitialSignature(currentSignature);
       setSaveStatus("Account configuration updated.");
       onSaved?.(updated);
       if (activeTab === "metrics") {
@@ -673,8 +738,9 @@ export default function CephAdminAccountEditModal({
   }, [canViewMetrics, configTab, metricsTab, overviewTab]);
 
   return (
-    <Modal title={`Configure account · ${accountId}`} onClose={onClose} maxWidthClass="max-w-6xl" maxBodyHeightClass="max-h-[85vh]">
+    <Modal title={`Configure account · ${accountId}`} onClose={closeGuard.requestClose} maxWidthClass="max-w-6xl" maxBodyHeightClass="max-h-[85vh]">
       <PageTabs tabs={tabs} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as TabId)} />
+      {closeGuard.confirmationDialog}
     </Modal>
   );
 }

@@ -24,6 +24,7 @@ type ConfirmActionDialogProps = {
   impacts?: ReactNode[];
   warning?: ReactNode;
   maxWidthClass?: string;
+  zIndexClass?: string;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -40,6 +41,7 @@ export default function ConfirmActionDialog({
   impacts = [],
   warning,
   maxWidthClass = "max-w-xl",
+  zIndexClass,
   onCancel,
   onConfirm,
 }: ConfirmActionDialogProps) {
@@ -48,6 +50,7 @@ export default function ConfirmActionDialog({
       title={title}
       onClose={onCancel}
       maxWidthClass={maxWidthClass}
+      zIndexClass={zIndexClass}
       closeOnBackdropClick={!loading}
     >
       <div className="space-y-4">

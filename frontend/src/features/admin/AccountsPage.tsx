@@ -31,7 +31,9 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { useAdminAccountStats } from "./useAdminAccountStats";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
+import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole } from "../../utils/workspaces";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 
@@ -70,6 +72,7 @@ export default function S3AccountsPage() {
     quota_max_objects: "",
     storage_endpoint_id: "",
   });
+  const [createInitialSignature, setCreateInitialSignature] = useState("");
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersLoaded, setUsersLoaded] = useState(false);
@@ -80,6 +83,7 @@ export default function S3AccountsPage() {
   const [endpointPermissionLoading, setEndpointPermissionLoading] = useState<Record<number, boolean>>({});
   const [endpointPermissionErrors, setEndpointPermissionErrors] = useState<Record<number, string | null>>({});
   const [importTenantEndpointId, setImportTenantEndpointId] = useState<string>("");
+  const [importInitialSignature, setImportInitialSignature] = useState("");
   const [editingS3Account, setEditingS3Account] = useState<S3Account | null>(null);
   const [editForm, setEditForm] = useState({
     tags: [] as UiTagDefinition[],
@@ -88,6 +92,7 @@ export default function S3AccountsPage() {
     quota_max_objects: "",
     user_links: [] as AccountUserLink[],
   });
+  const [editInitialSignature, setEditInitialSignature] = useState("");
   const [editTab, setEditTab] = useState<EditTab>("general");
   const [deletingS3AccountId, setDeletingS3AccountId] = useState<number | null>(null);
   const [accountToDelete, setS3AccountToDelete] = useState<S3Account | null>(null);
@@ -547,6 +552,40 @@ export default function S3AccountsPage() {
     !importTenantEndpointId ||
     importPermissionLoading ||
     !importEndpointCanWrite;
+  const createCurrentSignature = useMemo(
+    () => stableSignature({ form: { ...form, tags: normalizeUiTags(form.tags) } }),
+    [form]
+  );
+  const createCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: Boolean(createInitialSignature) && createCurrentSignature !== createInitialSignature,
+    disabled: creating,
+    onClose: () => setShowCreateModal(false),
+  });
+  const importCurrentSignature = useMemo(
+    () => stableSignature({ importText, importTenantEndpointId }),
+    [importTenantEndpointId, importText]
+  );
+  const importCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: Boolean(importInitialSignature) && importCurrentSignature !== importInitialSignature,
+    disabled: importBusy,
+    onClose: () => setShowImportModal(false),
+  });
+  const closeEditS3AccountModal = () => {
+    setEditingS3Account(null);
+    setEditTab("general");
+    setUserSearch("");
+    setShowUserPanel(false);
+    setUserSelections([]);
+    setEditInitialSignature("");
+  };
+  const editCurrentSignature = useMemo(
+    () => stableSignature({ editForm: { ...editForm, tags: normalizeUiTags(editForm.tags) } }),
+    [editForm]
+  );
+  const editCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: Boolean(editingS3Account && editInitialSignature && editCurrentSignature !== editInitialSignature),
+    onClose: closeEditS3AccountModal,
+  });
 
   const startEditS3Account = async (account: S3AccountSummary) => {
     setActionError(null);
@@ -557,8 +596,7 @@ export default function S3AccountsPage() {
     const detail = await loadAccountDetail(account);
     if (!detail) return;
     const quota = resolveQuotaForEdit(detail.quota_max_size_gb);
-    setEditingS3Account(detail);
-    setEditForm({
+    const nextEditForm = {
       tags: normalizeUiTags(detail.tags),
       quota_max_size_gb: quota.value,
       quota_max_size_unit: quota.unit,
@@ -569,7 +607,10 @@ export default function S3AccountsPage() {
           account_admin: Boolean(link.account_admin),
           user_email: link.user_email ?? undefined,
         })) ?? [],
-    });
+    };
+    setEditingS3Account(detail);
+    setEditForm(nextEditForm);
+    setEditInitialSignature(stableSignature({ editForm: { ...nextEditForm, tags: normalizeUiTags(nextEditForm.tags) } }));
     setUserSearch("");
     setShowUserPanel(false);
     setUserSelections([]);
@@ -599,11 +640,7 @@ export default function S3AccountsPage() {
           : {}),
       };
       await updateS3Account(targetId, payload);
-      setEditingS3Account(null);
-      setEditTab("general");
-      setUserSearch("");
-      setShowUserPanel(false);
-      setUserSelections([]);
+      closeEditS3AccountModal();
       await fetchS3Accounts();
       setActionMessage("S3Account updated");
     } catch (err) {
@@ -663,6 +700,7 @@ export default function S3AccountsPage() {
                     setImportText("");
                     setImportError(null);
                     setImportMessage(null);
+                    setImportInitialSignature(stableSignature({ importText: "", importTenantEndpointId }));
                     setShowImportModal(true);
                     void loadEndpointsIfNeeded();
                   },
@@ -671,6 +709,7 @@ export default function S3AccountsPage() {
                 {
                   label: "Create account",
                   onClick: () => {
+                    setCreateInitialSignature(stableSignature({ form: { ...form, tags: normalizeUiTags(form.tags) } }));
                     setShowCreateModal(true);
                     void loadEndpointsIfNeeded();
                   },
@@ -683,7 +722,7 @@ export default function S3AccountsPage() {
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
       {isSuperAdmin && showCreateModal && (
-        <Modal title="Create an account" onClose={() => setShowCreateModal(false)}>
+        <Modal title="Create an account" onClose={createCloseGuard.requestClose}>
           <p className="mb-3 ui-body text-slate-500">
             Super-admin only. Provision an RGW account (server-side generated <code>account_id</code>) with optional quotas.
           </p>
@@ -801,7 +840,7 @@ export default function S3AccountsPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={createCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
@@ -814,9 +853,10 @@ export default function S3AccountsPage() {
                 {creating ? "Creating..." : "Create account"}
               </button>
             </div>
+            {createCloseGuard.confirmationDialog}
           </form>
         </Modal>
-    )}
+      )}
 
       {isSuperAdmin && accountToDelete && (
         <Modal title={`Delete ${accountToDelete.name}`} onClose={closeDeleteModal}>
@@ -906,7 +946,7 @@ export default function S3AccountsPage() {
       )}
 
       {isSuperAdmin && showImportModal && (
-        <Modal title="Import accounts" onClose={() => setShowImportModal(false)}>
+        <Modal title="Import accounts" onClose={importCloseGuard.requestClose}>
           <p className="mb-3 ui-body text-slate-500">
             Enter RGW tenant IDs (RGWXXXXXXXXXXXXXXX) one per line. The platform will ensure a root user exists and retrieve keys.
           </p>
@@ -968,7 +1008,7 @@ export default function S3AccountsPage() {
           <div className="mt-4 flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => setShowImportModal(false)}
+              onClick={importCloseGuard.requestClose}
               className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               Cancel
@@ -1007,6 +1047,7 @@ export default function S3AccountsPage() {
                   await importS3Accounts(payload);
                   setImportMessage("S3Accounts imported.");
                   setImportText("");
+                  setImportInitialSignature(stableSignature({ importText: "", importTenantEndpointId }));
                   await fetchS3Accounts();
                 } catch (err) {
                   setImportError(extractError(err));
@@ -1019,19 +1060,14 @@ export default function S3AccountsPage() {
               {importBusy ? "Importing..." : "Import"}
             </button>
           </div>
+          {importCloseGuard.confirmationDialog}
         </Modal>
       )}
 
       {isSuperAdmin && editingS3Account && (
         <Modal
           title={`Edit ${editingS3Account.name}`}
-          onClose={() => {
-            setEditingS3Account(null);
-            setEditTab("general");
-            setUserSearch("");
-            setShowUserPanel(false);
-            setUserSelections([]);
-          }}
+          onClose={editCloseGuard.requestClose}
         >
           {actionError && (
             <PageBanner tone="error" className="mb-3">
@@ -1341,13 +1377,7 @@ export default function S3AccountsPage() {
               <div className="flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditingS3Account(null);
-                    setEditTab("general");
-                    setUserSearch("");
-                    setShowUserPanel(false);
-                    setUserSelections([]);
-                  }}
+                  onClick={editCloseGuard.requestClose}
                   className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                 >
                   Cancel
@@ -1359,6 +1389,7 @@ export default function S3AccountsPage() {
                   Save
                 </button>
               </div>
+              {editCloseGuard.confirmationDialog}
             </form>
           </div>
         </Modal>

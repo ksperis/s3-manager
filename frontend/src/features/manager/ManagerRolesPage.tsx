@@ -23,10 +23,12 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
+import { stableSignature } from "../../utils/stableSignature";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
 
@@ -70,10 +72,24 @@ export default function ManagerRolesPage() {
   const [showInlinePolicyOptions, setShowInlinePolicyOptions] = useState(false);
   const [showPolicyOptions, setShowPolicyOptions] = useState(false);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
+  const [advancedInitialSignature, setAdvancedInitialSignature] = useState(() =>
+    stableSignature({
+      advancedName: "",
+      advancedPath: DEFAULT_ROLE_PATH,
+      assumeRolePolicyText: DEFAULT_ASSUME_ROLE_DOCUMENT,
+      selectedPolicies: [],
+      inlineDrafts: [],
+      inlineDraftName: "",
+      inlinePolicyText: "",
+    })
+  );
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingRole, setEditingRole] = useState<IAMRole | null>(null);
   const [editPath, setEditPath] = useState(DEFAULT_ROLE_PATH);
   const [editAssumeRolePolicyText, setEditAssumeRolePolicyText] = useState(DEFAULT_ASSUME_ROLE_DOCUMENT);
+  const [editInitialSignature, setEditInitialSignature] = useState(() =>
+    stableSignature({ editPath: DEFAULT_ROLE_PATH, editAssumeRolePolicyText: DEFAULT_ASSUME_ROLE_DOCUMENT })
+  );
   const [loadingRoleDetails, setLoadingRoleDetails] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -143,6 +159,31 @@ export default function ManagerRolesPage() {
       return name.includes(query) || arn.includes(query);
     });
   }, [policies, policySearch]);
+  const advancedCurrentSignature = useMemo(
+    () =>
+      stableSignature({
+        advancedName,
+        advancedPath,
+        assumeRolePolicyText,
+        selectedPolicies,
+        inlineDrafts,
+        inlineDraftName,
+        inlinePolicyText,
+      }),
+    [
+      advancedName,
+      advancedPath,
+      assumeRolePolicyText,
+      inlineDraftName,
+      inlineDrafts,
+      inlinePolicyText,
+      selectedPolicies,
+    ]
+  );
+  const editCurrentSignature = useMemo(
+    () => stableSignature({ editPath, editAssumeRolePolicyText }),
+    [editAssumeRolePolicyText, editPath]
+  );
 
   const handleAdvancedCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -214,16 +255,35 @@ export default function ManagerRolesPage() {
   };
 
   const openAdvancedModal = () => {
+    setAdvancedName("");
+    setAdvancedPath(DEFAULT_ROLE_PATH);
+    setAssumeRolePolicyText(DEFAULT_ASSUME_ROLE_DOCUMENT);
+    setSelectedPolicies([]);
+    setPolicySearch("");
+    setShowPolicyOptions(false);
+    setInlineDrafts([]);
     setShowAdvancedModal(true);
     setSelectedInlineDraftName(null);
     setInlineDraftName("");
     setInlinePolicyText("");
-    setInlineDraftMode(inlineDrafts.length > 0 ? "idle" : "create");
+    setInlineDraftMode("create");
     setShowInlinePolicyOptions(false);
+    setAdvancedInitialSignature(
+      stableSignature({
+        advancedName: "",
+        advancedPath: DEFAULT_ROLE_PATH,
+        assumeRolePolicyText: DEFAULT_ASSUME_ROLE_DOCUMENT,
+        selectedPolicies: [],
+        inlineDrafts: [],
+        inlineDraftName: "",
+        inlinePolicyText: "",
+      })
+    );
   };
 
   const closeAdvancedModal = () => {
     setShowAdvancedModal(false);
+    setAdvancedName("");
     setAdvancedPath(DEFAULT_ROLE_PATH);
     setAssumeRolePolicyText(DEFAULT_ASSUME_ROLE_DOCUMENT);
     setSelectedPolicies([]);
@@ -336,9 +396,12 @@ export default function ManagerRolesPage() {
     setActionMessage(null);
     try {
       const role = await getIamRole(accountIdForApi, roleName);
+      const nextEditPath = role.path ?? DEFAULT_ROLE_PATH;
+      const nextAssumeRolePolicyText = formatAssumePolicyText(role.assume_role_policy_document);
       setEditingRole(role);
-      setEditPath(role.path ?? DEFAULT_ROLE_PATH);
-      setEditAssumeRolePolicyText(formatAssumePolicyText(role.assume_role_policy_document));
+      setEditPath(nextEditPath);
+      setEditAssumeRolePolicyText(nextAssumeRolePolicyText);
+      setEditInitialSignature(stableSignature({ editPath: nextEditPath, editAssumeRolePolicyText: nextAssumeRolePolicyText }));
     } catch (err) {
       setError(extractError(err));
       setShowEditModal(false);
@@ -353,7 +416,20 @@ export default function ManagerRolesPage() {
     setEditingRole(null);
     setEditAssumeRolePolicyText(DEFAULT_ASSUME_ROLE_DOCUMENT);
     setEditPath(DEFAULT_ROLE_PATH);
+    setEditInitialSignature(stableSignature({ editPath: DEFAULT_ROLE_PATH, editAssumeRolePolicyText: DEFAULT_ASSUME_ROLE_DOCUMENT }));
   };
+
+  const advancedCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showAdvancedModal && advancedCurrentSignature !== advancedInitialSignature,
+    onClose: closeAdvancedModal,
+    disabled: creating,
+  });
+
+  const editCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showEditModal && !loadingRoleDetails && editCurrentSignature !== editInitialSignature,
+    onClose: closeEditModal,
+    disabled: savingEdit,
+  });
 
   const handleSaveEdit = async (e: FormEvent) => {
     e.preventDefault();
@@ -520,7 +596,7 @@ export default function ManagerRolesPage() {
       )}
 
       {showAdvancedModal && (
-        <Modal title="Create IAM role" onClose={closeAdvancedModal}>
+        <Modal title="Create IAM role" onClose={advancedCloseGuard.requestClose}>
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
             <div className="flex flex-col gap-2">
               <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Role name</label>
@@ -650,9 +726,9 @@ export default function ManagerRolesPage() {
               onToggleExpanded={() => setShowInlinePolicyOptions((prev) => !prev)}
             />
             <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={closeAdvancedModal}
+                <button
+                  type="button"
+                  onClick={advancedCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
@@ -666,10 +742,11 @@ export default function ManagerRolesPage() {
               </button>
             </div>
           </form>
+          {advancedCloseGuard.confirmationDialog}
         </Modal>
       )}
       {showEditModal && (
-        <Modal title={editingRole ? `Edit IAM role: ${editingRole.name}` : "Edit IAM role"} onClose={closeEditModal}>
+        <Modal title={editingRole ? `Edit IAM role: ${editingRole.name}` : "Edit IAM role"} onClose={editCloseGuard.requestClose}>
           {loadingRoleDetails ? (
             <p className="ui-body text-slate-500 dark:text-slate-300">Loading role details...</p>
           ) : (
@@ -712,7 +789,7 @@ export default function ManagerRolesPage() {
               <div className="flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={closeEditModal}
+                  onClick={editCloseGuard.requestClose}
                   className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                 >
                   Cancel
@@ -727,6 +804,7 @@ export default function ManagerRolesPage() {
               </div>
             </form>
           )}
+          {editCloseGuard.confirmationDialog}
         </Modal>
       )}
     </div>

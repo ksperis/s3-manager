@@ -23,12 +23,14 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { confirmDeletion } from "../../utils/confirm";
+import { stableSignature } from "../../utils/stableSignature";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
 import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
@@ -64,6 +66,17 @@ export default function ManagerUsersPage() {
   const [showGroupOptions, setShowGroupOptions] = useState(false);
   const [showPolicyOptions, setShowPolicyOptions] = useState(false);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
+  const [advancedInitialSignature, setAdvancedInitialSignature] = useState(() =>
+    stableSignature({
+      advancedName: "",
+      createKey: true,
+      selectedGroups: [],
+      selectedPolicies: [],
+      inlineDrafts: [],
+      inlineDraftName: "",
+      inlinePolicyText: "",
+    })
+  );
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>({
     field: "name",
     direction: "asc",
@@ -188,6 +201,27 @@ export default function ManagerUsersPage() {
       return name.includes(query) || arn.includes(query);
     });
   }, [policies, policySearch]);
+  const advancedCurrentSignature = useMemo(
+    () =>
+      stableSignature({
+        advancedName,
+        createKey,
+        selectedGroups,
+        selectedPolicies,
+        inlineDrafts,
+        inlineDraftName,
+        inlinePolicyText,
+      }),
+    [
+      advancedName,
+      createKey,
+      inlineDraftName,
+      inlineDrafts,
+      inlinePolicyText,
+      selectedGroups,
+      selectedPolicies,
+    ]
+  );
   const tableStatus = resolveListTableStatus({
     loading,
     error,
@@ -264,16 +298,42 @@ export default function ManagerUsersPage() {
   };
 
   const openAdvancedModal = () => {
+    setAdvancedName("");
+    setCreateKey(true);
+    setSelectedGroups([]);
+    setSelectedPolicies([]);
+    setPolicySearch("");
+    setShowGroupOptions(false);
+    setShowPolicyOptions(false);
+    setInlineDrafts([]);
     setShowAdvancedModal(true);
     setSelectedInlineDraftName(null);
     setInlineDraftName("");
     setInlinePolicyText("");
-    setInlineDraftMode(inlineDrafts.length > 0 ? "idle" : "create");
+    setInlineDraftMode("create");
     setShowInlinePolicyOptions(false);
+    setAdvancedInitialSignature(
+      stableSignature({
+        advancedName: "",
+        createKey: true,
+        selectedGroups: [],
+        selectedPolicies: [],
+        inlineDrafts: [],
+        inlineDraftName: "",
+        inlinePolicyText: "",
+      })
+    );
   };
 
   const closeAdvancedModal = () => {
     setShowAdvancedModal(false);
+    setAdvancedName("");
+    setCreateKey(true);
+    setSelectedGroups([]);
+    setSelectedPolicies([]);
+    setPolicySearch("");
+    setShowGroupOptions(false);
+    setShowPolicyOptions(false);
     setInlineDrafts([]);
     setSelectedInlineDraftName(null);
     setInlineDraftName("");
@@ -281,6 +341,12 @@ export default function ManagerUsersPage() {
     setInlineDraftMode("create");
     setShowInlinePolicyOptions(false);
   };
+
+  const advancedCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showAdvancedModal && advancedCurrentSignature !== advancedInitialSignature,
+    onClose: closeAdvancedModal,
+    disabled: busy !== null,
+  });
 
   const handleAddInlineDraft = () => {
     const trimmedName = inlineDraftName.trim();
@@ -592,7 +658,7 @@ export default function ManagerUsersPage() {
       )}
 
       {showAdvancedModal && (
-        <Modal title="Create IAM user" onClose={closeAdvancedModal}>
+        <Modal title="Create IAM user" onClose={advancedCloseGuard.requestClose}>
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
             <div className="flex flex-col gap-2">
               <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">User name</label>
@@ -748,9 +814,9 @@ export default function ManagerUsersPage() {
               onToggleExpanded={() => setShowInlinePolicyOptions((prev) => !prev)}
             />
             <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={closeAdvancedModal}
+                  <button
+                    type="button"
+                    onClick={advancedCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
@@ -764,6 +830,7 @@ export default function ManagerUsersPage() {
               </button>
             </div>
           </form>
+          {advancedCloseGuard.confirmationDialog}
         </Modal>
       )}
 

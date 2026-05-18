@@ -28,8 +28,10 @@ import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { extractApiError } from "../../utils/apiError";
+import { stableSignature } from "../../utils/stableSignature";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
@@ -81,6 +83,7 @@ export default function S3UsersPage() {
     quota_max_objects: "",
     storage_endpoint_id: "",
   });
+  const [createInitialSignature, setCreateInitialSignature] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -90,6 +93,7 @@ export default function S3UsersPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [importEndpointId, setImportEndpointId] = useState("");
+  const [importInitialSignature, setImportInitialSignature] = useState("");
 
   const [editingUser, setEditingUser] = useState<S3User | null>(null);
   const [editForm, setEditForm] = useState({
@@ -102,6 +106,7 @@ export default function S3UsersPage() {
     quota_max_objects: "",
     storage_endpoint_id: "",
   });
+  const [editInitialSignature, setEditInitialSignature] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [editBusy, setEditBusy] = useState(false);
   const [editTab, setEditTab] = useState<EditTab>("general");
@@ -382,8 +387,7 @@ export default function S3UsersPage() {
     void loadPortalUsersIfNeeded();
     void loadEndpointsIfNeeded();
     const quota = resolveQuotaForEdit(user.quota_max_size_gb);
-    setEditingUser(user);
-    setEditForm({
+    const nextEditForm = {
       name: user.name,
       email: user.email ?? "",
       tags: normalizeUiTags(user.tags),
@@ -392,7 +396,10 @@ export default function S3UsersPage() {
       quota_max_size_unit: quota.unit,
       quota_max_objects: user.quota_max_objects != null ? String(user.quota_max_objects) : "",
       storage_endpoint_id: user.storage_endpoint_id ? String(user.storage_endpoint_id) : "",
-    });
+    };
+    setEditingUser(user);
+    setEditForm(nextEditForm);
+    setEditInitialSignature(stableSignature({ editForm: { ...nextEditForm, tags: normalizeUiTags(nextEditForm.tags) } }));
     setEditError(null);
     setEditTab("general");
     setPortalUserSearch("");
@@ -433,11 +440,7 @@ export default function S3UsersPage() {
       }
       await updateS3User(editingUser.id, payload);
       await fetchUsers();
-      setEditingUser(null);
-      setEditTab("general");
-      setPortalUserSearch("");
-      setShowEditPortalUserPanel(false);
-      setEditPortalUserSelections([]);
+      closeEditModal();
       setActionMessage("User updated.");
     } catch (err) {
       setEditError(extractError(err));
@@ -535,6 +538,7 @@ export default function S3UsersPage() {
       await importS3Users(payload);
       setImportMessage("Users imported.");
       setImportText("");
+      setImportInitialSignature(stableSignature({ importText: "", importEndpointId }));
       await fetchUsers();
     } catch (err) {
       setImportError(extractError(err));
@@ -575,6 +579,41 @@ export default function S3UsersPage() {
   const importEndpointCanWrite = selectedImportEndpointId ? endpointUsersWrite[selectedImportEndpointId] === true : false;
   const createPermissionError = selectedCreateEndpointId ? endpointPermissionErrors[selectedCreateEndpointId] ?? null : null;
   const importPermissionError = selectedImportEndpointId ? endpointPermissionErrors[selectedImportEndpointId] ?? null : null;
+  const createCurrentSignature = useMemo(
+    () => stableSignature({ createForm: { ...createForm, tags: normalizeUiTags(createForm.tags) } }),
+    [createForm]
+  );
+  const createCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: Boolean(createInitialSignature) && createCurrentSignature !== createInitialSignature,
+    disabled: creating,
+    onClose: () => setShowCreateModal(false),
+  });
+  const importCurrentSignature = useMemo(
+    () => stableSignature({ importText, importEndpointId }),
+    [importEndpointId, importText]
+  );
+  const importCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: Boolean(importInitialSignature) && importCurrentSignature !== importInitialSignature,
+    disabled: importBusy,
+    onClose: () => setShowImportModal(false),
+  });
+  const closeEditModal = () => {
+    setEditingUser(null);
+    setEditTab("general");
+    setPortalUserSearch("");
+    setShowEditPortalUserPanel(false);
+    setEditPortalUserSelections([]);
+    setEditInitialSignature("");
+  };
+  const editCurrentSignature = useMemo(
+    () => stableSignature({ editForm: { ...editForm, tags: normalizeUiTags(editForm.tags) } }),
+    [editForm]
+  );
+  const editCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: Boolean(editingUser && editInitialSignature && editCurrentSignature !== editInitialSignature),
+    disabled: editBusy,
+    onClose: closeEditModal,
+  });
   const columns: { label: string; field?: SortField | null; align?: "left" | "right" }[] = [
     { label: "Name", field: "name" },
     { label: "UID", field: "uid" },
@@ -616,6 +655,7 @@ export default function S3UsersPage() {
           {
             label: "Import",
             onClick: () => {
+              setImportInitialSignature(stableSignature({ importText, importEndpointId }));
               setShowImportModal(true);
               void loadEndpointsIfNeeded();
             },
@@ -624,6 +664,7 @@ export default function S3UsersPage() {
           {
             label: "Create user",
             onClick: () => {
+              setCreateInitialSignature(stableSignature({ createForm: { ...createForm, tags: normalizeUiTags(createForm.tags) } }));
               setShowCreateModal(true);
               void loadEndpointsIfNeeded();
             },
@@ -798,7 +839,7 @@ export default function S3UsersPage() {
       </div>
 
       {showCreateModal && (
-        <Modal title="Create user" onClose={() => setShowCreateModal(false)}>
+        <Modal title="Create user" onClose={createCloseGuard.requestClose}>
           {createError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {createError}
@@ -923,7 +964,7 @@ export default function S3UsersPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={createCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
@@ -936,12 +977,13 @@ export default function S3UsersPage() {
                 {creating ? "Creating..." : "Create user"}
               </button>
             </div>
+            {createCloseGuard.confirmationDialog}
           </form>
         </Modal>
       )}
 
       {showImportModal && (
-        <Modal title="Import users" onClose={() => setShowImportModal(false)}>
+        <Modal title="Import users" onClose={importCloseGuard.requestClose}>
           <p className="mb-3 ui-body text-slate-500">Enter RGW user IDs, one per line. The platform will fetch or generate keys.</p>
           {importError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
@@ -1003,7 +1045,7 @@ export default function S3UsersPage() {
           <div className="mt-4 flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => setShowImportModal(false)}
+              onClick={importCloseGuard.requestClose}
               className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               Cancel
@@ -1017,19 +1059,14 @@ export default function S3UsersPage() {
               {importBusy ? "Importing..." : "Import"}
             </button>
           </div>
+          {importCloseGuard.confirmationDialog}
         </Modal>
       )}
 
       {editingUser && (
         <Modal
           title={`Edit ${editingUser.name}`}
-          onClose={() => {
-            setEditingUser(null);
-            setEditTab("general");
-            setPortalUserSearch("");
-            setShowEditPortalUserPanel(false);
-            setEditPortalUserSelections([]);
-          }}
+          onClose={editCloseGuard.requestClose}
         >
           {editError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
@@ -1328,13 +1365,7 @@ export default function S3UsersPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={() => {
-                  setEditingUser(null);
-                  setEditTab("general");
-                  setPortalUserSearch("");
-                  setShowEditPortalUserPanel(false);
-                  setEditPortalUserSelections([]);
-                }}
+                onClick={editCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
@@ -1347,6 +1378,7 @@ export default function S3UsersPage() {
                 {editBusy ? "Saving..." : "Save changes"}
               </button>
             </div>
+            {editCloseGuard.confirmationDialog}
           </form>
         </Modal>
       )}

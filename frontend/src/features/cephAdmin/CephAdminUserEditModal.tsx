@@ -24,8 +24,10 @@ import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import UsageTile from "../../components/UsageTile";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
+import { stableSignature } from "../../utils/stableSignature";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
 import { buildCephAdminQuotaPatch } from "./quotaPatch";
 
@@ -166,6 +168,49 @@ export default function CephAdminUserEditModal({
   const [quotaObjects, setQuotaObjects] = useState("");
   const [capsMode, setCapsMode] = useState<CapsMode>("replace");
   const [capsText, setCapsText] = useState("");
+  const currentSignature = useMemo(
+    () =>
+      stableSignature({
+        displayName,
+        email,
+        suspended,
+        maxBuckets,
+        opMask,
+        defaultPlacement,
+        defaultStorageClass,
+        adminFlag,
+        systemFlag,
+        quotaEnabled,
+        quotaSize,
+        quotaUnit,
+        quotaObjects,
+        capsMode,
+        capsText,
+      }),
+    [
+      adminFlag,
+      capsMode,
+      capsText,
+      defaultPlacement,
+      defaultStorageClass,
+      displayName,
+      email,
+      maxBuckets,
+      opMask,
+      quotaEnabled,
+      quotaObjects,
+      quotaSize,
+      quotaUnit,
+      suspended,
+      systemFlag,
+    ]
+  );
+  const [initialSignature, setInitialSignature] = useState(currentSignature);
+  const closeGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: !detailLoading && currentSignature !== initialSignature,
+    onClose,
+    disabled: saving,
+  });
 
   const refreshKeys = async () => {
     setKeysLoading(true);
@@ -208,6 +253,25 @@ export default function CephAdminUserEditModal({
         setQuotaUnit(quotaForm.unit);
         setQuotaObjects(payload.quota?.max_objects != null ? String(payload.quota.max_objects) : "");
         setCapsText((payload.caps ?? []).join("\n"));
+        setInitialSignature(
+          stableSignature({
+            displayName: payload.display_name ?? "",
+            email: payload.email ?? "",
+            suspended: Boolean(payload.suspended),
+            maxBuckets: payload.max_buckets != null ? String(payload.max_buckets) : "",
+            opMask: payload.op_mask ?? "",
+            defaultPlacement: payload.default_placement ?? "",
+            defaultStorageClass: payload.default_storage_class ?? "",
+            adminFlag: Boolean(payload.admin),
+            systemFlag: Boolean(payload.system),
+            quotaEnabled: payload.quota?.enabled ?? quotaConfigured,
+            quotaSize: quotaForm.value,
+            quotaUnit: quotaForm.unit,
+            quotaObjects: payload.quota?.max_objects != null ? String(payload.quota.max_objects) : "",
+            capsMode: "replace",
+            capsText: (payload.caps ?? []).join("\n"),
+          })
+        );
       } catch (err) {
         if (!cancelled) {
           setDetailError(extractError(err));
@@ -326,6 +390,7 @@ export default function CephAdminUserEditModal({
       );
       setDetail(updated);
       setKeys(updated.keys ?? []);
+      setInitialSignature(currentSignature);
       setSaveStatus("User configuration updated.");
       onSaved?.(updated);
       if (activeTab === "metrics") {
@@ -877,7 +942,7 @@ export default function CephAdminUserEditModal({
   }, [createdKey, detail?.account_id, tenant, uid]);
 
   return (
-    <Modal title={`Configure user · ${identityLabel}`} onClose={onClose} maxWidthClass="max-w-6xl" maxBodyHeightClass="max-h-[85vh]">
+    <Modal title={`Configure user · ${identityLabel}`} onClose={closeGuard.requestClose} maxWidthClass="max-w-6xl" maxBodyHeightClass="max-h-[85vh]">
       <PageTabs tabs={tabs} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as TabId)} />
       {showAddConnectionModal && createdKey && addConnectionDefaults && (
         <AddS3ConnectionFromKeyModal
@@ -902,6 +967,7 @@ export default function CephAdminUserEditModal({
           }}
         />
       )}
+      {closeGuard.confirmationDialog}
     </Modal>
   );
 }

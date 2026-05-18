@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import axios from "axios";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   CephAdminRgwAccountDetail,
@@ -12,6 +12,8 @@ import {
 } from "../../api/cephAdmin";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { stableSignature } from "../../utils/stableSignature";
 
 type Props = {
   endpointId: number;
@@ -72,6 +74,49 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const currentSignature = useMemo(
+    () =>
+      stableSignature({
+        accountName,
+        email,
+        maxUsers,
+        maxBuckets,
+        maxRoles,
+        maxGroups,
+        maxAccessKeys,
+        accountQuotaEnabled,
+        accountQuotaSize,
+        accountQuotaUnit,
+        accountQuotaObjects,
+        bucketQuotaEnabled,
+        bucketQuotaSize,
+        bucketQuotaUnit,
+        bucketQuotaObjects,
+      }),
+    [
+      accountName,
+      accountQuotaEnabled,
+      accountQuotaObjects,
+      accountQuotaSize,
+      accountQuotaUnit,
+      bucketQuotaEnabled,
+      bucketQuotaObjects,
+      bucketQuotaSize,
+      bucketQuotaUnit,
+      email,
+      maxAccessKeys,
+      maxBuckets,
+      maxGroups,
+      maxRoles,
+      maxUsers,
+    ]
+  );
+  const [initialSignature, setInitialSignature] = useState(currentSignature);
+  const closeGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: currentSignature !== initialSignature,
+    onClose,
+    disabled: saving,
+  });
 
   const submit = async () => {
     setError(null);
@@ -151,6 +196,7 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
     try {
       const response = await createCephAdminAccount(endpointId, payload);
       onCreated?.(response.account);
+      setInitialSignature(currentSignature);
       setStatus(`Account ${response.account.account_id} created.`);
     } catch (err) {
       setError(extractError(err));
@@ -160,7 +206,7 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
   };
 
   return (
-    <Modal title="Create account" onClose={onClose} maxWidthClass="max-w-5xl">
+    <Modal title="Create account" onClose={closeGuard.requestClose} maxWidthClass="max-w-5xl">
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {status && <PageBanner tone="success">{status}</PageBanner>}
@@ -352,7 +398,7 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeGuard.requestClose}
             className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
           >
             Close
@@ -367,6 +413,7 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
           </button>
         </div>
       </div>
+      {closeGuard.confirmationDialog}
     </Modal>
   );
 }

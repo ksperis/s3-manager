@@ -25,6 +25,7 @@ import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactButtonClasses, toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
@@ -35,6 +36,7 @@ import {
   normalizeS3BucketName,
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
+import { stableSignature } from "../../utils/stableSignature";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 
 type BucketForm = {
@@ -193,6 +195,9 @@ export default function BucketsPage() {
   const [wizardStep, setWizardStep] = useState(0);
   const [useCustomLocationConstraint, setUseCustomLocationConstraint] = useState(false);
   const [bucketForm, setBucketForm] = useState<BucketForm>(buildDefaultForm);
+  const [wizardInitialSignature, setWizardInitialSignature] = useState(() =>
+    stableSignature({ bucketForm: buildDefaultForm(), useCustomLocationConstraint: false })
+  );
   const [filter, setFilter] = useState("");
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
@@ -667,6 +672,22 @@ export default function BucketsPage() {
 
   const stepTitles = ["General", "Protection"];
   const isBucketNameValid = !bucketForm.name || isValidS3BucketName(bucketForm.name);
+  const wizardCurrentSignature = useMemo(
+    () => stableSignature({ bucketForm, useCustomLocationConstraint }),
+    [bucketForm, useCustomLocationConstraint]
+  );
+  const closeWizard = () => {
+    setShowWizard(false);
+    setBucketForm(buildDefaultForm());
+    setWizardStep(0);
+    setUseCustomLocationConstraint(false);
+    setWizardInitialSignature(stableSignature({ bucketForm: buildDefaultForm(), useCustomLocationConstraint: false }));
+  };
+  const wizardCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showWizard && wizardCurrentSignature !== wizardInitialSignature,
+    onClose: closeWizard,
+    disabled: creating,
+  });
   const tableStatus = resolveListTableStatus({
     loading,
     error,
@@ -677,6 +698,7 @@ export default function BucketsPage() {
     setBucketForm(buildDefaultForm());
     setWizardStep(0);
     setUseCustomLocationConstraint(false);
+    setWizardInitialSignature(stableSignature({ bucketForm: buildDefaultForm(), useCustomLocationConstraint: false }));
     setShowWizard(true);
   };
 
@@ -858,7 +880,7 @@ export default function BucketsPage() {
       )}
 
       {showWizard && (
-        <Modal title="Create bucket" onClose={() => setShowWizard(false)}>
+        <Modal title="Create bucket" onClose={wizardCloseGuard.requestClose}>
           <form className="space-y-4" onSubmit={handleCreate}>
             <div className="flex items-center gap-3">
               {stepTitles.map((title, index) => (
@@ -1001,6 +1023,7 @@ export default function BucketsPage() {
               </div>
             </div>
           </form>
+          {wizardCloseGuard.confirmationDialog}
         </Modal>
       )}
     </div>

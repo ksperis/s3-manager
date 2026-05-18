@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useS3AccountContext } from "./S3AccountContext";
 import { S3AccountSelector } from "../../api/accountParams";
@@ -12,8 +12,10 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
+import { stableSignature } from "../../utils/stableSignature";
 
 const DEFAULT_POLICY_DOCUMENT = JSON.stringify(
   {
@@ -37,6 +39,9 @@ export default function PoliciesPage() {
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [advancedInitialSignature, setAdvancedInitialSignature] = useState(() =>
+    stableSignature({ advancedName: "", documentText: DEFAULT_POLICY_DOCUMENT })
+  );
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -99,12 +104,26 @@ export default function PoliciesPage() {
   };
 
   const openAdvancedModal = () => {
+    setAdvancedInitialSignature(stableSignature({ advancedName, documentText }));
     setShowAdvancedModal(true);
   };
 
   const closeAdvancedModal = () => {
     setShowAdvancedModal(false);
+    setAdvancedName("");
+    setDocumentText(DEFAULT_POLICY_DOCUMENT);
+    setAdvancedInitialSignature(stableSignature({ advancedName: "", documentText: DEFAULT_POLICY_DOCUMENT }));
   };
+
+  const advancedCurrentSignature = useMemo(
+    () => stableSignature({ advancedName, documentText }),
+    [advancedName, documentText]
+  );
+  const advancedCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showAdvancedModal && advancedCurrentSignature !== advancedInitialSignature,
+    onClose: closeAdvancedModal,
+    disabled: creating,
+  });
 
   const filteredPolicies = policies.filter((policy) => {
     const needle = policyFilter.trim().toLowerCase();
@@ -195,7 +214,7 @@ export default function PoliciesPage() {
       )}
 
       {showAdvancedModal && (
-        <Modal title="Create policy" onClose={closeAdvancedModal}>
+        <Modal title="Create policy" onClose={advancedCloseGuard.requestClose}>
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
             <div className="flex flex-col gap-2">
               <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Policy name</label>
@@ -223,7 +242,7 @@ export default function PoliciesPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={closeAdvancedModal}
+                onClick={advancedCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
@@ -237,6 +256,7 @@ export default function PoliciesPage() {
               </button>
             </div>
           </form>
+          {advancedCloseGuard.confirmationDialog}
         </Modal>
       )}
     </div>

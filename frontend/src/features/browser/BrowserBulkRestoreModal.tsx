@@ -2,9 +2,12 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import { useMemo, useState } from "react";
 import Modal from "../../components/Modal";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
 import { uiCheckboxClass } from "../../components/ui/styles";
+import { stableSignature } from "../../utils/stableSignature";
 
 type BrowserBulkRestoreModalProps = {
   bulkActionFileCount: number;
@@ -52,8 +55,25 @@ export default function BrowserBulkRestoreModal({
   onApply,
   onClose,
 }: BrowserBulkRestoreModalProps) {
+  const currentSignature = useMemo(
+    () =>
+      stableSignature({
+        bulkRestoreDryRun,
+        bulkRestoreDate,
+        bulkRestoreDeleteMissing,
+        bulkRestoreRestoreDeleted,
+      }),
+    [bulkRestoreDate, bulkRestoreDeleteMissing, bulkRestoreDryRun, bulkRestoreRestoreDeleted]
+  );
+  const [initialSignature] = useState(currentSignature);
+  const closeGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: currentSignature !== initialSignature,
+    onClose,
+    disabled: bulkRestoreLoading,
+  });
+
   return (
-    <Modal title="Restore to date" onClose={onClose} maxWidthClass="max-w-2xl">
+    <Modal title="Restore to date" onClose={closeGuard.requestClose} maxWidthClass="max-w-2xl">
       <div className="space-y-4 ui-caption text-slate-600 dark:text-slate-300">
         <div className="space-y-1">
           <p className="font-semibold text-slate-800 dark:text-slate-100">Targets</p>
@@ -188,7 +208,7 @@ export default function BrowserBulkRestoreModal({
             : "Restores the latest version at or before the selected date. Objects with a delete marker at that date are skipped unless deletion is enabled or deleted-object restore is selected."}
         </p>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <button type="button" className={bulkActionClasses} onClick={onClose}>
+          <button type="button" className={bulkActionClasses} onClick={closeGuard.requestClose}>
             Cancel
           </button>
           <button
@@ -201,6 +221,7 @@ export default function BrowserBulkRestoreModal({
           </button>
         </div>
       </div>
+      {closeGuard.confirmationDialog}
     </Modal>
   );
 }

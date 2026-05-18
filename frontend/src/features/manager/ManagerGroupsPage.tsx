@@ -14,10 +14,12 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
+import { stableSignature } from "../../utils/stableSignature";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
@@ -44,6 +46,15 @@ export default function ManagerGroupsPage() {
   const [showPolicyOptions, setShowPolicyOptions] = useState(false);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [advancedInitialSignature, setAdvancedInitialSignature] = useState(() =>
+    stableSignature({
+      advancedName: "",
+      selectedPolicies: [],
+      inlineDrafts: [],
+      inlineDraftName: "",
+      inlinePolicyText: "",
+    })
+  );
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -110,6 +121,17 @@ export default function ManagerGroupsPage() {
       return name.includes(query) || arn.includes(query);
     });
   }, [policies, policySearch]);
+  const advancedCurrentSignature = useMemo(
+    () =>
+      stableSignature({
+        advancedName,
+        selectedPolicies,
+        inlineDrafts,
+        inlineDraftName,
+        inlinePolicyText,
+      }),
+    [advancedName, inlineDraftName, inlineDrafts, inlinePolicyText, selectedPolicies]
+  );
 
   const handleAdvancedCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -166,16 +188,34 @@ export default function ManagerGroupsPage() {
   };
 
   const openAdvancedModal = () => {
+    setAdvancedName("");
+    setSelectedPolicies([]);
+    setPolicySearch("");
+    setShowPolicyOptions(false);
+    setInlineDrafts([]);
     setShowAdvancedModal(true);
     setSelectedInlineDraftName(null);
     setInlineDraftName("");
     setInlinePolicyText("");
-    setInlineDraftMode(inlineDrafts.length > 0 ? "idle" : "create");
+    setInlineDraftMode("create");
     setShowInlinePolicyOptions(false);
+    setAdvancedInitialSignature(
+      stableSignature({
+        advancedName: "",
+        selectedPolicies: [],
+        inlineDrafts: [],
+        inlineDraftName: "",
+        inlinePolicyText: "",
+      })
+    );
   };
 
   const closeAdvancedModal = () => {
     setShowAdvancedModal(false);
+    setAdvancedName("");
+    setSelectedPolicies([]);
+    setPolicySearch("");
+    setShowPolicyOptions(false);
     setInlineDrafts([]);
     setSelectedInlineDraftName(null);
     setInlineDraftName("");
@@ -183,6 +223,12 @@ export default function ManagerGroupsPage() {
     setInlineDraftMode("create");
     setShowInlinePolicyOptions(false);
   };
+
+  const advancedCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showAdvancedModal && advancedCurrentSignature !== advancedInitialSignature,
+    onClose: closeAdvancedModal,
+    disabled: busy !== null,
+  });
 
   const handleAddInlineDraft = () => {
     const trimmedName = inlineDraftName.trim();
@@ -387,7 +433,7 @@ export default function ManagerGroupsPage() {
       )}
 
       {showAdvancedModal && (
-        <Modal title="Create IAM group" onClose={closeAdvancedModal}>
+        <Modal title="Create IAM group" onClose={advancedCloseGuard.requestClose}>
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
             <div className="flex flex-col gap-2">
               <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Group name</label>
@@ -496,7 +542,7 @@ export default function ManagerGroupsPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={closeAdvancedModal}
+                onClick={advancedCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
@@ -510,6 +556,7 @@ export default function ManagerGroupsPage() {
               </button>
             </div>
           </form>
+          {advancedCloseGuard.confirmationDialog}
         </Modal>
       )}
     </div>

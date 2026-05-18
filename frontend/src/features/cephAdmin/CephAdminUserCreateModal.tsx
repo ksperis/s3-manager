@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   CephAdminRgwUserDetail,
@@ -14,6 +14,8 @@ import {
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { stableSignature } from "../../utils/stableSignature";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
 
 type Props = {
@@ -98,6 +100,54 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [generatedKey, setGeneratedKey] = useState<{ access_key: string; secret_key: string } | null>(null);
+  const currentSignature = useMemo(
+    () =>
+      stableSignature({
+        selectedAccountId,
+        uid,
+        tenant,
+        displayName,
+        email,
+        maxBuckets,
+        opMask,
+        suspended,
+        adminFlag,
+        systemFlag,
+        generateKey,
+        quotaEnabled,
+        quotaSize,
+        quotaUnit,
+        quotaObjects,
+        capsMode,
+        capsText,
+      }),
+    [
+      adminFlag,
+      capsMode,
+      capsText,
+      displayName,
+      email,
+      generateKey,
+      maxBuckets,
+      opMask,
+      quotaEnabled,
+      quotaObjects,
+      quotaSize,
+      quotaUnit,
+      selectedAccountId,
+      suspended,
+      systemFlag,
+      tenant,
+      uid,
+    ]
+  );
+  const [initialSignature, setInitialSignature] = useState(currentSignature);
+  const closeGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: currentSignature !== initialSignature,
+    onClose,
+    disabled: saving,
+    zIndexClass: "z-[70]",
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -203,6 +253,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
       const response = await createCephAdminUser(endpointId, payload);
       onCreated?.(response.detail);
       setGeneratedKey(response.generated_key ?? null);
+      setInitialSignature(currentSignature);
       setStatus(`User ${response.detail.uid} created.`);
     } catch (err) {
       setError(extractError(err));
@@ -219,7 +270,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
     : null;
 
   return (
-    <Modal title="Create user" onClose={onClose} maxWidthClass="max-w-5xl">
+    <Modal title="Create user" onClose={closeGuard.requestClose} maxWidthClass="max-w-5xl">
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {status && <PageBanner tone="success">{status}</PageBanner>}
@@ -433,7 +484,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeGuard.requestClose}
             className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
           >
             Close
@@ -472,6 +523,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
           }}
         />
       )}
+      {closeGuard.confirmationDialog}
     </Modal>
   );
 }

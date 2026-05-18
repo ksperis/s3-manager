@@ -2,9 +2,12 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import { useMemo, useState } from "react";
 import Modal from "../../components/Modal";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
 import { uiCheckboxClass } from "../../components/ui/styles";
+import { stableSignature } from "../../utils/stableSignature";
 
 type BrowserCleanupModalProps = {
   currentPath: string;
@@ -35,8 +38,24 @@ export default function BrowserCleanupModal({
   onApply,
   onClose,
 }: BrowserCleanupModalProps) {
+  const currentSignature = useMemo(
+    () =>
+      stableSignature({
+        cleanupKeepLast,
+        cleanupOlderThanDays,
+        cleanupDeleteOrphanMarkers,
+      }),
+    [cleanupDeleteOrphanMarkers, cleanupKeepLast, cleanupOlderThanDays]
+  );
+  const [initialSignature] = useState(currentSignature);
+  const closeGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: currentSignature !== initialSignature,
+    onClose,
+    disabled: cleanupLoading,
+  });
+
   return (
-    <Modal title="Clean old versions" onClose={onClose} maxWidthClass="max-w-2xl">
+    <Modal title="Clean old versions" onClose={closeGuard.requestClose} maxWidthClass="max-w-2xl">
       <div className="space-y-4 ui-caption text-slate-600 dark:text-slate-300">
         <div className="space-y-1">
           <p className="font-semibold text-slate-800 dark:text-slate-100">Context</p>
@@ -87,7 +106,7 @@ export default function BrowserCleanupModal({
           If multiple rules are set, versions matching any rule are removed. The latest version is never deleted.
         </p>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <button type="button" className={bulkActionClasses} onClick={onClose}>
+          <button type="button" className={bulkActionClasses} onClick={closeGuard.requestClose}>
             Cancel
           </button>
           <button
@@ -100,6 +119,7 @@ export default function BrowserCleanupModal({
           </button>
         </div>
       </div>
+      {closeGuard.confirmationDialog}
     </Modal>
   );
 }

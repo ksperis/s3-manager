@@ -31,9 +31,11 @@ import {
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { extractApiError } from "../../utils/apiError";
+import { stableSignature } from "../../utils/stableSignature";
 import { buildUiTagItems, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 
 const credentialOwnerTypeOptions = [
   { value: "", label: "(none)" },
@@ -42,6 +44,20 @@ const credentialOwnerTypeOptions = [
   { value: "s3_user", label: "S3 user" },
 ];
 type EditTab = "general" | "users";
+
+const createEmptyConnectionForm = () => ({
+  name: "",
+  tags: [] as UiTagDefinition[],
+  provider_hint: "",
+  access_manager: false,
+  access_browser: true,
+  endpoint_url: "",
+  region: "",
+  access_key_id: "",
+  secret_access_key: "",
+  force_path_style: false,
+  verify_tls: true,
+});
 
 export default function S3ConnectionsPage() {
   const [items, setItems] = useState<S3ConnectionAdminItem[]>([]);
@@ -62,19 +78,8 @@ export default function S3ConnectionsPage() {
   const [createEndpointMode, setCreateEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [createEndpointPresetId, setCreateEndpointPresetId] = useState("");
   const [createPresetTouched, setCreatePresetTouched] = useState(false);
-  const [createForm, setCreateForm] = useState({
-    name: "",
-    tags: [] as UiTagDefinition[],
-    provider_hint: "",
-    access_manager: false,
-    access_browser: true,
-    endpoint_url: "",
-    region: "",
-    access_key_id: "",
-    secret_access_key: "",
-    force_path_style: false,
-    verify_tls: true,
-  });
+  const [createForm, setCreateForm] = useState(createEmptyConnectionForm);
+  const [createInitialSignature, setCreateInitialSignature] = useState("");
 
   const [editing, setEditing] = useState<S3ConnectionAdminItem | null>(null);
   const [editBusy, setEditBusy] = useState(false);
@@ -98,6 +103,7 @@ export default function S3ConnectionsPage() {
     access_key_id: "",
     secret_access_key: "",
   });
+  const [editInitialSignature, setEditInitialSignature] = useState("");
   const [editTab, setEditTab] = useState<EditTab>("general");
   const [editLinkedUserIds, setEditLinkedUserIds] = useState<number[]>([]);
   const [editUserSearch, setEditUserSearch] = useState("");
@@ -148,42 +154,42 @@ export default function S3ConnectionsPage() {
     setEditing(null);
     setEditError(null);
     setEditCredentials({ access_key_id: "", secret_access_key: "" });
+    setEditInitialSignature("");
     resetEditUsersState();
   }, [resetEditUsersState]);
 
   const resetCreateForm = () => {
+    const nextForm = createEmptyConnectionForm();
     setCreateEndpointMode("custom");
     setCreateEndpointPresetId("");
     setCreatePresetTouched(false);
     setCreateError(null);
-    setCreateForm({
-      name: "",
-      tags: [],
-      provider_hint: "",
-      access_manager: false,
-      access_browser: true,
-      endpoint_url: "",
-      region: "",
-      access_key_id: "",
-      secret_access_key: "",
-      force_path_style: false,
-      verify_tls: true,
-    });
+    setCreateForm(nextForm);
+    setCreateInitialSignature(stableSignature({ endpointMode: "custom", endpointPresetId: "", form: nextForm }));
   };
 
   const openCreateModal = () => {
-    resetCreateForm();
+    const nextForm = createEmptyConnectionForm();
+    let nextEndpointMode: S3ConnectionEndpointMode = "custom";
+    let nextEndpointPresetId = "";
     if (defaultEndpoint) {
-      setCreateEndpointMode("preset");
-      setCreateEndpointPresetId(String(defaultEndpoint.id));
-      setCreateForm((prev) => ({
-        ...prev,
+      nextEndpointMode = "preset";
+      nextEndpointPresetId = String(defaultEndpoint.id);
+      Object.assign(nextForm, {
         endpoint_url: defaultEndpoint.endpoint_url,
         region: defaultEndpoint.region || "",
         force_path_style: false,
         verify_tls: true,
-      }));
+      });
     }
+    setCreateEndpointMode(nextEndpointMode);
+    setCreateEndpointPresetId(nextEndpointPresetId);
+    setCreatePresetTouched(false);
+    setCreateError(null);
+    setCreateForm(nextForm);
+    setCreateInitialSignature(
+      stableSignature({ endpointMode: nextEndpointMode, endpointPresetId: nextEndpointPresetId, form: nextForm })
+    );
     setShowCreateModal(true);
   };
 
@@ -325,6 +331,36 @@ export default function S3ConnectionsPage() {
     if (credentialOwnerTypeOptions.some((opt) => opt.value === currentValue)) return credentialOwnerTypeOptions;
     return [...credentialOwnerTypeOptions, { value: currentValue, label: `${currentValue} (legacy)` }];
   }, [editForm.credential_owner_type]);
+  const createCurrentSignature = useMemo(
+    () =>
+      stableSignature({
+        endpointMode: createEndpointMode,
+        endpointPresetId: createEndpointPresetId,
+        form: { ...createForm, tags: normalizeUiTags(createForm.tags) },
+      }),
+    [createEndpointMode, createEndpointPresetId, createForm]
+  );
+  const createCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: Boolean(createInitialSignature) && createCurrentSignature !== createInitialSignature,
+    disabled: creating,
+    onClose: () => setShowCreateModal(false),
+  });
+  const editCurrentSignature = useMemo(
+    () =>
+      stableSignature({
+        endpointMode: editEndpointMode,
+        endpointPresetId: editEndpointPresetId,
+        form: { ...editForm, tags: normalizeUiTags(editForm.tags) },
+        credentials: editCredentials,
+        linkedUserIds: normalizeLinkedUserIds(editLinkedUserIds),
+      }),
+    [editCredentials, editEndpointMode, editEndpointPresetId, editForm, editLinkedUserIds, normalizeLinkedUserIds]
+  );
+  const editCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: Boolean(editing && editInitialSignature && editCurrentSignature !== editInitialSignature),
+    disabled: editBusy,
+    onClose: closeEditModal,
+  });
   const tableStatus = resolveListTableStatus({
     loading,
     error,
@@ -457,15 +493,11 @@ export default function S3ConnectionsPage() {
       conn.storage_endpoint_id != null
         ? storageEndpoints.find((ep) => ep.id === conn.storage_endpoint_id)
         : storageEndpoints.find((ep) => ep.endpoint_url === conn.endpoint_url);
-    if (conn.storage_endpoint_id != null) {
-      setEditEndpointMode("preset");
-      setEditEndpointPresetId(String(conn.storage_endpoint_id));
-    } else {
-      setEditEndpointMode(presetMatch ? "preset" : "custom");
-      setEditEndpointPresetId(presetMatch ? String(presetMatch.id) : "");
-    }
-    setEditing(conn);
-    setEditForm({
+    const nextEndpointMode: S3ConnectionEndpointMode =
+      conn.storage_endpoint_id != null ? "preset" : presetMatch ? "preset" : "custom";
+    const nextEndpointPresetId =
+      conn.storage_endpoint_id != null ? String(conn.storage_endpoint_id) : presetMatch ? String(presetMatch.id) : "";
+    const nextForm = {
       name: conn.name,
       tags: normalizeUiTags(conn.tags),
       provider_hint: conn.provider_hint || "",
@@ -477,13 +509,27 @@ export default function S3ConnectionsPage() {
       region: conn.region || "",
       force_path_style: Boolean(conn.force_path_style),
       verify_tls: conn.verify_tls !== false,
-    });
+    };
+    const nextLinkedUserIds = normalizeLinkedUserIds(conn.user_ids);
+    setEditing(conn);
+    setEditEndpointMode(nextEndpointMode);
+    setEditEndpointPresetId(nextEndpointPresetId);
+    setEditForm(nextForm);
     setEditTab("general");
-    setEditLinkedUserIds(normalizeLinkedUserIds(conn.user_ids));
+    setEditLinkedUserIds(nextLinkedUserIds);
     setEditUserSearch("");
     setShowEditUserPanel(false);
     setEditUserSelections([]);
     setEditCredentials({ access_key_id: "", secret_access_key: "" });
+    setEditInitialSignature(
+      stableSignature({
+        endpointMode: nextEndpointMode,
+        endpointPresetId: nextEndpointPresetId,
+        form: { ...nextForm, tags: normalizeUiTags(nextForm.tags) },
+        credentials: { access_key_id: "", secret_access_key: "" },
+        linkedUserIds: nextLinkedUserIds,
+      })
+    );
     setEditError(null);
   };
 
@@ -954,7 +1000,7 @@ export default function S3ConnectionsPage() {
 
       {/* Create modal */}
       {showCreateModal && (
-        <Modal title="Add S3 Connection" onClose={() => (!creating ? setShowCreateModal(false) : null)}>
+        <Modal title="Add S3 Connection" onClose={createCloseGuard.requestClose}>
           {createError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {createError}
@@ -1093,7 +1139,7 @@ export default function S3ConnectionsPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={createCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                 disabled={creating}
               >
@@ -1107,12 +1153,13 @@ export default function S3ConnectionsPage() {
               </button>
             </div>
           </form>
+          {createCloseGuard.confirmationDialog}
         </Modal>
       )}
 
       {/* Edit modal */}
       {editing && (
-        <Modal title={`Edit: ${editing.name}`} onClose={() => (!editBusy ? closeEditModal() : null)}>
+        <Modal title={`Edit: ${editing.name}`} onClose={editCloseGuard.requestClose}>
           {editError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {editError}
@@ -1427,7 +1474,7 @@ export default function S3ConnectionsPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={closeEditModal}
+                onClick={editCloseGuard.requestClose}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                 disabled={editBusy}
               >
@@ -1441,6 +1488,7 @@ export default function S3ConnectionsPage() {
               </button>
             </div>
           </form>
+          {editCloseGuard.confirmationDialog}
 
         </Modal>
       )}

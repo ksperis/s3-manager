@@ -23,12 +23,14 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { extractApiError } from "../../utils/apiError";
+import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
@@ -757,6 +759,18 @@ export default function UsersPage() {
     can_access_storage_ops: false,
   });
   const [form, setForm] = useState<CreateUserPayload>(() => createFormTemplate());
+  const [createInitialSignature, setCreateInitialSignature] = useState(() =>
+    stableSignature({
+      form: createFormTemplate(),
+      selectedAccounts: [],
+      selectedS3Users: [],
+      selectedS3Connections: [],
+      pendingAccountSelections: [],
+      pendingS3UserSelections: [],
+      pendingConnectionSelections: [],
+      accountAdminChoice: {},
+    })
+  );
   const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<{ id: number; account_admin?: boolean }[]>([]);
   const [createSelectedS3Users, setCreateSelectedS3Users] = useState<number[]>([]);
   const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
@@ -774,6 +788,18 @@ export default function UsersPage() {
   const [createConnectionSelections, setCreateConnectionSelections] = useState<number[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState<UpdateUserPayload>({});
+  const [editInitialSignature, setEditInitialSignature] = useState(() =>
+    stableSignature({
+      form: {},
+      selectedAccounts: [],
+      selectedS3Users: [],
+      selectedS3Connections: [],
+      pendingAccountSelections: [],
+      pendingS3UserSelections: [],
+      pendingConnectionSelections: [],
+      accountAdminChoice: {},
+    })
+  );
   const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<{ id: number; account_admin?: boolean }[]>([]);
   const [editSelectedS3Users, setEditSelectedS3Users] = useState<number[]>([]);
   const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
@@ -1232,6 +1258,136 @@ export default function UsersPage() {
     );
   };
 
+  const emptyCreateSignature = () =>
+    stableSignature({
+      form: createFormTemplate(),
+      selectedAccounts: [],
+      selectedS3Users: [],
+      selectedS3Connections: [],
+      pendingAccountSelections: [],
+      pendingS3UserSelections: [],
+      pendingConnectionSelections: [],
+      accountAdminChoice: {},
+    });
+
+  const createCurrentSignature = useMemo(
+    () =>
+      stableSignature({
+        form,
+        selectedAccounts: createSelectedS3Accounts,
+        selectedS3Users: createSelectedS3Users,
+        selectedS3Connections: createSelectedS3Connections,
+        pendingAccountSelections: createAccountSelections,
+        pendingS3UserSelections: createS3UserSelections,
+        pendingConnectionSelections: createConnectionSelections,
+        accountAdminChoice: createAccountAdminChoice,
+      }),
+    [
+      createAccountAdminChoice,
+      createAccountSelections,
+      createConnectionSelections,
+      createS3UserSelections,
+      createSelectedS3Accounts,
+      createSelectedS3Connections,
+      createSelectedS3Users,
+      form,
+    ]
+  );
+
+  const resetCreateModalState = () => {
+    setForm(createFormTemplate());
+    setCreateSelectedS3Accounts([]);
+    setCreateSelectedS3Users([]);
+    setCreateSelectedS3Connections([]);
+    setCreateAccountAdminChoice({});
+    setCreateS3AccountSearch("");
+    setCreateS3Search("");
+    setCreateConnectionSearch("");
+    setCreateModalTab("general");
+    setCreateAssociationsTab("accounts");
+    setShowCreateAccountPanel(false);
+    setShowCreateS3UserPanel(false);
+    setShowCreateConnectionPanel(false);
+    setCreateAccountSelections([]);
+    setCreateS3UserSelections([]);
+    setCreateConnectionSelections([]);
+    setCreateRoleHelpOpen(false);
+    setCreateInitialSignature(emptyCreateSignature());
+  };
+
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    resetCreateModalState();
+  };
+
+  const editCurrentSignature = useMemo(
+    () =>
+      stableSignature({
+        form: editForm,
+        selectedAccounts: editSelectedS3Accounts,
+        selectedS3Users: editSelectedS3Users,
+        selectedS3Connections: editSelectedS3Connections,
+        pendingAccountSelections: editAccountSelections,
+        pendingS3UserSelections: editS3UserSelections,
+        pendingConnectionSelections: editConnectionSelections,
+        accountAdminChoice: editAccountAdminChoice,
+      }),
+    [
+      editAccountAdminChoice,
+      editAccountSelections,
+      editConnectionSelections,
+      editForm,
+      editS3UserSelections,
+      editSelectedS3Accounts,
+      editSelectedS3Connections,
+      editSelectedS3Users,
+    ]
+  );
+
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setEditingUser(null);
+    setEditSelectedS3Accounts([]);
+    setEditS3AccountSearch("");
+    setEditSelectedS3Users([]);
+    setEditS3Search("");
+    setEditSelectedS3Connections([]);
+    setEditConnectionSearch("");
+    setEditModalTab("general");
+    setEditAssociationsTab("accounts");
+    setShowEditAccountPanel(false);
+    setShowEditS3UserPanel(false);
+    setShowEditConnectionPanel(false);
+    setEditAccountSelections([]);
+    setEditS3UserSelections([]);
+    setEditConnectionSelections([]);
+    setEditAccountAdminChoice({});
+    setEditForm({});
+    setEditRoleHelpOpen(false);
+    setEditInitialSignature(
+      stableSignature({
+        form: {},
+        selectedAccounts: [],
+        selectedS3Users: [],
+        selectedS3Connections: [],
+        pendingAccountSelections: [],
+        pendingS3UserSelections: [],
+        pendingConnectionSelections: [],
+        accountAdminChoice: {},
+      })
+    );
+  };
+
+  const createCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showCreateModal && createCurrentSignature !== createInitialSignature,
+    onClose: closeCreateModal,
+  });
+
+  const editCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showEditModal && editCurrentSignature !== editInitialSignature,
+    onClose: closeEditModal,
+    disabled: editingUser ? busyId === editingUser.id : false,
+  });
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -1282,23 +1438,7 @@ export default function UsersPage() {
         }
       }
       setActionMessage("User created");
-      setForm(createFormTemplate());
-      setCreateSelectedS3Accounts([]);
-      setCreateSelectedS3Users([]);
-      setCreateSelectedS3Connections([]);
-      setCreateAccountAdminChoice({});
-      setCreateS3AccountSearch("");
-      setCreateS3Search("");
-      setCreateConnectionSearch("");
-      setCreateAccountSelections([]);
-      setCreateS3UserSelections([]);
-      setCreateConnectionSelections([]);
-      setShowCreateAccountPanel(false);
-      setShowCreateS3UserPanel(false);
-      setShowCreateConnectionPanel(false);
-      setCreateModalTab("general");
-      setCreateAssociationsTab("accounts");
-      setCreateRoleHelpOpen(false);
+      resetCreateModalState();
       await fetchUsers();
       if (s3AccountsLoaded) {
         await fetchS3Accounts();
@@ -1311,8 +1451,7 @@ export default function UsersPage() {
 
   const startEdit = (user: User) => {
     const normalizedRole = normalizeUiRoleValue(user.role);
-    setEditingUser(user);
-    setEditForm({
+    const nextEditForm = {
       email: user.email,
       password: "",
       role: normalizedRole,
@@ -1324,7 +1463,9 @@ export default function UsersPage() {
         normalizedRole === "ui_user" || normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin"
           ? Boolean(user.can_access_storage_ops)
           : false,
-    });
+    };
+    setEditingUser(user);
+    setEditForm(nextEditForm);
     const accountAdmins = new Map<number, boolean>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
     );
@@ -1334,8 +1475,10 @@ export default function UsersPage() {
         account_admin: accountAdmins.get(Number(id)) ?? false,
       })) ?? [];
     setEditSelectedS3Accounts(selectedAccounts);
-    setEditSelectedS3Users(user.s3_users ? user.s3_users.map((id) => Number(id)) : []);
-    setEditSelectedS3Connections(user.s3_connections ? user.s3_connections.map((id) => Number(id)) : []);
+    const nextSelectedS3Users = user.s3_users ? user.s3_users.map((id) => Number(id)) : [];
+    const nextSelectedS3Connections = user.s3_connections ? user.s3_connections.map((id) => Number(id)) : [];
+    setEditSelectedS3Users(nextSelectedS3Users);
+    setEditSelectedS3Connections(nextSelectedS3Connections);
     setEditS3AccountSearch("");
     setEditS3Search("");
     setEditConnectionSearch("");
@@ -1356,6 +1499,19 @@ export default function UsersPage() {
     setEditAccountSelections([]);
     setEditS3UserSelections([]);
     setEditConnectionSelections([]);
+    setEditAccountAdminChoice({});
+    setEditInitialSignature(
+      stableSignature({
+        form: nextEditForm,
+        selectedAccounts,
+        selectedS3Users: nextSelectedS3Users,
+        selectedS3Connections: nextSelectedS3Connections,
+        pendingAccountSelections: [],
+        pendingS3UserSelections: [],
+        pendingConnectionSelections: [],
+        accountAdminChoice: {},
+      })
+    );
     setEditModalTab("general");
     setEditRoleHelpOpen(false);
     setActionError(null);
@@ -1437,24 +1593,7 @@ export default function UsersPage() {
       }
 
       setActionMessage("User updated");
-      setEditingUser(null);
-      setEditForm({});
-      setEditSelectedS3Accounts([]);
-      setEditSelectedS3Users([]);
-      setEditSelectedS3Connections([]);
-      setEditS3AccountSearch("");
-      setEditS3Search("");
-      setEditConnectionSearch("");
-      setEditModalTab("general");
-      setEditAssociationsTab("accounts");
-      setShowEditAccountPanel(false);
-      setShowEditS3UserPanel(false);
-      setShowEditConnectionPanel(false);
-      setEditAccountSelections([]);
-      setEditS3UserSelections([]);
-      setEditConnectionSelections([]);
-      setEditRoleHelpOpen(false);
-      setShowEditModal(false);
+      closeEditModal();
       await fetchUsers();
       if (s3AccountsLoaded) {
         await fetchS3Accounts();
@@ -1513,9 +1652,7 @@ export default function UsersPage() {
           {
             label: "Create user",
             onClick: () => {
-              setCreateModalTab("general");
-              setCreateAssociationsTab("accounts");
-              setCreateRoleHelpOpen(false);
+              resetCreateModalState();
               setShowCreateModal(true);
               void ensureS3Accounts({ retryOnError: true });
             },
@@ -1528,26 +1665,7 @@ export default function UsersPage() {
       {showCreateModal && (
         <Modal
           title="Create user"
-          onClose={() => {
-            setShowCreateModal(false);
-            setForm(createFormTemplate());
-            setCreateSelectedS3Accounts([]);
-            setCreateSelectedS3Users([]);
-            setCreateSelectedS3Connections([]);
-            setCreateAccountAdminChoice({});
-            setCreateS3AccountSearch("");
-            setCreateS3Search("");
-            setCreateConnectionSearch("");
-            setCreateModalTab("general");
-            setCreateAssociationsTab("accounts");
-            setShowCreateAccountPanel(false);
-            setShowCreateS3UserPanel(false);
-            setShowCreateConnectionPanel(false);
-            setCreateAccountSelections([]);
-            setCreateS3UserSelections([]);
-            setCreateConnectionSelections([]);
-            setCreateRoleHelpOpen(false);
-          }}
+          onClose={createCloseGuard.requestClose}
         >
           {actionError && (
             <PageBanner tone="error" className="mb-3">
@@ -1734,26 +1852,7 @@ export default function UsersPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={() => {
-                  setShowCreateModal(false);
-                  setForm(createFormTemplate());
-                  setCreateSelectedS3Accounts([]);
-                  setCreateS3AccountSearch("");
-                  setCreateSelectedS3Users([]);
-                  setCreateS3Search("");
-                  setCreateSelectedS3Connections([]);
-                  setCreateConnectionSearch("");
-                  setCreateAccountAdminChoice({});
-                  setCreateModalTab("general");
-                  setCreateAssociationsTab("accounts");
-                  setShowCreateAccountPanel(false);
-                  setShowCreateS3UserPanel(false);
-                  setShowCreateConnectionPanel(false);
-                  setCreateAccountSelections([]);
-                  setCreateS3UserSelections([]);
-                  setCreateConnectionSelections([]);
-                  setCreateRoleHelpOpen(false);
-                }}
+                onClick={createCloseGuard.requestClose}
                 className={userModalCancelButtonClass}
               >
                 Cancel
@@ -1766,6 +1865,7 @@ export default function UsersPage() {
               </button>
             </div>
           </form>
+          {createCloseGuard.confirmationDialog}
         </Modal>
       )}
 
@@ -1908,26 +2008,7 @@ export default function UsersPage() {
       {editingUser && showEditModal && (
         <Modal
           title="Edit user"
-          onClose={() => {
-            setShowEditModal(false);
-            setEditingUser(null);
-            setEditSelectedS3Accounts([]);
-            setEditS3AccountSearch("");
-            setEditSelectedS3Users([]);
-            setEditS3Search("");
-            setEditSelectedS3Connections([]);
-            setEditConnectionSearch("");
-            setEditModalTab("general");
-            setEditAssociationsTab("accounts");
-            setShowEditAccountPanel(false);
-            setShowEditS3UserPanel(false);
-            setShowEditConnectionPanel(false);
-            setEditAccountSelections([]);
-            setEditS3UserSelections([]);
-            setEditConnectionSelections([]);
-            setEditForm({});
-            setEditRoleHelpOpen(false);
-          }}
+          onClose={editCloseGuard.requestClose}
         >
           <p className="mb-3 ui-body text-slate-500 dark:text-slate-300">{editingUser.email}</p>
           {actionError && (
@@ -2112,26 +2193,7 @@ export default function UsersPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={() => {
-                  setShowEditModal(false);
-                  setEditingUser(null);
-                  setEditSelectedS3Accounts([]);
-                  setEditS3AccountSearch("");
-                  setEditSelectedS3Users([]);
-                  setEditS3Search("");
-                  setEditSelectedS3Connections([]);
-                  setEditConnectionSearch("");
-                  setEditModalTab("general");
-                  setEditAssociationsTab("accounts");
-                  setShowEditAccountPanel(false);
-                  setShowEditS3UserPanel(false);
-                  setShowEditConnectionPanel(false);
-                  setEditAccountSelections([]);
-                  setEditS3UserSelections([]);
-                  setEditConnectionSelections([]);
-                  setEditForm({});
-                  setEditRoleHelpOpen(false);
-                }}
+                onClick={editCloseGuard.requestClose}
                 className={userModalCancelButtonClass}
               >
                 Cancel
@@ -2145,6 +2207,7 @@ export default function UsersPage() {
               </button>
             </div>
           </form>
+          {editCloseGuard.confirmationDialog}
         </Modal>
       )}
     </div>

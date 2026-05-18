@@ -7,7 +7,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createConnection } from "../api/connections";
 import { listStorageEndpoints, StorageEndpoint } from "../api/storageEndpoints";
 import { notifyExecutionContextsRefresh } from "../utils/executionContextRefresh";
+import { stableSignature } from "../utils/stableSignature";
 import Modal from "./Modal";
+import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
 
 type EndpointMode = "preset" | "custom";
 
@@ -100,15 +102,16 @@ export default function AddS3ConnectionFromKeyModal({
     access_manager: false,
     access_browser: true,
   });
+  const [initialSignature, setInitialSignature] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
     setEndpointLoadError(null);
     setSaving(false);
-    setEndpointMode(defaultEndpointId != null ? "preset" : "custom");
-    setSelectedEndpointId(defaultEndpointId != null ? String(defaultEndpointId) : "");
-    setForm({
+    const nextEndpointMode: EndpointMode = defaultEndpointId != null ? "preset" : "custom";
+    const nextSelectedEndpointId = defaultEndpointId != null ? String(defaultEndpointId) : "";
+    const nextForm = {
       name: defaultName,
       endpoint_url: defaultEndpointUrl || "",
       region: defaultRegion || "",
@@ -117,7 +120,11 @@ export default function AddS3ConnectionFromKeyModal({
       verify_tls: true,
       access_manager: Boolean(defaultAccessManager),
       access_browser: defaultAccessBrowser !== false,
-    });
+    };
+    setEndpointMode(nextEndpointMode);
+    setSelectedEndpointId(nextSelectedEndpointId);
+    setForm(nextForm);
+    setInitialSignature(stableSignature({ endpointMode: nextEndpointMode, selectedEndpointId: nextSelectedEndpointId, form: nextForm }));
   }, [
     defaultEndpointId,
     defaultEndpointUrl,
@@ -195,6 +202,17 @@ export default function AddS3ConnectionFromKeyModal({
     return defaultOwnerType || defaultOwnerIdentifier || null;
   }, [defaultOwnerIdentifier, defaultOwnerType]);
   const showEndpointSection = !endpointLocked;
+  const currentSignature = useMemo(
+    () => stableSignature({ endpointMode, selectedEndpointId, form }),
+    [endpointMode, form, selectedEndpointId]
+  );
+  const hasUnsavedChanges = Boolean(initialSignature) && currentSignature !== initialSignature;
+  const closeGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges,
+    disabled: saving,
+    onClose,
+    zIndexClass: "z-[80]",
+  });
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -267,7 +285,7 @@ export default function AddS3ConnectionFromKeyModal({
   if (!isOpen) return null;
 
   return (
-    <Modal title={title} onClose={() => (!saving ? onClose() : null)} maxWidthClass="max-w-3xl" zIndexClass={zIndexClass}>
+    <Modal title={title} onClose={closeGuard.requestClose} maxWidthClass="max-w-3xl" zIndexClass={zIndexClass}>
       <form className="space-y-4" onSubmit={submit}>
         {error && (
           <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
@@ -435,7 +453,7 @@ export default function AddS3ConnectionFromKeyModal({
         <div className="flex items-center justify-end gap-3">
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeGuard.requestClose}
             disabled={saving}
             className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
           >
@@ -450,6 +468,7 @@ export default function AddS3ConnectionFromKeyModal({
           </button>
         </div>
       </form>
+      {closeGuard.confirmationDialog}
     </Modal>
   );
 }

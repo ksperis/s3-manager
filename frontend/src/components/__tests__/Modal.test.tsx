@@ -21,6 +21,25 @@ function ModalHarness() {
   );
 }
 
+function NestedModalHarness() {
+  const [parentOpen, setParentOpen] = useState(true);
+  const [childOpen, setChildOpen] = useState(false);
+  if (!parentOpen) return <p>Closed</p>;
+  return (
+    <Modal title="Parent modal" onClose={() => setParentOpen(false)}>
+      <button type="button" onClick={() => setChildOpen(true)}>
+        Open child
+      </button>
+      <button type="button">Parent action</button>
+      {childOpen && (
+        <Modal title="Child modal" onClose={() => setChildOpen(false)} zIndexClass="z-[60]">
+          <button type="button">Child action</button>
+        </Modal>
+      )}
+    </Modal>
+  );
+}
+
 describe("Modal", () => {
   it("passes a11y checks", async () => {
     const { container } = render(
@@ -65,5 +84,34 @@ describe("Modal", () => {
     const backdrop = screen.getByRole("presentation");
     fireEvent.mouseDown(backdrop);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("lets only the top modal respond to Escape", async () => {
+    const user = userEvent.setup();
+    render(<NestedModalHarness />);
+
+    await user.click(screen.getByRole("button", { name: "Open child" }));
+    expect(screen.getByRole("dialog", { name: "Parent modal" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Child modal" })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Child modal" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Parent modal" })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Parent modal" })).not.toBeInTheDocument();
+  });
+
+  it("traps focus only inside the top modal", async () => {
+    const user = userEvent.setup();
+    render(<NestedModalHarness />);
+
+    await user.click(screen.getByRole("button", { name: "Open child" }));
+    expect(screen.getAllByRole("button", { name: "Close modal" })[1]).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Child action" })).toHaveFocus();
+    await user.tab();
+    expect(screen.getAllByRole("button", { name: "Close modal" })[1]).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Parent action" })).not.toHaveFocus();
   });
 });

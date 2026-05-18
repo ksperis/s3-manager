@@ -10,6 +10,7 @@ import Modal from "./Modal";
 import ThemeToggle from "./ThemeToggle";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
+import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
 
 type TopbarProps = {
   projectName?: string;
@@ -88,6 +89,7 @@ export default function Topbar({
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileModalHasUnsavedChanges, setProfileModalHasUnsavedChanges] = useState(false);
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
   const [showApiTokensModal, setShowApiTokensModal] = useState(false);
   const accountMenuRootRef = useRef<HTMLDivElement | null>(null);
@@ -106,6 +108,15 @@ export default function Topbar({
 
   const accountDisplay = userEmail ?? "Session";
   const accountInitial = buildAccountInitial(accountDisplay);
+  const closeProfileModal = () => {
+    setShowProfileModal(false);
+    setProfileModalHasUnsavedChanges(false);
+  };
+  const profileCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showProfileModal && profileModalHasUnsavedChanges,
+    onClose: closeProfileModal,
+    zIndexClass: "z-[70]",
+  });
 
   const adaptiveControlDescriptors = useMemo(
     () => (controlDescriptors?.filter((control) => control.id !== "workspace") ?? []),
@@ -301,6 +312,7 @@ export default function Topbar({
 
   const openProfileModal = () => {
     setAccountMenuOpen(false);
+    setProfileModalHasUnsavedChanges(false);
     setShowProfileModal(true);
   };
 
@@ -652,14 +664,20 @@ export default function Topbar({
       {showProfileModal && (
         <Modal
           title="User profile"
-          onClose={() => setShowProfileModal(false)}
+          onClose={profileCloseGuard.requestClose}
           maxWidthClass="max-w-6xl"
           maxBodyHeightClass="max-h-[85vh]"
           zIndexClass="z-[46]"
         >
           <Suspense fallback={<div className="ui-caption text-slate-500 dark:text-slate-400">Loading profile...</div>}>
-            <ProfilePage showPageHeader={false} showSettingsCards showConnectionsSection={false} />
+            <ProfilePage
+              showPageHeader={false}
+              showSettingsCards
+              showConnectionsSection={false}
+              onUnsavedChangesChange={setProfileModalHasUnsavedChanges}
+            />
           </Suspense>
+          {profileCloseGuard.confirmationDialog}
         </Modal>
       )}
 
