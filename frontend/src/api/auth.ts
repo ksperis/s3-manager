@@ -68,6 +68,40 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return data;
 }
 
+export type LDAPProviderInfo = {
+  id: string;
+  display_name: string;
+};
+
+export async function fetchLdapProviders(): Promise<LDAPProviderInfo[]> {
+  const { data } = await client.get("/auth/ldap/providers");
+  if (Array.isArray(data)) {
+    return data as LDAPProviderInfo[];
+  }
+  if (data && typeof data === "object") {
+    const maybeProviders =
+      (data as { providers?: unknown }).providers ??
+      (data as { items?: unknown }).items ??
+      (data as { data?: unknown }).data;
+    if (Array.isArray(maybeProviders)) {
+      return maybeProviders as LDAPProviderInfo[];
+    }
+  }
+  return [];
+}
+
+export async function loginWithLdap(
+  providerId: string,
+  username: string,
+  password: string,
+): Promise<LoginResponse> {
+  const { data } = await client.post<LoginResponse>(`/auth/ldap/${providerId}/login`, {
+    username,
+    password,
+  });
+  return data;
+}
+
 export async function loginWithKeys(
   accessKey: string,
   secretKey: string,

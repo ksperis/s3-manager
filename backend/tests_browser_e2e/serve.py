@@ -61,7 +61,7 @@ def _build_app_settings_payload() -> str:
 def _prepare_environment(backend_root: Path) -> dict[str, str]:
     env = os.environ.copy()
     for key in list(env):
-        if key.startswith("OIDC_PROVIDERS__"):
+        if key.startswith("OIDC_PROVIDERS__") or key.startswith("LDAP_PROVIDERS__"):
             env.pop(key, None)
 
     runtime_dir = backend_root / ".browser-e2e-runtime"
@@ -105,6 +105,7 @@ def _prepare_environment(backend_root: Path) -> dict[str, str]:
     env["SEED_S3_SECRET_KEY"] = e2e_s3_secret_key
     env["SEED_S3_REGION"] = e2e_s3_region
     env["OIDC_PROVIDERS"] = "{}"
+    env["LDAP_PROVIDERS"] = "{}"
     env["CORS_ORIGINS"] = json.dumps(FRONTEND_ORIGINS)
     env["BUCKET_MIGRATION_WORKER_ENABLED"] = "false"
     env["PYTHONUNBUFFERED"] = "1"

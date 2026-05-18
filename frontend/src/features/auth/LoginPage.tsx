@@ -4,12 +4,23 @@
  */
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchOidcProviders, login, loginWithKeys, startOidcLogin, type OidcProviderInfo } from "../../api/auth";
+import {
+  fetchLdapProviders,
+  fetchOidcProviders,
+  login,
+  loginWithKeys,
+  loginWithLdap,
+  startOidcLogin,
+  type LDAPProviderInfo,
+  type OidcProviderInfo,
+} from "../../api/auth";
 import { fetchGeneralSettings, fetchLoginSettings, type GeneralSettings, type LoginSettings } from "../../api/appSettings";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
+
+type LoginMode = "password" | "keys" | "ldap";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -17,14 +28,19 @@ export default function LoginPage() {
   const { setLanguagePreference } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [ldapUsername, setLdapUsername] = useState("");
+  const [ldapPassword, setLdapPassword] = useState("");
   const [accessKey, setAccessKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
-  const [mode, setMode] = useState<"password" | "keys">("password");
+  const [mode, setMode] = useState<LoginMode>("password");
   const [error, setError] = useState<string | null>(null);
   const [oidcError, setOidcError] = useState<string | null>(null);
+  const [ldapError, setLdapError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [oidcLoading, setOidcLoading] = useState<string | null>(null);
   const [oidcProviders, setOidcProviders] = useState<OidcProviderInfo[]>([]);
+  const [ldapProviders, setLdapProviders] = useState<LDAPProviderInfo[]>([]);
+  const [selectedLdapProvider, setSelectedLdapProvider] = useState("");
   const [loginSettings, setLoginSettings] = useState<LoginSettings | null>(null);
   const [endpointError, setEndpointError] = useState<string | null>(null);
   const [endpointLoading, setEndpointLoading] = useState(false);
@@ -53,6 +69,24 @@ export default function LoginPage() {
       .catch(() => {
         if (isMounted) {
           setOidcError("Unable to load identity providers");
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchLdapProviders()
+      .then((providers) => {
+        if (isMounted) {
+          setLdapProviders(Array.isArray(providers) ? providers : []);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setLdapError("Unable to load directory providers");
         }
       });
     return () => {
@@ -95,6 +129,11 @@ export default function LoginPage() {
   }, [loginSettings, selectedEndpoint, customEndpoint]);
 
   useEffect(() => {
+    if (selectedLdapProvider || ldapProviders.length === 0) return;
+    setSelectedLdapProvider(ldapProviders[0].id);
+  }, [ldapProviders, selectedLdapProvider]);
+
+  useEffect(() => {
     setLoginBrandingLogoFailed(false);
   }, [loginSettings?.login_logo_url]);
 
@@ -116,6 +155,35 @@ export default function LoginPage() {
     } catch (err) {
       console.error(err);
       setError("Invalid credentials or server unavailable");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLdapLogin = async (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setLdapError(null);
+    const providerId = selectedLdapProvider || ldapProviders[0]?.id || "";
+    if (!providerId) {
+      setError("No directory provider is available");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await loginWithLdap(providerId, ldapUsername.trim(), ldapPassword);
+      localStorage.setItem("token", res.access_token);
+      const sessionUser: SessionUser = { ...res.user, authType: "ldap" };
+      localStorage.setItem("user", JSON.stringify(sessionUser));
+      setLanguagePreference(res.user.ui_language ?? "auto");
+      localStorage.removeItem("s3SessionEndpoint");
+      const settings = await loadGeneralSettings();
+      const destination = resolvePostLoginPath(sessionUser, settings);
+      prefetchWorkspaceBranch(destination);
+      navigate(destination, { replace: true });
+    } catch (err) {
+      console.error(err);
+      setError("Unable to authenticate with this directory account");
     } finally {
       setLoading(false);
     }
@@ -164,7 +232,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleModeChange = (next: "password" | "keys") => {
+  const handleModeChange = (next: LoginMode) => {
     setMode(next);
     setError(null);
   };
@@ -182,8 +250,8 @@ export default function LoginPage() {
     }
   };
 
-  const tabClasses = (value: "password" | "keys") =>
-    `rounded-lg px-3 py-2 ui-body font-semibold transition ${
+  const tabClasses = (value: LoginMode) =>
+    `min-w-0 rounded-lg px-2 py-2 ui-body font-semibold leading-tight transition ${
       mode === value
         ? "bg-white text-slate-900 shadow-sm ring-1 ring-primary-200"
         : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
@@ -193,6 +261,12 @@ export default function LoginPage() {
   const allowEndpointList = Boolean(loginSettings?.allow_login_endpoint_list);
   const allowCustomEndpoint = Boolean(loginSettings?.allow_login_custom_endpoint);
   const endpointOptions = loginSettings?.endpoints ?? [];
+  const hasLdapProviders = ldapProviders.length > 0;
+  const loginModes: Array<{ value: LoginMode; label: string }> = [
+    { value: "password", label: "Email & password" },
+    ...(hasLdapProviders ? [{ value: "ldap" as const, label: "Directory" }] : []),
+    ...(allowAccessKeys ? [{ value: "keys" as const, label: "S3 access keys" }] : []),
+  ];
   const loginBrandingLogoUrl = loginSettings?.login_logo_url ?? null;
   const shouldShowLeftLogo = Boolean(loginBrandingLogoUrl && !loginBrandingLogoFailed);
   const inputClasses =
@@ -206,7 +280,10 @@ export default function LoginPage() {
     if (!allowAccessKeys && mode === "keys") {
       setMode("password");
     }
-  }, [allowAccessKeys, mode]);
+    if (!hasLdapProviders && mode === "ldap") {
+      setMode("password");
+    }
+  }, [allowAccessKeys, hasLdapProviders, mode]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -278,18 +355,84 @@ export default function LoginPage() {
               <p className="mt-1 ui-body text-slate-500">Use your account credentials.</p>
             </div>
 
-            {allowAccessKeys && (
-              <div className="mb-6 grid grid-cols-2 gap-1.5 rounded-xl border border-slate-200 bg-slate-100/80 p-1.5 ui-body font-semibold text-slate-600">
-                <button type="button" className={tabClasses("password")} onClick={() => handleModeChange("password")}>
-                  Email & password
-                </button>
-                <button type="button" className={tabClasses("keys")} onClick={() => handleModeChange("keys")}>
-                  S3 access keys
-                </button>
+            {loginModes.length > 1 && (
+              <div
+                className="mb-6 grid gap-1.5 rounded-xl border border-slate-200 bg-slate-100/80 p-1.5 ui-body font-semibold text-slate-600"
+                style={{ gridTemplateColumns: `repeat(${loginModes.length}, minmax(0, 1fr))` }}
+              >
+                {loginModes.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className={tabClasses(item.value)}
+                    onClick={() => handleModeChange(item.value)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
             )}
 
-            {mode === "password" || !allowAccessKeys ? (
+            {mode === "ldap" && hasLdapProviders ? (
+              <form onSubmit={handleLdapLogin} className="space-y-4">
+                {ldapProviders.length > 1 && (
+                  <div>
+                    <label htmlFor="ldap-provider" className="ui-body font-medium text-slate-700">
+                      Directory
+                    </label>
+                    <select
+                      id="ldap-provider"
+                      value={selectedLdapProvider || ldapProviders[0]?.id || ""}
+                      onChange={(e) => setSelectedLdapProvider(e.target.value)}
+                      className={inputClasses}
+                      required
+                    >
+                      {ldapProviders.map((provider) => (
+                        <option key={provider.id} value={provider.id}>
+                          {provider.display_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label htmlFor="ldap-username" className="ui-body font-medium text-slate-700">
+                    Username
+                  </label>
+                  <input
+                    id="ldap-username"
+                    type="text"
+                    value={ldapUsername}
+                    onChange={(e) => setLdapUsername(e.target.value)}
+                    className={inputClasses}
+                    placeholder="jane.doe or jane@example.com"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="ldap-password" className="ui-body font-medium text-slate-700">
+                    Password
+                  </label>
+                  <input
+                    id="ldap-password"
+                    type="password"
+                    value={ldapPassword}
+                    onChange={(e) => setLdapPassword(e.target.value)}
+                    className={inputClasses}
+                    placeholder="••••••••"
+                    required
+                  />
+                </div>
+                {(error || ldapError) && (
+                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700">
+                    {error || ldapError}
+                  </p>
+                )}
+                <button type="submit" disabled={loading} className={buttonClasses}>
+                  {loading ? "Signing in..." : "Sign in with directory"}
+                </button>
+              </form>
+            ) : mode === "password" || !allowAccessKeys ? (
               <form onSubmit={handlePasswordLogin} className="space-y-4">
                 <div>
                   <label className="ui-body font-medium text-slate-700">Email</label>

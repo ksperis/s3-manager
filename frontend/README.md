@@ -66,7 +66,7 @@ Post-refactor measurements (2026-02-28):
 - Breadcrumbs + `PageHeader`/cards for each view; tables use the same dense style for Admin/Manager.
 
 ## Available pages (high level)
-- Auth: Login (password, RGW keys, or external OIDC providers such as Google) + Unauthorized page; OIDC callbacks handled under `/oidc/:provider/callback`.
+- Auth: Login (password, LDAP directory, RGW keys, or external OIDC providers such as Google) + Unauthorized page; OIDC callbacks handled under `/oidc/:provider/callback`.
 - Admin area (`/admin/*`, role `ui_admin`):
   - Dashboard: real stats cards + accounts summary table.
   - Accounts: RGW admin ops (create/import accounts + quotas), users (CRUD) unchanged.

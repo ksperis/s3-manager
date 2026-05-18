@@ -20,6 +20,7 @@ from app.models.oidc import (
     OIDCStartRequest,
     OIDCStartResponse,
 )
+from app.models.ldap import LDAPLoginRequest, LDAPProviderInfo
 from app.models.user import UserCreate, UserOut
 from app.routers.dependencies import get_audit_logger, get_current_super_admin, get_current_ui_superadmin
 from app.services.audit_service import AuditService
@@ -31,6 +32,14 @@ from app.services.oidc_service import (
     OIDCStateError,
     OidcService,
     get_oidc_service,
+)
+from app.services.ldap_service import (
+    LDAPAuthenticationError,
+    LDAPConfigurationError,
+    LDAPProviderNotFoundError,
+    LDAPUserConflictError,
+    LDAPAuthService,
+    get_ldap_auth_service,
 )
 from app.services.session_service import SessionIntrospectionError, SessionService
 from app.services.refresh_session_service import RefreshSessionService
@@ -263,6 +272,146 @@ def login(
         action="login_success",
         entity_type="ui_session",
         metadata={"role": user.role, "username": user.email},
+        ip_address=ip_address,
+        user_agent=user_agent,
+        request_id=request_id,
+    )
+    return LoginResponse(access_token=token, user=users_service.user_to_out(user))
+
+
+@router.get("/ldap/providers", response_model=list[LDAPProviderInfo])
+def list_ldap_providers(
+    ldap_service: LDAPAuthService = Depends(lambda db=Depends(get_db): get_ldap_auth_service(db)),
+) -> list[dict[str, str]]:
+    return ldap_service.list_providers()
+
+
+@router.post("/ldap/{provider_id}/login", response_model=LoginResponse)
+def login_with_ldap(
+    request: Request,
+    response: Response,
+    provider_id: str,
+    payload: LDAPLoginRequest,
+    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    ldap_service: LDAPAuthService = Depends(lambda db=Depends(get_db): get_ldap_auth_service(db)),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> LoginResponse:
+    username = (payload.username or "").strip()
+    provider_key = provider_id.lower()
+    rate_limit_key = f"ldap:{provider_key}:{username.lower()}"
+    ip_address, user_agent, request_id = _request_audit_context(request)
+    existing_user = users_service.get_by_email_case_insensitive(username) if username else None
+
+    if _is_login_rate_limited(audit_service, rate_limit_key, ip_address):
+        audit_service.record_action(
+            user=existing_user,
+            user_email=rate_limit_key or payload.username,
+            user_role=existing_user.role if existing_user else None,
+            scope="auth",
+            action="login_rate_limited",
+            entity_type="ui_session",
+            status="failure",
+            message="Too many failed LDAP login attempts",
+            metadata={
+                "provider": provider_key,
+                "username": username or payload.username,
+                "window_seconds": settings.login_rate_limit_window_seconds,
+                "max_attempts": settings.login_rate_limit_max_attempts,
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Please try again later.",
+        )
+
+    try:
+        user, created = ldap_service.authenticate(provider_key, username, payload.password)
+    except LDAPProviderNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LDAPConfigurationError as exc:
+        audit_service.record_action(
+            user=existing_user,
+            user_email=rate_limit_key or payload.username,
+            user_role=existing_user.role if existing_user else None,
+            scope="auth",
+            action="login_ldap_configuration_error",
+            entity_type="ui_session",
+            status="failure",
+            message="LDAP provider configuration error",
+            metadata={
+                "provider": provider_key,
+                "username": username or payload.username,
+                "error": str(exc),
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="LDAP provider is unavailable. Please contact an administrator.",
+        ) from exc
+    except LDAPUserConflictError as exc:
+        audit_service.record_action(
+            user=existing_user,
+            user_email=rate_limit_key or payload.username,
+            user_role=existing_user.role if existing_user else None,
+            scope="auth",
+            action="login_failure",
+            entity_type="ui_session",
+            status="failure",
+            message="LDAP user cannot be linked",
+            metadata={"provider": provider_key, "username": username or payload.username},
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except LDAPAuthenticationError as exc:
+        audit_service.record_action(
+            user=existing_user,
+            user_email=rate_limit_key or payload.username,
+            user_role=existing_user.role if existing_user else None,
+            scope="auth",
+            action="login_failure",
+            entity_type="ui_session",
+            status="failure",
+            message="Invalid LDAP credentials",
+            metadata={"provider": provider_key, "username": username or payload.username},
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials") from exc
+
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    token = create_access_token(
+        data={
+            "sub": user.email,
+            "role": user.role,
+            "uid": user.id,
+            "auth_type": "ldap",
+            "provider": provider_key,
+        },
+        expires_delta=access_token_expires,
+    )
+    refresh_service = RefreshSessionService(users_service.db)
+    refresh_token, _ = refresh_service.create_for_user(user.id, auth_type="ldap")
+    _set_refresh_cookie(response, refresh_token)
+    audit_service.record_action(
+        user=user,
+        scope="auth",
+        action="login_ldap_success",
+        entity_type="ui_session",
+        metadata={
+            "provider": provider_key,
+            "email": user.email,
+            "created": created,
+            "role": user.role,
+        },
         ip_address=ip_address,
         user_agent=user_agent,
         request_id=request_id,

@@ -37,6 +37,7 @@ function isAuthEndpoint(url: string) {
   return (
     url.includes("/auth/login") ||
     url.includes("/auth/login-s3") ||
+    url.includes("/auth/ldap/") ||
     url.includes("/auth/oidc/") ||
     url.includes("/auth/refresh") ||
     url.includes("/auth/logout")

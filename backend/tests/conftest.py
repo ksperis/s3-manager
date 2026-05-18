@@ -83,6 +83,15 @@ def reset_bucket_listing_cache():
 
 
 @pytest.fixture(autouse=True)
+def reset_env_managed_storage_endpoints(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.storage_endpoints_service.settings.env_storage_endpoints",
+        None,
+        raising=False,
+    )
+
+
+@pytest.fixture(autouse=True)
 def reset_bucket_migration_workers():
     reset_bucket_migration_worker_for_tests()
     reset_bucket_migration_webhook_dispatcher_for_tests()

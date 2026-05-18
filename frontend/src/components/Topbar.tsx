@@ -33,7 +33,7 @@ type StoredAccountLink = {
 
 type StoredTopbarUser = {
   role?: string | null;
-  authType?: "password" | "s3_session" | "oidc" | null;
+  authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
   account_links?: StoredAccountLink[] | null;
 };
 

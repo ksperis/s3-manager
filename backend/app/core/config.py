@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
@@ -41,6 +42,80 @@ class OIDCProviderSettings(BaseModel):
         return value
 
 
+class LDAPProviderSettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    display_name: str
+    url: str
+    bind_dn: str
+    bind_password: str
+    user_base_dn: str
+    user_filter: str = "(|(mail={username})(uid={username})(sAMAccountName={username})(userPrincipalName={username}))"
+    email_attribute: str = "mail"
+    name_attribute: Optional[str] = "displayName"
+    subject_attribute: Optional[str] = None
+    start_tls: bool = False
+    tls_verify: bool = True
+    tls_ca_file: Optional[str] = None
+    timeout_seconds: float = Field(5.0, gt=0, le=60)
+    enabled: bool = True
+    allow_insecure: bool = False
+    allow_email_linking: bool = False
+
+    @field_validator(
+        "display_name",
+        "url",
+        "bind_dn",
+        "bind_password",
+        "user_base_dn",
+        "user_filter",
+        "email_attribute",
+        mode="before",
+    )
+    @classmethod
+    def normalize_required_strings(cls, value):
+        if not isinstance(value, str):
+            raise ValueError("LDAP provider fields must be strings")
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("LDAP provider fields cannot be empty")
+        return normalized
+
+    @field_validator("name_attribute", "subject_attribute", "tls_ca_file", mode="before")
+    @classmethod
+    def normalize_optional_strings(cls, value):
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("LDAP provider fields must be strings")
+        normalized = value.strip()
+        return normalized or None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        parsed = urlparse(value)
+        if parsed.scheme not in {"ldap", "ldaps"} or not parsed.hostname:
+            raise ValueError("LDAP provider url must be an ldap:// or ldaps:// URL")
+        return value
+
+    @field_validator("user_filter")
+    @classmethod
+    def validate_user_filter(cls, value: str) -> str:
+        if "{username}" not in value:
+            raise ValueError("LDAP provider user_filter must contain {username}")
+        return value
+
+    @model_validator(mode="after")
+    def validate_transport(self):
+        parsed = urlparse(self.url)
+        if parsed.scheme == "ldaps" and self.start_tls:
+            raise ValueError("LDAP provider start_tls cannot be used with ldaps:// URLs")
+        if parsed.scheme == "ldap" and not self.start_tls and not self.allow_insecure:
+            raise ValueError("LDAP provider requires LDAPS or START_TLS unless allow_insecure=true")
+        return self
+
+
 SuperAdminSeedMode = Literal["if_empty", "if_missing", "disabled"]
 
 ENV_FILE_PATH = Path(__file__).resolve().parents[2] / ".env"
@@ -54,6 +129,7 @@ DEFAULT_INSECURE_SECRET_VALUES = {
     "password",
     "secret",
 }
+LDAP_PROVIDER_ID_PATTERN = re.compile(r"^[a-z0-9_-]+$")
 
 
 def _default_sqlite_database_url() -> str:
@@ -221,6 +297,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     oidc_providers: dict[str, OIDCProviderSettings] = Field(default_factory=dict)
     oidc_state_ttl_seconds: int = Field(600, description="Validity of OIDC login state (seconds)")
+    ldap_providers: dict[str, LDAPProviderSettings] = Field(default_factory=dict)
 
     billing_enabled: bool = Field(True, description="Enable billing endpoints and collection")
     feature_manager_enabled: Optional[bool] = Field(
@@ -429,6 +506,19 @@ class Settings(BaseSettings):
             return [str(item).strip().lower() for item in value if str(item).strip()]
         return value
 
+    @field_validator("ldap_providers")
+    @classmethod
+    def normalize_ldap_provider_ids(cls, value):
+        normalized = {}
+        for key, provider in (value or {}).items():
+            provider_id = str(key or "").strip().lower()
+            if not provider_id or not LDAP_PROVIDER_ID_PATTERN.fullmatch(provider_id):
+                raise ValueError("LDAP provider keys must match [a-z0-9_-]+")
+            if provider_id in normalized:
+                raise ValueError(f"Duplicate LDAP provider key after normalization: {provider_id}")
+            normalized[provider_id] = provider
+        return normalized
+
     @field_validator("log_level", mode="before")
     @classmethod
     def normalize_log_level(cls, value):
@@ -480,6 +570,37 @@ def collect_secret_warnings(settings: Settings) -> list[str]:
         warnings.append(
             "Default SEED_SUPER_ADMIN_PASSWORD detected. "
             "Change it immediately before exposing this environment."
+        )
+    ldap_providers = getattr(settings, "ldap_providers", {}) or {}
+    insecure_ldap = [
+        key
+        for key, provider in ldap_providers.items()
+        if getattr(provider, "enabled", False) and getattr(provider, "allow_insecure", False)
+    ]
+    if insecure_ldap:
+        warnings.append(
+            "LDAP provider(s) allow insecure ldap:// bind without START_TLS: "
+            f"{', '.join(sorted(insecure_ldap))}. Use LDAPS or START_TLS in production."
+        )
+    tls_unverified_ldap = [
+        key
+        for key, provider in ldap_providers.items()
+        if getattr(provider, "enabled", False) and not getattr(provider, "tls_verify", True)
+    ]
+    if tls_unverified_ldap:
+        warnings.append(
+            "LDAP provider(s) disable TLS certificate verification: "
+            f"{', '.join(sorted(tls_unverified_ldap))}. This should be limited to isolated labs."
+        )
+    email_linking_ldap = [
+        key
+        for key, provider in ldap_providers.items()
+        if getattr(provider, "enabled", False) and getattr(provider, "allow_email_linking", False)
+    ]
+    if email_linking_ldap:
+        warnings.append(
+            "LDAP provider(s) allow email-based linking to existing local users: "
+            f"{', '.join(sorted(email_linking_ldap))}. Use only during planned identity migrations."
         )
     return warnings
 

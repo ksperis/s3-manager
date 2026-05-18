@@ -131,16 +131,17 @@ def _build_app_settings_payload() -> str:
 def _prepare_environment(backend_root: Path) -> dict[str, str]:
     env = os.environ.copy()
 
-    # CI should not rely on a repo-local .env file or partially injected nested OIDC variables.
+    # CI should not rely on a repo-local .env file or partially injected nested auth provider variables.
     if env.get("CI"):
         env_file = backend_root / ".env"
         if env_file.exists():
             env_file.unlink()
 
     for key in list(env):
-        if key.startswith("OIDC_PROVIDERS__"):
+        if key.startswith("OIDC_PROVIDERS__") or key.startswith("LDAP_PROVIDERS__"):
             env.pop(key, None)
     env["OIDC_PROVIDERS"] = "{}"
+    env["LDAP_PROVIDERS"] = "{}"
 
     for key in (
         "CEPH_TEST_BACKEND_CA_BUNDLE",

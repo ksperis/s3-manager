@@ -54,6 +54,13 @@ History retention / SMTP knobs:
 - `QUOTA_HISTORY_DAILY_RETENTION_DAYS`
 - `SMTP_PASSWORD`
 
+LDAP is configured on the backend with `LDAP_PROVIDERS__<key>__...`
+environment variables. Put bind passwords in your local `.env` or secret
+injection mechanism, use provider keys matching `[a-z0-9_-]+`, and use LDAPS
+or StartTLS for non-lab deployments. `TLS_VERIFY=false`,
+`ALLOW_INSECURE=true`, and `ALLOW_EMAIL_LINKING=true` emit startup security
+warnings.
+
 ## Related pages
 
 - [Configuration](configuration.md)

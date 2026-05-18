@@ -25,7 +25,7 @@ export type SessionUser = {
   ui_language?: "en" | "fr" | "de" | null;
   can_access_ceph_admin?: boolean | null;
   can_access_storage_ops?: boolean | null;
-  authType?: "password" | "s3_session" | "oidc" | null;
+  authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
   account_links?: { account_id: number; account_admin?: boolean | null }[] | null;
   s3_users?: number[] | null;
   s3_user_details?: { id: number; name?: string | null }[] | null;

@@ -3,6 +3,7 @@
 ## Authentication and access
 
 - Prefer enterprise OIDC.
+- For LDAP, require LDAPS or StartTLS with certificate verification, keep the bind account least-privilege, and leave `ALLOW_EMAIL_LINKING=false` unless you are intentionally migrating existing local users.
 - Restrict admin surface access by network/ingress policy.
 - Use least privilege for UI users and storage credentials.
 
@@ -10,6 +11,7 @@
 
 - Set strong non-default secrets for JWT and credential encryption keys.
 - Store all secrets in secure secret management systems.
+- Treat LDAP bind passwords like other runtime secrets; inject them from your deployment secret manager and never place them in public compose/Helm values.
 - Rotate credentials and API tokens periodically.
 
 ## Transport and network
@@ -22,6 +24,7 @@
 
 - Retain audit trail centrally.
 - Correlate UI actions with backend logs and executor identity.
+- LDAP login success, failure, rate-limit, and provider configuration failures are audited without recording submitted passwords.
 
 ## CI security gates
 

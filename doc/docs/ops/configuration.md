@@ -8,7 +8,7 @@ Primary source of truth: `backend/app/core/config.py`.
 
 Key areas:
 
-- Security and auth: JWT keys, credential keys, refresh cookie settings.
+- Security and auth: JWT keys, credential keys, refresh cookie settings, OIDC providers, LDAP providers.
 - Database: `DATABASE_URL` (SQLite defaults to `backend/app.db`; relative SQLite paths are normalized against `backend/`).
 - CORS: `CORS_ORIGINS`.
 - Feature force-locks: `FEATURE_MANAGER_ENABLED`, `FEATURE_BROWSER_ENABLED`, `FEATURE_CEPH_ADMIN_ENABLED`, `FEATURE_STORAGE_OPS_ENABLED`, `FEATURE_BILLING_ENABLED`, `FEATURE_ENDPOINT_STATUS_ENABLED`.
@@ -16,6 +16,23 @@ Key areas:
 - Billing, quota monitoring, and healthcheck behavior.
 - Shared history retention: `BILLING_DAILY_RETENTION_DAYS`, `QUOTA_HISTORY_HOURLY_RETENTION_DAYS`, `QUOTA_HISTORY_DAILY_RETENTION_DAYS`.
 - Quota SMTP secret: `SMTP_PASSWORD`.
+
+LDAP providers are configured with nested environment variables:
+
+- `LDAP_PROVIDERS__<key>__DISPLAY_NAME`
+- `LDAP_PROVIDERS__<key>__URL` (`ldaps://...` or `ldap://...` with `START_TLS=true`)
+- `LDAP_PROVIDERS__<key>__BIND_DN` / `LDAP_PROVIDERS__<key>__BIND_PASSWORD`
+- `LDAP_PROVIDERS__<key>__USER_BASE_DN`
+- `LDAP_PROVIDERS__<key>__USER_FILTER` containing `{username}`
+- optional attributes: `EMAIL_ATTRIBUTE`, `NAME_ATTRIBUTE`, `SUBJECT_ATTRIBUTE`
+- TLS and safety knobs: `START_TLS`, `TLS_VERIFY`, `TLS_CA_FILE`, `ALLOW_INSECURE`, `ALLOW_EMAIL_LINKING`
+
+Provider keys must match `[a-z0-9_-]+`. `ALLOW_INSECURE=true`,
+`TLS_VERIFY=false`, and `ALLOW_EMAIL_LINKING=true` are startup-warning
+conditions and should be limited to isolated labs or planned migrations.
+
+LDAP only authenticates the UI identity. First LDAP login creates a user with
+`ui_none`; admins still grant roles and storage access in s3-manager.
 
 ## App settings (persisted)
 

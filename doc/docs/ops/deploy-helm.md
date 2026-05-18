@@ -30,6 +30,12 @@ Cron values blocks:
 
 Backend env defaults include billing/quota retention knobs.
 Provide `SMTP_PASSWORD` via your secret injection policy.
+LDAP providers can be injected through `backend.extraEnv` with
+`LDAP_PROVIDERS__<key>__...` variables. Store bind passwords in Kubernetes
+Secrets or your external secret manager rather than plain values files. Use
+provider keys matching `[a-z0-9_-]+`; `TLS_VERIFY=false`,
+`ALLOW_INSECURE=true`, and `ALLOW_EMAIL_LINKING=true` emit startup security
+warnings.
 
 ## Container images
 
