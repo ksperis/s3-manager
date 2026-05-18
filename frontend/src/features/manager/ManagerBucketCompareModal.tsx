@@ -86,7 +86,7 @@ type ManagerBucketCompareModalProps = {
 };
 
 const extractError = extractCompareError;
-const DIFF_SAMPLE_LIMIT = 500;
+const DIFF_SAMPLE_LIMIT = 1000;
 
 const downloadFilenameFromKey = (key: string) => {
   const filename = key.split("/").filter(Boolean).pop();

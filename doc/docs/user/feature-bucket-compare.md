@@ -33,7 +33,7 @@ apply the same safeguard to a single key.
     Tool visibility depends on global feature flag and context requirements.
 
 !!! note
-    Object rows shown in content diff sections are samples of up to 500 objects
+    Object rows shown in content diff sections are samples of up to 1000 objects
     per diff section, not guaranteed exhaustive lists. Section counters remain
     the source of truth for totals.
 

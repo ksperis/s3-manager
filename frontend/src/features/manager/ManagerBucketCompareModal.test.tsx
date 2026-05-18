@@ -150,7 +150,7 @@ async function runInitialComparison() {
   });
   expect(compareManagerBucketPairMock).toHaveBeenCalledWith(
     "ctx-source",
-    expect.objectContaining({ diff_sample_limit: 500 }),
+    expect.objectContaining({ diff_sample_limit: 1000 }),
     expect.anything()
   );
   return user;
@@ -323,7 +323,7 @@ describe("ManagerBucketCompareModal remediation actions", () => {
         source_bucket: "bucket-a",
         target_bucket: "bucket-a",
         include_content: true,
-        diff_sample_limit: 500,
+        diff_sample_limit: 1000,
       })
     );
   });
