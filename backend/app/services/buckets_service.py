@@ -787,7 +787,7 @@ class BucketsService:
         target_bucket: str,
         target_account: S3Account,
         *,
-        diff_sample_limit: int = 200,
+        diff_sample_limit: int = 1000,
         ignore_modified_after: Optional[datetime] = None,
     ) -> CephAdminBucketContentDiff:
         source_objects_raw = self._list_bucket_objects_for_compare(source_bucket, source_account)

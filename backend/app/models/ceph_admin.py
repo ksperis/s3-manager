@@ -475,7 +475,7 @@ class CephAdminBucketCompareRequest(BaseModel):
     include_content: bool = True
     include_config: bool = False
     config_features: Optional[list[BucketCompareConfigFeature]] = None
-    diff_sample_limit: int = Field(default=200, ge=1, le=2000)
+    diff_sample_limit: int = Field(default=1000, ge=1, le=2000)
     ignore_modified_after: Optional[datetime] = None
 
     @model_validator(mode="after")

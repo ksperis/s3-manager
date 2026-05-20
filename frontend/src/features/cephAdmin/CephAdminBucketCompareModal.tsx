@@ -62,6 +62,7 @@ type CephAdminBucketCompareModalProps = {
 };
 
 const extractError = extractCompareError;
+const DIFF_SAMPLE_LIMIT = 1000;
 
 const copyFeedbackToneClass: Record<CompareVisibleKeysCopyFeedback["tone"], string> = {
   success:
@@ -472,6 +473,7 @@ export default function CephAdminBucketCompareModal({
               include_content: includeContent,
               include_config: includeConfig,
               config_features: includeConfig ? selectedConfigFeatures : undefined,
+              diff_sample_limit: DIFF_SAMPLE_LIMIT,
               ignore_modified_after: ignoreModifiedAfterIso,
             },
             { signal: controller.signal }
