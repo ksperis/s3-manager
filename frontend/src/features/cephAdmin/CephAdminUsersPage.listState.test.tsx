@@ -40,6 +40,12 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function getTableOverflowContainer() {
+  const container = screen.getByRole("table").parentElement;
+  expect(container).not.toBeNull();
+  return container as HTMLElement;
+}
+
 describe("CephAdminUsersPage list states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -122,6 +128,21 @@ describe("CephAdminUsersPage list states", () => {
       match: "all",
       rules: [{ field: "quota_usage_size_percent", op: "gte", value: 75 }],
     });
+  });
+
+  it("hides the horizontal table overflow behind the advanced filter drawer", async () => {
+    listCephAdminUsersMock.mockResolvedValue({ items: [], total: 0 });
+
+    renderPage();
+
+    expect(await screen.findByText("No users.")).toBeInTheDocument();
+    expect(getTableOverflowContainer()).toHaveClass("overflow-x-auto");
+
+    fireEvent.click(screen.getByRole("button", { name: /advanced filter/i }));
+
+    expect(screen.getByText("RGW Users listing").closest(".fixed")).toHaveClass("z-[46]");
+    expect(getTableOverflowContainer()).toHaveClass("overflow-x-hidden");
+    expect(getTableOverflowContainer()).not.toHaveClass("overflow-x-auto");
   });
 
   it("hides quota usage percent filters when metrics are unavailable", async () => {

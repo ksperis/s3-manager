@@ -7913,7 +7913,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                   )}
                 </div>
               {showAdvancedFilter && (
-                <div className="fixed inset-x-0 bottom-0 top-14 z-40">
+                <div className="fixed inset-x-0 bottom-0 top-14 z-[46]">
                   <button
                     type="button"
                     onClick={advancedFilterCloseGuard.requestClose}
@@ -9181,7 +9181,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        <div className={showAdvancedFilter ? "overflow-x-hidden" : "overflow-x-auto"}>
           <table className="manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>

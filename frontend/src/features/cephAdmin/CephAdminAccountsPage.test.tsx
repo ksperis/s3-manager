@@ -27,6 +27,12 @@ vi.mock("../../api/cephAdmin", async () => {
   };
 });
 
+function getTableOverflowContainer() {
+  const container = screen.getByRole("table").parentElement;
+  expect(container).not.toBeNull();
+  return container as HTMLElement;
+}
+
 describe("CephAdminAccountsPage", () => {
   beforeEach(() => {
     useCephAdminEndpointMock.mockReset();
@@ -90,6 +96,33 @@ describe("CephAdminAccountsPage", () => {
       match: "all",
       rules: [{ field: "quota_usage_size_percent", op: "gte", value: 80 }],
     });
+  });
+
+  it("hides the horizontal table overflow behind the advanced filter drawer", async () => {
+    useCephAdminEndpointMock.mockReturnValue({
+      loading: false,
+      selectedEndpointId: 7,
+      selectedEndpoint: { id: 7, name: "Ceph A", capabilities: {} },
+      selectedEndpointAccess: { can_metrics: true },
+      selectedEndpointAccessLoading: false,
+      selectedEndpointAccessError: null,
+    });
+    listCephAdminAccountsMock.mockResolvedValue({ items: [], total: 0 });
+
+    render(
+      <MemoryRouter>
+        <CephAdminAccountsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No accounts.")).toBeInTheDocument();
+    expect(getTableOverflowContainer()).toHaveClass("overflow-x-auto");
+
+    fireEvent.click(screen.getByRole("button", { name: /advanced filter/i }));
+
+    expect(screen.getByText("RGW Accounts listing").closest(".fixed")).toHaveClass("z-[46]");
+    expect(getTableOverflowContainer()).toHaveClass("overflow-x-hidden");
+    expect(getTableOverflowContainer()).not.toHaveClass("overflow-x-auto");
   });
 
   it("hides quota usage percent filters when metrics are unavailable", async () => {

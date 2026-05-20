@@ -128,6 +128,12 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function getTableOverflowContainer() {
+  const container = screen.getByRole("table").parentElement;
+  expect(container).not.toBeNull();
+  return container as HTMLElement;
+}
+
 describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
   beforeEach(() => {
     mocks.listCephAdminBuckets.mockReset();
@@ -221,6 +227,49 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
       }),
       expect.any(Object)
     );
+  });
+
+  it("hides the horizontal table overflow behind the advanced filter drawer while buckets are loading", async () => {
+    const pending = createDeferred<{
+      items: Array<{ name: string; owner: string }>;
+      total: number;
+      page: number;
+      page_size: number;
+      has_next: boolean;
+      stats_available: boolean;
+    }>();
+    mocks.listCephAdminBuckets.mockReturnValueOnce(pending.promise);
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench
+          mode="ceph-admin"
+          shell={{
+            pageDescription: "Ceph buckets",
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Loading buckets...")).toBeInTheDocument();
+    expect(getTableOverflowContainer()).toHaveClass("overflow-x-auto");
+
+    fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
+
+    expect(screen.getByText("Buckets listing").closest(".fixed")).toHaveClass("z-[46]");
+    expect(getTableOverflowContainer()).toHaveClass("overflow-x-hidden");
+    expect(getTableOverflowContainer()).not.toHaveClass("overflow-x-auto");
+
+    pending.resolve({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+      stats_available: true,
+    });
+
+    expect(await screen.findByText("No buckets.")).toBeInTheDocument();
   });
 
   it("clears the current rows and shows loading while a new filter request is in flight", async () => {
