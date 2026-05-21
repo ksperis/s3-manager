@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from datetime import datetime, timezone
+import logging
 from threading import Lock
 from typing import Any, Callable, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 
 from app.models.ceph_admin import (
     CephAdminAccountFilterQuery,
@@ -25,6 +27,8 @@ from app.routers.ceph_admin.listing_common import (
     EndpointCacheEntry as _common_EndpointCacheEntry,
     EndpointListCacheKey as _common_EndpointListCacheKey,
     EndpointPayloadCacheKey as _common_EndpointPayloadCacheKey,
+    ListingProgressEmitter as _common_ListingProgressEmitter,
+    ListingProgressSnapshot as _common_ListingProgressSnapshot,
     apply_advanced_filter as _common_apply_advanced_filter,
     apply_simple_search as _common_apply_simple_search,
     coerce_number as _common_coerce_number,
@@ -41,15 +45,19 @@ from app.routers.ceph_admin.listing_common import (
     parse_int as _common_parse_int,
     serialize_filter as _common_serialize_filter,
     sort_value as _common_sort_value,
+    invoke_cancel_check as _common_invoke_cancel_check,
+    stream_listing_response as _common_stream_listing_response,
 )
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.services.rgw_admin import RGWAdminError
+from app.services.bucket_listing_shared import _is_advanced_filter_stream_payload as _shared_is_advanced_filter_stream_payload
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.rgw import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import compute_usage_ratio_percent, summarize_bucket_usage
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/accounts", tags=["ceph-admin-accounts"])
+logger = logging.getLogger(__name__)
 
 ACCOUNTS_LIST_CACHE_TTL_SECONDS = 30.0
 ACCOUNTS_LIST_CACHE_MAX_ENTRIES = 64
@@ -404,8 +412,8 @@ def _get_cached_accounts_listing(
     )
 
 
-@router.get("", response_model=PaginatedCephAdminAccountsResponse)
-def list_rgw_accounts(
+def _compute_accounts_listing(
+    *,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
     search: str | None = Query(None),
@@ -414,10 +422,17 @@ def list_rgw_accounts(
     sort_dir: str = Query("asc"),
     include: list[str] = Query(default=[]),
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
+    progress_callback: Callable[[_common_ListingProgressSnapshot], None] | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> PaginatedCephAdminAccountsResponse:
+    progress = _common_ListingProgressEmitter(progress_callback)
+    progress.emit(percent=0, stage="prepare", message="Preparing advanced search", force=True)
+    _common_invoke_cancel_check(cancel_check)
+
     include_set = _parse_includes(include)
     requested = include_set & {"profile", "limits", "quota", "stats"}
     parsed_advanced_filter = _parse_advanced_filter(advanced_filter)
+    advanced_filter_active = bool(parsed_advanced_filter and parsed_advanced_filter.rules)
     cache_key = _AccountsListCacheKey(
         endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
         advanced_filter=_serialize_filter(parsed_advanced_filter),
@@ -426,6 +441,8 @@ def list_rgw_accounts(
     )
 
     def build_listing() -> list[CephAdminRgwAccountSummary]:
+        progress.emit(percent=10, stage="load_entries", message="Loading RGW accounts", force=True)
+        _common_invoke_cancel_check(cancel_check)
         payload = _get_cached_rgw_accounts_payload(ctx)
         results: list[CephAdminRgwAccountSummary] = []
         for entry in payload or []:
@@ -468,6 +485,15 @@ def list_rgw_accounts(
                     user_count=user_count,
                 )
             )
+        progress.emit(
+            percent=35,
+            stage="scan_entries",
+            processed=len(results),
+            total=len(results),
+            message="RGW account scanning completed",
+            force=True,
+        )
+        _common_invoke_cancel_check(cancel_check)
 
         advanced_fields = _common_collect_filter_fields(parsed_advanced_filter)
         sort_fields = {sort_by} if sort_by else {"account_id"}
@@ -478,9 +504,28 @@ def list_rgw_accounts(
         }
         needed_for_listing = _includes_for_account_fields(listing_fields)
         if needed_for_listing:
+            progress.emit(
+                percent=50,
+                stage="detail_enrichment",
+                processed=0,
+                total=len(results),
+                message="Loading account details",
+                force=True,
+            )
             results = _enrich_accounts(results, needed_for_listing, ctx)
+            _common_invoke_cancel_check(cancel_check)
 
+        if advanced_filter_active:
+            progress.emit(
+                percent=65,
+                stage="expensive_filters",
+                processed=0,
+                total=len(results),
+                message="Applying advanced filters",
+                force=True,
+            )
         results = _common_apply_advanced_filter(results, parsed_advanced_filter, _match_account_rules)
+        _common_invoke_cancel_check(cancel_check)
 
         def sort_key(item: CephAdminRgwAccountSummary):
             if sort_by in ("account_name", "name"):
@@ -507,6 +552,15 @@ def list_rgw_accounts(
         return results
 
     results = _get_cached_accounts_listing(cache_key, build_listing)
+    progress.emit(
+        percent=75,
+        stage="listing_ready",
+        processed=len(results),
+        total=len(results),
+        message="Base listing ready",
+        force=True,
+    )
+    _common_invoke_cancel_check(cancel_check)
     filtered_results = _common_apply_simple_search(
         results,
         search=search,
@@ -523,7 +577,16 @@ def list_rgw_accounts(
         and parsed_advanced_filter is None
         and any(not (account.account_name or "").strip() for account in results)
     ):
+        progress.emit(
+            percent=82,
+            stage="profile_enrichment",
+            processed=0,
+            total=len(results),
+            message="Loading account profiles",
+            force=True,
+        )
         searchable_results = _enrich_accounts(results, {"profile"}, ctx)
+        _common_invoke_cancel_check(cancel_check)
         filtered_results = _common_apply_simple_search(
             searchable_results,
             search=search,
@@ -533,6 +596,15 @@ def list_rgw_accounts(
                 needle in account.account_id.lower() or needle in (account.account_name or "").lower()
             ),
         )
+    progress.emit(
+        percent=85,
+        stage="paginate",
+        processed=len(filtered_results),
+        total=len(filtered_results),
+        message="Preparing result page",
+        force=True,
+    )
+    _common_invoke_cancel_check(cancel_check)
     page_items, total, has_next = _common_paginate(
         filtered_results,
         page=page,
@@ -545,7 +617,25 @@ def list_rgw_accounts(
     if any(_account_field_needs_enrichment(item, "account_name") for item in page_items):
         requested_for_page.add("profile")
     if requested_for_page and page_items:
+        progress.emit(
+            percent=92,
+            stage="page_enrichment",
+            processed=0,
+            total=len(page_items),
+            message="Loading page details",
+            force=True,
+        )
         page_items = _enrich_accounts(page_items, requested_for_page, ctx)
+        _common_invoke_cancel_check(cancel_check)
+
+    progress.emit(
+        percent=100,
+        stage="finalize",
+        processed=total,
+        total=total,
+        message="Search completed",
+        force=True,
+    )
 
     return PaginatedCephAdminAccountsResponse(
         items=page_items,
@@ -553,6 +643,66 @@ def list_rgw_accounts(
         page=page,
         page_size=page_size,
         has_next=has_next,
+    )
+
+
+@router.get("", response_model=PaginatedCephAdminAccountsResponse)
+def list_rgw_accounts(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+    search: str | None = Query(None),
+    advanced_filter: str | None = Query(None),
+    sort_by: str = Query("account_id"),
+    sort_dir: str = Query("asc"),
+    include: list[str] = Query(default=[]),
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> PaginatedCephAdminAccountsResponse:
+    return _compute_accounts_listing(
+        page=page,
+        page_size=page_size,
+        search=search,
+        advanced_filter=advanced_filter,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        include=include,
+        ctx=ctx,
+    )
+
+
+@router.get("/stream")
+async def stream_rgw_accounts(
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+    search: str | None = Query(None),
+    advanced_filter: str | None = Query(None),
+    sort_by: str = Query("account_id"),
+    sort_dir: str = Query("asc"),
+    include: list[str] = Query(default=[]),
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> StreamingResponse:
+    if not _shared_is_advanced_filter_stream_payload(advanced_filter):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="advanced_filter must be provided as a JSON payload for streaming search",
+        )
+
+    return _common_stream_listing_response(
+        request,
+        compute=lambda progress_callback, cancel_check: _compute_accounts_listing(
+            page=page,
+            page_size=page_size,
+            search=search,
+            advanced_filter=advanced_filter,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            include=include,
+            ctx=ctx,
+            progress_callback=progress_callback,
+            cancel_check=cancel_check,
+        ),
+        logger=logger,
+        failure_message="RGW accounts streaming search failed",
     )
 
 

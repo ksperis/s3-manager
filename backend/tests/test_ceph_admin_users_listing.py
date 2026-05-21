@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -277,6 +278,89 @@ def test_ceph_admin_users_advanced_filter_rejects_invalid_json():
             ctx=ctx,
         )
     assert exc.value.status_code == 400
+
+
+def test_ceph_admin_users_listing_advanced_progress_is_monotonic():
+    users_payload = ["u1", "u2"]
+    user_details = {
+        (None, "u1"): _build_user_payload("u1", full_name="Alice Example"),
+        (None, "u2"): _build_user_payload("u2", full_name="Bob Example"),
+    }
+    ctx, _ = _build_ctx(endpoint_id=1401, users_payload=users_payload, user_details=user_details)
+    snapshots = []
+    advanced_filter = json.dumps({"match": "all", "rules": [{"field": "full_name", "op": "contains", "value": "example"}]})
+
+    response = users_router._compute_users_listing(
+        page=1,
+        page_size=25,
+        search=None,
+        advanced_filter=advanced_filter,
+        sort_by="uid",
+        sort_dir="asc",
+        include=[],
+        ctx=ctx,
+        progress_callback=snapshots.append,
+        cancel_check=None,
+    )
+
+    percents = [snapshot.percent for snapshot in snapshots]
+    assert response.total == 2
+    assert percents
+    assert percents == sorted(percents)
+    assert all(0 <= percent <= 100 for percent in percents)
+    assert percents[-1] == 100
+
+
+def test_ceph_admin_users_stream_requires_advanced_filter_payload():
+    async def _run() -> None:
+        request = SimpleNamespace(is_disconnected=lambda: asyncio.sleep(0, result=False))
+        ctx, _ = _build_ctx(endpoint_id=1402, users_payload=[], user_details={})
+        with pytest.raises(HTTPException) as exc:
+            await users_router.stream_rgw_users(
+                request=request,
+                page=1,
+                page_size=25,
+                search=None,
+                advanced_filter=None,
+                sort_by="uid",
+                sort_dir="asc",
+                include=[],
+                ctx=ctx,
+            )
+        assert exc.value.status_code == 400
+
+    asyncio.run(_run())
+
+
+def test_ceph_admin_users_stream_emits_progress_result_and_done():
+    users_payload = ["alpha"]
+    user_details = {(None, "alpha"): _build_user_payload("alpha", full_name="Alice Example")}
+    ctx, _ = _build_ctx(endpoint_id=1403, users_payload=users_payload, user_details=user_details)
+
+    async def _run() -> str:
+        request = SimpleNamespace(is_disconnected=lambda: asyncio.sleep(0, result=False))
+        response = await users_router.stream_rgw_users(
+            request=request,
+            page=1,
+            page_size=25,
+            search=None,
+            advanced_filter=json.dumps({"match": "all", "rules": [{"field": "full_name", "op": "contains", "value": "alice"}]}),
+            sort_by="uid",
+            sort_dir="asc",
+            include=[],
+            ctx=ctx,
+        )
+        chunks: list[str] = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk.decode() if isinstance(chunk, bytes) else chunk)
+        return "".join(chunks)
+
+    body = asyncio.run(_run())
+    assert "event: progress" in body
+    assert "event: result" in body
+    assert "event: done" in body
+    assert '"stage":"expensive_filters"' in body
+    assert '"total":1' in body
 
 
 def test_ceph_admin_users_listing_account_include_skips_lookup_when_feature_disabled():

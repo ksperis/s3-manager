@@ -175,6 +175,30 @@ export type ListCephAdminAccountsParams = {
   include?: string[];
 };
 
+type EntityListingOptions = {
+  signal?: AbortSignal;
+};
+
+function buildEntityListingQuery(
+  params?: Pick<
+    ListCephAdminAccountsParams,
+    "page" | "page_size" | "search" | "advanced_filter" | "sort_by" | "sort_dir" | "include"
+  >
+): URLSearchParams {
+  const query = new URLSearchParams();
+  if (!params) return query;
+  if (typeof params.page === "number") query.set("page", String(params.page));
+  if (typeof params.page_size === "number") query.set("page_size", String(params.page_size));
+  if (typeof params.search === "string" && params.search.trim()) query.set("search", params.search);
+  if (typeof params.advanced_filter === "string" && params.advanced_filter.trim()) {
+    query.set("advanced_filter", params.advanced_filter);
+  }
+  if (typeof params.sort_by === "string" && params.sort_by.trim()) query.set("sort_by", params.sort_by);
+  if (params.sort_dir) query.set("sort_dir", params.sort_dir);
+  if (params.include && params.include.length > 0) query.set("include", params.include.join(","));
+  return query;
+}
+
 export async function listCephAdminEndpoints(): Promise<CephAdminEndpoint[]> {
   const { data } = await client.get<CephAdminEndpoint[]>("/ceph-admin/endpoints");
   return data;
@@ -187,15 +211,48 @@ export async function getCephAdminEndpointAccess(endpointId: number): Promise<Ce
 
 export async function listCephAdminAccounts(
   endpointId: number,
-  params?: ListCephAdminAccountsParams
+  params?: ListCephAdminAccountsParams,
+  options?: EntityListingOptions
 ): Promise<PaginatedCephAdminAccountsResponse> {
   const { data } = await client.get<PaginatedCephAdminAccountsResponse>(`/ceph-admin/endpoints/${endpointId}/accounts`, {
     params: {
       ...params,
       include: params?.include?.join(","),
     },
+    signal: options?.signal,
   });
   return data;
+}
+
+export type CephAdminListingStreamProgress = {
+  request_id: string;
+  percent: number;
+  stage: string;
+  processed: number;
+  total: number;
+  message?: string;
+};
+
+type CephAdminListingStreamOptions = {
+  signal?: AbortSignal;
+  onProgress?: (event: CephAdminListingStreamProgress) => void;
+};
+
+export async function streamCephAdminAccounts(
+  endpointId: number,
+  params?: ListCephAdminAccountsParams,
+  options?: CephAdminListingStreamOptions
+): Promise<PaginatedCephAdminAccountsResponse> {
+  const baseUrl = resolveApiBaseUrl();
+  const query = buildEntityListingQuery(params);
+  const queryText = query.toString();
+  const url = `${baseUrl}/ceph-admin/endpoints/${endpointId}/accounts/stream${queryText ? `?${queryText}` : ""}`;
+  return streamBucketsWithSse<CephAdminListingStreamProgress, PaginatedCephAdminAccountsResponse>({
+    url,
+    options,
+    streamFailedLabel: "Advanced search stream failed",
+    missingResultMessage: "Advanced search stream ended without a result payload",
+  });
 }
 
 export async function getCephAdminAccountDetail(endpointId: number, accountId: string): Promise<CephAdminRgwAccountDetail> {
@@ -356,15 +413,34 @@ export type ListCephAdminUsersParams = {
 
 export async function listCephAdminUsers(
   endpointId: number,
-  params?: ListCephAdminUsersParams
+  params?: ListCephAdminUsersParams,
+  options?: EntityListingOptions
 ): Promise<PaginatedCephAdminUsersResponse> {
   const { data } = await client.get<PaginatedCephAdminUsersResponse>(`/ceph-admin/endpoints/${endpointId}/users`, {
     params: {
       ...params,
       include: params?.include?.join(","),
     },
+    signal: options?.signal,
   });
   return data;
+}
+
+export async function streamCephAdminUsers(
+  endpointId: number,
+  params?: ListCephAdminUsersParams,
+  options?: CephAdminListingStreamOptions
+): Promise<PaginatedCephAdminUsersResponse> {
+  const baseUrl = resolveApiBaseUrl();
+  const query = buildEntityListingQuery(params);
+  const queryText = query.toString();
+  const url = `${baseUrl}/ceph-admin/endpoints/${endpointId}/users/stream${queryText ? `?${queryText}` : ""}`;
+  return streamBucketsWithSse<CephAdminListingStreamProgress, PaginatedCephAdminUsersResponse>({
+    url,
+    options,
+    streamFailedLabel: "Advanced search stream failed",
+    missingResultMessage: "Advanced search stream ended without a result payload",
+  });
 }
 
 export async function createCephAdminUser(
@@ -503,14 +579,7 @@ export type ListCephAdminBucketsParams = {
   with_stats?: boolean;
 };
 
-export type CephAdminBucketsStreamProgress = {
-  request_id: string;
-  percent: number;
-  stage: string;
-  processed: number;
-  total: number;
-  message?: string;
-};
+export type CephAdminBucketsStreamProgress = CephAdminListingStreamProgress;
 
 type CephAdminBucketsStreamOptions = {
   signal?: AbortSignal;

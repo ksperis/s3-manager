@@ -15,16 +15,20 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
-import { CephAdminRgwUser, CephAdminRgwUserDetail, listCephAdminUsers } from "../../api/cephAdmin";
+import { CephAdminRgwUser, CephAdminRgwUserDetail, listCephAdminUsers, streamCephAdminUsers } from "../../api/cephAdmin";
 import { tableActionMenuItemClasses } from "../../components/tableActionClasses";
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
 import CephAdminUserEditModal from "./CephAdminUserEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import {
   FILTER_COST_LABEL,
+  INACTIVE_ADVANCED_PROGRESS,
   buildTextFieldRules,
   formatTextFilterSummary,
+  isCancelledError,
   parseExactListInput,
+  progressFromAdvancedSearchEvent,
+  renderAdvancedSearchProgress,
   renderFilterCostIndicator,
   type FilterCostLevel,
   type TextMatchMode,
@@ -288,6 +292,7 @@ export default function CephAdminUsersPage() {
   const [items, setItems] = useState<CephAdminRgwUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [advancedProgress, setAdvancedProgress] = useState(INACTIVE_ADVANCED_PROGRESS);
   const [error, setError] = useState<string | null>(null);
   const [editingTarget, setEditingTarget] = useState<CephAdminRgwUser | null>(null);
   const [filter, setFilter] = useState("");
@@ -306,6 +311,7 @@ export default function CephAdminUsersPage() {
   const [reloadNonce, setReloadNonce] = useState(0);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const requestSeqRef = useRef(0);
+  const requestAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     persistVisibleColumns(visibleColumns);
@@ -369,40 +375,86 @@ export default function CephAdminUsersPage() {
 
   useEffect(() => {
     if (!selectedEndpointId) {
+      requestAbortRef.current?.abort();
+      requestAbortRef.current = null;
       setItems([]);
       setTotal(0);
       setLoading(false);
       setLoadingDetails(false);
+      setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
       return;
     }
 
     const requestId = requestSeqRef.current + 1;
     requestSeqRef.current = requestId;
+    requestAbortRef.current?.abort();
+    const requestAbort = new AbortController();
+    requestAbortRef.current = requestAbort;
 
     const load = async () => {
       setLoading(true);
       setLoadingDetails(false);
+      setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
       setError(null);
+      setItems([]);
+      setTotal(0);
       try {
-        const baseResponse = await listCephAdminUsers(selectedEndpointId, {
+        const baseParams = {
           page,
           page_size: pageSize,
           search: effectiveSearchValue || undefined,
           advanced_filter: advancedFilterParam,
           sort_by: sort.field,
           sort_dir: sort.direction,
-        });
+        };
+        const canUseAdvancedStream = typeof advancedFilterParam === "string" && advancedFilterParam.trim().startsWith("{");
+
+        let baseResponse;
+        if (canUseAdvancedStream) {
+          setAdvancedProgress({
+            active: true,
+            determinate: true,
+            percent: 0,
+            stage: "prepare",
+            message: "Preparing advanced search...",
+          });
+          try {
+            baseResponse = await streamCephAdminUsers(selectedEndpointId, baseParams, {
+              signal: requestAbort.signal,
+              onProgress: (event) => {
+                if (requestId !== requestSeqRef.current || requestAbort.signal.aborted) return;
+                setAdvancedProgress(progressFromAdvancedSearchEvent(event));
+              },
+            });
+          } catch (streamErr) {
+            if (isCancelledError(streamErr)) return;
+            if (requestId !== requestSeqRef.current) return;
+            setAdvancedProgress({
+              active: true,
+              determinate: false,
+              percent: 0,
+              stage: "fallback",
+              message: "Advanced search in progress...",
+            });
+            baseResponse = await listCephAdminUsers(selectedEndpointId, baseParams, { signal: requestAbort.signal });
+          }
+        } else {
+          baseResponse = await listCephAdminUsers(selectedEndpointId, baseParams, { signal: requestAbort.signal });
+        }
+        if (requestAbort.signal.aborted) return;
         if (requestId !== requestSeqRef.current) return;
 
         const baseItems = baseResponse.items ?? [];
         setItems(baseItems);
         setTotal(baseResponse.total ?? 0);
         setLoading(false);
+        setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
 
         if (includeParams.length === 0 || baseItems.length === 0) return;
 
         setLoadingDetails(true);
         try {
+          if (requestAbort.signal.aborted) return;
           const detailResponse = await listCephAdminUsers(selectedEndpointId, {
             page,
             page_size: pageSize,
@@ -411,7 +463,8 @@ export default function CephAdminUsersPage() {
             sort_by: sort.field,
             sort_dir: sort.direction,
             include: includeParams,
-          });
+          }, { signal: requestAbort.signal });
+          if (requestAbort.signal.aborted) return;
           if (requestId !== requestSeqRef.current) return;
 
           const detailsByKey = new Map((detailResponse.items ?? []).map((user) => [rowKey(user), user]));
@@ -422,12 +475,14 @@ export default function CephAdminUsersPage() {
           }
         }
       } catch (err) {
+        if (isCancelledError(err)) return;
         if (requestId !== requestSeqRef.current) return;
         setError(extractError(err));
         setItems([]);
         setTotal(0);
         setLoading(false);
         setLoadingDetails(false);
+        setAdvancedProgress(INACTIVE_ADVANCED_PROGRESS);
       }
     };
 
@@ -444,6 +499,13 @@ export default function CephAdminUsersPage() {
     includeParams.join(","),
     reloadNonce,
   ]);
+
+  useEffect(() => {
+    return () => {
+      requestAbortRef.current?.abort();
+      requestAbortRef.current = null;
+    };
+  }, []);
 
   const toggleColumn = (id: ColumnId) => {
     setVisibleColumns((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
@@ -792,6 +854,13 @@ export default function CephAdminUsersPage() {
     Number(fullNameDraftValue.length > 0) +
     Number(emailDraftValue.length > 0) +
     Number(suspendedDraftValue !== "any");
+  const advancedDraftDirectTextCount = Number(tenantDraftValue.length > 0);
+  const advancedDraftEnrichedTextCount =
+    Number(accountIdDraftValue.length > 0) +
+    Number(accountNameDraftValue.length > 0) +
+    Number(fullNameDraftValue.length > 0) +
+    Number(emailDraftValue.length > 0) +
+    Number(suspendedDraftValue !== "any");
   const advancedDraftNumericCount =
     numericFields.filter(({ key }) => (advancedDraft[key] as string).trim().length > 0).length +
     (canViewMetrics
@@ -801,21 +870,25 @@ export default function CephAdminUsersPage() {
   const advancedDraftGlobalCostLevel: FilterCostLevel = useMemo(() => {
     if (advancedDraftNumericCount >= 4) return "high";
     if (advancedDraftNumericCount > 0) return "medium";
-    if (advancedDraftTextCount > 0) return "low";
+    if (advancedDraftEnrichedTextCount > 0) return "medium";
+    if (advancedDraftDirectTextCount > 0) return "low";
     return "none";
-  }, [advancedDraftNumericCount, advancedDraftTextCount]);
+  }, [advancedDraftDirectTextCount, advancedDraftEnrichedTextCount, advancedDraftNumericCount]);
   const advancedDraftGlobalCostTooltip = useMemo(() => {
     if (advancedDraftGlobalCostLevel === "high") {
       return `${FILTER_COST_LABEL.high}: many numeric filters are active and may increase stats processing.`;
     }
     if (advancedDraftGlobalCostLevel === "medium") {
+      if (advancedDraftEnrichedTextCount > 0 && advancedDraftNumericCount === 0) {
+        return `${FILTER_COST_LABEL.medium}: enriched identity/status filters require per-user detail lookups.`;
+      }
       return `${FILTER_COST_LABEL.medium}: numeric filters are active and rely on limits/quota counters.`;
     }
     if (advancedDraftGlobalCostLevel === "low") {
-      return `${FILTER_COST_LABEL.low}: text/status filters are active.`;
+      return `${FILTER_COST_LABEL.low}: direct metadata filters are active.`;
     }
     return FILTER_COST_LABEL.none;
-  }, [advancedDraftGlobalCostLevel]);
+  }, [advancedDraftEnrichedTextCount, advancedDraftGlobalCostLevel, advancedDraftNumericCount]);
 
   const columnsCustomized = useMemo(() => {
     if (visibleColumns.length !== defaultVisibleColumns.length) return true;
@@ -1247,6 +1320,8 @@ export default function CephAdminUsersPage() {
                                   locked: tenantDraftForcesExact,
                                   fieldState: tenantFieldState,
                                   placeholder: "tenant-a, tenant-b",
+                                  costLevel: "low" as const,
+                                  costTooltip: "Low cost: tenant filters run on direct user metadata.",
                                 },
                                 {
                                   id: "accountId" as const,
@@ -1257,6 +1332,8 @@ export default function CephAdminUsersPage() {
                                   locked: accountIdDraftForcesExact,
                                   fieldState: accountIdFieldState,
                                   placeholder: "RGW123..., RGW456...",
+                                  costLevel: "medium" as const,
+                                  costTooltip: "Medium cost: account ID filters require per-user account details.",
                                 },
                                 {
                                   id: "accountName" as const,
@@ -1267,6 +1344,8 @@ export default function CephAdminUsersPage() {
                                   locked: accountNameDraftForcesExact,
                                   fieldState: accountNameFieldState,
                                   placeholder: "Backup, Analytics",
+                                  costLevel: "medium" as const,
+                                  costTooltip: "Medium cost: account name filters require account lookups.",
                                 },
                                 {
                                   id: "fullName" as const,
@@ -1277,6 +1356,8 @@ export default function CephAdminUsersPage() {
                                   locked: fullNameDraftForcesExact,
                                   fieldState: fullNameFieldState,
                                   placeholder: "John Doe",
+                                  costLevel: "medium" as const,
+                                  costTooltip: "Medium cost: full name filters require per-user profile lookups.",
                                 },
                                 {
                                   id: "email" as const,
@@ -1287,6 +1368,8 @@ export default function CephAdminUsersPage() {
                                   locked: emailDraftForcesExact,
                                   fieldState: emailFieldState,
                                   placeholder: "user@example.com",
+                                  costLevel: "medium" as const,
+                                  costTooltip: "Medium cost: email filters require per-user profile lookups.",
                                 },
                               ].map((field) => (
                                 <div key={field.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
@@ -1296,7 +1379,7 @@ export default function CephAdminUsersPage() {
                                     >
                                       <span className="inline-flex items-center gap-1">
                                         <span>{field.label}</span>
-                                        {renderFilterCostIndicator("low", "Low cost: text-based identity filter.")}
+                                        {renderFilterCostIndicator(field.costLevel, field.costTooltip)}
                                       </span>
                                     </label>
                                     <div className="inline-flex items-center gap-1">
@@ -1335,7 +1418,7 @@ export default function CephAdminUsersPage() {
                                 >
                                   <span className="inline-flex items-center gap-1">
                                     <span>Status</span>
-                                    {renderFilterCostIndicator("low", "Low cost: boolean status filter.")}
+                                    {renderFilterCostIndicator("medium", "Medium cost: status filters require per-user status details.")}
                                   </span>
                                 </label>
                                 <select
@@ -1434,6 +1517,8 @@ export default function CephAdminUsersPage() {
               </>
             }
           />
+
+          {renderAdvancedSearchProgress(advancedProgress)}
 
           <div className={showAdvancedFilter ? "overflow-x-hidden" : "overflow-x-auto"}>
             <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
