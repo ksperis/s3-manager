@@ -274,6 +274,17 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
 
 def test_storage_ops_stream_emits_progress_and_result(client, monkeypatch):
     def fake_compute_listing(**kwargs):  # noqa: ARG001
+        progress_callback = kwargs.get("progress_callback")
+        if progress_callback:
+            progress_callback(
+                storage_ops_router.ListingProgressSnapshot(
+                    percent=30,
+                    stage="context_listing",
+                    processed=1,
+                    total=2,
+                    message="Loading context bucket listings",
+                )
+            )
         return PaginatedStorageOpsBucketsResponse(
             items=[],
             total=0,
@@ -294,9 +305,64 @@ def test_storage_ops_stream_emits_progress_and_result(client, monkeypatch):
         assert response.status_code == 200
         assert "event: progress" in response.text
         assert "event: result" in response.text
+        assert "event: done" in response.text
+        assert '"processed":1' in response.text
+        assert '"total":2' in response.text
     finally:
         app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+
+
+def test_storage_ops_listing_reports_context_progress(monkeypatch):
+    contexts = [
+        ExecutionContext(
+            kind="account",
+            id=f"acct-{idx}",
+            display_name=f"Account {idx}",
+            endpoint_name="Endpoint One",
+            capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+        )
+        for idx in range(101)
+    ]
+
+    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
+        assert workspace == "manager"
+        return contexts
+
+    def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
+        return SimpleNamespace(context_id=account_ref)
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            return [Bucket(name=f"{account.context_id}-bucket")]
+
+    monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
+    monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
+    snapshots = []
+
+    response = storage_ops_router._compute_storage_ops_listing(
+        request=SimpleNamespace(),
+        db=SimpleNamespace(),
+        user=_admin_user(),
+        service=FakeBucketsService(),
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=json.dumps({"match": "all", "rules": [{"field": "name", "op": "contains", "value": "bucket"}]}),
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        progress_callback=snapshots.append,
+        cancel_check=None,
+    )
+
+    context_snapshots = [snapshot for snapshot in snapshots if snapshot.stage == "context_listing"]
+    assert response.total == 101
+    assert any(snapshot.processed == 100 and snapshot.total == 101 for snapshot in context_snapshots)
+    assert context_snapshots[-1].processed == 101
+    assert context_snapshots[-1].total == 101
+    assert snapshots[-1].percent == 100
 
 
 def test_storage_ops_query_endpoint_matches_get(client, monkeypatch):

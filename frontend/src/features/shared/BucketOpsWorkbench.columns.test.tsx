@@ -160,6 +160,16 @@ function renderStorageOps() {
   );
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("BucketOpsWorkbench atomic quota columns", () => {
   beforeEach(() => {
     mocks.listCephAdminBuckets.mockReset();
@@ -308,6 +318,58 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
       rules?: Array<{ field?: string; op?: string; value?: unknown }>;
     };
     expect(payload.rules).toEqual(expect.arrayContaining([{ field: "endpoint_name", op: "eq", value: "Archive" }]));
+  });
+
+  it("shows detailed advanced search progress while streaming bucket filters", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+    const pending = deferred<typeof baseResponse & { items: Array<typeof baseBucket> }>();
+    mocks.streamStorageOpsBuckets.mockImplementationOnce((...args: unknown[]) => {
+      const options = args[2] as
+        | {
+            onProgress?: (event: {
+              request_id: string;
+              percent: number;
+              stage: string;
+              processed: number;
+              total: number;
+              message: string;
+            }) => void;
+          }
+        | undefined;
+      options?.onProgress?.({
+        request_id: "progress-1",
+        percent: 48,
+        stage: "context_listing",
+        processed: 4,
+        total: 12,
+        message: "Loading context bucket listings",
+      });
+      return pending.promise;
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
+
+    const contextFilter = await screen.findByLabelText("Filter contexts");
+    fireEvent.change(contextFilter, { target: { value: "Account" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+
+    expect(await screen.findByText(/Advanced search in progress/)).toBeInTheDocument();
+    expect(screen.getByText(/Loading context bucket listings · 4 \/ 12/)).toBeInTheDocument();
+
+    pending.resolve({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+    await waitFor(() => {
+      expect(screen.queryByText(/Advanced search in progress/)).not.toBeInTheDocument();
+    });
   });
 
   it("flushes the backend cache before reloading storage ops buckets", async () => {

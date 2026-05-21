@@ -1937,6 +1937,33 @@ def test_ceph_admin_bucket_listing_advanced_progress_is_monotonic():
     assert percents[-1] == 100
 
 
+def test_ceph_admin_bucket_listing_scan_reports_item_progress():
+    payload = [{"name": f"bucket-{idx:03d}", "owner": "owner-a"} for idx in range(101)]
+    ctx, _ = _build_ctx(endpoint_id=3011, payload=payload)
+    snapshots: list[buckets_router._BucketListingProgressSnapshot] = []
+    advanced_filter = json.dumps({"match": "all", "rules": [{"field": "owner", "op": "contains", "value": "owner"}]})
+
+    response = buckets_router._compute_bucket_listing(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+        progress_callback=snapshots.append,
+        cancel_check=None,
+    )
+
+    scan_snapshots = [snapshot for snapshot in snapshots if snapshot.stage == "scan_entries"]
+    assert response.total == 101
+    assert any(snapshot.processed == 100 and snapshot.total == 101 for snapshot in scan_snapshots)
+    assert scan_snapshots[-1].processed == 101
+    assert scan_snapshots[-1].total == 101
+
+
 def test_ceph_admin_bucket_stream_requires_advanced_filter_payload():
     async def _run() -> None:
         request = SimpleNamespace(is_disconnected=lambda: asyncio.sleep(0, result=False))

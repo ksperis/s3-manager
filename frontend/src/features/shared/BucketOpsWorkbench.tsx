@@ -9165,6 +9165,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
               {(advancedProgress.message || advancedProgress.stage) && (
                 <p className="ui-caption text-slate-500 dark:text-slate-400">
                   {advancedProgress.message || formatAdvancedSearchStage(advancedProgress.stage)}
+                  {advancedProgress.total > 0 ? ` · ${advancedProgress.processed} / ${advancedProgress.total}` : ""}
                 </p>
               )}
             </div>

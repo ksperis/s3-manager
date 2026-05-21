@@ -4,14 +4,12 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
-import uuid
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
 from app.db import S3Account, User
@@ -19,7 +17,6 @@ from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketLis
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary, StorageOpsContextKind
 from app.services.bucket_listing_shared import (
     _enrich_buckets,
-    _format_sse_event,
     _is_advanced_filter_stream_payload,
     _load_feature_param_snapshots,
     _match_feature_param_rules,
@@ -30,7 +27,15 @@ from app.services.bucket_listing_shared import (
     parse_includes,
 )
 from app.services.bucket_owner_enrichment import BucketOwnerMetadataService, invalidate_bucket_owner_metadata_cache
-from app.routers.ceph_admin.listing_common import normalize_text, sort_value
+from app.routers.ceph_admin.listing_common import (
+    ListingProgressEmitter,
+    ListingProgressSnapshot,
+    interpolate_progress_percent,
+    invoke_cancel_check,
+    normalize_text,
+    sort_value,
+    stream_listing_response,
+)
 from app.routers.dependencies import get_account_context, get_current_storage_ops_admin
 from app.routers.execution_contexts import list_execution_contexts
 from app.services.bucket_listing_cache import (
@@ -326,16 +331,29 @@ def _resolve_context_accounts(
     request: Request,
     db: Session,
     user: User,
+    progress: ListingProgressEmitter | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> list[_StorageOpsResolvedContext]:
     resolved: list[_StorageOpsResolvedContext] = []
-    for ref in refs:
+    total = len(refs)
+    for index, ref in enumerate(refs, start=1):
+        invoke_cancel_check(cancel_check)
         try:
             account = get_account_context(request=request, account_ref=ref.context_id, actor=user, db=db)
         except HTTPException as exc:
             if exc.status_code not in {status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND}:
                 raise
-            continue
-        resolved.append(_StorageOpsResolvedContext(ref=ref, account=account))
+        else:
+            resolved.append(_StorageOpsResolvedContext(ref=ref, account=account))
+        if progress is not None:
+            progress.emit(
+                percent=interpolate_progress_percent(15, 25, processed=index, total=total),
+                stage="resolve_contexts",
+                processed=index,
+                total=total,
+                message="Resolving Storage Ops contexts",
+            )
+        invoke_cancel_check(cancel_check)
     return resolved
 
 
@@ -367,6 +385,8 @@ def _apply_page_owner_enrichment(
     resolved_contexts_by_id: dict[str, _StorageOpsResolvedContext],
     include_name: bool,
     include_quota: bool,
+    progress: ListingProgressEmitter | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> list[StorageOpsBucketSummary]:
     if not page_items or (not include_name and not include_quota):
         return page_items
@@ -375,19 +395,31 @@ def _apply_page_owner_enrichment(
     for bucket in page_items:
         buckets_by_context.setdefault(bucket.context_id, []).append(bucket)
 
+    processed = 0
+    total = len(page_items)
     for context_id, buckets in buckets_by_context.items():
+        invoke_cancel_check(cancel_check)
         resolved = resolved_contexts_by_id.get(context_id)
-        if resolved is None:
-            continue
-        metadata = BucketOwnerMetadataService(
-            endpoint_id=int(getattr(getattr(resolved.account, "storage_endpoint", None), "id", 0) or 0),
-            account=resolved.account,
-        )
-        metadata.enrich_buckets(
-            buckets,
-            include_name=include_name,
-            include_quota=include_quota,
-        )
+        if resolved is not None:
+            metadata = BucketOwnerMetadataService(
+                endpoint_id=int(getattr(getattr(resolved.account, "storage_endpoint", None), "id", 0) or 0),
+                account=resolved.account,
+            )
+            metadata.enrich_buckets(
+                buckets,
+                include_name=include_name,
+                include_quota=include_quota,
+            )
+        processed += len(buckets)
+        if progress is not None:
+            progress.emit(
+                percent=interpolate_progress_percent(92, 98, processed=processed, total=total),
+                stage="page_enrichment",
+                processed=processed,
+                total=total,
+                message="Loading page owner metadata",
+            )
+        invoke_cancel_check(cancel_check)
     return page_items
 
 
@@ -513,7 +545,13 @@ def _compute_storage_ops_listing(
     sort_dir: str,
     include: list[str],
     with_stats: bool,
+    progress_callback: Callable[[ListingProgressSnapshot], None] | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> PaginatedStorageOpsBucketsResponse:
+    progress = ListingProgressEmitter(progress_callback)
+    progress.emit(percent=5, stage="prepare", processed=0, total=0, message="Preparing Storage Ops search", force=True)
+    invoke_cancel_check(cancel_check)
+
     simple_filter: str | None = None
     parsed_filter: CephAdminBucketFilterQuery | None = None
     if advanced_filter:
@@ -560,15 +598,58 @@ def _compute_storage_ops_listing(
     needs_stats = bool(with_stats or _filter_requires_stats(parsed_filter) or sort_by in {"used_bytes", "object_count"})
     owner_usage_required = bool(needs_stats and (bool(filter_fields & (OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS)) or wants_owner_quota_usage))
     refs = _collect_context_refs(user, db)
+    progress.emit(
+        percent=10,
+        stage="collect_contexts",
+        processed=len(refs),
+        total=len(refs),
+        message="Collecting Storage Ops contexts",
+        force=True,
+    )
+    invoke_cancel_check(cancel_check)
     refs = _filter_context_refs_by_advanced_filter(refs, parsed_filter)
-    resolved_contexts = _resolve_context_accounts(refs=refs, request=request, db=db, user=user)
+    progress.emit(
+        percent=15,
+        stage="filter_contexts",
+        processed=len(refs),
+        total=len(refs),
+        message="Filtering Storage Ops contexts",
+        force=True,
+    )
+    resolved_contexts = _resolve_context_accounts(
+        refs=refs,
+        request=request,
+        db=db,
+        user=user,
+        progress=progress,
+        cancel_check=cancel_check,
+    )
+    progress.emit(
+        percent=25,
+        stage="resolve_contexts",
+        processed=len(resolved_contexts),
+        total=len(refs),
+        message="Storage Ops contexts resolved",
+        force=True,
+    )
+    invoke_cancel_check(cancel_check)
     resolved_contexts_by_id = {context.ref.context_id: context for context in resolved_contexts}
 
     results: list[StorageOpsBucketSummary] = []
     normalized_search = normalize_text(simple_filter or "")
     max_workers = min(STORAGE_OPS_CONTEXT_LISTING_MAX_WORKERS, len(resolved_contexts))
+    total_contexts = len(resolved_contexts)
+    progress.emit(
+        percent=30 if total_contexts else 75,
+        stage="context_listing",
+        processed=0 if total_contexts else 0,
+        total=total_contexts,
+        message="Loading context bucket listings",
+        force=True,
+    )
     if max_workers <= 1:
-        for context in resolved_contexts:
+        for index, context in enumerate(resolved_contexts, start=1):
+            invoke_cancel_check(cancel_check)
             results.extend(
                 _list_context_buckets(
                     context=context,
@@ -583,6 +664,14 @@ def _compute_storage_ops_listing(
                     owner_usage_required=owner_usage_required,
                 )
             )
+            progress.emit(
+                percent=interpolate_progress_percent(30, 75, processed=index, total=total_contexts),
+                stage="context_listing",
+                processed=index,
+                total=total_contexts,
+                message="Loading context bucket listings",
+            )
+            invoke_cancel_check(cancel_check)
     else:
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="storage-ops-list") as executor:
             futures = [
@@ -601,24 +690,61 @@ def _compute_storage_ops_listing(
                 )
                 for context in resolved_contexts
             ]
-            for future in as_completed(futures):
+            for index, future in enumerate(as_completed(futures), start=1):
+                invoke_cancel_check(cancel_check)
                 try:
                     results.extend(future.result())
                 except Exception as exc:
                     logger.warning("Storage Ops context worker failed: %s", exc)
+                progress.emit(
+                    percent=interpolate_progress_percent(30, 75, processed=index, total=total_contexts),
+                    stage="context_listing",
+                    processed=index,
+                    total=total_contexts,
+                    message="Loading context bucket listings",
+                )
+                invoke_cancel_check(cancel_check)
 
+    progress.emit(
+        percent=85,
+        stage="sort_paginate",
+        processed=len(results),
+        total=len(results),
+        message="Sorting and paginating bucket results",
+        force=True,
+    )
+    invoke_cancel_check(cancel_check)
     sorted_items = _sort_buckets(results, sort_by=sort_by, sort_dir=sort_dir)
     total = len(sorted_items)
     start = max(page - 1, 0) * page_size
     end = start + page_size
     page_items = sorted_items[start:end]
     if page_items and (wants_owner_name or wants_owner_quota or wants_owner_quota_usage):
+        progress.emit(
+            percent=92,
+            stage="page_enrichment",
+            processed=0,
+            total=len(page_items),
+            message="Loading page owner metadata",
+            force=True,
+        )
         page_items = _apply_page_owner_enrichment(
             page_items=page_items,
             resolved_contexts_by_id=resolved_contexts_by_id,
             include_name=wants_owner_name,
             include_quota=wants_owner_quota or wants_owner_quota_usage,
+            progress=progress,
+            cancel_check=cancel_check,
         )
+    invoke_cancel_check(cancel_check)
+    progress.emit(
+        percent=100,
+        stage="finalize",
+        processed=total,
+        total=total,
+        message="Search completed",
+        force=True,
+    )
     return PaginatedStorageOpsBucketsResponse(
         items=page_items,
         total=total,
@@ -723,65 +849,24 @@ async def stream_storage_ops_buckets(
             detail="advanced_filter must be provided as a JSON payload for streaming search",
         )
 
-    async def event_stream():
-        request_id = uuid.uuid4().hex
-        try:
-            yield _format_sse_event(
-                "progress",
-                {
-                    "request_id": request_id,
-                    "percent": 5,
-                    "stage": "prepare",
-                    "processed": 0,
-                    "total": 0,
-                    "message": "Preparing Storage Ops search...",
-                },
-            )
-            result = await run_in_threadpool(
-                _compute_storage_ops_listing,
-                request=request,
-                db=db,
-                user=user,
-                service=service,
-                page=page,
-                page_size=page_size,
-                filter=filter,
-                advanced_filter=advanced_filter,
-                sort_by=sort_by,
-                sort_dir=sort_dir,
-                include=include,
-                with_stats=with_stats,
-            )
-            yield _format_sse_event(
-                "progress",
-                {
-                    "request_id": request_id,
-                    "percent": 100,
-                    "stage": "completed",
-                    "processed": result.total,
-                    "total": result.total,
-                    "message": "Search completed.",
-                },
-            )
-            yield _format_sse_event("result", result.model_dump(mode="json"))
-        except HTTPException as exc:
-            yield _format_sse_event(
-                "error",
-                {"request_id": request_id, "detail": exc.detail, "status_code": exc.status_code},
-            )
-        except Exception as exc:
-            logger.exception("Storage Ops bucket streaming failed: %s", exc)
-            yield _format_sse_event(
-                "error",
-                {"request_id": request_id, "detail": "Storage Ops bucket streaming failed."},
-            )
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    return stream_listing_response(
+        request,
+        compute=lambda progress_callback, cancel_check: _compute_storage_ops_listing(
+            request=request,
+            db=db,
+            user=user,
+            service=service,
+            page=page,
+            page_size=page_size,
+            filter=filter,
+            advanced_filter=advanced_filter,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            include=include,
+            with_stats=with_stats,
+            progress_callback=progress_callback,
+            cancel_check=cancel_check,
+        ),
+        logger=logger,
+        failure_message="Storage Ops bucket streaming failed",
     )

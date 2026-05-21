@@ -51,6 +51,8 @@ export type AdvancedSearchProgress = {
   percent: number;
   stage: string;
   message: string;
+  processed: number;
+  total: number;
 };
 
 type UseBucketOpsListingResult = {
@@ -74,6 +76,8 @@ const INACTIVE_ADVANCED_PROGRESS: AdvancedSearchProgress = {
   percent: 0,
   stage: "",
   message: "",
+  processed: 0,
+  total: 0,
 };
 
 function isCancelledError(err: unknown): boolean {
@@ -157,6 +161,8 @@ export function useBucketOpsListing({
           percent: 0,
           stage: "prepare",
           message: "Preparing advanced search...",
+          processed: 0,
+          total: 0,
         });
         try {
           baseResponse = await streamBuckets(selectedScopeId, baseParams, {
@@ -165,12 +171,20 @@ export function useBucketOpsListing({
               if (requestId !== requestSeqRef.current || requestAbort.signal.aborted) return;
               const rawPercent = Number(event.percent);
               const percent = Number.isFinite(rawPercent) ? Math.max(0, Math.min(100, Math.round(rawPercent))) : 0;
+              const rawProcessed = Number(event.processed);
+              const rawTotal = Number(event.total);
+              const total = Number.isFinite(rawTotal) ? Math.max(0, Math.round(rawTotal)) : 0;
+              const processed = Number.isFinite(rawProcessed)
+                ? Math.max(0, Math.min(total || Number.MAX_SAFE_INTEGER, Math.round(rawProcessed)))
+                : 0;
               setAdvancedProgress({
                 active: true,
                 determinate: true,
                 percent,
                 stage: event.stage || "",
                 message: event.message || "Running advanced search...",
+                processed,
+                total,
               });
             },
           });
@@ -183,6 +197,8 @@ export function useBucketOpsListing({
             percent: 0,
             stage: "fallback",
             message: "Advanced search in progress...",
+            processed: 0,
+            total: 0,
           });
           baseResponse = await listBuckets(selectedScopeId, baseParams, { signal: requestAbort.signal });
         }
