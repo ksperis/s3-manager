@@ -47,6 +47,7 @@ from app.routers.ceph_admin.listing_common import (
     parse_int as _common_parse_int,
     serialize_filter as _common_serialize_filter,
     sort_value as _common_sort_value,
+    interpolate_progress_percent as _common_interpolate_progress_percent,
     invoke_cancel_check as _common_invoke_cancel_check,
     stream_listing_response as _common_stream_listing_response,
 )
@@ -322,68 +323,89 @@ def _enrich_users(
     users: list[CephAdminRgwUserSummary],
     requested: set[str],
     ctx: CephAdminContext,
+    *,
+    progress: _common_ListingProgressEmitter | None = None,
+    progress_stage: str = "detail_enrichment",
+    progress_message: str = "Loading user details",
+    progress_start: int = 50,
+    progress_end: int = 64,
+    cancel_check: Callable[[], None] | None = None,
 ) -> list[CephAdminRgwUserSummary]:
     if not users or not requested:
         return users
     account_name_by_id: dict[str, Optional[str]] = {}
     enriched: list[CephAdminRgwUserSummary] = []
-    for item in users:
+    total = len(users)
+    for index, item in enumerate(users, start=1):
+        _common_invoke_cancel_check(cancel_check)
         user = _clone_user(item)
         try:
             payload = ctx.rgw_admin.get_user(user.uid, tenant=user.tenant, allow_not_found=True)
         except RGWAdminError as exc:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-        if not payload or payload.get("not_found"):
-            enriched.append(user)
-            continue
-        user_payload = _extract_user_payload(payload)
-        account_id = _normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
-        if "account" in requested:
-            user.account_id = account_id
-            payload_account_name = _normalize_optional_str(
-                payload.get("account_name") or user_payload.get("account_name")
-            )
-            if account_id:
-                if account_id not in account_name_by_id:
-                    account_payload = None
-                    if _optional_account_lookup_enabled(ctx) is not False:
-                        try:
-                            account_payload = ctx.rgw_admin.get_account(
-                                account_id,
-                                allow_not_found=True,
-                                allow_not_implemented=True,
-                            )
-                        except RGWAdminError as exc:
-                            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-                    account_name_by_id[account_id] = _normalize_optional_str(
-                        account_payload.get("name") if isinstance(account_payload, dict) else None
-                    )
-                user.account_name = account_name_by_id.get(account_id) or payload_account_name
-            else:
-                user.account_name = payload_account_name
-        if "profile" in requested:
-            user.full_name = _normalize_optional_str(user_payload.get("display_name") or payload.get("display_name"))
-            user.email = _normalize_optional_str(user_payload.get("email") or payload.get("email"))
-        if "status" in requested:
-            user.suspended = _parse_suspended(user_payload.get("suspended") or payload.get("suspended"))
-        if "limits" in requested:
-            user.max_buckets = _parse_int(user_payload.get("max_buckets") or payload.get("max_buckets"))
-        if "quota" in requested:
-            quota_size, quota_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
-            user.quota_max_size_bytes = quota_size
-            user.quota_max_objects = quota_objects
-        if "usage" in requested:
-            lookup_uid = f"{user.tenant}${user.uid}" if user.tenant else user.uid
-            try:
-                buckets_payload = ctx.rgw_admin.get_all_buckets(uid=lookup_uid, with_stats=True)
-            except RGWAdminError as exc:
-                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-            _bucket_usage, total_bytes, total_objects, _bucket_count = summarize_bucket_usage(
-                extract_bucket_list(buckets_payload)
-            )
-            user.used_bytes = total_bytes
-            user.object_count = total_objects
+        if payload and not payload.get("not_found"):
+            user_payload = _extract_user_payload(payload)
+            account_id = _normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
+            if "account" in requested:
+                user.account_id = account_id
+                payload_account_name = _normalize_optional_str(
+                    payload.get("account_name") or user_payload.get("account_name")
+                )
+                if account_id:
+                    if account_id not in account_name_by_id:
+                        account_payload = None
+                        if _optional_account_lookup_enabled(ctx) is not False:
+                            try:
+                                account_payload = ctx.rgw_admin.get_account(
+                                    account_id,
+                                    allow_not_found=True,
+                                    allow_not_implemented=True,
+                                )
+                            except RGWAdminError as exc:
+                                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+                        account_name_by_id[account_id] = _normalize_optional_str(
+                            account_payload.get("name") if isinstance(account_payload, dict) else None
+                        )
+                    user.account_name = account_name_by_id.get(account_id) or payload_account_name
+                else:
+                    user.account_name = payload_account_name
+            if "profile" in requested:
+                user.full_name = _normalize_optional_str(user_payload.get("display_name") or payload.get("display_name"))
+                user.email = _normalize_optional_str(user_payload.get("email") or payload.get("email"))
+            if "status" in requested:
+                user.suspended = _parse_suspended(user_payload.get("suspended") or payload.get("suspended"))
+            if "limits" in requested:
+                user.max_buckets = _parse_int(user_payload.get("max_buckets") or payload.get("max_buckets"))
+            if "quota" in requested:
+                quota_size, quota_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
+                user.quota_max_size_bytes = quota_size
+                user.quota_max_objects = quota_objects
+            if "usage" in requested:
+                lookup_uid = f"{user.tenant}${user.uid}" if user.tenant else user.uid
+                try:
+                    buckets_payload = ctx.rgw_admin.get_all_buckets(uid=lookup_uid, with_stats=True)
+                except RGWAdminError as exc:
+                    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+                _bucket_usage, total_bytes, total_objects, _bucket_count = summarize_bucket_usage(
+                    extract_bucket_list(buckets_payload)
+                )
+                user.used_bytes = total_bytes
+                user.object_count = total_objects
         enriched.append(user)
+        if progress is not None:
+            progress.emit(
+                percent=_common_interpolate_progress_percent(
+                    progress_start,
+                    progress_end,
+                    processed=index,
+                    total=total,
+                ),
+                stage=progress_stage,
+                processed=index,
+                total=total,
+                message=progress_message,
+            )
+        _common_invoke_cancel_check(cancel_check)
     return enriched
 
 
@@ -737,7 +759,17 @@ def _compute_users_listing(
                 message="Loading user details",
                 force=True,
             )
-            results = _enrich_users(results, needed_for_listing, ctx)
+            results = _enrich_users(
+                results,
+                needed_for_listing,
+                ctx,
+                progress=progress,
+                progress_stage="detail_enrichment",
+                progress_message="Loading user details",
+                progress_start=50,
+                progress_end=64,
+                cancel_check=cancel_check,
+            )
             _common_invoke_cancel_check(cancel_check)
 
         if advanced_filter_active:
@@ -822,7 +854,17 @@ def _compute_users_listing(
             message="Loading page details",
             force=True,
         )
-        page_items = _enrich_users(page_items, requested, ctx)
+        page_items = _enrich_users(
+            page_items,
+            requested,
+            ctx,
+            progress=progress,
+            progress_stage="page_enrichment",
+            progress_message="Loading page details",
+            progress_start=92,
+            progress_end=99,
+            cancel_check=cancel_check,
+        )
         _common_invoke_cancel_check(cancel_check)
 
     progress.emit(

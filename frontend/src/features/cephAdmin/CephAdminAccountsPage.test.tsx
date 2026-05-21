@@ -127,7 +127,29 @@ describe("CephAdminAccountsPage", () => {
     });
     listCephAdminAccountsMock.mockResolvedValue({ items: [], total: 0 });
     const pending = deferred<{ items: never[]; total: number }>();
-    streamCephAdminAccountsMock.mockReturnValueOnce(pending.promise);
+    streamCephAdminAccountsMock.mockImplementationOnce((...args: unknown[]) => {
+      const options = args[2] as
+        | {
+            onProgress?: (event: {
+              request_id: string;
+              percent: number;
+              stage: string;
+              processed: number;
+              total: number;
+              message: string;
+            }) => void;
+          }
+        | undefined;
+      options?.onProgress?.({
+        request_id: "progress-1",
+        percent: 58,
+        stage: "detail_enrichment",
+        processed: 5,
+        total: 12,
+        message: "Loading account details",
+      });
+      return pending.promise;
+    });
 
     render(
       <MemoryRouter>
@@ -142,6 +164,7 @@ describe("CephAdminAccountsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
 
     expect(await screen.findByText(/Advanced search in progress/)).toBeInTheDocument();
+    expect(screen.getByText(/Loading account details · 5 \/ 12/)).toBeInTheDocument();
 
     pending.resolve({ items: [], total: 0 });
     await waitFor(() => {

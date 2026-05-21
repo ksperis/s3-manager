@@ -417,6 +417,8 @@ export default function CephAdminUsersPage() {
             percent: 0,
             stage: "prepare",
             message: "Preparing advanced search...",
+            processed: 0,
+            total: 0,
           });
           try {
             baseResponse = await streamCephAdminUsers(selectedEndpointId, baseParams, {
@@ -435,6 +437,8 @@ export default function CephAdminUsersPage() {
               percent: 0,
               stage: "fallback",
               message: "Advanced search in progress...",
+              processed: 0,
+              total: 0,
             });
             baseResponse = await listCephAdminUsers(selectedEndpointId, baseParams, { signal: requestAbort.signal });
           }

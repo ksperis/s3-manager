@@ -137,7 +137,29 @@ describe("CephAdminUsersPage list states", () => {
   it("shows advanced search progress while user filtering is running", async () => {
     listCephAdminUsersMock.mockResolvedValue({ items: [], total: 0 });
     const pending = deferred<{ items: never[]; total: number }>();
-    streamCephAdminUsersMock.mockReturnValueOnce(pending.promise);
+    streamCephAdminUsersMock.mockImplementationOnce((...args: unknown[]) => {
+      const options = args[2] as
+        | {
+            onProgress?: (event: {
+              request_id: string;
+              percent: number;
+              stage: string;
+              processed: number;
+              total: number;
+              message: string;
+            }) => void;
+          }
+        | undefined;
+      options?.onProgress?.({
+        request_id: "progress-1",
+        percent: 56,
+        stage: "detail_enrichment",
+        processed: 42,
+        total: 180,
+        message: "Loading user details",
+      });
+      return pending.promise;
+    });
 
     renderPage();
 
@@ -148,10 +170,35 @@ describe("CephAdminUsersPage list states", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
 
     expect(await screen.findByText(/Advanced search in progress/)).toBeInTheDocument();
+    expect(screen.getByText(/Loading user details · 42 \/ 180/)).toBeInTheDocument();
 
     pending.resolve({ items: [], total: 0 });
     await waitFor(() => {
       expect(screen.queryByText(/Advanced search in progress/)).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps an indeterminate progress panel when user streaming falls back", async () => {
+    listCephAdminUsersMock.mockResolvedValueOnce({ items: [], total: 0 });
+    const fallback = deferred<{ items: never[]; total: number }>();
+    listCephAdminUsersMock.mockReturnValueOnce(fallback.promise);
+    streamCephAdminUsersMock.mockRejectedValueOnce(new Error("stream unavailable"));
+
+    renderPage();
+
+    expect(await screen.findByText("No users.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /advanced filter/i }));
+    fireEvent.change(screen.getByPlaceholderText("John Doe"), { target: { value: "Alice" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Advanced search in progress...").length).toBeGreaterThan(0);
+    });
+
+    fallback.resolve({ items: [], total: 0 });
+    await waitFor(() => {
+      expect(screen.queryAllByText("Advanced search in progress...")).toHaveLength(0);
     });
   });
 

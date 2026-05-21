@@ -112,6 +112,17 @@ def invoke_cancel_check(cancel_check: Callable[[], None] | None) -> None:
     cancel_check()
 
 
+def interpolate_progress_percent(start: int, end: int, *, processed: int, total: int) -> int:
+    clamped_start = max(0, min(100, int(start)))
+    clamped_end = max(clamped_start, min(100, int(end)))
+    safe_total = max(0, int(total))
+    if safe_total <= 0:
+        return clamped_start
+    safe_processed = max(0, min(safe_total, int(processed)))
+    span = clamped_end - clamped_start
+    return clamped_start + round((span * safe_processed) / safe_total)
+
+
 def normalize_http_error_detail(detail: object) -> object:
     if isinstance(detail, (str, int, float, bool)) or detail is None:
         return detail

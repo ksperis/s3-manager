@@ -10,12 +10,16 @@ export type AdvancedSearchProgress = {
   percent: number;
   stage: string;
   message: string;
+  processed: number;
+  total: number;
 };
 
 type AdvancedSearchProgressEvent = {
   percent?: number;
   stage?: string;
   message?: string;
+  processed?: number;
+  total?: number;
 };
 
 export const INACTIVE_ADVANCED_PROGRESS: AdvancedSearchProgress = {
@@ -24,6 +28,8 @@ export const INACTIVE_ADVANCED_PROGRESS: AdvancedSearchProgress = {
   percent: 0,
   stage: "",
   message: "",
+  processed: 0,
+  total: 0,
 };
 
 export const FILTER_COST_LABEL: Record<FilterCostLevel, string> = {
@@ -80,18 +86,25 @@ export const formatAdvancedSearchStage = (stage: string) => {
 export const progressFromAdvancedSearchEvent = (event: AdvancedSearchProgressEvent): AdvancedSearchProgress => {
   const rawPercent = Number(event.percent);
   const percent = Number.isFinite(rawPercent) ? Math.max(0, Math.min(100, Math.round(rawPercent))) : 0;
+  const rawProcessed = Number(event.processed);
+  const rawTotal = Number(event.total);
+  const total = Number.isFinite(rawTotal) ? Math.max(0, Math.round(rawTotal)) : 0;
+  const processed = Number.isFinite(rawProcessed) ? Math.max(0, Math.min(total || Number.MAX_SAFE_INTEGER, Math.round(rawProcessed))) : 0;
   return {
     active: true,
     determinate: true,
     percent,
     stage: event.stage || "",
     message: event.message || "Running advanced search...",
+    processed,
+    total,
   };
 };
 
 export const renderAdvancedSearchProgress = (progress: AdvancedSearchProgress) => {
   if (!progress.active) return null;
   const percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
+  const progressDetails = progress.total > 0 ? ` · ${progress.processed} / ${progress.total}` : "";
   return (
     <div className="mb-3 rounded-xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-slate-900/70">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -101,6 +114,7 @@ export const renderAdvancedSearchProgress = (progress: AdvancedSearchProgress) =
         {(progress.message || progress.stage) && (
           <p className="ui-caption text-slate-500 dark:text-slate-400">
             {progress.message || formatAdvancedSearchStage(progress.stage)}
+            {progressDetails}
           </p>
         )}
       </div>
