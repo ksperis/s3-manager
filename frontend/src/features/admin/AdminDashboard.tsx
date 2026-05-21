@@ -252,28 +252,32 @@ export default function AdminDashboard() {
         label: "Manager",
         description: "Tenant administration workspace",
         enabled: generalSettings.manager_enabled,
-        critical: false,
+        massManagement: false,
+        to: "/admin/general-settings",
       },
       {
         id: "browser",
         label: "Browser",
         description: "Object and bucket navigation workspace",
         enabled: generalSettings.browser_enabled,
-        critical: false,
+        massManagement: false,
+        to: "/admin/general-settings",
       },
       {
         id: "ceph_admin",
-        label: "Ceph admin",
+        label: "Ceph Admin",
         description: "Cluster-wide advanced operations",
         enabled: generalSettings.ceph_admin_enabled,
-        critical: true,
+        massManagement: true,
+        to: "/admin/general-settings",
       },
       {
         id: "storage_ops",
         label: "Storage Ops",
         description: "Cross-context bucket operations workspace",
         enabled: generalSettings.storage_ops_enabled,
-        critical: true,
+        massManagement: true,
+        to: "/admin/general-settings",
       },
     ],
     [
@@ -284,7 +288,10 @@ export default function AdminDashboard() {
     ]
   );
 
-  const enabledCoreFeatures = useMemo(() => coreFeatures.filter((feature) => feature.enabled), [coreFeatures]);
+  const enabledCoreFeatureCount = useMemo(
+    () => coreFeatures.filter((feature) => feature.enabled).length,
+    [coreFeatures]
+  );
 
   return (
     <div className="space-y-4">
@@ -393,9 +400,9 @@ export default function AdminDashboard() {
       <div className={cx(uiCardClass, "p-3")}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h2 className="ui-body font-semibold text-slate-900 dark:text-white">Active core features</h2>
+            <h2 className="ui-body font-semibold text-slate-900 dark:text-white">Core features</h2>
             <p className="ui-caption text-slate-600 dark:text-slate-300">
-              {enabledCoreFeatures.length} / {coreFeatures.length} enabled
+              {enabledCoreFeatureCount} / {coreFeatures.length} enabled
             </p>
           </div>
           {canConfigureApp ? (
@@ -412,31 +419,52 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {enabledCoreFeatures.length === 0 ? (
-          <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">No core feature is enabled.</p>
-        ) : (
-          <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
-            {enabledCoreFeatures.map((feature) => {
-              const baseClasses = feature.critical
-                ? "border-orange-200 bg-orange-50 dark:border-orange-500/50 dark:bg-orange-950/30"
-                : "border-emerald-200 bg-emerald-50 dark:border-emerald-500/50 dark:bg-emerald-950/30";
-              const labelClasses = feature.critical
-                ? "text-orange-900 dark:text-orange-100"
-                : "text-emerald-900 dark:text-emerald-100";
-
-              return (
-                <div key={feature.id} className={`rounded-lg border px-2 py-1.5 ${baseClasses}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className={`text-[11px] font-semibold leading-4 ${labelClasses}`}>{feature.label}</p>
-                    <UiBadge tone={feature.critical ? "warning" : "success"} className="px-1.5 py-0.5">
-                      ON
-                    </UiBadge>
+        <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          {coreFeatures.map((feature) => {
+            const stateClasses = feature.enabled
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/50 dark:bg-emerald-950/30 dark:text-emerald-100"
+              : "border-slate-200 bg-slate-50 text-slate-500 opacity-75 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-400";
+            const descriptionClasses = feature.enabled
+              ? "text-emerald-700 dark:text-emerald-200"
+              : "text-slate-500 dark:text-slate-400";
+            const cardClasses = cx(
+              "flex min-h-[76px] flex-col justify-between gap-1.5 rounded-lg border px-2 py-1.5 transition",
+              stateClasses,
+              canConfigureApp &&
+                "hover:-translate-y-[1px] hover:border-primary-300 hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:hover:border-primary-700/60"
+            );
+            const cardContent = (
+              <>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-semibold leading-4">{feature.label}</p>
+                    <p className={cx("mt-0.5 line-clamp-2 text-[10px] leading-3", descriptionClasses)}>
+                      {feature.description}
+                    </p>
                   </div>
+                  <UiBadge tone={feature.enabled ? "success" : "neutral"} className="shrink-0 px-1.5 py-0 text-[10px] leading-4">
+                    {feature.enabled ? "ON" : "OFF"}
+                  </UiBadge>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                {feature.massManagement && (
+                  <UiBadge tone="warning" className="w-fit px-1.5 py-0 text-[10px] leading-4">
+                    Mass management
+                  </UiBadge>
+                )}
+              </>
+            );
+
+            return canConfigureApp ? (
+              <Link key={feature.id} to={feature.to} className={cardClasses}>
+                {cardContent}
+              </Link>
+            ) : (
+              <div key={feature.id} className={cardClasses}>
+                {cardContent}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {generalSettings.endpoint_status_enabled && (
