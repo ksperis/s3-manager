@@ -30,6 +30,7 @@ from app.models.user import (
     AccountMembership,
     LinkedS3Connection,
     LinkedS3User,
+    ManagerToolAccess,
     UserCreate,
     UserOut,
     UserSummary,
@@ -37,6 +38,13 @@ from app.models.user import (
     validate_password_policy,
 )
 logger = logging.getLogger(__name__)
+
+
+MANAGER_TOOL_ROLES = {
+    UserRole.UI_SUPERADMIN.value,
+    UserRole.UI_ADMIN.value,
+    UserRole.UI_USER.value,
+}
 
 
 class UsersService:
@@ -88,9 +96,11 @@ class UsersService:
         can_access_ceph_admin = bool(payload.can_access_ceph_admin) if is_admin_ui_role(role) else False
         can_access_storage_ops = (
             bool(payload.can_access_storage_ops)
-            if role in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}
+            if role in MANAGER_TOOL_ROLES
             else False
         )
+        manager_tool_access = payload.manager_tool_access or ManagerToolAccess()
+        manager_tools_supported = role in MANAGER_TOOL_ROLES
         user = User(
             email=payload.email,
             full_name=payload.full_name,
@@ -101,6 +111,18 @@ class UsersService:
             is_root=is_root,
             can_access_ceph_admin=can_access_ceph_admin,
             can_access_storage_ops=can_access_storage_ops,
+            can_access_manager_bucket_compare=(
+                bool(manager_tool_access.bucket_compare) if manager_tools_supported else False
+            ),
+            can_access_manager_bucket_integrity_check=(
+                bool(manager_tool_access.bucket_integrity_check) if manager_tools_supported else False
+            ),
+            can_access_manager_bucket_migration=(
+                bool(manager_tool_access.bucket_migration) if manager_tools_supported else False
+            ),
+            can_access_manager_ceph_s3_user_keys=(
+                bool(manager_tool_access.ceph_s3_user_keys) if manager_tools_supported else False
+            ),
         )
         self.db.add(user)
         self.db.commit()
@@ -136,11 +158,28 @@ class UsersService:
         if payload.can_access_storage_ops is not None:
             user.can_access_storage_ops = (
                 bool(payload.can_access_storage_ops)
-                if next_role in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}
+                if next_role in MANAGER_TOOL_ROLES
                 else False
             )
-        elif next_role not in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}:
+        elif next_role not in MANAGER_TOOL_ROLES:
             user.can_access_storage_ops = False
+        if payload.manager_tool_access is not None:
+            manager_tool_access = payload.manager_tool_access
+            if next_role in MANAGER_TOOL_ROLES:
+                user.can_access_manager_bucket_compare = bool(manager_tool_access.bucket_compare)
+                user.can_access_manager_bucket_integrity_check = bool(manager_tool_access.bucket_integrity_check)
+                user.can_access_manager_bucket_migration = bool(manager_tool_access.bucket_migration)
+                user.can_access_manager_ceph_s3_user_keys = bool(manager_tool_access.ceph_s3_user_keys)
+            else:
+                user.can_access_manager_bucket_compare = False
+                user.can_access_manager_bucket_integrity_check = False
+                user.can_access_manager_bucket_migration = False
+                user.can_access_manager_ceph_s3_user_keys = False
+        elif next_role not in MANAGER_TOOL_ROLES:
+            user.can_access_manager_bucket_compare = False
+            user.can_access_manager_bucket_integrity_check = False
+            user.can_access_manager_bucket_migration = False
+            user.can_access_manager_ceph_s3_user_keys = False
         if not is_admin_ui_role(next_role):
             user.quota_alerts_global_watch = False
         if payload.s3_user_ids is not None:
@@ -554,6 +593,12 @@ class UsersService:
             is_root=user.is_root,
             can_access_ceph_admin=bool(user.can_access_ceph_admin),
             can_access_storage_ops=bool(user.can_access_storage_ops),
+            manager_tool_access=ManagerToolAccess(
+                bucket_compare=bool(user.can_access_manager_bucket_compare),
+                bucket_integrity_check=bool(user.can_access_manager_bucket_integrity_check),
+                bucket_migration=bool(user.can_access_manager_bucket_migration),
+                ceph_s3_user_keys=bool(user.can_access_manager_ceph_s3_user_keys),
+            ),
             ui_language=user.ui_language,
             quota_alerts_enabled=bool(user.quota_alerts_enabled),
             quota_alerts_global_watch=bool(user.quota_alerts_global_watch),

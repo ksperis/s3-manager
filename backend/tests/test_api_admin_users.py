@@ -104,6 +104,54 @@ def test_superadmin_can_create_superadmin_and_grant_ceph_admin(client: TestClien
     payload = create_admin_with_ceph.json()
     assert payload["role"] == UserRole.UI_ADMIN.value
     assert payload["can_access_ceph_admin"] is True
+    assert payload["manager_tool_access"] == {
+        "bucket_compare": False,
+        "bucket_integrity_check": False,
+        "bucket_migration": False,
+        "ceph_s3_user_keys": False,
+    }
+
+
+def test_admin_can_configure_manager_tool_access_on_update(client: TestClient, db_session):
+    target = User(
+        email="target-manager-tools@example.com",
+        full_name="Target Manager Tools",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    db_session.add(target)
+    db_session.commit()
+
+    admin_user = User(
+        id=1007,
+        email="admin-tools@example.com",
+        full_name="Admin Tools",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    app.dependency_overrides[dependencies.get_current_super_admin] = lambda: admin_user
+
+    response = client.put(
+        f"/api/admin/users/{target.id}",
+        json={
+            "manager_tool_access": {
+                "bucket_compare": True,
+                "bucket_integrity_check": True,
+                "bucket_migration": False,
+                "ceph_s3_user_keys": True,
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["manager_tool_access"] == {
+        "bucket_compare": True,
+        "bucket_integrity_check": True,
+        "bucket_migration": False,
+        "ceph_s3_user_keys": True,
+    }
 
 
 def test_admin_cannot_promote_or_grant_ceph_admin_on_update(client: TestClient, db_session):

@@ -16,53 +16,53 @@ from app.routers.dependencies import (
 )
 
 
-def _user(role: str) -> User:
+def _user(role: str, *, bucket_migration: bool = False) -> User:
     return User(
         email=f"{role}@example.com",
         hashed_password="x",
         is_active=True,
         role=role,
+        can_access_manager_bucket_migration=bucket_migration,
     )
 
 
-def _settings(*, enabled: bool, allow_ui_user: bool):
+def _settings(*, enabled: bool):
     return SimpleNamespace(
         general=SimpleNamespace(
             bucket_migration_enabled=enabled,
-            allow_ui_user_bucket_migration=allow_ui_user,
         )
     )
 
 
-def test_bucket_migration_allowed_for_admin_when_feature_enabled(monkeypatch):
-    monkeypatch.setattr("app.routers.dependencies.load_app_settings", lambda: _settings(enabled=True, allow_ui_user=False))
-    _ensure_bucket_migration_allowed(_user(UserRole.UI_ADMIN.value))
+def test_bucket_migration_allowed_for_admin_with_user_tool_access(monkeypatch):
+    monkeypatch.setattr("app.routers.dependencies.load_app_settings", lambda: _settings(enabled=True))
+    _ensure_bucket_migration_allowed(_user(UserRole.UI_ADMIN.value, bucket_migration=True))
 
 
-def test_bucket_migration_allowed_for_ui_user_when_explicitly_enabled(monkeypatch):
-    monkeypatch.setattr("app.routers.dependencies.load_app_settings", lambda: _settings(enabled=True, allow_ui_user=True))
-    _ensure_bucket_migration_allowed(_user(UserRole.UI_USER.value))
+def test_bucket_migration_allowed_for_ui_user_with_user_tool_access(monkeypatch):
+    monkeypatch.setattr("app.routers.dependencies.load_app_settings", lambda: _settings(enabled=True))
+    _ensure_bucket_migration_allowed(_user(UserRole.UI_USER.value, bucket_migration=True))
 
 
-def test_bucket_migration_forbidden_for_ui_user_by_default(monkeypatch):
-    monkeypatch.setattr("app.routers.dependencies.load_app_settings", lambda: _settings(enabled=True, allow_ui_user=False))
+def test_bucket_migration_forbidden_without_user_tool_access(monkeypatch):
+    monkeypatch.setattr("app.routers.dependencies.load_app_settings", lambda: _settings(enabled=True))
     with pytest.raises(HTTPException) as exc:
         _ensure_bucket_migration_allowed(_user(UserRole.UI_USER.value))
     assert exc.value.status_code == 403
 
 
 def test_bucket_migration_forbidden_when_feature_disabled(monkeypatch):
-    monkeypatch.setattr("app.routers.dependencies.load_app_settings", lambda: _settings(enabled=False, allow_ui_user=True))
+    monkeypatch.setattr("app.routers.dependencies.load_app_settings", lambda: _settings(enabled=False))
     with pytest.raises(HTTPException) as exc:
-        _ensure_bucket_migration_allowed(_user(UserRole.UI_ADMIN.value))
+        _ensure_bucket_migration_allowed(_user(UserRole.UI_ADMIN.value, bucket_migration=True))
     assert exc.value.status_code == 403
     assert "feature is disabled" in str(exc.value.detail).lower()
 
 
 def test_bucket_migration_forbidden_for_unassigned_user(monkeypatch):
-    monkeypatch.setattr("app.routers.dependencies.load_app_settings", lambda: _settings(enabled=True, allow_ui_user=True))
+    monkeypatch.setattr("app.routers.dependencies.load_app_settings", lambda: _settings(enabled=True))
     with pytest.raises(HTTPException) as exc:
-        _ensure_bucket_migration_allowed(_user(UserRole.UI_NONE.value))
+        _ensure_bucket_migration_allowed(_user(UserRole.UI_NONE.value, bucket_migration=True))
     assert exc.value.status_code == 403
 
 

@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
+import type { ManagerToolAccess } from "./users";
 
 export type LoginResponse = {
   access_token: string;
@@ -18,6 +19,7 @@ export type LoginResponse = {
     is_root?: boolean;
     can_access_ceph_admin?: boolean;
     can_access_storage_ops?: boolean;
+    manager_tool_access?: ManagerToolAccess | null;
     ui_language?: "en" | "fr" | "de" | null;
     accounts?: number[];
     account_links?: { account_id: number; account_admin?: boolean | null }[] | null;

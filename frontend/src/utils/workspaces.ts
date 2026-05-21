@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { GeneralSettings } from "../api/appSettings";
+import type { ManagerToolAccess } from "../api/users";
 
 export const WORKSPACE_STORAGE_KEY = "selectedWorkspace";
 
@@ -25,6 +26,7 @@ export type SessionUser = {
   ui_language?: "en" | "fr" | "de" | null;
   can_access_ceph_admin?: boolean | null;
   can_access_storage_ops?: boolean | null;
+  manager_tool_access?: ManagerToolAccess | null;
   authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
   account_links?: { account_id: number; account_admin?: boolean | null }[] | null;
   s3_users?: number[] | null;

@@ -22,6 +22,12 @@ type SessionCapabilities = {
 type SessionUserPayload = {
   role?: string;
   capabilities?: SessionCapabilities;
+  manager_tool_access?: {
+    bucket_compare?: boolean;
+    bucket_integrity_check?: boolean;
+    bucket_migration?: boolean;
+    ceph_s3_user_keys?: boolean;
+  } | null;
 };
 
 function getUserCapabilities(): SessionCapabilities | null {
@@ -43,6 +49,17 @@ function getUserRole(): string | null {
   try {
     const parsed = JSON.parse(raw) as SessionUserPayload;
     return typeof parsed.role === "string" ? parsed.role : null;
+  } catch {
+    return null;
+  }
+}
+
+function getStoredUser(): SessionUserPayload | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem("user");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as SessionUserPayload;
   } catch {
     return null;
   }
@@ -70,7 +87,8 @@ function ManagerShell() {
   const selected = accounts.find((a) => a.id === selectedS3AccountId);
   const showSelector = requiresS3AccountSelection && accounts.length > 1;
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
-  const fallbackCapabilities = getUserCapabilities();
+  const storedUser = getStoredUser();
+  const fallbackCapabilities = storedUser?.capabilities ?? getUserCapabilities();
   const capabilities = fallbackCapabilities ?? {
     can_manage_iam: true,
     can_manage_buckets: true,
@@ -82,12 +100,16 @@ function ManagerShell() {
     canManageBuckets && Boolean(generalSettings.bucket_compare_enabled) && Boolean(requiresS3AccountSelection);
   const canAccessBucketIntegrity =
     canManageBuckets && Boolean(generalSettings.bucket_integrity_check_enabled) && Boolean(requiresS3AccountSelection);
-  const userRole = getUserRole();
+  const userRole = storedUser?.role ?? getUserRole();
+  const managerToolAccess = storedUser?.manager_tool_access ?? null;
   const canAccessMigration =
     Boolean(generalSettings.bucket_migration_enabled) &&
-    (userRole === "ui_admin" ||
-      userRole === "ui_superadmin" ||
-      (userRole === "ui_user" && Boolean(generalSettings.allow_ui_user_bucket_migration)));
+    Boolean(managerToolAccess?.bucket_migration) &&
+    (userRole === "ui_admin" || userRole === "ui_superadmin" || userRole === "ui_user");
+  const canAccessBucketCompareForUser = Boolean(managerToolAccess?.bucket_compare);
+  const canAccessBucketIntegrityForUser = Boolean(managerToolAccess?.bucket_integrity_check);
+  const canShowBucketCompare = canAccessBucketCompare && canAccessBucketCompareForUser;
+  const canShowBucketIntegrity = canAccessBucketIntegrity && canAccessBucketIntegrityForUser;
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
   const iamFeatureEnabled = endpointCaps ? endpointCaps.iam !== false : true;
   const canManageIam = !isS3User && capabilities.can_manage_iam !== false && iamFeatureEnabled;
@@ -235,12 +257,12 @@ function ManagerShell() {
     });
   }
 
-  if (canManageBuckets && (canAccessBucketCompare || canAccessBucketIntegrity || canAccessMigration)) {
+  if (canManageBuckets && (canShowBucketCompare || canShowBucketIntegrity || canAccessMigration)) {
     const toolsLinks: SidebarSection[number]["links"] = [];
-    if (canAccessBucketCompare) {
+    if (canShowBucketCompare) {
       toolsLinks.push({ to: "/manager/bucket-compare", label: "Compare" });
     }
-    if (canAccessBucketIntegrity) {
+    if (canShowBucketIntegrity) {
       toolsLinks.push({ to: "/manager/bucket-integrity", label: "Integrity" });
     }
     if (canAccessMigration) {

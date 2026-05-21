@@ -19,7 +19,7 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
       <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/admin-ui-users.light.png" alt="Admin UI Users page with roles, last login, and workspace associations" loading="lazy">
       <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/admin-ui-users.dark.png" alt="Admin UI Users page with roles, last login, and workspace associations" loading="lazy">
     </div>
-    <figcaption><strong>UI Users.</strong> This page centralizes workspace roles, Ceph Admin and Storage Ops access, and the main account associations for each user.</figcaption>
+    <figcaption><strong>UI Users.</strong> This page centralizes workspace roles, Manager tool access, Ceph Admin and Storage Ops access, and the main account associations for each user.</figcaption>
   </figure>
   <figure data-thumb-label="Endpoints">
     <div class="docs-themed-shot" data-docs-themed-shot>

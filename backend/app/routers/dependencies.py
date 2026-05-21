@@ -6,7 +6,7 @@ import hashlib
 from app.utils.time import utcnow
 from dataclasses import dataclass, field
 import logging
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 from fastapi import Depends, HTTPException, Query, Request, status, Header
 from fastapi.security import OAuth2PasswordBearer
@@ -48,6 +48,32 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login")
 ManagerActor = Union[User, ManagerSessionPrincipal]
+ManagerToolKey = Literal[
+    "bucket_compare",
+    "bucket_integrity_check",
+    "bucket_migration",
+    "ceph_s3_user_keys",
+]
+
+_MANAGER_TOOL_ACCESS_FIELDS: dict[ManagerToolKey, str] = {
+    "bucket_compare": "can_access_manager_bucket_compare",
+    "bucket_integrity_check": "can_access_manager_bucket_integrity_check",
+    "bucket_migration": "can_access_manager_bucket_migration",
+    "ceph_s3_user_keys": "can_access_manager_ceph_s3_user_keys",
+}
+
+_MANAGER_TOOL_GLOBAL_FIELDS: dict[ManagerToolKey, tuple[str, str]] = {
+    "bucket_compare": ("bucket_compare_enabled", "Bucket compare feature is disabled"),
+    "bucket_integrity_check": ("bucket_integrity_check_enabled", "Bucket integrity check feature is disabled"),
+    "bucket_migration": ("bucket_migration_enabled", "Bucket migration feature is disabled"),
+    "ceph_s3_user_keys": ("manager_ceph_s3_user_keys_enabled", "Ceph key management feature is disabled"),
+}
+
+_MANAGER_TOOL_ROLES = {
+    UserRole.UI_SUPERADMIN.value,
+    UserRole.UI_ADMIN.value,
+    UserRole.UI_USER.value,
+}
 
 
 @dataclass
@@ -760,15 +786,29 @@ def require_metrics_capable_manager(
     )
 
 
-def _ensure_bucket_migration_allowed(user: User) -> None:
+def _manager_tool_global_state(tool: ManagerToolKey) -> tuple[bool, str]:
     app_settings = load_app_settings()
-    if not app_settings.general.bucket_migration_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket migration feature is disabled")
-    if is_admin_ui_role(user.role):
-        return
-    if user.role == UserRole.UI_USER.value and bool(app_settings.general.allow_ui_user_bucket_migration):
+    global_field, disabled_detail = _MANAGER_TOOL_GLOBAL_FIELDS[tool]
+    return bool(getattr(app_settings.general, global_field)), disabled_detail
+
+
+def user_has_manager_tool_access(user: User, tool: ManagerToolKey) -> bool:
+    return bool(getattr(user, _MANAGER_TOOL_ACCESS_FIELDS[tool], False))
+
+
+def ensure_manager_tool_allowed(user: User, tool: ManagerToolKey) -> None:
+    enabled, disabled_detail = _manager_tool_global_state(tool)
+    if not enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=disabled_detail)
+    if user.role not in _MANAGER_TOOL_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    if user_has_manager_tool_access(user, tool):
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+
+def _ensure_bucket_migration_allowed(user: User) -> None:
+    ensure_manager_tool_allowed(user, "bucket_migration")
 
 
 def _manager_link_allows_bucket_migration(
@@ -863,21 +903,21 @@ def get_current_bucket_migration_scope(
     )
 
 
-def require_bucket_compare_enabled() -> None:
-    app_settings = load_app_settings()
-    if not app_settings.general.bucket_compare_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket compare feature is disabled")
+def require_bucket_compare_enabled(user: User = Depends(get_current_user)) -> User:
+    ensure_manager_tool_allowed(user, "bucket_compare")
+    return user
 
 
-def require_bucket_integrity_check_enabled() -> None:
-    app_settings = load_app_settings()
-    if not app_settings.general.bucket_integrity_check_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket integrity check feature is disabled")
+def require_bucket_integrity_check_enabled(user: User = Depends(get_current_user)) -> User:
+    ensure_manager_tool_allowed(user, "bucket_integrity_check")
+    return user
 
 
-def is_manager_ceph_s3_user_keys_available(account: S3Account) -> bool:
-    app_settings = load_app_settings()
-    if not bool(app_settings.general.manager_ceph_s3_user_keys_enabled):
+def is_manager_ceph_s3_user_keys_available(account: S3Account, user: Optional[User] = None) -> bool:
+    enabled, _ = _manager_tool_global_state("ceph_s3_user_keys")
+    if not enabled:
+        return False
+    if user is not None and not user_has_manager_tool_access(user, "ceph_s3_user_keys"):
         return False
 
     s3_user_id = getattr(account, "s3_user_id", None)
@@ -905,9 +945,11 @@ def is_manager_ceph_s3_user_keys_available(account: S3Account) -> bool:
 
 
 def require_manager_ceph_s3_user_keys(
+    user: User = Depends(get_current_user),
     account: S3Account = Depends(get_account_context),
 ) -> S3Account:
-    if not is_manager_ceph_s3_user_keys_available(account):
+    ensure_manager_tool_allowed(user, "ceph_s3_user_keys")
+    if not is_manager_ceph_s3_user_keys_available(account, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Ceph key management is not available for this context",

@@ -129,9 +129,14 @@ def test_manager_ceph_s3_user_keys_flag_default_enabled():
     assert settings.general.manager_ceph_s3_user_keys_enabled is True
 
 
-def test_bucket_integrity_check_flag_default_disabled():
+def test_bucket_integrity_check_flag_default_enabled():
     settings = AppSettings()
-    assert settings.general.bucket_integrity_check_enabled is False
+    assert settings.general.bucket_integrity_check_enabled is True
+
+
+def test_bucket_compare_flag_default_enabled():
+    settings = AppSettings()
+    assert settings.general.bucket_compare_enabled is True
 
 
 def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path):

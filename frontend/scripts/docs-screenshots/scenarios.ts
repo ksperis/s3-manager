@@ -7,6 +7,12 @@ const superAdminUser = {
   role: "ui_superadmin",
   ui_language: "en",
   can_access_ceph_admin: true,
+  manager_tool_access: {
+    bucket_compare: true,
+    bucket_integrity_check: true,
+    bucket_migration: true,
+    ceph_s3_user_keys: true,
+  },
   authType: "password",
   account_links: [
     { account_id: 101, account_admin: true },
@@ -22,6 +28,12 @@ const adminUser = {
   role: "ui_admin",
   ui_language: "en",
   can_access_ceph_admin: true,
+  manager_tool_access: {
+    bucket_compare: true,
+    bucket_integrity_check: true,
+    bucket_migration: true,
+    ceph_s3_user_keys: true,
+  },
   authType: "password",
   account_links: [
     { account_id: 101, account_admin: true },
@@ -42,6 +54,12 @@ const storageUser = {
   role: "ui_user",
   ui_language: "en",
   can_access_ceph_admin: false,
+  manager_tool_access: {
+    bucket_compare: true,
+    bucket_integrity_check: true,
+    bucket_migration: true,
+    ceph_s3_user_keys: true,
+  },
   authType: "password",
   account_links: [
     { account_id: 101, account_admin: false },
@@ -300,8 +318,8 @@ const storageOpsEnabledGeneralSettingsRule: MockRule = {
     bucket_migration_enabled: true,
     bucket_compare_enabled: true,
     bucket_integrity_check_enabled: true,
+    manager_ceph_s3_user_keys_enabled: true,
     storage_ops_enabled: true,
-    allow_ui_user_bucket_migration: true,
     allow_login_access_keys: false,
     allow_login_endpoint_list: true,
     allow_login_custom_endpoint: false,
@@ -324,7 +342,7 @@ const billingEnabledGeneralSettingsRule: MockRule = {
     bucket_migration_enabled: true,
     bucket_compare_enabled: true,
     bucket_integrity_check_enabled: true,
-    allow_ui_user_bucket_migration: true,
+    manager_ceph_s3_user_keys_enabled: true,
     allow_login_access_keys: false,
     allow_login_endpoint_list: true,
     allow_login_custom_endpoint: false,

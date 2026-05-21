@@ -7,6 +7,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.db import StorageProvider
+from app.models.user import ManagerToolAccess
 
 
 ApplyState = Literal["present", "absent"]
@@ -66,6 +67,7 @@ class UiUserSpec(BaseModel):
     role: Optional[str] = None
     is_active: Optional[bool] = None
     is_root: Optional[bool] = None
+    manager_tool_access: Optional[ManagerToolAccess] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
 

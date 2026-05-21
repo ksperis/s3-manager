@@ -75,12 +75,14 @@ def _build_linked_s3_user_context(
     *,
     endpoint: StorageEndpoint,
     email: str = "manager-ceph-keys-s3u@example.com",
+    ceph_keys_access: bool = False,
 ):
     user = User(
         email=email,
         hashed_password="x",
         is_active=True,
         role=UserRole.UI_USER.value,
+        can_access_manager_ceph_s3_user_keys=ceph_keys_access,
     )
     s3_user = S3User(
         name="managed-s3-user",
@@ -563,11 +565,31 @@ def test_manager_context_s3_user_enables_ceph_keys_when_management_possible(db_s
         db_session,
         endpoint=endpoint,
         email="manager-ceph-keys-ok@example.com",
+        ceph_keys_access=True,
     )
 
     payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
     assert payload.access_mode == "s3_user"
     assert payload.manager_ceph_keys_enabled is True
+
+
+def test_manager_context_s3_user_disables_ceph_keys_without_user_tool_access(db_session, monkeypatch):
+    settings = AppSettings()
+    settings.general.manager_ceph_s3_user_keys_enabled = True
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
+
+    endpoint = _ceph_s3_user_management_endpoint(name="ceph-s3u-keys-no-user-access")
+    user, account = _build_linked_s3_user_context(
+        db_session,
+        endpoint=endpoint,
+        email="manager-ceph-keys-no-user-access@example.com",
+        ceph_keys_access=False,
+    )
+
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.access_mode == "s3_user"
+    assert payload.manager_ceph_keys_enabled is False
 
 
 @pytest.mark.parametrize(
@@ -595,6 +617,7 @@ def test_manager_context_s3_user_disables_ceph_keys_when_management_not_possible
         db_session,
         endpoint=endpoint,
         email=f"manager-ceph-keys-ko-{endpoint.name}@example.com",
+        ceph_keys_access=True,
     )
 
     payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)

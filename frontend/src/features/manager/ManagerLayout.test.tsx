@@ -80,13 +80,28 @@ function buildGeneralSettings(overrides?: Record<string, unknown>) {
     bucket_compare_enabled: true,
     bucket_integrity_check_enabled: false,
     manager_ceph_s3_user_keys_enabled: true,
-    allow_ui_user_bucket_migration: false,
     allow_login_access_keys: false,
     allow_login_endpoint_list: false,
     allow_login_custom_endpoint: false,
     allow_user_private_connections: false,
     ...overrides,
   };
+}
+
+function setStoredManagerUser(overrides?: Record<string, unknown>) {
+  localStorage.setItem(
+    "user",
+    JSON.stringify({
+      role: "ui_user",
+      manager_tool_access: {
+        bucket_compare: true,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        ceph_s3_user_keys: true,
+      },
+      ...overrides,
+    })
+  );
 }
 
 describe("ManagerLayout", () => {
@@ -98,6 +113,7 @@ describe("ManagerLayout", () => {
   });
 
   it("shows Ceph section above Tools when manager_ceph_keys_enabled is true", () => {
+    setStoredManagerUser();
     useS3AccountContextMock.mockReturnValue(buildContext({ managerCephKeysEnabled: true }));
     useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
@@ -117,6 +133,7 @@ describe("ManagerLayout", () => {
   });
 
   it("hides Ceph section when manager_ceph_keys_enabled is false", () => {
+    setStoredManagerUser();
     useS3AccountContextMock.mockReturnValue(buildContext({ managerCephKeysEnabled: false }));
     useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
@@ -131,6 +148,14 @@ describe("ManagerLayout", () => {
   });
 
   it("shows Integrity tool when bucket integrity flag is enabled", () => {
+    setStoredManagerUser({
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: true,
+        bucket_migration: false,
+        ceph_s3_user_keys: true,
+      },
+    });
     useS3AccountContextMock.mockReturnValue(buildContext());
     useGeneralSettingsMock.mockReturnValue({
       generalSettings: buildGeneralSettings({

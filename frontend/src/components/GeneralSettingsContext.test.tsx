@@ -33,7 +33,7 @@ describe("GeneralSettingsProvider fallbacks", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps bucket migration/compare flags disabled when no token is available", async () => {
+  it("uses local defaults when no token is available", async () => {
     const fetchGeneralSettings = vi.mocked(appSettingsApi.fetchGeneralSettings);
     fetchGeneralSettings.mockResolvedValueOnce({
       manager_enabled: true,
@@ -51,7 +51,6 @@ describe("GeneralSettingsProvider fallbacks", () => {
       bucket_compare_enabled: true,
       bucket_integrity_check_enabled: true,
       manager_ceph_s3_user_keys_enabled: true,
-      allow_ui_user_bucket_migration: true,
       allow_login_access_keys: true,
       allow_login_endpoint_list: true,
       allow_login_custom_endpoint: true,
@@ -69,11 +68,11 @@ describe("GeneralSettingsProvider fallbacks", () => {
     });
 
     expect(screen.getByTestId("migration").textContent).toBe("false");
-    expect(screen.getByTestId("compare").textContent).toBe("false");
+    expect(screen.getByTestId("compare").textContent).toBe("true");
     expect(fetchGeneralSettings).not.toHaveBeenCalled();
   });
 
-  it("falls back to disabled migration/compare flags when settings fetch fails", async () => {
+  it("falls back to local defaults when settings fetch fails", async () => {
     const fetchGeneralSettings = vi.mocked(appSettingsApi.fetchGeneralSettings);
     window.localStorage.setItem("token", "token-value");
     fetchGeneralSettings.mockRejectedValueOnce(new Error("network down"));
@@ -90,6 +89,6 @@ describe("GeneralSettingsProvider fallbacks", () => {
     });
 
     expect(screen.getByTestId("migration").textContent).toBe("false");
-    expect(screen.getByTestId("compare").textContent).toBe("false");
+    expect(screen.getByTestId("compare").textContent).toBe("true");
   });
 });

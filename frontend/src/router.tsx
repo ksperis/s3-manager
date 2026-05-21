@@ -348,8 +348,8 @@ function canAccessManagerMigration(
   user: SessionUser | null
 ): boolean {
   if (!generalSettings.bucket_migration_enabled || !user?.role) return false;
-  if (isAdminLikeRole(user.role)) return true;
-  return user.role === USER_ROLE && generalSettings.allow_ui_user_bucket_migration;
+  if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
+  return Boolean(user.manager_tool_access?.bucket_migration);
 }
 
 function canAccessManagerBucketCompare(
@@ -358,6 +358,7 @@ function canAccessManagerBucketCompare(
 ): boolean {
   if (!generalSettings.bucket_compare_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
+  if (!user.manager_tool_access?.bucket_compare) return false;
   return user.capabilities?.can_manage_buckets !== false;
 }
 
@@ -367,6 +368,7 @@ function canAccessManagerBucketIntegrity(
 ): boolean {
   if (!generalSettings.bucket_integrity_check_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
+  if (!user.manager_tool_access?.bucket_integrity_check) return false;
   return user.capabilities?.can_manage_buckets !== false;
 }
 
