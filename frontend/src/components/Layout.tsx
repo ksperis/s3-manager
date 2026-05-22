@@ -100,7 +100,7 @@ export default function Layout({
   const heroInlineAction = topbarContent || hasTopbarControls ? undefined : headerInlineAction;
   const resolvedInlineTopbarContent = topbarContent ?? (hasTopbarControls ? undefined : headerInlineAction);
   const mainOverflowClass = disableMainScroll ? "overflow-hidden" : "overflow-y-auto";
-  const mainClasses = `flex min-h-0 flex-1 flex-col ${mainOverflowClass} bg-surface px-3 pb-8 pt-3 sm:px-6 dark:bg-slate-950${
+  const mainClasses = `flex min-h-0 min-w-0 flex-1 flex-col ${mainOverflowClass} bg-surface px-3 pb-8 pt-3 sm:px-6 dark:bg-slate-950${
     mainClassName ? ` ${mainClassName}` : ""
   }`;
   const rootHeightClass = fullHeight ? "h-[100dvh]" : "h-screen";
@@ -280,7 +280,7 @@ export default function Layout({
               inlineAction={heroInlineAction}
             />
           )}
-          <div className="flex min-h-0 flex-1 flex-col space-y-4">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col space-y-4">
             <Outlet />
           </div>
         </main>

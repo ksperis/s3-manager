@@ -98,6 +98,15 @@ describe("Layout", () => {
     );
   });
 
+  it("lets route content shrink so wide inner lists can scroll horizontally", () => {
+    const { container } = renderLayout();
+    const main = container.querySelector("main");
+    const outletWrapper = screen.getByText("Dashboard content").parentElement;
+
+    expect(main).toHaveClass("min-w-0");
+    expect(outletWrapper).toHaveClass("min-w-0");
+  });
+
   it("supports pointer resize with compact and max-width bounds", () => {
     const { container } = renderLayout();
     const desktopSidebar = getDesktopSidebar(container);

@@ -957,6 +957,8 @@ export default function CephAdminUsersPage() {
         id: "uid",
         label: "UID",
         field: "uid",
+        headerClassName: "min-w-[12rem] max-w-[20rem]",
+        cellClassName: "min-w-[12rem] max-w-[20rem]",
         render: (user) => user.uid,
       },
     ];
@@ -967,6 +969,8 @@ export default function CephAdminUsersPage() {
         id: "tenant",
         label: "Tenant",
         field: "tenant",
+        headerClassName: "min-w-[10rem] max-w-[16rem]",
+        cellClassName: "min-w-[10rem] max-w-[16rem]",
         render: (user) => user.tenant ?? "-",
       });
     }
@@ -975,6 +979,8 @@ export default function CephAdminUsersPage() {
         id: "account_name",
         label: "Account",
         field: "account_name",
+        headerClassName: "min-w-[12rem] max-w-[18rem]",
+        cellClassName: "min-w-[12rem] max-w-[18rem]",
         render: (user) => user.account_name ?? user.account_id ?? detailPlaceholder,
       });
     }
@@ -983,6 +989,8 @@ export default function CephAdminUsersPage() {
         id: "full_name",
         label: "Full name",
         field: "full_name",
+        headerClassName: "min-w-[12rem] max-w-[18rem]",
+        cellClassName: "min-w-[12rem] max-w-[18rem]",
         render: (user) => user.full_name ?? detailPlaceholder,
       });
     }
@@ -991,6 +999,8 @@ export default function CephAdminUsersPage() {
         id: "email",
         label: "Email",
         field: "email",
+        headerClassName: "min-w-[14rem] max-w-[22rem]",
+        cellClassName: "min-w-[14rem] max-w-[22rem]",
         render: (user) => user.email ?? detailPlaceholder,
       });
     }
@@ -999,6 +1009,8 @@ export default function CephAdminUsersPage() {
         id: "suspended",
         label: "Suspended",
         field: "suspended",
+        headerClassName: "min-w-[8rem]",
+        cellClassName: "min-w-[8rem]",
         render: (user) => renderSuspended(user.suspended),
       });
     }
@@ -1008,6 +1020,8 @@ export default function CephAdminUsersPage() {
         label: "Max buckets",
         field: "max_buckets",
         align: "right",
+        headerClassName: "min-w-[8rem]",
+        cellClassName: "min-w-[8rem]",
         render: (user) => (user.max_buckets == null ? detailPlaceholder : formatNumber(user.max_buckets)),
       });
     }
@@ -1017,6 +1031,8 @@ export default function CephAdminUsersPage() {
         label: "Quota (size)",
         field: "quota_max_size_bytes",
         align: "right",
+        headerClassName: "min-w-[9rem]",
+        cellClassName: "min-w-[9rem]",
         render: (user) => (user.quota_max_size_bytes == null ? detailPlaceholder : formatBytes(user.quota_max_size_bytes)),
       });
     }
@@ -1026,6 +1042,8 @@ export default function CephAdminUsersPage() {
         label: "Quota (objects)",
         field: "quota_max_objects",
         align: "right",
+        headerClassName: "min-w-[10rem]",
+        cellClassName: "min-w-[10rem]",
         render: (user) => (user.quota_max_objects == null ? detailPlaceholder : formatNumber(user.quota_max_objects)),
       });
     }
@@ -1525,7 +1543,7 @@ export default function CephAdminUsersPage() {
           {renderAdvancedSearchProgress(advancedProgress)}
 
           <div className={showAdvancedFilter ? "overflow-x-hidden" : "overflow-x-auto"}>
-            <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <table className="manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
               <thead className="bg-slate-50 dark:bg-slate-900/50">
                 <tr>
                   {userTableColumns.map((col) =>
@@ -1568,7 +1586,7 @@ export default function CephAdminUsersPage() {
                           ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
                           : "ui-body text-slate-600 dark:text-slate-300";
                       return (
-                        <td key={`${rowKey(user)}:${col.id}`} className={`${cellBase} ${textClass}`}>
+                        <td key={`${rowKey(user)}:${col.id}`} className={`${cellBase} ${textClass} ${col.cellClassName ?? ""}`}>
                           {col.render(user)}
                         </td>
                       );

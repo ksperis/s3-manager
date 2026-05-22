@@ -215,6 +215,7 @@ describe("CephAdminAccountsPage", () => {
 
     expect(await screen.findByText("No accounts.")).toBeInTheDocument();
     expect(getTableOverflowContainer()).toHaveClass("overflow-x-auto");
+    expect(screen.getByRole("table")).toHaveClass("!table-auto", "!w-max", "min-w-full");
 
     fireEvent.click(screen.getByRole("button", { name: /advanced filter/i }));
 

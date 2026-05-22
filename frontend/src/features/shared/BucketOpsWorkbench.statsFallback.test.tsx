@@ -253,6 +253,7 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
 
     expect(await screen.findByText("Loading buckets...")).toBeInTheDocument();
     expect(getTableOverflowContainer()).toHaveClass("overflow-x-auto");
+    expect(screen.getByRole("table")).toHaveClass("!table-auto", "!w-max", "min-w-full");
 
     fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
 

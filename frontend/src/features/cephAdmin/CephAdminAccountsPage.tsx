@@ -850,6 +850,8 @@ export default function CephAdminAccountsPage() {
     label: string;
     field: SortField | null;
     align?: "left" | "right";
+    headerClassName?: string;
+    cellClassName?: string;
     render: (account: CephAdminRgwAccount) => ReactNode;
   };
 
@@ -860,6 +862,8 @@ export default function CephAdminAccountsPage() {
         id: "account_id",
         label: "Account ID",
         field: "account_id",
+        headerClassName: "min-w-[12rem] max-w-[20rem]",
+        cellClassName: "min-w-[12rem] max-w-[20rem]",
         render: (account) => account.account_id,
       },
     ];
@@ -869,6 +873,8 @@ export default function CephAdminAccountsPage() {
         id: "account_name",
         label: "Name",
         field: "account_name",
+        headerClassName: "min-w-[12rem] max-w-[18rem]",
+        cellClassName: "min-w-[12rem] max-w-[18rem]",
         render: (account) => account.account_name ?? detailPlaceholder,
       });
     }
@@ -877,6 +883,8 @@ export default function CephAdminAccountsPage() {
         id: "email",
         label: "Email",
         field: "email",
+        headerClassName: "min-w-[14rem] max-w-[22rem]",
+        cellClassName: "min-w-[14rem] max-w-[22rem]",
         render: (account) => account.email ?? detailPlaceholder,
       });
     }
@@ -886,6 +894,8 @@ export default function CephAdminAccountsPage() {
         label: "Max users",
         field: "max_users",
         align: "right",
+        headerClassName: "min-w-[8rem]",
+        cellClassName: "min-w-[8rem]",
         render: (account) => (account.max_users == null ? detailPlaceholder : formatNumber(account.max_users)),
       });
     }
@@ -895,6 +905,8 @@ export default function CephAdminAccountsPage() {
         label: "Max buckets",
         field: "max_buckets",
         align: "right",
+        headerClassName: "min-w-[8rem]",
+        cellClassName: "min-w-[8rem]",
         render: (account) => (account.max_buckets == null ? detailPlaceholder : formatNumber(account.max_buckets)),
       });
     }
@@ -904,6 +916,8 @@ export default function CephAdminAccountsPage() {
         label: "Quota (size)",
         field: "quota_max_size_bytes",
         align: "right",
+        headerClassName: "min-w-[9rem]",
+        cellClassName: "min-w-[9rem]",
         render: (account) =>
           account.quota_max_size_bytes == null ? detailPlaceholder : formatBytes(account.quota_max_size_bytes),
       });
@@ -914,6 +928,8 @@ export default function CephAdminAccountsPage() {
         label: "Quota (objects)",
         field: "quota_max_objects",
         align: "right",
+        headerClassName: "min-w-[10rem]",
+        cellClassName: "min-w-[10rem]",
         render: (account) =>
           account.quota_max_objects == null ? detailPlaceholder : formatNumber(account.quota_max_objects),
       });
@@ -924,6 +940,8 @@ export default function CephAdminAccountsPage() {
         label: "Buckets",
         field: "bucket_count",
         align: "right",
+        headerClassName: "min-w-[8rem]",
+        cellClassName: "min-w-[8rem]",
         render: (account) => (account.bucket_count == null ? detailPlaceholder : formatNumber(account.bucket_count)),
       });
     }
@@ -933,6 +951,8 @@ export default function CephAdminAccountsPage() {
         label: "Users",
         field: "user_count",
         align: "right",
+        headerClassName: "min-w-[8rem]",
+        cellClassName: "min-w-[8rem]",
         render: (account) => (account.user_count == null ? detailPlaceholder : formatNumber(account.user_count)),
       });
     }
@@ -1393,7 +1413,7 @@ export default function CephAdminAccountsPage() {
           {renderAdvancedSearchProgress(advancedProgress)}
 
           <div className={showAdvancedFilter ? "overflow-x-hidden" : "overflow-x-auto"}>
-            <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <table className="manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
               <thead className="bg-slate-50 dark:bg-slate-900/50">
                 <tr>
                   {accountTableColumns.map((col) => (
@@ -1404,6 +1424,7 @@ export default function CephAdminAccountsPage() {
                       activeField={sort.field}
                       direction={sort.direction}
                       align={col.align ?? "left"}
+                      className={col.headerClassName ?? ""}
                       onSort={(field) => toggleSort(field as SortField)}
                     />
                   ))}
@@ -1425,7 +1446,7 @@ export default function CephAdminAccountsPage() {
                           ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
                           : "ui-body text-slate-600 dark:text-slate-300";
                       return (
-                        <td key={`${rowKey(account)}:${col.id}`} className={`${cellBase} ${textClass}`}>
+                        <td key={`${rowKey(account)}:${col.id}`} className={`${cellBase} ${textClass} ${col.cellClassName ?? ""}`}>
                           {col.render(account)}
                         </td>
                       );
