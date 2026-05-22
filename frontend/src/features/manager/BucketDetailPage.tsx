@@ -515,6 +515,12 @@ export default function BucketDetailPage({
     }
     return selectedS3Account?.storage_endpoint_capabilities?.sse === true;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
+  const snsFeatureEnabled = useMemo(() => {
+    if (isCephAdmin) {
+      return selectedEndpoint?.capabilities?.sns === true;
+    }
+    return selectedS3Account?.storage_endpoint_capabilities?.sns !== false;
+  }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
   const replicationFeatureEnabled = useMemo(() => {
     if (!isCephEndpoint) return false;
     if (isCephAdmin) {
@@ -1813,6 +1819,16 @@ export default function BucketDetailPage({
     const accessLoggingTone: PropertySummary["tone"] =
       accessLoggingLoading || accessLoggingError ? "unknown" : accessLoggingConfigured ? "active" : "inactive";
 
+    const notificationsState = notificationsLoading
+      ? "Loading..."
+      : notificationsError
+        ? "Unavailable"
+        : notificationsConfigured
+          ? "Configured"
+          : "Not set";
+    const notificationsTone: PropertySummary["tone"] =
+      notificationsLoading || notificationsError ? "unknown" : notificationsConfigured ? "active" : "inactive";
+
     const replicationState = !isCephEndpoint || !replicationFeatureEnabled
       ? "Unavailable"
       : replicationLoading
@@ -1877,7 +1893,10 @@ export default function BucketDetailPage({
       summary.push({ label: "Server-side encryption", state: encryptionState, tone: encryptionTone });
     }
     summary.push({ label: "Access logging", state: accessLoggingState, tone: accessLoggingTone });
-    if (isCephEndpoint) {
+    if (snsFeatureEnabled) {
+      summary.push({ label: "Notifications", state: notificationsState, tone: notificationsTone });
+    }
+    if (replicationFeatureEnabled) {
       summary.push({ label: "Replication", state: replicationState, tone: replicationTone });
     }
 
@@ -1896,6 +1915,9 @@ export default function BucketDetailPage({
     corsLoading,
     lifecycleError,
     lifecycleLoading,
+    notificationsConfigured,
+    notificationsError,
+    notificationsLoading,
     objectLockLoadError,
     objectLockLoading,
     objectLockPersistentlyEnabled,
@@ -1918,6 +1940,7 @@ export default function BucketDetailPage({
     replicationError,
     replicationFeatureEnabled,
     replicationLoading,
+    snsFeatureEnabled,
     staticWebsiteEnabled,
     websiteConfigured,
     websiteError,

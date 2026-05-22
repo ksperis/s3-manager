@@ -336,6 +336,7 @@ BucketFeatureKey = Literal[
     "bucket_policy",
     "cors",
     "access_logging",
+    "notifications",
     "server_side_encryption",
 ]
 BucketFeatureState = Literal[

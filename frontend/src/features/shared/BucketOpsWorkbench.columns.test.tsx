@@ -32,6 +32,7 @@ vi.mock("../../api/cephAdmin", () => ({
   getCephAdminBucketEncryption: mocks.noopAsync,
   getCephAdminBucketLifecycle: mocks.noopAsync,
   getCephAdminBucketLogging: mocks.noopAsync,
+  getCephAdminBucketNotifications: mocks.noopAsync,
   getCephAdminBucketPolicy: mocks.noopAsync,
   getCephAdminBucketProperties: mocks.noopAsync,
   getCephAdminBucketPublicAccessBlock: mocks.noopAsync,
@@ -60,6 +61,7 @@ vi.mock("../../api/storageOps", () => ({
   getStorageOpsBucketEncryption: mocks.noopAsync,
   getStorageOpsBucketLifecycle: mocks.noopAsync,
   getStorageOpsBucketLogging: mocks.noopAsync,
+  getStorageOpsBucketNotifications: mocks.noopAsync,
   getStorageOpsBucketPolicy: mocks.noopAsync,
   getStorageOpsBucketProperties: mocks.noopAsync,
   getStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
@@ -440,6 +442,38 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         with_stats: true,
       })
     );
+  });
+
+  it("exposes the Notifications column in storage ops and requests notifications enrichment", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [
+        {
+          ...baseBucket,
+          features: {
+            notifications: { state: "Configured", tone: "active" },
+          },
+        },
+      ],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    const notificationsColumn = await screen.findByLabelText("Notifications");
+    expect(notificationsColumn).toBeInTheDocument();
+
+    fireEvent.click(notificationsColumn);
+
+    await waitFor(() =>
+      expect(mocks.listStorageOpsBuckets.mock.calls.at(-1)?.[1]).toEqual(
+        expect.objectContaining({
+          include: expect.arrayContaining(["notifications"]),
+        })
+      )
+    );
+    expect(await screen.findByText("Configured")).toBeInTheDocument();
   });
 
   it("groups bucket and owner quota picker options behind detail toggles", async () => {

@@ -58,6 +58,10 @@ from app.routers.ceph_admin.listing_common import (
     interpolate_progress_percent as _common_interpolate_progress_percent,
 )
 from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.services.bucket_notification_state import (
+    account_sns_feature_enabled,
+    is_bucket_notification_configuration_configured,
+)
 from app.services.bucket_listing_shared import (
     _filter_requires_stats as _shared_filter_requires_stats,
     _format_sse_event as _shared_format_sse_event,
@@ -1433,6 +1437,8 @@ def _enrich_buckets(
     wants_policy = "bucket_policy" in requested
     wants_logging = "access_logging" in requested
     wants_encryption = "server_side_encryption" in requested
+    wants_notifications = "notifications" in requested
+    sns_feature_enabled = account_sns_feature_enabled(account)
     lifecycle_detail_keys = requested & _COLUMN_DETAIL_LIFECYCLE_KEYS
     wants_lifecycle_details = bool(lifecycle_detail_keys)
     props_feature_keys = {"versioning", "object_lock", "block_public_access", "lifecycle_rules", "cors"}
@@ -1629,6 +1635,19 @@ def _enrich_buckets(
                 feature_map["access_logging"] = _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
             except RuntimeError:
                 feature_map["access_logging"] = _feature_status_unavailable()
+
+        if wants_notifications and "notifications" in requested:
+            if not sns_feature_enabled:
+                feature_map["notifications"] = _feature_status_unavailable()
+            else:
+                try:
+                    notifications = service.get_bucket_notifications(bucket.name, account)
+                    configured = is_bucket_notification_configuration_configured(notifications.configuration)
+                    feature_map["notifications"] = (
+                        _feature_status_active("Configured") if configured else _feature_status_inactive("Not set")
+                    )
+                except RuntimeError:
+                    feature_map["notifications"] = _feature_status_unavailable()
 
         if wants_encryption and "server_side_encryption" in requested:
             try:
@@ -1932,6 +1951,7 @@ def _compute_bucket_listing(
         "bucket_policy",
         "cors",
         "access_logging",
+        "notifications",
         "server_side_encryption",
     }
     requested_detail_fields = include_set & _COLUMN_DETAIL_LIFECYCLE_KEYS

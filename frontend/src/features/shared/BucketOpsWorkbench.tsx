@@ -38,6 +38,7 @@ import {
   getCephAdminBucketEncryption,
   getCephAdminBucketLifecycle,
   getCephAdminBucketLogging,
+  getCephAdminBucketNotifications,
   getCephAdminBucketPolicy,
   getCephAdminBucketProperties,
   getCephAdminBucketPublicAccessBlock,
@@ -65,6 +66,7 @@ import {
   getStorageOpsBucketEncryption,
   getStorageOpsBucketLifecycle,
   getStorageOpsBucketLogging,
+  getStorageOpsBucketNotifications,
   getStorageOpsBucketPolicy,
   getStorageOpsBucketProperties,
   getStorageOpsBucketPublicAccessBlock,
@@ -87,6 +89,7 @@ import { parseCorsRules, parseLifecycleRules, parsePolicyStatements, parseRuleId
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
+import { normalizeNotificationConfiguration } from "../manager/bucketDetail";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
 import type { BucketIntegrityUiTarget } from "./BucketIntegrityCheckModal";
@@ -935,6 +938,7 @@ type ColumnId =
   | "bucket_policy"
   | "cors"
   | "access_logging"
+  | "notifications"
   | "server_side_encryption"
   | "lifecycle_expiration_days"
   | "lifecycle_noncurrent_expiration_days"
@@ -952,6 +956,7 @@ type FeatureKey =
   | "bucket_policy"
   | "cors"
   | "access_logging"
+  | "notifications"
   | "server_side_encryption";
 type FeatureFilterState = "any" | "enabled" | "disabled" | "suspended" | "disabled_or_suspended";
 type TextMatchMode = "contains" | "exact";
@@ -1105,6 +1110,7 @@ const defaultAdvancedFilter: AdvancedFilterState = {
     bucket_policy: "any",
     cors: "any",
     access_logging: "any",
+    notifications: "any",
     server_side_encryption: "any",
   },
   featureDetails: { ...defaultFeatureDetailFilters },
@@ -1119,6 +1125,7 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   bucket_policy: "Bucket policy",
   cors: "CORS",
   access_logging: "Access logging",
+  notifications: "Notifications",
   server_side_encryption: "Server-side encryption",
 };
 
@@ -1131,6 +1138,7 @@ const FEATURE_STATE_OPTIONS: Array<{ id: FeatureKey; label: string }> = [
   { id: "bucket_policy", label: "Bucket policy" },
   { id: "cors", label: "CORS" },
   { id: "access_logging", label: "Access logging" },
+  { id: "notifications", label: "Notifications" },
   { id: "server_side_encryption", label: "Server-side encryption" },
 ];
 type FeatureDetailColumnOption = {
@@ -1617,6 +1625,7 @@ const loadVisibleColumns = (
       "bucket_policy",
       "cors",
       "access_logging",
+      "notifications",
       "server_side_encryption",
       "lifecycle_expiration_days",
       "lifecycle_noncurrent_expiration_days",
@@ -2122,6 +2131,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             capabilities: {
               metrics: true,
               static_website: true,
+              sns: true,
               sse: true,
             },
           }
@@ -2136,6 +2146,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     cephBucketStatsEndpointId !== selectedEndpointId ||
     cephBucketStatsAvailable !== false;
   const staticWebsiteFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.static_website === true;
+  const snsFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.sns === true;
   const sseFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.sse !== false;
 
   const listBuckets = isStorageOps ? listStorageOpsBuckets : listCephAdminBuckets;
@@ -2162,6 +2173,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const getBucketLogging = isStorageOps ? getStorageOpsBucketLogging : getCephAdminBucketLogging;
   const putBucketLogging = isStorageOps ? putStorageOpsBucketLogging : putCephAdminBucketLogging;
   const deleteBucketLogging = isStorageOps ? deleteStorageOpsBucketLogging : deleteCephAdminBucketLogging;
+  const getBucketNotifications = isStorageOps ? getStorageOpsBucketNotifications : getCephAdminBucketNotifications;
   const getBucketWebsite = isStorageOps ? getStorageOpsBucketWebsite : getCephAdminBucketWebsite;
   const getBucketEncryption = isStorageOps ? getStorageOpsBucketEncryption : getCephAdminBucketEncryption;
   const setBucketVersioning = isStorageOps ? setStorageOpsBucketVersioning : setCephAdminBucketVersioning;
@@ -2193,9 +2205,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       bucket_policy: true,
       cors: true,
       access_logging: true,
+      notifications: snsFeatureEnabled,
       server_side_encryption: sseFeatureEnabled,
     }),
-    [staticWebsiteFeatureEnabled, sseFeatureEnabled]
+    [snsFeatureEnabled, staticWebsiteFeatureEnabled, sseFeatureEnabled]
   );
   const featureStateOptions = useMemo(
     () => FEATURE_STATE_OPTIONS.map((option) => ({ ...option, supported: featureSupport[option.id] !== false })),
@@ -2571,12 +2584,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setVisibleColumns((prev) => {
       const next = prev.filter((column) => {
         if (column === "static_website") return staticWebsiteFeatureEnabled;
+        if (column === "notifications") return snsFeatureEnabled;
         if (column === "server_side_encryption") return sseFeatureEnabled;
         return true;
       });
       return next.length === prev.length ? prev : next;
     });
-  }, [staticWebsiteFeatureEnabled, sseFeatureEnabled]);
+  }, [snsFeatureEnabled, staticWebsiteFeatureEnabled, sseFeatureEnabled]);
 
   useEffect(() => {
     if (!showAdvancedFilter) return;
@@ -7054,6 +7068,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       const lines = [`Enabled: ${enabled ? "Yes" : "No"}`];
       if (targetBucket) lines.push(`Target bucket: ${targetBucket}`);
       if (targetPrefix) lines.push(`Target prefix: ${targetPrefix}`);
+      return lines;
+    }
+
+    if (featureKey === "notifications") {
+      const notifications = await getBucketNotifications(selectedEndpointId, bucket.name);
+      const config = normalizeNotificationConfiguration(notifications.configuration ?? {});
+      const configured = Object.keys(config).length > 0;
+      const topicConfigs = config["TopicConfigurations"];
+      const queueConfigs = config["QueueConfigurations"];
+      const lambdaConfigs = config["LambdaFunctionConfigurations"];
+      const eventBridgeConfig = config["EventBridgeConfiguration"];
+      const lines = [`Configured: ${configured ? "Yes" : "No"}`];
+      if (Array.isArray(topicConfigs)) lines.push(`Topic configurations: ${topicConfigs.length}`);
+      if (Array.isArray(queueConfigs)) lines.push(`Queue configurations: ${queueConfigs.length}`);
+      if (Array.isArray(lambdaConfigs)) lines.push(`Lambda configurations: ${lambdaConfigs.length}`);
+      if (eventBridgeConfig && typeof eventBridgeConfig === "object") lines.push("EventBridge: Configured");
       return lines;
     }
 

@@ -25,6 +25,7 @@ Use **Advanced filter** in **Ceph Admin** listings when you need precise selecti
    - Tag criteria for buckets (S3 tags)
    - Storage and quota ranges
    - Quota usage percentage ranges for bucket, account, or user quotas when metrics are available
+   - Feature states such as versioning, lifecycle rules, access logging, and notifications
 4. Choose match mode (`Contains` or `Exact`) per field when relevant.
 5. Click **Apply filters**.
 6. Review active filters and resulting bucket list; clear or refine filters as needed.
@@ -37,6 +38,8 @@ The current Ceph Admin listing is narrowed down to the entities matching your ad
 
 !!! note
     Some advanced filters require additional lookups or bucket metrics aggregation and can be slower on large inventories.
+    The **Notifications** feature-state filter is available for bucket listings
+    when the selected endpoint exposes SNS support.
 
 ## Related pages
 

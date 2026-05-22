@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db import S3Account
-from app.models.bucket import BucketProperties, BucketQuotaUpdate
+from app.db import S3Account, StorageEndpoint
+from app.models.bucket import BucketNotificationConfiguration, BucketProperties, BucketQuotaUpdate
 from app.services import s3_client
 from app.services.buckets_service import BucketsService
 
@@ -177,6 +177,75 @@ def test_list_buckets_multiple_prop_features_use_bundle_properties(monkeypatch):
     assert buckets[0].features is not None
     assert buckets[0].features["versioning"].state == "Enabled"
     assert buckets[0].features["cors"].state == "Not set"
+
+
+def test_list_buckets_notifications_feature_statuses(monkeypatch):
+    service = BucketsService()
+    account = _build_account()
+    monkeypatch.setattr(
+        s3_client,
+        "list_buckets",
+        lambda **kwargs: [{"name": "bucket-configured"}, {"name": "bucket-empty"}, {"name": "bucket-failing"}],
+    )
+    monkeypatch.setattr(service, "_admin_bucket_list", lambda *args, **kwargs: [])
+
+    def fake_get_notifications(bucket_name, *_args, **_kwargs):
+        if bucket_name == "bucket-configured":
+            return BucketNotificationConfiguration(
+                configuration={
+                    "TopicConfigurations": [
+                        {
+                            "Id": "topic-1",
+                            "TopicArn": "arn:aws:sns:us-east-1:123456789012:bucket-events",
+                            "Events": ["s3:ObjectCreated:*"],
+                        }
+                    ]
+                }
+            )
+        if bucket_name == "bucket-empty":
+            return BucketNotificationConfiguration(configuration={"TopicConfigurations": [], "QueueConfigurations": [{}]})
+        raise RuntimeError("GetBucketNotificationConfiguration failed")
+
+    monkeypatch.setattr(service, "get_bucket_notifications", fake_get_notifications)
+
+    buckets = service.list_buckets(account, include={"notifications"}, with_stats=False)
+    features = {bucket.name: bucket.features["notifications"] for bucket in buckets if bucket.features}
+
+    assert features["bucket-configured"].state == "Configured"
+    assert features["bucket-configured"].tone == "active"
+    assert features["bucket-empty"].state == "Not set"
+    assert features["bucket-empty"].tone == "inactive"
+    assert features["bucket-failing"].state == "Unavailable"
+    assert features["bucket-failing"].tone == "unknown"
+
+
+def test_list_buckets_notifications_unavailable_when_sns_disabled(monkeypatch):
+    service = BucketsService()
+    account = _build_account()
+    account.storage_endpoint = StorageEndpoint(
+        name="Ceph no SNS",
+        endpoint_url="http://127.0.0.1:9000",
+        provider="ceph",
+        region=None,
+        features_config="features:\n  sns:\n    enabled: false\n",
+    )
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: [{"name": "bucket-a"}])
+    monkeypatch.setattr(service, "_admin_bucket_list", lambda *args, **kwargs: [])
+
+    calls = {"notifications": 0}
+
+    def fake_get_notifications(*_args, **_kwargs):
+        calls["notifications"] += 1
+        raise AssertionError("notifications must not be fetched when SNS is disabled")
+
+    monkeypatch.setattr(service, "get_bucket_notifications", fake_get_notifications)
+
+    buckets = service.list_buckets(account, include={"notifications"}, with_stats=False)
+
+    assert calls["notifications"] == 0
+    assert buckets[0].features is not None
+    assert buckets[0].features["notifications"].state == "Unavailable"
+    assert buckets[0].features["notifications"].tone == "unknown"
 
 
 def test_set_bucket_quota_calls_single_scope_without_user_lookup(monkeypatch):

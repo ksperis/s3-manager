@@ -125,6 +125,27 @@ describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
     expect(hasAdvancedFilters(advanced, false, false)).toBe(true);
   });
 
+  it("serializes notifications feature state only when the feature is supported", () => {
+    const advanced: AdvancedFilterState = {
+      ...baseAdvancedFilter(),
+      features: {
+        ...baseAdvancedFilter().features,
+        notifications: "enabled",
+      },
+    };
+
+    const rawPayload = buildAdvancedFilterPayload("", "contains", advanced, null, false, true, {
+      notifications: true,
+    });
+    expect(rawPayload).toBeTruthy();
+    const payload = JSON.parse(rawPayload ?? "{}") as { rules?: Array<Record<string, unknown>> };
+
+    expect(payload.rules).toEqual(expect.arrayContaining([{ feature: "notifications", state: "enabled" }]));
+    expect(hasAdvancedFilters(advanced, false, true, { notifications: true })).toBe(true);
+    expect(buildAdvancedFilterPayload("", "contains", advanced, null, false, true, { notifications: false })).toBeUndefined();
+    expect(hasAdvancedFilters(advanced, false, true, { notifications: false })).toBe(false);
+  });
+
   it("sanitizes persisted owner quota fields", () => {
     const sanitized = sanitizeAdvancedFilter({
       minQuotaUsageSizePercent: "71",

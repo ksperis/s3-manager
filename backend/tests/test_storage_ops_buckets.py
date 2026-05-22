@@ -10,7 +10,7 @@ import time
 import pytest
 from fastapi import HTTPException
 
-from app.db import S3Connection, User, UserRole
+from app.db import S3Account, S3Connection, User, UserRole
 from app.models.bucket import Bucket
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketSummary
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
@@ -1016,6 +1016,77 @@ def test_storage_ops_applies_cheap_field_prefilter_before_feature_enrichment(cli
         app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
+
+
+def test_storage_ops_notifications_feature_filter_uses_enrichment(monkeypatch):
+    captured: dict[str, object] = {}
+    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "notifications", "state": "enabled"},
+            ],
+        }
+    )
+    account = S3Account(
+        name="storage-ops-notifications",
+        rgw_account_id="RGW00000000000000001",
+        rgw_access_key="AKIA_TEST",
+        rgw_secret_key="SECRET_TEST",
+    )
+    context = storage_ops_router._StorageOpsResolvedContext(
+        ref=storage_ops_router._StorageOpsContextRef(
+            context_id="1",
+            context_name="Account A",
+            context_kind="account",
+            endpoint_name="Primary",
+        ),
+        account=account,
+    )
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            return [Bucket(name="alpha"), Bucket(name="beta")]
+
+    def fake_enrich_buckets(buckets, requested_features, include_tags, service, account):  # noqa: ANN001, ARG001
+        captured["requested_features"] = requested_features
+        captured["include_tags"] = include_tags
+        enriched: list[CephAdminBucketSummary] = []
+        for bucket in buckets:
+            tone = "active" if bucket.name == "alpha" else "inactive"
+            state = "Configured" if bucket.name == "alpha" else "Not set"
+            enriched.append(
+                CephAdminBucketSummary(
+                    name=bucket.name,
+                    tenant=bucket.tenant,
+                    owner=bucket.owner,
+                    owner_name=bucket.owner_name,
+                    features={
+                        "notifications": {"state": state, "tone": tone},
+                    },
+                )
+            )
+        return enriched
+
+    monkeypatch.setattr(storage_ops_router, "_enrich_buckets", fake_enrich_buckets)
+    monkeypatch.setattr(storage_ops_router, "get_cached_bucket_listing_for_account", lambda **kwargs: kwargs["builder"]())
+
+    result = storage_ops_router._list_context_buckets(
+        context=context,
+        service=FakeBucketsService(),
+        needs_stats=False,
+        requested_features={"notifications"},
+        include_tags=False,
+        parsed_filter=parsed_filter,
+        normalized_search="",
+        filter_requires_owner_name=False,
+        filter_requires_owner_quota=False,
+        owner_usage_required=False,
+    )
+
+    assert captured["requested_features"] == {"notifications"}
+    assert captured["include_tags"] is False
+    assert [bucket.bucket_name for bucket in result] == ["alpha"]
 
 
 def test_storage_ops_owner_quota_and_usage_use_context_principal_and_resolve_connection_once(client, monkeypatch):

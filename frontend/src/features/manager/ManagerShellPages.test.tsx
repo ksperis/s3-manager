@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -80,6 +80,7 @@ describe("manager shell pages", () => {
       error: null,
     });
     listBucketsMock.mockResolvedValue([]);
+    window.localStorage.clear();
   });
 
   it("renders the manager dashboard without a page-level context strip", () => {
@@ -256,5 +257,59 @@ describe("manager shell pages", () => {
 
     expect(screen.getByText("Select an account before managing buckets")).toBeInTheDocument();
     expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
+  });
+
+  it("offers the Notifications bucket column when SNS is enabled and requests notifications enrichment", async () => {
+    listBucketsMock.mockResolvedValue([
+      {
+        name: "bucket-a",
+        used_bytes: 1024,
+        object_count: 1,
+        features: {
+          notifications: { state: "Configured", tone: "active" },
+        },
+      },
+    ]);
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          endpoint_provider: "ceph",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true, sns: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    const notificationsColumn = await screen.findByLabelText("Notifications");
+
+    fireEvent.click(notificationsColumn);
+
+    await waitFor(() =>
+      expect(listBucketsMock.mock.calls.at(-1)?.[1]).toEqual(
+        expect.objectContaining({
+          include: expect.arrayContaining(["notifications"]),
+        })
+      )
+    );
   });
 });

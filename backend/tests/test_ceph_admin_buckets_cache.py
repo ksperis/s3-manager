@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from app.models.bucket import (
     BucketLifecycleConfig,
     BucketLoggingConfiguration,
+    BucketNotificationConfiguration,
     BucketObjectLock,
     BucketProperties,
     BucketPublicAccessBlock,
@@ -716,6 +717,73 @@ def test_ceph_admin_bucket_listing_any_mixed_filter_prefers_bulk_field_rules(mon
     assert captured["requested"] == {"versioning"}
     assert captured["include_tags"] is False
     assert [item.name for item in response.items] == ["bucket-a", "bucket-b"]
+
+
+def test_ceph_admin_bucket_listing_notifications_include_and_filter(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-configured", "owner": "owner-a"},
+        {"name": "bucket-empty", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=166, payload=payload)
+
+    def fake_get_notifications(self, bucket_name, *_args, **_kwargs):  # noqa: ANN001, ARG001
+        if bucket_name == "bucket-configured":
+            return BucketNotificationConfiguration(
+                configuration={
+                    "TopicConfigurations": [
+                        {
+                            "Id": "topic-1",
+                            "TopicArn": "arn:aws:sns:us-east-1:123456789012:bucket-events",
+                            "Events": ["s3:ObjectCreated:*"],
+                        }
+                    ]
+                }
+            )
+        return BucketNotificationConfiguration(configuration={"TopicConfigurations": [], "QueueConfigurations": [{}]})
+
+    monkeypatch.setattr(BucketsService, "get_bucket_notifications", fake_get_notifications)
+
+    included = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=["notifications"],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert included.items[0].features is not None
+    assert included.items[0].features["notifications"].state == "Configured"
+    assert included.items[0].features["notifications"].tone == "active"
+    assert included.items[1].features is not None
+    assert included.items[1].features["notifications"].state == "Not set"
+    assert included.items[1].features["notifications"].tone == "inactive"
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "notifications", "state": "enabled"},
+            ],
+        }
+    )
+
+    filtered = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in filtered.items] == ["bucket-configured"]
 
 
 def test_ceph_admin_bucket_listing_tag_filter_matches_s3_tags(monkeypatch: pytest.MonkeyPatch):

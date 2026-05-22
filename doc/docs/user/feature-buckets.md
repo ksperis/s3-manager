@@ -17,6 +17,7 @@ Use this guide when creating, updating, or inspecting bucket configuration.
    - Versioning
    - Object Lock
    - Lifecycle
+   - Notifications
    - CORS
    - Policy and ACL options
    - Public access controls
@@ -30,6 +31,9 @@ Bucket configuration is applied as native backend settings and visible in detail
 
 !!! note
     Exposed controls depend on backend capabilities. Unsupported features are hidden or disabled.
+    When the endpoint supports SNS, bucket lists can add a **Notifications**
+    column and bucket detail pages show whether notification configuration is
+    configured or not set.
 
 ## Related pages
 

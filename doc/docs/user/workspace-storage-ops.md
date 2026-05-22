@@ -24,6 +24,8 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
    - bulk preview/apply,
    - export.
    - quota and usage columns are available as single-line atomic columns so on-screen review and CSV export stay aligned.
+   - the **Notifications** column can be added to inspect bucket notification
+     configuration across supported contexts.
 5. In **Advanced filter**, use the compact **Context** and **Endpoint**
    selectors to pick authorized scopes directly. Their quick filters match
    names, types, and standard tags, and **Select filtered** / **Deselect
@@ -40,6 +42,8 @@ You can search and operate on large bucket sets across authorized accounts, S3 u
 
 !!! note
     UI tags are local browser metadata (localStorage), namespaced separately from Ceph Admin.
+    Storage Ops exposes the Notifications feature-state filter globally; each
+    bucket status still follows the SNS capability of its underlying context.
 
 ## Related pages
 

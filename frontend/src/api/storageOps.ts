@@ -12,6 +12,7 @@ import {
   getBucketEncryption,
   getBucketLifecycle,
   getBucketLogging,
+  getBucketNotifications,
   getBucketPolicy,
   getBucketProperties,
   getBucketPublicAccessBlock,
@@ -30,6 +31,7 @@ import type {
   BucketEncryptionConfiguration,
   BucketLifecycleConfig,
   BucketLoggingConfiguration,
+  BucketNotificationConfiguration,
   BucketObjectLockConfiguration,
   BucketObjectLockUpdatePayload,
   BucketPolicy,
@@ -265,6 +267,14 @@ export async function putStorageOpsBucketLogging(
 export async function deleteStorageOpsBucketLogging(_scopeId: number, bucketRef: string): Promise<void> {
   const { contextId, bucketName } = resolveBucketTarget(bucketRef);
   await deleteBucketLogging(contextId, bucketName);
+}
+
+export async function getStorageOpsBucketNotifications(
+  _scopeId: number,
+  bucketRef: string
+): Promise<BucketNotificationConfiguration> {
+  const { contextId, bucketName } = resolveBucketTarget(bucketRef);
+  return getBucketNotifications(contextId, bucketName);
 }
 
 export async function getStorageOpsBucketWebsite(

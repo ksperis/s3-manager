@@ -588,6 +588,7 @@ def _compute_storage_ops_listing(
             "bucket_policy",
             "cors",
             "access_logging",
+            "notifications",
             "server_side_encryption",
             "lifecycle_expiration_days",
             "lifecycle_noncurrent_expiration_days",
