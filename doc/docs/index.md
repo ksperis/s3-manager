@@ -14,6 +14,7 @@
 
 - **Admin** (`/admin`): platform governance, endpoints, users, settings.
 - **Manager** (`/manager`): account-scoped bucket and IAM operations.
+- **Portal** (`/portal`): explicit self-service workspace backed by RGW IAM.
 - **Browser** (`/browser`): object-level operations.
 - **Ceph Admin** (`/ceph-admin`): Ceph RGW cluster-level administration (optional).
 

@@ -40,6 +40,18 @@ import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinit
 type SortField = "name" | "rgw_account_id";
 type EditTab = "general" | "users";
 type TextMatchMode = "contains" | "exact";
+type PortalAccountRole = "portal_none" | "portal_user" | "portal_manager";
+
+const PORTAL_ROLE_OPTIONS: { value: PortalAccountRole; label: string }[] = [
+  { value: "portal_none", label: "No portal access" },
+  { value: "portal_user", label: "Portal user" },
+  { value: "portal_manager", label: "Portal manager" },
+];
+
+function normalizePortalRole(value?: string | null): PortalAccountRole {
+  if (value === "portal_user" || value === "portal_manager") return value;
+  return "portal_none";
+}
 
 export default function S3AccountsPage() {
   const [accounts, setS3Accounts] = useState<S3Account[]>([]);
@@ -280,6 +292,7 @@ export default function S3AccountsPage() {
       id: link.user_id,
       label: link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`,
       account_admin: Boolean(link.account_admin),
+      account_role: normalizePortalRole(link.account_role),
     }));
   }, [editForm.user_links, userLabelById]);
   const availableUsers = useMemo(() => {
@@ -523,7 +536,7 @@ export default function S3AccountsPage() {
     if (account.user_links && account.user_links.length > 0) {
       return account.user_links;
     }
-    return (account.user_ids ?? []).map((id) => ({ user_id: id, account_admin: false }));
+    return (account.user_ids ?? []).map((id) => ({ user_id: id, account_admin: false, account_role: "portal_none" }));
   };
 
   const deleteModalUnknownResources =
@@ -605,6 +618,7 @@ export default function S3AccountsPage() {
         detail.user_links?.map((link) => ({
           user_id: link.user_id,
           account_admin: Boolean(link.account_admin),
+          account_role: normalizePortalRole(link.account_role),
           user_email: link.user_email ?? undefined,
         })) ?? [],
     };
@@ -1213,6 +1227,9 @@ export default function S3AccountsPage() {
                           <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Admin
                           </th>
+                          <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Portal role
+                          </th>
                           <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Actions
                           </th>
@@ -1221,7 +1238,7 @@ export default function S3AccountsPage() {
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {assignedUsers.length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                            <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
                               No linked users yet.
                             </td>
                           </tr>
@@ -1246,6 +1263,28 @@ export default function S3AccountsPage() {
                                   />
                                   Admin
                                 </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <select
+                                  value={u.account_role}
+                                  onChange={(e) =>
+                                    setEditForm((prev) => ({
+                                      ...prev,
+                                      user_links: prev.user_links.map((link) =>
+                                        link.user_id === u.id
+                                          ? { ...link, account_role: normalizePortalRole(e.target.value) }
+                                          : link
+                                      ),
+                                    }))
+                                  }
+                                  className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                >
+                                  {PORTAL_ROLE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
                               </td>
                               <td className="px-3 py-2 text-right">
                                 <button
@@ -1354,6 +1393,7 @@ export default function S3AccountsPage() {
                               const toAdd = userSelections.map((id) => ({
                                 user_id: id,
                                 account_admin: userAdminChoice[id] ?? false,
+                                account_role: "portal_none" as PortalAccountRole,
                                 user_email: userLabelById.get(id) ?? undefined,
                               }));
                               setEditForm((prev) => ({
@@ -1530,15 +1570,21 @@ export default function S3AccountsPage() {
                       <div className="flex flex-wrap gap-2">
                         {accountUserLinks.map((link) => {
                           const isAccountAdmin = Boolean(link.account_admin);
+                          const portalRole = normalizePortalRole(link.account_role);
                           return (
                             <span
-                              key={`${account.id}-${link.user_id}-${isAccountAdmin ? "admin" : "user"}`}
+                              key={`${account.id}-${link.user_id}-${isAccountAdmin ? "admin" : "user"}-${portalRole}`}
                               className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
                             >
                               <span>{link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`}</span>
                               {isAccountAdmin && (
                                 <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                                   Admin
+                                </span>
+                              )}
+                              {portalRole !== "portal_none" && (
+                                <span className="rounded-full bg-sky-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
+                                  {portalRole === "portal_manager" ? "Portal manager" : "Portal user"}
                                 </span>
                               )}
                             </span>

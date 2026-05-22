@@ -26,7 +26,7 @@ Platform and tenant-entry resources are configured and auditable.
 ## Limits / feature flags
 
 !!! note
-    Billing, Endpoint Status, and some browser settings are visible only when corresponding features are enabled.
+    Billing, Endpoint Status, Portal, and some browser settings are visible only when corresponding features are enabled.
 
 !!! note
     UI User role and entitlement rules:

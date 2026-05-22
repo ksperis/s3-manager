@@ -15,7 +15,7 @@ const superAdminUser = {
   },
   authType: "password",
   account_links: [
-    { account_id: 101, account_admin: true },
+    { account_id: 101, account_role: "portal_manager", account_admin: true },
   ],
   s3_user_details: [{ id: 901, name: "helios-admin" }],
   s3_connection_details: [{ id: 701, name: "BlueHarbor Shared Connection", access_manager: true, access_browser: true }],
@@ -36,7 +36,7 @@ const adminUser = {
   },
   authType: "password",
   account_links: [
-    { account_id: 101, account_admin: true },
+    { account_id: 101, account_role: "portal_manager", account_admin: true },
   ],
   s3_user_details: [{ id: 903, name: "platform-admin" }],
   s3_connection_details: [{ id: 701, name: "BlueHarbor Shared Connection", access_manager: true, access_browser: true }],
@@ -62,7 +62,7 @@ const storageUser = {
   },
   authType: "password",
   account_links: [
-    { account_id: 101, account_admin: false },
+    { account_id: 101, account_role: "portal_user", account_admin: false },
   ],
   s3_user_details: [{ id: 904, name: "storage-user-helios" }],
   s3_connection_details: [{ id: 701, name: "BlueHarbor Shared Connection", access_manager: true, access_browser: true }],
@@ -75,6 +75,7 @@ function baseStorage(user: Record<string, unknown>) {
     user,
     selectedWorkspace: "admin" as const,
     selectedExecutionContextId: "acc-helios",
+    selectedPortalAccountId: "101",
     selectedCephAdminEndpointId: "11",
   };
 }
@@ -312,7 +313,9 @@ const storageOpsEnabledGeneralSettingsRule: MockRule = {
     browser_enabled: true,
     browser_root_enabled: true,
     browser_manager_enabled: true,
+    browser_portal_enabled: true,
     browser_ceph_admin_enabled: true,
+    portal_enabled: true,
     billing_enabled: false,
     endpoint_status_enabled: true,
     bucket_migration_enabled: true,
@@ -336,7 +339,9 @@ const billingEnabledGeneralSettingsRule: MockRule = {
     browser_enabled: true,
     browser_root_enabled: true,
     browser_manager_enabled: true,
+    browser_portal_enabled: true,
     browser_ceph_admin_enabled: true,
+    portal_enabled: true,
     billing_enabled: true,
     endpoint_status_enabled: true,
     bucket_migration_enabled: true,
@@ -853,6 +858,19 @@ export const scenarios: DocScreenshotScenario[] = [
     waitFor: "button[aria-label='Upload'], button[aria-label='Upload files']",
     storage: { ...baseStorage(storageUser), selectedWorkspace: "browser" },
     actions: [{ type: "wait", selector: "text=daily/report-2026-03-08.json" }],
+    mockRules: withBaseRules(),
+  },
+  {
+    id: "workspace-portal",
+    docPage: "user/workspace-portal.md",
+    route: "/portal",
+    outputBasename: "workspace-portal",
+    waitFor: "h1:has-text('Helios Retail')",
+    storage: { ...baseStorage(storageUser), selectedWorkspace: "portal" },
+    actions: [
+      { type: "wait", selector: "text=My Buckets" },
+      { type: "wait", selector: "text=helios-retail-logs" },
+    ],
     mockRules: withBaseRules(),
   },
   {

@@ -16,6 +16,7 @@ Use this page when you log in for the first time and need to understand where to
 3. Pick the workspace matching your task:
    - `Admin`: platform setup and governance.
    - `Manager`: bucket and IAM administration.
+   - `Portal`: self-service buckets and access keys on explicitly assigned RGW accounts.
    - `Browser`: object operations.
    - `Ceph Admin`: Ceph cluster-level tasks.
    - `Storage Ops`: cross-context bucket operations.
@@ -29,12 +30,13 @@ You know which workspace to use and can start from the correct context.
 ## Limits / feature flags
 
 !!! note
-    Workspace visibility depends on role, account links, and feature flags (`manager_enabled`, `browser_enabled`, `ceph_admin_enabled`, `storage_ops_enabled`).
+    Workspace visibility depends on role, account links, and feature flags (`manager_enabled`, `portal_enabled`, `browser_enabled`, `ceph_admin_enabled`, `storage_ops_enabled`). Portal visibility also requires an explicit `portal_user` or `portal_manager` account role.
 
 ## Related pages
 
 - [Use cases for storage administrators](use-cases-storage-admin.md)
 - [Use cases for storage users](use-cases-storage-user.md)
+- [Workspace: Portal](workspace-portal.md)
 - [User profile](profile.md)
 - [Troubleshooting](troubleshooting.md)
 

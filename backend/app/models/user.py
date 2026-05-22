@@ -32,6 +32,7 @@ class LinkedS3Connection(BaseModel):
 class AccountMembership(BaseModel):
     account_id: int
     account_admin: Optional[bool] = None
+    account_role: Optional[str] = None
 
 
 class ManagerToolAccess(BaseModel):
@@ -104,6 +105,7 @@ class UserAssignS3Account(BaseModel):
     account_id: int
     account_root: Optional[bool] = None
     account_admin: Optional[bool] = None
+    account_role: Optional[str] = None
 
 
 class UserOut(BaseModel):

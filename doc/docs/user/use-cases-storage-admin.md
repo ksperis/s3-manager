@@ -18,13 +18,16 @@ Use this page when you are responsible for platform setup, tenant operations, or
 2. For tenant-level operations, go to **Manager**:
    - Manage buckets, IAM users/groups/roles/policies.
    - Use tools such as Bucket Compare and Bucket Migration when enabled.
-3. For Ceph cluster-level actions, use **Ceph Admin** (if enabled):
+3. For delegated tenant self-service, configure **Portal**:
+   - Assign explicit `portal_user` or `portal_manager` account roles.
+   - Keep `/manager` access separate with `account_admin` or `is_root`.
+4. For Ceph cluster-level actions, use **Ceph Admin** (if enabled):
    - RGW accounts, RGW users, buckets, endpoint metrics.
-4. For cross-account and cross-connection bucket campaigns, use **Storage Ops** (if enabled):
+5. For cross-account and cross-connection bucket campaigns, use **Storage Ops** (if enabled):
    - Unified bucket listing and advanced filters.
    - Bulk configuration actions with preview/apply.
    - UI tags for operational grouping.
-5. Use **Browser** only when object-level actions are needed.
+6. Use **Browser** only when object-level actions are needed.
 
 ## Expected result
 
@@ -33,12 +36,13 @@ You can map each operational task to the right workspace and avoid cross-scope m
 ## Limits / feature flags
 
 !!! note
-    Some areas are optional or restricted by endpoint capabilities: IAM support, migration tool, bucket compare, and endpoint status.
+    Some areas are optional or restricted by endpoint capabilities: IAM support, Portal, migration tool, bucket compare, and endpoint status.
 
 ## Related pages
 
 - [Workspace: Admin](workspace-admin.md)
 - [Workspace: Manager](workspace-manager.md)
+- [Workspace: Portal](workspace-portal.md)
 - [Workspace: Ceph Admin](workspace-ceph-admin.md)
 - [Workspace: Storage Ops](workspace-storage-ops.md)
 

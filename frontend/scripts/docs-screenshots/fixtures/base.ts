@@ -10,9 +10,9 @@ const ADMIN_ACCOUNTS_MINIMAL = [
     tags: [{ id: 901, label: "prod", color_key: "emerald", scope: "standard" }],
     user_ids: [1, 2, 3],
     user_links: [
-      { user_id: 1, account_admin: true, user_email: "admin.docs@example.com" },
-      { user_id: 2, account_admin: true, user_email: "platform.admin@example.com" },
-      { user_id: 3, account_admin: false, user_email: "storage.user@example.com" },
+      { user_id: 1, account_admin: true, account_role: "portal_manager", user_email: "admin.docs@example.com" },
+      { user_id: 2, account_admin: true, account_role: "portal_manager", user_email: "platform.admin@example.com" },
+      { user_id: 3, account_admin: false, account_role: "portal_user", user_email: "storage.user@example.com" },
     ],
     rgw_account_id: "RGW-HELIOS",
     storage_endpoint_id: 11,
@@ -25,7 +25,7 @@ const ADMIN_ACCOUNTS_MINIMAL = [
     name: "Northwind Ops",
     tags: [{ id: 902, label: "ops", color_key: "sky", scope: "standard" }],
     user_ids: [2],
-    user_links: [{ user_id: 2, account_admin: true, user_email: "platform.admin@example.com" }],
+    user_links: [{ user_id: 2, account_admin: true, account_role: "portal_none", user_email: "platform.admin@example.com" }],
     rgw_account_id: "RGW-NORTHWIND",
     storage_endpoint_id: 12,
     storage_endpoint_name: "Archive",
@@ -47,7 +47,7 @@ const ADMIN_UI_USERS = [
       ceph_s3_user_keys: true,
     },
     accounts: [101],
-    account_links: [{ account_id: 101, account_admin: true }],
+    account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
     s3_users: [901],
     s3_user_details: [{ id: 901, name: "helios-admin" }],
     s3_connections: [701],
@@ -68,8 +68,8 @@ const ADMIN_UI_USERS = [
     },
     accounts: [101, 102],
     account_links: [
-      { account_id: 101, account_admin: true },
-      { account_id: 102, account_admin: true },
+      { account_id: 101, account_admin: true, account_role: "portal_manager" },
+      { account_id: 102, account_admin: true, account_role: "portal_none" },
     ],
     s3_users: [903],
     s3_user_details: [{ id: 903, name: "platform-admin" }],
@@ -90,7 +90,7 @@ const ADMIN_UI_USERS = [
       ceph_s3_user_keys: true,
     },
     accounts: [101],
-    account_links: [{ account_id: 101, account_admin: false }],
+    account_links: [{ account_id: 101, account_admin: false, account_role: "portal_user" }],
     s3_users: [904],
     s3_user_details: [{ id: 904, name: "storage-user-helios" }],
     s3_connections: [701],
@@ -201,7 +201,9 @@ const GENERAL_SETTINGS = {
   browser_enabled: true,
   browser_root_enabled: true,
   browser_manager_enabled: true,
+  browser_portal_enabled: true,
   browser_ceph_admin_enabled: true,
+  portal_enabled: true,
   billing_enabled: false,
   endpoint_status_enabled: true,
   bucket_migration_enabled: true,
@@ -432,6 +434,131 @@ const MANAGER_MIGRATIONS = [
     updated_at: NOW,
   },
 ];
+
+const PORTAL_ACCOUNTS = [
+  {
+    id: "101",
+    db_id: 101,
+    name: "Helios Retail",
+    tags: [{ id: 901, label: "prod", color_key: "emerald", scope: "standard" }],
+    quota_max_size_gb: 10,
+    quota_max_objects: 100_000,
+    rgw_account_id: "RGW-HELIOS",
+    storage_endpoint_id: 11,
+    storage_endpoint_name: "Default",
+    storage_endpoint_url: "https://s3-default.docs.example.com",
+    storage_endpoint_capabilities: {
+      iam: true,
+      sns: true,
+      usage: true,
+      metrics: true,
+      static_website: true,
+      sts: false,
+      replication: true,
+    },
+  },
+];
+
+const PORTAL_STATE = {
+  account_id: 101,
+  iam_provisioned: true,
+  iam_user: {
+    iam_user_id: "AIDAEXAMPLEPORTAL",
+    iam_username: "portal-user-helios",
+    arn: "arn:aws:iam::111111111111:user/portal-user-helios",
+    created_at: NOW,
+  },
+  access_keys: [
+    {
+      access_key_id: "AKIAHELIOSPORTALROOT",
+      status: "Active",
+      created_at: NOW,
+      is_active: true,
+      is_portal: true,
+      deletable: false,
+    },
+    {
+      access_key_id: "AKIAHELIOSPORTAL001",
+      status: "Active",
+      created_at: NOW,
+      is_active: true,
+      is_portal: false,
+      deletable: true,
+    },
+  ],
+  buckets: MANAGER_BUCKETS,
+  total_buckets: MANAGER_BUCKETS.length,
+  s3_endpoint: "https://s3-default.docs.example.com",
+  used_bytes: 1_128_876_445,
+  used_objects: 1_722,
+  quota_max_size_bytes: 10 * 1024 * 1024 * 1024,
+  quota_max_objects: 100_000,
+  account_role: "portal_user",
+  can_manage_buckets: true,
+  can_manage_portal_users: false,
+};
+
+const PORTAL_SETTINGS = {
+  allow_portal_key: true,
+  allow_portal_user_bucket_create: true,
+  allow_portal_user_access_key_create: true,
+  max_portal_user_access_keys: 2,
+  iam_group_manager_policy: {
+    actions: ["s3:*"],
+    advanced_policy: null,
+  },
+  iam_group_user_policy: {
+    actions: ["s3:GetObject", "s3:ListBucket"],
+    advanced_policy: null,
+  },
+  bucket_access_policy: {
+    actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+    advanced_policy: null,
+  },
+  bucket_defaults: {
+    versioning: true,
+    enable_cors: true,
+    enable_lifecycle: true,
+    cors_allowed_origins: ["https://app.example.com"],
+  },
+  override_policy: {
+    allow_portal_key: true,
+    allow_portal_user_bucket_create: true,
+    allow_portal_user_access_key_create: true,
+    iam_group_manager_policy: { actions: true, advanced_policy: true },
+    iam_group_user_policy: { actions: true, advanced_policy: true },
+    bucket_access_policy: { actions: true, advanced_policy: true },
+    bucket_defaults: {
+      versioning: true,
+      enable_cors: true,
+      enable_lifecycle: true,
+      cors_allowed_origins: true,
+    },
+  },
+};
+
+const PORTAL_TRAFFIC = {
+  window: "day",
+  start: "2026-03-08T00:00:00Z",
+  end: NOW,
+  resolution: "hour",
+  bucket_filter: null,
+  data_points: 3,
+  series: [
+    { timestamp: "2026-03-08T06:00:00Z", bytes_in: 1200, bytes_out: 800, ops: 25, success_ops: 25 },
+    { timestamp: "2026-03-08T07:00:00Z", bytes_in: 1800, bytes_out: 1200, ops: 41, success_ops: 40 },
+    { timestamp: "2026-03-08T08:00:00Z", bytes_in: 2100, bytes_out: 1400, ops: 52, success_ops: 51 },
+  ],
+  totals: { bytes_in: 5100, bytes_out: 3400, ops: 118, success_ops: 116, success_rate: 0.983 },
+  bucket_rankings: [
+    { bucket: "helios-retail-logs", bytes_total: 6500, bytes_in: 3900, bytes_out: 2600, ops: 95, success_ops: 94, success_ratio: 0.989 },
+  ],
+  user_rankings: [
+    { user: "portal-user-helios", bytes_total: 6500, bytes_in: 3900, bytes_out: 2600, ops: 95, success_ops: 94, success_ratio: 0.989 },
+  ],
+  request_breakdown: [{ group: "GetObject", bytes_in: 0, bytes_out: 2600, ops: 70 }],
+  category_breakdown: [{ category: "read", bytes_in: 0, bytes_out: 2600, ops: 70 }],
+};
 
 const WORKSPACE_HEALTH = {
   generated_at: NOW,
@@ -725,6 +852,7 @@ export function buildBaseRules(): MockRule[] {
         total_users: 7,
         total_admins: 2,
         total_none_users: 1,
+        total_portal_users: 3,
         total_s3_users: 9,
         assigned_accounts: 4,
         unassigned_accounts: 1,
@@ -875,6 +1003,200 @@ export function buildBaseRules(): MockRule[] {
       path: /^\/manager\/migrations$/,
       body: {
         items: MANAGER_MIGRATIONS,
+      },
+    },
+    {
+      id: "portal-accounts",
+      path: /^\/portal\/accounts$/,
+      body: PORTAL_ACCOUNTS,
+    },
+    {
+      id: "portal-eligibility",
+      path: /^\/portal\/eligibility$/,
+      body: {
+        eligible: true,
+        reasons: [],
+      },
+    },
+    {
+      id: "portal-bootstrap",
+      method: "POST",
+      path: /^\/portal\/bootstrap$/,
+      body: {
+        ...PORTAL_STATE,
+        just_created: true,
+      },
+    },
+    {
+      id: "portal-state",
+      path: /^\/portal\/state$/,
+      body: PORTAL_STATE,
+    },
+    {
+      id: "portal-usage",
+      path: /^\/portal\/usage$/,
+      body: {
+        used_bytes: PORTAL_STATE.used_bytes,
+        used_objects: PORTAL_STATE.used_objects,
+      },
+    },
+    {
+      id: "portal-endpoint-health",
+      path: /^\/portal\/endpoint-health$/,
+      body: WORKSPACE_HEALTH,
+    },
+    {
+      id: "portal-traffic",
+      path: /^\/portal\/traffic$/,
+      body: PORTAL_TRAFFIC,
+    },
+    {
+      id: "portal-settings",
+      path: /^\/portal\/settings$/,
+      body: PORTAL_SETTINGS,
+    },
+    {
+      id: "portal-account-settings",
+      path: /^\/portal\/account-settings$/,
+      body: {
+        effective: PORTAL_SETTINGS,
+        admin_override: {},
+        portal_manager_override: {},
+        override_policy: PORTAL_SETTINGS.override_policy,
+      },
+    },
+    {
+      id: "portal-iam-compliance",
+      path: /^\/portal\/iam-compliance$/,
+      body: {
+        ok: true,
+        issues: [],
+      },
+    },
+    {
+      id: "portal-buckets",
+      path: /^\/portal\/buckets$/,
+      body: ({ url }) => {
+        const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
+        if (!search) return MANAGER_BUCKETS;
+        return MANAGER_BUCKETS.filter((bucket) => bucket.name.toLowerCase().includes(search));
+      },
+    },
+    {
+      id: "portal-create-bucket",
+      method: "POST",
+      path: /^\/portal\/buckets$/,
+      body: ({ requestBodyText }) => {
+        let payload: { name?: string } = {};
+        try {
+          payload = JSON.parse(requestBodyText || "{}") as { name?: string };
+        } catch {
+          payload = {};
+        }
+        return {
+          name: payload.name ?? "new-portal-bucket",
+          creation_date: NOW,
+          owner: "RGW-HELIOS",
+          owner_name: "Helios Platform",
+          used_bytes: 0,
+          object_count: 0,
+          tags: [],
+          features: {
+            versioning: { state: "enabled", tone: "active" },
+          },
+        };
+      },
+    },
+    {
+      id: "portal-delete-bucket",
+      method: "DELETE",
+      path: /^\/portal\/buckets\/[^/]+$/,
+      status: 204,
+      body: undefined,
+    },
+    {
+      id: "portal-bucket-stats",
+      path: /^\/portal\/buckets\/[^/]+\/stats$/,
+      body: ({ url }) => {
+        const bucketName = parseBucketName(url.pathname);
+        const bucket = MANAGER_BUCKETS.find((item) => item.name === bucketName);
+        return {
+          name: bucketName,
+          used_bytes: bucket?.used_bytes ?? 0,
+          object_count: bucket?.object_count ?? 0,
+        };
+      },
+    },
+    {
+      id: "portal-bucket-users",
+      path: /^\/portal\/buckets\/[^/]+\/users$/,
+      body: [
+        { id: 3, email: "storage.user@example.com", role: "ui_user", iam_username: "portal-user-helios", iam_only: false },
+        { id: 2, email: "platform.admin@example.com", role: "ui_admin", iam_username: "portal-manager-helios", iam_only: false },
+      ],
+    },
+    {
+      id: "portal-access-keys-list",
+      path: /^\/portal\/access-keys$/,
+      body: PORTAL_STATE.access_keys,
+    },
+    {
+      id: "portal-access-key-create",
+      method: "POST",
+      path: /^\/portal\/access-keys$/,
+      status: 201,
+      body: {
+        access_key_id: "AKIAHELIOSPORTAL002",
+        secret_access_key: "docs-secret",
+        status: "Active",
+        created_at: NOW,
+        is_active: true,
+        is_portal: false,
+        deletable: true,
+      },
+    },
+    {
+      id: "portal-access-key-status",
+      method: "PUT",
+      path: /^\/portal\/access-keys\/[^/]+\/status$/,
+      body: ({ requestBodyText, url }) => {
+        let payload: { active?: boolean } = {};
+        try {
+          payload = JSON.parse(requestBodyText || "{}") as { active?: boolean };
+        } catch {
+          payload = {};
+        }
+        const active = payload.active !== false;
+        return {
+          access_key_id: decodeURIComponent(url.pathname.split("/").at(-2) ?? "AKIAHELIOSPORTAL001"),
+          status: active ? "Active" : "Inactive",
+          created_at: NOW,
+          is_active: active,
+          is_portal: false,
+          deletable: true,
+        };
+      },
+    },
+    {
+      id: "portal-access-key-delete",
+      method: "DELETE",
+      path: /^\/portal\/access-keys\/[^/]+$/,
+      status: 204,
+      body: undefined,
+    },
+    {
+      id: "portal-users",
+      path: /^\/portal\/users$/,
+      body: [
+        { id: 3, email: "storage.user@example.com", role: "ui_user", iam_username: "portal-user-helios", iam_only: false },
+        { id: 2, email: "platform.admin@example.com", role: "ui_admin", iam_username: "portal-manager-helios", iam_only: false },
+      ],
+    },
+    {
+      id: "portal-user-buckets",
+      path: /^\/portal\/users\/\d+\/buckets$/,
+      body: {
+        buckets: ["helios-retail-logs"],
       },
     },
     {

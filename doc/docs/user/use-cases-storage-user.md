@@ -15,8 +15,11 @@ Use this page when your main goal is object access, limited bucket actions, or d
    - Browse buckets and prefixes.
    - Keep folders, the action bar, and the inspector visible on `/browser` when you want faster day-to-day object workflows.
    - Upload, download, preview, delete, restore versions.
-2. For advanced bucket/IAM operations with delegated rights, open **Manager**.
-3. If an action is unavailable, verify selected context and request additional permissions.
+2. For guided account self-service, open **Portal**:
+   - Select the assigned RGW account.
+   - Use the dashboard for buckets, IAM keys, usage, traffic, and account settings exposed by policy.
+3. For advanced bucket/IAM operations with delegated rights, open **Manager**.
+4. If an action is unavailable, verify selected context and request additional permissions.
 
 ## Expected result
 
@@ -25,11 +28,12 @@ You can complete daily storage tasks without navigating admin-only areas.
 ## Limits / feature flags
 
 !!! note
-    Access depends on role, account links, connection permissions, and flags like `browser_root_enabled` and `manager_enabled`.
+    Access depends on role, account links, connection permissions, explicit Portal account roles, and flags like `browser_root_enabled`, `manager_enabled`, `portal_enabled`, and `browser_portal_enabled`.
 
 ## Related pages
 
 - [Workspace: Browser](workspace-browser.md)
+- [Workspace: Portal](workspace-portal.md)
 - [Feature: Object operations in Browser](feature-objects-browser.md)
 
 ## Visual example

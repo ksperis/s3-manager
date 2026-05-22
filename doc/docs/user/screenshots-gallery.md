@@ -172,11 +172,11 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
 ## Portal { #portal }
 
 <div class="docs-screenshot-carousel" data-docs-carousel data-carousel-title="Portal workspace">
-  <figure data-thumb-label="Historical">
+  <figure data-thumb-label="Overview">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Historical Portal workspace screenshot with guided self-service flow" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Historical Portal workspace screenshot with guided self-service flow" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Portal workspace dashboard with self-service buckets, access keys, and account status" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Portal workspace dashboard with self-service buckets, access keys, and account status" loading="lazy">
     </div>
-    <figcaption><strong>Historical view.</strong> Portal is currently removed from the active product surface, but this capture is kept as reference for the earlier guided self-service experience.</figcaption>
+    <figcaption><strong>Overview.</strong> Portal is a distinct self-service workspace for explicitly assigned `portal_user` and `portal_manager` links on Ceph RGW accounts with IAM enabled.</figcaption>
   </figure>
 </div>

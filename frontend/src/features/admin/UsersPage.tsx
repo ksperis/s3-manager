@@ -46,7 +46,10 @@ type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 type AccountSelection = {
   id: number;
   account_admin?: boolean;
+  account_role?: PortalAccountRole;
 };
+
+type PortalAccountRole = "portal_none" | "portal_user" | "portal_manager";
 
 type Option = {
   id: number;
@@ -59,6 +62,16 @@ const DEFAULT_MANAGER_TOOL_ACCESS: ManagerToolAccess = {
   bucket_migration: false,
   ceph_s3_user_keys: false,
 };
+const PORTAL_ROLE_OPTIONS: { value: PortalAccountRole; label: string }[] = [
+  { value: "portal_none", label: "No portal access" },
+  { value: "portal_user", label: "Portal user" },
+  { value: "portal_manager", label: "Portal manager" },
+];
+
+function normalizePortalRole(value?: string | null): PortalAccountRole {
+  if (value === "portal_user" || value === "portal_manager") return value;
+  return "portal_none";
+}
 
 function normalizeManagerToolAccess(access?: ManagerToolAccess | null): ManagerToolAccess {
   return {
@@ -294,6 +307,9 @@ const AssociationsTabs = ({
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Admin
                         </th>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Portal role
+                        </th>
                         <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Actions
                         </th>
@@ -302,7 +318,7 @@ const AssociationsTabs = ({
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                       {accounts.selected.length === 0 ? (
                         <tr>
-                          <td colSpan={3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
                             No account linked yet.
                           </td>
                         </tr>
@@ -329,6 +345,27 @@ const AssociationsTabs = ({
                                   />
                                   Admin
                                 </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <select
+                                  value={normalizePortalRole(entry.account_role)}
+                                  onChange={(e) =>
+                                    accounts.setSelected((prev) =>
+                                      prev.map((item) =>
+                                        item.id === entry.id
+                                          ? { ...item, account_role: normalizePortalRole(e.target.value) }
+                                          : item
+                                      )
+                                    )
+                                  }
+                                  className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                >
+                                  {PORTAL_ROLE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
                               </td>
                               <td className="px-3 py-2 text-right">
                                 <button
@@ -439,7 +476,7 @@ const AssociationsTabs = ({
                             if (accounts.selections.length === 0) return;
                             const next = accounts.selections.map((accountId) => {
                               const account_admin = accounts.adminChoice[accountId] ?? false;
-                              return { id: accountId, account_admin };
+                              return { id: accountId, account_admin, account_role: "portal_none" as PortalAccountRole };
                             });
                             accounts.setSelected((prev) => [...prev, ...next]);
                             accounts.setSelections([]);
@@ -805,7 +842,7 @@ export default function UsersPage() {
       accountAdminChoice: {},
     })
   );
-  const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<{ id: number; account_admin?: boolean }[]>([]);
+  const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<AccountSelection[]>([]);
   const [createSelectedS3Users, setCreateSelectedS3Users] = useState<number[]>([]);
   const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
   const [createAccountAdminChoice, setCreateAccountAdminChoice] = useState<Record<number, boolean>>({});
@@ -834,7 +871,7 @@ export default function UsersPage() {
       accountAdminChoice: {},
     })
   );
-  const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<{ id: number; account_admin?: boolean }[]>([]);
+  const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<AccountSelection[]>([]);
   const [editSelectedS3Users, setEditSelectedS3Users] = useState<number[]>([]);
   const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
   const [editAccountAdminChoice, setEditAccountAdminChoice] = useState<Record<number, boolean>>({});
@@ -1076,20 +1113,29 @@ export default function UsersPage() {
     const adminByAccountId = new Map<number, boolean>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
     );
+    const portalRoleByAccountId = new Map<number, PortalAccountRole>(
+      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
+    );
     return (
       <div className="flex flex-wrap gap-2">
         {user.accounts.map((id) => {
           const label = accountOptionsById.get(Number(id))?.name ?? `Account #${id}`;
           const isAccountAdmin = adminByAccountId.get(Number(id)) === true;
+          const portalRole = portalRoleByAccountId.get(Number(id)) ?? "portal_none";
           return (
             <span
-              key={`${id}-${isAccountAdmin ? "admin" : "user"}`}
+              key={`${id}-${isAccountAdmin ? "admin" : "user"}-${portalRole}`}
               className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
             >
               <span>{label}</span>
               {isAccountAdmin && (
                 <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                   Admin
+                </span>
+              )}
+              {portalRole !== "portal_none" && (
+                <span className="rounded-full bg-sky-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
+                  {portalRole === "portal_manager" ? "Portal manager" : "Portal user"}
                 </span>
               )}
             </span>
@@ -1489,7 +1535,8 @@ export default function UsersPage() {
             assignUserToS3Account(
               created.id,
               Number(entry.id),
-              entry.account_admin ?? false
+              entry.account_admin ?? false,
+              normalizePortalRole(entry.account_role)
             )
           )
         );
@@ -1539,10 +1586,14 @@ export default function UsersPage() {
     const accountAdmins = new Map<number, boolean>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
     );
+    const accountRoles = new Map<number, PortalAccountRole>(
+      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
+    );
     const selectedAccounts =
       user.accounts?.map((id) => ({
         id: Number(id),
         account_admin: accountAdmins.get(Number(id)) ?? false,
+        account_role: accountRoles.get(Number(id)) ?? "portal_none",
       })) ?? [];
     setEditSelectedS3Accounts(selectedAccounts);
     const nextSelectedS3Users = user.s3_users ? user.s3_users.map((id) => Number(id)) : [];
@@ -1638,12 +1689,19 @@ export default function UsersPage() {
       const existingAdminById = new Map<number, boolean>(
         (editingUser.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
       );
+      const existingRoleById = new Map<number, PortalAccountRole>(
+        (editingUser.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
+      );
       const selectedIds = editSelectedS3Accounts.map((entry) => Number(entry.id));
       const toAdd = editSelectedS3Accounts.filter((entry) => !existing.includes(Number(entry.id)));
       const toRemove = existing.filter((id) => !selectedIds.includes(id));
       const toUpdateLinks = editSelectedS3Accounts.filter((entry) => {
         const currentAdmin = existingAdminById.get(Number(entry.id)) ?? false;
-        return existing.includes(Number(entry.id)) && currentAdmin !== Boolean(entry.account_admin);
+        const currentRole = existingRoleById.get(Number(entry.id)) ?? "portal_none";
+        return (
+          existing.includes(Number(entry.id)) &&
+          (currentAdmin !== Boolean(entry.account_admin) || currentRole !== normalizePortalRole(entry.account_role))
+        );
       });
 
       if (toAdd.length > 0) {
@@ -1652,7 +1710,8 @@ export default function UsersPage() {
             assignUserToS3Account(
               editingUser.id,
               Number(entry.id),
-              entry.account_admin ?? false
+              entry.account_admin ?? false,
+              normalizePortalRole(entry.account_role)
             )
           )
         );
@@ -1663,7 +1722,8 @@ export default function UsersPage() {
             assignUserToS3Account(
               editingUser.id,
               Number(entry.id),
-              entry.account_admin ?? false
+              entry.account_admin ?? false,
+              normalizePortalRole(entry.account_role)
             )
           )
         );
@@ -1672,7 +1732,7 @@ export default function UsersPage() {
         const account = accountOptionsById.get(Number(accountId));
         if (!account) continue;
         const remainingLinks =
-          (account.user_links ?? account.user_ids?.map((id) => ({ user_id: id, account_admin: false })) ?? [])
+          (account.user_links ?? account.user_ids?.map((id) => ({ user_id: id, account_admin: false, account_role: "portal_none" })) ?? [])
             .filter((link) => link.user_id !== editingUser.id);
         await updateS3Account(Number(accountId), { user_links: remainingLinks });
       }

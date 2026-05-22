@@ -8,6 +8,7 @@ import { PaginatedResponse } from "./types";
 export type AccountMembership = {
   account_id: number;
   account_admin?: boolean | null;
+  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
 };
 
 export type ManagerToolAccess = {
@@ -130,10 +131,12 @@ export async function assignUserToS3Account(
   userId: number,
   accountId: number,
   accountAdmin?: boolean | null,
+  accountRole?: AccountMembership["account_role"],
 ): Promise<User> {
   const { data } = await client.post<User>(`/admin/users/${userId}/assign-account`, {
     account_id: accountId,
     account_admin: accountAdmin,
+    account_role: accountRole,
   });
   return data;
 }

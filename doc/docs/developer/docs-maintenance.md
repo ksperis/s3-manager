@@ -30,6 +30,7 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/manager/bucket-compare` | `user/feature-bucket-compare.md` | Covered |
 | `/manager/bucket-integrity` | `user/feature-bucket-integrity-check.md` | Covered |
 | `/manager/migrations*` | `user/feature-bucket-migration.md` | Covered |
+| `/portal` and children | `user/workspace-portal.md` | Covered |
 | `/browser` | `user/workspace-browser.md` + `user/feature-objects-browser.md` | Covered |
 | `/browser` object versions modal | `user/feature-object-versions-browser.md` | Covered |
 | Feature flags in app settings | `ops/configuration.md` + user pages limits blocks | Covered |
@@ -93,6 +94,6 @@ If you update the gallery page:
 3. Reference the curated screenshots from `user/screenshots-gallery.md` using themed screenshot blocks.
 4. Run the screenshot check script.
 
-Historical note:
+Portal screenshot note:
 
-- `workspace-portal` is manually maintained because Portal is no longer part of the active product surface, but it still follows the same `.light.png` / `.dark.png` convention.
+- `workspace-portal` follows the same `.light.png` / `.dark.png` convention as other active workspace screenshots.

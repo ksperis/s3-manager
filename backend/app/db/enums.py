@@ -30,6 +30,12 @@ class StorageProvider(str, Enum):
     OTHER = "other"
 
 
+class AccountRole(str, Enum):
+    PORTAL_MANAGER = "portal_manager"
+    PORTAL_USER = "portal_user"
+    PORTAL_NONE = "portal_none"
+
+
 class HealthCheckStatus(str, Enum):
     UNKNOWN = "unknown"
     UP = "up"

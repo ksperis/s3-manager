@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { GeneralSettings } from "../api/appSettings";
 import type { SessionUser } from "./workspaces";
-import { resolveAvailableWorkspacesWithFlags } from "./workspaces";
+import { resolveAvailableWorkspacesWithFlags, resolvePostLoginPath } from "./workspaces";
 
 const baseSettings: GeneralSettings = {
   manager_enabled: true,
@@ -10,7 +10,9 @@ const baseSettings: GeneralSettings = {
   browser_enabled: true,
   browser_root_enabled: true,
   browser_manager_enabled: false,
+  browser_portal_enabled: false,
   browser_ceph_admin_enabled: true,
+  portal_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: false,
   quota_alerts_enabled: false,
@@ -34,6 +36,10 @@ const adminUser: SessionUser = {
 };
 
 describe("resolveAvailableWorkspacesWithFlags", () => {
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
   it("returns English workspace labels", () => {
     const workspaces = resolveAvailableWorkspacesWithFlags(adminUser, {
       ...baseSettings,
@@ -99,5 +105,99 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       storage_ops_enabled: true,
     });
     expect(workspaces.some((workspace) => workspace.id === "storage-ops")).toBe(true);
+  });
+
+  it("exposes Portal only for explicit portal account roles when feature is enabled", () => {
+    const user: SessionUser = {
+      id: 7,
+      email: "portal-user@example.com",
+      role: "ui_user",
+      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
+    };
+
+    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+      ...baseSettings,
+      portal_enabled: true,
+    });
+
+    expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(true);
+  });
+
+  it("exposes Portal for portal managers when feature is enabled", () => {
+    const user: SessionUser = {
+      id: 9,
+      email: "portal-manager@example.com",
+      role: "ui_user",
+      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_manager" }],
+    };
+
+    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+      ...baseSettings,
+      portal_enabled: true,
+    });
+
+    expect(workspaces.find((workspace) => workspace.id === "portal")).toMatchObject({
+      label: "Portal (self-service)",
+      path: "/portal",
+    });
+  });
+
+  it("does not expose Portal when the feature flag is disabled", () => {
+    const user: SessionUser = {
+      id: 10,
+      email: "portal-disabled@example.com",
+      role: "ui_user",
+      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
+    };
+
+    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+      ...baseSettings,
+      portal_enabled: false,
+    });
+
+    expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(false);
+  });
+
+  it("does not expose Portal for plain account links", () => {
+    const user: SessionUser = {
+      id: 8,
+      email: "plain-user@example.com",
+      role: "ui_user",
+      account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
+    };
+
+    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+      ...baseSettings,
+      portal_enabled: true,
+    });
+
+    expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(false);
+  });
+
+  it("does not expose Portal when the account link has no portal role", () => {
+    const user: SessionUser = {
+      id: 11,
+      email: "missing-role@example.com",
+      role: "ui_user",
+      account_links: [{ account_id: 24, account_admin: true }],
+    };
+
+    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+      ...baseSettings,
+      portal_enabled: true,
+    });
+
+    expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(false);
+  });
+
+  it("redirects a portal-only user to Portal", () => {
+    const user: SessionUser = {
+      id: 12,
+      email: "portal-only@example.com",
+      role: "ui_user",
+      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
+    };
+
+    expect(resolvePostLoginPath(user, { ...baseSettings, portal_enabled: true })).toBe("/portal");
   });
 });

@@ -8,7 +8,7 @@ import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 function isTopLevelBrowserSurface(): boolean {
   if (typeof window === "undefined") return false;
   const normalizedPath = window.location.pathname.replace(/\/+$/, "");
-  return normalizedPath === "/browser";
+  return normalizedPath === "/browser" || normalizedPath.endsWith("/portal/browser");
 }
 
 function bucketBasePath(): string {

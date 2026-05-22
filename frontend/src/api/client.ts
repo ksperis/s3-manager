@@ -44,6 +44,13 @@ function isAuthEndpoint(url: string) {
   );
 }
 
+function isPortalBrowserApiRequest(url?: string): boolean {
+  if (typeof window === "undefined" || !url) return false;
+  const normalizedPath = window.location.pathname.replace(/\/+$/, "");
+  if (!normalizedPath.endsWith("/portal/browser")) return false;
+  return url.startsWith("/browser");
+}
+
 let refreshPromise: Promise<string> | null = null;
 
 async function refreshAccessToken(): Promise<string> {
@@ -67,6 +74,10 @@ client.interceptors.request.use((config) => {
   if (token) {
     config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (isPortalBrowserApiRequest(config.url)) {
+    config.headers = config.headers ?? {};
+    config.headers["X-S3-Workspace"] = "portal";
   }
   const userRaw = localStorage.getItem("user");
   if (userRaw) {

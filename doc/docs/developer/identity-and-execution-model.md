@@ -8,6 +8,7 @@
 ## Context and executor
 
 - `/manager` and `/browser` rely on execution context selection.
+- `/portal` uses an explicit account context and portal IAM identities for self-service workflows.
 - Backend resolves executor from selected context and policy constraints.
 
 ## Practical impact

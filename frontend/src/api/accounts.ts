@@ -9,6 +9,7 @@ import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 export type AccountUserLink = {
   user_id: number;
   account_admin?: boolean | null;
+  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
   user_email?: string | null;
 };
 

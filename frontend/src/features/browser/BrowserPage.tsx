@@ -7855,6 +7855,10 @@ export default function BrowserPage({
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
+    const normalizedPath = window.location.pathname.replace(/\/+$/, "");
+    if (normalizedPath.endsWith("/portal/browser")) {
+      headers["X-S3-Workspace"] = "portal";
+    }
     const userRaw = localStorage.getItem("user");
     if (userRaw) {
       try {
