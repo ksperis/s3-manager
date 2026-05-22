@@ -3,6 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
+import type { PortalSettingsOverride } from "./appSettings";
+import type { PortalAccountSettings } from "./portal";
 import { PaginatedResponse } from "./types";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 
@@ -139,4 +141,17 @@ export async function importS3Accounts(payload: ImportS3AccountPayload[]): Promi
 export async function importS3AccountsByIds(ids: string[]): Promise<S3Account[]> {
   const payload = ids.map((id) => ({ rgw_account_id: id }));
   return importS3Accounts(payload);
+}
+
+export async function fetchAccountPortalSettings(accountId: number): Promise<PortalAccountSettings> {
+  const { data } = await client.get<PortalAccountSettings>(`/admin/accounts/${accountId}/portal-settings`);
+  return data;
+}
+
+export async function updateAccountPortalSettings(
+  accountId: number,
+  payload: PortalSettingsOverride
+): Promise<PortalAccountSettings> {
+  const { data } = await client.put<PortalAccountSettings>(`/admin/accounts/${accountId}/portal-settings`, payload);
+  return data;
 }
