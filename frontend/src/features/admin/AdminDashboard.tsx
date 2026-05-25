@@ -16,7 +16,6 @@ import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHeal
 import UiBadge from "../../components/ui/UiBadge";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiCardClass, uiCardMutedClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
-import { isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 const ENDPOINT_STATUS_MAX_AGE_HOURS = 24;
 const ENDPOINT_STATUS_MAX_AGE_MS = ENDPOINT_STATUS_MAX_AGE_HOURS * 60 * 60 * 1000;
@@ -54,8 +53,6 @@ export default function AdminDashboard() {
   const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
   const [dismissBusy, setDismissBusy] = useState(false);
   const { generalSettings } = useGeneralSettings();
-  const currentUser = useMemo(() => readStoredUser(), []);
-  const canConfigureApp = isSuperAdminRole(currentUser?.role);
 
   useEffect(() => {
     const load = async () => {
@@ -250,47 +247,90 @@ export default function AdminDashboard() {
       {
         id: "manager",
         label: "Manager",
-        description: "Tenant administration workspace",
         enabled: generalSettings.manager_enabled,
         massManagement: false,
-        to: "/admin/general-settings",
       },
       {
         id: "browser",
         label: "Browser",
-        description: "Object and bucket navigation workspace",
         enabled: generalSettings.browser_enabled,
         massManagement: false,
-        to: "/admin/general-settings",
+      },
+      {
+        id: "portal",
+        label: "Portal",
+        enabled: generalSettings.portal_enabled,
+        massManagement: false,
       },
       {
         id: "ceph_admin",
         label: "Ceph Admin",
-        description: "Cluster-wide advanced operations",
         enabled: generalSettings.ceph_admin_enabled,
         massManagement: true,
-        to: "/admin/general-settings",
       },
       {
         id: "storage_ops",
         label: "Storage Ops",
-        description: "Cross-context bucket operations workspace",
         enabled: generalSettings.storage_ops_enabled,
         massManagement: true,
-        to: "/admin/general-settings",
       },
     ],
     [
       generalSettings.browser_enabled,
       generalSettings.ceph_admin_enabled,
       generalSettings.manager_enabled,
+      generalSettings.portal_enabled,
       generalSettings.storage_ops_enabled,
     ]
   );
 
-  const enabledCoreFeatureCount = useMemo(
-    () => coreFeatures.filter((feature) => feature.enabled).length,
-    [coreFeatures]
+  const extraFeatures = useMemo(
+    () => [
+      {
+        id: "billing",
+        label: "Billing",
+        enabled: generalSettings.billing_enabled,
+        massManagement: false,
+      },
+      {
+        id: "endpoint_status",
+        label: "Endpoint Status",
+        enabled: generalSettings.endpoint_status_enabled,
+        massManagement: false,
+      },
+      {
+        id: "quota_alerts",
+        label: "Quota alerts",
+        enabled: generalSettings.quota_alerts_enabled,
+        massManagement: false,
+      },
+      {
+        id: "usage_history",
+        label: "Usage history",
+        enabled: generalSettings.usage_history_enabled,
+        massManagement: false,
+      },
+    ],
+    [
+      generalSettings.billing_enabled,
+      generalSettings.endpoint_status_enabled,
+      generalSettings.quota_alerts_enabled,
+      generalSettings.usage_history_enabled,
+    ]
+  );
+
+  const featureGroups = useMemo(
+    () => [
+      {
+        title: "Core features",
+        features: coreFeatures,
+      },
+      {
+        title: "Extra features",
+        features: extraFeatures,
+      },
+    ],
+    [coreFeatures, extraFeatures]
   );
 
   return (
@@ -397,74 +437,44 @@ export default function AdminDashboard() {
       {endpointFreshnessWarning && <PageBanner tone="warning">{endpointFreshnessWarning}</PageBanner>}
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
-      <div className={cx(uiCardClass, "p-3")}>
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <h2 className="ui-body font-semibold text-slate-900 dark:text-white">Core features</h2>
-            <p className="ui-caption text-slate-600 dark:text-slate-300">
-              {enabledCoreFeatureCount} / {coreFeatures.length} enabled
-            </p>
-          </div>
-          {canConfigureApp ? (
-            <Link
-              to="/admin/general-settings"
-              className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "px-2.5 py-1.5")}
+      <div className="grid gap-3 md:grid-cols-2">
+        {featureGroups.map((group) => {
+          const enabledFeatures = group.features.filter((feature) => feature.enabled);
+
+          return (
+            <section
+              key={group.title}
+              aria-label={`${group.title} summary`}
+              className={cx(uiCardClass, "flex min-h-[96px] flex-col gap-3 p-3")}
             >
-              Configure features
-            </Link>
-          ) : (
-            <UiBadge tone="neutral" className="px-2 py-1">
-              Superadmin required
-            </UiBadge>
-          )}
-        </div>
-
-        <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
-          {coreFeatures.map((feature) => {
-            const stateClasses = feature.enabled
-              ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/50 dark:bg-emerald-950/30 dark:text-emerald-100"
-              : "border-slate-200 bg-slate-50 text-slate-500 opacity-75 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-400";
-            const descriptionClasses = feature.enabled
-              ? "text-emerald-700 dark:text-emerald-200"
-              : "text-slate-500 dark:text-slate-400";
-            const cardClasses = cx(
-              "flex min-h-[76px] flex-col justify-between gap-1.5 rounded-lg border px-2 py-1.5 transition",
-              stateClasses,
-              canConfigureApp &&
-                "hover:-translate-y-[1px] hover:border-primary-300 hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:hover:border-primary-700/60"
-            );
-            const cardContent = (
-              <>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-[11px] font-semibold leading-4">{feature.label}</p>
-                    <p className={cx("mt-0.5 line-clamp-2 text-[10px] leading-3", descriptionClasses)}>
-                      {feature.description}
-                    </p>
-                  </div>
-                  <UiBadge tone={feature.enabled ? "success" : "neutral"} className="shrink-0 px-1.5 py-0 text-[10px] leading-4">
-                    {feature.enabled ? "ON" : "OFF"}
-                  </UiBadge>
-                </div>
-                {feature.massManagement && (
-                  <UiBadge tone="warning" className="w-fit px-1.5 py-0 text-[10px] leading-4">
-                    Mass management
-                  </UiBadge>
-                )}
-              </>
-            );
-
-            return canConfigureApp ? (
-              <Link key={feature.id} to={feature.to} className={cardClasses}>
-                {cardContent}
-              </Link>
-            ) : (
-              <div key={feature.id} className={cardClasses}>
-                {cardContent}
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="ui-body font-semibold text-slate-900 dark:text-white">{group.title}</h2>
+                <UiBadge tone={enabledFeatures.length > 0 ? "success" : "neutral"} className="px-2 py-0 text-[11px] leading-5">
+                  {enabledFeatures.length} enabled
+                </UiBadge>
               </div>
-            );
-          })}
-        </div>
+              {enabledFeatures.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {enabledFeatures.map((feature) => (
+                    <UiBadge key={feature.id} tone="success" className="gap-1.5 px-2 py-0 text-[11px] leading-5">
+                      <span>{feature.label}</span>
+                      {feature.massManagement && (
+                        <span
+                          title="Mass management"
+                          className="rounded-full border border-emerald-300/80 bg-white/70 px-1 text-[9px] font-bold leading-3 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-950/50 dark:text-emerald-200"
+                        >
+                          MM
+                        </span>
+                      )}
+                    </UiBadge>
+                  ))}
+                </div>
+              ) : (
+                <p className="ui-caption text-slate-500 dark:text-slate-400">None enabled</p>
+              )}
+            </section>
+          );
+        })}
       </div>
 
       {generalSettings.endpoint_status_enabled && (
