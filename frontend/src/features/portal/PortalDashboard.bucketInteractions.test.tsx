@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PortalDashboard from "./PortalDashboard";
@@ -280,6 +280,72 @@ describe("PortalDashboard bucket interactions", () => {
 
     expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Inactive").length).toBeGreaterThan(0);
+  });
+
+  it("shows only state badges in ongoing and recent incident cards", async () => {
+    generalSettingsState.endpoint_status_enabled = true;
+    fetchPortalWorkspaceHealthOverviewMock.mockResolvedValueOnce({
+      generated_at: "2026-03-12T12:00:00Z",
+      incident_highlight_minutes: 720,
+      endpoint_count: 1,
+      up_count: 0,
+      degraded_count: 0,
+      down_count: 1,
+      unknown_count: 0,
+      endpoints: [
+        {
+          endpoint_id: 7,
+          name: "Archive",
+          endpoint_url: "https://s3-archive.example.com",
+          status: "down",
+          checked_at: "2026-03-12T11:58:00Z",
+          latency_ms: null,
+          check_mode: "http",
+          check_target_url: "https://s3-archive.example.com",
+        },
+      ],
+      incidents: [
+        {
+          endpoint_id: 7,
+          endpoint_name: "Archive",
+          endpoint_url: "https://s3-archive.example.com",
+          status: "down",
+          start: "2026-03-12T10:00:00Z",
+          end: null,
+          duration_minutes: 120,
+          check_mode: "http",
+          ongoing: true,
+          recent: true,
+        },
+        {
+          endpoint_id: 7,
+          endpoint_name: "Archive",
+          endpoint_url: "https://s3-archive.example.com",
+          status: "down",
+          start: "2026-03-11T10:00:00Z",
+          end: "2026-03-11T10:30:00Z",
+          duration_minutes: 30,
+          check_mode: "http",
+          ongoing: false,
+          recent: true,
+        },
+      ],
+    });
+
+    render(<PortalDashboard />);
+
+    expect(await screen.findByText("Down")).toBeInTheDocument();
+    const incidentsTitle = await screen.findByText("Ongoing / Recent Incidents");
+    const incidentsSection = incidentsTitle.closest("section");
+    expect(incidentsSection).not.toBeNull();
+    const incidents = within(incidentsSection as HTMLElement);
+
+    expect(incidents.getByText("In progress")).toBeInTheDocument();
+    expect(incidents.getByText("Resolved")).toBeInTheDocument();
+    expect(incidents.queryByText("Down")).not.toBeInTheDocument();
+    expect(incidents.queryByText("Degraded")).not.toBeInTheDocument();
+    expect(incidents.queryByText("Up")).not.toBeInTheDocument();
+    expect(incidents.queryByText("Unknown")).not.toBeInTheDocument();
   });
 
   it("allows portal_user to disable a key when key management is enabled", async () => {

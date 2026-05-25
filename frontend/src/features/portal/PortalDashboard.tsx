@@ -1211,15 +1211,6 @@ export default function PortalDashboard() {
                           ? t({ en: "In progress", fr: "En cours", de: "Laufend" })
                           : t({ en: "Resolved", fr: "Resolu", de: "Behoben" })}
                       </UiBadge>
-                      <UiBadge tone={endpointStatusBadge(incident.status).tone}>
-                        {endpointStatusBadge(incident.status).label === "Up"
-                          ? t({ en: "Up", fr: "Disponible", de: "Verfugbar" })
-                          : endpointStatusBadge(incident.status).label === "Degraded"
-                            ? t({ en: "Degraded", fr: "Degrade", de: "Beeintrachtigt" })
-                            : endpointStatusBadge(incident.status).label === "Down"
-                              ? t({ en: "Down", fr: "Indisponible", de: "Nicht verfugbar" })
-                              : t({ en: "Unknown", fr: "Inconnu", de: "Unbekannt" })}
-                      </UiBadge>
                     </div>
                   </div>
                   <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">
