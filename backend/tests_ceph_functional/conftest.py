@@ -257,6 +257,12 @@ def _provision_account(
             "password": manager_password,
             "full_name": "Ceph Functional Manager",
             "role": "ui_user",
+            "manager_tool_access": {
+                "bucket_compare": True,
+                "bucket_integrity_check": True,
+                "bucket_migration": True,
+                "ceph_s3_user_keys": True,
+            },
         },
         expected_status=201,
     )
