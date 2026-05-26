@@ -28,8 +28,10 @@ import {
   type UiFeatureStateTone,
 } from "../../components/ui/styles";
 import {
+  backupCephAdminBucketConfigs,
   BucketProperties,
   CephAdminBucket,
+  type CephAdminBucketConfigBackupFeature,
   deleteCephAdminBucketLogging,
   deleteCephAdminBucketCors,
   deleteCephAdminBucketLifecycle,
@@ -93,6 +95,8 @@ import { normalizeNotificationConfiguration } from "../manager/bucketDetail";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
 import type { BucketIntegrityUiTarget } from "./BucketIntegrityCheckModal";
+import BucketConfigBackupModal from "./BucketConfigBackupModal";
+import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal";
 import BucketOpsBulkUpdateModal from "./BucketOpsBulkUpdateModal";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
@@ -455,6 +459,18 @@ const BULK_COPY_FEATURE_LABELS: Record<BulkCopyFeatureKey, string> = {
   cors: "CORS",
   policy: "Bucket policy",
   access_logging: "Access logging",
+};
+
+const BUCKET_CONFIG_BACKUP_FEATURE_LABELS: Record<CephAdminBucketConfigBackupFeature, string> = {
+  quota: "Quota",
+  versioning: "Versioning",
+  object_lock: "Object Lock",
+  public_access_block: "Block public access",
+  lifecycle: "Lifecycle rules",
+  cors: "CORS",
+  policy: "Bucket policy",
+  access_logging: "Access logging",
+  tags: "Tags",
 };
 
 const DEFAULT_BULK_COPY_FEATURE_SELECTION: BulkCopyFeatureSelection = {
@@ -2247,6 +2263,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showIntegrityModal, setShowIntegrityModal] = useState(false);
+  const [showConfigBackupModal, setShowConfigBackupModal] = useState(false);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
   const [bulkConfigClipboard, setBulkConfigClipboard] = useState<BulkConfigClipboard | null>(() =>
     loadBulkConfigClipboard(bulkClipboardStorageKey)
@@ -3053,6 +3070,25 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const usageUnavailableDescription = statsWarning
     ? statsWarning
     : "Storage metrics are unavailable for this listing, so range filters and quota actions are disabled.";
+  const configBackupFeatureOptions = useMemo<BucketConfigBackupFeatureOption[]>(
+    () =>
+      (Object.keys(BUCKET_CONFIG_BACKUP_FEATURE_LABELS) as CephAdminBucketConfigBackupFeature[]).map((feature) => {
+        if (feature === "quota" && !usageFeatureEnabled) {
+          return {
+            key: feature,
+            label: BUCKET_CONFIG_BACKUP_FEATURE_LABELS[feature],
+            available: false,
+            unavailableReason: usageUnavailableBadge,
+          };
+        }
+        return {
+          key: feature,
+          label: BUCKET_CONFIG_BACKUP_FEATURE_LABELS[feature],
+          available: true,
+        };
+      }),
+    [usageFeatureEnabled, usageUnavailableBadge]
+  );
 
   useEffect(() => {
     if (isStorageOps) {
@@ -3259,6 +3295,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setSelectionTagActionLoading(null);
     setSelectionTagAddInput("");
     setSelectionExportLoading(null);
+    setShowConfigBackupModal(false);
   };
 
   const updateTagDraft = (bucketKey: string, value: string) => {
@@ -4098,6 +4135,24 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         setSelectionActionProgress(null);
       }
     }
+  };
+
+  const createConfigBackup = async (features: CephAdminBucketConfigBackupFeature[]) => {
+    if (isStorageOps || !selectedEndpointId || selectedBucketList.length === 0) return;
+    const generatedAt = new Date().toISOString();
+    const timestamp = generatedAt.replace(/[:.]/g, "-");
+    const endpointPart = sanitizeExportFilenamePart(
+      selectedEndpoint?.name ?? (selectedEndpointId ? `endpoint-${selectedEndpointId}` : "endpoint")
+    );
+    const backup = await backupCephAdminBucketConfigs(selectedEndpointId, {
+      buckets: selectedBucketList,
+      features,
+    });
+    triggerDownload(
+      `ceph-admin-bucket-config-backup-${endpointPart}-${timestamp}.json`,
+      JSON.stringify(backup, null, 2),
+      "application/json"
+    );
   };
 
   const resetBulkPreview = () => {
@@ -9177,6 +9232,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             exportSelectedBuckets={exportSelectedBuckets}
             selectionActionProgress={selectionActionProgress}
             isStorageOps={isStorageOps}
+            onShowConfigBackupModal={!isStorageOps ? () => setShowConfigBackupModal(true) : undefined}
             onShowCompareModal={() => setShowCompareModal(true)}
             onShowIntegrityModal={() => setShowIntegrityModal(true)}
             openBulkUpdateModal={openBulkUpdateModal}
@@ -9369,6 +9425,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           mode="storage-ops"
           targets={selectedIntegrityTargets}
           onClose={() => setShowIntegrityModal(false)}
+        />
+      )}
+      {!isStorageOps && showConfigBackupModal && selectedEndpointId && selectedBucketList.length > 0 && (
+        <BucketConfigBackupModal
+          bucketCount={selectedBucketList.length}
+          featureOptions={configBackupFeatureOptions}
+          onClose={() => setShowConfigBackupModal(false)}
+          onCreate={createConfigBackup}
         />
       )}
       <BucketOpsBulkUpdateModal open={showBulkUpdateModal} onClose={closeBulkUpdateModal}>

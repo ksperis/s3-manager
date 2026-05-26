@@ -44,6 +44,11 @@ from app.models.bucket import (
     BucketVersioningStatus,
     BucketWebsiteConfiguration,
 )
+from app.models.bucket_config_backup import (
+    BucketConfigBackupRequest,
+    BucketConfigBackupResponse,
+    BucketConfigBackupSource,
+)
 from app.models.ceph_admin import (
     CephAdminBucketCompareRequest,
     CephAdminBucketCompareResult,
@@ -61,6 +66,10 @@ from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     is_bucket_notification_configuration_configured,
+)
+from app.services.bucket_config_backup_service import (
+    BucketConfigBackupService,
+    quota_from_bucket_summary,
 )
 from app.services.bucket_listing_shared import (
     _filter_requires_stats as _shared_filter_requires_stats,
@@ -2601,6 +2610,37 @@ def refresh_bucket_listing_cache(
     _invalidate_bucket_listing_cache(resolved_endpoint_id)
     invalidate_bucket_owner_metadata_cache(resolved_endpoint_id)
     return {"refreshed": True, "endpoint_id": resolved_endpoint_id}
+
+
+@router.post("/config-backup", response_model=BucketConfigBackupResponse)
+def backup_bucket_configs(
+    payload: BucketConfigBackupRequest,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> BucketConfigBackupResponse:
+    service = BucketConfigBackupService(BucketsService())
+    account = _build_endpoint_account(ctx)
+
+    def quota_loader(bucket_name: str) -> dict[str, int | None]:
+        try:
+            raw = ctx.rgw_admin.get_bucket_info(bucket_name, stats=True, allow_not_found=True)
+        except RGWAdminError as exc:
+            raise RuntimeError(f"Unable to fetch bucket quota: {exc}") from exc
+        if not isinstance(raw, dict):
+            raise RuntimeError("Unable to fetch bucket quota: bucket not found")
+        summary = _build_bucket_summary(raw)
+        return quota_from_bucket_summary(summary)
+
+    return service.build_backup(
+        account=account,
+        bucket_names=payload.buckets,
+        features=payload.features,
+        source=BucketConfigBackupSource(
+            surface="ceph-admin",
+            endpoint_id=ctx.endpoint.id,
+            endpoint_name=ctx.endpoint.name,
+        ),
+        quota_loader=quota_loader,
+    )
 
 
 @router.post("/compare", response_model=CephAdminBucketCompareResult)

@@ -597,6 +597,41 @@ export type BucketListingCacheRefreshResponse = {
   endpoints?: number;
 };
 
+export type CephAdminBucketConfigBackupFeature =
+  | "quota"
+  | "versioning"
+  | "object_lock"
+  | "public_access_block"
+  | "lifecycle"
+  | "cors"
+  | "policy"
+  | "access_logging"
+  | "tags";
+
+export type CephAdminBucketConfigBackupRequest = {
+  buckets: string[];
+  features: CephAdminBucketConfigBackupFeature[];
+};
+
+export type CephAdminBucketConfigBackupBucket = {
+  name: string;
+  configuration: Record<string, unknown>;
+  errors: Record<string, string>;
+};
+
+export type CephAdminBucketConfigBackupResponse = {
+  kind: string;
+  version: number;
+  generated_at: string;
+  source: {
+    surface: string;
+    endpoint_id?: number | null;
+    endpoint_name?: string | null;
+  };
+  features: CephAdminBucketConfigBackupFeature[];
+  buckets: CephAdminBucketConfigBackupBucket[];
+};
+
 export async function listCephAdminBuckets(
   endpointId: number,
   params?: ListCephAdminBucketsParams,
@@ -623,6 +658,19 @@ export async function refreshCephAdminBucketListingCache(
 ): Promise<BucketListingCacheRefreshResponse> {
   const { data } = await client.post<BucketListingCacheRefreshResponse>(
     `/ceph-admin/endpoints/${endpointId}/buckets/cache/refresh`
+  );
+  return data;
+}
+
+export async function backupCephAdminBucketConfigs(
+  endpointId: number,
+  payload: CephAdminBucketConfigBackupRequest,
+  options?: { signal?: AbortSignal }
+): Promise<CephAdminBucketConfigBackupResponse> {
+  const { data } = await client.post<CephAdminBucketConfigBackupResponse>(
+    `/ceph-admin/endpoints/${endpointId}/buckets/config-backup`,
+    payload,
+    { signal: options?.signal }
   );
   return data;
 }

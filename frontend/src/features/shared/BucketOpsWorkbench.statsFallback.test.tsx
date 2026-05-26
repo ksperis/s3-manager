@@ -21,6 +21,7 @@ vi.mock("react-router-dom", async () => {
 });
 
 vi.mock("../../api/cephAdmin", () => ({
+  backupCephAdminBucketConfigs: mocks.noopAsync,
   deleteCephAdminBucketLogging: mocks.noopAsync,
   deleteCephAdminBucketCors: mocks.noopAsync,
   deleteCephAdminBucketLifecycle: mocks.noopAsync,
