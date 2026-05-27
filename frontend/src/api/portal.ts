@@ -52,6 +52,51 @@ export type PortalUsage = {
   used_objects?: number | null;
 };
 
+export type PortalStorageSpaceRole = "Viewer" | "Editor" | "Owner";
+
+export type PortalStorageSpaceSummary = {
+  id: string;
+  name: string;
+  role: PortalStorageSpaceRole;
+  status?: string | null;
+  region?: string | null;
+  created_at?: string | null;
+  used_bytes?: number | null;
+  object_count?: number | null;
+  quota_max_size_bytes?: number | null;
+  quota_max_objects?: number | null;
+  internal_bucket_name?: string | null;
+};
+
+export type PortalStorageSpace = PortalStorageSpaceSummary & {
+  description?: string | null;
+};
+
+export type PortalStorageObject = {
+  key: string;
+  name: string;
+  size?: number | null;
+  last_modified?: string | null;
+};
+
+export type PortalStorageObjectListing = {
+  prefix: string;
+  objects: PortalStorageObject[];
+  prefixes: string[];
+  is_truncated?: boolean;
+  next_continuation_token?: string | null;
+};
+
+export type PortalStorageObjectUploadResponse = {
+  key: string;
+  message: string;
+};
+
+export type PortalStorageObjectDownload = {
+  blob: Blob;
+  filename: string;
+};
+
 export type PortalUserSummary = {
   id: number | null;
   email: string;
@@ -120,6 +165,109 @@ export async function listPortalBuckets(
   }
   const { data } = await client.get<Bucket[]>("/portal/buckets", { params: withS3AccountParam(baseParams, accountId) });
   return data;
+}
+
+export async function listPortalStorageSpaces(
+  accountId: S3AccountSelector,
+  options?: { search?: string }
+): Promise<PortalStorageSpaceSummary[]> {
+  const baseParams: Record<string, string> = {};
+  if (options?.search) {
+    baseParams.search = options.search;
+  }
+  const { data } = await client.get<PortalStorageSpaceSummary[]>("/portal/storage-spaces", {
+    params: withS3AccountParam(baseParams, accountId),
+  });
+  return data;
+}
+
+export async function fetchPortalStorageSpace(
+  accountId: S3AccountSelector,
+  spaceId: string
+): Promise<PortalStorageSpace> {
+  const { data } = await client.get<PortalStorageSpace>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function listPortalStorageSpaceObjects(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  options?: { prefix?: string; continuationToken?: string; maxKeys?: number }
+): Promise<PortalStorageObjectListing> {
+  const baseParams: Record<string, string | number> = {};
+  if (options?.prefix) {
+    baseParams.prefix = options.prefix;
+  }
+  if (options?.continuationToken) {
+    baseParams.continuation_token = options.continuationToken;
+  }
+  if (options?.maxKeys) {
+    baseParams.max_keys = options.maxKeys;
+  }
+  const { data } = await client.get<PortalStorageObjectListing>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects`,
+    { params: withS3AccountParam(baseParams, accountId) }
+  );
+  return data;
+}
+
+export async function uploadPortalStorageSpaceObject(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  file: File,
+  options?: { prefix?: string; key?: string }
+): Promise<PortalStorageObjectUploadResponse> {
+  const payload = new FormData();
+  payload.append("file", file);
+  if (options?.prefix) {
+    payload.append("prefix", options.prefix);
+  }
+  if (options?.key) {
+    payload.append("key", options.key);
+  }
+  const { data } = await client.post<PortalStorageObjectUploadResponse>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects/upload`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+function filenameFromContentDisposition(value: unknown, fallback: string): string {
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  const extended = value.match(/filename\*\s*=\s*([^;]+)/i);
+  if (extended?.[1]) {
+    const raw = extended[1].trim().replace(/^"|"$/g, "");
+    const encoded = raw.includes("''") ? raw.split("''").at(-1) ?? raw : raw;
+    try {
+      const decoded = decodeURIComponent(encoded);
+      return decoded.split("/").filter(Boolean).at(-1) ?? fallback;
+    } catch {
+      return encoded.split("/").filter(Boolean).at(-1) ?? fallback;
+    }
+  }
+  const basic = value.match(/filename\s*=\s*"?([^";]+)"?/i);
+  return basic?.[1]?.split("/").filter(Boolean).at(-1) ?? fallback;
+}
+
+export async function downloadPortalStorageSpaceObject(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  key: string
+): Promise<PortalStorageObjectDownload> {
+  const response = await client.get<Blob>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects/download`,
+    {
+      params: withS3AccountParam({ key }, accountId),
+      responseType: "blob",
+    }
+  );
+  const fallback = key.split("/").filter(Boolean).at(-1) ?? "download";
+  const filename = filenameFromContentDisposition(response.headers?.["content-disposition"], fallback);
+  return { blob: response.data, filename };
 }
 
 export async function fetchPortalBucketStats(

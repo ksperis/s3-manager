@@ -24,7 +24,8 @@ export function prefetchWorkspaceBranch(pathname: string): void {
     void Promise.allSettled([
       import("../features/portal/PortalLayout"),
       import("../features/portal/PortalDashboard"),
-      import("../features/portal/PortalBucketsPage"),
+      import("../features/portal/PortalStorageSpacesPage"),
+      import("../features/portal/PortalObjectDetailPage"),
     ]);
     return;
   }

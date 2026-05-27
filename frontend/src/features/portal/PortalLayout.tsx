@@ -2,23 +2,28 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { Outlet } from "react-router-dom";
-import Layout from "../../components/Layout";
-import { SidebarSection } from "../../components/Sidebar";
-import TopbarDropdownSelect, { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
+import { NavLink, Outlet } from "react-router-dom";
+import type { ReactNode } from "react";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
-import { useGeneralSettings } from "../../components/GeneralSettingsContext";
-import { useI18n } from "../../i18n";
-import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
+import { cx } from "../../components/ui/styles";
 
-type StoredUser = {
-  account_links?: { account_id: number | string; account_role?: string | null }[] | null;
+type PortalNavItem = {
+  to: string;
+  label: string;
+  end?: boolean;
+  icon: ReactNode;
 };
 
-function getStoredUser(): StoredUser | null {
+type StoredUser = {
+  email?: string | null;
+  full_name?: string | null;
+  display_name?: string | null;
+};
+
+function readStoredUser(): StoredUser | null {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("user");
+  const raw = window.localStorage.getItem("user");
   if (!raw) return null;
   try {
     return JSON.parse(raw) as StoredUser;
@@ -27,197 +32,129 @@ function getStoredUser(): StoredUser | null {
   }
 }
 
-function normalizePortalRole(value?: string | null): string | null {
-  const normalized = (value ?? "").trim().toLowerCase();
-  if (normalized === "portal_user" || normalized === "portal_manager" || normalized === "portal_none") {
-    return normalized;
-  }
-  return null;
+const userNavigation: PortalNavItem[] = [
+  { to: "/portal", label: "Dashboard", end: true, icon: <HomeIcon /> },
+  { to: "/portal/storage-spaces", label: "Storage Spaces", icon: <StorageIcon /> },
+  { to: "/portal/shares", label: "Shares", icon: <ShareIcon /> },
+  { to: "/portal/activity", label: "Activity", icon: <ActivityIcon /> },
+  { to: "/portal/transfers", label: "Transfers", icon: <TransferIcon /> },
+  { to: "/portal/usage", label: "Usage & Analytics", icon: <ChartIcon /> },
+];
+
+const adminNavigation: PortalNavItem[] = [
+  { to: "/portal/users", label: "Users", icon: <UserIcon /> },
+  { to: "/portal/groups", label: "Groups", icon: <GroupIcon /> },
+  { to: "/portal/policies", label: "Policies", icon: <PolicyIcon /> },
+  { to: "/portal/access-keys", label: "Access Keys", icon: <KeyIcon /> },
+  { to: "/portal/settings", label: "Settings", icon: <SettingsIcon /> },
+];
+
+function PortalNavLink({ item }: { item: PortalNavItem }) {
+  return (
+    <NavLink
+      to={item.to}
+      end={item.end}
+      className={({ isActive }) =>
+        cx(
+          "group flex h-8 items-center gap-2 rounded-md px-2 text-[12px] font-semibold transition",
+          isActive
+            ? "bg-blue-50 text-blue-700"
+            : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <span className={cx("flex h-4 w-4 shrink-0 items-center justify-center", isActive ? "text-blue-600" : "text-slate-500")}>
+            {item.icon}
+          </span>
+          <span className="truncate">{item.label}</span>
+        </>
+      )}
+    </NavLink>
+  );
 }
 
-function resolvePortalRole(user: StoredUser | null, accountId: string | null): string | null {
-  if (!user || !accountId) return null;
-  const normalizedTargetId = String(accountId).trim();
-  if (!normalizedTargetId) return null;
-  const links = user.account_links ?? [];
-  const direct = links.find((entry) => String(entry.account_id).trim() === normalizedTargetId);
-  if (direct) return normalizePortalRole(direct.account_role);
-
-  const numericTargetId = Number(normalizedTargetId);
-  if (!Number.isFinite(numericTargetId)) return null;
-  const numeric = links.find((entry) => Number(entry.account_id) === numericTargetId);
-  return normalizePortalRole(numeric?.account_role);
-}
-
-type AccountSelectorProps = {
-  triggerMode?: "icon" | "icon_label";
-  openInPortal?: boolean;
-  widthClassName?: string;
-  menuMinWidthClassName?: string;
-};
-
-function AccountSelector({
-  triggerMode = "icon_label",
-  openInPortal = true,
-  widthClassName,
-  menuMinWidthClassName = "min-w-full",
-}: AccountSelectorProps) {
-  const { t } = useI18n();
-  const { accounts, selectedAccountId, setSelectedAccountId, selectedAccount, loading, error } = usePortalAccountContext();
+function PortalAccountFooter() {
+  const { accounts, selectedAccount, selectedAccountId, setSelectedAccountId } = usePortalAccountContext();
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
-  const iconOnly = triggerMode === "icon";
-  const selectedLabel = selectedAccount
+  const storedUser = readStoredUser();
+  const displayName = storedUser?.display_name || storedUser?.full_name || storedUser?.email?.split("@")[0] || "Laurent";
+  const accountLabel = selectedAccount
     ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
-    : t({ en: "No account", fr: "Aucun compte", de: "Kein Konto" });
-  const options: TopbarDropdownOption[] = [
-    ...(!selectedAccount
-      ? [
-          {
-            value: "",
-            label: t({ en: "Select an account", fr: "Selectionnez un compte", de: "Konto auswahlen" }),
-          },
-        ]
-      : []),
-    ...accounts.map((acc) => ({
-      value: acc.id,
-      label: formatAccountLabel(acc, defaultEndpointId, defaultEndpointName, false),
-      title: acc.storage_endpoint_url || undefined,
-    })),
-  ];
-  const pillClasses =
-    "inline-flex h-9 w-56 items-center rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
-  const iconButtonClasses =
-    "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
-
-  if (loading) {
-    if (iconOnly) {
-      return (
-        <button
-          type="button"
-          disabled
-          aria-label={t({ en: "Loading account", fr: "Chargement du compte", de: "Konto wird geladen" })}
-          className={iconButtonClasses}
-        >
-          <AccountControlIcon className="h-4 w-4 animate-pulse" />
-        </button>
-      );
-    }
-    return <div className={pillClasses}>{t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}</div>;
-  }
-
-  if (error) {
-    if (iconOnly) {
-      return (
-        <button type="button" aria-label={error} title={error} className={`${iconButtonClasses} text-rose-600 dark:text-rose-300`}>
-          <WarningIcon className="h-4 w-4" />
-        </button>
-      );
-    }
-    return <div className="ui-body font-semibold text-rose-600">{error}</div>;
-  }
-
-  if (accounts.length <= 1) {
-    if (iconOnly) {
-      return (
-        <button
-          type="button"
-          aria-label={selectedLabel}
-          title={selectedAccount?.storage_endpoint_url || selectedLabel}
-          className={iconButtonClasses}
-        >
-          <AccountControlIcon className="h-4 w-4" />
-        </button>
-      );
-    }
-    return (
-      <div className={pillClasses} title={selectedAccount?.storage_endpoint_url || undefined}>
-        {selectedLabel}
-      </div>
-    );
-  }
-
-  const handleChange = (selectedValue: string) => {
-    const value = selectedValue || null;
-    setSelectedAccountId(value);
-  };
+    : "Workspace";
+  const initials = displayName
+    .split(/[.\s_-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "LA";
 
   return (
-    <TopbarDropdownSelect
-      value={selectedAccountId ?? ""}
-      options={options}
-      onChange={handleChange}
-      ariaLabel={t({ en: "Select portal account", fr: "Selectionner un compte portail", de: "Portal-Konto auswahlen" })}
-      triggerLabel={t({ en: "Account", fr: "Compte", de: "Konto" })}
-      widthClassName={widthClassName ?? (iconOnly ? "w-9" : "w-56 lg:w-64")}
-      menuMinWidthClassName={menuMinWidthClassName}
-      triggerMode={triggerMode}
-      openInPortal={openInPortal}
-      icon={<AccountControlIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
-    />
+    <div className="border-t border-slate-100 p-3">
+      {accounts.length > 1 ? (
+        <label className="mb-3 block">
+          <span className="sr-only">Select portal account</span>
+          <select
+            value={selectedAccountId ?? ""}
+            onChange={(event) => setSelectedAccountId(event.target.value || null)}
+            className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[12px] font-semibold text-slate-700 shadow-sm"
+          >
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {formatAccountLabel(account, defaultEndpointId, defaultEndpointName, false)}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      <div className="flex items-center gap-2">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-700 text-[11px] font-bold text-white">
+          {initials}
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-[12px] font-bold text-slate-950">{displayName}</div>
+          <div className="truncate text-[11px] text-slate-500">{accountLabel}</div>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function PortalShell() {
-  const { t } = useI18n();
-  const { selectedAccountId, selectedAccount, loading } = usePortalAccountContext();
-  const { generalSettings } = useGeneralSettings();
-  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
-  const storedUser = getStoredUser();
-  const accountRole = resolvePortalRole(storedUser, selectedAccountId);
-  const storedRoles = (storedUser?.account_links ?? [])
-    .map((entry) => normalizePortalRole(entry.account_role))
-    .filter((role): role is string => Boolean(role));
-  const hasPortalManagerRole = storedRoles.includes("portal_manager");
-  const hasPortalUserRole = storedRoles.includes("portal_user");
-  const effectiveAccountRole = accountRole ?? (hasPortalUserRole && !hasPortalManagerRole ? "portal_user" : null);
-  const isPortalManager = effectiveAccountRole === "portal_manager";
-  const selectedPortalLabel = selectedAccount
-    ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
-    : loading
-      ? t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })
-      : t({ en: "No account", fr: "Aucun compte", de: "Kein Konto" });
-  const navSections: SidebarSection[] = [
-    {
-      label: t({ en: "Portal", fr: "Portail", de: "Portal" }),
-      links: [
-        { to: "/portal", label: t({ en: "Home", fr: "Accueil", de: "Startseite" }), end: true },
-        ...(generalSettings.browser_enabled && generalSettings.browser_portal_enabled
-          ? [{ to: "/portal/browser", label: t({ en: "Browser", fr: "Browser", de: "Browser" }) }]
-          : []),
-        ...(isPortalManager ? [{ to: "/portal/buckets", label: t({ en: "Buckets", fr: "Buckets", de: "Buckets" }) }] : []),
-        { to: "/portal/manage", label: t({ en: "Access", fr: "Acces", de: "Zugriff" }) },
-        ...(generalSettings.billing_enabled
-          ? [{ to: "/portal/billing", label: t({ en: "Billing", fr: "Facturation", de: "Abrechnung" }) }]
-          : []),
-        { to: "/portal/settings", label: t({ en: "Settings", fr: "Configuration", de: "Einstellungen" }) },
-      ],
-    },
-  ];
-
-  const topbarControlDescriptors: TopbarControlDescriptor[] = [
-    {
-      id: "account",
-      icon: <AccountControlIcon className="h-4 w-4" />,
-      selectedLabel: selectedPortalLabel,
-      priority: 10,
-      estimatedIconWidth: 36,
-      estimatedLabelWidth: 220,
-      renderControl: (mode) => (
-        <AccountSelector triggerMode={mode} openInPortal widthClassName={mode === "icon" ? "w-9" : "w-56 lg:w-64"} />
-      ),
-    },
-  ];
-
   return (
-    <Layout
-      headerTitle={t({ en: "Portal", fr: "Portail", de: "Portal" })}
-      navSections={navSections}
-      sidebarTitle="PORTAL"
-      hideHeader
-      topbarControlDescriptors={topbarControlDescriptors}
-    >
-      <Outlet />
-    </Layout>
+    <div className="portal-v3 flex h-screen overflow-hidden bg-[#f4f7fb] text-slate-900">
+      <aside className="hidden w-[188px] shrink-0 border-r border-slate-200 bg-white md:flex md:flex-col">
+        <div className="flex h-14 items-center justify-between border-b border-slate-100 px-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-white">
+              <StorageIcon />
+            </div>
+            <span className="text-[12px] font-bold text-slate-950">S3 Manager</span>
+          </div>
+          <span className="text-[11px] font-bold text-slate-400">{"<<"}</span>
+        </div>
+
+        <nav className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 py-4" aria-label="Portal navigation">
+          <div className="space-y-1">
+            {userNavigation.map((item) => (
+              <PortalNavLink key={item.to} item={item} />
+            ))}
+          </div>
+          <div className="space-y-1">
+            <div className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Administration</div>
+            {adminNavigation.map((item) => (
+              <PortalNavLink key={item.to} item={item} />
+            ))}
+          </div>
+        </nav>
+
+        <PortalAccountFooter />
+      </aside>
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <Outlet />
+      </main>
+    </div>
   );
 }
 
@@ -229,23 +166,109 @@ export default function PortalLayout() {
   );
 }
 
-function AccountControlIcon(props: React.SVGProps<SVGSVGElement>) {
+function IconBase({ children }: { children: ReactNode }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <rect x="3" y="5" width="18" height="14" rx="2.5" strokeWidth={1.5} />
-      <path strokeLinecap="round" strokeWidth={1.5} d="M3 10h18" />
-      <circle cx="8.5" cy="14.2" r="1.1" strokeWidth={1.4} />
-      <path strokeLinecap="round" strokeWidth={1.5} d="M12 14.2h6" />
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" className="h-4 w-4">
+      {children}
     </svg>
   );
 }
 
-function WarningIcon(props: React.SVGProps<SVGSVGElement>) {
+function HomeIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="m12 4 9 16H3l9-16Z" />
-      <path strokeLinecap="round" strokeWidth={1.7} d="M12 9v5.5" />
-      <circle cx="12" cy="17.5" r="1" fill="currentColor" stroke="none" />
-    </svg>
+    <IconBase>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M3 9.3 10 4l7 5.3V16H3V9.3Z" />
+    </IconBase>
+  );
+}
+
+function StorageIcon() {
+  return (
+    <IconBase>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M3.5 6.2 10 3.5l6.5 2.7L10 9 3.5 6.2Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M3.5 10 10 12.8 16.5 10M3.5 13.7 10 16.5l6.5-2.8" />
+    </IconBase>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <IconBase>
+      <circle cx="6" cy="10" r="2.2" strokeWidth={1.7} />
+      <circle cx="14.5" cy="5.8" r="2" strokeWidth={1.7} />
+      <circle cx="14.5" cy="14.2" r="2" strokeWidth={1.7} />
+      <path strokeLinecap="round" strokeWidth={1.7} d="m8 9 4.5-2.3M8 11l4.5 2.3" />
+    </IconBase>
+  );
+}
+
+function ActivityIcon() {
+  return (
+    <IconBase>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M3 10h3l2-4 3.5 8L14 10h3" />
+    </IconBase>
+  );
+}
+
+function TransferIcon() {
+  return (
+    <IconBase>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M4 6h10m0 0-2.5-2.5M14 6 11.5 8.5M16 14H6m0 0 2.5-2.5M6 14l2.5 2.5" />
+    </IconBase>
+  );
+}
+
+function ChartIcon() {
+  return (
+    <IconBase>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M4 16V9m6 7V4m6 12v-5" />
+    </IconBase>
+  );
+}
+
+function UserIcon() {
+  return (
+    <IconBase>
+      <circle cx="10" cy="6.5" r="2.6" strokeWidth={1.7} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M4.5 15.5c1.4-2 3-3 5.5-3s4.1 1 5.5 3" />
+    </IconBase>
+  );
+}
+
+function GroupIcon() {
+  return (
+    <IconBase>
+      <circle cx="7" cy="7.2" r="2.2" strokeWidth={1.6} />
+      <circle cx="13.1" cy="8.1" r="1.8" strokeWidth={1.6} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M3.8 15.2c.9-1.6 2-2.4 3.8-2.4 1.7 0 2.8.8 3.7 2.4m1.3-2.2c1.3.1 2.2.8 3 2" />
+    </IconBase>
+  );
+}
+
+function PolicyIcon() {
+  return (
+    <IconBase>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M6 3.5h6l3 3V16.5H6V3.5Zm6 0v3h3" />
+    </IconBase>
+  );
+}
+
+function KeyIcon() {
+  return (
+    <IconBase>
+      <circle cx="7" cy="10" r="3" strokeWidth={1.7} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M10 10h6m-2 0v2m-2-2v2" />
+    </IconBase>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <IconBase>
+      <path strokeLinecap="round" strokeWidth={1.7} d="M4 5.5h12M4 10h12M4 14.5h12" />
+      <circle cx="7.2" cy="5.5" r="1.4" strokeWidth={1.7} />
+      <circle cx="12.4" cy="10" r="1.4" strokeWidth={1.7} />
+      <circle cx="9.5" cy="14.5" r="1.4" strokeWidth={1.7} />
+    </IconBase>
   );
 }

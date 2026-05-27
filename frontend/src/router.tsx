@@ -63,11 +63,18 @@ const loadManagerBucketIntegrityPage = () => import("./features/manager/ManagerB
 const loadManagerCephKeysPage = () => import("./features/manager/ManagerCephKeysPage");
 const loadPortalLayout = () => import("./features/portal/PortalLayout");
 const loadPortalDashboard = () => import("./features/portal/PortalDashboard");
-const loadPortalBucketsPage = () => import("./features/portal/PortalBucketsPage");
-const loadPortalBrowserPage = () => import("./features/portal/PortalBrowserPage");
-const loadPortalManagePage = () => import("./features/portal/PortalManagePage");
+const loadPortalStorageSpacesPage = () => import("./features/portal/PortalStorageSpacesPage");
+const loadPortalStorageSpaceDetailPage = () => import("./features/portal/PortalStorageSpaceDetailPage");
+const loadPortalObjectDetailPage = () => import("./features/portal/PortalObjectDetailPage");
+const loadPortalSharesPage = () => import("./features/portal/PortalSharesPage");
+const loadPortalActivityPage = () => import("./features/portal/PortalActivityPage");
+const loadPortalTransfersPage = () => import("./features/portal/PortalTransfersPage");
+const loadPortalUsagePage = () => import("./features/portal/PortalUsagePage");
 const loadPortalSettingsPage = () => import("./features/portal/PortalSettingsPage");
-const loadPortalBillingPage = () => import("./features/portal/BillingPage");
+const loadPortalUsersPage = () => import("./features/portal/PortalAdminMockPages").then((module) => ({ default: module.PortalUsersPage }));
+const loadPortalGroupsPage = () => import("./features/portal/PortalAdminMockPages").then((module) => ({ default: module.PortalGroupsPage }));
+const loadPortalPoliciesPage = () => import("./features/portal/PortalAdminMockPages").then((module) => ({ default: module.PortalPoliciesPage }));
+const loadPortalAccessKeysPage = () => import("./features/portal/PortalAdminMockPages").then((module) => ({ default: module.PortalAccessKeysPage }));
 const loadBrowserLayout = () => import("./features/browser/BrowserLayout");
 const loadCephAdminLayout = () => import("./features/cephAdmin/CephAdminLayout");
 const loadCephAdminDashboard = () => import("./features/cephAdmin/CephAdminDashboard");
@@ -128,11 +135,18 @@ const ManagerBucketIntegrityPage = lazy(loadManagerBucketIntegrityPage);
 const ManagerCephKeysPage = lazy(loadManagerCephKeysPage);
 const PortalLayout = lazy(loadPortalLayout);
 const PortalDashboard = lazy(loadPortalDashboard);
-const PortalBucketsPage = lazy(loadPortalBucketsPage);
-const PortalBrowserPage = lazy(loadPortalBrowserPage);
-const PortalManagePage = lazy(loadPortalManagePage);
+const PortalStorageSpacesPage = lazy(loadPortalStorageSpacesPage);
+const PortalStorageSpaceDetailPage = lazy(loadPortalStorageSpaceDetailPage);
+const PortalObjectDetailPage = lazy(loadPortalObjectDetailPage);
+const PortalSharesPage = lazy(loadPortalSharesPage);
+const PortalActivityPage = lazy(loadPortalActivityPage);
+const PortalTransfersPage = lazy(loadPortalTransfersPage);
+const PortalUsagePage = lazy(loadPortalUsagePage);
 const PortalSettingsPage = lazy(loadPortalSettingsPage);
-const PortalBillingPage = lazy(loadPortalBillingPage);
+const PortalUsersPage = lazy(loadPortalUsersPage);
+const PortalGroupsPage = lazy(loadPortalGroupsPage);
+const PortalPoliciesPage = lazy(loadPortalPoliciesPage);
+const PortalAccessKeysPage = lazy(loadPortalAccessKeysPage);
 const BrowserLayout = lazy(loadBrowserLayout);
 const CephAdminLayout = lazy(loadCephAdminLayout);
 const CephAdminDashboard = lazy(loadCephAdminDashboard);
@@ -150,6 +164,13 @@ const ProfilePage = lazy(loadProfilePage);
 const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
+
+export const PORTAL_LEGACY_REDIRECTS = {
+  buckets: "/portal/storage-spaces",
+  manage: "/portal/shares",
+  billing: "/portal/usage",
+  browser: "/portal/storage-spaces",
+} as const;
 
 function RouteFallback() {
   return (
@@ -273,11 +294,6 @@ function AdminBillingRoute() {
 function AdminPortalSettingsRoute() {
   const { generalSettings } = useGeneralSettings();
   return generalSettings.portal_enabled ? <AdminPortalSettingsPage /> : <FeatureDisabledPage feature="Portal" />;
-}
-
-function PortalBillingRoute() {
-  const { generalSettings } = useGeneralSettings();
-  return generalSettings.billing_enabled ? <PortalBillingPage /> : <FeatureDisabledPage feature="Billing" />;
 }
 
 function AdminEndpointStatusRoute() {
@@ -563,13 +579,22 @@ export function createAppRoutes() {
           <Route element={<RequireFeature feature="portal" />}>
             <Route path="/portal" element={<PortalLayout />}>
               <Route index element={<PortalDashboard />} />
-              <Route path="buckets" element={<PortalBucketsPage />} />
-              <Route element={<RequireBrowserSurface surface="portal" />}>
-                <Route path="browser" element={<PortalBrowserPage />} />
-              </Route>
-              <Route path="manage" element={<PortalManagePage />} />
-              <Route path="billing" element={<PortalBillingRoute />} />
+              <Route path="storage-spaces" element={<PortalStorageSpacesPage />} />
+              <Route path="storage-spaces/:spaceId/objects/*" element={<PortalObjectDetailPage />} />
+              <Route path="storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
+              <Route path="shares" element={<PortalSharesPage />} />
+              <Route path="activity" element={<PortalActivityPage />} />
+              <Route path="transfers" element={<PortalTransfersPage />} />
+              <Route path="usage" element={<PortalUsagePage />} />
+              <Route path="users" element={<PortalUsersPage />} />
+              <Route path="groups" element={<PortalGroupsPage />} />
+              <Route path="policies" element={<PortalPoliciesPage />} />
+              <Route path="access-keys" element={<PortalAccessKeysPage />} />
               <Route path="settings" element={<PortalSettingsPage />} />
+              <Route path="buckets" element={<Navigate to={PORTAL_LEGACY_REDIRECTS.buckets} replace />} />
+              <Route path="manage" element={<Navigate to={PORTAL_LEGACY_REDIRECTS.manage} replace />} />
+              <Route path="billing" element={<Navigate to={PORTAL_LEGACY_REDIRECTS.billing} replace />} />
+              <Route path="browser" element={<Navigate to={PORTAL_LEGACY_REDIRECTS.browser} replace />} />
             </Route>
           </Route>
         </Route>

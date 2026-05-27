@@ -3,9 +3,12 @@
 import copy
 import json
 import logging
+import os
 from datetime import datetime
+from io import BytesIO
 from typing import Any, Optional, Tuple, TYPE_CHECKING
 
+from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -30,10 +33,16 @@ from app.models.portal import (
     PortalIamComplianceIssue,
     PortalIamComplianceReport,
     PortalState,
+    PortalStorageSpace,
+    PortalStorageObject,
+    PortalStorageObjectListing,
+    PortalStorageSpaceRole,
+    PortalStorageSpaceSummary,
     PortalUsage,
 )
 from app.services.app_settings_service import load_app_settings
 from app.services import s3_client
+from app.services.s3_client import get_s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
@@ -1380,6 +1389,255 @@ class PortalService:
             return self._extract_bucket_access(policy)
         iam_service.delete_user_inline_policy(link.iam_username, self._bucket_access_policy_name)
         return []
+
+    def _storage_space_label(self, bucket_name: str) -> str:
+        cleaned = " ".join(bucket_name.replace("_", " ").replace("-", " ").split())
+        if not cleaned:
+            return bucket_name
+        return " ".join(part[:1].upper() + part[1:] for part in cleaned.split())
+
+    def _storage_space_role(self, access: "AccountAccess") -> PortalStorageSpaceRole:
+        if access.capabilities.can_manage_buckets or access.role == AccountRole.PORTAL_MANAGER.value:
+            return "Owner"
+        if access.role == AccountRole.PORTAL_USER.value:
+            return "Editor"
+        return "Viewer"
+
+    def _storage_space_status(self, bucket: Bucket, role: PortalStorageSpaceRole) -> str:
+        if role != "Owner":
+            return "Shared"
+        used = bucket.used_bytes
+        quota = bucket.quota_max_size_bytes
+        if used is not None and quota is not None and quota > 0 and used / quota >= 0.85:
+            return "Attention"
+        return "Active"
+
+    def _bucket_to_storage_space_summary(
+        self,
+        bucket: Bucket,
+        access: "AccountAccess",
+    ) -> PortalStorageSpaceSummary:
+        role = self._storage_space_role(access)
+        endpoint = getattr(access.account, "storage_endpoint", None)
+        region = getattr(endpoint, "region", None)
+        return PortalStorageSpaceSummary(
+            id=bucket.name,
+            name=self._storage_space_label(bucket.name),
+            role=role,
+            status=self._storage_space_status(bucket, role),
+            region=region,
+            created_at=bucket.creation_date,
+            used_bytes=bucket.used_bytes,
+            object_count=bucket.object_count,
+            quota_max_size_bytes=bucket.quota_max_size_bytes,
+            quota_max_objects=bucket.quota_max_objects,
+            internal_bucket_name=bucket.name,
+        )
+
+    def list_storage_spaces(
+        self,
+        user: User,
+        access: "AccountAccess",
+        search: Optional[str] = None,
+    ) -> list[PortalStorageSpaceSummary]:
+        state = self.get_state(user, access)
+        spaces = [self._bucket_to_storage_space_summary(bucket, access) for bucket in state.buckets]
+        if search:
+            term = search.strip().lower()
+            if term:
+                spaces = [
+                    space
+                    for space in spaces
+                    if term in space.name.lower()
+                    or term in space.id.lower()
+                    or term in (space.internal_bucket_name or "").lower()
+                ]
+        return spaces
+
+    def get_storage_space(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+    ) -> Optional[PortalStorageSpace]:
+        if not space_id:
+            return None
+        visible_spaces = self.list_storage_spaces(user, access)
+        summary = next(
+            (
+                space
+                for space in visible_spaces
+                if space.id == space_id or space.internal_bucket_name == space_id
+            ),
+            None,
+        )
+        if summary is None or not summary.internal_bucket_name:
+            return None
+        stats = self.get_bucket_stats(user, access, summary.internal_bucket_name)
+        merged = self._bucket_to_storage_space_summary(
+            Bucket(
+                name=summary.internal_bucket_name,
+                creation_date=stats.creation_date or summary.created_at,
+                used_bytes=stats.used_bytes if stats.used_bytes is not None else summary.used_bytes,
+                object_count=stats.object_count if stats.object_count is not None else summary.object_count,
+                quota_max_size_bytes=(
+                    stats.quota_max_size_bytes
+                    if stats.quota_max_size_bytes is not None
+                    else summary.quota_max_size_bytes
+                ),
+                quota_max_objects=(
+                    stats.quota_max_objects
+                    if stats.quota_max_objects is not None
+                    else summary.quota_max_objects
+                ),
+            ),
+            access,
+        )
+        return PortalStorageSpace(
+            **merged.model_dump(),
+            description=f"{merged.name} storage space",
+        )
+
+    def _resolve_storage_space_bucket_name(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+    ) -> Optional[str]:
+        if not space_id:
+            return None
+        visible_spaces = self.list_storage_spaces(user, access)
+        summary = next(
+            (
+                space
+                for space in visible_spaces
+                if space.id == space_id or space.internal_bucket_name == space_id
+            ),
+            None,
+        )
+        return summary.internal_bucket_name if summary and summary.internal_bucket_name else None
+
+    def _portal_object_client(self, user: User, account: S3Account):
+        link = self._existing_portal_link(user, account)
+        if not link or not link.active_access_key or not link.active_secret_key:
+            raise RuntimeError("Portal IAM credentials are not provisioned for this user.")
+        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
+        return get_s3_client(
+            link.active_access_key,
+            link.active_secret_key,
+            endpoint=endpoint,
+            region=region,
+            force_path_style=force_path_style,
+            verify_tls=verify_tls,
+        )
+
+    def _object_name(self, key: str) -> str:
+        normalized = key.rstrip("/")
+        return os.path.basename(normalized) or normalized or key
+
+    def list_storage_space_objects(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        prefix: str = "",
+        continuation_token: Optional[str] = None,
+        max_keys: int = 1000,
+    ) -> PortalStorageObjectListing:
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        client = self._portal_object_client(user, access.account)
+        safe_max_keys = max(1, min(int(max_keys or 1000), 1000))
+        normalized_prefix = (prefix or "").lstrip("/")
+        kwargs: dict[str, Any] = {
+            "Bucket": bucket_name,
+            "Prefix": normalized_prefix,
+            "Delimiter": "/",
+            "MaxKeys": safe_max_keys,
+        }
+        if continuation_token:
+            kwargs["ContinuationToken"] = continuation_token
+        try:
+            resp = client.list_objects_v2(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to list objects for storage space '{space_id}': {exc}") from exc
+
+        objects: list[PortalStorageObject] = []
+        for obj in resp.get("Contents", []):
+            key = obj.get("Key")
+            if not key:
+                continue
+            if normalized_prefix and key.rstrip("/") == normalized_prefix.rstrip("/") and int(obj.get("Size") or 0) == 0:
+                continue
+            objects.append(
+                PortalStorageObject(
+                    key=key,
+                    name=self._object_name(key),
+                    size=int(obj.get("Size") or 0),
+                    last_modified=obj.get("LastModified"),
+                )
+            )
+        prefixes = [item.get("Prefix") for item in resp.get("CommonPrefixes", []) if item.get("Prefix")]
+        return PortalStorageObjectListing(
+            prefix=normalized_prefix,
+            objects=objects,
+            prefixes=prefixes,
+            is_truncated=bool(resp.get("IsTruncated")),
+            next_continuation_token=resp.get("NextContinuationToken"),
+        )
+
+    def upload_storage_space_object(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        key: str,
+        file_obj,
+        content_type: Optional[str] = None,
+    ) -> str:
+        if self._storage_space_role(access) == "Viewer":
+            raise RuntimeError("Upload not allowed for this storage space role.")
+        target_key = (key or "").lstrip("/")
+        if not target_key:
+            raise RuntimeError("Object key is required.")
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        client = self._portal_object_client(user, access.account)
+        extra_args = {"ContentType": content_type} if content_type else None
+        stream = file_obj if hasattr(file_obj, "read") else BytesIO(file_obj)
+        try:
+            client.upload_fileobj(stream, bucket_name, target_key, ExtraArgs=extra_args)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to upload object '{target_key}' in storage space '{space_id}': {exc}") from exc
+        return target_key
+
+    def download_storage_space_object(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        key: str,
+    ):
+        target_key = (key or "").lstrip("/")
+        if not target_key:
+            raise RuntimeError("Object key is required.")
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        client = self._portal_object_client(user, access.account)
+        try:
+            resp = client.get_object(Bucket=bucket_name, Key=target_key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to download object '{target_key}' in storage space '{space_id}': {exc}") from exc
+        body = resp.get("Body")
+        if not body:
+            raise RuntimeError(f"Unable to download object '{target_key}': empty response body")
+        stream = body.iter_chunks(chunk_size=1024 * 1024) if hasattr(body, "iter_chunks") else body
+        content_type = resp.get("ContentType")
+        filename = self._object_name(target_key) or "download"
+        return stream, content_type, filename
 
     def get_state(self, user: User, access: "AccountAccess") -> PortalState:
         account = access.account

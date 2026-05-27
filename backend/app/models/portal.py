@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -54,6 +54,47 @@ class PortalState(BaseModel):
 class PortalUsage(BaseModel):
     used_bytes: Optional[int] = None
     used_objects: Optional[int] = None
+
+
+PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner"]
+
+
+class PortalStorageSpaceSummary(BaseModel):
+    id: str
+    name: str
+    role: PortalStorageSpaceRole
+    status: str = "Active"
+    region: Optional[str] = None
+    created_at: Optional[datetime] = None
+    used_bytes: Optional[int] = None
+    object_count: Optional[int] = None
+    quota_max_size_bytes: Optional[int] = None
+    quota_max_objects: Optional[int] = None
+    internal_bucket_name: Optional[str] = None
+
+
+class PortalStorageSpace(PortalStorageSpaceSummary):
+    description: Optional[str] = None
+
+
+class PortalStorageObject(BaseModel):
+    key: str
+    name: str
+    size: Optional[int] = None
+    last_modified: Optional[datetime] = None
+
+
+class PortalStorageObjectListing(BaseModel):
+    prefix: str = ""
+    objects: list[PortalStorageObject]
+    prefixes: list[str]
+    is_truncated: bool = False
+    next_continuation_token: Optional[str] = None
+
+
+class PortalStorageObjectUploadResponse(BaseModel):
+    key: str
+    message: str
 
 
 class PortalUserCard(BaseModel):

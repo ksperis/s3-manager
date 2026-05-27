@@ -9,6 +9,14 @@ import { useI18n } from "../../i18n";
 import { listPortalAccounts } from "../../api/portal";
 import { extractApiError } from "../../utils/apiError";
 
+const DEV_MOCK_ACCOUNT: S3Account = {
+  id: "mock-account",
+  name: "Laurent",
+  tags: [],
+  storage_endpoint_id: 1,
+  storage_endpoint_name: "eu-west-3",
+};
+
 type PortalAccountContextType = {
   accounts: S3Account[];
   selectedAccountId: string | null;
@@ -63,6 +71,13 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error(err);
         if (!cancelled) {
+          if (import.meta.env.DEV) {
+            setAccounts([DEV_MOCK_ACCOUNT]);
+            setSelectedAccountId(DEV_MOCK_ACCOUNT.id);
+            localStorage.setItem("selectedPortalAccountId", DEV_MOCK_ACCOUNT.id);
+            setError(null);
+            return;
+          }
           setError(
             extractApiError(
               err,

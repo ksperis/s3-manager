@@ -2,10 +2,13 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 import logging
+import os
 from datetime import datetime
 from typing import Optional
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -20,6 +23,10 @@ from app.models.portal import (
     PortalEligibility,
     PortalIamComplianceReport,
     PortalState,
+    PortalStorageObjectListing,
+    PortalStorageObjectUploadResponse,
+    PortalStorageSpace,
+    PortalStorageSpaceSummary,
     PortalUsage,
     PortalUserCard,
 )
@@ -57,6 +64,22 @@ from app.models.billing import BillingSubjectDetail
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def _build_attachment_content_disposition(filename: str) -> str:
+    fallback = "".join(char if 0x20 <= ord(char) <= 0x7E else "_" for char in filename).replace('"', '\\"')
+    encoded = quote(filename, safe="")
+    return f'attachment; filename="{fallback or "download"}"; filename*=UTF-8\'\'{encoded}'
+
+
+def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
+    detail = str(exc)
+    lowered = detail.lower()
+    if "not found or not allowed" in lowered:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
+    if "not allowed" in lowered or "not provisioned" in lowered:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
+    raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/accounts", response_model=list[S3AccountSchema])
@@ -272,6 +295,152 @@ def portal_buckets(
         return buckets
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
+
+
+@router.get("/storage-spaces", response_model=list[PortalStorageSpaceSummary])
+def portal_storage_spaces(
+    search: Optional[str] = Query(None, description="Filter storage spaces by name"),
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalStorageSpaceSummary]:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.list_storage_spaces(actor, access, search=search)
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
+
+
+@router.get("/storage-spaces/{space_id}/objects", response_model=PortalStorageObjectListing)
+def portal_storage_space_objects(
+    space_id: str,
+    prefix: str = Query("", description="Object prefix to browse"),
+    continuation_token: Optional[str] = Query(None),
+    max_keys: int = Query(1000, ge=1, le=1000),
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageObjectListing:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.list_storage_space_objects(
+            actor,
+            access,
+            space_id,
+            prefix=prefix,
+            continuation_token=continuation_token,
+            max_keys=max_keys,
+        )
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.post(
+    "/storage-spaces/{space_id}/objects/upload",
+    response_model=PortalStorageObjectUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def portal_upload_storage_space_object(
+    space_id: str,
+    file: UploadFile = File(...),
+    prefix: str = Form(""),
+    key: Optional[str] = Form(None),
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageObjectUploadResponse:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    if not file.filename:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing filename")
+    target_key = key.strip().lstrip("/") if key else ""
+    if not target_key:
+        normalized_prefix = (prefix or "").lstrip("/")
+        if normalized_prefix and not normalized_prefix.endswith("/"):
+            normalized_prefix = f"{normalized_prefix}/"
+        target_key = f"{normalized_prefix}{os.path.basename(file.filename)}"
+    if not target_key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing object key")
+    try:
+        contents = await file.read()
+        uploaded_key = service.upload_storage_space_object(
+            actor,
+            access,
+            space_id,
+            target_key,
+            file_obj=contents,
+            content_type=file.content_type,
+        )
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="upload_object",
+            entity_type="object",
+            entity_id=uploaded_key,
+            account=access.account,
+            metadata={
+                "storage_space_id": space_id,
+                "content_type": file.content_type,
+                "size_bytes": len(contents),
+            },
+        )
+        return PortalStorageObjectUploadResponse(key=uploaded_key, message="Uploaded")
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/storage-spaces/{space_id}/objects/download")
+def portal_download_storage_space_object(
+    space_id: str,
+    key: str = Query(..., min_length=1),
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> StreamingResponse:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        stream, content_type, filename = service.download_storage_space_object(actor, access, space_id, key)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="download_object",
+            entity_type="object",
+            entity_id=key,
+            account=access.account,
+            metadata={"storage_space_id": space_id},
+        )
+        headers = {}
+        if filename:
+            headers["Content-Disposition"] = _build_attachment_content_disposition(filename)
+        return StreamingResponse(stream, media_type=content_type or "application/octet-stream", headers=headers)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/storage-spaces/{space_id}", response_model=PortalStorageSpace)
+def portal_storage_space_detail(
+    space_id: str,
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpace:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        storage_space = service.get_storage_space(actor, access, space_id)
+    except RuntimeError as exc:
+        detail = str(exc)
+        if "autorisé" in detail.lower() or "not allowed" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
+        raise_bad_gateway_from_runtime(exc)
+    if storage_space is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
+    return storage_space
 
 
 @router.get("/buckets/{bucket_name}/users", response_model=list[PortalUserCard])

@@ -3,17 +3,15 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import { Bucket } from "../../api/buckets";
-import { listObjects, S3Object } from "../../api/objects";
+import { listPortalStorageSpaceObjects, type PortalStorageObject } from "../../api/portal";
 import Modal from "../../components/Modal";
 import PageTabs from "../../components/PageTabs";
 import SplitView from "../../components/SplitView";
 import UsageTile from "../../components/UsageTile";
 import { useI18n } from "../../i18n";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
-import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 
 type PortalBucketModalProps = {
   bucket: Bucket;
@@ -28,7 +26,7 @@ type PortalBucketModalProps = {
   bucketStatsLoading?: boolean;
 };
 
-type ObjectRow = { type: "prefix"; key: string; name: string } | { type: "object"; key: string; name: string; object: S3Object };
+type ObjectRow = { type: "prefix"; key: string; name: string } | { type: "object"; key: string; name: string; object: PortalStorageObject };
 
 const bucketCardClasses = "rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50";
 
@@ -50,11 +48,9 @@ export default function PortalBucketModal({
   bucketStatsLoading = false,
 }: PortalBucketModalProps) {
   const { t } = useI18n();
-  const navigate = useNavigate();
-  const { generalSettings } = useGeneralSettings();
   const [activeTab, setActiveTab] = useState<"overview" | "objects">("overview");
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
-  const [objects, setObjects] = useState<S3Object[]>([]);
+  const [objects, setObjects] = useState<PortalStorageObject[]>([]);
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [objectsLoading, setObjectsLoading] = useState(false);
   const [objectsError, setObjectsError] = useState<string | null>(null);
@@ -106,7 +102,7 @@ export default function PortalBucketModal({
       setObjectsLoading(true);
       setObjectsError(null);
       try {
-        const data = await listObjects(accountId, bucket.name, prefix);
+        const data = await listPortalStorageSpaceObjects(accountId, bucket.name, { prefix });
         setObjects(data.objects);
         setPrefixes(data.prefixes);
       } catch (err) {
@@ -134,8 +130,6 @@ export default function PortalBucketModal({
 
   const storageShare = computeRelativeShare(bucket.used_bytes, accountUsedBytes);
   const objectsShare = computeRelativeShare(bucket.object_count, accountUsedObjects);
-  const canOpenInBrowser =
-    Boolean(accountId) && generalSettings.browser_enabled && generalSettings.browser_portal_enabled;
   const canDeleteNow =
     Boolean(canDeleteBucket) &&
     bucket.object_count === 0 &&
@@ -159,12 +153,6 @@ export default function PortalBucketModal({
     }
     return null;
   }, [bucket.object_count, bucketStatsLoading, canDeleteBucket, t]);
-
-  const handleOpenInBrowser = () => {
-    if (!accountId || !generalSettings.browser_enabled || !generalSettings.browser_portal_enabled) return;
-    localStorage.setItem("selectedPortalAccountId", String(accountId));
-    navigate(`/portal/browser?bucket=${encodeURIComponent(bucket.name)}`);
-  };
 
   const handleDeleteBucket = () => {
     if (!canDeleteNow) return;
@@ -196,18 +184,6 @@ export default function PortalBucketModal({
                     </div>
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={handleOpenInBrowser}
-                          disabled={!canOpenInBrowser}
-                          className={`inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1 ui-caption font-semibold text-slate-700 shadow-sm transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 ${
-                            canOpenInBrowser
-                              ? "hover:border-primary/60 hover:text-primary-700 dark:hover:text-primary-200"
-                              : "cursor-not-allowed opacity-60"
-                          }`}
-                        >
-                          {t({ en: "Open in Browser", fr: "Ouvrir dans Browser", de: "Im Browser offnen" })}
-                        </button>
                         {canDeleteBucket && (
                           <button
                             type="button"
@@ -387,22 +363,19 @@ export default function PortalBucketModal({
                             <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               {t({ en: "Last modified", fr: "Derniere modification", de: "Zuletzt geandert" })}
                             </th>
-                            <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              {t({ en: "Storage class", fr: "Classe de stockage", de: "Speicherklasse" })}
-                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                           {objectsLoading && (
                             <tr>
-                              <td colSpan={4} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
+                              <td colSpan={3} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
                                 {t({ en: "Loading objects...", fr: "Chargement des objets...", de: "Objekte werden geladen..." })}
                               </td>
                             </tr>
                           )}
                           {!objectsLoading && objectRows.length === 0 && (
                             <tr>
-                              <td colSpan={4} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
+                              <td colSpan={3} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
                                 {t({ en: "No object in this prefix.", fr: "Aucun objet dans ce prefixe.", de: "Keine Objekte in diesem Prafix." })}
                               </td>
                             </tr>
@@ -419,7 +392,6 @@ export default function PortalBucketModal({
                                     <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100">📁 {row.name}</td>
                                     <td className="px-4 py-2 text-slate-600 dark:text-slate-300">—</td>
                                     <td className="px-4 py-2 text-slate-600 dark:text-slate-300">—</td>
-                                    <td className="px-4 py-2 text-slate-600 dark:text-slate-300">—</td>
                                   </tr>
                                 );
                               }
@@ -430,7 +402,6 @@ export default function PortalBucketModal({
                                   <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
                                     {row.object.last_modified ? new Date(row.object.last_modified).toLocaleString() : "—"}
                                   </td>
-                                  <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{row.object.storage_class ?? "—"}</td>
                                 </tr>
                               );
                             })}

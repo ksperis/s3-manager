@@ -165,6 +165,74 @@ body {
   .ui-button-danger {
     @apply bg-rose-600 text-white shadow-sm hover:bg-rose-700;
   }
+
+  .portal-v3 {
+    --portal-v3-bg: #f4f7fb;
+    --portal-v3-surface: #ffffff;
+    --portal-v3-border: #dbe3ee;
+    --portal-v3-border-soft: #edf1f7;
+    --portal-v3-text: #0b1f3a;
+    --portal-v3-muted: #64748b;
+    --portal-v3-blue: #2563eb;
+    --portal-v3-blue-soft: #eff6ff;
+    background: var(--portal-v3-bg);
+    color: var(--portal-v3-text);
+    letter-spacing: 0;
+  }
+
+  .portal-v3-card {
+    border: 1px solid var(--portal-v3-border);
+    border-radius: 8px;
+    background: var(--portal-v3-surface);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.045);
+  }
+
+  .portal-v3-muted-card {
+    border: 1px solid var(--portal-v3-border-soft);
+    border-radius: 8px;
+    background: #f8fafc;
+  }
+
+  .portal-v3-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+    line-height: 1.25rem;
+  }
+
+  .portal-v3-table th {
+    border-bottom: 1px solid var(--portal-v3-border-soft);
+    background: #f8fafc;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 700;
+    color: #475569;
+  }
+
+  .portal-v3-table td {
+    border-bottom: 1px solid var(--portal-v3-border-soft);
+    padding: 10px 12px;
+    color: #334155;
+    vertical-align: middle;
+  }
+
+  .portal-v3-table tbody tr:hover td {
+    background: #f8fbff;
+  }
+
+  .portal-v3-tab {
+    border-bottom: 2px solid transparent;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 10px 2px 9px;
+  }
+
+  .portal-v3-tab-active {
+    border-color: var(--portal-v3-blue);
+    color: var(--portal-v3-blue);
+  }
 }
 
 @layer utilities {
