@@ -15,6 +15,7 @@ import {
 } from "./portalWorkspaceMockData";
 import { PortalV3Card, PortalV3Page } from "./PortalV3Components";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
+import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 
 const tabs = ["Aperçu", "Détails", "Événements"];
 
@@ -163,10 +164,19 @@ export default function PortalObjectDetailPage() {
   const parentPrefix = object.path.split("/").slice(0, -1).join("/");
   const handleDownload = async () => {
     if (!accountIdForApi || downloading) return;
+    const transferId = startPortalTransfer({
+      accountId: accountIdForApi,
+      spaceId: space.id,
+      spaceName: space.name,
+      name: object.name || objectName(object.path),
+      direction: "Download",
+      sizeBytes: object.sizeBytes,
+    });
     setDownloading(true);
     setDownloadMessage(null);
     try {
       const result = await downloadPortalStorageSpaceObject(accountIdForApi, space.id, object.path);
+      completePortalTransfer(transferId, result.filename);
       const href = URL.createObjectURL(result.blob);
       const link = document.createElement("a");
       link.href = href;
@@ -178,7 +188,9 @@ export default function PortalObjectDetailPage() {
       setDownloadMessage(`${result.filename} téléchargé.`);
     } catch (err) {
       console.error(err);
-      setDownloadMessage(extractApiError(err, "Téléchargement impossible pour cet objet."));
+      const message = extractApiError(err, "Téléchargement impossible pour cet objet.");
+      failPortalTransfer(transferId, message);
+      setDownloadMessage(message);
     } finally {
       setDownloading(false);
     }

@@ -187,33 +187,33 @@ Objectif : permettre browse/upload/download dans `/portal` sans dependre de
 
 Objectif : exprimer les permissions en termes utilisateur.
 
-- [ ] Definir les roles UI :
+- [x] Definir les roles UI :
   - Viewer : lire/lister/telecharger ;
   - Editor : Viewer + upload/modification simple ;
   - Owner : gestion de l'espace et du partage.
-- [ ] Traduire ces roles en policies IAM cote backend.
-- [ ] Ajouter `GET /portal/storage-spaces/{space_id}/shares`.
-- [ ] Ajouter grant/revoke/update share.
-- [ ] Remplacer les libelles `portal_user`, `portal_manager`, `bucket permissions` par `Viewer`, `Editor`, `Owner`, `Shared with me`, `Shared by me`.
-- [ ] Garder IAM comme source de verite ; ne pas creer de permission parallele.
-- [ ] Ajouter tests de mapping IAM.
+- [x] Traduire ces roles en policies IAM cote backend.
+- [x] Ajouter `GET /portal/storage-spaces/{space_id}/shares`.
+- [x] Ajouter grant/revoke/update share.
+- [x] Remplacer les libelles `portal_user`, `portal_manager`, `bucket permissions` par `Viewer`, `Editor`, `Owner`, `Shared with me`, `Shared by me`.
+- [x] Garder IAM comme source de verite ; ne pas creer de permission parallele.
+- [x] Ajouter tests de mapping IAM.
 
 ## Etape 5 - Activity, Transfers, Alerts
 
 Objectif : remplacer les mocks UX par des donnees reelles.
 
-- [ ] Ajouter endpoint activite portail filtre par compte et storage space.
-- [ ] Alimenter Activity depuis audit logs et operations portail.
-- [ ] Ajouter suivi frontend des transferts recents.
-- [ ] Ajouter persistance backend des transferts si necessaire.
-- [ ] Ajouter endpoint alertes simples :
+- [x] Ajouter endpoint activite portail filtre par compte et storage space.
+- [x] Alimenter Activity depuis audit logs et operations portail.
+- [x] Ajouter suivi frontend des transferts recents.
+- [x] Ajouter persistance backend des transferts si necessaire.
+- [x] Ajouter endpoint alertes simples :
   - quota proche ;
   - storage space public ;
   - lien expirant ;
   - erreur de transfert ;
   - endpoint degrade.
-- [ ] Connecter Home aux vraies donnees.
-- [ ] Ajouter tests backend et frontend.
+- [x] Connecter Home aux vraies donnees.
+- [x] Ajouter tests backend et frontend.
 
 ## Etape 6 - Usage & Analytics
 

@@ -10,6 +10,10 @@ export default function PortalActivityPage() {
   const [actionFilter, setActionFilter] = useState("All actions");
   const [spaceFilter, setSpaceFilter] = useState("All storage spaces");
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading } = usePortalWorkspaceData();
+  const actionOptions = useMemo(
+    () => ["All actions", ...Array.from(new Set(workspace.activity.map((item) => item.action))).sort()],
+    [workspace.activity]
+  );
   const rows = useMemo(
     () =>
       workspace.activity.filter((item) => {
@@ -39,11 +43,9 @@ export default function PortalActivityPage() {
       <PortalV3Card>
         <div className="mb-4 flex flex-wrap gap-3">
           <select className="ui-control h-8 w-44 py-1.5 text-xs" value={actionFilter} onChange={(event) => setActionFilter(event.target.value)}>
-            <option>All actions</option>
-            <option>Uploaded</option>
-            <option>Upload</option>
-            <option>Download</option>
-            <option>Delete</option>
+            {actionOptions.map((action) => (
+              <option key={action}>{action}</option>
+            ))}
           </select>
           <select className="ui-control h-8 w-52 py-1.5 text-xs" value={spaceFilter} onChange={(event) => setSpaceFilter(event.target.value)}>
             <option>All storage spaces</option>
@@ -75,6 +77,13 @@ export default function PortalActivityPage() {
                   <td>{item.ipAddress}</td>
                 </tr>
               ))}
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-xs font-semibold text-slate-500">
+                    No activity to display.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

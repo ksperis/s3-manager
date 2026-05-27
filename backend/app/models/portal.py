@@ -57,6 +57,10 @@ class PortalUsage(BaseModel):
 
 
 PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner"]
+PortalStorageSpaceShareDirection = Literal["with_me", "by_me"]
+PortalTransferDirection = Literal["Upload", "Download"]
+PortalTransferStatus = Literal["Completed", "Uploading", "Queued", "Failed"]
+PortalAlertTone = Literal["info", "warning", "danger"]
 
 
 class PortalStorageSpaceSummary(BaseModel):
@@ -95,6 +99,64 @@ class PortalStorageObjectListing(BaseModel):
 class PortalStorageObjectUploadResponse(BaseModel):
     key: str
     message: str
+
+
+class PortalStorageSpaceShare(BaseModel):
+    id: str
+    storage_space_id: str
+    storage_space_name: str
+    user_id: Optional[int] = None
+    email: str
+    role: PortalStorageSpaceRole
+    direction: PortalStorageSpaceShareDirection
+    activity_label: str = "Active"
+
+
+class PortalStorageSpaceSharePayload(BaseModel):
+    email: Optional[str] = None
+    user_id: Optional[int] = None
+    role: PortalStorageSpaceRole
+
+
+class PortalStorageSpaceShareUpdate(BaseModel):
+    role: PortalStorageSpaceRole
+
+
+class PortalActivityItem(BaseModel):
+    id: int
+    created_at: datetime
+    actor: str
+    action: str
+    target: str
+    storage_space_id: Optional[str] = None
+    storage_space_name: Optional[str] = None
+    ip_address: Optional[str] = None
+    status: str = "success"
+
+
+class PortalTransfer(BaseModel):
+    id: str
+    name: str
+    direction: PortalTransferDirection
+    status: PortalTransferStatus
+    progress: int = 100
+    size_bytes: Optional[int] = None
+    storage_space_id: Optional[str] = None
+    storage_space_name: Optional[str] = None
+    started_at: datetime
+    eta_label: str = "Completed"
+    speed_label: str = "-"
+    error_message: Optional[str] = None
+
+
+class PortalAlert(BaseModel):
+    id: str
+    tone: PortalAlertTone
+    title: str
+    description: str
+    severity_label: str
+    storage_space_id: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class PortalUserCard(BaseModel):

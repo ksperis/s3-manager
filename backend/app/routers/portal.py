@@ -19,13 +19,19 @@ from app.models.app_settings import PortalSettingsOverride, PortalSettings
 from app.models.portal import (
     PortalAccessKey,
     PortalAccessKeyStatusChange,
+    PortalActivityItem,
     PortalAccountSettings,
+    PortalAlert,
     PortalEligibility,
     PortalIamComplianceReport,
     PortalState,
+    PortalTransfer,
     PortalStorageObjectListing,
     PortalStorageObjectUploadResponse,
     PortalStorageSpace,
+    PortalStorageSpaceShare,
+    PortalStorageSpaceSharePayload,
+    PortalStorageSpaceShareUpdate,
     PortalStorageSpaceSummary,
     PortalUsage,
     PortalUserCard,
@@ -77,7 +83,7 @@ def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
     lowered = detail.lower()
     if "not found or not allowed" in lowered:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
-    if "not allowed" in lowered or "not provisioned" in lowered:
+    if "not allowed" in lowered or "not provisioned" in lowered or "owner role required" in lowered:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
     raise_bad_gateway_from_runtime(exc)
 
@@ -227,6 +233,38 @@ def portal_usage(
         raise_bad_gateway_from_runtime(exc)
 
 
+@router.get("/activity", response_model=list[PortalActivityItem])
+def portal_activity(
+    space_id: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=200),
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalActivityItem]:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.list_portal_activity(actor, access, space_id=space_id, limit=limit)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/transfers", response_model=list[PortalTransfer])
+def portal_transfers(
+    space_id: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=200),
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalTransfer]:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.list_portal_transfers(actor, access, space_id=space_id, limit=limit)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
 @router.get("/endpoint-health", response_model=WorkspaceEndpointHealthOverviewResponse)
 def portal_endpoint_health(
     access: AccountAccess = Depends(get_portal_account_access),
@@ -253,6 +291,47 @@ def portal_endpoint_health(
     return WorkspaceEndpointHealthOverviewResponse(
         **service.build_workspace_health_overview(endpoint_id=int(endpoint_id))
     )
+
+
+def _portal_endpoint_alerts(access: AccountAccess, db: Session) -> list[PortalAlert]:
+    app_settings = load_app_settings()
+    if not app_settings.general.endpoint_status_enabled:
+        return []
+    endpoint_id = getattr(access.account, "storage_endpoint_id", None)
+    if endpoint_id is None:
+        return []
+    overview = HealthCheckService(db).build_workspace_health_overview(endpoint_id=int(endpoint_id))
+    down_count = int(overview.get("down_count") or 0)
+    degraded_count = int(overview.get("degraded_count") or 0)
+    if down_count <= 0 and degraded_count <= 0:
+        return []
+    return [
+        PortalAlert(
+            id="endpoint-degraded",
+            tone="danger" if down_count > 0 else "warning",
+            title="Storage service availability issue",
+            description="One storage service is currently unavailable." if down_count > 0 else "One storage service is degraded.",
+            severity_label="Critical" if down_count > 0 else "Warning",
+        )
+    ]
+
+
+@router.get("/alerts", response_model=list[PortalAlert])
+def portal_alerts(
+    limit: int = Query(50, ge=1, le=100),
+    access: AccountAccess = Depends(get_portal_account_access),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalAlert]:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        alerts = service.list_portal_alerts(actor, access, limit=limit)
+        health_alerts = _portal_endpoint_alerts(access, db)
+        return [*health_alerts, *alerts][:limit]
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
 
 
 @router.get("/billing/me", response_model=BillingSubjectDetail)
@@ -389,6 +468,20 @@ async def portal_upload_storage_space_object(
         )
         return PortalStorageObjectUploadResponse(key=uploaded_key, message="Uploaded")
     except RuntimeError as exc:
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="upload_object",
+            entity_type="object",
+            entity_id=target_key,
+            account=access.account,
+            metadata={
+                "storage_space_id": space_id,
+                "content_type": file.content_type,
+            },
+            status="failed",
+            message=str(exc),
+        )
         _raise_portal_storage_runtime(exc)
 
 
@@ -418,6 +511,135 @@ def portal_download_storage_space_object(
         if filename:
             headers["Content-Disposition"] = _build_attachment_content_disposition(filename)
         return StreamingResponse(stream, media_type=content_type or "application/octet-stream", headers=headers)
+    except RuntimeError as exc:
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="download_object",
+            entity_type="object",
+            entity_id=key,
+            account=access.account,
+            metadata={"storage_space_id": space_id},
+            status="failed",
+            message=str(exc),
+        )
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/storage-spaces/{space_id}/shares", response_model=list[PortalStorageSpaceShare])
+def portal_storage_space_shares(
+    space_id: str,
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalStorageSpaceShare]:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.list_storage_space_shares(actor, access, space_id)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+def _resolve_share_target(payload: PortalStorageSpaceSharePayload, users_service: UsersService) -> User:
+    target = None
+    if payload.user_id is not None:
+        target = users_service.get_by_id(payload.user_id)
+    elif payload.email:
+        target = users_service.get_by_email_case_insensitive(payload.email)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return target
+
+
+@router.post("/storage-spaces/{space_id}/shares", response_model=PortalStorageSpaceShare, status_code=status.HTTP_201_CREATED)
+def grant_portal_storage_space_share(
+    space_id: str,
+    payload: PortalStorageSpaceSharePayload,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpaceShare:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    target = _resolve_share_target(payload, users_service)
+    try:
+        share = service.set_storage_space_share(actor, access, target, space_id, payload.role)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="grant_storage_space_share",
+            entity_type="storage_space",
+            entity_id=space_id,
+            account=access.account,
+            metadata={"target_user_id": target.id, "role": payload.role},
+        )
+        return share
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.put("/storage-spaces/{space_id}/shares/{user_id}", response_model=PortalStorageSpaceShare)
+def update_portal_storage_space_share(
+    space_id: str,
+    user_id: int,
+    payload: PortalStorageSpaceShareUpdate,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpaceShare:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    target = users_service.get_by_id(user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    try:
+        share = service.set_storage_space_share(actor, access, target, space_id, payload.role)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="update_storage_space_share",
+            entity_type="storage_space",
+            entity_id=space_id,
+            account=access.account,
+            metadata={"target_user_id": target.id, "role": payload.role},
+        )
+        return share
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.delete("/storage-spaces/{space_id}/shares/{user_id}", response_model=list[PortalStorageSpaceShare])
+def revoke_portal_storage_space_share(
+    space_id: str,
+    user_id: int,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalStorageSpaceShare]:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    target = users_service.get_by_id(user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    try:
+        shares = service.revoke_storage_space_share(actor, access, target, space_id)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="revoke_storage_space_share",
+            entity_type="storage_space",
+            entity_id=space_id,
+            account=access.account,
+            metadata={"target_user_id": target.id},
+        )
+        return shares
     except RuntimeError as exc:
         _raise_portal_storage_runtime(exc)
 

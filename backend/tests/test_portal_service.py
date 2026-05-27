@@ -1,15 +1,16 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import asyncio
+import json
 from datetime import datetime, timezone
 
 import pytest
 from fastapi import HTTPException
 
-from app.db import AccountIAMUser, AccountRole, S3Account, User
+from app.db import AuditLog, AccountIAMUser, AccountRole, S3Account, User, UserS3Account
 from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
-from app.models.portal import PortalAccessKey, PortalIAMUser, PortalState, PortalStorageSpaceSummary
+from app.models.portal import PortalAccessKey, PortalIAMUser, PortalState, PortalStorageSpaceSummary, PortalUsage
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import s3_client
@@ -863,10 +864,12 @@ def test_upload_storage_space_object_allows_editor_and_rejects_viewer(monkeypatc
                     "key": key,
                     "extra_args": ExtraArgs,
                 }
-            )
+    )
 
     fake_client = FakeClient()
     monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: fake_client)
+    role_map = {"bucket-research-data": "Editor"}
+    monkeypatch.setattr(service, "list_existing_user_storage_space_access", lambda *_args, **_kwargs: role_map)
 
     editor_access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     uploaded_key = service.upload_storage_space_object(
@@ -888,9 +891,216 @@ def test_upload_storage_space_object_allows_editor_and_rejects_viewer(monkeypatc
         }
     ]
 
-    viewer_access = _portal_access(account, user, role=AccountRole.PORTAL_NONE.value, can_manage_buckets=False)
+    role_map["bucket-research-data"] = "Viewer"
+    viewer_access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     with pytest.raises(RuntimeError, match="Upload not allowed"):
         service.upload_storage_space_object(user, viewer_access, "research-data", "raw-data/denied.csv", b"sample")
+
+
+def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
+    service = PortalService(db_session)
+
+    class FakeIAMService:
+        def __init__(self):
+            self.policies = {}
+            self.deleted = []
+
+        def get_user_inline_policy(self, username, policy_name):
+            return self.policies.get((username, policy_name))
+
+        def put_user_inline_policy(self, username, policy_name, policy_document):
+            self.policies[(username, policy_name)] = policy_document
+
+        def delete_user_inline_policy(self, username, policy_name):
+            self.deleted.append((username, policy_name))
+            self.policies.pop((username, policy_name), None)
+
+    iam = FakeIAMService()
+
+    service._set_user_storage_space_policy(iam, "portal-iam", "research-data", "Viewer")
+    policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
+    access = service._extract_storage_space_access(policy)
+
+    assert access == {"research-data": "Viewer"}
+    viewer_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceViewer")
+    assert viewer_statement["Action"] == ["s3:GetBucketLocation", "s3:ListBucket", "s3:GetObject"]
+
+    service._set_user_storage_space_policy(iam, "portal-iam", "research-data", "Editor")
+    policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
+    access = service._extract_storage_space_access(policy)
+
+    assert access == {"research-data": "Editor"}
+    assert not any(stmt["Sid"] == "PortalStorageSpaceViewer" for stmt in policy["Statement"])
+    editor_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceEditor")
+    assert "s3:PutObject" in editor_statement["Action"]
+    assert "s3:DeleteObject" in editor_statement["Action"]
+
+    service._set_user_storage_space_policy(iam, "portal-iam", "research-data", "Owner")
+    policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
+    access = service._extract_storage_space_access(policy)
+
+    assert access == {"research-data": "Owner"}
+    owner_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceOwner")
+    assert owner_statement["Action"] == ["s3:*"]
+
+
+def test_list_storage_space_shares_uses_iam_roles(monkeypatch, db_session):
+    account = S3Account(name="portal-share-list", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner@example.com", hashed_password="x", role="ui_user")
+    viewer = User(email="viewer@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, viewer])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam", iam_username="owner-iam"),
+            AccountIAMUser(user_id=viewer.id, account_id=account.id, iam_user_id="viewer-iam", iam_username="viewer-iam"),
+        ]
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="research-data",
+                name="Research Data",
+                role="Owner",
+                internal_bucket_name="research-data",
+            )
+        ],
+    )
+
+    class FakeIAMService:
+        def get_user_inline_policy(self, username, policy_name):  # noqa: ARG002
+            if username == "viewer-iam":
+                return {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Sid": service._storage_space_share_sid("Viewer"),
+                            "Effect": "Allow",
+                            "Action": service._storage_space_role_actions("Viewer"),
+                            "Resource": service._bucket_arns("research-data"),
+                        }
+                    ],
+                }
+            return None
+
+    monkeypatch.setattr(service, "_get_iam_service", lambda _account: FakeIAMService())
+    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    shares = service.list_storage_space_shares(owner, access, "research-data")
+
+    assert [(share.email, share.role, share.direction) for share in shares] == [
+        ("viewer@example.com", "Viewer", "by_me"),
+        ("owner@example.com", "Owner", "with_me"),
+    ]
+
+
+def test_portal_activity_and_transfers_are_filtered_by_visible_storage_spaces(monkeypatch, db_session):
+    account = S3Account(name="portal-activity", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="activity@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    db_session.add_all(
+        [
+            AuditLog(
+                user_id=user.id,
+                user_email=user.email,
+                user_role=user.role,
+                scope="portal",
+                action="upload_object",
+                entity_type="object",
+                entity_id="raw-data/report.csv",
+                account_id=account.id,
+                account_name=account.name,
+                status="success",
+                metadata_json=json.dumps({"storage_space_id": "research-data", "size_bytes": 42}),
+                ip_address="192.0.2.10",
+            ),
+            AuditLog(
+                user_id=user.id,
+                user_email=user.email,
+                user_role=user.role,
+                scope="portal",
+                action="download_object",
+                entity_type="object",
+                entity_id="secret.txt",
+                account_id=account.id,
+                account_name=account.name,
+                status="success",
+                metadata_json=json.dumps({"storage_space_id": "hidden-data"}),
+            ),
+        ]
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(id="research-data", name="Research Data", role="Owner", internal_bucket_name="research-data")
+        ],
+    )
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    activity = service.list_portal_activity(user, access)
+    transfers = service.list_portal_transfers(user, access)
+
+    assert [(item.action, item.target, item.storage_space_name, item.ip_address) for item in activity] == [
+        ("Uploaded", "report.csv", "Research Data", "192.0.2.10")
+    ]
+    assert [(item.direction, item.status, item.progress, item.size_bytes) for item in transfers] == [
+        ("Upload", "Completed", 100, 42)
+    ]
+    with pytest.raises(RuntimeError, match="Storage space not found"):
+        service.list_portal_activity(user, access, space_id="hidden-data")
+
+
+def test_portal_alerts_are_derived_from_quota_public_spaces_and_transfer_errors(monkeypatch, db_session):
+    account = S3Account(name="portal-alerts", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="alerts@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    db_session.add(
+        AuditLog(
+            user_id=user.id,
+            user_email=user.email,
+            user_role=user.role,
+            scope="portal",
+            action="upload_object",
+            entity_type="object",
+            entity_id="failed.zip",
+            account_id=account.id,
+            account_name=account.name,
+            status="failed",
+            message="network error",
+            metadata_json=json.dumps({"storage_space_id": "public-data"}),
+        )
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(id="public-data", name="Public Data", role="Owner", internal_bucket_name="public-data")
+        ],
+    )
+    monkeypatch.setattr(service, "_account_quota", lambda _account: (100, None))
+    monkeypatch.setattr(service, "get_usage", lambda *_args, **_kwargs: PortalUsage(used_bytes=90, used_objects=None))
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    alerts = service.list_portal_alerts(user, access)
+
+    assert [alert.id for alert in alerts[:2]] == ["quota-near", "public-space-public-data"]
+    assert alerts[2].id.startswith("transfer-failed-audit-")
+    assert alerts[0].severity_label == "Warning"
+    assert alerts[-1].description == "failed.zip failed recently."
 
 
 def test_download_storage_space_object_streams_visible_object(monkeypatch, db_session):

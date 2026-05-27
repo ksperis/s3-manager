@@ -31,10 +31,16 @@ function alertTone(tone: string) {
   return "neutral";
 }
 
+function transferTone(status: string) {
+  if (status === "Failed") return "rose";
+  if (status === "Uploading" || status === "Queued") return "blue";
+  return "neutral";
+}
+
 export default function PortalDashboard() {
   const { workspace, healthAlerts, loading, error, hasAccountContext, accountError, accountLoading, traffic, trafficLoading } =
     usePortalWorkspaceData({ includeTraffic: true, includeHealth: true });
-  const alerts = [...healthAlerts, ...workspace.alerts].slice(0, 4);
+  const alerts = (workspace.alerts.length > 0 ? workspace.alerts : healthAlerts).slice(0, 4);
   const topSpaces = [...workspace.spaces].sort((left, right) => (right.usedBytes ?? 0) - (left.usedBytes ?? 0)).slice(0, 5);
   const donutSegments = topSpaces.map((space, index) => ({
     value: space.usedBytes ?? 0,
@@ -118,7 +124,7 @@ export default function PortalDashboard() {
         </PortalV3Card>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
+      <section className="grid gap-4 xl:grid-cols-4">
         <PortalV3Card title="Top storage spaces">
           <div className="space-y-3">
             {topSpaces.map((space) => (
@@ -147,6 +153,25 @@ export default function PortalDashboard() {
           </div>
         </PortalV3Card>
 
+        <PortalV3Card title="Recent transfers" action={<PortalV3Link to="/portal/transfers">View all transfers</PortalV3Link>}>
+          <div className="space-y-2">
+            {workspace.transfers.slice(0, 5).map((transfer) => (
+              <div key={transfer.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2">
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-bold text-slate-800">{transfer.name}</div>
+                  <div className="truncate text-[11px] text-slate-500">{transfer.direction} - {transfer.startedLabel}</div>
+                </div>
+                <PortalV3Badge tone={transferTone(transfer.status)}>{transfer.status}</PortalV3Badge>
+              </div>
+            ))}
+            {workspace.transfers.length === 0 ? (
+              <div className="rounded-md border border-slate-100 px-3 py-4 text-xs font-semibold text-slate-500">
+                No recent transfers.
+              </div>
+            ) : null}
+          </div>
+        </PortalV3Card>
+
         <PortalV3Card title="Alerts" action={<PortalV3Link to="/portal/activity">View all alerts</PortalV3Link>}>
           <div className="space-y-2">
             {alerts.map((alert) => (
@@ -155,7 +180,7 @@ export default function PortalDashboard() {
                   <div className="truncate text-xs font-bold text-slate-800">{alert.title}</div>
                   <div className="truncate text-[11px] text-slate-500">{alert.description}</div>
                 </div>
-                <PortalV3Badge tone={alertTone(alert.tone)}>{alert.severityLabel}</PortalV3Badge>
+                <PortalV3Badge tone={alertTone(alert.tone)}>{alert.severityLabel ?? "Info"}</PortalV3Badge>
               </div>
             ))}
           </div>

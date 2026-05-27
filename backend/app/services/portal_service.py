@@ -4,7 +4,7 @@ import copy
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Any, Optional, Tuple, TYPE_CHECKING
 
@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db import AccountIAMUser, AccountRole, S3Account, StorageEndpoint, User, UserRole, UserS3Account
+from app.db import AuditLog, AccountIAMUser, AccountRole, S3Account, StorageEndpoint, User, UserRole, UserS3Account, is_admin_ui_role
 from app.models.app_settings import (
     PortalBucketDefaults,
     PortalBucketDefaultsOverride,
@@ -29,14 +29,18 @@ from app.models.iam import AccessKey as ModelAccessKey, IAMUser
 from app.models.portal import (
     PortalAccessKey,
     PortalAccountSettings,
+    PortalActivityItem,
+    PortalAlert,
     PortalIAMUser,
     PortalIamComplianceIssue,
     PortalIamComplianceReport,
     PortalState,
+    PortalTransfer,
     PortalStorageSpace,
     PortalStorageObject,
     PortalStorageObjectListing,
     PortalStorageSpaceRole,
+    PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
     PortalUsage,
 )
@@ -71,6 +75,7 @@ class PortalService:
         self._user_group_name = "portal-user"
         self._bucket_access_policy_name = "portal-user-buckets"
         self._bucket_access_sid = "PortalUserBuckets"
+        self._storage_space_share_sid_prefix = "PortalStorageSpace"
         self._bucket_access_default_actions = PortalSettings().bucket_access_policy.actions
 
     def _portal_settings(self) -> PortalSettings:
@@ -505,6 +510,78 @@ class PortalService:
         settings = portal_settings or self._portal_settings()
         actions = self._normalize_actions(settings.bucket_access_policy.actions)
         return actions or list(self._bucket_access_default_actions)
+
+    def _storage_space_share_sid(self, role: PortalStorageSpaceRole) -> str:
+        return f"{self._storage_space_share_sid_prefix}{role}"
+
+    def _storage_space_share_sids(self) -> set[str]:
+        return {
+            self._storage_space_share_sid("Viewer"),
+            self._storage_space_share_sid("Editor"),
+            self._storage_space_share_sid("Owner"),
+        }
+
+    def _storage_space_role_actions(self, role: PortalStorageSpaceRole) -> list[str]:
+        viewer_actions = [
+            "s3:GetBucketLocation",
+            "s3:ListBucket",
+            "s3:GetObject",
+        ]
+        if role == "Viewer":
+            return viewer_actions
+        editor_actions = [
+            *viewer_actions,
+            "s3:PutObject",
+            "s3:DeleteObject",
+        ]
+        if role == "Editor":
+            return editor_actions
+        return ["s3:*"]
+
+    def _bucket_arns(self, bucket_name: str) -> list[str]:
+        return [f"arn:aws:s3:::{bucket_name}", f"arn:aws:s3:::{bucket_name}/*"]
+
+    def _bucket_names_from_resources(self, resources: Any) -> set[str]:
+        if not isinstance(resources, list):
+            resources = [resources]
+        buckets: set[str] = set()
+        for res in resources:
+            if not isinstance(res, str) or not res.startswith("arn:aws:s3:::"):
+                continue
+            name = res.replace("arn:aws:s3:::", "")
+            buckets.add(name.replace("/*", ""))
+        return buckets
+
+    def _role_precedence(self, role: PortalStorageSpaceRole) -> int:
+        return {"Viewer": 1, "Editor": 2, "Owner": 3}[role]
+
+    def _merge_storage_space_role(
+        self,
+        roles_by_bucket: dict[str, PortalStorageSpaceRole],
+        bucket_name: str,
+        role: PortalStorageSpaceRole,
+    ) -> None:
+        current = roles_by_bucket.get(bucket_name)
+        if current is None or self._role_precedence(role) > self._role_precedence(current):
+            roles_by_bucket[bucket_name] = role
+
+    def _extract_storage_space_access(self, policy: Optional[dict]) -> dict[str, PortalStorageSpaceRole]:
+        roles_by_bucket: dict[str, PortalStorageSpaceRole] = {}
+        statements = self._policy_statements(policy)
+        sid_to_role = {
+            self._bucket_access_sid: "Editor",
+            self._storage_space_share_sid("Viewer"): "Viewer",
+            self._storage_space_share_sid("Editor"): "Editor",
+            self._storage_space_share_sid("Owner"): "Owner",
+        }
+        for stmt in statements:
+            sid = stmt.get("Sid")
+            role = sid_to_role.get(sid)
+            if role is None:
+                continue
+            for bucket_name in self._bucket_names_from_resources(stmt.get("Resource") or []):
+                self._merge_storage_space_role(roles_by_bucket, bucket_name, role)
+        return roles_by_bucket
 
     def _portal_bucket_cors_rules(self, origins: list[str]) -> list[dict]:
         return [
@@ -1103,25 +1180,115 @@ class PortalService:
         }
         iam_service.put_user_inline_policy(iam_username, self._bucket_access_policy_name, policy)
 
-    def _extract_bucket_access(self, policy: Optional[dict]) -> list[str]:
-        if not policy or not isinstance(policy, dict):
-            return []
+    def _set_user_storage_space_policy(
+        self,
+        iam_service: RGWIAMService,
+        iam_username: Optional[str],
+        bucket_name: str,
+        role: PortalStorageSpaceRole,
+    ) -> None:
+        if not iam_username:
+            raise RuntimeError("IAM username missing for this portal user")
+        policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name) or {}
         statements = policy.get("Statement") or []
         if not isinstance(statements, list):
             statements = [statements]
+        managed_sids = {self._bucket_access_sid, *self._storage_space_share_sids()}
+        remove_arns = set(self._bucket_arns(bucket_name))
+        next_statements: list[dict] = []
+        target_statement = None
+        target_sid = self._storage_space_share_sid(role)
+
         for stmt in statements:
-            if isinstance(stmt, dict) and stmt.get("Sid") == self._bucket_access_sid:
+            if not isinstance(stmt, dict):
+                continue
+            sid = stmt.get("Sid")
+            if sid in managed_sids:
                 resources = stmt.get("Resource") or []
                 if not isinstance(resources, list):
                     resources = [resources]
-                buckets: list[str] = []
-                for res in resources:
-                    if not isinstance(res, str) or not res.startswith("arn:aws:s3:::"):
-                        continue
-                    name = res.replace("arn:aws:s3:::", "")
-                    buckets.append(name.replace("/*", ""))
-                return sorted(set(buckets))
-        return []
+                resources = [arn for arn in resources if arn not in remove_arns]
+                if resources:
+                    stmt = copy.deepcopy(stmt)
+                    stmt["Resource"] = resources
+                    next_statements.append(stmt)
+            else:
+                next_statements.append(stmt)
+
+        for stmt in next_statements:
+            if stmt.get("Sid") == target_sid:
+                target_statement = stmt
+                break
+        if target_statement is None:
+            target_statement = {
+                "Sid": target_sid,
+                "Effect": "Allow",
+                "Action": self._storage_space_role_actions(role),
+                "Resource": [],
+            }
+            next_statements.append(target_statement)
+        target_statement["Effect"] = "Allow"
+        target_statement["Action"] = self._storage_space_role_actions(role)
+        resources = target_statement.get("Resource") or []
+        if not isinstance(resources, list):
+            resources = [resources]
+        for arn in self._bucket_arns(bucket_name):
+            if arn not in resources:
+                resources.append(arn)
+        target_statement["Resource"] = resources
+
+        iam_service.put_user_inline_policy(
+            iam_username,
+            self._bucket_access_policy_name,
+            {
+                "Version": policy.get("Version") or "2012-10-17",
+                "Statement": next_statements,
+            },
+        )
+
+    def _remove_user_storage_space_policy(
+        self,
+        iam_service: RGWIAMService,
+        iam_username: Optional[str],
+        bucket_name: str,
+    ) -> None:
+        if not iam_username:
+            return
+        policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name) or {}
+        statements = policy.get("Statement") or []
+        if not isinstance(statements, list):
+            statements = [statements]
+        managed_sids = {self._bucket_access_sid, *self._storage_space_share_sids()}
+        remove_arns = set(self._bucket_arns(bucket_name))
+        next_statements: list[dict] = []
+        for stmt in statements:
+            if not isinstance(stmt, dict):
+                continue
+            if stmt.get("Sid") not in managed_sids:
+                next_statements.append(stmt)
+                continue
+            resources = stmt.get("Resource") or []
+            if not isinstance(resources, list):
+                resources = [resources]
+            remaining = [arn for arn in resources if arn not in remove_arns]
+            if remaining:
+                stmt = copy.deepcopy(stmt)
+                stmt["Resource"] = remaining
+                next_statements.append(stmt)
+        if next_statements:
+            iam_service.put_user_inline_policy(
+                iam_username,
+                self._bucket_access_policy_name,
+                {
+                    "Version": policy.get("Version") or "2012-10-17",
+                    "Statement": next_statements,
+                },
+            )
+        else:
+            iam_service.delete_user_inline_policy(iam_username, self._bucket_access_policy_name)
+
+    def _extract_bucket_access(self, policy: Optional[dict]) -> list[str]:
+        return sorted(self._extract_storage_space_access(policy).keys())
 
     def _portal_user_rows(self, account: S3Account) -> list[tuple[User, Optional[str], Optional[str]]]:
         roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]
@@ -1307,8 +1474,17 @@ class PortalService:
 
     def list_existing_user_bucket_access(self, target: User, account: S3Account, account_role: str) -> list[str]:
         """Read bucket permissions without provisioning IAM user/key side effects."""
+        return sorted(self.list_existing_user_storage_space_access(target, account, account_role).keys())
+
+    def list_existing_user_storage_space_access(
+        self,
+        target: User,
+        account: S3Account,
+        account_role: str,
+    ) -> dict[str, PortalStorageSpaceRole]:
+        """Read Storage Space permissions from IAM policy without side effects."""
         if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
-            return []
+            return {}
         link = (
             self.db.query(AccountIAMUser)
             .filter(
@@ -1318,10 +1494,10 @@ class PortalService:
             .first()
         )
         if not link or not link.iam_username:
-            return []
+            return {}
         iam_service = self._get_iam_service(account)
         policy = iam_service.get_user_inline_policy(link.iam_username, self._bucket_access_policy_name)
-        return self._extract_bucket_access(policy)
+        return self._extract_storage_space_access(policy)
 
     def grant_bucket_access(self, target: User, account: S3Account, account_role: str, bucket_name: str) -> list[str]:
         if not bucket_name:
@@ -1416,8 +1592,9 @@ class PortalService:
         self,
         bucket: Bucket,
         access: "AccountAccess",
+        role: Optional[PortalStorageSpaceRole] = None,
     ) -> PortalStorageSpaceSummary:
-        role = self._storage_space_role(access)
+        role = role or self._storage_space_role(access)
         endpoint = getattr(access.account, "storage_endpoint", None)
         region = getattr(endpoint, "region", None)
         return PortalStorageSpaceSummary(
@@ -1441,7 +1618,15 @@ class PortalService:
         search: Optional[str] = None,
     ) -> list[PortalStorageSpaceSummary]:
         state = self.get_state(user, access)
-        spaces = [self._bucket_to_storage_space_summary(bucket, access) for bucket in state.buckets]
+        role_by_bucket = self.list_existing_user_storage_space_access(user, access.account, access.role)
+        spaces = [
+            self._bucket_to_storage_space_summary(
+                bucket,
+                access,
+                role=role_by_bucket.get(bucket.name),
+            )
+            for bucket in state.buckets
+        ]
         if search:
             term = search.strip().lower()
             if term:
@@ -1516,6 +1701,17 @@ class PortalService:
             None,
         )
         return summary.internal_bucket_name if summary and summary.internal_bucket_name else None
+
+    def _user_storage_space_role(
+        self,
+        user: User,
+        access: "AccountAccess",
+        bucket_name: str,
+    ) -> Optional[PortalStorageSpaceRole]:
+        if access.role == AccountRole.PORTAL_MANAGER.value or access.capabilities.can_manage_portal_users:
+            return "Owner"
+        role_by_bucket = self.list_existing_user_storage_space_access(user, access.account, access.role)
+        return role_by_bucket.get(bucket_name)
 
     def _portal_object_client(self, user: User, account: S3Account):
         link = self._existing_portal_link(user, account)
@@ -1596,14 +1792,14 @@ class PortalService:
         file_obj,
         content_type: Optional[str] = None,
     ) -> str:
-        if self._storage_space_role(access) == "Viewer":
-            raise RuntimeError("Upload not allowed for this storage space role.")
         target_key = (key or "").lstrip("/")
         if not target_key:
             raise RuntimeError("Object key is required.")
         bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
+        if self._user_storage_space_role(user, access, bucket_name) == "Viewer":
+            raise RuntimeError("Upload not allowed for this storage space role.")
         client = self._portal_object_client(user, access.account)
         extra_args = {"ContentType": content_type} if content_type else None
         stream = file_obj if hasattr(file_obj, "read") else BytesIO(file_obj)
@@ -1638,6 +1834,422 @@ class PortalService:
         content_type = resp.get("ContentType")
         filename = self._object_name(target_key) or "download"
         return stream, content_type, filename
+
+    def _share_target_rows(self, account: S3Account) -> list[tuple[User, Optional[str], Optional[str]]]:
+        roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]
+        return (
+            self.db.query(User, UserS3Account.account_role, AccountIAMUser.iam_username)
+            .join(UserS3Account, UserS3Account.user_id == User.id)
+            .outerjoin(
+                AccountIAMUser,
+                (AccountIAMUser.user_id == User.id) & (AccountIAMUser.account_id == account.id),
+            )
+            .filter(UserS3Account.account_id == account.id)
+            .filter(User.role.in_(roles))
+            .filter(UserS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]))
+            .all()
+        )
+
+    def _storage_space_share_card(
+        self,
+        actor: User,
+        target: User,
+        storage_space: PortalStorageSpaceSummary,
+        role: PortalStorageSpaceRole,
+    ) -> PortalStorageSpaceShare:
+        return PortalStorageSpaceShare(
+            id=f"{storage_space.id}:{target.id}",
+            storage_space_id=storage_space.id,
+            storage_space_name=storage_space.name,
+            user_id=target.id,
+            email=target.email,
+            role=role,
+            direction="with_me" if actor.id == target.id else "by_me",
+            activity_label="Active",
+        )
+
+    def _require_storage_space_owner(
+        self,
+        user: User,
+        access: "AccountAccess",
+        bucket_name: str,
+    ) -> None:
+        if self._user_storage_space_role(user, access, bucket_name) != "Owner":
+            raise RuntimeError("Owner role required for this storage space.")
+
+    def list_storage_space_shares(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+    ) -> list[PortalStorageSpaceShare]:
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        storage_space = next(
+            (
+                item
+                for item in self.list_storage_spaces(user, access)
+                if item.id == space_id or item.internal_bucket_name == bucket_name
+            ),
+            None,
+        )
+        if storage_space is None:
+            raise RuntimeError("Storage space not found or not allowed.")
+        actor_role = self._user_storage_space_role(user, access, bucket_name)
+        can_see_all = actor_role == "Owner"
+        shares: list[PortalStorageSpaceShare] = []
+        iam_service = self._get_iam_service(access.account)
+        for target, account_role, iam_username in self._share_target_rows(access.account):
+            role: Optional[PortalStorageSpaceRole] = None
+            if account_role == AccountRole.PORTAL_MANAGER.value:
+                role = "Owner"
+            elif iam_username:
+                policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name)
+                role = self._extract_storage_space_access(policy).get(bucket_name)
+            if role is None:
+                continue
+            if not can_see_all and target.id != user.id:
+                continue
+            shares.append(self._storage_space_share_card(user, target, storage_space, role))
+        return sorted(shares, key=lambda item: (item.direction, item.email.lower()))
+
+    def set_storage_space_share(
+        self,
+        user: User,
+        access: "AccountAccess",
+        target: User,
+        space_id: str,
+        role: PortalStorageSpaceRole,
+    ) -> PortalStorageSpaceShare:
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        self._require_storage_space_owner(user, access, bucket_name)
+        if is_admin_ui_role(target.role):
+            raise RuntimeError("Cannot share a storage space with this user.")
+        link = (
+            self.db.query(UserS3Account)
+            .filter(UserS3Account.user_id == target.id, UserS3Account.account_id == access.account.id)
+            .first()
+        )
+        if not link:
+            link = UserS3Account(
+                user_id=target.id,
+                account_id=access.account.id,
+                is_root=False,
+                account_role=AccountRole.PORTAL_USER.value,
+            )
+            self.db.add(link)
+            self.db.commit()
+            self.db.refresh(link)
+        elif link.account_role == AccountRole.PORTAL_NONE.value:
+            link.account_role = AccountRole.PORTAL_USER.value
+            self.db.add(link)
+            self.db.commit()
+            self.db.refresh(link)
+
+        account_role = link.account_role or AccountRole.PORTAL_USER.value
+        iam_service = self._get_iam_service(access.account)
+        portal_settings = self._effective_portal_settings(access.account)
+        iam_link, _, _ = self._ensure_portal_user(target, access.account, iam_service)
+        self._sync_user_group_membership(iam_service, iam_link.iam_username, account_role, portal_settings=portal_settings)
+        self._set_user_storage_space_policy(iam_service, iam_link.iam_username, bucket_name, role)
+        shares = self.list_storage_space_shares(user, access, space_id)
+        return next((share for share in shares if share.user_id == target.id), self._storage_space_share_card(
+            user,
+            target,
+            PortalStorageSpaceSummary(id=space_id, name=self._storage_space_label(bucket_name), role=role, internal_bucket_name=bucket_name),
+            role,
+        ))
+
+    def revoke_storage_space_share(
+        self,
+        user: User,
+        access: "AccountAccess",
+        target: User,
+        space_id: str,
+    ) -> list[PortalStorageSpaceShare]:
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        self._require_storage_space_owner(user, access, bucket_name)
+        link = (
+            self.db.query(AccountIAMUser)
+            .filter(AccountIAMUser.user_id == target.id, AccountIAMUser.account_id == access.account.id)
+            .first()
+        )
+        if link and link.iam_username:
+            iam_service = self._get_iam_service(access.account)
+            self._remove_user_storage_space_policy(iam_service, link.iam_username, bucket_name)
+        return self.list_storage_space_shares(user, access, space_id)
+
+    def _audit_metadata(self, log: AuditLog) -> dict[str, Any]:
+        if not log.metadata_json:
+            return {}
+        try:
+            value = json.loads(log.metadata_json)
+        except (TypeError, ValueError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    def _visible_storage_space_lookup(
+        self,
+        user: User,
+        access: "AccountAccess",
+    ) -> dict[str, PortalStorageSpaceSummary]:
+        lookup: dict[str, PortalStorageSpaceSummary] = {}
+        for item in self.list_storage_spaces(user, access):
+            lookup[item.id] = item
+            if item.internal_bucket_name:
+                lookup[item.internal_bucket_name] = item
+        return lookup
+
+    def _audit_storage_space(
+        self,
+        log: AuditLog,
+        metadata: dict[str, Any],
+        visible_spaces: dict[str, PortalStorageSpaceSummary],
+    ) -> PortalStorageSpaceSummary | None:
+        raw_space_id = self._audit_storage_space_id(log, metadata)
+        if raw_space_id is None:
+            return None
+        return visible_spaces.get(raw_space_id)
+
+    def _audit_storage_space_id(self, log: AuditLog, metadata: dict[str, Any]) -> str | None:
+        raw_space_id = metadata.get("storage_space_id")
+        if raw_space_id is None and log.entity_type == "storage_space":
+            raw_space_id = log.entity_id
+        if raw_space_id is None:
+            return None
+        return str(raw_space_id)
+
+    def _audit_target_label(self, log: AuditLog, metadata: dict[str, Any], storage_space: PortalStorageSpaceSummary | None) -> str:
+        if log.entity_type == "object" and log.entity_id:
+            return os.path.basename(log.entity_id.rstrip("/")) or log.entity_id
+        if log.entity_type == "storage_space" and storage_space:
+            return storage_space.name
+        if "target_user_id" in metadata:
+            return f"user #{metadata['target_user_id']}"
+        return log.entity_id or log.message or "workspace"
+
+    def _portal_action_label(self, action: str) -> str:
+        labels = {
+            "upload_object": "Uploaded",
+            "download_object": "Downloaded",
+            "grant_storage_space_share": "Shared",
+            "update_storage_space_share": "Updated share",
+            "revoke_storage_space_share": "Removed share",
+        }
+        return labels.get(action, action.replace("_", " ").title())
+
+    def list_portal_activity(
+        self,
+        user: User,
+        access: "AccountAccess",
+        *,
+        space_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[PortalActivityItem]:
+        visible_spaces = self._visible_storage_space_lookup(user, access)
+        selected_space = visible_spaces.get(space_id) if space_id else None
+        if space_id and selected_space is None:
+            raise RuntimeError("Storage space not found or not allowed.")
+        query_limit = min(max(limit, 1), 200)
+        logs = (
+            self.db.query(AuditLog)
+            .filter(AuditLog.scope == "portal", AuditLog.account_id == access.account.id)
+            .order_by(AuditLog.id.desc())
+            .limit(min(query_limit * 5, 500))
+            .all()
+        )
+        items: list[PortalActivityItem] = []
+        for log in logs:
+            metadata = self._audit_metadata(log)
+            raw_space_id = self._audit_storage_space_id(log, metadata)
+            storage_space = self._audit_storage_space(log, metadata, visible_spaces)
+            if raw_space_id is not None and storage_space is None:
+                continue
+            if selected_space is not None and storage_space != selected_space:
+                continue
+            if storage_space is None and log.user_id != user.id:
+                continue
+            items.append(
+                PortalActivityItem(
+                    id=log.id,
+                    created_at=log.created_at,
+                    actor=log.user_email,
+                    action=self._portal_action_label(log.action),
+                    target=self._audit_target_label(log, metadata, storage_space),
+                    storage_space_id=storage_space.id if storage_space else None,
+                    storage_space_name=storage_space.name if storage_space else None,
+                    ip_address=log.ip_address,
+                    status=log.status,
+                )
+            )
+            if len(items) >= query_limit:
+                break
+        return items
+
+    def list_portal_transfers(
+        self,
+        user: User,
+        access: "AccountAccess",
+        *,
+        space_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[PortalTransfer]:
+        visible_spaces = self._visible_storage_space_lookup(user, access)
+        selected_space = visible_spaces.get(space_id) if space_id else None
+        if space_id and selected_space is None:
+            raise RuntimeError("Storage space not found or not allowed.")
+        query_limit = min(max(limit, 1), 200)
+        logs = (
+            self.db.query(AuditLog)
+            .filter(
+                AuditLog.scope == "portal",
+                AuditLog.account_id == access.account.id,
+                AuditLog.action.in_(["upload_object", "download_object"]),
+            )
+            .order_by(AuditLog.id.desc())
+            .limit(min(query_limit * 5, 500))
+            .all()
+        )
+        transfers: list[PortalTransfer] = []
+        for log in logs:
+            metadata = self._audit_metadata(log)
+            raw_space_id = self._audit_storage_space_id(log, metadata)
+            storage_space = self._audit_storage_space(log, metadata, visible_spaces)
+            if raw_space_id is not None and storage_space is None:
+                continue
+            if selected_space is not None and storage_space != selected_space:
+                continue
+            if storage_space is None and log.user_id != user.id:
+                continue
+            failed = log.status != "success"
+            target = log.entity_id or "object"
+            transfers.append(
+                PortalTransfer(
+                    id=f"audit-{log.id}",
+                    name=os.path.basename(target.rstrip("/")) or target,
+                    direction="Upload" if log.action == "upload_object" else "Download",
+                    status="Failed" if failed else "Completed",
+                    progress=0 if failed else 100,
+                    size_bytes=metadata.get("size_bytes") if isinstance(metadata.get("size_bytes"), int) else None,
+                    storage_space_id=storage_space.id if storage_space else None,
+                    storage_space_name=storage_space.name if storage_space else None,
+                    started_at=log.created_at,
+                    eta_label="-" if failed else "Completed",
+                    speed_label="-",
+                    error_message=log.message if failed else None,
+                )
+            )
+            if len(transfers) >= query_limit:
+                break
+        return transfers
+
+    def list_portal_alerts(
+        self,
+        user: User,
+        access: "AccountAccess",
+        *,
+        limit: int = 50,
+    ) -> list[PortalAlert]:
+        alerts: list[PortalAlert] = []
+        try:
+            quota_bytes, _ = self._account_quota(access.account)
+            usage = self.get_usage(user, access)
+            if usage.used_bytes is not None and quota_bytes and quota_bytes > 0:
+                ratio = usage.used_bytes / quota_bytes
+                if ratio >= 0.8:
+                    percent_used = round(ratio * 100)
+                    alerts.append(
+                        PortalAlert(
+                            id="quota-near",
+                            tone="danger" if ratio >= 0.95 else "warning",
+                            title="Quota is getting close",
+                            description=f"{percent_used}% of workspace storage is used.",
+                            severity_label="Critical" if ratio >= 0.95 else "Warning",
+                        )
+                    )
+        except RuntimeError:
+            pass
+
+        for space in self.list_storage_spaces(user, access):
+            bucket_name = (space.internal_bucket_name or space.id).lower()
+            if "public" in bucket_name or "website" in bucket_name:
+                alerts.append(
+                    PortalAlert(
+                        id=f"public-space-{space.id}",
+                        tone="danger",
+                        title="Public storage space detected",
+                        description=f"{space.name} appears to be publicly reachable.",
+                        severity_label="Critical",
+                        storage_space_id=space.id,
+                    )
+                )
+
+        now = datetime.now(timezone.utc)
+        link_cutoff = now + timedelta(days=7)
+        link_logs = (
+            self.db.query(AuditLog)
+            .filter(AuditLog.scope == "portal", AuditLog.account_id == access.account.id)
+            .order_by(AuditLog.id.desc())
+            .limit(100)
+            .all()
+        )
+        visible_spaces = self._visible_storage_space_lookup(user, access)
+        for log in link_logs:
+            metadata = self._audit_metadata(log)
+            raw_expires = metadata.get("expires_at") or metadata.get("expires")
+            if not raw_expires:
+                continue
+            storage_space = self._audit_storage_space(log, metadata, visible_spaces)
+            raw_space_id = self._audit_storage_space_id(log, metadata)
+            if raw_space_id is not None and storage_space is None:
+                continue
+            try:
+                expires_at = datetime.fromisoformat(str(raw_expires).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if now <= expires_at <= link_cutoff:
+                target = log.entity_id or metadata.get("link_name") or "shared link"
+                alerts.append(
+                    PortalAlert(
+                        id=f"link-expiring-{log.id}",
+                        tone="warning",
+                        title="Shared link expiring",
+                        description=f"{target} expires soon.",
+                        severity_label="Warning",
+                        storage_space_id=storage_space.id if storage_space else None,
+                        created_at=log.created_at,
+                    )
+                )
+                break
+
+        failed_transfer = next(
+            (
+                transfer
+                for transfer in self.list_portal_transfers(user, access, limit=10)
+                if transfer.status == "Failed"
+            ),
+            None,
+        )
+        if failed_transfer:
+            alerts.append(
+                PortalAlert(
+                    id=f"transfer-failed-{failed_transfer.id}",
+                    tone="warning",
+                    title="Transfer retry needed",
+                    description=f"{failed_transfer.name} failed recently.",
+                    severity_label="Warning",
+                    storage_space_id=failed_transfer.storage_space_id,
+                    created_at=failed_transfer.started_at,
+                )
+            )
+        return alerts[: min(max(limit, 1), 100)]
 
     def get_state(self, user: User, access: "AccountAccess") -> PortalState:
         account = access.account

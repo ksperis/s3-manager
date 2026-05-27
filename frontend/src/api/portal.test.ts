@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const clientMock = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  put: vi.fn(),
+  delete: vi.fn(),
 }));
 
 vi.mock("./client", () => ({
@@ -10,10 +12,17 @@ vi.mock("./client", () => ({
 }));
 
 import {
+  fetchPortalActivity,
+  fetchPortalAlerts,
+  grantPortalStorageSpaceShare,
   downloadPortalStorageSpaceObject,
   fetchPortalStorageSpace,
+  fetchPortalTransfers,
+  listPortalStorageSpaceShares,
   listPortalStorageSpaceObjects,
   listPortalStorageSpaces,
+  revokePortalStorageSpaceShare,
+  updatePortalStorageSpaceShare,
   uploadPortalStorageSpaceObject,
 } from "./portal";
 
@@ -21,8 +30,12 @@ describe("portal storage spaces api", () => {
   beforeEach(() => {
     clientMock.get.mockReset();
     clientMock.post.mockReset();
+    clientMock.put.mockReset();
+    clientMock.delete.mockReset();
     clientMock.get.mockResolvedValue({ data: [] });
     clientMock.post.mockResolvedValue({ data: { key: "raw-data/report.csv", message: "Uploaded" } });
+    clientMock.put.mockResolvedValue({ data: {} });
+    clientMock.delete.mockResolvedValue({ data: [] });
   });
 
   it("lists storage spaces through the canonical portal endpoint", async () => {
@@ -99,5 +112,49 @@ describe("portal storage spaces api", () => {
     });
     expect(result.blob).toBe(blob);
     expect(result.filename).toBe("report.csv");
+  });
+
+  it("manages storage space shares through canonical portal endpoints", async () => {
+    clientMock.get.mockResolvedValueOnce({ data: [] });
+    clientMock.post.mockResolvedValueOnce({ data: { id: "research-data:12", role: "Viewer" } });
+    clientMock.get.mockResolvedValueOnce({ data: [] });
+
+    await listPortalStorageSpaceShares("101", "research data");
+    await grantPortalStorageSpaceShare("101", "research data", { email: "viewer@example.com", role: "Viewer" });
+    await updatePortalStorageSpaceShare("101", "research data", 12, "Editor");
+    await revokePortalStorageSpaceShare("101", "research data", 12);
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/shares", {
+      params: { account_id: "101" },
+    });
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/storage-spaces/research%20data/shares",
+      { email: "viewer@example.com", role: "Viewer" },
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.put).toHaveBeenCalledWith(
+      "/portal/storage-spaces/research%20data/shares/12",
+      { role: "Editor" },
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.delete).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/shares/12", {
+      params: { account_id: "101" },
+    });
+  });
+
+  it("fetches portal activity transfers and alerts", async () => {
+    await fetchPortalActivity("101", { spaceId: "research data", limit: 25 });
+    await fetchPortalTransfers("101", { limit: 10 });
+    await fetchPortalAlerts("101", 5);
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/activity", {
+      params: { account_id: "101", space_id: "research data", limit: 25 },
+    });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/transfers", {
+      params: { account_id: "101", limit: 10 },
+    });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/alerts", {
+      params: { account_id: "101", limit: 5 },
+    });
   });
 });

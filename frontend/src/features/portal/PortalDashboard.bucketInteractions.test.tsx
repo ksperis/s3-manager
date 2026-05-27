@@ -66,7 +66,20 @@ const mocks = vi.hoisted(() => ({
           ipAddress: "192.168.1.10",
         },
       ],
-      transfers: [],
+      transfers: [
+        {
+          id: "transfer-1",
+          name: "report.pdf",
+          direction: "Upload",
+          status: "Completed",
+          progress: 100,
+          sizeBytes: 512,
+          spaceName: "Research Data",
+          startedLabel: "4 min ago",
+          etaLabel: "Completed",
+          speedLabel: "-",
+        },
+      ],
       alerts: [
         {
           id: "quota-near",
@@ -117,6 +130,7 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.getByText("Usage over time")).toBeInTheDocument();
     expect(screen.getByText("Top storage spaces")).toBeInTheDocument();
     expect(screen.getByText("Recent activity")).toBeInTheDocument();
+    expect(screen.getByText("Recent transfers")).toBeInTheDocument();
     expect(screen.getByText("Alerts")).toBeInTheDocument();
     expect(screen.queryByText(/Open in Browser/i)).not.toBeInTheDocument();
   });

@@ -97,6 +97,56 @@ export type PortalStorageObjectDownload = {
   filename: string;
 };
 
+export type PortalStorageSpaceShareDirection = "with_me" | "by_me";
+
+export type PortalStorageSpaceShare = {
+  id: string;
+  storage_space_id: string;
+  storage_space_name: string;
+  user_id?: number | null;
+  email: string;
+  role: PortalStorageSpaceRole;
+  direction: PortalStorageSpaceShareDirection;
+  activity_label?: string | null;
+};
+
+export type PortalActivityItem = {
+  id: number;
+  created_at: string;
+  actor: string;
+  action: string;
+  target: string;
+  storage_space_id?: string | null;
+  storage_space_name?: string | null;
+  ip_address?: string | null;
+  status: string;
+};
+
+export type PortalTransfer = {
+  id: string;
+  name: string;
+  direction: "Upload" | "Download";
+  status: "Completed" | "Uploading" | "Queued" | "Failed";
+  progress: number;
+  size_bytes?: number | null;
+  storage_space_id?: string | null;
+  storage_space_name?: string | null;
+  started_at: string;
+  eta_label: string;
+  speed_label: string;
+  error_message?: string | null;
+};
+
+export type PortalAlert = {
+  id: string;
+  tone: "info" | "warning" | "danger";
+  title: string;
+  description: string;
+  severity_label: string;
+  storage_space_id?: string | null;
+  created_at?: string | null;
+};
+
 export type PortalUserSummary = {
   id: number | null;
   email: string;
@@ -152,6 +202,39 @@ export async function bootstrapPortalIdentity(accountId: S3AccountSelector): Pro
 
 export async function fetchPortalUsage(accountId: S3AccountSelector): Promise<PortalUsage> {
   const { data } = await client.get<PortalUsage>("/portal/usage", { params: withS3AccountParam(undefined, accountId) });
+  return data;
+}
+
+export async function fetchPortalActivity(
+  accountId: S3AccountSelector,
+  options?: { spaceId?: string; limit?: number }
+): Promise<PortalActivityItem[]> {
+  const baseParams: Record<string, string | number> = {};
+  if (options?.spaceId) baseParams.space_id = options.spaceId;
+  if (options?.limit) baseParams.limit = options.limit;
+  const { data } = await client.get<PortalActivityItem[]>("/portal/activity", {
+    params: withS3AccountParam(baseParams, accountId),
+  });
+  return data;
+}
+
+export async function fetchPortalTransfers(
+  accountId: S3AccountSelector,
+  options?: { spaceId?: string; limit?: number }
+): Promise<PortalTransfer[]> {
+  const baseParams: Record<string, string | number> = {};
+  if (options?.spaceId) baseParams.space_id = options.spaceId;
+  if (options?.limit) baseParams.limit = options.limit;
+  const { data } = await client.get<PortalTransfer[]>("/portal/transfers", {
+    params: withS3AccountParam(baseParams, accountId),
+  });
+  return data;
+}
+
+export async function fetchPortalAlerts(accountId: S3AccountSelector, limit = 50): Promise<PortalAlert[]> {
+  const { data } = await client.get<PortalAlert[]>("/portal/alerts", {
+    params: withS3AccountParam({ limit }, accountId),
+  });
   return data;
 }
 
@@ -268,6 +351,56 @@ export async function downloadPortalStorageSpaceObject(
   const fallback = key.split("/").filter(Boolean).at(-1) ?? "download";
   const filename = filenameFromContentDisposition(response.headers?.["content-disposition"], fallback);
   return { blob: response.data, filename };
+}
+
+export async function listPortalStorageSpaceShares(
+  accountId: S3AccountSelector,
+  spaceId: string
+): Promise<PortalStorageSpaceShare[]> {
+  const { data } = await client.get<PortalStorageSpaceShare[]>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/shares`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function grantPortalStorageSpaceShare(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  payload: { email?: string; user_id?: number; role: PortalStorageSpaceRole }
+): Promise<PortalStorageSpaceShare> {
+  const { data } = await client.post<PortalStorageSpaceShare>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/shares`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function updatePortalStorageSpaceShare(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  userId: number,
+  role: PortalStorageSpaceRole
+): Promise<PortalStorageSpaceShare> {
+  const { data } = await client.put<PortalStorageSpaceShare>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/shares/${userId}`,
+    { role },
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function revokePortalStorageSpaceShare(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  userId: number
+): Promise<PortalStorageSpaceShare[]> {
+  const { data } = await client.delete<PortalStorageSpaceShare[]>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/shares/${userId}`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
 }
 
 export async function fetchPortalBucketStats(

@@ -19,6 +19,7 @@ import {
 } from "./portalWorkspaceMockData";
 import { PortalV3Badge, PortalV3Card, PortalV3Page, PortalV3Progress, PortalV3Search } from "./PortalV3Components";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
+import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 
 function decodeRouteValue(value?: string): string {
   if (!value) return "";
@@ -248,15 +249,26 @@ export default function PortalStorageSpaceDetailPage() {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!file || !space || !accountIdForApi) return;
+    const transferId = startPortalTransfer({
+      accountId: accountIdForApi,
+      spaceId: space.id,
+      spaceName: space.name,
+      name: file.name,
+      direction: "Upload",
+      sizeBytes: file.size,
+    });
     setUploading(true);
     setMessage(null);
     try {
       const result = await uploadPortalStorageSpaceObject(accountIdForApi, space.id, file, { prefix: currentPrefix });
+      completePortalTransfer(transferId, result.key.split("/").filter(Boolean).at(-1) ?? result.key);
       setMessage(`${result.key} téléversé.`);
       setRefreshIndex((value) => value + 1);
     } catch (err) {
       console.error(err);
-      setMessage(extractApiError(err, "Téléversement impossible pour cet espace."));
+      const message = extractApiError(err, "Téléversement impossible pour cet espace.");
+      failPortalTransfer(transferId, message);
+      setMessage(message);
     } finally {
       setUploading(false);
     }
