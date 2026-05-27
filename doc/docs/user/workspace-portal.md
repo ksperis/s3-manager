@@ -2,46 +2,53 @@
 
 ## When to use
 
-Use **Portal** for self-service bucket and access-key work on a Ceph RGW account where IAM is enabled.
+Use **Portal** for an end-user Storage Workspace focused on storage spaces,
+sharing, activity, transfers, usage, alerts, and simple preferences.
 
 ## Prerequisites
 
 - The global `portal_enabled` setting is enabled.
-- Your UI user is explicitly linked to the account with `portal_user` or `portal_manager`.
-- The account is backed by a Ceph storage endpoint with IAM capability enabled.
+- Your UI user is explicitly linked to the account with Portal access.
+- The account is backed by a storage endpoint configured by the platform team.
 
 ## Steps
 
 1. Open `/portal`.
 2. Select the portal account context in the top bar.
-3. Use **Home** for the dashboard, quick bucket actions, IAM keys, usage, traffic, billing status, and endpoint health.
-4. Bootstrap your portal IAM identity if the dashboard asks for it.
-5. Use **Buckets** for the buckets exposed to your portal identity.
-6. Use **Browser** from Portal only when `browser_portal_enabled` is enabled and you need object-level operations.
-7. Portal managers can use **Manage access** and **Settings** for account-scoped portal delegation.
+3. Use **Home** for the dashboard, quota, usage by Storage Space, recent
+   activity, shared spaces, transfers, and simple alerts.
+4. Use **Storage Spaces** to open an assigned space, browse files, upload,
+   download, and share with collaborators.
+5. Use **Shares** to review items shared with you, items shared by you, and
+   public links when enabled.
+6. Use **Activity**, **Transfers**, and **Usage & Analytics** for collaboration
+   history and consumption tracking.
+7. Use **Settings** for simple account and preference changes.
 
 ## Expected result
 
-Portal actions use IAM users, groups, policies, and access keys as the source of truth for S3 access.
+Portal actions stay user-oriented and use the storage permissions configured by
+the platform as the source of truth.
 
 ## Limits / feature flags
 
 !!! note
-    Portal roles are independent from Manager access. `portal_user` and `portal_manager` do not grant `/manager`; `/manager` still requires `account_admin` or `is_root` on the account link. Existing account links default to `portal_none` until an admin assigns a portal role.
+    Portal roles are independent from Manager access. Portal access does not
+    grant `/manager`; `/manager` still requires the appropriate account
+    administration rights.
 
 !!! note
-    Portal requires `portal_enabled`, a Ceph RGW account, and endpoint IAM capability. `/portal/browser` also requires `browser_enabled` and `browser_portal_enabled`.
+    Portal requires `portal_enabled` and an explicit account link. Advanced
+    object inspection belongs in `/browser`, not inside Portal.
 
 ## Related pages
 
 - [Workspace: Browser](workspace-browser.md)
-- [Feature: Buckets](feature-buckets.md)
-- [Feature: IAM](feature-iam.md)
 - [Use cases for storage users](use-cases-storage-user.md)
 
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Portal workspace dashboard with self-service buckets and IAM status" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Portal workspace dashboard with self-service buckets and IAM status" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Portal Storage Workspace dashboard with usage, activity, shares, transfers, and alerts" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Portal Storage Workspace dashboard with usage, activity, shares, transfers, and alerts" loading="lazy">
 </div>

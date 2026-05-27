@@ -165,13 +165,6 @@ const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
 
-export const PORTAL_LEGACY_REDIRECTS = {
-  buckets: "/portal/storage-spaces",
-  manage: "/portal/shares",
-  billing: "/portal/usage",
-  browser: "/portal/storage-spaces",
-} as const;
-
 function RouteFallback() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
@@ -369,16 +362,15 @@ function RequireStorageOpsFeature() {
 
 function isBrowserSurfaceEnabled(
   generalSettings: ReturnType<typeof useGeneralSettings>["generalSettings"],
-  surface: "root" | "manager" | "portal" | "ceph_admin"
+  surface: "root" | "manager" | "ceph_admin"
 ) {
   if (!generalSettings.browser_enabled) return false;
   if (surface === "root") return generalSettings.browser_root_enabled;
   if (surface === "manager") return generalSettings.browser_manager_enabled;
-  if (surface === "portal") return generalSettings.browser_portal_enabled;
   return generalSettings.browser_ceph_admin_enabled;
 }
 
-function RequireBrowserSurface({ surface }: { surface: "root" | "manager" | "portal" | "ceph_admin" }) {
+function RequireBrowserSurface({ surface }: { surface: "root" | "manager" | "ceph_admin" }) {
   const { generalSettings } = useGeneralSettings();
   if (!isBrowserSurfaceEnabled(generalSettings, surface)) {
     return <FeatureDisabledPage feature="Browser" />;
@@ -591,10 +583,6 @@ export function createAppRoutes() {
               <Route path="policies" element={<PortalPoliciesPage />} />
               <Route path="access-keys" element={<PortalAccessKeysPage />} />
               <Route path="settings" element={<PortalSettingsPage />} />
-              <Route path="buckets" element={<Navigate to={PORTAL_LEGACY_REDIRECTS.buckets} replace />} />
-              <Route path="manage" element={<Navigate to={PORTAL_LEGACY_REDIRECTS.manage} replace />} />
-              <Route path="billing" element={<Navigate to={PORTAL_LEGACY_REDIRECTS.billing} replace />} />
-              <Route path="browser" element={<Navigate to={PORTAL_LEGACY_REDIRECTS.browser} replace />} />
             </Route>
           </Route>
         </Route>

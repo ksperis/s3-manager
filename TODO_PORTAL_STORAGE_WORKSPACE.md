@@ -219,30 +219,30 @@ Objectif : remplacer les mocks UX par des donnees reelles.
 
 Objectif : consolider usage, trafic et facturation dans une vue utilisateur.
 
-- [ ] Reutiliser `PortalUsage`, `fetchPortalTraffic` et billing si active.
-- [ ] Ajouter usage par Storage Space.
-- [ ] Ajouter tendances temporelles.
-- [ ] Masquer les metriques indisponibles proprement.
-- [ ] Renommer l'ancien ecran Billing en sous-section ou source de donnees.
-- [ ] Ajouter tests d'etats sans metriques, sans billing, et quota absent.
+- [x] Reutiliser `PortalUsage`, `fetchPortalTraffic` et billing si active.
+- [x] Ajouter usage par Storage Space.
+- [x] Ajouter tendances temporelles.
+- [x] Masquer les metriques indisponibles proprement.
+- [x] Renommer l'ancien ecran Billing en sous-section ou source de donnees.
+- [x] Ajouter tests d'etats sans metriques, sans billing, et quota absent.
 
 ## Etape 7 - Nettoyage Separation Des Surfaces
 
 Objectif : finaliser la separation `/portal`, `/browser`, `/manager`, `/admin`.
 
-- [ ] Supprimer ou deprecier `/portal/browser`.
-- [ ] Retirer `BrowserEmbed` du portail.
-- [ ] Deplacer reglages IAM avances vers `/manager` ou `/admin`.
-- [ ] Garder `/portal/settings` limite aux preferences simples.
-- [ ] Documenter la separation des surfaces.
-- [ ] Mettre a jour les tests route/access.
-- [ ] Verifier qu'aucun texte portail utilisateur ne mentionne IAM, policy JSON, ARN ou ACL avancees.
+- [x] Supprimer ou deprecier `/portal/browser`.
+- [x] Retirer `BrowserEmbed` du portail.
+- [x] Deplacer reglages IAM avances vers `/manager` ou `/admin`.
+- [x] Garder `/portal/settings` limite aux preferences simples.
+- [x] Documenter la separation des surfaces.
+- [x] Mettre a jour les tests route/access.
+- [x] Verifier qu'aucun texte portail utilisateur ne mentionne IAM, policy JSON, ARN ou ACL avancees.
 
 ## Validation Globale
 
-- [ ] `npm run test` frontend cible.
-- [ ] Tests backend portail.
-- [ ] Tests de non-regression permissions IAM.
+- [x] `npm run test` frontend cible.
+- [x] Tests backend portail.
+- [x] Tests de non-regression permissions IAM.
 - [ ] Verification manuelle responsive desktop/mobile.
 - [ ] Verification qu'un utilisateur final peut :
   - voir son dashboard ;

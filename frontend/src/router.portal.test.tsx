@@ -1,13 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { PORTAL_LEGACY_REDIRECTS } from "./router";
+import { createAppRoutes } from "./router";
 
-describe("portal legacy redirects", () => {
-  it("keeps old portal routes mapped to the storage workspace UX", () => {
-    expect(PORTAL_LEGACY_REDIRECTS).toEqual({
-      buckets: "/portal/storage-spaces",
-      manage: "/portal/shares",
-      billing: "/portal/usage",
-      browser: "/portal/storage-spaces",
-    });
+function findRouteByPath(routes: Array<{ path?: string; children?: unknown[] }>, path: string): { path?: string; children?: unknown[] } | null {
+  for (const route of routes) {
+    if (route.path === path) return route;
+    const found = findRouteByPath((route.children ?? []) as Array<{ path?: string; children?: unknown[] }>, path);
+    if (found) return found;
+  }
+  return null;
+}
+
+describe("portal routes", () => {
+  it("keeps only canonical storage workspace routes under portal", () => {
+    const portalRoute = findRouteByPath(createAppRoutes() as Array<{ path?: string; children?: unknown[] }>, "/portal");
+    const childPaths = ((portalRoute?.children ?? []) as Array<{ path?: string }>).map((route) => route.path).filter(Boolean);
+
+    expect(childPaths).toEqual([
+      "storage-spaces",
+      "storage-spaces/:spaceId/objects/*",
+      "storage-spaces/:spaceId",
+      "shares",
+      "activity",
+      "transfers",
+      "usage",
+      "users",
+      "groups",
+      "policies",
+      "access-keys",
+      "settings",
+    ]);
+    expect(childPaths).not.toContain("browser");
+    expect(childPaths).not.toContain("buckets");
+    expect(childPaths).not.toContain("manage");
+    expect(childPaths).not.toContain("billing");
   });
 });

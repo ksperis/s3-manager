@@ -26,7 +26,7 @@ export default function PortalSettingsPage() {
       <PortalV3PageHeader title="Settings" description="Configure your account and preferences." />
       <div className="border-b border-slate-200">
         <div className="flex gap-7">
-          {["General", "Security", "Default Policies", "Notifications", "Endpoints", "Integrations"].map((tab, index) => (
+          {["General", "Security", "Notifications"].map((tab, index) => (
             <button key={tab} type="button" className={index === 0 ? "portal-v3-tab portal-v3-tab-active" : "portal-v3-tab"}>
               {tab}
             </button>

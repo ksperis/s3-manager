@@ -82,7 +82,6 @@ export default function BrowserSettingsPage() {
     field:
       | "browser_root_enabled"
       | "browser_manager_enabled"
-      | "browser_portal_enabled"
       | "browser_ceph_admin_enabled",
     checked: boolean
   ) => {
@@ -133,13 +132,12 @@ export default function BrowserSettingsPage() {
               ...prev,
               browser: defaults.browser,
               general: {
-                ...prev.general,
-                browser_root_enabled: defaults.general.browser_root_enabled,
-                browser_manager_enabled: defaults.general.browser_manager_enabled,
-                browser_portal_enabled: defaults.general.browser_portal_enabled,
-                browser_ceph_admin_enabled: defaults.general.browser_ceph_admin_enabled,
-              },
-            }
+              ...prev.general,
+              browser_root_enabled: defaults.general.browser_root_enabled,
+              browser_manager_enabled: defaults.general.browser_manager_enabled,
+              browser_ceph_admin_enabled: defaults.general.browser_ceph_admin_enabled,
+            },
+          }
           : defaults
       );
     } catch (err) {
@@ -212,17 +210,6 @@ export default function BrowserSettingsPage() {
                     <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{BROWSER_MANAGER_WARNING_MESSAGE}</p>
                   )}
                 </PortalSettingsItem>
-                <PortalSettingsItem
-                  title="/portal/browser"
-                  description="Browser tab inside the self-service portal workspace."
-                  action={
-                    <PortalSettingsToggleAction
-                      checked={settings.general.browser_portal_enabled}
-                      onChange={(value) => handleWorkspaceToggle("browser_portal_enabled", value)}
-                      ariaLabel="Enable /portal/browser workspace"
-                    />
-                  }
-                />
                 <PortalSettingsItem
                   title="/ceph-admin/browser"
                   description="Browser tab inside the Ceph Admin workspace."

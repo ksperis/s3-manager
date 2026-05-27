@@ -10,6 +10,9 @@ describe("PortalSettingsPage", () => {
     expect(screen.getByRole("heading", { name: "Account" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Security" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Preferences" })).toBeInTheDocument();
+    expect(screen.queryByText(/Default Policies/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Endpoints/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Integrations/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/policy JSON/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/ARN/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/diagnostics/i)).not.toBeInTheDocument();

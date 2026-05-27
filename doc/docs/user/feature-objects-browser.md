@@ -6,7 +6,7 @@ Use this guide for object-level actions in Browser surfaces.
 
 ## Prerequisites
 
-- Access to `/browser`, `/manager/browser`, `/portal/browser`, or `/ceph-admin/browser`.
+- Access to `/browser`, `/manager/browser`, or `/ceph-admin/browser`.
 - Effective permissions for target bucket/prefix.
 
 ## Steps
