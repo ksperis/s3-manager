@@ -125,6 +125,22 @@ describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
     expect(hasAdvancedFilters(advanced, false, false)).toBe(true);
   });
 
+  it("serializes owner suspended filters as boolean backend rules", () => {
+    const advanced: AdvancedFilterState = {
+      ...baseAdvancedFilter(),
+      ownerSuspended: "true",
+    };
+
+    const rawPayload = buildAdvancedFilterPayload("", "contains", advanced, null, false, true);
+    expect(rawPayload).toBeTruthy();
+    const payload = JSON.parse(rawPayload ?? "{}") as { rules?: Array<Record<string, unknown>> };
+
+    expect(payload.rules).toEqual(
+      expect.arrayContaining([{ field: "owner_suspended", op: "eq", value: true }])
+    );
+    expect(hasAdvancedFilters(advanced, false, true)).toBe(true);
+  });
+
   it("serializes notifications feature state only when the feature is supported", () => {
     const advanced: AdvancedFilterState = {
       ...baseAdvancedFilter(),
@@ -181,5 +197,10 @@ describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
     expect(sanitized.minOwnerQuotaBytes).toBe("123");
     expect(sanitized.maxOwnerQuotaObjects).toBe("45");
     expect(sanitized.minOwnerQuotaUsageSizePercent).toBe("88");
+  });
+
+  it("sanitizes persisted owner suspended filter state", () => {
+    expect(sanitizeAdvancedFilter({ ownerSuspended: "false" }).ownerSuspended).toBe("false");
+    expect(sanitizeAdvancedFilter({ ownerSuspended: "maybe" }).ownerSuspended).toBe("any");
   });
 });

@@ -52,9 +52,10 @@ BUCKET_REF_SEPARATOR = "::"
 STORAGE_OPS_CONTEXT_LISTING_MAX_WORKERS = 6
 CONTEXT_IDENTITY_FIELDS = {"context_id", "context_name", "context_kind", "endpoint_name"}
 OWNER_QUOTA_FIELDS = {"owner_quota_max_size_bytes", "owner_quota_max_objects"}
+OWNER_STATUS_FIELDS = {"owner_suspended"}
 OWNER_USAGE_FIELDS = {"owner_used_bytes", "owner_object_count"}
 OWNER_USAGE_PERCENT_FIELDS = {"owner_quota_usage_size_percent", "owner_quota_usage_object_percent"}
-OWNER_ENRICHED_FIELDS = {"owner_name"} | OWNER_QUOTA_FIELDS | OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS
+OWNER_ENRICHED_FIELDS = {"owner_name"} | OWNER_STATUS_FIELDS | OWNER_QUOTA_FIELDS | OWNER_USAGE_FIELDS | OWNER_USAGE_PERCENT_FIELDS
 
 
 @dataclass(frozen=True)
@@ -384,11 +385,12 @@ def _apply_page_owner_enrichment(
     page_items: list[StorageOpsBucketSummary],
     resolved_contexts_by_id: dict[str, _StorageOpsResolvedContext],
     include_name: bool,
+    include_suspended: bool,
     include_quota: bool,
     progress: ListingProgressEmitter | None = None,
     cancel_check: Callable[[], None] | None = None,
 ) -> list[StorageOpsBucketSummary]:
-    if not page_items or (not include_name and not include_quota):
+    if not page_items or (not include_name and not include_suspended and not include_quota):
         return page_items
 
     buckets_by_context: dict[str, list[StorageOpsBucketSummary]] = {}
@@ -405,11 +407,13 @@ def _apply_page_owner_enrichment(
                 endpoint_id=int(getattr(getattr(resolved.account, "storage_endpoint", None), "id", 0) or 0),
                 account=resolved.account,
             )
-            metadata.enrich_buckets(
-                buckets,
-                include_name=include_name,
-                include_quota=include_quota,
-            )
+            kwargs = {
+                "include_name": include_name,
+                "include_quota": include_quota,
+            }
+            if include_suspended:
+                kwargs["include_suspended"] = True
+            metadata.enrich_buckets(buckets, **kwargs)
         processed += len(buckets)
         if progress is not None:
             progress.emit(
@@ -433,6 +437,7 @@ def _list_context_buckets(
     parsed_filter: CephAdminBucketFilterQuery | None,
     normalized_search: str,
     filter_requires_owner_name: bool,
+    filter_requires_owner_suspended: bool,
     filter_requires_owner_quota: bool,
     owner_usage_required: bool,
 ) -> list[StorageOpsBucketSummary]:
@@ -470,17 +475,24 @@ def _list_context_buckets(
             )
         )
 
-    if context_buckets and (filter_requires_owner_name or filter_requires_owner_quota or owner_usage_required):
+    if context_buckets and (
+        filter_requires_owner_name
+        or filter_requires_owner_suspended
+        or filter_requires_owner_quota
+        or owner_usage_required
+    ):
         metadata = BucketOwnerMetadataService(
             endpoint_id=int(getattr(getattr(account, "storage_endpoint", None), "id", 0) or 0),
             account=account,
         )
-        metadata.enrich_buckets(
-            context_buckets,
-            include_name=filter_requires_owner_name,
-            include_quota=filter_requires_owner_quota,
-            include_usage=owner_usage_required,
-        )
+        kwargs = {
+            "include_name": filter_requires_owner_name,
+            "include_quota": filter_requires_owner_quota,
+            "include_usage": owner_usage_required,
+        }
+        if filter_requires_owner_suspended:
+            kwargs["include_suspended"] = True
+        metadata.enrich_buckets(context_buckets, **kwargs)
 
     cheap_prefilter, cheap_prefilter_complete = _build_cheap_field_prefilter(parsed_filter)
     effective_filter = parsed_filter
@@ -561,9 +573,11 @@ def _compute_storage_ops_listing(
     include_set = parse_includes(include)
     filter_fields = _collect_filter_fields(parsed_filter)
     wants_owner_name = "owner_name" in include_set
+    wants_owner_suspended = "owner_suspended" in include_set
     wants_owner_quota = "owner_quota" in include_set
     wants_owner_quota_usage = "owner_quota_usage" in include_set
     filter_requires_owner_name = "owner_name" in filter_fields
+    filter_requires_owner_suspended = "owner_suspended" in filter_fields
     filter_requires_owner_quota = bool(filter_fields & (OWNER_QUOTA_FIELDS | OWNER_USAGE_PERCENT_FIELDS))
 
     required_feature_include = {
@@ -661,6 +675,7 @@ def _compute_storage_ops_listing(
                     parsed_filter=parsed_filter,
                     normalized_search=normalized_search,
                     filter_requires_owner_name=filter_requires_owner_name,
+                    filter_requires_owner_suspended=filter_requires_owner_suspended,
                     filter_requires_owner_quota=filter_requires_owner_quota,
                     owner_usage_required=owner_usage_required,
                 )
@@ -686,6 +701,7 @@ def _compute_storage_ops_listing(
                     parsed_filter=parsed_filter,
                     normalized_search=normalized_search,
                     filter_requires_owner_name=filter_requires_owner_name,
+                    filter_requires_owner_suspended=filter_requires_owner_suspended,
                     filter_requires_owner_quota=filter_requires_owner_quota,
                     owner_usage_required=owner_usage_required,
                 )
@@ -720,7 +736,7 @@ def _compute_storage_ops_listing(
     start = max(page - 1, 0) * page_size
     end = start + page_size
     page_items = sorted_items[start:end]
-    if page_items and (wants_owner_name or wants_owner_quota or wants_owner_quota_usage):
+    if page_items and (wants_owner_name or wants_owner_suspended or wants_owner_quota or wants_owner_quota_usage):
         progress.emit(
             percent=92,
             stage="page_enrichment",
@@ -733,6 +749,7 @@ def _compute_storage_ops_listing(
             page_items=page_items,
             resolved_contexts_by_id=resolved_contexts_by_id,
             include_name=wants_owner_name,
+            include_suspended=wants_owner_suspended,
             include_quota=wants_owner_quota or wants_owner_quota_usage,
             progress=progress,
             cancel_check=cancel_check,

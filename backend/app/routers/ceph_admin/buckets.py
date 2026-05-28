@@ -252,9 +252,10 @@ _COLUMN_DETAIL_LIFECYCLE_KEYS = {
     "lifecycle_abort_multipart_days",
 }
 _OWNER_QUOTA_FIELDS = {"owner_quota_max_size_bytes", "owner_quota_max_objects"}
+_OWNER_STATUS_FIELDS = {"owner_suspended"}
 _OWNER_USAGE_FIELDS = {"owner_used_bytes", "owner_object_count"}
 _OWNER_USAGE_PERCENT_FIELDS = {"owner_quota_usage_size_percent", "owner_quota_usage_object_percent"}
-_OWNER_ENRICHED_FIELDS = _OWNER_QUOTA_FIELDS | _OWNER_USAGE_FIELDS | _OWNER_USAGE_PERCENT_FIELDS
+_OWNER_ENRICHED_FIELDS = _OWNER_STATUS_FIELDS | _OWNER_QUOTA_FIELDS | _OWNER_USAGE_FIELDS | _OWNER_USAGE_PERCENT_FIELDS
 _EXPENSIVE_FIELD_RULES = {"owner_name", "tag"} | _OWNER_ENRICHED_FIELDS
 
 
@@ -567,23 +568,26 @@ def _apply_owner_enrichment(
     ctx: CephAdminContext,
     buckets: list[CephAdminBucketSummary],
     *,
+    include_suspended: bool = False,
     include_quota: bool = False,
     include_usage: bool = False,
     usage_by_key: dict[str, BucketOwnerUsage] | None = None,
 ) -> list[CephAdminBucketSummary]:
-    if not buckets or (not include_quota and not include_usage):
+    if not buckets or (not include_suspended and not include_quota and not include_usage):
         return buckets
     service = BucketOwnerMetadataService(
         endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
         endpoint=ctx.endpoint,
         rgw_admin=ctx.rgw_admin,
     )
-    return service.enrich_buckets(
-        buckets,
-        include_quota=include_quota,
-        include_usage=include_usage,
-        usage_by_key=usage_by_key,
-    )
+    kwargs: dict[str, Any] = {
+        "include_quota": include_quota,
+        "include_usage": include_usage,
+        "usage_by_key": usage_by_key,
+    }
+    if include_suspended:
+        kwargs["include_suspended"] = True
+    return service.enrich_buckets(buckets, **kwargs)
 
 
 def _match_tag_expression(tag_key: str, tag_value: str, expression: str, op: str) -> bool:
@@ -668,6 +672,23 @@ def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilte
         return value is None
     if op == "not_null":
         return value is not None
+    if field == "owner_suspended":
+        left_bool = _coerce_bool(value)
+        if left_bool is None:
+            left_bool = False
+        if op in ("eq", "neq"):
+            right_bool = _coerce_bool(rule.value)
+            if right_bool is None:
+                return False
+            return left_bool == right_bool if op == "eq" else left_bool != right_bool
+        if op in ("in", "not_in"):
+            if not isinstance(rule.value, list):
+                return False
+            candidates = {_coerce_bool(item) for item in rule.value}
+            candidates = {item for item in candidates if item is not None}
+            result = left_bool in candidates
+            return result if op == "in" else not result
+        return False
     if value is None:
         return False
 
@@ -1956,6 +1977,7 @@ def _compute_bucket_listing(
 
     include_set = parse_includes(include)
     wants_owner_name = "owner_name" in include_set
+    wants_owner_suspended = "owner_suspended" in include_set
     wants_owner_quota = "owner_quota" in include_set
     wants_owner_quota_usage = "owner_quota_usage" in include_set
     owner_usage_required_for_request = wants_owner_quota_usage or _filter_requires_owner_usage(advanced_filter)
@@ -2133,6 +2155,7 @@ def _compute_bucket_listing(
                 filter_features = {rule.feature for rule in feature_state_rules if rule.feature}
                 requires_tag_lookup = any(rule.field == "tag" for rule in expensive_field_rules)
                 requires_owner_name_lookup = any(rule.field == "owner_name" for rule in expensive_field_rules)
+                requires_owner_suspended_lookup = any(rule.field in _OWNER_STATUS_FIELDS for rule in expensive_field_rules)
                 requires_owner_quota_lookup = any(
                     rule.field in (_OWNER_QUOTA_FIELDS | _OWNER_USAGE_PERCENT_FIELDS) for rule in expensive_field_rules
                 )
@@ -2157,10 +2180,15 @@ def _compute_bucket_listing(
                                 continue
                             owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
                             bucket.owner_name = owner_name_by_key.get(owner_key)
-                    if (requires_owner_quota_lookup or requires_owner_usage_lookup) and expensive_candidates:
+                    if (
+                        requires_owner_suspended_lookup
+                        or requires_owner_quota_lookup
+                        or requires_owner_usage_lookup
+                    ) and expensive_candidates:
                         expensive_candidates = _apply_owner_enrichment(
                             ctx,
                             expensive_candidates,
+                            include_suspended=requires_owner_suspended_lookup,
                             include_quota=requires_owner_quota_lookup,
                             include_usage=requires_owner_usage_lookup,
                             usage_by_key=owner_usage_by_key,
@@ -2271,10 +2299,15 @@ def _compute_bucket_listing(
                                 continue
                             owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
                             bucket.owner_name = owner_name_by_key.get(owner_key)
-                    if (requires_owner_quota_lookup or requires_owner_usage_lookup) and expensive_candidates:
+                    if (
+                        requires_owner_suspended_lookup
+                        or requires_owner_quota_lookup
+                        or requires_owner_usage_lookup
+                    ) and expensive_candidates:
                         expensive_candidates = _apply_owner_enrichment(
                             ctx,
                             expensive_candidates,
+                            include_suspended=requires_owner_suspended_lookup,
                             include_quota=requires_owner_quota_lookup,
                             include_usage=requires_owner_usage_lookup,
                             usage_by_key=owner_usage_by_key,
@@ -2410,7 +2443,7 @@ def _compute_bucket_listing(
         page_items = _backfill_bucket_owner_metadata(
             ctx,
             page_items,
-            include_tenant=wants_owner_name or wants_owner_quota or wants_owner_quota_usage,
+            include_tenant=wants_owner_name or wants_owner_suspended or wants_owner_quota or wants_owner_quota_usage,
             **(
                 {
                     "progress": progress,
@@ -2465,11 +2498,12 @@ def _compute_bucket_listing(
                 continue
             owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
             bucket.owner_name = owner_name_by_key.get(owner_key, bucket.owner_name)
-    if page_items and (wants_owner_quota or wants_owner_quota_usage):
+    if page_items and (wants_owner_suspended or wants_owner_quota or wants_owner_quota_usage):
         page_items = _apply_owner_enrichment(
             ctx,
             page_items,
-            include_quota=True,
+            include_suspended=wants_owner_suspended,
+            include_quota=wants_owner_quota or wants_owner_quota_usage,
             include_usage=wants_owner_quota_usage,
             usage_by_key=listing.owner_usage_by_key,
         )

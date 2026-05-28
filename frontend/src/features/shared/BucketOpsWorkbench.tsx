@@ -925,6 +925,12 @@ const formatQuotaUsageValue = (used?: number | null, quota?: number | null) => {
   return percent !== null ? (formatQuotaPercent(percent) ?? "-") : "-";
 };
 
+const formatOwnerSuspended = (value?: boolean | null) => {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return "-";
+};
+
 type ColumnId =
   | "context_name"
   | "context_kind"
@@ -932,6 +938,7 @@ type ColumnId =
   | "tenant"
   | "owner"
   | "owner_name"
+  | "owner_suspended"
   | "owner_used_bytes"
   | "owner_object_count"
   | "owner_quota_max_size_bytes"
@@ -976,6 +983,7 @@ type FeatureKey =
   | "server_side_encryption";
 type FeatureFilterState = "any" | "enabled" | "disabled" | "suspended" | "disabled_or_suspended";
 type TextMatchMode = "contains" | "exact";
+type BooleanFilterState = "any" | "true" | "false";
 type StorageOpsContextFilterKind = "any" | "account" | "connection" | "s3_user";
 type AdvancedNumericField =
   | "minUsedBytes"
@@ -1011,6 +1019,7 @@ type ActiveFilterRemoveAction =
   | { type: "advanced_context_ids" }
   | { type: "advanced_endpoint_names" }
   | { type: "advanced_text"; field: "tenant" | "owner" | "ownerName" | "s3Tags" }
+  | { type: "advanced_owner_suspended" }
   | { type: "advanced_owner_scope" }
   | { type: "advanced_numeric"; field: AdvancedNumericField }
   | { type: "advanced_feature"; feature: FeatureKey }
@@ -1051,6 +1060,7 @@ export type AdvancedFilterState = {
   ownerName: string;
   ownerNameMatchMode: TextMatchMode;
   ownerNameScope: OwnerNameScope;
+  ownerSuspended: BooleanFilterState;
   s3Tags: string;
   s3TagsMatchMode: TextMatchMode;
   minUsedBytes: string;
@@ -1091,6 +1101,7 @@ const defaultAdvancedFilter: AdvancedFilterState = {
   ownerName: "",
   ownerNameMatchMode: "contains",
   ownerNameScope: "any",
+  ownerSuspended: "any",
   s3Tags: "",
   s3TagsMatchMode: "contains",
   minUsedBytes: "",
@@ -1189,7 +1200,7 @@ const FEATURE_DETAIL_COLUMN_OPTIONS: FeatureDetailColumnOption[] = [
     include: "lifecycle_abort_multipart_days",
   },
 ];
-const BOOLEAN_FILTER_OPTIONS: Array<{ value: "any" | "true" | "false"; label: string }> = [
+const BOOLEAN_FILTER_OPTIONS: Array<{ value: BooleanFilterState; label: string }> = [
   { value: "any", label: "Any" },
   { value: "true", label: "Yes" },
   { value: "false", label: "No" },
@@ -1420,6 +1431,9 @@ export const buildAdvancedFilterPayload = (
     if (advanced.ownerNameScope !== "any") {
       rules.push({ field: "owner_kind", op: "eq", value: advanced.ownerNameScope });
     }
+    if (advanced.ownerSuspended !== "any") {
+      rules.push({ field: "owner_suspended", op: "eq", value: advanced.ownerSuspended === "true" });
+    }
     const tagExpressions = parseS3TagExpressions(advanced.s3Tags);
     if (tagExpressions.length > 0) {
       const parsedS3Tags = parseExactListInput(advanced.s3Tags);
@@ -1501,6 +1515,7 @@ export const hasAdvancedFilters = (
     advanced.owner.trim() ||
     advanced.ownerName.trim() ||
     advanced.ownerNameScope !== "any" ||
+    advanced.ownerSuspended !== "any" ||
     parseS3TagExpressions(advanced.s3Tags).length > 0
   ) {
     return true;
@@ -1573,6 +1588,7 @@ const BUCKET_CORE_COLUMN_OPTIONS: Array<{ id: ColumnId; label: string }> = [
   { id: "tenant", label: "Tenant" },
   { id: "owner", label: "Owner" },
   { id: "owner_name", label: "Owner name" },
+  { id: "owner_suspended", label: "Owner suspended" },
   { id: "used_bytes", label: "Used" },
   { id: "object_count", label: "Objects" },
   { id: "owner_used_bytes", label: "Owner used" },
@@ -1619,6 +1635,7 @@ const loadVisibleColumns = (
       "tenant",
       "owner",
       "owner_name",
+      "owner_suspended",
       "owner_used_bytes",
       "owner_object_count",
       "owner_quota_max_size_bytes",
@@ -1919,6 +1936,10 @@ export const sanitizeAdvancedFilter = (value: unknown): AdvancedFilterState => {
     if (input === "account" || input === "user") return input;
     return "any";
   };
+  const parseBooleanFilterState = (input: unknown): BooleanFilterState => {
+    if (input === "true" || input === "false") return input;
+    return "any";
+  };
   return {
     contextIds: normalizeAdvancedSelectionValues(sanitizeStringArray(data.contextIds)),
     endpointNames: normalizeAdvancedSelectionValues(sanitizeStringArray(data.endpointNames)),
@@ -1929,6 +1950,7 @@ export const sanitizeAdvancedFilter = (value: unknown): AdvancedFilterState => {
     ownerName: safeString(data.ownerName),
     ownerNameMatchMode: parseMatchMode(data.ownerNameMatchMode),
     ownerNameScope: parseOwnerNameScope(data.ownerNameScope),
+    ownerSuspended: parseBooleanFilterState(data.ownerSuspended),
     s3Tags: safeString(data.s3Tags),
     s3TagsMatchMode: parseMatchMode(data.s3TagsMatchMode),
     minUsedBytes: safeString(data.minUsedBytes),
@@ -2830,6 +2852,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     if (visibleColumns.includes("owner_name")) {
       include.add("owner_name");
     }
+    if (visibleColumns.includes("owner_suspended")) {
+      include.add("owner_suspended");
+    }
     if (visibleColumns.includes("tags")) {
       include.add("tags");
     }
@@ -2855,6 +2880,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const includeParams = useMemo(() => {
     const include: string[] = [];
     if (visibleColumns.includes("owner_name")) include.push("owner_name");
+    if (visibleColumns.includes("owner_suspended")) include.push("owner_suspended");
     if (needsOwnerQuotaDetails) include.push("owner_quota");
     if (needsOwnerUsageDetails) include.push("owner_quota_usage");
     if (visibleColumns.includes("tags")) include.push("tags");
@@ -2953,6 +2979,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       ].forEach((id) => ids.add(id));
     }
     if (visibleColumns.includes("owner_quota_max_size_bytes")) ids.add("owner_quota_max_size_bytes");
+    if (visibleColumns.includes("owner_suspended")) ids.add("owner_suspended");
     if (visibleColumns.includes("owner_quota_max_objects")) ids.add("owner_quota_max_objects");
     if (visibleColumns.includes("owner_used_bytes")) ids.add("owner_used_bytes");
     if (visibleColumns.includes("owner_object_count")) ids.add("owner_object_count");
@@ -3874,6 +3901,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       }
       if (col === "owner_name") {
         exportColumns.push({ id: col, label: "Owner name", getValue: (bucket) => bucket.owner_name ?? "-" });
+        return;
+      }
+      if (col === "owner_suspended") {
+        exportColumns.push({
+          id: col,
+          label: "Owner suspended",
+          getValue: (bucket) => formatOwnerSuspended(bucket.owner_suspended),
+        });
         return;
       }
       if (col === "owner_used_bytes") {
@@ -5954,6 +5989,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const ownerNameAppliedEffectiveMatchMode: TextMatchMode = ownerNameAppliedForcesExact ? "exact" : ownerNameAppliedMatchMode;
   const s3TagsAppliedEffectiveMatchMode: TextMatchMode = s3TagsAppliedForcesExact ? "exact" : s3TagsAppliedMatchMode;
   const ownerNameAppliedScope = advancedApplied?.ownerNameScope ?? "any";
+  const ownerSuspendedApplied = advancedApplied?.ownerSuspended ?? "any";
   const contextDraftIds = normalizeAdvancedSelectionValues(advancedDraft.contextIds);
   const contextDraftIdsSerialized = serializeAdvancedSelectionValues(contextDraftIds);
   const endpointDraftNames = normalizeAdvancedSelectionValues(advancedDraft.endpointNames);
@@ -5980,6 +6016,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const ownerNameDraftEffectiveMatchMode: TextMatchMode = ownerNameDraftForcesExact ? "exact" : ownerNameDraftMatchMode;
   const s3TagsDraftEffectiveMatchMode: TextMatchMode = s3TagsDraftForcesExact ? "exact" : s3TagsDraftMatchMode;
   const ownerNameDraftScope = advancedDraft.ownerNameScope;
+  const ownerSuspendedDraft = advancedDraft.ownerSuspended;
   const contextPending =
     contextDraftIdsSerialized !== contextAppliedIdsSerialized;
   const endpointPending = endpointDraftNamesSerialized !== endpointAppliedNamesSerialized;
@@ -5991,6 +6028,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     ownerNameDraftValue !== ownerNameAppliedValue ||
     ownerNameDraftScope !== ownerNameAppliedScope ||
     (ownerNameDraftValue.length > 0 && ownerNameDraftEffectiveMatchMode !== ownerNameAppliedEffectiveMatchMode);
+  const ownerSuspendedPending = ownerSuspendedDraft !== ownerSuspendedApplied;
   const s3TagsPending =
     s3TagsDraftSerialized !== s3TagsAppliedSerialized ||
     (s3TagsDraftExpressions.length > 0 && s3TagsDraftEffectiveMatchMode !== s3TagsAppliedEffectiveMatchMode);
@@ -6014,6 +6052,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     Boolean(ownerNameAppliedValue || ownerNameAppliedScope !== "any"),
     ownerNamePending
   );
+  const ownerSuspendedFieldState = fieldHighlight(
+    ownerSuspendedApplied !== "any",
+    ownerSuspendedPending
+  );
   const s3TagsFieldState = fieldHighlight(
     s3TagsAppliedExpressions.length > 0,
     s3TagsPending
@@ -6026,6 +6068,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     quickFilterPending
   );
   const ownerNameLookupActive = ownerNameDraftValue.length > 0;
+  const ownerSuspendedLookupActive = ownerSuspendedDraft !== "any";
   const ownerQuotaLookupActive = OWNER_QUOTA_NUMERIC_FILTER_FIELDS.some((field) => advancedDraft[field].trim().length > 0);
   const ownerUsageLookupActive = usageFeatureEnabled
     && OWNER_USAGE_NUMERIC_FILTER_FIELDS.some((field) => advancedDraft[field].trim().length > 0);
@@ -6047,7 +6090,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     Number(tenantDraftValue.length > 0) +
     Number(ownerDraftValue.length > 0) +
     Number(ownerNameLookupActive) +
-    Number(ownerNameDraftScope !== "any");
+    Number(ownerNameDraftScope !== "any") +
+    Number(ownerSuspendedLookupActive);
   const advancedDraftRangeCount = useMemo(() => {
     const alwaysAvailableCount = OWNER_QUOTA_NUMERIC_FILTER_FIELDS
       .map((field) => advancedDraft[field])
@@ -6085,6 +6129,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       return featureCostReducedByPrefilter ? "medium" : "high";
     }
     if (ownerNameLookupActive) return "medium";
+    if (ownerSuspendedLookupActive) return "medium";
     if (ownerQuotaLookupActive) return "medium";
     if (ownerUsageLookupActive) return "medium";
     if (advancedDraftRangeCount > 0) return "medium";
@@ -6095,6 +6140,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     advancedDraftRangeCount,
     advancedDraftIdentityCount,
     ownerNameLookupActive,
+    ownerSuspendedLookupActive,
     ownerQuotaLookupActive,
     ownerUsageLookupActive,
     s3TagsLookupActive,
@@ -6119,6 +6165,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       if (ownerNameLookupActive) {
         return `${FILTER_COST_LABEL.medium}: owner-name filters require owner identity lookups.`;
       }
+      if (ownerSuspendedLookupActive) {
+        return `${FILTER_COST_LABEL.medium}: owner-suspended filters require owner status lookups.`;
+      }
       if (ownerQuotaLookupActive && !ownerUsageLookupActive) {
         return `${FILTER_COST_LABEL.medium}: owner quota filters require owner metadata lookups.`;
       }
@@ -6137,6 +6186,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [
     advancedDraftGlobalCostLevel,
     ownerNameLookupActive,
+    ownerSuspendedLookupActive,
     ownerQuotaLookupActive,
     ownerUsageLookupActive,
     s3TagsLookupActive,
@@ -6181,6 +6231,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setAdvancedApplied((prev) => (prev ? { ...prev, ownerNameScope: "any" } : prev));
     setPage(1);
   };
+  const clearAdvancedOwnerSuspended = () => {
+    setAdvancedDraft((prev) => ({ ...prev, ownerSuspended: "any" }));
+    setAdvancedApplied((prev) => (prev ? { ...prev, ownerSuspended: "any" } : prev));
+    setPage(1);
+  };
   const clearAdvancedFeatureField = (feature: FeatureKey) => {
     setAdvancedDraft((prev) => ({ ...prev, features: { ...prev.features, [feature]: "any" } }));
     setAdvancedApplied((prev) => (prev ? { ...prev, features: { ...prev.features, [feature]: "any" } } : prev));
@@ -6211,6 +6266,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
     if (action.type === "advanced_owner_scope") {
       clearAdvancedOwnerScope();
+      return;
+    }
+    if (action.type === "advanced_owner_suspended") {
+      clearAdvancedOwnerSuspended();
       return;
     }
     if (action.type === "advanced_context_ids") {
@@ -6321,6 +6380,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           id: "owner-kind",
           label: `Owner kind: ${advancedApplied.ownerNameScope === "account" ? "Accounts" : "Users"}`,
           remove: { type: "advanced_owner_scope" },
+        });
+      }
+      if (advancedApplied.ownerSuspended !== "any") {
+        items.push({
+          id: "owner-suspended",
+          label: `Owner suspended: ${advancedApplied.ownerSuspended === "true" ? "Yes" : "No"}`,
+          remove: { type: "advanced_owner_suspended" },
         });
       }
       const s3TagExpressions = parseS3TagExpressions(advancedApplied.s3Tags);
@@ -6450,6 +6516,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       items.push({
         id: "draft-owner-kind",
         label: `Owner kind: ${advancedDraft.ownerNameScope === "account" ? "Accounts" : "Users"}`,
+      });
+    }
+    if (advancedDraft.ownerSuspended !== "any") {
+      items.push({
+        id: "draft-owner-suspended",
+        label: `Owner suspended: ${advancedDraft.ownerSuspended === "true" ? "Yes" : "No"}`,
       });
     }
     const s3TagExpressions = parseS3TagExpressions(advancedDraft.s3Tags);
@@ -7470,6 +7542,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         render: (bucket) => bucket.owner_name ?? "-",
       });
     }
+    if (visible.has("owner_suspended")) {
+      cols.push({
+        id: "owner_suspended",
+        label: "Owner suspended",
+        field: null,
+        expensive: true,
+        headerClassName: "w-36",
+        render: (bucket) => formatOwnerSuspended(bucket.owner_suspended),
+      });
+    }
     if (visible.has("owner_used_bytes")) {
       cols.push({
         id: "owner_used_bytes",
@@ -8401,6 +8483,35 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                   <option value="user">Users only</option>
                                 </select>
                               </div>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <label
+                                className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${ownerSuspendedFieldState.labelClass}`}
+                              >
+                                <span className="inline-flex items-center gap-1">
+                                  <span>Owner suspended</span>
+                                  {renderFilterCostIndicator("medium", "Medium cost: owner-suspended filters require owner status lookups.")}
+                                </span>
+                              </label>
+                              <select
+                                value={advancedDraft.ownerSuspended}
+                                onChange={(e) =>
+                                  setAdvancedDraft((prev) => ({
+                                    ...prev,
+                                    ownerSuspended: e.target.value as BooleanFilterState,
+                                  }))
+                                }
+                                className={`mt-2 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                                  ownerSuspendedFieldState.fieldClass
+                                }`}
+                              >
+                                {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
 
                             <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 md:col-span-2">

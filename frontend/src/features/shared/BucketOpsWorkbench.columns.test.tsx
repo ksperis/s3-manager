@@ -419,6 +419,29 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     );
   });
 
+  it("loads and renders the owner suspended column in storage ops", async () => {
+    window.localStorage.setItem(
+      STORAGE_OPS_COLUMNS_STORAGE_KEY,
+      JSON.stringify(["context_name", "owner_suspended"])
+    );
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [{ ...baseBucket, owner_suspended: true }],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    await waitFor(() => expect(mocks.listStorageOpsBuckets).toHaveBeenCalledTimes(2));
+    expect(mocks.listStorageOpsBuckets.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({
+        include: ["owner_suspended"],
+        with_stats: false,
+      })
+    );
+    expect(screen.getByText("Owner suspended")).toBeInTheDocument();
+    expect(screen.getByText("Yes")).toBeInTheDocument();
+  });
+
   it("loads owner usage percentage columns with owner quota metadata and stats", async () => {
     window.localStorage.setItem(
       STORAGE_OPS_COLUMNS_STORAGE_KEY,

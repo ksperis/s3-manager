@@ -62,6 +62,7 @@ class CephAdminBucketSummary(BaseModel):
     tenant: Optional[str] = None
     owner: Optional[str] = None
     owner_name: Optional[str] = None
+    owner_suspended: Optional[bool] = None
     used_bytes: Optional[int] = None
     object_count: Optional[int] = None
     quota_max_size_bytes: Optional[int] = None
@@ -291,6 +292,7 @@ BucketFilterField = Literal[
     "tenant",
     "owner",
     "owner_name",
+    "owner_suspended",
     "owner_kind",
     "context_id",
     "context_name",

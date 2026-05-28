@@ -2386,6 +2386,82 @@ def test_ceph_admin_owner_quota_filter_for_user_owner_is_deduplicated_and_cached
     assert rgw_admin.get_user_calls == 1
 
 
+def test_ceph_admin_bucket_listing_filters_by_owner_suspended_status():
+    payload = [
+        {"name": "bucket-active", "owner": "user-active"},
+        {"name": "bucket-suspended", "owner": "user-suspended"},
+    ]
+    ctx, rgw_admin = _build_ctx(
+        endpoint_id=405,
+        payload=payload,
+        user_details={
+            (None, "user-active"): {"uid": "user-active", "display_name": "Active User", "suspended": False},
+            (None, "user-suspended"): {
+                "uid": "user-suspended",
+                "display_name": "Suspended User",
+                "suspended": True,
+            },
+        },
+    )
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"field": "owner_suspended", "op": "eq", "value": True},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=["owner_suspended"],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-suspended"]
+    assert response.items[0].owner_suspended is True
+    assert rgw_admin.get_user_calls == 2
+
+
+def test_ceph_admin_bucket_listing_owner_suspended_column_treats_missing_flag_as_active():
+    payload = [
+        {"name": "bucket-active", "owner": "user-active"},
+        {"name": "bucket-suspended", "owner": "user-suspended"},
+    ]
+    ctx, _ = _build_ctx(
+        endpoint_id=406,
+        payload=payload,
+        user_details={
+            (None, "user-active"): {"uid": "user-active", "display_name": "Active User"},
+            (None, "user-suspended"): {
+                "uid": "user-suspended",
+                "display_name": "Suspended User",
+                "suspended": "suspended",
+            },
+        },
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=["owner_suspended"],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.owner_suspended for item in response.items] == [False, True]
+
+
 def test_ceph_admin_owner_quota_usage_percent_filter_uses_global_owner_usage():
     owner_id = "RGW00000000000000009"
     payload = [
