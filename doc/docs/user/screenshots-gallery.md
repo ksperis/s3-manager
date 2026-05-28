@@ -174,9 +174,44 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
 <div class="docs-screenshot-carousel" data-docs-carousel data-carousel-title="Portal workspace">
   <figure data-thumb-label="Overview">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Portal workspace dashboard with self-service buckets, access keys, and account status" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Portal workspace dashboard with self-service buckets, access keys, and account status" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Portal Storage Workspace dashboard with usage, activity, shares, transfers, and alerts" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Portal Storage Workspace dashboard with usage, activity, shares, transfers, and alerts" loading="lazy">
     </div>
-    <figcaption><strong>Overview.</strong> Portal is a distinct self-service workspace for explicitly assigned `portal_user` and `portal_manager` links on Ceph RGW accounts with IAM enabled.</figcaption>
+    <figcaption><strong>Overview.</strong> Portal opens on a user dashboard with quota, Storage Space usage, recent activity, transfers, shares, and simple alerts.</figcaption>
+  </figure>
+  <figure data-thumb-label="Storage Spaces">
+    <div class="docs-themed-shot" data-docs-themed-shot>
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-storage-spaces.light.png" alt="Portal Storage Spaces list with search, usage, roles, status, and open actions" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-storage-spaces.dark.png" alt="Portal Storage Spaces list with search, usage, roles, status, and open actions" loading="lazy">
+    </div>
+    <figcaption><strong>Storage Spaces.</strong> End users see spaces as collaborative work areas rather than raw S3 configuration surfaces.</figcaption>
+  </figure>
+  <figure data-thumb-label="Object List">
+    <div class="docs-themed-shot" data-docs-themed-shot>
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-object-list.light.png" alt="Portal object list for a Storage Space with breadcrumbs, metrics, search, upload, and folder navigation" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-object-list.dark.png" alt="Portal object list for a Storage Space with breadcrumbs, metrics, search, upload, and folder navigation" loading="lazy">
+    </div>
+    <figcaption><strong>Object list.</strong> The Portal object view keeps browsing, upload, download, and share actions simple while leaving advanced inspection to Browser.</figcaption>
+  </figure>
+  <figure data-thumb-label="Object Detail">
+    <div class="docs-themed-shot" data-docs-themed-shot>
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-object-detail.light.png" alt="Portal object detail page with file path, general information, quick actions, preview, and recent events" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-object-detail.dark.png" alt="Portal object detail page with file path, general information, quick actions, preview, and recent events" loading="lazy">
+    </div>
+    <figcaption><strong>Object detail.</strong> File details focus on safe user-facing metadata, quick actions, and recent events.</figcaption>
+  </figure>
+  <figure data-thumb-label="Usage">
+    <div class="docs-themed-shot" data-docs-themed-shot>
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-usage.light.png" alt="Portal Usage and Analytics page with storage, traffic, requests, per-space breakdown, and billing source" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-usage.dark.png" alt="Portal Usage and Analytics page with storage, traffic, requests, per-space breakdown, and billing source" loading="lazy">
+    </div>
+    <figcaption><strong>Usage.</strong> Usage & Analytics consolidates storage, traffic, requests, and billing source signals in end-user language.</figcaption>
+  </figure>
+  <figure data-thumb-label="Settings">
+    <div class="docs-themed-shot" data-docs-themed-shot>
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-settings.light.png" alt="Portal Settings page with account, security, and preference cards" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-settings.dark.png" alt="Portal Settings page with account, security, and preference cards" loading="lazy">
+    </div>
+    <figcaption><strong>Settings.</strong> Portal settings stay limited to simple user account, security, and preference controls.</figcaption>
   </figure>
 </div>

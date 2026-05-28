@@ -15,6 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SCREENSHOT_DIR = path.resolve(__dirname, "../../../doc/docs/assets/screenshots/user");
 const SCREENSHOT_VARIANTS: ScreenshotThemeVariant[] = ["light", "dark"];
+const ACTION_TIMEOUT_MS = 15_000;
 
 async function writeDebugArtifacts(page: Page, scenarioId: string, runtimeErrors: string[]) {
   const debugPath = path.join(SCREENSHOT_DIR, `${scenarioId}.debug.png`);
@@ -64,31 +65,37 @@ async function seedLocalStorage(page: Page, storage: {
 }
 
 async function runAction(page: Page, action: ScenarioAction) {
-  if (action.type === "wait") {
-    await page.locator(action.selector).first().waitFor({ state: "visible" });
-    return;
-  }
-  if (action.type === "click") {
+  try {
+    if (action.type === "wait") {
+      await page.locator(action.selector).first().waitFor({ state: "visible", timeout: ACTION_TIMEOUT_MS });
+      return;
+    }
+    if (action.type === "click") {
+      const locator = page.locator(action.selector).first();
+      await locator.waitFor({ state: "visible", timeout: ACTION_TIMEOUT_MS });
+      await locator.click({ timeout: ACTION_TIMEOUT_MS });
+      return;
+    }
+    if (action.type === "select") {
+      const locator = page.locator(action.selector).first();
+      await locator.waitFor({ state: "visible", timeout: ACTION_TIMEOUT_MS });
+      await locator.selectOption(action.value, { timeout: ACTION_TIMEOUT_MS });
+      return;
+    }
+    if (action.type === "fill") {
+      const locator = page.locator(action.selector).first();
+      await locator.waitFor({ state: "visible", timeout: ACTION_TIMEOUT_MS });
+      await locator.fill(action.value, { timeout: ACTION_TIMEOUT_MS });
+      return;
+    }
     const locator = page.locator(action.selector).first();
-    await locator.waitFor({ state: "visible" });
-    await locator.click();
-    return;
+    await locator.waitFor({ state: "visible", timeout: ACTION_TIMEOUT_MS });
+    await locator.press(action.key, { timeout: ACTION_TIMEOUT_MS });
+  } catch (error) {
+    throw new Error(`Unable to run screenshot action ${action.type} on selector "${action.selector}"`, {
+      cause: error,
+    });
   }
-  if (action.type === "select") {
-    const locator = page.locator(action.selector).first();
-    await locator.waitFor({ state: "visible" });
-    await locator.selectOption(action.value);
-    return;
-  }
-  if (action.type === "fill") {
-    const locator = page.locator(action.selector).first();
-    await locator.waitFor({ state: "visible" });
-    await locator.fill(action.value);
-    return;
-  }
-  const locator = page.locator(action.selector).first();
-  await locator.waitFor({ state: "visible" });
-  await locator.press(action.key);
 }
 
 async function captureScenarioVariant(

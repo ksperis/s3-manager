@@ -47,3 +47,10 @@ The report shows whether each bucket passed, completed with object errors, or fa
 - [Workspace: Ceph Admin](workspace-ceph-admin.md)
 - [Workspace: Storage Ops](workspace-storage-ops.md)
 - [Feature: Bucket compare](feature-bucket-compare.md)
+
+## Visual example
+
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/feature-bucket-integrity-check.light.png" alt="Bucket integrity page listing buckets that can be selected for an integrity check" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/feature-bucket-integrity-check.dark.png" alt="Bucket integrity page listing buckets that can be selected for an integrity check" loading="lazy">
+</div>
