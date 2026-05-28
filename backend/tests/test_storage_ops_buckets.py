@@ -11,7 +11,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.db import S3Account, S3Connection, User, UserRole
-from app.models.bucket import Bucket
+from app.models.bucket import Bucket, BucketLifecycleConfig
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketSummary
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
@@ -647,6 +647,63 @@ def test_storage_ops_context_filters_match_context_id():
         account=SimpleNamespace(),
     )
     assert [bucket.bucket_name for bucket in result] == ["beta"]
+
+
+def test_storage_ops_lifecycle_rule_status_filter_uses_context_lifecycle_lookup():
+    buckets = [
+        StorageOpsBucketSummary(
+            name="alpha",
+            bucket_name="alpha",
+            context_id="1",
+            context_name="Account A",
+            context_kind="account",
+            endpoint_name="Primary Endpoint",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+        StorageOpsBucketSummary(
+            name="beta",
+            bucket_name="beta",
+            context_id="1",
+            context_name="Account A",
+            context_kind="account",
+            endpoint_name="Primary Endpoint",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+    ]
+    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_rule_status",
+                    "op": "eq",
+                    "value": "Disabled",
+                }
+            ],
+        }
+    )
+
+    class FakeBucketsService:
+        def get_lifecycle(self, name: str, account):  # noqa: ARG002
+            rules = (
+                [{"ID": "cleanup", "Status": "Disabled"}]
+                if name == "alpha"
+                else [{"ID": "cleanup", "Status": "Enabled"}]
+            )
+            return BucketLifecycleConfig(rules=rules)
+
+    result = storage_ops_router._apply_advanced_filter_for_context(
+        buckets,
+        parsed_filter,
+        service=FakeBucketsService(),
+        account=SimpleNamespace(),
+    )
+    assert [bucket.bucket_name for bucket in result] == ["alpha"]
 
 
 def test_storage_ops_context_filters_match_s3_user_kind():

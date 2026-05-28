@@ -26,6 +26,7 @@ Use **Advanced filter** in **Ceph Admin** listings when you need precise selecti
    - Storage and quota ranges
    - Quota usage percentage ranges for bucket, account, or user quotas when metrics are available
    - Feature states such as versioning, lifecycle rules, access logging, and notifications
+   - Lifecycle rule details, including disabled lifecycle rules
 4. Choose match mode (`Contains` or `Exact`) per field when relevant.
 5. Click **Apply filters**.
 6. Review active filters and resulting bucket list; clear or refine filters as needed.

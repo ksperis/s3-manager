@@ -1498,6 +1498,92 @@ def test_ceph_admin_bucket_listing_lifecycle_rule_name_can_be_negated_with_quant
     assert [item.name for item in response.items] == ["bucket-a"]
 
 
+def test_ceph_admin_bucket_listing_lifecycle_rule_status_filters_same_rule(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+        {"name": "bucket-c", "owner": "owner-c"},
+        {"name": "bucket-d", "owner": "owner-d"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=204, payload=payload)
+
+    lifecycle_by_bucket = {
+        "bucket-a": [
+            {"ID": "cleanup", "Status": "Disabled", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}}
+        ],
+        "bucket-b": [{"ID": "cleanup", "Status": "Disabled"}],
+        "bucket-c": [
+            {"ID": "cleanup", "Status": "Enabled", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}}
+        ],
+        "bucket-d": [],
+    }
+
+    def fake_get_lifecycle(self, name: str, account):
+        return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    status_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_rule_status",
+                    "op": "eq",
+                    "value": "Disabled",
+                }
+            ],
+        }
+    )
+    status_response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=status_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in status_response.items] == ["bucket-a", "bucket-b"]
+
+    combined_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_rule_status",
+                    "op": "eq",
+                    "value": "Disabled",
+                },
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_abort_multipart_days",
+                    "op": "gte",
+                    "value": 7,
+                },
+            ],
+        }
+    )
+    combined_response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=combined_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in combined_response.items] == ["bucket-a"]
+
+
 @pytest.mark.parametrize(
     ("op", "value", "expected"),
     [

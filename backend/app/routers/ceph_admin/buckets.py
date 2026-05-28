@@ -223,6 +223,7 @@ _RGW_BUCKET_PAYLOAD_INFLIGHT: dict[_RgwBucketPayloadCacheKey, Future[list[dict]]
 _FEATURE_PARAM_UNAVAILABLE = object()
 _FEATURE_PARAM_SOURCE_BY_PARAM: dict[str, str] = {
     "lifecycle_rule_id": "lifecycle",
+    "lifecycle_rule_status": "lifecycle",
     "lifecycle_rule_type": "lifecycle",
     "lifecycle_expiration_days": "lifecycle",
     "lifecycle_noncurrent_expiration_days": "lifecycle",
@@ -870,6 +871,16 @@ def _extract_lifecycle_rule_id(rule_entry: dict) -> str | None:
     return value or None
 
 
+def _extract_lifecycle_rule_status(rule_entry: dict) -> str | None:
+    raw = rule_entry.get("Status")
+    if raw is None:
+        raw = rule_entry.get("status")
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    return value or None
+
+
 def _extract_lifecycle_abort_days(rule_entry: dict) -> float | None:
     raw = rule_entry.get("AbortIncompleteMultipartUpload")
     if not isinstance(raw, dict):
@@ -973,6 +984,8 @@ def _lifecycle_rule_matches_param(
         op = "has"
     if param == "lifecycle_rule_id":
         return _match_text_value(_extract_lifecycle_rule_id(lifecycle_rule), op, rule.value)
+    if param == "lifecycle_rule_status":
+        return _match_text_value(_extract_lifecycle_rule_status(lifecycle_rule), op, rule.value)
     if param == "lifecycle_rule_type":
         rule_types = _extract_lifecycle_rule_types(lifecycle_rule)
         if op == "has":
@@ -1075,6 +1088,7 @@ def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[st
 
     if param in {
         "lifecycle_rule_id",
+        "lifecycle_rule_status",
         "lifecycle_rule_type",
         "lifecycle_expiration_days",
         "lifecycle_noncurrent_expiration_days",

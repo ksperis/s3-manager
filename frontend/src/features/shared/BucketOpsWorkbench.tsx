@@ -8678,7 +8678,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                 Lifecycle
                               </p>
                               <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                                Rule name, type and lifecycle day conditions are evaluated on the same lifecycle rule.
+                                Rule name, status, type and lifecycle day conditions are evaluated on the same lifecycle rule.
                               </p>
                               <div className="mt-2 space-y-2">
                                 <div>
@@ -8706,6 +8706,23 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                       className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                     />
                                   </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule status</label>
+                                  <select
+                                    value={advancedDraft.featureDetails.lifecycleRuleStatus}
+                                    onChange={(e) =>
+                                      updateFeatureDetailFilter(
+                                        "lifecycleRuleStatus",
+                                        e.target.value as FeatureDetailFilters["lifecycleRuleStatus"]
+                                      )
+                                    }
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  >
+                                    <option value="">Any</option>
+                                    <option value="Enabled">Enabled</option>
+                                    <option value="Disabled">Disabled</option>
+                                  </select>
                                 </div>
                                 <div>
                                   <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule type</label>
