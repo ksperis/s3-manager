@@ -2,9 +2,21 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { CSSProperties, ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  CSSProperties,
+  ReactNode,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { NavLink } from "react-router-dom";
 import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_MAX_WIDTH } from "./sidebarSizing";
+import { workspaceIconById, type WorkspaceSwitcherModel } from "./EnvironmentSwitcher";
+import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
+import type { WorkspaceId } from "../utils/workspaces";
 
 export type SidebarLink = {
   to: string;
@@ -30,6 +42,7 @@ type SidebarProps = {
   sections?: SidebarSection[];
   links?: SidebarLink[];
   headerAction?: ReactNode;
+  footer?: ReactNode;
   variant?: "desktop" | "mobile";
   className?: string;
   onNavigate?: () => void;
@@ -38,6 +51,8 @@ type SidebarProps = {
   resizing?: boolean;
   onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
   onResizeKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  onCollapseToggle?: () => void;
+  workspaceSwitcher?: WorkspaceSwitcherModel | null;
 };
 
 function isSectionCollapsible(section: SidebarSection) {
@@ -49,6 +64,7 @@ export default function Sidebar({
   sections,
   links = [],
   headerAction,
+  footer,
   variant = "desktop",
   className,
   onNavigate,
@@ -57,7 +73,20 @@ export default function Sidebar({
   resizing = false,
   onResizeStart,
   onResizeKeyDown,
+  onCollapseToggle,
+  workspaceSwitcher,
 }: SidebarProps) {
+  const workspaceOptions = useMemo(() => workspaceSwitcher?.options ?? [], [workspaceSwitcher]);
+  const workspaceSelectedIndex = useMemo(() => {
+    if (!workspaceSwitcher) return -1;
+    return workspaceOptions.findIndex((option) => option.value === workspaceSwitcher.currentWorkspaceId);
+  }, [workspaceOptions, workspaceSwitcher]);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [workspaceActiveIndex, setWorkspaceActiveIndex] = useState(-1);
+  const workspaceTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const workspaceMenuSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const workspaceListboxRef = useRef<HTMLDivElement | null>(null);
+  const workspaceListboxId = useId();
   const effectiveSections: SidebarSection[] = useMemo(
     () => (sections && sections.length > 0 ? sections : [{ label: "Navigation", links }]),
     [links, sections]
@@ -90,27 +119,124 @@ export default function Sidebar({
     }));
   };
 
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (workspaceTriggerRef.current?.contains(target)) return;
+      if (workspaceMenuSurfaceRef.current?.contains(target)) return;
+      setWorkspaceMenuOpen(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setWorkspaceMenuOpen(false);
+      workspaceTriggerRef.current?.focus();
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [workspaceMenuOpen]);
+
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+    setWorkspaceActiveIndex(workspaceSelectedIndex >= 0 ? workspaceSelectedIndex : workspaceOptions.length > 0 ? 0 : -1);
+    requestAnimationFrame(() => {
+      workspaceListboxRef.current?.focus();
+    });
+  }, [workspaceMenuOpen, workspaceOptions.length, workspaceSelectedIndex]);
+
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+    if (workspaceOptions.length === 0) {
+      setWorkspaceActiveIndex(-1);
+      return;
+    }
+    if (workspaceActiveIndex < 0 || workspaceActiveIndex >= workspaceOptions.length) {
+      setWorkspaceActiveIndex(0);
+    }
+  }, [workspaceActiveIndex, workspaceMenuOpen, workspaceOptions.length]);
+
+  const activateWorkspaceByIndex = (index: number) => {
+    if (!workspaceSwitcher) return;
+    if (index < 0 || index >= workspaceOptions.length) return;
+    const option = workspaceOptions[index];
+    setWorkspaceMenuOpen(false);
+    if (option.value !== workspaceSwitcher.currentWorkspaceId) {
+      workspaceSwitcher.onChange(option.value);
+    }
+    workspaceTriggerRef.current?.focus();
+  };
+
+  const handleWorkspaceListboxKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setWorkspaceMenuOpen(false);
+      workspaceTriggerRef.current?.focus();
+      return;
+    }
+    if (event.key === "Tab") {
+      setWorkspaceMenuOpen(false);
+      return;
+    }
+    if (workspaceOptions.length === 0) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setWorkspaceActiveIndex((current) => (current < 0 ? 0 : (current + 1) % workspaceOptions.length));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setWorkspaceActiveIndex((current) =>
+        current < 0 ? workspaceOptions.length - 1 : (current - 1 + workspaceOptions.length) % workspaceOptions.length
+      );
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      setWorkspaceActiveIndex(0);
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      setWorkspaceActiveIndex(workspaceOptions.length - 1);
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (workspaceActiveIndex >= 0) activateWorkspaceByIndex(workspaceActiveIndex);
+    }
+  };
+
   const baseLinkClasses = compact
-    ? "group relative flex items-center justify-center rounded-xl px-2.5 py-3 ui-caption font-semibold leading-4 transition"
-    : "group relative flex items-center justify-between gap-2 overflow-hidden rounded-xl px-3 py-2.5 ui-caption font-semibold leading-4 transition";
+    ? "group relative flex h-10 items-center justify-center rounded-md px-2 ui-caption font-semibold leading-4 transition"
+    : "group relative flex h-9 items-center justify-between gap-2 overflow-hidden rounded-md px-3 ui-caption font-semibold leading-4 transition";
   const inactiveLinkClasses =
-    "text-slate-600 hover:bg-slate-100/90 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/80 dark:hover:text-slate-50";
+    "text-slate-700 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800/80 dark:hover:text-slate-50";
   const activeLinkClasses =
     compact
-      ? "bg-primary-100/90 text-primary-900 ring-1 ring-primary-200/90 shadow-sm shadow-primary-200/40 dark:bg-primary-900/35 dark:text-primary-100 dark:ring-primary-700/60 dark:shadow-black/30"
-      : "bg-gradient-to-r from-primary-100 via-primary-50 to-white text-primary-950 ring-1 ring-primary-200/90 shadow-sm shadow-primary-200/40 before:absolute before:left-1.5 before:top-2 before:bottom-2 before:w-1 before:rounded-full before:bg-primary-500 dark:from-primary-900/40 dark:via-primary-900/20 dark:to-slate-900/85 dark:text-primary-100 dark:ring-primary-700/55 dark:shadow-black/30 dark:before:bg-primary-300";
+      ? "bg-blue-50 text-blue-700 shadow-sm dark:bg-blue-950/40 dark:text-blue-100"
+      : "bg-blue-50 text-blue-700 shadow-sm before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-r-full before:bg-blue-600 dark:bg-blue-950/40 dark:text-blue-100 dark:before:bg-blue-300";
   const badgeClasses = "shrink-0 rounded-full px-1.5 py-0.5 ui-caption font-semibold";
   const activeBadgeClasses = "bg-primary-200/80 text-primary-900 dark:bg-primary-800/70 dark:text-primary-100";
   const inactiveBadgeClasses =
     "bg-slate-100 text-slate-600 group-hover:bg-slate-200/90 group-hover:text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:group-hover:bg-slate-700 dark:group-hover:text-slate-100";
   const containerClasses =
     variant === "desktop"
-      ? `relative hidden shrink-0 border-r border-slate-200/80 bg-gradient-to-b from-white/95 via-white/92 to-slate-50/85 py-3 dark:border-slate-800 dark:from-slate-900/85 dark:via-slate-900/75 dark:to-slate-950/70 md:flex md:flex-col ${
-          compact ? "px-2.5" : "px-3"
+      ? `relative hidden h-full shrink-0 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 md:flex md:flex-col ${
+          compact ? "px-2" : "px-0"
         } ${resizing ? "" : "transition-[width,padding] duration-200 ease-out"}`
-      : "flex h-full flex-col border-r border-slate-200/80 bg-gradient-to-b from-white/95 via-white/92 to-slate-50/85 px-3 py-3 dark:border-slate-800 dark:from-slate-900/85 dark:via-slate-900/75 dark:to-slate-950/70";
+      : "flex h-full flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950";
   const rootClassName = className ? `${containerClasses} ${className}` : containerClasses;
   const iconClasses = compact ? "h-4 w-4" : "h-3.5 w-3.5";
+  const currentWorkspaceLabel = workspaceSwitcher?.currentWorkspaceLabel ?? title;
   const rootStyle: CSSProperties | undefined =
     variant === "desktop" && width
       ? {
@@ -120,29 +246,118 @@ export default function Sidebar({
 
   return (
     <aside className={rootClassName} style={rootStyle} data-sidebar-variant={variant}>
-      <div
-        className={`mb-3 rounded-2xl border border-slate-200/80 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.96),_rgba(241,245,249,0.88))] shadow-sm shadow-slate-200/60 dark:border-slate-800 dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.98),_rgba(15,23,42,0.84))] dark:shadow-black/20 ${
-          compact ? "p-2.5" : "p-3"
-        }`}
-      >
-        <div className={`flex items-center ${compact ? "justify-center" : "gap-3"}`}>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary-200/80 bg-primary-100/90 text-primary-700 shadow-inner shadow-white/60 dark:border-primary-800/70 dark:bg-primary-900/40 dark:text-primary-200 dark:shadow-black/20">
-            <SidebarCompassIcon className="h-4 w-4" />
-          </div>
-          {!compact && (
-            <div className="min-w-0 leading-tight">
-              <p className="truncate ui-caption font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-200">
-                {title}
-              </p>
-              <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">Workspace navigation</p>
+      <div className={`relative border-b border-slate-200 dark:border-slate-800 ${compact ? "px-0 py-3" : "px-4 py-4"}`}>
+        {workspaceSwitcher ? (
+          <button
+            ref={workspaceTriggerRef}
+            type="button"
+            onClick={() => setWorkspaceMenuOpen((open) => !open)}
+            aria-label="Switch workspace"
+            aria-haspopup="listbox"
+            aria-expanded={workspaceMenuOpen}
+            aria-controls={workspaceMenuOpen ? workspaceListboxId : undefined}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+              event.preventDefault();
+              setWorkspaceMenuOpen(true);
+            }}
+            className={`flex w-full min-w-0 items-center rounded-lg text-left transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-slate-900 ${
+              compact ? "justify-center p-1" : "gap-3 p-1.5"
+            }`}
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm shadow-blue-200 dark:shadow-black/20">
+              <SidebarCompassIcon className="h-5 w-5" />
+            </span>
+            {!compact && (
+              <>
+                <span className="min-w-0 flex-1 leading-tight">
+                  <span className="block truncate text-[13px] font-bold text-slate-950 dark:text-slate-50">S3 Manager</span>
+                  <span className="mt-0.5 block truncate text-[12px] font-medium text-slate-500 dark:text-slate-400">
+                    {currentWorkspaceLabel}
+                  </span>
+                </span>
+                <SidebarChevronDownIcon
+                  className={`h-4 w-4 shrink-0 text-slate-500 transition-transform dark:text-slate-300 ${
+                    workspaceMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </>
+            )}
+          </button>
+        ) : (
+          <div className={`flex min-w-0 items-center ${compact ? "justify-center" : "gap-3"}`}>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm shadow-blue-200 dark:shadow-black/20">
+              <SidebarCompassIcon className="h-5 w-5" />
             </div>
-          )}
-        </div>
+            {!compact && (
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-[13px] font-bold text-slate-950 dark:text-slate-50">S3 Manager</p>
+                <p className="mt-0.5 truncate text-[12px] font-medium text-slate-500 dark:text-slate-400">{title}</p>
+              </div>
+            )}
+          </div>
+        )}
+        {workspaceMenuOpen && workspaceSwitcher && (
+          <AnchoredPortalMenu
+            open={workspaceMenuOpen}
+            anchorRef={workspaceTriggerRef}
+            placement="bottom-start"
+            minWidth={compact ? 220 : "anchor"}
+            className="overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <div ref={workspaceMenuSurfaceRef}>
+              <div
+                id={workspaceListboxId}
+                ref={workspaceListboxRef}
+                className="max-h-72 overflow-y-auto focus:outline-none"
+                role="listbox"
+                tabIndex={0}
+                aria-label="Switch workspace"
+                aria-activedescendant={
+                  workspaceActiveIndex >= 0 ? `${workspaceListboxId}-option-${workspaceActiveIndex}` : undefined
+                }
+                onKeyDown={handleWorkspaceListboxKeyDown}
+              >
+                {workspaceOptions.map((option, index) => {
+                  const active = workspaceSwitcher.currentWorkspaceId === option.value;
+                  const highlighted = workspaceOptions[workspaceActiveIndex]?.value === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      id={`${workspaceListboxId}-option-${index}`}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      tabIndex={-1}
+                      onMouseEnter={() => setWorkspaceActiveIndex(index)}
+                      onClick={() => activateWorkspaceByIndex(index)}
+                      className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition ${
+                        active
+                          ? "bg-blue-50 text-blue-900 dark:bg-blue-900/30 dark:text-blue-100"
+                          : highlighted
+                            ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                            : "text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      <span className="mt-0.5 h-4 w-4 shrink-0">{active ? <CheckIcon className="h-4 w-4" /> : null}</span>
+                      <span className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-300">
+                        {workspaceIconById(option.value as WorkspaceId)}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate ui-caption font-semibold">{option.label}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </AnchoredPortalMenu>
+        )}
         {!compact && headerAction ? <div className="mt-3">{headerAction}</div> : null}
       </div>
 
       <nav
-        className={`flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-4 ${compact ? "pr-0" : "pr-1"}`}
+        className={`flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-5 ${compact ? "px-0" : "px-4"}`}
         aria-label={`${title} navigation`}
       >
         {effectiveSections.map((section) => {
@@ -151,28 +366,26 @@ export default function Sidebar({
           return (
             <section
               key={section.label}
-              className={`space-y-1 rounded-2xl border border-slate-200/80 bg-white/80 shadow-sm shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-black/10 ${
-                compact ? "px-1.5 py-2" : "p-1.5"
-              }`}
+              className="space-y-1.5"
             >
               {compact ? (
-                <div className="mx-auto my-1 h-1.5 w-7 rounded-full bg-slate-200/90 dark:bg-slate-700/80" />
+                <div className="mx-auto my-1 h-1.5 w-7 rounded-full bg-slate-200 dark:bg-slate-700" />
               ) : collapsible ? (
                 <button
                   type="button"
                   onClick={() => toggleSection(section.label, collapsible)}
-                  className="flex h-8 w-full items-center justify-between rounded-xl px-2.5 ui-caption font-semibold uppercase tracking-[0.16em] text-slate-500 transition hover:bg-slate-100/80 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800/80 dark:hover:text-slate-200"
+                  className="flex h-6 w-full items-center justify-between rounded-md px-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-200"
                 >
                   <span>{section.label}</span>
                   <SidebarChevronIcon className={`h-3.5 w-3.5 transition-transform ${isCollapsed ? "" : "rotate-90"}`} />
                 </button>
               ) : (
-                <div className="px-2.5 py-1 ui-caption font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                <div className="px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
                   {section.label}
                 </div>
               )}
               {!isCollapsed && (
-                <ul className="space-y-1">
+                <ul className="space-y-0.5">
                   {section.links.map((link) => (
                     <li key={link.to}>
                       {link.disabled ? (
@@ -234,6 +447,23 @@ export default function Sidebar({
           );
         })}
       </nav>
+      {footer ? <div className={`shrink-0 overflow-hidden border-t border-slate-200 dark:border-slate-800 ${compact ? "p-2" : "p-4"}`}>{footer}</div> : null}
+      {variant === "desktop" && onCollapseToggle ? (
+        <div className={`shrink-0 border-t border-slate-200 dark:border-slate-800 ${compact ? "p-2" : "p-4"}`}>
+          <button
+            type="button"
+            onClick={onCollapseToggle}
+            aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
+            title={compact ? "Expand" : undefined}
+            className={`flex h-9 w-full items-center rounded-md text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50 ${
+              compact ? "justify-center px-2" : "gap-2 px-3"
+            }`}
+          >
+            <CollapseIcon className={`h-4 w-4 shrink-0 transition-transform ${compact ? "rotate-180" : ""}`} />
+            {!compact && <span>Collapse</span>}
+          </button>
+        </div>
+      ) : null}
       {variant === "desktop" && onResizeStart && onResizeKeyDown ? (
         <div className="absolute inset-y-0 right-0 flex w-4 translate-x-1/2 items-center justify-center">
           <div
@@ -275,6 +505,31 @@ function SidebarChevronIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="m7 5 6 5-6 5" />
+    </svg>
+  );
+}
+
+function SidebarChevronDownIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="m5 7 5 6 5-6" />
+    </svg>
+  );
+}
+
+function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="m4.5 10.5 3.2 3.2 7.8-7.8" />
+    </svg>
+  );
+}
+
+function CollapseIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="m12 5-5 5 5 5" />
+      <path strokeLinecap="round" strokeWidth={1.7} d="M15 4.5v11" />
     </svg>
   );
 }

@@ -130,4 +130,33 @@ describe("Topbar account menu", () => {
     expect(await screen.findByRole("dialog", { name: "API tokens" })).toBeInTheDocument();
     expect(await screen.findByText("API Tokens Page (embedded)")).toBeInTheDocument();
   });
+
+  it("renders the workspace selector in the topbar when requested", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <Topbar
+        userEmail="admin@example.com"
+        section="Browser"
+        showWorkspaceSwitcher
+        workspaceSwitcher={{
+          currentWorkspaceId: "browser",
+          currentWorkspaceLabel: "Browser",
+          options: [
+            { value: "manager", label: "Manager" },
+            { value: "browser", label: "Browser" },
+          ],
+          onChange,
+        }}
+      />
+    );
+
+    const switcher = screen.getByRole("button", { name: "Switch workspace" });
+    expect(switcher).toHaveTextContent("S3 Manager");
+    expect(switcher).toHaveTextContent("Browser");
+
+    await user.click(switcher);
+    await user.click(await screen.findByRole("option", { name: "Manager" }));
+    expect(onChange).toHaveBeenCalledWith("manager");
+  });
 });

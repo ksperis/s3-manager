@@ -10,6 +10,8 @@ const useS3AccountContextMock = vi.fn();
 const useGeneralSettingsMock = vi.fn();
 
 let capturedNavSections: SidebarSection[] = [];
+let capturedTopbarControlDescriptors: Array<{ id: string; renderControl: (mode: "icon" | "icon_label") => ReactNode }> = [];
+let capturedAccountSelectorProps: { selectedContextId?: string | null; selectedLabel?: string } | null = null;
 
 vi.mock("./S3AccountContext", () => ({
   S3AccountProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -21,15 +23,34 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
 }));
 
 vi.mock("../../components/Layout", () => ({
-  default: ({ navSections, children }: { navSections?: SidebarSection[]; children: ReactNode }) => {
+  default: ({
+    navSections,
+    topbarControlDescriptors,
+    children,
+  }: {
+    navSections?: SidebarSection[];
+    topbarControlDescriptors?: Array<{ id: string; renderControl: (mode: "icon" | "icon_label") => ReactNode }>;
+    children: ReactNode;
+  }) => {
     capturedNavSections = navSections ?? [];
-    return <div>{children}</div>;
+    capturedTopbarControlDescriptors = topbarControlDescriptors ?? [];
+    return (
+      <div>
+        {capturedTopbarControlDescriptors.map((descriptor) => (
+          <div key={descriptor.id}>{descriptor.renderControl("icon_label")}</div>
+        ))}
+        {children}
+      </div>
+    );
   },
 }));
 
 vi.mock("../../components/TopbarContextAccountSelector", () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: { selectedContextId?: string | null; selectedLabel?: string }) => {
+    capturedAccountSelectorProps = props;
+    return <button type="button">Manager account selector</button>;
+  },
   getContextAccessModeVisual: () => ({ shortLabel: "Admin", classes: "" }),
 }));
 
@@ -107,6 +128,8 @@ function setStoredManagerUser(overrides?: Record<string, unknown>) {
 describe("ManagerLayout", () => {
   beforeEach(() => {
     capturedNavSections = [];
+    capturedTopbarControlDescriptors = [];
+    capturedAccountSelectorProps = null;
     useS3AccountContextMock.mockReset();
     useGeneralSettingsMock.mockReset();
     localStorage.clear();
@@ -284,5 +307,30 @@ describe("ManagerLayout", () => {
 
     const iamSection = capturedNavSections.find((section) => section.label === "IAM");
     expect(iamSection?.links.map((link) => link.label)).toEqual(["Users", "Groups", "Roles", "Policies"]);
+  });
+
+  it("keeps the manager account context selector in the topbar controls", () => {
+    useS3AccountContextMock.mockReturnValue(
+      buildContext({
+        accounts: [
+          { id: "ctx-1", display_name: "Primary", storage_endpoint_capabilities: {} },
+          { id: "ctx-2", display_name: "Archive", storage_endpoint_capabilities: {} },
+        ],
+        selectedS3AccountId: "ctx-1",
+        selectedS3AccountType: "connection",
+        accessMode: "connection",
+        iamIdentity: "ak-1",
+      })
+    );
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    expect(capturedTopbarControlDescriptors.map((descriptor) => descriptor.id)).toEqual(["account"]);
+    expect(capturedAccountSelectorProps).toEqual(expect.objectContaining({ selectedContextId: "ctx-1", selectedLabel: "Context" }));
   });
 });

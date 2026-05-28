@@ -2,159 +2,128 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { NavLink, Outlet } from "react-router-dom";
 import type { ReactNode } from "react";
+import Layout from "../../components/Layout";
+import type { SidebarSection } from "../../components/Sidebar";
+import TopbarDropdownSelect, { type TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
+import type { TopbarControlDescriptor, TopbarControlRenderMode } from "../../components/topbarControlsLayout";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
-import { cx } from "../../components/ui/styles";
 
-type PortalNavItem = {
-  to: string;
-  label: string;
-  end?: boolean;
-  icon: ReactNode;
-};
-
-type StoredUser = {
-  email?: string | null;
-  full_name?: string | null;
-  display_name?: string | null;
-};
-
-function readStoredUser(): StoredUser | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as StoredUser;
-  } catch {
-    return null;
-  }
-}
-
-const userNavigation: PortalNavItem[] = [
-  { to: "/portal", label: "Dashboard", end: true, icon: <HomeIcon /> },
-  { to: "/portal/storage-spaces", label: "Storage Spaces", icon: <StorageIcon /> },
-  { to: "/portal/shares", label: "Shares", icon: <ShareIcon /> },
-  { to: "/portal/activity", label: "Activity", icon: <ActivityIcon /> },
-  { to: "/portal/transfers", label: "Transfers", icon: <TransferIcon /> },
-  { to: "/portal/usage", label: "Usage & Analytics", icon: <ChartIcon /> },
+const portalNavSections: SidebarSection[] = [
+  {
+    label: "Workspace",
+    links: [
+      { to: "/portal", label: "Dashboard", end: true, icon: <HomeIcon /> },
+      { to: "/portal/storage-spaces", label: "Storage Spaces", icon: <StorageIcon /> },
+      { to: "/portal/shares", label: "Shares", icon: <ShareIcon /> },
+      { to: "/portal/activity", label: "Activity", icon: <ActivityIcon /> },
+      { to: "/portal/transfers", label: "Transfers", icon: <TransferIcon /> },
+      { to: "/portal/usage", label: "Usage & Analytics", icon: <ChartIcon /> },
+    ],
+  },
+  {
+    label: "Administration",
+    links: [
+      { to: "/portal/users", label: "Users", icon: <UserIcon /> },
+      { to: "/portal/groups", label: "Groups", icon: <GroupIcon /> },
+      { to: "/portal/policies", label: "Policies", icon: <PolicyIcon /> },
+      { to: "/portal/access-keys", label: "Access Keys", icon: <KeyIcon /> },
+      { to: "/portal/settings", label: "Settings", icon: <SettingsIcon /> },
+    ],
+  },
 ];
 
-const adminNavigation: PortalNavItem[] = [
-  { to: "/portal/users", label: "Users", icon: <UserIcon /> },
-  { to: "/portal/groups", label: "Groups", icon: <GroupIcon /> },
-  { to: "/portal/policies", label: "Policies", icon: <PolicyIcon /> },
-  { to: "/portal/access-keys", label: "Access Keys", icon: <KeyIcon /> },
-  { to: "/portal/settings", label: "Settings", icon: <SettingsIcon /> },
-];
-
-function PortalNavLink({ item }: { item: PortalNavItem }) {
-  return (
-    <NavLink
-      to={item.to}
-      end={item.end}
-      className={({ isActive }) =>
-        cx(
-          "group flex h-8 items-center gap-2 rounded-md px-2 text-[12px] font-semibold transition",
-          isActive
-            ? "bg-blue-50 text-blue-700"
-            : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
-        )
-      }
-    >
-      {({ isActive }) => (
-        <>
-          <span className={cx("flex h-4 w-4 shrink-0 items-center justify-center", isActive ? "text-blue-600" : "text-slate-500")}>
-            {item.icon}
-          </span>
-          <span className="truncate">{item.label}</span>
-        </>
-      )}
-    </NavLink>
-  );
-}
-
-function PortalAccountFooter() {
-  const { accounts, selectedAccount, selectedAccountId, setSelectedAccountId } = usePortalAccountContext();
+function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }) {
+  const { accounts, selectedAccount, selectedAccountId, setSelectedAccountId, loading } = usePortalAccountContext();
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
-  const storedUser = readStoredUser();
-  const displayName = storedUser?.display_name || storedUser?.full_name || storedUser?.email?.split("@")[0] || "Laurent";
-  const accountLabel = selectedAccount
+  const selectedLabel = selectedAccount
     ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
-    : "Workspace";
-  const initials = displayName
-    .split(/[.\s_-]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "LA";
+    : loading
+      ? "Loading..."
+      : "No account selected";
+  const options: TopbarDropdownOption[] = accounts.map((account) => ({
+    value: String(account.id),
+    label: formatAccountLabel(account, defaultEndpointId, defaultEndpointName, false),
+    icon: <AccountControlIcon className="h-4 w-4" />,
+  }));
 
+  if (accounts.length > 1) {
+    return (
+      <TopbarDropdownSelect
+        value={selectedAccountId ?? ""}
+        options={options}
+        onChange={(value) => setSelectedAccountId(value || null)}
+        ariaLabel="Select portal account"
+        triggerLabel="Account"
+        placeholder={selectedLabel}
+        widthClassName={mode === "icon" ? "w-10" : "w-48 lg:w-[20rem] xl:w-[26rem] min-w-[12rem] max-w-[40vw]"}
+        menuMinWidthClassName="min-w-[18rem]"
+        icon={<AccountControlIcon className="h-4 w-4 text-slate-500 dark:text-slate-300" />}
+        disabled={loading}
+        triggerMode={mode}
+      />
+    );
+  }
+
+  if (mode === "icon") {
+    return (
+      <button
+        type="button"
+        aria-label={`Portal account ${selectedLabel}`}
+        title={selectedLabel}
+        className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+      >
+        <AccountControlIcon className="h-4 w-4" />
+      </button>
+    );
+  }
   return (
-    <div className="border-t border-slate-100 p-3">
-      {accounts.length > 1 ? (
-        <label className="mb-3 block">
-          <span className="sr-only">Select portal account</span>
-          <select
-            value={selectedAccountId ?? ""}
-            onChange={(event) => setSelectedAccountId(event.target.value || null)}
-            className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[12px] font-semibold text-slate-700 shadow-sm"
-          >
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {formatAccountLabel(account, defaultEndpointId, defaultEndpointName, false)}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-      <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-700 text-[11px] font-bold text-white">
-          {initials}
-        </div>
-        <div className="min-w-0">
-          <div className="truncate text-[12px] font-bold text-slate-950">{displayName}</div>
-          <div className="truncate text-[11px] text-slate-500">{accountLabel}</div>
-        </div>
-      </div>
+    <div className="inline-flex h-10 min-w-[12rem] items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-100">
+        <AccountControlIcon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 leading-tight">
+        <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+          Account
+        </span>
+        <span className="mt-px block min-w-0 truncate text-[13px] font-semibold leading-4 text-slate-950 dark:text-slate-100">
+          {selectedLabel}
+        </span>
+      </span>
     </div>
   );
 }
 
 function PortalShell() {
+  const { selectedAccount, loading } = usePortalAccountContext();
+  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
+  const selectedLabel = selectedAccount
+    ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
+    : loading
+      ? "Loading..."
+      : "No account selected";
+  const topbarControlDescriptors: TopbarControlDescriptor[] = [
+    {
+      id: "account",
+      icon: <AccountControlIcon className="h-4 w-4" />,
+      selectedLabel,
+      priority: 10,
+      estimatedIconWidth: 40,
+      estimatedLabelWidth: 240,
+      renderControl: (mode) => <PortalAccountTopbarSelector mode={mode} />,
+    },
+  ];
+
   return (
-    <div className="portal-v3 flex h-screen overflow-hidden bg-[#f4f7fb] text-slate-900">
-      <aside className="hidden w-[188px] shrink-0 border-r border-slate-200 bg-white md:flex md:flex-col">
-        <div className="flex h-14 items-center justify-between border-b border-slate-100 px-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-white">
-              <StorageIcon />
-            </div>
-            <span className="text-[12px] font-bold text-slate-950">S3 Manager</span>
-          </div>
-          <span className="text-[11px] font-bold text-slate-400">{"<<"}</span>
-        </div>
-
-        <nav className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 py-4" aria-label="Portal navigation">
-          <div className="space-y-1">
-            {userNavigation.map((item) => (
-              <PortalNavLink key={item.to} item={item} />
-            ))}
-          </div>
-          <div className="space-y-1">
-            <div className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Administration</div>
-            {adminNavigation.map((item) => (
-              <PortalNavLink key={item.to} item={item} />
-            ))}
-          </div>
-        </nav>
-
-        <PortalAccountFooter />
-      </aside>
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <Outlet />
-      </main>
-    </div>
+    <Layout
+      navSections={portalNavSections}
+      headerTitle="Portal"
+      sidebarTitle="PORTAL"
+      hideHeader
+      topbarControlDescriptors={topbarControlDescriptors}
+      mainClassName="portal-v3"
+    />
   );
 }
 
@@ -170,6 +139,17 @@ function IconBase({ children }: { children: ReactNode }) {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" className="h-4 w-4">
       {children}
+    </svg>
+  );
+}
+
+function AccountControlIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" strokeWidth={1.5} />
+      <path strokeLinecap="round" strokeWidth={1.5} d="M3 10h18" />
+      <circle cx="8.5" cy="14.2" r="1.1" strokeWidth={1.4} />
+      <path strokeLinecap="round" strokeWidth={1.5} d="M12 14.2h6" />
     </svg>
   );
 }

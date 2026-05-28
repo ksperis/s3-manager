@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
@@ -6,6 +7,29 @@ import PortalLayout from "./PortalLayout";
 
 const mocks = vi.hoisted(() => ({
   setSelectedAccountId: vi.fn(),
+  generalSettings: {
+    manager_enabled: true,
+    ceph_admin_enabled: false,
+    storage_ops_enabled: false,
+    browser_enabled: true,
+    browser_root_enabled: true,
+    browser_manager_enabled: true,
+    browser_portal_enabled: true,
+    browser_ceph_admin_enabled: false,
+    portal_enabled: true,
+    billing_enabled: false,
+    endpoint_status_enabled: false,
+    quota_alerts_enabled: false,
+    usage_history_enabled: false,
+    bucket_migration_enabled: true,
+    bucket_compare_enabled: true,
+    bucket_integrity_check_enabled: true,
+    manager_ceph_s3_user_keys_enabled: true,
+    allow_login_access_keys: false,
+    allow_login_endpoint_list: false,
+    allow_login_custom_endpoint: false,
+    allow_user_private_connections: false,
+  },
 }));
 
 vi.mock("./PortalAccountContext", () => ({
@@ -31,22 +55,46 @@ vi.mock("../shared/storageEndpointLabel", () => ({
   formatAccountLabel: (account: { name: string }) => account.name,
 }));
 
+vi.mock("../../components/GeneralSettingsContext", () => ({
+  useGeneralSettings: () => ({
+    generalSettings: mocks.generalSettings,
+  }),
+}));
+
+vi.mock("../../components/ThemeToggle", () => ({
+  default: () => <button type="button">Theme</button>,
+}));
+
 describe("PortalLayout", () => {
   afterEach(() => {
     window.localStorage.clear();
     vi.clearAllMocks();
   });
 
-  it("renders the portal v3 navigation with administration and no browser entry", () => {
-    window.localStorage.setItem("user", JSON.stringify({ email: "laurent@example.com", display_name: "Laurent" }));
-    render(
+  it("uses the shared shell with workspace selector and keeps the portal account selector in the topbar", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        id: 1,
+        email: "laurent@example.com",
+        display_name: "Laurent",
+        role: "ui_admin",
+        authType: "password",
+        account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
+      })
+    );
+    const { container } = render(
       <MemoryRouter initialEntries={["/portal"]}>
         <PortalLayout />
       </MemoryRouter>
     );
 
-    expect(screen.getByText("S3 Manager")).toBeInTheDocument();
-    const nav = screen.getByRole("navigation", { name: "Portal navigation" });
+    expect(screen.getAllByText("S3 Manager").length).toBeGreaterThan(0);
+    const topbar = container.querySelector("[data-topbar]") as HTMLElement;
+    expect(topbar).not.toBeNull();
+
+    const nav = screen.getByRole("navigation", { name: "PORTAL navigation" });
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Dashboard",
       "Storage Spaces",
@@ -64,7 +112,18 @@ describe("PortalLayout", () => {
     expect(nav).not.toHaveTextContent("Browser");
     expect(nav).not.toHaveTextContent("Buckets");
     expect(nav).not.toHaveTextContent("Billing");
-    expect(screen.getByRole("combobox", { name: "Select portal account" })).toHaveValue("101");
-    expect(screen.getByText("Laurent")).toBeInTheDocument();
+
+    const desktopSidebar = container.querySelector('[data-sidebar-variant="desktop"]') as HTMLElement;
+    expect(desktopSidebar).not.toBeNull();
+    expect(within(desktopSidebar).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Portal");
+    expect(within(desktopSidebar).queryByRole("button", { name: "Select portal account" })).not.toBeInTheDocument();
+    expect(within(desktopSidebar).queryByText("Helios Retail")).not.toBeInTheDocument();
+
+    const accountSelector = within(topbar).getByRole("button", { name: "Select portal account" });
+    expect(accountSelector).toHaveTextContent("Account");
+    expect(accountSelector).toHaveTextContent("Helios Retail");
+    await user.click(accountSelector);
+    await user.click(await screen.findByRole("option", { name: "Northwind Ops" }));
+    expect(mocks.setSelectedAccountId).toHaveBeenCalledWith("102");
   });
 });
