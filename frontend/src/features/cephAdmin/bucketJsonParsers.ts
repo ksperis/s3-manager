@@ -40,6 +40,218 @@ export const parseLifecycleRules = (raw: string) => {
   }
 };
 
+export type NotificationConfigurationTypeKey = "topic" | "queue" | "lambda" | "eventbridge";
+
+export const NOTIFICATION_CONFIGURATION_ARRAY_KEYS = {
+  topic: "TopicConfigurations",
+  queue: "QueueConfigurations",
+  lambda: "LambdaFunctionConfigurations",
+} as const satisfies Record<Exclude<NotificationConfigurationTypeKey, "eventbridge">, string>;
+
+export const NOTIFICATION_EVENTBRIDGE_KEY = "EventBridgeConfiguration";
+
+const NOTIFICATION_ARRAY_TYPES = Object.keys(
+  NOTIFICATION_CONFIGURATION_ARRAY_KEYS
+) as Array<Exclude<NotificationConfigurationTypeKey, "eventbridge">>;
+
+export type NotificationConfigurationChange = {
+  type: NotificationConfigurationTypeKey;
+  action: "replace" | "add" | "remove";
+  index?: number;
+  before?: JsonRecord;
+  after?: JsonRecord;
+};
+
+export const getNotificationConfigurationId = (configuration: JsonRecord) => {
+  const rawId = configuration.Id ?? configuration.ID ?? configuration.id;
+  if (typeof rawId === "string") {
+    const trimmed = rawId.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (typeof rawId === "number") {
+    return String(rawId);
+  }
+  return null;
+};
+
+export const normalizeNotificationConfigurationForBulk = (configuration: unknown): JsonRecord => {
+  if (!isJsonObject(configuration)) return {};
+  const normalized: JsonRecord = {};
+
+  NOTIFICATION_ARRAY_TYPES.forEach((type) => {
+    const key = NOTIFICATION_CONFIGURATION_ARRAY_KEYS[type];
+    const rawEntries = configuration[key];
+    if (!Array.isArray(rawEntries)) return;
+    const entries = rawEntries.filter(isJsonObject).map((entry) => entry as JsonRecord);
+    if (entries.length > 0) {
+      normalized[key] = entries;
+    }
+  });
+
+  const eventBridge = configuration[NOTIFICATION_EVENTBRIDGE_KEY];
+  if (isJsonObject(eventBridge)) {
+    normalized[NOTIFICATION_EVENTBRIDGE_KEY] = eventBridge;
+  }
+
+  return normalized;
+};
+
+export const isNotificationConfigurationEmpty = (configuration: unknown) => {
+  const normalized = normalizeNotificationConfigurationForBulk(configuration);
+  const hasArrayConfig = NOTIFICATION_ARRAY_TYPES.some((type) => {
+    const key = NOTIFICATION_CONFIGURATION_ARRAY_KEYS[type];
+    const entries = normalized[key];
+    return Array.isArray(entries) && entries.length > 0;
+  });
+  return !hasArrayConfig && !Object.prototype.hasOwnProperty.call(normalized, NOTIFICATION_EVENTBRIDGE_KEY);
+};
+
+export const parseNotificationConfiguration = (raw: string) => {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { error: "Provide notification configuration in JSON format." } as const;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!isJsonObject(parsed)) {
+      return { error: "Notification configuration must be a JSON object." } as const;
+    }
+
+    for (const type of NOTIFICATION_ARRAY_TYPES) {
+      const key = NOTIFICATION_CONFIGURATION_ARRAY_KEYS[type];
+      if (!(key in parsed)) continue;
+      const rawEntries = parsed[key];
+      if (!Array.isArray(rawEntries)) {
+        return { error: `${key} must be an array.` } as const;
+      }
+      const invalidIndex = rawEntries.findIndex((entry) => !isJsonObject(entry));
+      if (invalidIndex >= 0) {
+        return { error: `${key} entry at index ${invalidIndex} must be a JSON object.` } as const;
+      }
+    }
+
+    if (NOTIFICATION_EVENTBRIDGE_KEY in parsed && !isJsonObject(parsed[NOTIFICATION_EVENTBRIDGE_KEY])) {
+      return { error: `${NOTIFICATION_EVENTBRIDGE_KEY} must be a JSON object.` } as const;
+    }
+
+    const configuration = normalizeNotificationConfigurationForBulk(parsed);
+    if (isNotificationConfigurationEmpty(configuration)) {
+      return { error: "Provide at least one notification configuration." } as const;
+    }
+    return { configuration } as const;
+  } catch {
+    return { error: "Invalid JSON." } as const;
+  }
+};
+
+export const mergeNotificationConfigurations = (existingConfiguration: unknown, incomingConfiguration: unknown) => {
+  const existing = normalizeNotificationConfigurationForBulk(existingConfiguration);
+  const incoming = normalizeNotificationConfigurationForBulk(incomingConfiguration);
+  const next: JsonRecord = {};
+  const changes: NotificationConfigurationChange[] = [];
+  const serialize = (value: JsonRecord) => stableStringify(value);
+
+  NOTIFICATION_ARRAY_TYPES.forEach((type) => {
+    const key = NOTIFICATION_CONFIGURATION_ARRAY_KEYS[type];
+    const existingEntries = Array.isArray(existing[key]) ? ([...(existing[key] as JsonRecord[])] as JsonRecord[]) : [];
+    const incomingEntries = Array.isArray(incoming[key]) ? (incoming[key] as JsonRecord[]) : [];
+    const nextEntries = [...existingEntries];
+
+    incomingEntries.forEach((incomingEntry) => {
+      const incomingId = getNotificationConfigurationId(incomingEntry);
+      if (incomingId) {
+        const matchIndex = nextEntries.findIndex((entry) => getNotificationConfigurationId(entry) === incomingId);
+        if (matchIndex >= 0) {
+          if (serialize(nextEntries[matchIndex]) !== serialize(incomingEntry)) {
+            changes.push({
+              type,
+              action: "replace",
+              index: matchIndex,
+              before: nextEntries[matchIndex],
+              after: incomingEntry,
+            });
+            nextEntries[matchIndex] = incomingEntry;
+          }
+          return;
+        }
+      }
+
+      const existsByContent = nextEntries.some((entry) => serialize(entry) === serialize(incomingEntry));
+      if (!existsByContent) {
+        changes.push({ type, action: "add", index: nextEntries.length, after: incomingEntry });
+        nextEntries.push(incomingEntry);
+      }
+    });
+
+    if (nextEntries.length > 0) {
+      next[key] = nextEntries;
+    }
+  });
+
+  const hasExistingEventBridge = Object.prototype.hasOwnProperty.call(existing, NOTIFICATION_EVENTBRIDGE_KEY);
+  const hasIncomingEventBridge = Object.prototype.hasOwnProperty.call(incoming, NOTIFICATION_EVENTBRIDGE_KEY);
+  if (hasExistingEventBridge) {
+    next[NOTIFICATION_EVENTBRIDGE_KEY] = existing[NOTIFICATION_EVENTBRIDGE_KEY];
+  }
+  if (hasIncomingEventBridge) {
+    const incomingEventBridge = incoming[NOTIFICATION_EVENTBRIDGE_KEY] as JsonRecord;
+    const existingEventBridge = hasExistingEventBridge ? (existing[NOTIFICATION_EVENTBRIDGE_KEY] as JsonRecord) : null;
+    if (!existingEventBridge || stableStringify(existingEventBridge) !== stableStringify(incomingEventBridge)) {
+      changes.push({
+        type: "eventbridge",
+        action: hasExistingEventBridge ? "replace" : "add",
+        before: existingEventBridge ?? undefined,
+        after: incomingEventBridge,
+      });
+    }
+    next[NOTIFICATION_EVENTBRIDGE_KEY] = incomingEventBridge;
+  }
+
+  return { configuration: next, changes };
+};
+
+export const deleteNotificationConfigurations = (
+  existingConfiguration: unknown,
+  deleteIds: ReadonlySet<string>,
+  deleteTypes: ReadonlySet<NotificationConfigurationTypeKey>
+) => {
+  const existing = normalizeNotificationConfigurationForBulk(existingConfiguration);
+  const next: JsonRecord = {};
+  const changes: NotificationConfigurationChange[] = [];
+
+  NOTIFICATION_ARRAY_TYPES.forEach((type) => {
+    const key = NOTIFICATION_CONFIGURATION_ARRAY_KEYS[type];
+    const existingEntries = Array.isArray(existing[key]) ? (existing[key] as JsonRecord[]) : [];
+    const removeWholeType = deleteTypes.has(type);
+    const nextEntries: JsonRecord[] = [];
+    existingEntries.forEach((entry, index) => {
+      const entryId = getNotificationConfigurationId(entry);
+      const shouldRemove = removeWholeType || Boolean(entryId && deleteIds.has(entryId));
+      if (shouldRemove) {
+        changes.push({ type, action: "remove", index, before: entry });
+        return;
+      }
+      nextEntries.push(entry);
+    });
+    if (nextEntries.length > 0) {
+      next[key] = nextEntries;
+    }
+  });
+
+  const hasEventBridge = Object.prototype.hasOwnProperty.call(existing, NOTIFICATION_EVENTBRIDGE_KEY);
+  if (hasEventBridge) {
+    const eventBridge = existing[NOTIFICATION_EVENTBRIDGE_KEY] as JsonRecord;
+    if (deleteTypes.has("eventbridge")) {
+      changes.push({ type: "eventbridge", action: "remove", before: eventBridge });
+    } else {
+      next[NOTIFICATION_EVENTBRIDGE_KEY] = eventBridge;
+    }
+  }
+
+  return { configuration: next, changes };
+};
+
 export const parseCorsRules = (raw: string) => {
   const trimmed = raw.trim();
   if (!trimmed) {

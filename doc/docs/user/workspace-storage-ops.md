@@ -26,6 +26,8 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
    - quota and usage columns are available as single-line atomic columns so on-screen review and CSV export stay aligned.
    - the **Notifications** column can be added to inspect bucket notification
      configuration across supported contexts.
+   - bucket notification configurations can be added, updated, previewed, or
+     deleted in bulk from the same action flow as lifecycle rules.
 5. In **Advanced filter**, use the compact **Context** and **Endpoint**
    selectors to pick authorized scopes directly. Their quick filters match
    names, types, and standard tags, and **Select filtered** / **Deselect

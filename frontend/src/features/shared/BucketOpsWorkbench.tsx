@@ -35,6 +35,7 @@ import {
   deleteCephAdminBucketLogging,
   deleteCephAdminBucketCors,
   deleteCephAdminBucketLifecycle,
+  deleteCephAdminBucketNotifications,
   deleteCephAdminBucketPolicy,
   getCephAdminBucketCors,
   getCephAdminBucketEncryption,
@@ -49,6 +50,7 @@ import {
   putCephAdminBucketLogging,
   putCephAdminBucketCors,
   putCephAdminBucketLifecycle,
+  putCephAdminBucketNotifications,
   putCephAdminBucketPolicy,
   refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning,
@@ -63,6 +65,7 @@ import {
   deleteStorageOpsBucketCors,
   deleteStorageOpsBucketLifecycle,
   deleteStorageOpsBucketLogging,
+  deleteStorageOpsBucketNotifications,
   deleteStorageOpsBucketPolicy,
   getStorageOpsBucketCors,
   getStorageOpsBucketEncryption,
@@ -77,6 +80,7 @@ import {
   putStorageOpsBucketCors,
   putStorageOpsBucketLifecycle,
   putStorageOpsBucketLogging,
+  putStorageOpsBucketNotifications,
   putStorageOpsBucketPolicy,
   refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning,
@@ -87,7 +91,21 @@ import {
 } from "../../api/storageOps";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
 import { RefreshIcon } from "../browser/browserIcons";
-import { parseCorsRules, parseLifecycleRules, parsePolicyStatements, parseRuleIds, stableStringify } from "../cephAdmin/bucketJsonParsers";
+import {
+  deleteNotificationConfigurations,
+  isNotificationConfigurationEmpty,
+  mergeNotificationConfigurations,
+  normalizeNotificationConfigurationForBulk,
+  NOTIFICATION_CONFIGURATION_ARRAY_KEYS,
+  NOTIFICATION_EVENTBRIDGE_KEY,
+  parseCorsRules,
+  parseLifecycleRules,
+  parseNotificationConfiguration,
+  parsePolicyStatements,
+  parseRuleIds,
+  stableStringify,
+  type NotificationConfigurationTypeKey,
+} from "../cephAdmin/bucketJsonParsers";
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
@@ -202,6 +220,8 @@ type BulkOperation =
   | "disable_versioning"
   | "add_lifecycle"
   | "delete_lifecycle"
+  | "add_notifications"
+  | "delete_notifications"
   | "add_cors"
   | "delete_cors"
   | "add_policy"
@@ -538,6 +558,13 @@ type PolicyRuleTypeKey =
   | "condition"
   | "public_principal";
 
+const NOTIFICATION_TYPE_OPTIONS: Array<{ key: NotificationConfigurationTypeKey; label: string }> = [
+  { key: "topic", label: "Topic configurations" },
+  { key: "queue", label: "Queue configurations" },
+  { key: "lambda", label: "Lambda configurations" },
+  { key: "eventbridge", label: "EventBridge configuration" },
+];
+
 const LIFECYCLE_TYPE_OPTIONS: Array<{ key: LifecycleRuleTypeKey; label: string }> = [
   { key: "expiration", label: "Expiration (current versions)" },
   { key: "delete_markers", label: "Expired object delete markers" },
@@ -568,6 +595,11 @@ const POLICY_TYPE_OPTIONS: Array<{ key: PolicyRuleTypeKey; label: string }> = [
 const formatLifecycleRule = (rule: Record<string, unknown>) => JSON.stringify(rule, null, 2);
 const formatCorsRule = (rule: Record<string, unknown>) => JSON.stringify(rule, null, 2);
 const formatPolicyRule = (rule: Record<string, unknown>) => JSON.stringify(rule, null, 2);
+const formatNotificationConfiguration = (configuration: Record<string, unknown>) => {
+  const normalized = normalizeNotificationConfigurationForBulk(configuration);
+  if (isNotificationConfigurationEmpty(normalized)) return "(no notification configurations)";
+  return JSON.stringify(normalized, null, 2);
+};
 
 const getLifecycleRuleId = (rule: Record<string, unknown>) => {
   const rawId = rule.ID ?? (rule as { Id?: unknown }).Id ?? (rule as { id?: unknown }).id;
@@ -2212,6 +2244,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const putBucketLogging = isStorageOps ? putStorageOpsBucketLogging : putCephAdminBucketLogging;
   const deleteBucketLogging = isStorageOps ? deleteStorageOpsBucketLogging : deleteCephAdminBucketLogging;
   const getBucketNotifications = isStorageOps ? getStorageOpsBucketNotifications : getCephAdminBucketNotifications;
+  const putBucketNotifications = isStorageOps ? putStorageOpsBucketNotifications : putCephAdminBucketNotifications;
+  const deleteBucketNotifications = isStorageOps
+    ? deleteStorageOpsBucketNotifications
+    : deleteCephAdminBucketNotifications;
   const getBucketWebsite = isStorageOps ? getStorageOpsBucketWebsite : getCephAdminBucketWebsite;
   const getBucketEncryption = isStorageOps ? getStorageOpsBucketEncryption : getCephAdminBucketEncryption;
   const setBucketVersioning = isStorageOps ? setStorageOpsBucketVersioning : setCephAdminBucketVersioning;
@@ -2317,6 +2353,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     return LIFECYCLE_TYPE_OPTIONS.reduce(
       (acc, option) => ({ ...acc, [option.key]: false }),
       {} as Record<LifecycleRuleTypeKey, boolean>
+    );
+  });
+  const [bulkNotificationText, setBulkNotificationText] = useState("");
+  const [bulkNotificationDeleteIds, setBulkNotificationDeleteIds] = useState("");
+  const [bulkNotificationDeleteTypes, setBulkNotificationDeleteTypes] = useState<
+    Record<NotificationConfigurationTypeKey, boolean>
+  >(() => {
+    return NOTIFICATION_TYPE_OPTIONS.reduce(
+      (acc, option) => ({ ...acc, [option.key]: false }),
+      {} as Record<NotificationConfigurationTypeKey, boolean>
     );
   });
   const [bulkCorsRuleText, setBulkCorsRuleText] = useState("");
@@ -3293,6 +3339,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         {} as Record<LifecycleRuleTypeKey, boolean>
       )
     );
+    setBulkNotificationText("");
+    setBulkNotificationDeleteIds("");
+    setBulkNotificationDeleteTypes(
+      NOTIFICATION_TYPE_OPTIONS.reduce(
+        (acc, option) => ({ ...acc, [option.key]: false }),
+        {} as Record<NotificationConfigurationTypeKey, boolean>
+      )
+    );
     setBulkCorsRuleText("");
     setBulkCorsUpdateOnlyExisting(false);
     setBulkCorsDeleteIds("");
@@ -4221,6 +4275,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     bulkLifecycleUpdateOnlyExisting,
     bulkLifecycleDeleteIds,
     bulkLifecycleDeleteTypes,
+    bulkNotificationText,
+    bulkNotificationDeleteIds,
+    bulkNotificationDeleteTypes,
     bulkCorsRuleText,
     bulkCorsUpdateOnlyExisting,
     bulkCorsDeleteIds,
@@ -4240,7 +4297,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     if (!usageFeatureEnabled && bulkOperation === "set_quota") {
       setBulkOperation("");
     }
-  }, [bulkOperation, usageFeatureEnabled]);
+    if (!snsFeatureEnabled && (bulkOperation === "add_notifications" || bulkOperation === "delete_notifications")) {
+      setBulkOperation("");
+    }
+  }, [bulkOperation, snsFeatureEnabled, usageFeatureEnabled]);
 
   const openBulkUpdateModal = () => {
     bulkCopyRunTokenRef.current += 1;
@@ -4271,6 +4331,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       LIFECYCLE_TYPE_OPTIONS.reduce(
         (acc, option) => ({ ...acc, [option.key]: false }),
         {} as Record<LifecycleRuleTypeKey, boolean>
+      )
+    );
+    setBulkNotificationText("");
+    setBulkNotificationDeleteIds("");
+    setBulkNotificationDeleteTypes(
+      NOTIFICATION_TYPE_OPTIONS.reduce(
+        (acc, option) => ({ ...acc, [option.key]: false }),
+        {} as Record<NotificationConfigurationTypeKey, boolean>
       )
     );
     setBulkCorsRuleText("");
@@ -4519,6 +4587,66 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       changed: removedIndices.size > 0,
       before: beforeLines,
       after: afterLines,
+    };
+  };
+
+  const buildNotificationsPreview = async (
+    bucketName: string,
+    configuration: Record<string, unknown>
+  ): Promise<BulkPreviewItem> => {
+    const notifications = await getBucketNotifications(selectedEndpointId!, bucketName);
+    const currentConfiguration = notifications.configuration ?? {};
+    const { configuration: nextConfiguration, changes } = mergeNotificationConfigurations(
+      currentConfiguration,
+      configuration
+    );
+    const changed = changes.length > 0;
+    return {
+      bucket: bucketName,
+      changed,
+      before: [
+        {
+          text: formatNotificationConfiguration(currentConfiguration),
+          tone: changed ? "removed" : undefined,
+        },
+      ],
+      after: [
+        {
+          text: formatNotificationConfiguration(nextConfiguration),
+          tone: changed ? "added" : undefined,
+        },
+      ],
+    };
+  };
+
+  const buildNotificationsDeletePreview = async (
+    bucketName: string,
+    deleteIds: Set<string>,
+    deleteTypes: Set<NotificationConfigurationTypeKey>
+  ): Promise<BulkPreviewItem> => {
+    const notifications = await getBucketNotifications(selectedEndpointId!, bucketName);
+    const currentConfiguration = notifications.configuration ?? {};
+    const { configuration: nextConfiguration, changes } = deleteNotificationConfigurations(
+      currentConfiguration,
+      deleteIds,
+      deleteTypes
+    );
+    const changed = changes.length > 0;
+    return {
+      bucket: bucketName,
+      changed,
+      before: [
+        {
+          text: formatNotificationConfiguration(currentConfiguration),
+          tone: changed ? "removed" : undefined,
+        },
+      ],
+      after: [
+        {
+          text: formatNotificationConfiguration(nextConfiguration),
+          tone: changed ? "added" : undefined,
+        },
+      ],
     };
   };
 
@@ -5075,10 +5203,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
     let parsedQuota: ParsedQuotaInput | null = null;
     let parsedRules: Record<string, unknown>[] | null = null;
+    let parsedNotificationConfiguration: Record<string, unknown> | null = null;
     let parsedCorsRules: Record<string, unknown>[] | null = null;
     let parsedPolicyStatements: Record<string, unknown>[] | null = null;
     let deleteIds: Set<string> | null = null;
     let deleteTypes: Set<LifecycleRuleTypeKey> | null = null;
+    let deleteNotificationIds: Set<string> | null = null;
+    let deleteNotificationTypes: Set<NotificationConfigurationTypeKey> | null = null;
     let deleteCorsIds: Set<string> | null = null;
     let deleteCorsTypes: Set<CorsRuleTypeKey> | null = null;
     let deletePolicyIds: Set<string> | null = null;
@@ -5109,6 +5240,26 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         return;
       }
       parsedRules = parsed.rules;
+    }
+    if (bulkOperation === "add_notifications") {
+      const parsed = parseNotificationConfiguration(bulkNotificationText);
+      if ("error" in parsed) {
+        setBulkPreviewError(parsed.error);
+        return;
+      }
+      parsedNotificationConfiguration = parsed.configuration;
+    }
+    if (bulkOperation === "delete_notifications") {
+      const parsedIds = parseRuleIds(bulkNotificationDeleteIds);
+      const parsedTypes = NOTIFICATION_TYPE_OPTIONS.filter((option) => bulkNotificationDeleteTypes[option.key]).map(
+        (option) => option.key
+      );
+      if (parsedIds.length === 0 && parsedTypes.length === 0) {
+        setBulkPreviewError("Provide at least one notification ID or notification type.");
+        return;
+      }
+      deleteNotificationIds = new Set(parsedIds);
+      deleteNotificationTypes = new Set(parsedTypes);
     }
     if (bulkOperation === "add_cors") {
       const parsed = parseCorsRules(bulkCorsRuleText);
@@ -5218,6 +5369,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           }
           if (bulkOperation === "delete_lifecycle" && deleteIds && deleteTypes) {
             return await buildLifecycleDeletePreview(bucketName, deleteIds, deleteTypes);
+          }
+          if (bulkOperation === "add_notifications" && parsedNotificationConfiguration) {
+            return await buildNotificationsPreview(bucketName, parsedNotificationConfiguration);
+          }
+          if (bulkOperation === "delete_notifications" && deleteNotificationIds && deleteNotificationTypes) {
+            return await buildNotificationsDeletePreview(bucketName, deleteNotificationIds, deleteNotificationTypes);
           }
           if (bulkOperation === "add_cors" && parsedCorsRules) {
             return await buildCorsPreview(bucketName, parsedCorsRules);
@@ -5470,11 +5627,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
     let parsedQuota: ParsedQuotaInput | null = null;
     let parsedRules: Record<string, unknown>[] | null = null;
+    let parsedNotificationConfiguration: Record<string, unknown> | null = null;
     let parsedCorsRules: Record<string, unknown>[] | null = null;
     let parsedPolicyStatements: Record<string, unknown>[] | null = null;
     let parsedPolicy: Record<string, unknown> | null = null;
     let deleteIds: Set<string> | null = null;
     let deleteTypes: Set<LifecycleRuleTypeKey> | null = null;
+    let deleteNotificationIds: Set<string> | null = null;
+    let deleteNotificationTypes: Set<NotificationConfigurationTypeKey> | null = null;
     let deleteCorsIds: Set<string> | null = null;
     let deleteCorsTypes: Set<CorsRuleTypeKey> | null = null;
     let deletePolicyIds: Set<string> | null = null;
@@ -5505,6 +5665,26 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         return;
       }
       parsedRules = parsed.rules;
+    }
+    if (bulkOperation === "add_notifications") {
+      const parsed = parseNotificationConfiguration(bulkNotificationText);
+      if ("error" in parsed) {
+        setBulkApplyError(parsed.error);
+        return;
+      }
+      parsedNotificationConfiguration = parsed.configuration;
+    }
+    if (bulkOperation === "delete_notifications") {
+      const parsedIds = parseRuleIds(bulkNotificationDeleteIds);
+      const parsedTypes = NOTIFICATION_TYPE_OPTIONS.filter((option) => bulkNotificationDeleteTypes[option.key]).map(
+        (option) => option.key
+      );
+      if (parsedIds.length === 0 && parsedTypes.length === 0) {
+        setBulkApplyError("Provide at least one notification ID or notification type.");
+        return;
+      }
+      deleteNotificationIds = new Set(parsedIds);
+      deleteNotificationTypes = new Set(parsedTypes);
     }
     if (bulkOperation === "add_cors") {
       const parsed = parseCorsRules(bulkCorsRuleText);
@@ -5677,6 +5857,33 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             return { changed: true };
           }
           await putBucketLifecycle(selectedEndpointId, bucketName, nextRules);
+          return { changed: true };
+        }
+        if (bulkOperation === "add_notifications" && parsedNotificationConfiguration) {
+          const notifications = await getBucketNotifications(selectedEndpointId, bucketName);
+          const currentConfiguration = notifications.configuration ?? {};
+          const { configuration: nextConfiguration, changes } = mergeNotificationConfigurations(
+            currentConfiguration,
+            parsedNotificationConfiguration
+          );
+          if (changes.length === 0) return { changed: false };
+          await putBucketNotifications(selectedEndpointId, bucketName, nextConfiguration);
+          return { changed: true };
+        }
+        if (bulkOperation === "delete_notifications" && deleteNotificationIds && deleteNotificationTypes) {
+          const notifications = await getBucketNotifications(selectedEndpointId, bucketName);
+          const currentConfiguration = notifications.configuration ?? {};
+          const { configuration: nextConfiguration, changes } = deleteNotificationConfigurations(
+            currentConfiguration,
+            deleteNotificationIds,
+            deleteNotificationTypes
+          );
+          if (changes.length === 0) return { changed: false };
+          if (isNotificationConfigurationEmpty(nextConfiguration)) {
+            await deleteBucketNotifications(selectedEndpointId, bucketName);
+            return { changed: true };
+          }
+          await putBucketNotifications(selectedEndpointId, bucketName, nextConfiguration);
           return { changed: true };
         }
         if (bulkOperation === "add_cors" && parsedCorsRules) {
@@ -6642,6 +6849,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const bulkApplyProgressPercent = calculateActionProgressPercent(bulkApplyProgress);
   const hasDeleteCriteria =
     bulkLifecycleDeleteIds.trim().length > 0 || Object.values(bulkLifecycleDeleteTypes).some(Boolean);
+  const hasNotificationDeleteCriteria =
+    bulkNotificationDeleteIds.trim().length > 0 || Object.values(bulkNotificationDeleteTypes).some(Boolean);
   const hasCorsDeleteCriteria =
     bulkCorsDeleteIds.trim().length > 0 || Object.values(bulkCorsDeleteTypes).some(Boolean);
   const hasPolicyDeleteCriteria =
@@ -6711,6 +6920,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       case "add_lifecycle":
       case "delete_lifecycle":
         return "Lifecycle";
+      case "add_notifications":
+      case "delete_notifications":
+        return "Notifications";
       case "add_cors":
       case "delete_cors":
         return "CORS";
@@ -9596,6 +9808,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                   <option value="disable_versioning">Disable versioning</option>
                   <option value="add_lifecycle">Add or update lifecycle rules</option>
                   <option value="delete_lifecycle">Delete lifecycle rules</option>
+                  <option value="add_notifications" disabled={!snsFeatureEnabled}>
+                    {snsFeatureEnabled
+                      ? "Add or update notification configurations"
+                      : "Add or update notification configurations (SNS unavailable)"}
+                  </option>
+                  <option value="delete_notifications" disabled={!snsFeatureEnabled}>
+                    {snsFeatureEnabled
+                      ? "Delete notification configurations"
+                      : "Delete notification configurations (SNS unavailable)"}
+                  </option>
                   <option value="add_cors">Add or update CORS rules</option>
                   <option value="delete_cors">Delete CORS rules</option>
                   <option value="add_policy">Add or update policy statements</option>
@@ -9916,6 +10138,62 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                 </div>
               </div>
             )}
+            {bulkOperation === "add_notifications" && (
+              <div className="space-y-2">
+                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Notification configuration (JSON)
+                </label>
+                <textarea
+                  value={bulkNotificationText}
+                  onChange={(event) => setBulkNotificationText(event.target.value)}
+                  rows={8}
+                  placeholder={`{"${NOTIFICATION_CONFIGURATION_ARRAY_KEYS.topic}":[{"Id":"topic-created","TopicArn":"arn:aws:sns:default:ACCOUNT:topic","Events":["s3:ObjectCreated:*"]}],"${NOTIFICATION_EVENTBRIDGE_KEY}":{}}`}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  Provide a bucket notification configuration object. Entries replace existing entries with the same ID;
+                  anonymous entries are appended when they are not already present.
+                </p>
+              </div>
+            )}
+            {bulkOperation === "delete_notifications" && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Notification IDs (comma, newline, or JSON array)
+                  </label>
+                  <textarea
+                    value={bulkNotificationDeleteIds}
+                    onChange={(event) => setBulkNotificationDeleteIds(event.target.value)}
+                    rows={4}
+                    placeholder='topic-created, queue-created or ["topic-created","queue-created"]'
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Notification types
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {NOTIFICATION_TYPE_OPTIONS.map((option) => (
+                      <UiCheckboxField
+                        key={option.key}
+                        checked={bulkNotificationDeleteTypes[option.key]}
+                        onChange={(event) =>
+                          setBulkNotificationDeleteTypes((prev) => ({ ...prev, [option.key]: event.target.checked }))
+                        }
+                        className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
+                      >
+                        {option.label}
+                      </UiCheckboxField>
+                    ))}
+                  </div>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    Entries are deleted if the ID matches or if their notification type is selected.
+                  </p>
+                </div>
+              </div>
+            )}
             {bulkOperation === "add_cors" && (
               <div className="space-y-2">
                 <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -10132,6 +10410,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                         !hasPublicAccessBlockTargetCriteria) ||
                       (bulkOperation === "add_lifecycle" && !bulkLifecycleRuleText.trim()) ||
                       (bulkOperation === "delete_lifecycle" && !hasDeleteCriteria) ||
+                      (bulkOperation === "add_notifications" && !bulkNotificationText.trim()) ||
+                      (bulkOperation === "delete_notifications" && !hasNotificationDeleteCriteria) ||
                       (bulkOperation === "add_cors" && !bulkCorsRuleText.trim()) ||
                       (bulkOperation === "delete_cors" && !hasCorsDeleteCriteria) ||
                       (bulkOperation === "add_policy" && !bulkPolicyText.trim()) ||

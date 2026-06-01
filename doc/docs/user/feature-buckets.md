@@ -22,6 +22,9 @@ Use this guide when creating, updating, or inspecting bucket configuration.
    - Policy and ACL options
    - Public access controls
 4. Validate changes from bucket detail views.
+5. On Ceph Admin and Storage Ops bucket workbenches, use bulk update to preview
+   and apply lifecycle or notification configuration changes across selected
+   buckets.
 
 ## Expected result
 
@@ -33,7 +36,8 @@ Bucket configuration is applied as native backend settings and visible in detail
     Exposed controls depend on backend capabilities. Unsupported features are hidden or disabled.
     When the endpoint supports SNS, bucket lists can add a **Notifications**
     column and bucket detail pages show whether notification configuration is
-    configured or not set.
+    configured or not set. Bulk notification updates still depend on the
+    target context supporting bucket notifications.
 
 ## Related pages
 
