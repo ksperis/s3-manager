@@ -27,8 +27,12 @@ export type PortalWorkspaceSpace = {
   name: string;
   internalName: string | null;
   description: string;
+  ownerLabel: string | null;
+  spaceType: string | null;
+  projectKey: string | null;
+  datasetLabel: string | null;
   role: PortalWorkspaceRole;
-  status: PortalWorkspaceStatus;
+  status: PortalWorkspaceStatus | "Archived";
   access: PortalWorkspaceAccess;
   region: string | null;
   createdLabel: string;
@@ -36,6 +40,7 @@ export type PortalWorkspaceSpace = {
   quotaBytes?: number | null;
   objectCount?: number | null;
   createdAt?: string | null;
+  archivedAt?: string | null;
   shareCount: number | null;
 };
 
@@ -61,6 +66,7 @@ export type PortalWorkspaceTransfer = {
   startedLabel: string;
   etaLabel: string;
   speedLabel: string;
+  errorMessage?: string | null;
 };
 
 export type PortalWorkspaceAlert = {
@@ -170,8 +176,12 @@ export function buildPortalWorkspaceModel({
       name,
       internalName: storageSpace.internal_bucket_name ?? null,
       description: storageSpace.description ?? `${name} storage space`,
+      ownerLabel: storageSpace.owner_label ?? null,
+      spaceType: storageSpace.space_type ?? null,
+      projectKey: storageSpace.project_key ?? null,
+      datasetLabel: storageSpace.dataset_label ?? null,
       role,
-      status: statusFromStorageSpace(storageSpace, role),
+      status: storageSpace.archived_at ? "Archived" : statusFromStorageSpace(storageSpace, role),
       access: "Unavailable" as const,
       region: storageSpace.region ?? null,
       createdLabel: createdLabel(storageSpace.created_at),
@@ -179,6 +189,7 @@ export function buildPortalWorkspaceModel({
       quotaBytes: storageSpace.quota_max_size_bytes ?? null,
       objectCount: storageSpace.object_count ?? null,
       createdAt: storageSpace.created_at ?? null,
+      archivedAt: storageSpace.archived_at ?? null,
       shareCount: null,
     };
   });

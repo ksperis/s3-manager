@@ -22,6 +22,7 @@ from .healthcheck import (
     EndpointHealthStatusSegment,
 )
 from .bucket_migration import BucketMigration, BucketMigrationEvent, BucketMigrationItem
+from .portal import PortalPublicLink, PortalStorageSpaceMetadata
 
 __all__ = [
     "Base",
@@ -64,4 +65,6 @@ __all__ = [
     "BucketMigration",
     "BucketMigrationItem",
     "BucketMigrationEvent",
+    "PortalStorageSpaceMetadata",
+    "PortalPublicLink",
 ]

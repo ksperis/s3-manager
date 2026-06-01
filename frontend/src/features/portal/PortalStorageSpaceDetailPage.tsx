@@ -3,9 +3,11 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  createPortalStorageSpaceFolder,
   listPortalStorageSpaceObjects,
+  updatePortalStorageSpace,
   uploadPortalStorageSpaceObject,
   type PortalStorageObjectListing,
 } from "../../api/portal";
@@ -173,9 +175,16 @@ function filesFromListing(listing: PortalStorageObjectListing): PortalWorkspaceF
 
 export default function PortalStorageSpaceDetailPage() {
   const { spaceId } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [showFolderForm, setShowFolderForm] = useState(false);
+  const [folderNameValue, setFolderNameValue] = useState("");
+  const [metadataName, setMetadataName] = useState("");
+  const [metadataDescription, setMetadataDescription] = useState("");
+  const [metadataBusy, setMetadataBusy] = useState(false);
+  const [folderBusy, setFolderBusy] = useState(false);
   const [objectListing, setObjectListing] = useState<PortalStorageObjectListing | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
   const [objectsError, setObjectsError] = useState<string | null>(null);
@@ -219,6 +228,12 @@ export default function PortalStorageSpaceDetailPage() {
     };
   }, [accountIdForApi, currentPrefix, refreshIndex, space]);
 
+  useEffect(() => {
+    if (!space) return;
+    setMetadataName(space.name);
+    setMetadataDescription(space.description);
+  }, [space]);
+
   const childObjects = useMemo(() => {
     const source = objectListing ? filesFromListing(objectListing) : [];
     if (!normalizedQuery) return source;
@@ -255,6 +270,60 @@ export default function PortalStorageSpaceDetailPage() {
       setMessage(message);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleCreateFolder = async () => {
+    if (!space || !accountIdForApi || !folderNameValue.trim()) return;
+    setFolderBusy(true);
+    setMessage(null);
+    try {
+      const result = await createPortalStorageSpaceFolder(accountIdForApi, space.id, {
+        prefix: currentPrefix,
+        name: folderNameValue.trim(),
+      });
+      setFolderNameValue("");
+      setShowFolderForm(false);
+      setMessage(`${result.key} créé.`);
+      setRefreshIndex((value) => value + 1);
+    } catch (err) {
+      console.error(err);
+      setMessage(extractApiError(err, "Création du dossier impossible pour cet espace."));
+    } finally {
+      setFolderBusy(false);
+    }
+  };
+
+  const handleSaveMetadata = async () => {
+    if (!space || !accountIdForApi) return;
+    setMetadataBusy(true);
+    setMessage(null);
+    try {
+      await updatePortalStorageSpace(accountIdForApi, space.id, {
+        name: metadataName.trim() || space.name,
+        description: metadataDescription.trim() || null,
+      });
+      setMessage("Storage Space mis à jour.");
+    } catch (err) {
+      console.error(err);
+      setMessage(extractApiError(err, "Mise à jour impossible pour cet espace."));
+    } finally {
+      setMetadataBusy(false);
+    }
+  };
+
+  const handleArchive = async () => {
+    if (!space || !accountIdForApi) return;
+    if (!window.confirm(`Archiver ${space.name} ? Les objets ne seront pas supprimés.`)) return;
+    setMetadataBusy(true);
+    setMessage(null);
+    try {
+      await updatePortalStorageSpace(accountIdForApi, space.id, { archived: true });
+      navigate("/portal/storage-spaces");
+    } catch (err) {
+      console.error(err);
+      setMessage(extractApiError(err, "Archivage impossible pour cet espace."));
+      setMetadataBusy(false);
     }
   };
 
@@ -300,6 +369,7 @@ export default function PortalStorageSpaceDetailPage() {
           <p className="mt-2 text-xs font-medium text-slate-500">
             Créé le {space.createdLabel} <span className="px-2 text-slate-300">•</span> Région: {space.region ?? "-"}{" "}
           </p>
+          <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-500">{space.description}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link to="/portal/shares" className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700">
@@ -313,6 +383,21 @@ export default function PortalStorageSpaceDetailPage() {
         <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
           {objectsError}
         </div>
+      ) : null}
+
+      {space.role === "Owner" ? (
+        <PortalV3Card title="Storage Space details">
+          <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto_auto]">
+            <input className="ui-control h-9 text-xs" value={metadataName} onChange={(event) => setMetadataName(event.target.value)} aria-label="Storage Space name" />
+            <input className="ui-control h-9 text-xs" value={metadataDescription} onChange={(event) => setMetadataDescription(event.target.value)} aria-label="Storage Space description" />
+            <button type="button" disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">
+              Save
+            </button>
+            <button type="button" disabled={metadataBusy} onClick={handleArchive} className="h-9 rounded-md border border-amber-200 bg-white px-3 text-xs font-bold text-amber-700 disabled:cursor-not-allowed disabled:opacity-60">
+              Archive
+            </button>
+          </div>
+        </PortalV3Card>
       ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -334,12 +419,24 @@ export default function PortalStorageSpaceDetailPage() {
             <button type="button" onClick={handleUploadClick} disabled={uploading || !accountIdForApi} className="inline-flex h-9 items-center justify-center rounded-md border border-blue-600 bg-blue-600 px-3 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
               {uploading ? "Téléversement..." : "Téléverser"}
             </button>
+            <button type="button" onClick={() => setShowFolderForm((value) => !value)} disabled={!accountIdForApi || space.role === "Viewer"} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+              Nouveau dossier
+            </button>
           </div>
           <div className="flex flex-wrap gap-2">
             <PortalV3Search value={query} onChange={setQuery} placeholder="Rechercher des objets..." className="w-full sm:w-64" />
             <HeaderIconButton label="Actualiser" onClick={() => setRefreshIndex((value) => value + 1)}>↻</HeaderIconButton>
           </div>
         </div>
+
+        {showFolderForm ? (
+          <div className="mb-4 grid gap-2 rounded-md border border-slate-100 bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
+            <input className="ui-control h-9 text-xs" value={folderNameValue} onChange={(event) => setFolderNameValue(event.target.value)} placeholder="Nom du dossier" />
+            <button type="button" onClick={handleCreateFolder} disabled={!folderNameValue.trim() || folderBusy} className="h-9 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">
+              {folderBusy ? "Création..." : "Créer"}
+            </button>
+          </div>
+        ) : null}
 
         <div className="mb-3">
           <PrefixBreadcrumbs space={space} prefix={currentPrefix} />

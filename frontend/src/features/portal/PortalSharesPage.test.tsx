@@ -4,8 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import PortalSharesPage from "./PortalSharesPage";
 
 const mocks = vi.hoisted(() => ({
+  createPublicLinkMock: vi.fn(),
   listSharesMock: vi.fn(),
+  listPublicLinksMock: vi.fn(),
   grantShareMock: vi.fn(),
+  revokePublicLinkMock: vi.fn(),
   updateShareMock: vi.fn(),
   revokeShareMock: vi.fn(),
   hookResult: {
@@ -37,8 +40,11 @@ vi.mock("./usePortalWorkspaceData", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
+  createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
+  listPortalStorageSpacePublicLinks: (...args: unknown[]) => mocks.listPublicLinksMock(...args),
   listPortalStorageSpaceShares: (...args: unknown[]) => mocks.listSharesMock(...args),
   grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
+  revokePortalStorageSpacePublicLink: (...args: unknown[]) => mocks.revokePublicLinkMock(...args),
   updatePortalStorageSpaceShare: (...args: unknown[]) => mocks.updateShareMock(...args),
   revokePortalStorageSpaceShare: (...args: unknown[]) => mocks.revokeShareMock(...args),
 }));
@@ -58,6 +64,19 @@ describe("PortalSharesPage", () => {
         activity_label: "Active",
       },
     ]);
+    mocks.listPublicLinksMock.mockResolvedValue([
+      {
+        id: 42,
+        storage_space_id: "research-data",
+        storage_space_name: "Research Data",
+        object_key: "raw-data/report.csv",
+        object_name: "report.csv",
+        url: "/api/portal/public-links/token/download",
+        status: "Active",
+        created_at: "2026-06-01T10:00:00Z",
+        expires_at: "2026-06-10T10:00:00Z",
+      },
+    ]);
   });
 
   it("loads shares from storage space API with simple roles", async () => {
@@ -75,5 +94,18 @@ describe("PortalSharesPage", () => {
     expect(screen.queryByText(/portal_user/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/bucket permissions/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
+  });
+
+  it("loads public links from real portal endpoints", async () => {
+    const user = userEvent.setup();
+
+    render(<PortalSharesPage />);
+
+    await user.click(screen.getByRole("button", { name: "Public links" }));
+    expect(await screen.findByText("report.csv")).toBeInTheDocument();
+    expect(screen.getByText("/api/portal/public-links/token/download")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.listPublicLinksMock).toHaveBeenCalledWith("101", "research-data", { includeRevoked: true });
+    });
   });
 });

@@ -4,8 +4,12 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import {
+  createPortalStorageSpacePublicLink,
   grantPortalStorageSpaceShare,
+  listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
+  revokePortalStorageSpacePublicLink,
+  type PortalPublicLink,
   revokePortalStorageSpaceShare,
   updatePortalStorageSpaceShare,
   type PortalStorageSpaceRole,
@@ -136,11 +140,14 @@ function SharesTable({
 export default function PortalSharesPage() {
   const [activeTab, setActiveTab] = useState<ShareTab>("with");
   const [apiShares, setApiShares] = useState<PortalStorageSpaceShare[] | null>(null);
+  const [publicLinks, setPublicLinks] = useState<PortalPublicLink[]>([]);
   const [sharesLoading, setSharesLoading] = useState(false);
   const [sharesError, setSharesError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [selectedSpaceId, setSelectedSpaceId] = useState("");
   const [selectedRole, setSelectedRole] = useState<PortalStorageSpaceRole>("Viewer");
+  const [publicObjectKey, setPublicObjectKey] = useState("");
+  const [publicLinkExpiration, setPublicLinkExpiration] = useState("");
   const [busyShareId, setBusyShareId] = useState<string | null>(null);
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
 
@@ -177,6 +184,31 @@ export default function PortalSharesPage() {
       })
       .finally(() => {
         if (!cancelled) setSharesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, spaceIds, workspace.spaces]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!accountIdForApi || workspace.spaces.length === 0) {
+      setPublicLinks([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+    Promise.all(
+      workspace.spaces
+        .filter((space) => space.role === "Owner")
+        .map((space) => listPortalStorageSpacePublicLinks(accountIdForApi, space.id, { includeRevoked: true }))
+    )
+      .then((results) => {
+        if (!cancelled) setPublicLinks(results.flat());
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setPublicLinks([]);
       });
     return () => {
       cancelled = true;
@@ -240,6 +272,7 @@ export default function PortalSharesPage() {
 
   const handleRevoke = async (share: ShareRow) => {
     if (!accountIdForApi || !share.userId) return;
+    if (!window.confirm(`Revoke access for ${share.person} on ${share.spaceName}?`)) return;
     setBusyShareId(share.id);
     setSharesError(null);
     try {
@@ -248,6 +281,46 @@ export default function PortalSharesPage() {
     } catch (err) {
       console.error(err);
       setSharesError(extractApiError(err, "Unable to revoke share."));
+    } finally {
+      setBusyShareId(null);
+    }
+  };
+
+  const handleCreatePublicLink = async () => {
+    if (!accountIdForApi || !selectedSpaceId || !publicObjectKey.trim()) return;
+    setBusyShareId("public-link");
+    setSharesError(null);
+    try {
+      const link = await createPortalStorageSpacePublicLink(accountIdForApi, selectedSpaceId, {
+        object_key: publicObjectKey.trim(),
+        label: publicObjectKey.trim().split("/").filter(Boolean).at(-1) ?? publicObjectKey.trim(),
+        expires_at: publicLinkExpiration ? new Date(publicLinkExpiration).toISOString() : null,
+      });
+      setPublicLinks((current) => [link, ...current.filter((item) => item.id !== link.id)]);
+      setPublicObjectKey("");
+      setActiveTab("links");
+    } catch (err) {
+      console.error(err);
+      setSharesError(extractApiError(err, "Unable to create public link."));
+    } finally {
+      setBusyShareId(null);
+    }
+  };
+
+  const handleRevokePublicLink = async (link: PortalPublicLink) => {
+    if (!accountIdForApi) return;
+    if (!window.confirm(`Revoke public link for ${link.object_name}?`)) return;
+    setBusyShareId(`public-link-${link.id}`);
+    setSharesError(null);
+    try {
+      const updated = await revokePortalStorageSpacePublicLink(accountIdForApi, link.storage_space_id, link.id);
+      setPublicLinks((current) => [
+        ...current.filter((item) => item.storage_space_id !== link.storage_space_id),
+        ...updated,
+      ]);
+    } catch (err) {
+      console.error(err);
+      setSharesError(extractApiError(err, "Unable to revoke public link."));
     } finally {
       setBusyShareId(null);
     }
@@ -286,8 +359,49 @@ export default function PortalSharesPage() {
         </div>
         {sharesLoading ? <div className="mb-3 text-xs font-semibold text-slate-500">Loading share permissions...</div> : null}
         {activeTab === "links" ? (
-          <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-6 text-center text-xs font-semibold text-slate-500">
-            Public link management is unavailable in Portal for this release.
+          <div className="overflow-x-auto">
+            <table className="portal-v3-table min-w-[860px]">
+              <thead>
+                <tr>
+                  <th>Storage Space</th>
+                  <th>Object</th>
+                  <th>Status</th>
+                  <th>Expires</th>
+                  <th>URL</th>
+                  <th className="text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {publicLinks.map((link) => (
+                  <tr key={link.id}>
+                    <td className="font-bold text-slate-950">{link.storage_space_name}</td>
+                    <td>{link.object_name}</td>
+                    <td>{link.status}</td>
+                    <td>{link.expires_at ? new Date(link.expires_at).toLocaleDateString() : "-"}</td>
+                    <td className="max-w-[260px] truncate text-blue-700">{link.url}</td>
+                    <td className="text-right">
+                      {link.status === "Active" ? (
+                        <button
+                          type="button"
+                          disabled={busyShareId === `public-link-${link.id}`}
+                          onClick={() => handleRevokePublicLink(link)}
+                          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 shadow-sm hover:border-rose-200 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Revoke
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+                {publicLinks.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-xs font-semibold text-slate-500">
+                      No public links to display.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
         ) : (
           <SharesTable
@@ -332,7 +446,27 @@ export default function PortalSharesPage() {
             </button>
           </div>
         </PortalV3Card>
-      ) : null}
+      ) : (
+        <PortalV3Card title="Create a public link">
+          <div className="grid gap-3 md:grid-cols-[180px_1fr_220px_auto]">
+            <select className="ui-control h-8 py-1.5 text-xs" value={selectedSpaceId} onChange={(event) => setSelectedSpaceId(event.target.value)}>
+              {workspace.spaces.filter((space) => space.role === "Owner").map((space) => (
+                <option key={space.id} value={space.id}>{space.name}</option>
+              ))}
+            </select>
+            <input className="ui-control h-8 text-xs" value={publicObjectKey} onChange={(event) => setPublicObjectKey(event.target.value)} placeholder="path/to/object.ext" />
+            <input type="datetime-local" className="ui-control h-8 text-xs" value={publicLinkExpiration} onChange={(event) => setPublicLinkExpiration(event.target.value)} aria-label="Public link expiration" />
+            <button
+              type="button"
+              disabled={!accountIdForApi || !selectedSpaceId || !publicObjectKey.trim() || busyShareId === "public-link"}
+              onClick={handleCreatePublicLink}
+              className="h-8 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Create link
+            </button>
+          </div>
+        </PortalV3Card>
+      )}
     </PortalV3Page>
   );
 }

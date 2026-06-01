@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.app_settings import PortalSettings, PortalSettingsOverride, PortalSettingsOverridePolicy
 
@@ -61,6 +61,7 @@ PortalStorageSpaceShareDirection = Literal["with_me", "by_me"]
 PortalTransferDirection = Literal["Upload", "Download"]
 PortalTransferStatus = Literal["Completed", "Uploading", "Queued", "Failed"]
 PortalAlertTone = Literal["info", "warning", "danger"]
+PortalStorageObjectPreviewType = Literal["text", "image", "unavailable"]
 
 
 class PortalStorageSpaceSummary(BaseModel):
@@ -68,6 +69,11 @@ class PortalStorageSpaceSummary(BaseModel):
     name: str
     role: PortalStorageSpaceRole
     status: str = "Active"
+    description: Optional[str] = None
+    owner_label: Optional[str] = None
+    space_type: Optional[str] = None
+    project_key: Optional[str] = None
+    dataset_label: Optional[str] = None
     region: Optional[str] = None
     created_at: Optional[datetime] = None
     used_bytes: Optional[int] = None
@@ -75,10 +81,48 @@ class PortalStorageSpaceSummary(BaseModel):
     quota_max_size_bytes: Optional[int] = None
     quota_max_objects: Optional[int] = None
     internal_bucket_name: Optional[str] = None
+    archived_at: Optional[datetime] = None
 
 
 class PortalStorageSpace(PortalStorageSpaceSummary):
-    description: Optional[str] = None
+    pass
+
+
+class PortalStorageSpaceCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    owner_label: Optional[str] = Field(default=None, max_length=120)
+    space_type: Optional[str] = Field(default=None, max_length=80)
+    project_key: Optional[str] = Field(default=None, max_length=80)
+    dataset_label: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            raise ValueError("Storage Space name is required")
+        return cleaned
+
+
+class PortalStorageSpaceUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    owner_label: Optional[str] = Field(default=None, max_length=120)
+    space_type: Optional[str] = Field(default=None, max_length=80)
+    project_key: Optional[str] = Field(default=None, max_length=80)
+    dataset_label: Optional[str] = Field(default=None, max_length=120)
+    archived: Optional[bool] = None
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            raise ValueError("Storage Space name is required")
+        return cleaned
 
 
 class PortalStorageObject(BaseModel):
@@ -86,6 +130,9 @@ class PortalStorageObject(BaseModel):
     name: str
     size: Optional[int] = None
     last_modified: Optional[datetime] = None
+    content_type: Optional[str] = None
+    storage_class: Optional[str] = None
+    encryption: Optional[str] = None
 
 
 class PortalStorageObjectListing(BaseModel):
@@ -99,6 +146,29 @@ class PortalStorageObjectListing(BaseModel):
 class PortalStorageObjectUploadResponse(BaseModel):
     key: str
     message: str
+
+
+class PortalStorageObjectFolderCreate(BaseModel):
+    prefix: str = ""
+    name: str = Field(min_length=1, max_length=255)
+
+
+class PortalStorageObjectDeleteResponse(BaseModel):
+    key: str
+    message: str
+
+
+class PortalStorageObjectDetail(BaseModel):
+    key: str
+    name: str
+    size: Optional[int] = None
+    last_modified: Optional[datetime] = None
+    content_type: Optional[str] = None
+    storage_class: Optional[str] = None
+    encryption: Optional[str] = None
+    preview_type: PortalStorageObjectPreviewType = "unavailable"
+    preview_text: Optional[str] = None
+    preview_unavailable_reason: Optional[str] = None
 
 
 class PortalStorageSpaceShare(BaseModel):
@@ -120,6 +190,27 @@ class PortalStorageSpaceSharePayload(BaseModel):
 
 class PortalStorageSpaceShareUpdate(BaseModel):
     role: PortalStorageSpaceRole
+
+
+class PortalPublicLink(BaseModel):
+    id: int
+    storage_space_id: str
+    storage_space_name: str
+    object_key: str
+    object_name: str
+    url: str
+    label: Optional[str] = None
+    created_by_email: Optional[str] = None
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+    status: str
+
+
+class PortalPublicLinkCreate(BaseModel):
+    object_key: str = Field(min_length=1)
+    label: Optional[str] = Field(default=None, max_length=120)
+    expires_at: Optional[datetime] = None
 
 
 class PortalActivityItem(BaseModel):

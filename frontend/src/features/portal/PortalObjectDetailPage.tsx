@@ -5,10 +5,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  createPortalStorageSpacePublicLink,
+  deletePortalStorageSpaceObject,
   downloadPortalStorageSpaceObject,
-  listPortalStorageSpaceObjects,
-  type PortalStorageObject,
-  type PortalStorageObjectListing,
+  fetchPortalStorageSpaceObjectDetail,
+  listPortalStorageSpacePublicLinks,
+  revokePortalStorageSpacePublicLink,
+  type PortalPublicLink,
+  type PortalStorageObjectDetail,
 } from "../../api/portal";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
@@ -61,10 +65,6 @@ function formatObjectDate(raw?: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function objectFromListing(path: string, listing: PortalStorageObjectListing | null): PortalStorageObject | null {
-  return listing?.objects.find((item) => item.key === path) ?? null;
 }
 
 function Breadcrumbs({ space, objectPath }: { space: PortalWorkspaceSpace; objectPath: string }) {
@@ -154,19 +154,22 @@ export default function PortalObjectDetailPage() {
   const [activeTab, setActiveTab] = useState("Aperçu");
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
-  const [objectListing, setObjectListing] = useState<PortalStorageObjectListing | null>(null);
+  const [objectDetail, setObjectDetail] = useState<PortalStorageObjectDetail | null>(null);
+  const [publicLinks, setPublicLinks] = useState<PortalPublicLink[]>([]);
+  const [linkExpiration, setLinkExpiration] = useState("");
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [objectLoading, setObjectLoading] = useState(false);
   const [objectError, setObjectError] = useState<string | null>(null);
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
   const decodedSpaceId = decodeRouteValue(params.spaceId);
   const objectPath = decodeObjectPath(params["*"]);
   const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
-  const objectPrefix = parentPrefix(objectPath);
 
   useEffect(() => {
     let cancelled = false;
     if (!space || !accountIdForApi || !objectPath) {
-      setObjectListing(null);
+      setObjectDetail(null);
       setObjectLoading(false);
       setObjectError(null);
       return () => {
@@ -175,14 +178,23 @@ export default function PortalObjectDetailPage() {
     }
     setObjectLoading(true);
     setObjectError(null);
-    listPortalStorageSpaceObjects(accountIdForApi, space.id, { prefix: objectPrefix })
-      .then((listing) => {
-        if (!cancelled) setObjectListing(listing);
+    Promise.all([
+      fetchPortalStorageSpaceObjectDetail(accountIdForApi, space.id, objectPath),
+      space.role === "Owner"
+        ? listPortalStorageSpacePublicLinks(accountIdForApi, space.id, { objectKey: objectPath, includeRevoked: true })
+        : Promise.resolve([] as PortalPublicLink[]),
+    ])
+      .then(([detail, links]) => {
+        if (!cancelled) {
+          setObjectDetail(detail);
+          setPublicLinks(links);
+        }
       })
       .catch((err) => {
         console.error(err);
         if (!cancelled) {
-          setObjectListing(null);
+          setObjectDetail(null);
+          setPublicLinks([]);
           setObjectError(extractApiError(err, "Impossible de charger les métadonnées de cet objet."));
         }
       })
@@ -192,18 +204,22 @@ export default function PortalObjectDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, objectPath, objectPrefix, space]);
+  }, [accountIdForApi, objectPath, space]);
 
-  const listedObject = useMemo(() => objectFromListing(objectPath, objectListing), [objectListing, objectPath]);
   const object = useMemo(
     () => ({
-      name: listedObject?.name || objectName(objectPath),
-      path: listedObject?.key || objectPath,
-      sizeBytes: listedObject?.size ?? null,
-      type: "Unavailable",
-      lastModified: formatObjectDate(listedObject?.last_modified),
+      name: objectDetail?.name || objectName(objectPath),
+      path: objectDetail?.key || objectPath,
+      sizeBytes: objectDetail?.size ?? null,
+      type: objectDetail?.content_type ?? "Unavailable",
+      storageClass: objectDetail?.storage_class ?? "STANDARD",
+      encryption: objectDetail?.encryption ?? "-",
+      lastModified: formatObjectDate(objectDetail?.last_modified),
+      previewType: objectDetail?.preview_type ?? "unavailable",
+      previewText: objectDetail?.preview_text ?? null,
+      previewUnavailableReason: objectDetail?.preview_unavailable_reason ?? "Preview unavailable.",
     }),
-    [listedObject, objectPath]
+    [objectDetail, objectPath]
   );
 
   if (accountLoading || loading) {
@@ -230,6 +246,41 @@ export default function PortalObjectDetailPage() {
       setDownloadMessage("Chemin copié.");
     } catch {
       setDownloadMessage("Copie indisponible dans ce navigateur.");
+    }
+  };
+  const handleCreatePublicLink = async () => {
+    if (!accountIdForApi || !space || linkBusy) return;
+    setLinkBusy(true);
+    setDownloadMessage(null);
+    try {
+      const link = await createPortalStorageSpacePublicLink(accountIdForApi, space.id, {
+        object_key: object.path,
+        label: object.name,
+        expires_at: linkExpiration ? new Date(linkExpiration).toISOString() : null,
+      });
+      setPublicLinks((current) => [link, ...current.filter((item) => item.id !== link.id)]);
+      setDownloadMessage("Lien public créé.");
+    } catch (err) {
+      console.error(err);
+      setDownloadMessage(extractApiError(err, "Création du lien public impossible."));
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+  const handleRevokePublicLink = async (link: PortalPublicLink) => {
+    if (!accountIdForApi || !space || linkBusy) return;
+    if (!window.confirm(`Révoquer le lien public pour ${link.object_name} ?`)) return;
+    setLinkBusy(true);
+    setDownloadMessage(null);
+    try {
+      const links = await revokePortalStorageSpacePublicLink(accountIdForApi, space.id, link.id);
+      setPublicLinks(links);
+      setDownloadMessage("Lien public révoqué.");
+    } catch (err) {
+      console.error(err);
+      setDownloadMessage(extractApiError(err, "Révocation du lien public impossible."));
+    } finally {
+      setLinkBusy(false);
     }
   };
   const handleDownload = async () => {
@@ -265,6 +316,23 @@ export default function PortalObjectDetailPage() {
       setDownloading(false);
     }
   };
+  const handleDelete = async () => {
+    if (!accountIdForApi || !space || deleteBusy) return;
+    if (!window.confirm(`Supprimer ${object.name} ? Cette action est définitive.`)) return;
+    setDeleteBusy(true);
+    setDownloadMessage(null);
+    try {
+      await deletePortalStorageSpaceObject(accountIdForApi, space.id, object.path);
+      setDownloadMessage(`${object.name} supprimé.`);
+      window.setTimeout(() => {
+        window.location.href = `${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPath ? `${parentPath}/` : "")}`;
+      }, 250);
+    } catch (err) {
+      console.error(err);
+      setDownloadMessage(extractApiError(err, "Suppression impossible pour cet objet."));
+      setDeleteBusy(false);
+    }
+  };
 
   return (
     <PortalV3Page>
@@ -287,8 +355,8 @@ export default function PortalObjectDetailPage() {
           <button type="button" onClick={handleDownload} disabled={!accountIdForApi || downloading} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
             {downloading ? "Téléchargement..." : "Télécharger"}
           </button>
-          <button type="button" disabled className="inline-flex h-9 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-400 shadow-sm">
-            Partager
+          <button type="button" onClick={handleCreatePublicLink} disabled={!accountIdForApi || space.role !== "Owner" || linkBusy} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+            {linkBusy ? "Partage..." : "Partager"}
           </button>
         </div>
       </header>
@@ -325,6 +393,8 @@ export default function PortalObjectDetailPage() {
             <DetailRow label="Taille" value={formatBytes(object.sizeBytes)} />
             <DetailRow label="Type de contenu" value={object.type} />
             <DetailRow label="Dernière modification" value={object.lastModified} />
+            <DetailRow label="Storage class" value={object.storageClass} />
+            <DetailRow label="Chiffrement" value={object.encryption} />
             <DetailRow label="Chemin" value={object.path} />
           </dl>
           {objectLoading ? <div className="mt-4 text-[11px] font-semibold text-slate-400">Chargement des métadonnées...</div> : null}
@@ -333,19 +403,77 @@ export default function PortalObjectDetailPage() {
         <PortalV3Card title="Actions rapides">
           <div className="grid gap-4">
             <QuickAction label="Télécharger" onClick={handleDownload} />
-            <QuickAction label="Obtenir le lien de l'objet" disabled />
+            <QuickAction label="Obtenir le lien public" onClick={handleCreatePublicLink} disabled={space.role !== "Owner" || linkBusy} />
             <QuickAction label="Copier le chemin" onClick={copyPath} />
-            <QuickAction label="Partager cet objet" disabled />
-            <QuickAction label="Supprimer l'objet" tone="rose" disabled />
+            <QuickAction label="Partager cet objet" onClick={handleCreatePublicLink} disabled={space.role !== "Owner" || linkBusy} />
+            <QuickAction label={deleteBusy ? "Suppression..." : "Supprimer l'objet"} tone="rose" onClick={handleDelete} disabled={space.role === "Viewer" || deleteBusy} />
           </div>
         </PortalV3Card>
       </section>
 
+      {space.role === "Owner" ? (
+        <PortalV3Card title="Liens publics">
+          <div className="mb-3 grid gap-2 sm:grid-cols-[220px_auto]">
+            <input
+              type="datetime-local"
+              className="ui-control h-9 text-xs"
+              value={linkExpiration}
+              onChange={(event) => setLinkExpiration(event.target.value)}
+              aria-label="Expiration du lien public"
+            />
+            <button type="button" onClick={handleCreatePublicLink} disabled={linkBusy} className="h-9 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">
+              {linkBusy ? "Création..." : "Créer un lien"}
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="portal-v3-table min-w-[760px]">
+              <thead>
+                <tr>
+                  <th>Objet</th>
+                  <th>Statut</th>
+                  <th>Expiration</th>
+                  <th>Lien</th>
+                  <th className="text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {publicLinks.map((link) => (
+                  <tr key={link.id}>
+                    <td className="font-bold text-slate-950">{link.object_name}</td>
+                    <td>{link.status}</td>
+                    <td>{link.expires_at ? formatObjectDate(link.expires_at) : "-"}</td>
+                    <td className="max-w-[260px] truncate text-blue-700">{link.url}</td>
+                    <td className="text-right">
+                      {link.status === "Active" ? (
+                        <button type="button" onClick={() => handleRevokePublicLink(link)} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 shadow-sm hover:border-rose-200 hover:text-rose-600">
+                          Revoke
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+                {publicLinks.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-5 text-center text-xs font-semibold text-slate-500">
+                      Aucun lien public pour cet objet.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </PortalV3Card>
+      ) : null}
+
       <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
         <PortalV3Card title="Aperçu rapide">
-          <div className="min-h-28 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-500">
-            Aperçu indisponible pour cet objet.
-          </div>
+          {object.previewType === "text" && object.previewText ? (
+            <pre className="max-h-72 overflow-auto rounded-md border border-slate-200 bg-slate-950 p-3 text-xs leading-5 text-slate-50">{object.previewText}</pre>
+          ) : (
+            <div className="min-h-28 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-500">
+              {object.previewUnavailableReason}
+            </div>
+          )}
           <div className="mt-3 text-right text-xs font-bold text-blue-700">
             <Link to={`${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPath ? `${parentPath}/` : "")}`}>
               Ouvrir dans la liste
@@ -354,8 +482,18 @@ export default function PortalObjectDetailPage() {
         </PortalV3Card>
 
         <PortalV3Card title="Événements récents">
-          <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-6 text-center text-xs font-semibold text-slate-500">
-            Aucun événement objet disponible.
+          <div className="grid gap-2">
+            {workspace.activity.filter((item) => item.target === object.name || item.target === object.path).slice(0, 4).map((item) => (
+              <div key={item.id} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
+                <div className="font-bold text-slate-800">{item.action}</div>
+                <div className="mt-1 text-slate-500">{item.actor} · {item.timeLabel}</div>
+              </div>
+            ))}
+            {workspace.activity.filter((item) => item.target === object.name || item.target === object.path).length === 0 ? (
+              <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-6 text-center text-xs font-semibold text-slate-500">
+                Aucun événement objet disponible.
+              </div>
+            ) : null}
           </div>
         </PortalV3Card>
       </section>

@@ -110,62 +110,62 @@ Objective: make mock usage explicit, then remove it from production paths.
 Objective: make Storage Spaces a stronger abstraction while keeping v1 bucket
 mapping internal.
 
-- [ ] Extend Storage Space API responses only where needed with user-facing
+- [x] Extend Storage Space API responses only where needed with user-facing
   fields such as display name, description, owner label, status, created date,
   region, quota, usage, object count, and user role.
-- [ ] Keep `internal_bucket_name` out of primary UI labels.
-- [ ] Add search, sort, and filter support for Storage Spaces if backend support
+- [x] Keep `internal_bucket_name` out of primary UI labels.
+- [x] Add search, sort, and filter support for Storage Spaces if backend support
   is not already sufficient.
-- [ ] Add optional Storage Space metadata for future project/dataset concepts.
-- [ ] Decide whether Storage Space metadata needs database persistence; if yes,
+- [x] Add optional Storage Space metadata for future project/dataset concepts.
+- [x] Decide whether Storage Space metadata needs database persistence; if yes,
   add a migration and service tests.
-- [ ] Add create/update/archive flows only if they can be expressed as
+- [x] Add create/update/archive flows only if they can be expressed as
   user-facing Storage Space operations without exposing advanced S3 settings.
-- [ ] Add backend tests for account isolation, role filtering, missing spaces,
+- [x] Add backend tests for account isolation, role filtering, missing spaces,
   and metadata visibility.
-- [ ] Add frontend tests for list filtering, empty states, role badges, and
+- [x] Add frontend tests for list filtering, empty states, role badges, and
   detail loading failures.
 
 ## Step 4 - Sharing, Public Links And Collaboration
 
 Objective: finish collaboration workflows with simple user-facing language.
 
-- [ ] Add or finalize endpoints for public links:
+- [x] Add or finalize endpoints for public links:
   - list links for a Storage Space or object;
   - create a link with optional expiration;
   - revoke a link;
   - report expiring links for dashboard alerts.
-- [ ] Ensure share roles remain `Viewer`, `Editor`, and `Owner` in Portal UI.
-- [ ] Connect `Shared with me`, `Shared by me`, and `Public links` to real
+- [x] Ensure share roles remain `Viewer`, `Editor`, and `Owner` in Portal UI.
+- [x] Connect `Shared with me`, `Shared by me`, and `Public links` to real
   backend data.
-- [ ] Add share creation, update, and revoke flows with clear confirmation for
+- [x] Add share creation, update, and revoke flows with clear confirmation for
   destructive actions.
-- [ ] Add collaboration activity entries for share grants, updates, revokes,
+- [x] Add collaboration activity entries for share grants, updates, revokes,
   and public-link lifecycle events.
-- [ ] Add backend tests for share role mapping, tenant isolation, public-link
+- [x] Add backend tests for share role mapping, tenant isolation, public-link
   expiration, and revocation.
-- [ ] Add frontend tests for share tabs, role labels, optimistic or loading
+- [x] Add frontend tests for share tabs, role labels, optimistic or loading
   states, errors, and empty states.
 
 ## Step 5 - Files And Transfers Experience
 
 Objective: make Portal file operations reliable without becoming Browser.
 
-- [ ] Replace remaining object-list mock fallbacks with real Portal object
+- [x] Replace remaining object-list mock fallbacks with real Portal object
   listings and clear unavailable states.
-- [ ] Add simple folder creation if supported by the chosen object model.
-- [ ] Add rename, move, or delete only if they can be implemented safely with
+- [x] Add simple folder creation if supported by the chosen object model.
+- [x] Add rename, move, or delete only if they can be implemented safely with
   clear Portal-level permissions and confirmations.
-- [ ] Keep advanced object features out of Portal object views.
-- [ ] Connect object detail to real safe metadata only: name, path, size,
+- [x] Keep advanced object features out of Portal object views.
+- [x] Connect object detail to real safe metadata only: name, path, size,
   content type, last modified, simple storage class, and simple encryption
   label when available.
-- [ ] Add real preview only for supported safe text or image content; otherwise
+- [x] Add real preview only for supported safe text or image content; otherwise
   show a download-oriented empty state.
-- [ ] Persist or reconcile transfer history so refreshes do not lose completed
+- [x] Persist or reconcile transfer history so refreshes do not lose completed
   transfers that should remain visible.
-- [ ] Add transfer retries or failure details if backend data supports them.
-- [ ] Add tests for upload, download, folder navigation, failed transfers,
+- [x] Add transfer retries or failure details if backend data supports them.
+- [x] Add tests for upload, download, folder navigation, failed transfers,
   empty folders, and permission-denied states.
 
 ## Step 6 - Usage, Alerts And Observability

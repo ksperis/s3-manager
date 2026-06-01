@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const clientMock = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  patch: vi.fn(),
   put: vi.fn(),
   delete: vi.fn(),
 }));
@@ -15,13 +16,21 @@ import {
   fetchPortalActivity,
   fetchPortalAlerts,
   grantPortalStorageSpaceShare,
+  createPortalStorageSpace,
+  createPortalStorageSpaceFolder,
+  createPortalStorageSpacePublicLink,
+  deletePortalStorageSpaceObject,
   downloadPortalStorageSpaceObject,
+  fetchPortalStorageSpaceObjectDetail,
   fetchPortalStorageSpace,
   fetchPortalTransfers,
+  listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
   listPortalStorageSpaceObjects,
   listPortalStorageSpaces,
+  revokePortalStorageSpacePublicLink,
   revokePortalStorageSpaceShare,
+  updatePortalStorageSpace,
   updatePortalStorageSpaceShare,
   uploadPortalStorageSpaceObject,
 } from "./portal";
@@ -30,23 +39,45 @@ describe("portal storage spaces api", () => {
   beforeEach(() => {
     clientMock.get.mockReset();
     clientMock.post.mockReset();
+    clientMock.patch.mockReset();
     clientMock.put.mockReset();
     clientMock.delete.mockReset();
     clientMock.get.mockResolvedValue({ data: [] });
     clientMock.post.mockResolvedValue({ data: { key: "raw-data/report.csv", message: "Uploaded" } });
+    clientMock.patch.mockResolvedValue({ data: {} });
     clientMock.put.mockResolvedValue({ data: {} });
     clientMock.delete.mockResolvedValue({ data: [] });
   });
 
   it("lists storage spaces through the canonical portal endpoint", async () => {
-    await listPortalStorageSpaces("101", { search: "research" });
+    await listPortalStorageSpaces("101", { search: "research", role: "Owner", status: "Active", sort: "-used_bytes", includeArchived: true });
 
     expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces", {
       params: {
         account_id: "101",
         search: "research",
+        role: "Owner",
+        status: "Active",
+        sort: "-used_bytes",
+        include_archived: true,
       },
     });
+  });
+
+  it("creates and updates storage spaces through user-facing endpoints", async () => {
+    await createPortalStorageSpace("101", { name: "Research Data", description: "Lab files" });
+    await updatePortalStorageSpace("101", "research data", { description: "Updated", archived: true });
+
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/storage-spaces",
+      { name: "Research Data", description: "Lab files" },
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.patch).toHaveBeenCalledWith(
+      "/portal/storage-spaces/research%20data",
+      { description: "Updated", archived: true },
+      { params: { account_id: "101" } }
+    );
   });
 
   it("fetches a storage space detail through the canonical portal endpoint", async () => {
@@ -94,6 +125,27 @@ describe("portal storage spaces api", () => {
     expect(config).toEqual({ params: { account_id: "101" } });
   });
 
+  it("fetches object detail and creates folders without browser endpoints", async () => {
+    await fetchPortalStorageSpaceObjectDetail("101", "research data", "raw-data/report.csv");
+    await createPortalStorageSpaceFolder("101", "research data", { prefix: "raw-data/", name: "new-folder" });
+    await deletePortalStorageSpaceObject("101", "research data", "raw-data/old.csv");
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/objects/detail", {
+      params: {
+        account_id: "101",
+        key: "raw-data/report.csv",
+      },
+    });
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/storage-spaces/research%20data/objects/folders",
+      { prefix: "raw-data/", name: "new-folder" },
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.delete).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/objects", {
+      params: { account_id: "101", key: "raw-data/old.csv" },
+    });
+  });
+
   it("downloads a storage space object as a blob with filename", async () => {
     const blob = new Blob(["hello"], { type: "text/plain" });
     clientMock.get.mockResolvedValueOnce({
@@ -138,6 +190,32 @@ describe("portal storage spaces api", () => {
       { params: { account_id: "101" } }
     );
     expect(clientMock.delete).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/shares/12", {
+      params: { account_id: "101" },
+    });
+  });
+
+  it("manages public links through storage space endpoints", async () => {
+    await listPortalStorageSpacePublicLinks("101", "research data", { objectKey: "raw-data/report.csv", includeRevoked: true });
+    await createPortalStorageSpacePublicLink("101", "research data", {
+      object_key: "raw-data/report.csv",
+      label: "Report",
+      expires_at: "2026-06-10T10:00:00Z",
+    });
+    await revokePortalStorageSpacePublicLink("101", "research data", 42);
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/public-links", {
+      params: {
+        account_id: "101",
+        object_key: "raw-data/report.csv",
+        include_revoked: true,
+      },
+    });
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/storage-spaces/research%20data/public-links",
+      { object_key: "raw-data/report.csv", label: "Report", expires_at: "2026-06-10T10:00:00Z" },
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.delete).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/public-links/42", {
       params: { account_id: "101" },
     });
   });

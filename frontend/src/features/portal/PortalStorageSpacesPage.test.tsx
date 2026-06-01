@@ -66,7 +66,7 @@ describe("PortalStorageSpacesPage", () => {
       "href",
       "/portal/storage-spaces/research-data"
     );
-    expect(screen.queryByRole("button", { name: "+ Create storage space" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create storage space" })).toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
   });
 });

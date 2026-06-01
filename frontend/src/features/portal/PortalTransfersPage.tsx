@@ -55,6 +55,7 @@ export default function PortalTransfersPage() {
                 <th>Speed</th>
                 <th>Started</th>
                 <th>ETA</th>
+                <th>Details</th>
               </tr>
             </thead>
             <tbody>
@@ -72,11 +73,14 @@ export default function PortalTransfersPage() {
                   <td>{transfer.speedLabel}</td>
                   <td>{transfer.startedLabel}</td>
                   <td>{transfer.etaLabel}</td>
+                  <td className="max-w-[240px] truncate text-xs text-slate-500">
+                    {transfer.errorMessage ?? (transfer.status === "Failed" ? "Failure details unavailable." : "-")}
+                  </td>
                 </tr>
               ))}
               {transfers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-xs font-semibold text-slate-500">
+                  <td colSpan={8} className="py-6 text-center text-xs font-semibold text-slate-500">
                     No transfers to display.
                   </td>
                 </tr>

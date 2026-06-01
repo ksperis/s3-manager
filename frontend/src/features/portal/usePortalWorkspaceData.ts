@@ -83,6 +83,7 @@ function transferFromApi(item: PortalTransfer): PortalWorkspaceTransfer {
     startedLabel: shortTimeLabel(item.started_at),
     etaLabel: item.eta_label,
     speedLabel: item.speed_label,
+    errorMessage: item.error_message ?? null,
   };
 }
 

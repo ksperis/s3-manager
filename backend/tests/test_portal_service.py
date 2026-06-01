@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import pytest
 from fastapi import HTTPException
 
-from app.db import AuditLog, AccountIAMUser, AccountRole, S3Account, User, UserS3Account
+from app.db import AuditLog, AccountIAMUser, AccountRole, PortalPublicLink, PortalStorageSpaceMetadata, S3Account, User, UserS3Account
 from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
 from app.models.portal import PortalAccessKey, PortalIAMUser, PortalState, PortalStorageSpaceSummary, PortalUsage
@@ -674,6 +674,59 @@ def test_list_storage_spaces_maps_visible_buckets_to_workspace_summary(monkeypat
     assert spaces[0].object_count == 12
 
 
+def test_storage_space_metadata_filters_sorting_and_archive(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-metadata", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-metadata@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    db_session.add_all(
+        [
+            PortalStorageSpaceMetadata(
+                account_id=account.id,
+                bucket_name="research-data",
+                display_name="Genome Project",
+                description="Primary sequencing dataset",
+                owner_label="Lab Team",
+                space_type="Dataset",
+                project_key="GEN-2026",
+            ),
+            PortalStorageSpaceMetadata(
+                account_id=account.id,
+                bucket_name="old-data",
+                display_name="Old Data",
+                archived_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "get_state",
+        lambda *_args, **_kwargs: PortalState(
+            account_id=account.id,
+            iam_user=PortalIAMUser(),
+            access_keys=[],
+            buckets=[
+                Bucket(name="research-data", creation_date="2026-03-01T00:00:00Z", used_bytes=2048, object_count=12),
+                Bucket(name="old-data", creation_date="2026-01-01T00:00:00Z", used_bytes=4096, object_count=2),
+            ],
+            account_role=AccountRole.PORTAL_MANAGER.value,
+            can_manage_buckets=True,
+        ),
+    )
+
+    spaces = service.list_storage_spaces(user, access, search="gen", sort="-used_bytes")
+    archived = service.list_storage_spaces(user, access, include_archived=True, status="Archived")
+
+    assert [(space.id, space.name, space.description, space.owner_label, space.space_type) for space in spaces] == [
+        ("research-data", "Genome Project", "Primary sequencing dataset", "Lab Team", "Dataset")
+    ]
+    assert [(space.id, space.status) for space in archived] == [("old-data", "Archived")]
+
+
 def test_get_storage_space_keeps_bucket_scope_and_returns_none_when_hidden(monkeypatch, db_session):
     account = S3Account(name="portal-storage-space-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-space-scope@example.com", hashed_password="x", role="ui_user")
@@ -897,6 +950,86 @@ def test_upload_storage_space_object_allows_editor_and_rejects_viewer(monkeypatc
         service.upload_storage_space_object(user, viewer_access, "research-data", "raw-data/denied.csv", b"sample")
 
 
+def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(monkeypatch, db_session):
+    account = S3Account(name="portal-object-detail", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-object-detail@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="research-data",
+                name="Research Data",
+                role="Editor",
+                internal_bucket_name="bucket-research-data",
+            )
+        ],
+    )
+
+    class FakeBody:
+        def read(self):
+            return b"hello preview"
+
+    class FakeClient:
+        def __init__(self):
+            self.puts = []
+            self.deletes = []
+
+        def head_object(self, **kwargs):
+            assert kwargs == {"Bucket": "bucket-research-data", "Key": "raw-data/readme.txt"}
+            return {
+                "ContentLength": 13,
+                "ContentType": "text/plain",
+                "LastModified": datetime(2026, 5, 27, 8, 15, tzinfo=timezone.utc),
+                "StorageClass": "STANDARD",
+                "ServerSideEncryption": "AES256",
+            }
+
+        def get_object(self, **kwargs):
+            assert kwargs == {
+                "Bucket": "bucket-research-data",
+                "Key": "raw-data/readme.txt",
+                "Range": "bytes=0-65535",
+            }
+            return {"Body": FakeBody()}
+
+        def put_object(self, **kwargs):
+            self.puts.append(kwargs)
+
+        def delete_object(self, **kwargs):
+            self.deletes.append(kwargs)
+
+    fake_client = FakeClient()
+    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: fake_client)
+    monkeypatch.setattr(service, "list_existing_user_storage_space_access", lambda *_args, **_kwargs: {"bucket-research-data": "Editor"})
+
+    detail = service.get_storage_space_object_detail(user, access, "research-data", "/raw-data/readme.txt")
+    folder_key = service.create_storage_space_folder(user, access, "research-data", "raw-data", "reports")
+    deleted_key = service.delete_storage_space_object(user, access, "research-data", "/raw-data/old.txt")
+
+    assert detail.content_type == "text/plain"
+    assert detail.storage_class == "STANDARD"
+    assert detail.encryption == "AES256"
+    assert detail.preview_type == "text"
+    assert detail.preview_text == "hello preview"
+    assert folder_key == "raw-data/reports/"
+    assert fake_client.puts == [
+        {
+            "Bucket": "bucket-research-data",
+            "Key": "raw-data/reports/",
+            "Body": b"",
+            "ContentType": "application/x-directory",
+        }
+    ]
+    assert deleted_key == "raw-data/old.txt"
+    assert fake_client.deletes == [{"Bucket": "bucket-research-data", "Key": "raw-data/old.txt"}]
+
+
 def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
     service = PortalService(db_session)
 
@@ -999,6 +1132,46 @@ def test_list_storage_space_shares_uses_iam_roles(monkeypatch, db_session):
         ("viewer@example.com", "Viewer", "by_me"),
         ("owner@example.com", "Owner", "with_me"),
     ]
+
+
+def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session):
+    account = S3Account(name="portal-public-links", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-public@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner])
+    db_session.commit()
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="research-data",
+                name="Research Data",
+                role="Owner",
+                internal_bucket_name="research-data",
+            )
+        ],
+    )
+    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    link = service.create_storage_space_public_link(
+        owner,
+        access,
+        "research-data",
+        object_key="/raw-data/report.csv",
+        label="Report",
+        expires_at=datetime(2026, 6, 10, 10, 0, tzinfo=timezone.utc),
+    )
+    links = service.list_storage_space_public_links(owner, access, "research-data")
+    revoked = service.revoke_storage_space_public_link(owner, access, "research-data", link.id)
+
+    assert link.object_key == "raw-data/report.csv"
+    assert link.object_name == "report.csv"
+    assert link.status == "Active"
+    assert link.url.startswith("/api/portal/public-links/")
+    assert [(item.id, item.status) for item in links] == [(link.id, "Active")]
+    assert [(item.id, item.status) for item in revoked] == [(link.id, "Revoked")]
 
 
 def test_portal_activity_and_transfers_are_filtered_by_visible_storage_spaces(monkeypatch, db_session):

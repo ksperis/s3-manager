@@ -4,7 +4,9 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import PortalStorageSpaceDetailPage from "./PortalStorageSpaceDetailPage";
 
 const mocks = vi.hoisted(() => ({
+  createFolderMock: vi.fn(),
   listObjectsMock: vi.fn(),
+  updateStorageSpaceMock: vi.fn(),
   uploadObjectMock: vi.fn(),
   hookResult: {
     accountIdForApi: "101",
@@ -61,7 +63,9 @@ vi.mock("./usePortalWorkspaceData", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
+  createPortalStorageSpaceFolder: (...args: unknown[]) => mocks.createFolderMock(...args),
   listPortalStorageSpaceObjects: (...args: unknown[]) => mocks.listObjectsMock(...args),
+  updatePortalStorageSpace: (...args: unknown[]) => mocks.updateStorageSpaceMock(...args),
   uploadPortalStorageSpaceObject: (...args: unknown[]) => mocks.uploadObjectMock(...args),
 }));
 
@@ -95,7 +99,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     expect(screen.getByRole("heading", { name: "Research Data" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Téléverser" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "+ Nouveau dossier" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nouveau dossier" })).toBeInTheDocument();
     expect(screen.getByText("Racine")).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "01-fastq" })).toHaveAttribute(
       "href",

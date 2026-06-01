@@ -4,8 +4,12 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import PortalObjectDetailPage from "./PortalObjectDetailPage";
 
 const mocks = vi.hoisted(() => ({
+  createPublicLinkMock: vi.fn(),
+  deleteObjectMock: vi.fn(),
   downloadObjectMock: vi.fn(),
-  listObjectsMock: vi.fn(),
+  fetchObjectDetailMock: vi.fn(),
+  listPublicLinksMock: vi.fn(),
+  revokePublicLinkMock: vi.fn(),
   hookResult: {
     accountIdForApi: "101",
     workspace: {
@@ -50,28 +54,31 @@ vi.mock("./usePortalWorkspaceData", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
+  createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
+  deletePortalStorageSpaceObject: (...args: unknown[]) => mocks.deleteObjectMock(...args),
   downloadPortalStorageSpaceObject: (...args: unknown[]) => mocks.downloadObjectMock(...args),
-  listPortalStorageSpaceObjects: (...args: unknown[]) => mocks.listObjectsMock(...args),
+  fetchPortalStorageSpaceObjectDetail: (...args: unknown[]) => mocks.fetchObjectDetailMock(...args),
+  listPortalStorageSpacePublicLinks: (...args: unknown[]) => mocks.listPublicLinksMock(...args),
+  revokePortalStorageSpacePublicLink: (...args: unknown[]) => mocks.revokePublicLinkMock(...args),
 }));
 
 describe("PortalObjectDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.downloadObjectMock.mockResolvedValue({ blob: new Blob(["hello"]), filename: "sample_001.fastq.gz" });
-    mocks.listObjectsMock.mockResolvedValue({
-      prefix: "raw-data/2024/03/",
-      prefixes: [],
-      objects: [
-        {
-          key: "raw-data/2024/03/sample_001.fastq.gz",
-          name: "sample_001.fastq.gz",
-          size: 512,
-          last_modified: "2026-05-27T08:15:00Z",
-        },
-      ],
-      is_truncated: false,
-      next_continuation_token: null,
+    mocks.fetchObjectDetailMock.mockResolvedValue({
+      key: "raw-data/2024/03/sample_001.fastq.gz",
+      name: "sample_001.fastq.gz",
+      size: 512,
+      last_modified: "2026-05-27T08:15:00Z",
+      content_type: "text/plain",
+      storage_class: "STANDARD",
+      encryption: "AES256",
+      preview_type: "text",
+      preview_text: "hello content",
+      preview_unavailable_reason: null,
     });
+    mocks.listPublicLinksMock.mockResolvedValue([]);
   });
 
   it("renders object detail tabs, actions, and unavailable states without browser handoff", async () => {
@@ -90,7 +97,10 @@ describe("PortalObjectDetailPage", () => {
     expect(screen.getByText("Informations générales")).toBeInTheDocument();
     expect(screen.getByText("Actions rapides")).toBeInTheDocument();
     expect(await screen.findByText("512 B")).toBeInTheDocument();
-    expect(screen.getByText("Aperçu indisponible pour cet objet.")).toBeInTheDocument();
+    expect(screen.getByText("hello content")).toBeInTheDocument();
+    expect(screen.getByText("STANDARD")).toBeInTheDocument();
+    expect(screen.getByText("AES256")).toBeInTheDocument();
+    expect(screen.getByText("Liens publics")).toBeInTheDocument();
     expect(screen.getByText("Aucun événement objet disponible.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Versions" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Métadonnées" })).not.toBeInTheDocument();

@@ -4,6 +4,8 @@ import copy
 import json
 import logging
 import os
+import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Any, Optional, Tuple, TYPE_CHECKING
@@ -13,7 +15,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db import AuditLog, AccountIAMUser, AccountRole, S3Account, StorageEndpoint, User, UserRole, UserS3Account, is_admin_ui_role
+from app.db import (
+    AuditLog,
+    AccountIAMUser,
+    AccountRole,
+    PortalPublicLink as DBPortalPublicLink,
+    PortalStorageSpaceMetadata,
+    S3Account,
+    StorageEndpoint,
+    User,
+    UserRole,
+    UserS3Account,
+    is_admin_ui_role,
+)
 from app.models.app_settings import (
     PortalBucketDefaults,
     PortalBucketDefaultsOverride,
@@ -34,8 +48,10 @@ from app.models.portal import (
     PortalIAMUser,
     PortalIamComplianceIssue,
     PortalIamComplianceReport,
+    PortalPublicLink,
     PortalState,
     PortalTransfer,
+    PortalStorageObjectDetail,
     PortalStorageSpace,
     PortalStorageObject,
     PortalStorageObjectListing,
@@ -54,6 +70,7 @@ from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_a
 from app.utils.s3_endpoint import resolve_s3_client_options, resolve_s3_endpoint
 from app.utils.normalize import normalize_string_list
 from app.utils.usage_stats import extract_usage_stats
+from app.utils.time import utcnow
 
 if TYPE_CHECKING:
     from app.routers.dependencies import AccountAccess
@@ -1572,6 +1589,62 @@ class PortalService:
             return bucket_name
         return " ".join(part[:1].upper() + part[1:] for part in cleaned.split())
 
+    def _storage_space_metadata_map(self, account: S3Account) -> dict[str, PortalStorageSpaceMetadata]:
+        return {
+            item.bucket_name: item
+            for item in self.db.query(PortalStorageSpaceMetadata)
+            .filter(PortalStorageSpaceMetadata.account_id == account.id)
+            .all()
+        }
+
+    def _storage_space_metadata(self, account: S3Account, bucket_name: str) -> PortalStorageSpaceMetadata | None:
+        return (
+            self.db.query(PortalStorageSpaceMetadata)
+            .filter(
+                PortalStorageSpaceMetadata.account_id == account.id,
+                PortalStorageSpaceMetadata.bucket_name == bucket_name,
+            )
+            .first()
+        )
+
+    def _display_storage_space_name(self, bucket_name: str, metadata: PortalStorageSpaceMetadata | None = None) -> str:
+        if metadata and metadata.display_name:
+            return metadata.display_name
+        return self._storage_space_label(bucket_name)
+
+    def _default_storage_space_description(self, name: str, metadata: PortalStorageSpaceMetadata | None = None) -> str:
+        if metadata and metadata.description:
+            return metadata.description
+        if metadata and metadata.space_type:
+            return f"{name} {metadata.space_type} workspace"
+        return f"{name} storage space"
+
+    def _normalize_storage_space_datetime(self, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+    def _storage_space_slug(self, value: str) -> str:
+        slug = re.sub(r"[^a-z0-9-]+", "-", value.strip().lower())
+        slug = re.sub(r"-+", "-", slug).strip("-")
+        if not slug:
+            slug = "storage-space"
+        if len(slug) > 52:
+            slug = slug[:52].rstrip("-")
+        return slug
+
+    def _unique_storage_space_bucket_name(self, base_name: str, existing: set[str]) -> str:
+        base = self._storage_space_slug(base_name)
+        candidate = base
+        counter = 2
+        while candidate in existing:
+            suffix = f"-{counter}"
+            candidate = f"{base[: 63 - len(suffix)].rstrip('-')}{suffix}"
+            counter += 1
+        return candidate
+
     def _storage_space_role(self, access: "AccountAccess") -> PortalStorageSpaceRole:
         if access.capabilities.can_manage_buckets or access.role == AccountRole.PORTAL_MANAGER.value:
             return "Owner"
@@ -1593,15 +1666,22 @@ class PortalService:
         bucket: Bucket,
         access: "AccountAccess",
         role: Optional[PortalStorageSpaceRole] = None,
+        metadata: PortalStorageSpaceMetadata | None = None,
     ) -> PortalStorageSpaceSummary:
         role = role or self._storage_space_role(access)
         endpoint = getattr(access.account, "storage_endpoint", None)
         region = getattr(endpoint, "region", None)
+        name = self._display_storage_space_name(bucket.name, metadata)
         return PortalStorageSpaceSummary(
             id=bucket.name,
-            name=self._storage_space_label(bucket.name),
+            name=name,
             role=role,
-            status=self._storage_space_status(bucket, role),
+            status="Archived" if metadata and metadata.archived_at else self._storage_space_status(bucket, role),
+            description=self._default_storage_space_description(name, metadata),
+            owner_label=(metadata.owner_label if metadata and metadata.owner_label else access.account.name),
+            space_type=metadata.space_type if metadata else None,
+            project_key=metadata.project_key if metadata else None,
+            dataset_label=metadata.dataset_label if metadata else None,
             region=region,
             created_at=bucket.creation_date,
             used_bytes=bucket.used_bytes,
@@ -1609,6 +1689,7 @@ class PortalService:
             quota_max_size_bytes=bucket.quota_max_size_bytes,
             quota_max_objects=bucket.quota_max_objects,
             internal_bucket_name=bucket.name,
+            archived_at=metadata.archived_at if metadata else None,
         )
 
     def list_storage_spaces(
@@ -1616,17 +1697,25 @@ class PortalService:
         user: User,
         access: "AccountAccess",
         search: Optional[str] = None,
+        role: Optional[str] = None,
+        status: Optional[str] = None,
+        sort: str = "name",
+        include_archived: bool = False,
     ) -> list[PortalStorageSpaceSummary]:
         state = self.get_state(user, access)
         role_by_bucket = self.list_existing_user_storage_space_access(user, access.account, access.role)
+        metadata_by_bucket = self._storage_space_metadata_map(access.account)
         spaces = [
             self._bucket_to_storage_space_summary(
                 bucket,
                 access,
                 role=role_by_bucket.get(bucket.name),
+                metadata=metadata_by_bucket.get(bucket.name),
             )
             for bucket in state.buckets
         ]
+        if not include_archived:
+            spaces = [space for space in spaces if not space.archived_at]
         if search:
             term = search.strip().lower()
             if term:
@@ -1635,8 +1724,30 @@ class PortalService:
                     for space in spaces
                     if term in space.name.lower()
                     or term in space.id.lower()
+                    or term in (space.description or "").lower()
+                    or term in (space.owner_label or "").lower()
+                    or term in (space.space_type or "").lower()
+                    or term in (space.project_key or "").lower()
+                    or term in (space.dataset_label or "").lower()
                     or term in (space.internal_bucket_name or "").lower()
                 ]
+        if role:
+            role_term = role.strip().lower()
+            spaces = [space for space in spaces if space.role.lower() == role_term]
+        if status:
+            status_term = status.strip().lower()
+            spaces = [space for space in spaces if space.status.lower() == status_term]
+        reverse = sort.startswith("-")
+        sort_key = sort[1:] if reverse else sort
+        sorters = {
+            "name": lambda item: (item.name or "").lower(),
+            "created_at": lambda item: item.created_at or datetime.min,
+            "used_bytes": lambda item: item.used_bytes if item.used_bytes is not None else -1,
+            "object_count": lambda item: item.object_count if item.object_count is not None else -1,
+            "role": lambda item: item.role,
+            "status": lambda item: item.status,
+        }
+        spaces = sorted(spaces, key=sorters.get(sort_key, sorters["name"]), reverse=reverse)
         return spaces
 
     def get_storage_space(
@@ -1647,7 +1758,7 @@ class PortalService:
     ) -> Optional[PortalStorageSpace]:
         if not space_id:
             return None
-        visible_spaces = self.list_storage_spaces(user, access)
+        visible_spaces = self.list_storage_spaces(user, access, include_archived=True)
         summary = next(
             (
                 space
@@ -1659,6 +1770,7 @@ class PortalService:
         if summary is None or not summary.internal_bucket_name:
             return None
         stats = self.get_bucket_stats(user, access, summary.internal_bucket_name)
+        metadata = self._storage_space_metadata(access.account, summary.internal_bucket_name)
         merged = self._bucket_to_storage_space_summary(
             Bucket(
                 name=summary.internal_bucket_name,
@@ -1677,21 +1789,102 @@ class PortalService:
                 ),
             ),
             access,
+            role=summary.role,
+            metadata=metadata,
         )
-        return PortalStorageSpace(
-            **merged.model_dump(),
-            description=f"{merged.name} storage space",
+        return PortalStorageSpace(**merged.model_dump())
+
+    def create_storage_space(
+        self,
+        user: User,
+        access: "AccountAccess",
+        *,
+        name: str,
+        description: Optional[str] = None,
+        owner_label: Optional[str] = None,
+        space_type: Optional[str] = None,
+        project_key: Optional[str] = None,
+        dataset_label: Optional[str] = None,
+    ) -> PortalStorageSpace:
+        portal_settings = self._effective_portal_settings(access.account)
+        allow_portal_user_create = portal_settings.allow_portal_user_bucket_create
+        is_portal_user = access.role == AccountRole.PORTAL_USER.value
+        if not (access.capabilities.can_manage_buckets or (allow_portal_user_create and is_portal_user)):
+            raise RuntimeError("Storage Space creation not allowed for this role.")
+        existing = {space.internal_bucket_name or space.id for space in self.list_storage_spaces(user, access, include_archived=True)}
+        bucket_name = self._unique_storage_space_bucket_name(name, existing)
+        self.create_bucket(user, access, bucket_name, portal_settings=portal_settings)
+        metadata = PortalStorageSpaceMetadata(
+            account_id=access.account.id,
+            bucket_name=bucket_name,
+            display_name=name,
+            description=description,
+            owner_label=owner_label or access.account.name,
+            space_type=space_type,
+            project_key=project_key,
+            dataset_label=dataset_label,
         )
+        self.db.add(metadata)
+        self.db.commit()
+        storage_space = self.get_storage_space(user, access, bucket_name)
+        if storage_space is None:
+            raise RuntimeError("Created Storage Space is not visible.")
+        return storage_space
+
+    def update_storage_space(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        *,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        owner_label: Optional[str] = None,
+        space_type: Optional[str] = None,
+        project_key: Optional[str] = None,
+        dataset_label: Optional[str] = None,
+        archived: Optional[bool] = None,
+    ) -> PortalStorageSpace:
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id, include_archived=True)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        self._require_storage_space_owner(user, access, bucket_name)
+        metadata = self._storage_space_metadata(access.account, bucket_name)
+        if metadata is None:
+            metadata = PortalStorageSpaceMetadata(account_id=access.account.id, bucket_name=bucket_name)
+            self.db.add(metadata)
+        if name is not None:
+            metadata.display_name = name
+        if description is not None:
+            metadata.description = description
+        if owner_label is not None:
+            metadata.owner_label = owner_label
+        if space_type is not None:
+            metadata.space_type = space_type
+        if project_key is not None:
+            metadata.project_key = project_key
+        if dataset_label is not None:
+            metadata.dataset_label = dataset_label
+        if archived is not None:
+            metadata.archived_at = utcnow() if archived else None
+        metadata.updated_at = utcnow()
+        self.db.add(metadata)
+        self.db.commit()
+        storage_space = self.get_storage_space(user, access, bucket_name)
+        if storage_space is None:
+            raise RuntimeError("Storage space not found after update.")
+        return storage_space
 
     def _resolve_storage_space_bucket_name(
         self,
         user: User,
         access: "AccountAccess",
         space_id: str,
+        include_archived: bool = False,
     ) -> Optional[str]:
         if not space_id:
             return None
-        visible_spaces = self.list_storage_spaces(user, access)
+        visible_spaces = self.list_storage_spaces(user, access, include_archived=include_archived)
         summary = next(
             (
                 space
@@ -1834,6 +2027,116 @@ class PortalService:
         content_type = resp.get("ContentType")
         filename = self._object_name(target_key) or "download"
         return stream, content_type, filename
+
+    def _safe_content_preview(self, client, bucket_name: str, key: str, content_type: Optional[str]) -> tuple[str, Optional[str], Optional[str]]:
+        normalized_type = (content_type or "").split(";")[0].strip().lower()
+        text_types = {
+            "application/json",
+            "application/xml",
+            "application/csv",
+            "application/x-yaml",
+            "application/yaml",
+            "text/csv",
+        }
+        is_text = normalized_type.startswith("text/") or normalized_type in text_types or key.lower().endswith(
+            (".txt", ".csv", ".json", ".xml", ".yaml", ".yml", ".md", ".log")
+        )
+        if not is_text:
+            if normalized_type.startswith("image/"):
+                return "image", None, "Image preview is not embedded in Portal yet. Download the file to inspect it."
+            return "unavailable", None, "Preview is available only for small text files."
+        try:
+            resp = client.get_object(Bucket=bucket_name, Key=key, Range="bytes=0-65535")
+            body = resp.get("Body")
+            raw = body.read() if hasattr(body, "read") else b""
+            if not isinstance(raw, bytes):
+                return "unavailable", None, "Preview response could not be decoded."
+            return "text", raw.decode("utf-8", errors="replace"), None
+        except (ClientError, BotoCoreError) as exc:
+            logger.debug("Unable to read object preview for %s/%s: %s", bucket_name, key, exc)
+            return "unavailable", None, "Preview could not be loaded."
+
+    def get_storage_space_object_detail(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        key: str,
+    ) -> PortalStorageObjectDetail:
+        target_key = (key or "").lstrip("/")
+        if not target_key:
+            raise RuntimeError("Object key is required.")
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        client = self._portal_object_client(user, access.account)
+        try:
+            resp = client.head_object(Bucket=bucket_name, Key=target_key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to load object '{target_key}' in storage space '{space_id}': {exc}") from exc
+        content_type = resp.get("ContentType")
+        preview_type, preview_text, preview_reason = self._safe_content_preview(client, bucket_name, target_key, content_type)
+        return PortalStorageObjectDetail(
+            key=target_key,
+            name=self._object_name(target_key),
+            size=resp.get("ContentLength"),
+            last_modified=resp.get("LastModified"),
+            content_type=content_type,
+            storage_class=resp.get("StorageClass") or "STANDARD",
+            encryption=resp.get("ServerSideEncryption"),
+            preview_type=preview_type,
+            preview_text=preview_text,
+            preview_unavailable_reason=preview_reason,
+        )
+
+    def create_storage_space_folder(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        prefix: str,
+        name: str,
+    ) -> str:
+        folder_name = (name or "").strip().strip("/")
+        if not folder_name:
+            raise RuntimeError("Folder name is required.")
+        base_prefix = (prefix or "").lstrip("/")
+        if base_prefix and not base_prefix.endswith("/"):
+            base_prefix = f"{base_prefix}/"
+        target_key = f"{base_prefix}{folder_name}/"
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        if self._user_storage_space_role(user, access, bucket_name) == "Viewer":
+            raise RuntimeError("Folder creation not allowed for this storage space role.")
+        client = self._portal_object_client(user, access.account)
+        try:
+            client.put_object(Bucket=bucket_name, Key=target_key, Body=b"", ContentType="application/x-directory")
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to create folder '{target_key}' in storage space '{space_id}': {exc}") from exc
+        return target_key
+
+    def delete_storage_space_object(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        key: str,
+    ) -> str:
+        target_key = (key or "").lstrip("/")
+        if not target_key:
+            raise RuntimeError("Object key is required.")
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        if self._user_storage_space_role(user, access, bucket_name) == "Viewer":
+            raise RuntimeError("Delete not allowed for this storage space role.")
+        client = self._portal_object_client(user, access.account)
+        try:
+            client.delete_object(Bucket=bucket_name, Key=target_key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to delete object '{target_key}' in storage space '{space_id}': {exc}") from exc
+        return target_key
 
     def _share_target_rows(self, account: S3Account) -> list[tuple[User, Optional[str], Optional[str]]]:
         roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]
@@ -1984,6 +2287,174 @@ class PortalService:
             self._remove_user_storage_space_policy(iam_service, link.iam_username, bucket_name)
         return self.list_storage_space_shares(user, access, space_id)
 
+    def _public_link_status(self, link: DBPortalPublicLink, now: datetime | None = None) -> str:
+        now = now or utcnow()
+        expires_at = self._normalize_storage_space_datetime(link.expires_at)
+        if link.revoked_at is not None:
+            return "Revoked"
+        if expires_at is not None and expires_at <= now:
+            return "Expired"
+        return "Active"
+
+    def _public_link_url(self, token: str) -> str:
+        return f"{settings.api_v1_prefix}/portal/public-links/{token}/download"
+
+    def _public_link_card(
+        self,
+        link: DBPortalPublicLink,
+        storage_space: PortalStorageSpaceSummary,
+    ) -> PortalPublicLink:
+        return PortalPublicLink(
+            id=link.id,
+            storage_space_id=storage_space.id,
+            storage_space_name=storage_space.name,
+            object_key=link.object_key,
+            object_name=self._object_name(link.object_key),
+            url=self._public_link_url(link.token),
+            label=link.label,
+            created_by_email=link.created_by_email,
+            created_at=link.created_at,
+            expires_at=link.expires_at,
+            revoked_at=link.revoked_at,
+            status=self._public_link_status(link),
+        )
+
+    def list_storage_space_public_links(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        object_key: Optional[str] = None,
+        include_revoked: bool = False,
+    ) -> list[PortalPublicLink]:
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        self._require_storage_space_owner(user, access, bucket_name)
+        storage_space = next(
+            (
+                item
+                for item in self.list_storage_spaces(user, access)
+                if item.id == space_id or item.internal_bucket_name == bucket_name
+            ),
+            None,
+        )
+        if storage_space is None:
+            raise RuntimeError("Storage space not found or not allowed.")
+        query = self.db.query(DBPortalPublicLink).filter(
+            DBPortalPublicLink.account_id == access.account.id,
+            DBPortalPublicLink.bucket_name == bucket_name,
+        )
+        if object_key:
+            query = query.filter(DBPortalPublicLink.object_key == object_key.lstrip("/"))
+        if not include_revoked:
+            query = query.filter(DBPortalPublicLink.revoked_at.is_(None))
+        links = query.order_by(DBPortalPublicLink.created_at.desc(), DBPortalPublicLink.id.desc()).all()
+        return [self._public_link_card(link, storage_space) for link in links]
+
+    def create_storage_space_public_link(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        *,
+        object_key: str,
+        label: Optional[str] = None,
+        expires_at: Optional[datetime] = None,
+    ) -> PortalPublicLink:
+        target_key = (object_key or "").lstrip("/")
+        if not target_key:
+            raise RuntimeError("Object key is required.")
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        self._require_storage_space_owner(user, access, bucket_name)
+        storage_space = next(
+            (
+                item
+                for item in self.list_storage_spaces(user, access)
+                if item.id == space_id or item.internal_bucket_name == bucket_name
+            ),
+            None,
+        )
+        if storage_space is None:
+            raise RuntimeError("Storage space not found or not allowed.")
+        expires_at = self._normalize_storage_space_datetime(expires_at)
+        if expires_at is not None and expires_at <= utcnow():
+            raise RuntimeError("Public link expiration must be in the future.")
+        token = secrets.token_urlsafe(32)
+        link = DBPortalPublicLink(
+            token=token,
+            account_id=access.account.id,
+            bucket_name=bucket_name,
+            object_key=target_key,
+            label=label,
+            created_by_user_id=user.id,
+            created_by_email=user.email,
+            expires_at=expires_at,
+        )
+        self.db.add(link)
+        self.db.commit()
+        self.db.refresh(link)
+        return self._public_link_card(link, storage_space)
+
+    def revoke_storage_space_public_link(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        link_id: int,
+    ) -> list[PortalPublicLink]:
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        self._require_storage_space_owner(user, access, bucket_name)
+        link = (
+            self.db.query(DBPortalPublicLink)
+            .filter(
+                DBPortalPublicLink.id == link_id,
+                DBPortalPublicLink.account_id == access.account.id,
+                DBPortalPublicLink.bucket_name == bucket_name,
+            )
+            .first()
+        )
+        if link is None:
+            raise RuntimeError("Public link not found.")
+        link.revoked_at = utcnow()
+        self.db.add(link)
+        self.db.commit()
+        return self.list_storage_space_public_links(user, access, space_id, include_revoked=True)
+
+    def download_public_link(self, token: str):
+        link = self.db.query(DBPortalPublicLink).filter(DBPortalPublicLink.token == token).first()
+        if link is None:
+            raise RuntimeError("Public link not found.")
+        if self._public_link_status(link) != "Active":
+            raise RuntimeError("Public link is expired or revoked.")
+        account = self.db.query(S3Account).filter(S3Account.id == link.account_id).first()
+        if account is None:
+            raise RuntimeError("Public link account not found.")
+        access_key, secret_key = self._account_credentials(account)
+        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
+        client = get_s3_client(
+            access_key,
+            secret_key,
+            endpoint=endpoint,
+            region=region,
+            force_path_style=force_path_style,
+            verify_tls=verify_tls,
+        )
+        try:
+            resp = client.get_object(Bucket=link.bucket_name, Key=link.object_key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError("Unable to download this public link.") from exc
+        body = resp.get("Body")
+        if not body:
+            raise RuntimeError("Unable to download this public link.")
+        stream = body.iter_chunks(chunk_size=1024 * 1024) if hasattr(body, "iter_chunks") else body
+        filename = self._object_name(link.object_key) or "download"
+        return stream, resp.get("ContentType"), filename
+
     def _audit_metadata(self, log: AuditLog) -> dict[str, Any]:
         if not log.metadata_json:
             return {}
@@ -2037,9 +2508,16 @@ class PortalService:
         labels = {
             "upload_object": "Uploaded",
             "download_object": "Downloaded",
+            "create_folder": "Created folder",
+            "delete_object": "Deleted",
             "grant_storage_space_share": "Shared",
             "update_storage_space_share": "Updated share",
             "revoke_storage_space_share": "Removed share",
+            "create_storage_space": "Created storage space",
+            "update_storage_space": "Updated storage space",
+            "archive_storage_space": "Archived storage space",
+            "create_public_link": "Created public link",
+            "revoke_public_link": "Revoked public link",
         }
         return labels.get(action, action.replace("_", " ").title())
 
@@ -2189,42 +2667,37 @@ class PortalService:
                     )
                 )
 
-        now = datetime.now(timezone.utc)
+        now = utcnow()
         link_cutoff = now + timedelta(days=7)
-        link_logs = (
-            self.db.query(AuditLog)
-            .filter(AuditLog.scope == "portal", AuditLog.account_id == access.account.id)
-            .order_by(AuditLog.id.desc())
-            .limit(100)
+        visible_spaces = self._visible_storage_space_lookup(user, access)
+        public_links = (
+            self.db.query(DBPortalPublicLink)
+            .filter(
+                DBPortalPublicLink.account_id == access.account.id,
+                DBPortalPublicLink.revoked_at.is_(None),
+                DBPortalPublicLink.expires_at.isnot(None),
+                DBPortalPublicLink.expires_at >= now,
+                DBPortalPublicLink.expires_at <= link_cutoff,
+            )
+            .order_by(DBPortalPublicLink.expires_at.asc(), DBPortalPublicLink.id.asc())
+            .limit(20)
             .all()
         )
-        visible_spaces = self._visible_storage_space_lookup(user, access)
-        for log in link_logs:
-            metadata = self._audit_metadata(log)
-            raw_expires = metadata.get("expires_at") or metadata.get("expires")
-            if not raw_expires:
+        for link in public_links:
+            storage_space = visible_spaces.get(link.bucket_name)
+            if storage_space is None:
                 continue
-            storage_space = self._audit_storage_space(log, metadata, visible_spaces)
-            raw_space_id = self._audit_storage_space_id(log, metadata)
-            if raw_space_id is not None and storage_space is None:
-                continue
-            try:
-                expires_at = datetime.fromisoformat(str(raw_expires).replace("Z", "+00:00"))
-            except ValueError:
-                continue
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-            if now <= expires_at <= link_cutoff:
-                target = log.entity_id or metadata.get("link_name") or "shared link"
+            expires_at = self._normalize_storage_space_datetime(link.expires_at)
+            if expires_at is not None:
                 alerts.append(
                     PortalAlert(
-                        id=f"link-expiring-{log.id}",
+                        id=f"link-expiring-{link.id}",
                         tone="warning",
                         title="Shared link expiring",
-                        description=f"{target} expires soon.",
+                        description=f"{self._object_name(link.object_key)} expires soon.",
                         severity_label="Warning",
-                        storage_space_id=storage_space.id if storage_space else None,
-                        created_at=log.created_at,
+                        storage_space_id=storage_space.id,
+                        created_at=link.created_at,
                     )
                 )
                 break
