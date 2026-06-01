@@ -49,3 +49,39 @@ def test_ci_endpoint_payload_can_seed_two_lab_zones(monkeypatch):
     ]
     assert payload[0]["admin_access_key"] == payload[1]["admin_access_key"] == "admin-ak"
     assert payload[0]["ceph_admin_secret_key"] == payload[1]["ceph_admin_secret_key"] == "ceph-admin-sk"
+
+
+def test_ci_endpoint_payload_can_use_env_storage_endpoints():
+    storage_endpoints = [
+        {
+            "name": "s3-z1",
+            "endpoint_url": "https://s3-z1.example.test",
+            "provider": "ceph",
+            "region": "us-east-1",
+            "verify_tls": True,
+            "features": {
+                "admin": {"enabled": True, "endpoint": "https://admin-z1.example.test"},
+                "account": {"enabled": True, "endpoint": "https://admin-z1.example.test"},
+                "sns": {"enabled": True},
+            },
+            "admin_access_key": "admin-ak",
+            "admin_secret_key": "admin-sk",
+            "supervision_access_key": "supervision-ak",
+            "supervision_secret_key": "supervision-sk",
+            "ceph_admin_access_key": "ceph-admin-ak",
+            "ceph_admin_secret_key": "ceph-admin-sk",
+            "is_default": True,
+        }
+    ]
+    env = {"ENV_STORAGE_ENDPOINTS": json.dumps(storage_endpoints)}
+
+    assert json.loads(run_ci._build_endpoint_payload(env)) == storage_endpoints
+
+    run_ci._derive_ceph_test_env_from_storage_endpoints(env)
+
+    assert env["CEPH_TEST_LAB_S3_ENDPOINT"] == "https://s3-z1.example.test"
+    assert env["CEPH_TEST_RGW_ADMIN_ENDPOINT"] == "https://admin-z1.example.test"
+    assert env["CEPH_TEST_RGW_ADMIN_ACCESS_KEY"] == "admin-ak"
+    assert env["CEPH_TEST_SUPERVISION_SECRET_KEY"] == "supervision-sk"
+    assert env["CEPH_TEST_CEPH_ADMIN_ACCESS_KEY"] == "ceph-admin-ak"
+    assert env["CEPH_TEST_RGW_VERIFY_TLS"] == "true"
