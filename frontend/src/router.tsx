@@ -71,10 +71,6 @@ const loadPortalActivityPage = () => import("./features/portal/PortalActivityPag
 const loadPortalTransfersPage = () => import("./features/portal/PortalTransfersPage");
 const loadPortalUsagePage = () => import("./features/portal/PortalUsagePage");
 const loadPortalSettingsPage = () => import("./features/portal/PortalSettingsPage");
-const loadPortalUsersPage = () => import("./features/portal/PortalAdminMockPages").then((module) => ({ default: module.PortalUsersPage }));
-const loadPortalGroupsPage = () => import("./features/portal/PortalAdminMockPages").then((module) => ({ default: module.PortalGroupsPage }));
-const loadPortalPoliciesPage = () => import("./features/portal/PortalAdminMockPages").then((module) => ({ default: module.PortalPoliciesPage }));
-const loadPortalAccessKeysPage = () => import("./features/portal/PortalAdminMockPages").then((module) => ({ default: module.PortalAccessKeysPage }));
 const loadBrowserLayout = () => import("./features/browser/BrowserLayout");
 const loadCephAdminLayout = () => import("./features/cephAdmin/CephAdminLayout");
 const loadCephAdminDashboard = () => import("./features/cephAdmin/CephAdminDashboard");
@@ -143,10 +139,6 @@ const PortalActivityPage = lazy(loadPortalActivityPage);
 const PortalTransfersPage = lazy(loadPortalTransfersPage);
 const PortalUsagePage = lazy(loadPortalUsagePage);
 const PortalSettingsPage = lazy(loadPortalSettingsPage);
-const PortalUsersPage = lazy(loadPortalUsersPage);
-const PortalGroupsPage = lazy(loadPortalGroupsPage);
-const PortalPoliciesPage = lazy(loadPortalPoliciesPage);
-const PortalAccessKeysPage = lazy(loadPortalAccessKeysPage);
 const BrowserLayout = lazy(loadBrowserLayout);
 const CephAdminLayout = lazy(loadCephAdminLayout);
 const CephAdminDashboard = lazy(loadCephAdminDashboard);
@@ -578,10 +570,6 @@ export function createAppRoutes() {
               <Route path="activity" element={<PortalActivityPage />} />
               <Route path="transfers" element={<PortalTransfersPage />} />
               <Route path="usage" element={<PortalUsagePage />} />
-              <Route path="users" element={<PortalUsersPage />} />
-              <Route path="groups" element={<PortalGroupsPage />} />
-              <Route path="policies" element={<PortalPoliciesPage />} />
-              <Route path="access-keys" element={<PortalAccessKeysPage />} />
               <Route path="settings" element={<PortalSettingsPage />} />
             </Route>
           </Route>

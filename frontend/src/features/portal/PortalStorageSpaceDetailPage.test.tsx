@@ -31,49 +31,8 @@ const mocks = vi.hoisted(() => ({
           objectCount: 12,
           createdAt: "2026-03-10T10:00:00Z",
           shareCount: 3,
-          defaultPrefix: "raw-data/2024/03/",
-          files: [
-            {
-              id: "folder-1",
-              name: "01-fastq",
-              kind: "folder",
-              path: "raw-data/2024/03/01-fastq/",
-              updatedLabel: "12 mars 2024, 10:10",
-              ownerLabel: "Workspace",
-              typeLabel: "Dossier",
-            },
-            {
-              id: "file-1",
-              name: "sample_001.fastq.gz",
-              kind: "file",
-              path: "raw-data/2024/03/sample_001.fastq.gz",
-              sizeBytes: 512,
-              updatedLabel: "12 mars 2024, 10:15",
-              ownerLabel: "You",
-              mimeType: "application/gzip",
-              typeLabel: "Fichier",
-            },
-          ],
-          objectDetail: {
-            name: "sample_001.fastq.gz",
-            path: "raw-data/2024/03/sample_001.fastq.gz",
-            sizeBytes: 512,
-            type: "application/gzip",
-            lastModified: "12 mars 2024",
-            etag: "mock",
-            storageClass: "STANDARD",
-            encryption: "AES-256",
-            objectUrl: "s3://research-data/raw-data/2024/03/sample_001.fastq.gz",
-            downloadUrl: "https://s3.example.com/research-data/sample_001.fastq.gz?download=1",
-            versions: [],
-            events: [],
-            previewLines: [],
-          },
         },
       ],
-      sharesWithMe: [],
-      sharesByMe: [],
-      publicLinks: [],
       activity: [
         {
           id: "activity-1",
@@ -136,7 +95,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     expect(screen.getByRole("heading", { name: "Research Data" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Téléverser" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "+ Nouveau dossier" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "+ Nouveau dossier" })).not.toBeInTheDocument();
     expect(screen.getByText("Racine")).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "01-fastq" })).toHaveAttribute(
       "href",
@@ -149,6 +108,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     await waitFor(() => {
       expect(mocks.listObjectsMock).toHaveBeenCalledWith("101", "research-data", { prefix: "raw-data/2024/03/" });
     });
+    expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Open in Browser/i)).not.toBeInTheDocument();
   });
 });

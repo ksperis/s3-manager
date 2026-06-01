@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
-import { storageSpacePath } from "./portalWorkspaceMockData";
+import { storageSpacePath } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import {
   PortalV3Badge,
@@ -37,6 +37,14 @@ function transferTone(status: string) {
   return "neutral";
 }
 
+function EmptyState({ children }: { children: string }) {
+  return (
+    <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-4 text-xs font-semibold text-slate-500">
+      {children}
+    </div>
+  );
+}
+
 export default function PortalDashboard() {
   const { workspace, healthAlerts, loading, error, hasAccountContext, accountError, accountLoading, traffic, trafficLoading } =
     usePortalWorkspaceData({ includeTraffic: true, includeHealth: true });
@@ -50,6 +58,9 @@ export default function PortalDashboard() {
     (traffic?.series ?? []).length > 0
       ? (traffic?.series ?? []).map((point) => point.bytes_in + point.bytes_out)
       : workspace.usageTrend.map((point) => point.value);
+  const trendLabels = (traffic?.series ?? []).map((point) =>
+    new Date(point.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  );
 
   if (accountLoading || loading) {
     return (
@@ -82,44 +93,53 @@ export default function PortalDashboard() {
         description={`Welcome back, ${workspace.accountName}`}
         right={
           <div className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm">
-            <span>May 10 - Jun 10, 2024</span>
-            <span className="text-slate-300">refresh</span>
+            <span>Current period</span>
           </div>
         }
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <PortalV3MetricCard label="Total Storage" value={formatBytes(workspace.usedBytes)} delta={`${formatPercentage(percent(workspace.usedBytes, workspace.quotaBytes))} used`} />
-        <PortalV3MetricCard label="Total Objects" value={formatCompactNumber(workspace.usedObjects)} delta="+12% vs last month" tone="blue" />
-        <PortalV3MetricCard label="Requests (30d)" value={formatCompactNumber(workspace.requestCount)} delta="+16% vs last month" tone="green" />
-        <PortalV3MetricCard label="Data Out" value={formatBytes(workspace.dataOutBytes)} delta="+9% vs last month" tone="amber" />
+        <PortalV3MetricCard label="Total Storage" value={formatBytes(workspace.usedBytes)} delta={workspace.quotaBytes ? `${formatPercentage(percent(workspace.usedBytes, workspace.quotaBytes))} used` : "Quota unavailable"} />
+        <PortalV3MetricCard label="Total Objects" value={formatCompactNumber(workspace.usedObjects)} delta={workspace.usedObjects == null ? "Unavailable" : "Tracked"} tone="blue" />
+        <PortalV3MetricCard label="Requests" value={formatCompactNumber(workspace.requestCount)} delta={trafficLoading ? "Loading traffic" : workspace.requestCount == null ? "Unavailable" : "From traffic"} tone="green" />
+        <PortalV3MetricCard label="Data Out" value={formatBytes(workspace.dataOutBytes)} delta={trafficLoading ? "Loading traffic" : workspace.dataOutBytes == null ? "Unavailable" : "From traffic"} tone="amber" />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
         <PortalV3Card title="Storage usage">
-          <div className="grid gap-4 md:grid-cols-[220px_1fr] md:items-center">
-            <PortalV3Donut segments={donutSegments} center={formatBytes(workspace.usedBytes)} caption={`of ${formatBytes(workspace.quotaBytes)} used`} />
-            <div className="space-y-3">
-              {topSpaces.map((space, index) => (
-                <div key={space.id} className="flex items-center justify-between gap-3 text-xs">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="h-2 w-2 rounded-full" style={{ background: DONUT_COLORS[index] ?? "#94a3b8" }} />
-                    <span className="truncate font-semibold text-slate-700">{space.name}</span>
+          {topSpaces.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-[220px_1fr] md:items-center">
+              <PortalV3Donut segments={donutSegments} center={formatBytes(workspace.usedBytes)} caption={workspace.quotaBytes ? `of ${formatBytes(workspace.quotaBytes)} used` : "quota unavailable"} />
+              <div className="space-y-3">
+                {topSpaces.map((space, index) => (
+                  <div key={space.id} className="flex items-center justify-between gap-3 text-xs">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ background: DONUT_COLORS[index] ?? "#94a3b8" }} />
+                      <span className="truncate font-semibold text-slate-700">{space.name}</span>
+                    </div>
+                    <span className="shrink-0 text-slate-500">{formatBytes(space.usedBytes)}</span>
                   </div>
-                  <span className="shrink-0 text-slate-500">{formatBytes(space.usedBytes)}</span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <EmptyState>No Storage Space usage available.</EmptyState>
+          )}
         </PortalV3Card>
 
         <PortalV3Card title="Usage over time">
-          <PortalV3MiniLineChart values={trendValues} />
-          <div className="mt-2 flex justify-between text-[11px] font-semibold text-slate-400">
-            {workspace.usageTrend.map((point) => (
-              <span key={point.label}>{point.label}</span>
-            ))}
-          </div>
+          {trendValues.length > 0 ? (
+            <>
+              <PortalV3MiniLineChart values={trendValues} />
+              <div className="mt-2 flex justify-between text-[11px] font-semibold text-slate-400">
+                {(trendLabels.length > 0 ? trendLabels : workspace.usageTrend.map((point) => point.label)).map((label) => (
+                  <span key={label}>{label}</span>
+                ))}
+              </div>
+            </>
+          ) : (
+            <EmptyState>No usage trend available.</EmptyState>
+          )}
           {trafficLoading ? <div className="mt-2 text-[11px] text-slate-400">Loading live trend...</div> : null}
         </PortalV3Card>
       </section>
@@ -136,6 +156,7 @@ export default function PortalDashboard() {
                 </div>
               </div>
             ))}
+            {topSpaces.length === 0 ? <EmptyState>No Storage Spaces to display.</EmptyState> : null}
           </div>
         </PortalV3Card>
 
@@ -150,6 +171,7 @@ export default function PortalDashboard() {
                 </div>
               </div>
             ))}
+            {workspace.activity.length === 0 ? <EmptyState>No recent activity.</EmptyState> : null}
           </div>
         </PortalV3Card>
 
@@ -183,6 +205,7 @@ export default function PortalDashboard() {
                 <PortalV3Badge tone={alertTone(alert.tone)}>{alert.severityLabel ?? "Info"}</PortalV3Badge>
               </div>
             ))}
+            {alerts.length === 0 ? <EmptyState>No alerts to display.</EmptyState> : null}
           </div>
         </PortalV3Card>
       </section>

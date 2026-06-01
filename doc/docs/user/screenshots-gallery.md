@@ -195,8 +195,8 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
   </figure>
   <figure data-thumb-label="Object Detail">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-object-detail.light.png" alt="Portal object detail page with file path, general information, quick actions, preview, and recent events" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-object-detail.dark.png" alt="Portal object detail page with file path, general information, quick actions, preview, and recent events" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-object-detail.light.png" alt="Portal object detail page with file path, general information, quick actions, and unavailable preview and event states" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-object-detail.dark.png" alt="Portal object detail page with file path, general information, quick actions, and unavailable preview and event states" loading="lazy">
     </div>
     <figcaption><strong>Object detail.</strong> File details focus on safe user-facing metadata, quick actions, and recent events.</figcaption>
   </figure>

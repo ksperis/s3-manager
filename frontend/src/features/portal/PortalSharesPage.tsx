@@ -13,7 +13,7 @@ import {
 } from "../../api/portal";
 import { extractApiError } from "../../utils/apiError";
 import { PortalV3Badge, PortalV3Card, PortalV3Page, PortalV3PageHeader } from "./PortalV3Components";
-import type { PortalWorkspaceRole, PortalWorkspaceShare } from "./portalWorkspaceMockData";
+import type { PortalWorkspaceRole } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 const tabs = [
@@ -34,7 +34,6 @@ type ShareRow = {
   access: PortalWorkspaceRole;
   expiresLabel?: string;
   activityLabel: string;
-  source: "api" | "mock";
 };
 
 function roleTone(role: PortalWorkspaceRole) {
@@ -52,21 +51,6 @@ function fromApiShare(share: PortalStorageSpaceShare): ShareRow {
     person: share.email,
     access: share.role,
     activityLabel: share.activity_label ?? "Active",
-    source: "api",
-  };
-}
-
-function fromMockShare(share: PortalWorkspaceShare): ShareRow {
-  return {
-    id: share.id,
-    userId: null,
-    spaceId: share.spaceId,
-    spaceName: share.spaceName,
-    person: share.person,
-    access: share.access,
-    expiresLabel: share.expiresLabel,
-    activityLabel: share.activityLabel,
-    source: "mock",
   };
 }
 
@@ -102,7 +86,7 @@ function SharesTable({
               <td className="font-bold text-slate-950">{share.spaceName}</td>
               <td>{share.person}</td>
               <td>
-                {editable && share.source === "api" && share.userId ? (
+                {editable && share.userId ? (
                   <select
                     className="ui-control h-8 py-1.5 text-xs"
                     value={share.access}
@@ -122,7 +106,7 @@ function SharesTable({
               <td>{share.activityLabel}</td>
               {editable ? (
                 <td className="text-right">
-                  {share.source === "api" && share.userId ? (
+                  {share.userId ? (
                     <button
                       type="button"
                       disabled={busyShareId === share.id}
@@ -131,9 +115,7 @@ function SharesTable({
                     >
                       Revoke
                     </button>
-                  ) : (
-                    <span className="text-[11px] font-semibold text-slate-400">Preview</span>
-                  )}
+                  ) : null}
                 </td>
               ) : null}
             </tr>
@@ -202,19 +184,12 @@ export default function PortalSharesPage() {
   }, [accountIdForApi, spaceIds, workspace.spaces]);
 
   const rows = useMemo(() => {
-    if (apiShares) {
-      return {
-        with: apiShares.filter((share) => share.direction === "with_me").map(fromApiShare),
-        by: apiShares.filter((share) => share.direction === "by_me").map(fromApiShare),
-        links: workspace.publicLinks.map(fromMockShare),
-      };
-    }
     return {
-      with: workspace.sharesWithMe.map(fromMockShare),
-      by: workspace.sharesByMe.map(fromMockShare),
-      links: workspace.publicLinks.map(fromMockShare),
+      with: (apiShares ?? []).filter((share) => share.direction === "with_me").map(fromApiShare),
+      by: (apiShares ?? []).filter((share) => share.direction === "by_me").map(fromApiShare),
+      links: [],
     };
-  }, [apiShares, workspace.publicLinks, workspace.sharesByMe, workspace.sharesWithMe]);
+  }, [apiShares]);
 
   const refreshSpaceShares = async (spaceId: string) => {
     if (!accountIdForApi) return;
@@ -293,7 +268,7 @@ export default function PortalSharesPage() {
       <PortalV3PageHeader title="Shares" description="Manage shared access with Viewer, Editor, and Owner roles." />
       {sharesError ? (
         <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-          {sharesError} Preview data may be shown.
+          {sharesError}
         </div>
       ) : null}
       <PortalV3Card>
@@ -310,47 +285,54 @@ export default function PortalSharesPage() {
           ))}
         </div>
         {sharesLoading ? <div className="mb-3 text-xs font-semibold text-slate-500">Loading share permissions...</div> : null}
-        <SharesTable
-          shares={shares}
-          editable={activeTab === "by"}
-          busyShareId={busyShareId}
-          onRoleChange={handleRoleChange}
-          onRevoke={handleRevoke}
-        />
+        {activeTab === "links" ? (
+          <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-6 text-center text-xs font-semibold text-slate-500">
+            Public link management is unavailable in Portal for this release.
+          </div>
+        ) : (
+          <SharesTable
+            shares={shares}
+            editable={activeTab === "by"}
+            busyShareId={busyShareId}
+            onRoleChange={handleRoleChange}
+            onRevoke={handleRevoke}
+          />
+        )}
         <div className="mt-4 flex items-center justify-between text-[11px] font-semibold text-slate-500">
-          <span>1-{shares.length} of {shares.length}</span>
-          <span>‹ 1 2 3 4 ›</span>
+          <span>{shares.length} of {shares.length}</span>
         </div>
       </PortalV3Card>
 
-      <PortalV3Card title="Create a new share">
-        <div className="grid gap-3 md:grid-cols-[1fr_180px_160px_auto]">
-          <select className="ui-control h-8 py-1.5 text-xs" value={selectedSpaceId} onChange={(event) => setSelectedSpaceId(event.target.value)}>
-            {workspace.spaces.map((space) => (
-              <option key={space.id} value={space.id}>{space.name}</option>
-            ))}
-          </select>
-          <input
-            className="ui-control h-8 text-xs"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="user@example.com"
-          />
-          <select className="ui-control h-8 py-1.5 text-xs" value={selectedRole} onChange={(event) => setSelectedRole(event.target.value as PortalStorageSpaceRole)}>
-            {roles.map((role) => (
-              <option key={role} value={role}>{role}</option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={!accountIdForApi || !selectedSpaceId || !email.trim() || busyShareId === "new"}
-            onClick={handleCreateShare}
-            className="h-8 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Create share
-          </button>
-        </div>
-      </PortalV3Card>
+      {activeTab !== "links" ? (
+        <PortalV3Card title="Create a new share">
+          <div className="grid gap-3 md:grid-cols-[1fr_180px_160px_auto]">
+            <select className="ui-control h-8 py-1.5 text-xs" value={selectedSpaceId} onChange={(event) => setSelectedSpaceId(event.target.value)}>
+              {workspace.spaces.map((space) => (
+                <option key={space.id} value={space.id}>{space.name}</option>
+              ))}
+            </select>
+            <input
+              className="ui-control h-8 text-xs"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="user@example.com"
+            />
+            <select className="ui-control h-8 py-1.5 text-xs" value={selectedRole} onChange={(event) => setSelectedRole(event.target.value as PortalStorageSpaceRole)}>
+              {roles.map((role) => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!accountIdForApi || !selectedSpaceId || !email.trim() || busyShareId === "new"}
+              onClick={handleCreateShare}
+              className="h-8 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Create share
+            </button>
+          </div>
+        </PortalV3Card>
+      ) : null}
     </PortalV3Page>
   );
 }

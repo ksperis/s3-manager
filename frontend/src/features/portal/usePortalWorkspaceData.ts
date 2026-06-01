@@ -27,7 +27,7 @@ import {
   type PortalWorkspaceActivityItem,
   type PortalWorkspaceAlert,
   type PortalWorkspaceTransfer,
-} from "./portalWorkspaceMockData";
+} from "./portalWorkspaceModel";
 import { usePortalAccountContext } from "./PortalAccountContext";
 import { listPortalLocalTransfers, subscribePortalTransferUpdates } from "./portalTransferTracker";
 
@@ -394,14 +394,18 @@ export function usePortalWorkspaceData({
       });
     return {
       ...base,
-      activity: activity ? activity.map(activityFromApi) : base.activity,
-      transfers:
-        transfers || localTransfers.length > 0
-          ? [...localTransfers, ...(transfers ?? []).map(transferFromApi)]
-          : base.transfers,
-      alerts: alerts ? alerts.map(alertFromApi) : base.alerts,
+      activity: activity ? activity.map(activityFromApi) : [],
+      transfers: [...localTransfers, ...(transfers ?? []).map(transferFromApi)],
+      alerts: alerts ? alerts.map(alertFromApi) : [],
+      usageTrend: (traffic?.series ?? []).map((point) => ({
+        label: new Date(point.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        value: point.bytes_in + point.bytes_out,
+      })),
+      requestCount: traffic?.totals.ops ?? null,
+      dataInBytes: traffic?.totals.bytes_in ?? null,
+      dataOutBytes: traffic?.totals.bytes_out ?? null,
     };
-  }, [activity, alerts, localTransfers, selectedAccount, state, storageSpaces, transfers, usage]);
+  }, [activity, alerts, localTransfers, selectedAccount, state, storageSpaces, traffic, transfers, usage]);
   const healthAlerts = useMemo<PortalWorkspaceAlert[]>(() => {
     if (!health) return [];
     const ongoingIncident = health.incidents.find(

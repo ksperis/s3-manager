@@ -23,10 +23,6 @@ describe("portal routes", () => {
       "activity",
       "transfers",
       "usage",
-      "users",
-      "groups",
-      "policies",
-      "access-keys",
       "settings",
     ]);
     expect(childPaths).not.toContain("browser");

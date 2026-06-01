@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPortalWorkspaceModel } from "./portalWorkspaceMockData";
+import { buildPortalWorkspaceModel } from "./portalWorkspaceModel";
 
 describe("buildPortalWorkspaceModel", () => {
   it("uses canonical storage spaces instead of PortalState buckets", () => {
@@ -56,5 +56,12 @@ describe("buildPortalWorkspaceModel", () => {
     });
 
     expect(workspace.spaces).toEqual([]);
+    expect(workspace.activity).toEqual([]);
+    expect(workspace.transfers).toEqual([]);
+    expect(workspace.alerts).toEqual([]);
+    expect(workspace.usageTrend).toEqual([]);
+    expect(workspace.requestCount).toBeNull();
+    expect(workspace.dataInBytes).toBeNull();
+    expect(workspace.dataOutBytes).toBeNull();
   });
 });

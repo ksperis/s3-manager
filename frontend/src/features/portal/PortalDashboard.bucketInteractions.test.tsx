@@ -36,24 +36,8 @@ const mocks = vi.hoisted(() => ({
           objectCount: 12,
           createdAt: "2026-03-10T10:00:00Z",
           shareCount: 3,
-          files: [],
-          objectDetail: {
-            name: "image_001.jpg",
-            path: "research-data/2024/image_001.jpg",
-            sizeBytes: 512,
-            type: "image/jpeg",
-            lastModified: "Jun 10, 2024",
-            etag: "mock",
-            storageClass: "STANDARD",
-            encryption: "AES-256",
-            objectUrl: "https://s3.example.com/research-data/image_001.jpg",
-            downloadUrl: "https://s3.example.com/research-data/image_001.jpg?download=1",
-          },
         },
       ],
-      sharesWithMe: [],
-      sharesByMe: [],
-      publicLinks: [],
       activity: [
         {
           id: "activity-1",
@@ -89,10 +73,6 @@ const mocks = vi.hoisted(() => ({
           severityLabel: "Warning",
         },
       ],
-      adminUsers: [],
-      groups: [],
-      policies: [],
-      accessKeys: [],
     },
     traffic: {
       series: [],
@@ -132,6 +112,7 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.getByText("Recent activity")).toBeInTheDocument();
     expect(screen.getByText("Recent transfers")).toBeInTheDocument();
     expect(screen.getByText("Alerts")).toBeInTheDocument();
+    expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Open in Browser/i)).not.toBeInTheDocument();
   });
 

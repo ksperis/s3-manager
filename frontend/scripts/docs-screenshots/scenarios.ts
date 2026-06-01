@@ -904,7 +904,7 @@ export const scenarios: DocScreenshotScenario[] = [
   {
     id: "gallery-portal-object-list",
     docPage: "user/screenshots-gallery.md",
-    route: "/portal/storage-spaces/genomics-2026",
+    route: "/portal/storage-spaces/genomics-2026?prefix=raw-data%2F2024%2F03%2F",
     outputBasename: "portal-object-list",
     waitFor: "h1:has-text('genomics-2026')",
     storage: { ...baseStorage(storageUser), selectedWorkspace: "portal" },

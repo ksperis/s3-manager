@@ -2,17 +2,20 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { downloadPortalStorageSpaceObject } from "../../api/portal";
+import {
+  downloadPortalStorageSpaceObject,
+  listPortalStorageSpaceObjects,
+  type PortalStorageObject,
+  type PortalStorageObjectListing,
+} from "../../api/portal";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
 import {
   storageSpacePath,
-  type PortalWorkspaceFile,
-  type PortalWorkspaceObjectDetail,
   type PortalWorkspaceSpace,
-} from "./portalWorkspaceMockData";
+} from "./portalWorkspaceModel";
 import { PortalV3Card, PortalV3Page } from "./PortalV3Components";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
@@ -41,28 +44,27 @@ function objectName(path: string): string {
   return parts.at(-1) ?? path;
 }
 
-function fallbackDetail(space: PortalWorkspaceSpace, file: PortalWorkspaceFile): PortalWorkspaceObjectDetail {
-  return {
-    name: file.name,
-    path: file.path,
-    sizeBytes: file.sizeBytes ?? 0,
-    type: file.mimeType ?? "application/octet-stream",
-    lastModified: file.updatedLabel,
-    etag: "\"mocked-object-etag\"",
-    storageClass: "STANDARD",
-    encryption: "AES256 (SSE-S3)",
-    objectUrl: `s3://${space.internalName}/${file.path}`,
-    downloadUrl: `https://s3.example.com/${space.internalName}/${file.path}?download=1`,
-    versions: [
-      { id: "null (actuelle)", sizeBytes: file.sizeBytes ?? 0, lastModified: file.updatedLabel, actionLabel: "Actuelle", current: true },
-      { id: "8d91fa...77c2", sizeBytes: file.sizeBytes ?? 0, lastModified: "Hier, 18:22:11", actionLabel: "Restaurer" },
-    ],
-    events: [
-      { id: "downloaded", label: "Objet téléchargé", actor: "Alice", timeLabel: "Il y a 2 min" },
-      { id: "shared", label: "Objet partagé", actor: "team", timeLabel: "Il y a 1 h" },
-    ],
-    previewLines: ["Aperçu mocké de l'objet sélectionné.", "Le contenu réel sera connecté aux APIs portail plus tard."],
-  };
+function parentPrefix(path: string): string {
+  const parts = path.split("/").filter(Boolean);
+  parts.pop();
+  return parts.length > 0 ? `${parts.join("/")}/` : "";
+}
+
+function formatObjectDate(raw?: string | null): string {
+  if (!raw) return "-";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function objectFromListing(path: string, listing: PortalStorageObjectListing | null): PortalStorageObject | null {
+  return listing?.objects.find((item) => item.key === path) ?? null;
 }
 
 function Breadcrumbs({ space, objectPath }: { space: PortalWorkspaceSpace; objectPath: string }) {
@@ -118,12 +120,29 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function QuickAction({ label, tone = "blue", onClick }: { label: string; tone?: "blue" | "rose"; onClick?: () => void }) {
+function QuickAction({
+  label,
+  tone = "blue",
+  onClick,
+  disabled = false,
+}: {
+  label: string;
+  tone?: "blue" | "rose";
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={tone === "rose" ? "text-left text-xs font-bold text-rose-600 hover:text-rose-700" : "text-left text-xs font-bold text-blue-700 hover:text-blue-800"}
+      disabled={disabled}
+      className={
+        disabled
+          ? "cursor-not-allowed text-left text-xs font-bold text-slate-400"
+          : tone === "rose"
+            ? "text-left text-xs font-bold text-rose-600 hover:text-rose-700"
+            : "text-left text-xs font-bold text-blue-700 hover:text-blue-800"
+      }
     >
       {label}
     </button>
@@ -135,18 +154,57 @@ export default function PortalObjectDetailPage() {
   const [activeTab, setActiveTab] = useState("Aperçu");
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [objectListing, setObjectListing] = useState<PortalStorageObjectListing | null>(null);
+  const [objectLoading, setObjectLoading] = useState(false);
+  const [objectError, setObjectError] = useState<string | null>(null);
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
   const decodedSpaceId = decodeRouteValue(params.spaceId);
   const objectPath = decodeObjectPath(params["*"]);
-  const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? workspace.spaces[0] ?? null;
+  const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
+  const objectPrefix = parentPrefix(objectPath);
 
-  const { object, sourceFile } = useMemo(() => {
-    if (!space) return { object: null, sourceFile: null };
-    const file = space.files.find((item) => item.kind === "file" && item.path === objectPath) ?? space.files.find((item) => item.kind === "file") ?? null;
-    if (!file) return { object: space.objectDetail, sourceFile: null };
-    const detail = space.objectDetail.path === file.path ? space.objectDetail : fallbackDetail(space, file);
-    return { object: detail, sourceFile: file };
-  }, [objectPath, space]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!space || !accountIdForApi || !objectPath) {
+      setObjectListing(null);
+      setObjectLoading(false);
+      setObjectError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setObjectLoading(true);
+    setObjectError(null);
+    listPortalStorageSpaceObjects(accountIdForApi, space.id, { prefix: objectPrefix })
+      .then((listing) => {
+        if (!cancelled) setObjectListing(listing);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) {
+          setObjectListing(null);
+          setObjectError(extractApiError(err, "Impossible de charger les métadonnées de cet objet."));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setObjectLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, objectPath, objectPrefix, space]);
+
+  const listedObject = useMemo(() => objectFromListing(objectPath, objectListing), [objectListing, objectPath]);
+  const object = useMemo(
+    () => ({
+      name: listedObject?.name || objectName(objectPath),
+      path: listedObject?.key || objectPath,
+      sizeBytes: listedObject?.size ?? null,
+      type: "Unavailable",
+      lastModified: formatObjectDate(listedObject?.last_modified),
+    }),
+    [listedObject, objectPath]
+  );
 
   if (accountLoading || loading) {
     return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Loading object...</div></PortalV3Page>;
@@ -156,12 +214,24 @@ export default function PortalObjectDetailPage() {
     return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-rose-600">{accountError ?? error}</div></PortalV3Page>;
   }
 
-  if (!hasAccountContext || !space || !object) {
+  if (!hasAccountContext || !space || !objectPath) {
     return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Object not available.</div></PortalV3Page>;
   }
 
-  const displayPath = `s3://${space.internalName}/${object.path}`;
-  const parentPrefix = object.path.split("/").slice(0, -1).join("/");
+  const displayPath = object.path;
+  const parentPath = object.path.split("/").slice(0, -1).join("/");
+  const copyPath = async () => {
+    if (!navigator.clipboard) {
+      setDownloadMessage("Copie indisponible dans ce navigateur.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(object.path);
+      setDownloadMessage("Chemin copié.");
+    } catch {
+      setDownloadMessage("Copie indisponible dans ce navigateur.");
+    }
+  };
   const handleDownload = async () => {
     if (!accountIdForApi || downloading) return;
     const transferId = startPortalTransfer({
@@ -170,7 +240,7 @@ export default function PortalObjectDetailPage() {
       spaceName: space.name,
       name: object.name || objectName(object.path),
       direction: "Download",
-      sizeBytes: object.sizeBytes,
+      sizeBytes: object.sizeBytes ?? undefined,
     });
     setDownloading(true);
     setDownloadMessage(null);
@@ -200,11 +270,6 @@ export default function PortalObjectDetailPage() {
     <PortalV3Page>
       <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-5 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <Breadcrumbs space={space} objectPath={object.path} />
-        <div className="flex items-center gap-2">
-          <input type="search" aria-label="Rechercher" placeholder="Rechercher..." className="h-8 w-52 rounded-md border border-slate-200 px-3 text-xs font-medium shadow-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100" />
-          <button type="button" aria-label="Notifications" className="h-8 w-8 rounded-md border border-slate-200 bg-white text-xs font-bold text-slate-600 shadow-sm">!</button>
-          <button type="button" aria-label="Aide" className="h-8 w-8 rounded-md border border-slate-200 bg-white text-xs font-bold text-slate-600 shadow-sm">?</button>
-        </div>
       </div>
 
       <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -214,7 +279,7 @@ export default function PortalObjectDetailPage() {
             <h1 className="truncate text-[26px] font-bold leading-8 text-slate-950">{object.name || objectName(object.path)}</h1>
             <div className="mt-3 flex max-w-2xl items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
               <span className="min-w-0 flex-1 truncate">{displayPath}</span>
-              <button type="button" className="shrink-0 text-blue-700">Copier</button>
+              <button type="button" onClick={copyPath} className="shrink-0 text-blue-700">Copier</button>
             </div>
           </div>
         </div>
@@ -222,11 +287,8 @@ export default function PortalObjectDetailPage() {
           <button type="button" onClick={handleDownload} disabled={!accountIdForApi || downloading} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
             {downloading ? "Téléchargement..." : "Télécharger"}
           </button>
-          <button type="button" className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700">
+          <button type="button" disabled className="inline-flex h-9 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-400 shadow-sm">
             Partager
-          </button>
-          <button type="button" className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700">
-            Actions <span className="ml-2 text-slate-400">⌄</span>
           </button>
         </div>
       </header>
@@ -234,6 +296,11 @@ export default function PortalObjectDetailPage() {
       {downloadMessage ? (
         <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
           {downloadMessage}
+        </div>
+      ) : null}
+      {objectError ? (
+        <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+          {objectError}
         </div>
       ) : null}
 
@@ -260,42 +327,36 @@ export default function PortalObjectDetailPage() {
             <DetailRow label="Dernière modification" value={object.lastModified} />
             <DetailRow label="Chemin" value={object.path} />
           </dl>
+          {objectLoading ? <div className="mt-4 text-[11px] font-semibold text-slate-400">Chargement des métadonnées...</div> : null}
         </PortalV3Card>
 
         <PortalV3Card title="Actions rapides">
           <div className="grid gap-4">
             <QuickAction label="Télécharger" onClick={handleDownload} />
-            <QuickAction label="Obtenir le lien de l'objet" />
-            <QuickAction label="Copier le chemin" />
-            <QuickAction label="Partager cet objet" />
-            <QuickAction label="Supprimer l'objet" tone="rose" />
+            <QuickAction label="Obtenir le lien de l'objet" disabled />
+            <QuickAction label="Copier le chemin" onClick={copyPath} />
+            <QuickAction label="Partager cet objet" disabled />
+            <QuickAction label="Supprimer l'objet" tone="rose" disabled />
           </div>
         </PortalV3Card>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
         <PortalV3Card title="Aperçu rapide">
-          <pre className="min-h-28 overflow-x-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-[11px] leading-5 text-slate-500">{object.previewLines.join("\n")}</pre>
+          <div className="min-h-28 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-500">
+            Aperçu indisponible pour cet objet.
+          </div>
           <div className="mt-3 text-right text-xs font-bold text-blue-700">
-            <Link to={`${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPrefix ? `${parentPrefix}/` : "")}`}>
+            <Link to={`${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPath ? `${parentPath}/` : "")}`}>
               Ouvrir dans la liste
             </Link>
           </div>
         </PortalV3Card>
 
         <PortalV3Card title="Événements récents">
-          <div className="grid gap-4">
-            {object.events.map((event) => (
-              <div key={event.id} className="grid grid-cols-[1fr_auto] gap-3 text-xs">
-                <div>
-                  <div className="font-bold text-slate-900">{event.label}</div>
-                  <div className="mt-1 text-[11px] font-medium text-slate-500">par {event.actor}</div>
-                </div>
-                <div className="text-[11px] font-semibold text-slate-400">{event.timeLabel}</div>
-              </div>
-            ))}
+          <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-6 text-center text-xs font-semibold text-slate-500">
+            Aucun événement objet disponible.
           </div>
-          {sourceFile ? <div className="mt-4 text-[11px] font-semibold text-slate-400">Objet source: {sourceFile.name}</div> : null}
         </PortalV3Card>
       </section>
     </PortalV3Page>

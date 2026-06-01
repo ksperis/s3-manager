@@ -34,7 +34,8 @@ implementation:
 - `Usage & Analytics`, activity, transfers, shares, and alerts exist, but still
   need integration polish, empty-state tuning, and real-world QA.
 - `/portal/users`, `/portal/groups`, `/portal/policies`, and
-  `/portal/access-keys` are still mock/read-only pages.
+  `/portal/access-keys` mock/read-only pages have been removed from the
+  production Portal route tree.
 - Visual responsive QA and screenshots remain incomplete from the previous TODO.
 
 ## Non-Negotiable Rules
@@ -85,23 +86,23 @@ Objective: validate the existing Portal V3 UI before adding more behavior.
 
 Objective: make mock usage explicit, then remove it from production paths.
 
-- [ ] Inventory all production imports and usages of `portalWorkspaceMockData.ts`.
-- [ ] Inventory all user-visible text containing `mock`, `mocked`,
+- [x] Inventory all production imports and usages of `portalWorkspaceMockData.ts`.
+- [x] Inventory all user-visible text containing `mock`, `mocked`,
   `preview`, or placeholder-only behavior in Portal pages.
-- [ ] Define a frontend fallback policy:
+- [x] Define a frontend fallback policy:
   - use real API data first;
   - show an empty state when data is absent;
   - use local deterministic mock data only in tests or isolated demo fixtures.
-- [ ] Replace mock object metadata and previews with real API data or an
+- [x] Replace mock object metadata and previews with real API data or an
   unavailable state.
-- [ ] Replace mock public links with real public-link data or hide the section
+- [x] Replace mock public links with real public-link data or hide the section
   behind a clear unavailable state.
-- [ ] Replace mock admin pages with real pages, or remove those routes from
+- [x] Replace mock admin pages with real pages, or remove those routes from
   Portal if they are out of scope.
-- [ ] Remove fake action success messages such as local-only create folder,
+- [x] Remove fake action success messages such as local-only create folder,
   create user, create group, create policy, and create access key messages from
   production UI.
-- [ ] Add tests proving Portal pages do not render mock-only strings in normal
+- [x] Add tests proving Portal pages do not render mock-only strings in normal
   production states.
 
 ## Step 3 - Advanced Storage Spaces

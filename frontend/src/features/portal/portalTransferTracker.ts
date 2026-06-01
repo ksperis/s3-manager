@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { PortalWorkspaceTransfer } from "./portalWorkspaceMockData";
+import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 
 const STORAGE_KEY = "portal:v3:transfers";
 const UPDATE_EVENT = "portal-transfers-updated";

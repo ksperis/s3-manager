@@ -102,13 +102,9 @@ describe("PortalLayout", () => {
       "Activity",
       "Transfers",
       "Usage & Analytics",
-      "Users",
-      "Groups",
-      "Policies",
-      "Access Keys",
       "Settings",
     ]);
-    expect(nav).toHaveTextContent("Administration");
+    expect(nav).not.toHaveTextContent("Administration");
     expect(nav).not.toHaveTextContent("Browser");
     expect(nav).not.toHaveTextContent("Buckets");
     expect(nav).not.toHaveTextContent("Billing");

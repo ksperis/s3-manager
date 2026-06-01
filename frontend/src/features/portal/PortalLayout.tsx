@@ -20,15 +20,6 @@ const portalNavSections: SidebarSection[] = [
       { to: "/portal/activity", label: "Activity", icon: <ActivityIcon /> },
       { to: "/portal/transfers", label: "Transfers", icon: <TransferIcon /> },
       { to: "/portal/usage", label: "Usage & Analytics", icon: <ChartIcon /> },
-    ],
-  },
-  {
-    label: "Administration",
-    links: [
-      { to: "/portal/users", label: "Users", icon: <UserIcon /> },
-      { to: "/portal/groups", label: "Groups", icon: <GroupIcon /> },
-      { to: "/portal/policies", label: "Policies", icon: <PolicyIcon /> },
-      { to: "/portal/access-keys", label: "Access Keys", icon: <KeyIcon /> },
       { to: "/portal/settings", label: "Settings", icon: <SettingsIcon /> },
     ],
   },
@@ -202,42 +193,6 @@ function ChartIcon() {
   return (
     <IconBase>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M4 16V9m6 7V4m6 12v-5" />
-    </IconBase>
-  );
-}
-
-function UserIcon() {
-  return (
-    <IconBase>
-      <circle cx="10" cy="6.5" r="2.6" strokeWidth={1.7} />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M4.5 15.5c1.4-2 3-3 5.5-3s4.1 1 5.5 3" />
-    </IconBase>
-  );
-}
-
-function GroupIcon() {
-  return (
-    <IconBase>
-      <circle cx="7" cy="7.2" r="2.2" strokeWidth={1.6} />
-      <circle cx="13.1" cy="8.1" r="1.8" strokeWidth={1.6} />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M3.8 15.2c.9-1.6 2-2.4 3.8-2.4 1.7 0 2.8.8 3.7 2.4m1.3-2.2c1.3.1 2.2.8 3 2" />
-    </IconBase>
-  );
-}
-
-function PolicyIcon() {
-  return (
-    <IconBase>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M6 3.5h6l3 3V16.5H6V3.5Zm6 0v3h3" />
-    </IconBase>
-  );
-}
-
-function KeyIcon() {
-  return (
-    <IconBase>
-      <circle cx="7" cy="10" r="3" strokeWidth={1.7} />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M10 10h6m-2 0v2m-2-2v2" />
     </IconBase>
   );
 }

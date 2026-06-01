@@ -16,7 +16,7 @@ import {
   storageSpacePath,
   type PortalWorkspaceFile,
   type PortalWorkspaceSpace,
-} from "./portalWorkspaceMockData";
+} from "./portalWorkspaceModel";
 import { PortalV3Badge, PortalV3Card, PortalV3Page, PortalV3Progress, PortalV3Search } from "./PortalV3Components";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
@@ -34,12 +34,6 @@ function normalizePrefix(value: string): string {
   const trimmed = value.replace(/^\/+/, "");
   if (!trimmed) return "";
   return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
-}
-
-function objectParent(path: string): string {
-  const normalized = path.endsWith("/") ? path.slice(0, -1) : path;
-  const index = normalized.lastIndexOf("/");
-  return index < 0 ? "" : `${normalized.slice(0, index)}/`;
 }
 
 function prefixLink(space: PortalWorkspaceSpace, prefix: string): string {
@@ -190,8 +184,8 @@ export default function PortalStorageSpaceDetailPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
   const decodedSpaceId = decodeRouteValue(spaceId);
-  const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? workspace.spaces[0] ?? null;
-  const currentPrefix = normalizePrefix(searchParams.get("prefix") ?? space?.defaultPrefix ?? "");
+  const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
+  const currentPrefix = normalizePrefix(searchParams.get("prefix") ?? "");
   const normalizedQuery = query.trim().toLowerCase();
 
   useEffect(() => {
@@ -225,21 +219,11 @@ export default function PortalStorageSpaceDetailPage() {
     };
   }, [accountIdForApi, currentPrefix, refreshIndex, space]);
 
-  const mockChildObjects = useMemo(() => {
-    if (!space) return [];
-    return space.files
-      .filter((file) => objectParent(file.path) === currentPrefix)
-      .filter((file) => {
-        if (!normalizedQuery) return true;
-        return file.name.toLowerCase().includes(normalizedQuery) || file.path.toLowerCase().includes(normalizedQuery);
-      });
-  }, [currentPrefix, normalizedQuery, space]);
-
   const childObjects = useMemo(() => {
-    const source = objectListing ? filesFromListing(objectListing) : mockChildObjects;
+    const source = objectListing ? filesFromListing(objectListing) : [];
     if (!normalizedQuery) return source;
     return source.filter((file) => file.name.toLowerCase().includes(normalizedQuery) || file.path.toLowerCase().includes(normalizedQuery));
-  }, [mockChildObjects, normalizedQuery, objectListing]);
+  }, [normalizedQuery, objectListing]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -286,11 +270,11 @@ export default function PortalStorageSpaceDetailPage() {
     return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Storage space not available.</div></PortalV3Page>;
   }
 
-  const fileEntries = space.files.filter((file) => file.kind === "file");
+  const fileEntries = childObjects.filter((file) => file.kind === "file");
   const totalFileBytes = fileEntries.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0);
   const averageFileSize = fileEntries.length > 0 ? totalFileBytes / fileEntries.length : null;
-  const quotaPercent = space.quotaBytes && space.usedBytes ? Math.min(100, (space.usedBytes / space.quotaBytes) * 100) : 34;
-  const lastActivity = workspace.activity.find((item) => item.spaceId === space.id)?.actor ?? "Alice";
+  const quotaPercent = space.quotaBytes && space.usedBytes ? Math.min(100, (space.usedBytes / space.quotaBytes) * 100) : null;
+  const lastActivity = workspace.activity.find((item) => item.spaceId === space.id)?.actor ?? "-";
 
   return (
     <PortalV3Page>
@@ -304,9 +288,6 @@ export default function PortalStorageSpaceDetailPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <PortalV3Search value={query} onChange={setQuery} placeholder="Rechercher..." className="w-full sm:w-56" />
-          <HeaderIconButton label="Notifications">!</HeaderIconButton>
-          <HeaderIconButton label="Aide">?</HeaderIconButton>
-          <HeaderIconButton label="Preferences">*</HeaderIconButton>
         </div>
       </div>
 
@@ -317,33 +298,33 @@ export default function PortalStorageSpaceDetailPage() {
             <PortalV3Badge tone={statusTone(space)}>{space.status}</PortalV3Badge>
           </div>
           <p className="mt-2 text-xs font-medium text-slate-500">
-            Créé le {space.createdLabel} <span className="px-2 text-slate-300">•</span> Région: {space.region}{" "}
-            <span className="px-2 text-slate-300">•</span> Standard
+            Créé le {space.createdLabel} <span className="px-2 text-slate-300">•</span> Région: {space.region ?? "-"}{" "}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700">
+          <Link to="/portal/shares" className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700">
             Partager
-          </button>
-          <button type="button" className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700">
-            Actions
-            <span className="ml-2 text-slate-400">⌄</span>
-          </button>
+          </Link>
         </div>
       </header>
 
       {message ? <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">{message}</div> : null}
       {objectsError ? (
         <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-          {objectsError} Données de prévisualisation affichées.
+          {objectsError}
         </div>
       ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <ObjectMetricCard label="Utilisation" value={formatBytes(space.usedBytes)} detail={`sur ${formatBytes(space.quotaBytes ?? 10 * 1024 ** 4)} (${Math.round(quotaPercent)}%)`} progress={quotaPercent} />
-        <ObjectMetricCard label="Objets" value={formatCompactNumber(space.objectCount)} detail="+47,342 cette semaine" />
+        <ObjectMetricCard
+          label="Utilisation"
+          value={formatBytes(space.usedBytes)}
+          detail={quotaPercent == null ? "Quota indisponible" : `sur ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)}%)`}
+          progress={quotaPercent ?? undefined}
+        />
+        <ObjectMetricCard label="Objets" value={formatCompactNumber(space.objectCount)} detail={space.objectCount == null ? "Indisponible" : "Suivi"} />
         <ObjectMetricCard label="Taille moyenne" value={formatBytes(averageFileSize)} detail="par objet" />
-        <ObjectMetricCard label="Dernière activité" value="Il y a 2 min" detail={`Par ${lastActivity}`} />
+        <ObjectMetricCard label="Dernière activité" value={lastActivity === "-" ? "-" : "Récente"} detail={lastActivity === "-" ? "Aucune activité disponible" : `Par ${lastActivity}`} />
       </section>
 
       <PortalV3Card>
@@ -353,13 +334,9 @@ export default function PortalStorageSpaceDetailPage() {
             <button type="button" onClick={handleUploadClick} disabled={uploading || !accountIdForApi} className="inline-flex h-9 items-center justify-center rounded-md border border-blue-600 bg-blue-600 px-3 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
               {uploading ? "Téléversement..." : "Téléverser"}
             </button>
-            <button type="button" onClick={() => setMessage("Création de dossier mockée pour cette prévisualisation UX.")} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700">
-              + Nouveau dossier
-            </button>
           </div>
           <div className="flex flex-wrap gap-2">
             <PortalV3Search value={query} onChange={setQuery} placeholder="Rechercher des objets..." className="w-full sm:w-64" />
-            <HeaderIconButton label="Filtrer">≡</HeaderIconButton>
             <HeaderIconButton label="Actualiser" onClick={() => setRefreshIndex((value) => value + 1)}>↻</HeaderIconButton>
           </div>
         </div>
@@ -415,6 +392,13 @@ export default function PortalStorageSpaceDetailPage() {
                   </td>
                 </tr>
               ))}
+              {!objectsLoading && childObjects.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-xs font-semibold text-slate-500">
+                    Aucun objet à afficher pour ce préfixe.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

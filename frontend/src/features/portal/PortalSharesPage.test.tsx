@@ -20,13 +20,8 @@ const mocks = vi.hoisted(() => ({
           region: "eu-west-3",
           createdLabel: "May 10, 2023",
           shareCount: 1,
-          files: [],
-          objectDetail: {},
         },
       ],
-      sharesWithMe: [],
-      sharesByMe: [],
-      publicLinks: [],
     },
     loading: false,
     accountLoading: false,
@@ -79,5 +74,6 @@ describe("PortalSharesPage", () => {
     });
     expect(screen.queryByText(/portal_user/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/bucket permissions/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
   });
 });

@@ -28,24 +28,8 @@ const mocks = vi.hoisted(() => ({
           objectCount: 12,
           createdAt: "2026-03-10T10:00:00Z",
           shareCount: 3,
-          files: [],
-          objectDetail: {
-            name: "image_001.jpg",
-            path: "research-data/2024/image_001.jpg",
-            sizeBytes: 512,
-            type: "image/jpeg",
-            lastModified: "Jun 10, 2024",
-            etag: "mock",
-            storageClass: "STANDARD",
-            encryption: "AES-256",
-            objectUrl: "https://s3.example.com/research-data/image_001.jpg",
-            downloadUrl: "https://s3.example.com/research-data/image_001.jpg?download=1",
-          },
         },
       ],
-      sharesWithMe: [],
-      sharesByMe: [],
-      publicLinks: [],
       activity: [],
       transfers: [],
       alerts: [],
@@ -82,6 +66,7 @@ describe("PortalStorageSpacesPage", () => {
       "href",
       "/portal/storage-spaces/research-data"
     );
-    expect(screen.getByRole("button", { name: "+ Create storage space" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "+ Create storage space" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
   });
 });

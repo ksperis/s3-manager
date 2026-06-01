@@ -5,7 +5,7 @@
 import { useMemo, useState } from "react";
 import { formatBytes } from "../../utils/format";
 import { PortalV3Badge, PortalV3Card, PortalV3Page, PortalV3PageHeader, PortalV3Progress } from "./PortalV3Components";
-import type { PortalWorkspaceTransfer } from "./portalWorkspaceMockData";
+import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 const tabs = ["All", "Uploads", "Downloads"];
@@ -74,10 +74,16 @@ export default function PortalTransfersPage() {
                   <td>{transfer.etaLabel}</td>
                 </tr>
               ))}
+              {transfers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-xs font-semibold text-slate-500">
+                    No transfers to display.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
-        <div className="mt-4 text-xs font-bold text-blue-600">View all transfers {"->"}</div>
         <div className="mt-3 text-[11px] text-slate-400">Total visible size: {formatBytes(transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0))}</div>
       </PortalV3Card>
     </PortalV3Page>
