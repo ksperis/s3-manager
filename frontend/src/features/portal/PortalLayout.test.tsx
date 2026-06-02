@@ -111,7 +111,8 @@ describe("PortalLayout", () => {
 
     const desktopSidebar = container.querySelector('[data-sidebar-variant="desktop"]') as HTMLElement;
     expect(desktopSidebar).not.toBeNull();
-    expect(within(desktopSidebar).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Portal");
+    expect(within(topbar).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Portal");
+    expect(within(desktopSidebar).queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
     expect(within(desktopSidebar).queryByRole("button", { name: "Select portal account" })).not.toBeInTheDocument();
     expect(within(desktopSidebar).queryByText("Helios Retail")).not.toBeInTheDocument();
 

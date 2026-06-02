@@ -160,7 +160,7 @@ describe("Layout", () => {
     const mobileSidebar = getMobileSidebar(container);
     const mobilePanel = container.querySelector("#mobile-navigation-panel");
 
-    expect(mobilePanel).toHaveClass("w-[18.5rem]");
+    expect(mobilePanel).toHaveClass("w-[16rem]");
     expect(within(mobileSidebar).queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
     expect(mobileSidebar).toHaveClass("-translate-x-full");
 
@@ -171,7 +171,7 @@ describe("Layout", () => {
     expect(mobileSidebar).toHaveClass("-translate-x-full");
   });
 
-  it("renders the workspace switcher in the sidebar when the sidebar is visible", () => {
+  it("keeps the workspace switcher in the topbar when the sidebar is visible", () => {
     const onWorkspaceChange = vi.fn();
     mocks.workspaceSwitcherModel = {
       currentWorkspaceId: "manager",
@@ -186,10 +186,8 @@ describe("Layout", () => {
     const { container } = renderLayout();
     const desktopSidebar = getDesktopSidebar(container);
 
-    expect(screen.getByTestId("layout-topbar")).toHaveAttribute("data-show-workspace-switcher", "false");
-    const switcher = within(desktopSidebar).getByRole("button", { name: "Switch workspace" });
-    expect(switcher).toHaveTextContent("S3 Manager");
-    expect(switcher).toHaveTextContent("Manager");
+    expect(screen.getByTestId("layout-topbar")).toHaveAttribute("data-show-workspace-switcher", "true");
+    expect(within(desktopSidebar).queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
   });
 
   it("keeps the workspace switcher in the topbar when the sidebar is hidden", () => {

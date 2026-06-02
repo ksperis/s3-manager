@@ -110,7 +110,7 @@ export default function Layout({
     mainClassName ? ` ${mainClassName}` : ""
   }`;
   const rootHeightClass = fullHeight ? "h-[100dvh]" : "h-screen";
-  const drawerTopClass = hideTopbar ? "top-0" : "top-16";
+  const drawerTopClass = hideTopbar ? "top-0" : "top-12";
 
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -222,87 +222,87 @@ export default function Layout({
   };
 
   return (
-    <div className={`flex ${rootHeightClass} overflow-hidden bg-[#f6f8fc] text-slate-900 dark:bg-slate-950 dark:text-slate-50`}>
-      {shouldShowSidebar && (
-        <Sidebar
-          title={sidebarTitle}
-          sections={navSections}
-          links={navLinks}
-          headerAction={sidebarAction}
-          footer={sidebarFooter}
-          width={desktopSidebarWidth}
-          compact={desktopSidebarCompact}
-          resizing={desktopSidebarDragging}
-          onResizeStart={handleDesktopSidebarResizeStart}
-          onResizeKeyDown={handleDesktopSidebarResizeKeyDown}
-          onCollapseToggle={handleDesktopSidebarCollapseToggle}
+    <div className={`flex ${rootHeightClass} flex-col overflow-hidden bg-[#f6f8fc] text-slate-900 dark:bg-slate-950 dark:text-slate-50`}>
+      {!hideTopbar && (
+        <Topbar
+          projectName={projectName}
+          section={headerTitle}
+          inlineContent={resolvedInlineTopbarContent}
+          controlsContent={topbarControls}
+          controlDescriptors={topbarControlDescriptors}
+          userEmail={userEmail}
+          onLogout={logout}
+          contextAction={topbarAction}
+          showMobileMenuButton={shouldShowSidebar}
+          mobileMenuOpen={mobileSidebarOpen}
+          onMobileMenuToggle={() => setMobileSidebarOpen((open) => !open)}
+          showWorkspaceSwitcher
           workspaceSwitcher={workspaceSwitcher}
         />
       )}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {!hideTopbar && (
-          <Topbar
-            projectName={projectName}
-            section={headerTitle}
-            inlineContent={resolvedInlineTopbarContent}
-            controlsContent={topbarControls}
-            controlDescriptors={topbarControlDescriptors}
-            userEmail={userEmail}
-            onLogout={logout}
-            contextAction={topbarAction}
-            showMobileMenuButton={shouldShowSidebar}
-            mobileMenuOpen={mobileSidebarOpen}
-            onMobileMenuToggle={() => setMobileSidebarOpen((open) => !open)}
-            showWorkspaceSwitcher={!shouldShowSidebar}
-            workspaceSwitcher={workspaceSwitcher}
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        {shouldShowSidebar && (
+          <Sidebar
+            title={sidebarTitle}
+            sections={navSections}
+            links={navLinks}
+            headerAction={sidebarAction}
+            footer={sidebarFooter}
+            width={desktopSidebarWidth}
+            compact={desktopSidebarCompact}
+            resizing={desktopSidebarDragging}
+            onResizeStart={handleDesktopSidebarResizeStart}
+            onResizeKeyDown={handleDesktopSidebarResizeKeyDown}
+            onCollapseToggle={handleDesktopSidebarCollapseToggle}
           />
         )}
-        {shouldShowSidebar && (
-          <div
-            className={`fixed inset-x-0 bottom-0 ${drawerTopClass} z-[44] md:hidden ${
-              mobileSidebarOpen ? "pointer-events-auto" : "pointer-events-none"
-            }`}
-            aria-hidden={!mobileSidebarOpen}
-          >
-            <button
-              type="button"
-              tabIndex={mobileSidebarOpen ? 0 : -1}
-              aria-label="Close mobile navigation"
-              onClick={() => setMobileSidebarOpen(false)}
-              className={`absolute inset-0 bg-slate-950/45 transition-opacity duration-200 ${
-                mobileSidebarOpen ? "opacity-100" : "opacity-0"
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {shouldShowSidebar && (
+            <div
+              className={`fixed inset-x-0 bottom-0 ${drawerTopClass} z-[44] md:hidden ${
+                mobileSidebarOpen ? "pointer-events-auto" : "pointer-events-none"
               }`}
-            />
-            <div id="mobile-navigation-panel" className="absolute left-0 top-0 h-full w-[18.5rem] max-w-[86vw]">
-              <Sidebar
-                variant="mobile"
-                className={`shadow-2xl transition-transform duration-200 ${
-                  mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+              aria-hidden={!mobileSidebarOpen}
+            >
+              <button
+                type="button"
+                tabIndex={mobileSidebarOpen ? 0 : -1}
+                aria-label="Close mobile navigation"
+                onClick={() => setMobileSidebarOpen(false)}
+                className={`absolute inset-0 bg-slate-950/45 transition-opacity duration-200 ${
+                  mobileSidebarOpen ? "opacity-100" : "opacity-0"
                 }`}
-                title={sidebarTitle}
-                sections={navSections}
-                links={navLinks}
-                headerAction={sidebarAction}
-                footer={sidebarFooter}
-                workspaceSwitcher={workspaceSwitcher}
-                onNavigate={() => setMobileSidebarOpen(false)}
               />
+              <div id="mobile-navigation-panel" className="absolute left-0 top-0 h-full w-[16rem] max-w-[86vw]">
+                <Sidebar
+                  variant="mobile"
+                  className={`shadow-2xl transition-transform duration-200 ${
+                    mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                  }`}
+                  title={sidebarTitle}
+                  sections={navSections}
+                  links={navLinks}
+                  headerAction={sidebarAction}
+                  footer={sidebarFooter}
+                  onNavigate={() => setMobileSidebarOpen(false)}
+                />
+              </div>
             </div>
-          </div>
-        )}
-        <main className={mainClasses}>
-          {!hideHeader && (
-            <Header
-              title={headerTitle}
-              subtitle={headerSubtitle}
-              context={headerContext}
-              inlineAction={heroInlineAction}
-            />
           )}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col space-y-4">
-            {children ?? <Outlet />}
-          </div>
-        </main>
+          <main className={mainClasses}>
+            {!hideHeader && (
+              <Header
+                title={headerTitle}
+                subtitle={headerSubtitle}
+                context={headerContext}
+                inlineAction={heroInlineAction}
+              />
+            )}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col space-y-4">
+              {children ?? <Outlet />}
+            </div>
+          </main>
+        </div>
       </div>
     </div>
   );

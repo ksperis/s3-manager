@@ -1,7 +1,7 @@
-export const SIDEBAR_DEFAULT_WIDTH = 232;
-export const SIDEBAR_COLLAPSE_THRESHOLD = 192;
-export const SIDEBAR_COMPACT_WIDTH = 88;
-export const SIDEBAR_MAX_WIDTH = 384;
+export const SIDEBAR_DEFAULT_WIDTH = 196;
+export const SIDEBAR_COLLAPSE_THRESHOLD = 168;
+export const SIDEBAR_COMPACT_WIDTH = 72;
+export const SIDEBAR_MAX_WIDTH = 360;
 export const SIDEBAR_RESIZE_KEYBOARD_STEP = 16;
 export const DESKTOP_SIDEBAR_SESSION_STORAGE_KEY = "app_shell_desktop_sidebar_width";
 

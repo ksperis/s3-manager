@@ -17,7 +17,7 @@ describe("TopbarControlTrigger", () => {
     );
 
     const trigger = screen.getByRole("button", { name: "Select account" });
-    expect(trigger).toHaveClass("h-10", "rounded-lg", "border-slate-200");
+    expect(trigger).toHaveClass("h-8", "rounded-md", "border-slate-200");
     expect(screen.getByText("Account")).toHaveClass("uppercase");
     expect(screen.getByText("Account_test (s3-z1)")).toBeInTheDocument();
   });
@@ -34,7 +34,7 @@ describe("TopbarControlTrigger", () => {
     );
 
     const trigger = screen.getByRole("button", { name: "Select endpoint" });
-    expect(trigger).toHaveClass("h-10", "w-10");
+    expect(trigger).toHaveClass("h-8", "w-8");
     expect(screen.getByText("s3-z1")).toHaveClass("sr-only");
   });
 });

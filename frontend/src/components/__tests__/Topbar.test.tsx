@@ -3,11 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Topbar from "../Topbar";
 
-vi.mock("../EnvironmentSwitcher", () => ({
-  default: () => <div data-testid="environment-switcher" />,
-  useWorkspaceSwitcherModel: () => null,
-}));
-
 vi.mock("../ThemeToggle", () => ({
   default: () => <button type="button">Theme</button>,
 }));

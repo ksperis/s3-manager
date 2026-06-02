@@ -2,13 +2,15 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { Suspense, lazy, useEffect, useMemo } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Navigate, Outlet, Route, RouterProvider, createBrowserRouter, createRoutesFromElements } from "react-router-dom";
 import Layout from "./components/Layout";
 import { useS3AccountContext } from "./features/manager/S3AccountContext";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
+import { fetchCurrentUser } from "./api/users";
 import RouteErrorPage from "./features/shared/RouteErrorPage";
 import {
+  hasPortalWorkspaceAccess,
   isAdminLikeRole,
   isSuperAdminRole,
   readStoredUser,
@@ -312,17 +314,61 @@ function RoleRedirect() {
   return <Navigate to={destination} replace />;
 }
 
-function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal" }) {
+function RequireManagerFeature() {
   const { generalSettings } = useGeneralSettings();
-  const enabled =
-    feature === "manager"
-      ? generalSettings.manager_enabled
-      : feature === "browser"
-        ? generalSettings.browser_enabled
-        : generalSettings.portal_enabled;
-  if (!enabled) {
-    const label = feature === "manager" ? "Manager" : feature === "browser" ? "Browser" : "Portal";
-    return <FeatureDisabledPage feature={label} />;
+  if (!generalSettings.manager_enabled) {
+    return <FeatureDisabledPage feature="Manager" />;
+  }
+  return <Outlet />;
+}
+
+export function RequirePortalAccess() {
+  const { generalSettings } = useGeneralSettings();
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(() => getStoredUser());
+  const [refreshingSession, setRefreshingSession] = useState(() => {
+    const storedUser = getStoredUser();
+    return Boolean(
+      typeof window !== "undefined" &&
+        localStorage.getItem("token") &&
+        storedUser &&
+        !hasPortalWorkspaceAccess(storedUser)
+    );
+  });
+
+  useEffect(() => {
+    if (!generalSettings.portal_enabled || hasPortalWorkspaceAccess(sessionUser)) return;
+    if (typeof window === "undefined" || !localStorage.getItem("token")) return;
+    let cancelled = false;
+    setRefreshingSession(true);
+    fetchCurrentUser()
+      .then((currentUser) => {
+        if (cancelled) return;
+        const mergedUser = { ...(getStoredUser() ?? {}), ...currentUser } as SessionUser;
+        localStorage.setItem("user", JSON.stringify(mergedUser));
+        setSessionUser(mergedUser);
+      })
+      .catch(() => {
+        // The API client handles auth redirects; the guard falls back to unauthorized.
+      })
+      .finally(() => {
+        if (!cancelled) setRefreshingSession(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [generalSettings.portal_enabled, sessionUser]);
+
+  if (!generalSettings.portal_enabled) {
+    return <FeatureDisabledPage feature="Portal" />;
+  }
+  if (hasPortalWorkspaceAccess(sessionUser)) {
+    return <Outlet />;
+  }
+  if (refreshingSession) {
+    return <RouteFallback />;
+  }
+  if (!hasPortalWorkspaceAccess(sessionUser)) {
+    return <Navigate to="/unauthorized" replace />;
   }
   return <Outlet />;
 }
@@ -516,7 +562,7 @@ export function createAppRoutes() {
         </Route>
 
         <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
-          <Route element={<RequireFeature feature="manager" />}>
+          <Route element={<RequireManagerFeature />}>
             <Route path="/manager" element={<ManagerLayout />}>
               <Route index element={<ManagerDashboard />} />
               <Route path="buckets" element={<BucketsPage />} />
@@ -560,7 +606,7 @@ export function createAppRoutes() {
         </Route>
 
         <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
-          <Route element={<RequireFeature feature="portal" />}>
+          <Route element={<RequirePortalAccess />}>
             <Route path="/portal" element={<PortalLayout />}>
               <Route index element={<PortalDashboard />} />
               <Route path="storage-spaces" element={<PortalStorageSpacesPage />} />

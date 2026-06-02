@@ -161,19 +161,19 @@ function ManagerShell() {
           type="button"
           aria-label={`Account context ${selectedLabel}`}
           title={identityLabel ?? selectedLabel}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         >
           <AccountControlIcon className="h-4 w-4" />
         </button>
       );
     }
     return (
-      <div className="inline-flex h-10 min-w-[12rem] items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-100">
+      <div className="inline-flex h-9 min-w-[12rem] items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-100">
           <AccountControlIcon className="h-4 w-4" />
         </span>
         <span className="min-w-0 leading-tight">
-          <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+          <span className="block truncate text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">
             Account
           </span>
           <span className="mt-px block max-w-[20rem] truncate text-[13px] font-semibold leading-4 text-slate-950 dark:text-slate-100">
@@ -205,7 +205,7 @@ function ManagerShell() {
             identityLabel={identityLabel}
             defaultEndpointId={defaultEndpointId}
             defaultEndpointName={defaultEndpointName}
-            widthClassName={mode === "icon" ? "w-10" : "w-48 lg:w-[20rem] xl:w-[28rem] min-w-[12rem] max-w-[48vw]"}
+            widthClassName={mode === "icon" ? "w-9" : "w-48 lg:w-[20rem] xl:w-[28rem] min-w-[12rem] max-w-[48vw]"}
             triggerMode={mode}
           />
         ) : (

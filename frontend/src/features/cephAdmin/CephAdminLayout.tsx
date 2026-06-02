@@ -175,7 +175,7 @@ function CephAdminShell() {
     };
   });
   const pillClasses =
-    "inline-flex h-10 min-w-[12rem] items-center rounded-lg border border-slate-200 bg-white px-2.5 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900";
+    "inline-flex h-9 min-w-[12rem] items-center rounded-md border border-slate-200 bg-white px-2.5 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900";
   const selectedEndpointLabel = selectedEndpoint ? selectedEndpoint.name : loading ? "Loading..." : "No endpoint selected";
 
   const renderStaticEndpointPill = (mode: "icon" | "icon_label") => {
@@ -185,7 +185,7 @@ function CephAdminShell() {
           type="button"
           aria-label={`Endpoint ${selectedEndpointLabel}`}
           title={selectedEndpoint?.endpoint_url ?? selectedEndpointLabel}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         >
           <EndpointIcon className="h-4 w-4" />
         </button>
@@ -193,11 +193,11 @@ function CephAdminShell() {
     }
     return (
       <div className={`${pillClasses} gap-2`}>
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-100">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-100">
           <EndpointIcon className="h-4 w-4" />
         </span>
         <span className="min-w-0 leading-tight">
-          <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+          <span className="block truncate text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">
             Endpoint
           </span>
           <span className="mt-px block max-w-[20rem] truncate text-[13px] font-semibold leading-4 text-slate-950 dark:text-slate-100">
@@ -225,7 +225,7 @@ function CephAdminShell() {
             ariaLabel="Select Ceph endpoint"
             triggerLabel="Endpoint"
             title={selectedEndpoint?.endpoint_url ?? undefined}
-            widthClassName={mode === "icon" ? "w-10" : "w-[19rem] lg:w-[26rem] xl:w-[32rem] max-w-[72vw]"}
+            widthClassName={mode === "icon" ? "w-9" : "w-[19rem] lg:w-[26rem] xl:w-[32rem] max-w-[72vw]"}
             menuMinWidthClassName="min-w-[24rem]"
             icon={<EndpointIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
             disabled={!selectorEnabled || loading}

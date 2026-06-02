@@ -137,20 +137,11 @@ describe("Sidebar", () => {
     expect(onCollapseToggle).toHaveBeenCalledTimes(1);
   });
 
-  it("renders the workspace switcher in the sidebar header", () => {
-    const onWorkspaceChange = vi.fn();
+  it("does not render a visual workspace header in the sidebar", () => {
     render(
       <MemoryRouter>
         <Sidebar
-          workspaceSwitcher={{
-            currentWorkspaceId: "manager",
-            currentWorkspaceLabel: "Manager",
-            options: [
-              { value: "manager", label: "Manager" },
-              { value: "portal", label: "Portal" },
-            ],
-            onChange: onWorkspaceChange,
-          }}
+          title="MANAGER"
           sections={[
             {
               label: "Overview",
@@ -161,9 +152,10 @@ describe("Sidebar", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Switch workspace" }));
-    fireEvent.click(screen.getByRole("option", { name: "Portal" }));
-    expect(onWorkspaceChange).toHaveBeenCalledWith("portal");
+    expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
+    expect(screen.queryByText("MANAGER")).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "MANAGER navigation" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
   });
 
   it("keeps compact links titled and labeled for assistive tech", () => {

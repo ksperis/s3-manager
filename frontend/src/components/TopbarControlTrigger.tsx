@@ -52,8 +52,8 @@ export default function TopbarControlTrigger({
       onKeyDown={onKeyDown}
       className={
         className ??
-        `inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white text-left shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-blue-500 dark:focus-visible:ring-offset-slate-900 ${
-          iconOnly ? iconModeClassName ?? "w-10 justify-center px-0" : "w-full px-2.5"
+        `inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white text-left shadow-sm transition hover:border-primary-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-primary-400 dark:focus-visible:ring-offset-slate-900 ${
+          iconOnly ? iconModeClassName ?? "w-8 justify-center px-0" : "w-full px-2"
         } ${open ? "border-blue-400" : ""}`
       }
     >
@@ -67,16 +67,16 @@ export default function TopbarControlTrigger({
           <span
             className={
               iconSlotClassName ??
-              "flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              "flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-100"
             }
           >
             {icon}
           </span>
           <div className="min-w-0 flex-1 leading-tight">
-            <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">{label}</span>
+            <span className="block truncate text-[9px] font-semibold uppercase text-slate-500 dark:text-slate-400">{label}</span>
             <span
               data-slot="topbar-trigger-value"
-              className="mt-px block min-w-0 truncate text-[13px] font-semibold leading-4 text-slate-950 dark:text-slate-100"
+              className="mt-px block min-w-0 truncate text-[12px] font-semibold leading-4 text-slate-950 dark:text-slate-100"
             >
               {value}
             </span>
