@@ -75,6 +75,65 @@ bucket administration workflows belong outside the Portal user surface. Future
 Portal preferences should use a simple user-preference contract, not the
 advanced Portal settings payload.
 
+### Breaking API Notes
+
+Portal V3 clients must not call the removed legacy endpoints listed above.
+Use these replacement surfaces instead:
+
+- Storage Space list/detail/create/update: `/portal/storage-spaces*`.
+- Simple object list/detail/upload/download/delete/folders:
+  `/portal/storage-spaces/{spaceId}/objects*`.
+- Collaboration: `/portal/storage-spaces/{spaceId}/shares*`.
+- Public links: `/portal/storage-spaces/{spaceId}/public-links*`.
+- Usage, activity, transfers, alerts, traffic, health, and billing source:
+  the remaining Portal V3 read endpoints.
+- Portal override governance:
+  `/admin/accounts/{accountId}/portal-settings`.
+
+Native IAM access keys, IAM compliance remediation, bucket-user grants, and
+bucket-centric administration should be implemented in Manager or Admin when
+they are needed by operators.
+
+## Portal Data Flow
+
+Portal uses thin FastAPI route handlers in `backend/app/routers/portal.py` and
+keeps business logic in `PortalService`. The frontend API client is
+`frontend/src/api/portal.ts`, and production Portal pages live under
+`frontend/src/features/portal`.
+
+The current backend flow is:
+
+1. Resolve the authenticated UI user and Portal account binding.
+2. Resolve visible Storage Spaces from the existing storage-side permissions.
+3. Map Storage Spaces to a user-facing role: `Viewer`, `Editor`, or `Owner`.
+4. Execute file and sharing operations with the Portal execution identity.
+5. Record mutating Portal actions through audit logging.
+6. Return user-facing shapes without policy JSON, principals, ARNs, or
+   advanced S3 diagnostics.
+
+Storage Space remains an API/UI abstraction. In v1 it maps to a bucket, but the
+UI must keep the Storage Space label so future project, dataset, or workspace
+concepts can be introduced without another surface rewrite.
+
+## Portal Test Group
+
+Use focused Portal validation before broader suites:
+
+- Frontend Portal unit and route checks, from `frontend/`:
+  `rtk npm run test:portal`
+- Frontend typecheck, from `frontend/`:
+  `rtk npm run typecheck`
+- Frontend dead-code check, from `frontend/`:
+  `rtk npm run deadcode:check`
+- Backend Portal service and route-contract checks:
+  `rtk env PYTHONPATH=backend backend/.venv/bin/pytest backend/tests/test_portal_service.py -q`
+- Diff hygiene:
+  `git diff --check`
+
+The Portal backend tests include permission regressions for `Viewer`, `Editor`,
+and `Owner` across object listing, download, upload, folder creation, delete,
+sharing, and removed advanced settings routes.
+
 ## Portal V3 Fallback Policy
 
 Production Portal pages use real Portal APIs first. When a backend capability

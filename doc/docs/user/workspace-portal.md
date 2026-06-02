@@ -25,6 +25,60 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
    history and consumption tracking.
 7. Use **Settings** for simple account and preference changes.
 
+## Portal V3 workflows
+
+### Dashboard
+
+The dashboard is the default Portal landing page. It summarizes total storage,
+object counts, requests, egress, usage by Storage Space, recent activity,
+recent transfers, and simple alerts. It should never open directly inside a
+bucket or advanced object browser.
+
+### Storage Spaces and files
+
+**Storage Spaces** are the user-facing abstraction for assigned storage areas.
+In v1, a Storage Space can still map to a bucket internally, but Portal labels
+and navigation stay user-oriented.
+
+From a Storage Space, users can:
+
+- browse folders and files;
+- upload files when their role allows it;
+- download files they can read;
+- create simple folders when their role allows it;
+- delete files only when their role allows it;
+- open a file detail view with safe metadata and a safe preview when available.
+
+Advanced object features such as versions, tags, raw metadata headers, object
+lock, diagnostics, and batch operations belong in Browser or Manager, not in
+Portal.
+
+### Sharing and roles
+
+Portal exposes collaboration through simple roles:
+
+- **Viewer** can list, read, and download.
+- **Editor** can do Viewer actions plus simple upload, folder creation, and
+  file deletion.
+- **Owner** can do Editor actions plus manage sharing.
+
+These roles are translated by the backend into storage-side permissions. They
+do not create a separate permission source.
+
+### Empty and unavailable states
+
+Portal uses real backend data first. When a source is missing, it shows a clear
+empty or unavailable state:
+
+- no Storage Spaces;
+- no shares or public links;
+- no recent activity;
+- no recent transfers;
+- no quota;
+- no traffic metrics;
+- no billing source;
+- no alerts.
+
 ## Expected result
 
 Portal actions stay user-oriented and use the storage permissions configured by

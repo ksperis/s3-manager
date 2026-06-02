@@ -131,4 +131,39 @@ describe("PortalDashboard storage workspace UX", () => {
       "/portal/storage-spaces/research-data"
     );
   });
+
+  it("shows clear empty states when portal workspace signals are absent", () => {
+    mocks.hookResult.workspace = {
+      accountName: "Laurent",
+      userEmail: "manager@example.com",
+      usedBytes: null,
+      usedObjects: null,
+      quotaBytes: null,
+      quotaObjects: null,
+      requestCount: null,
+      dataInBytes: null,
+      dataOutBytes: null,
+      usageTrend: [],
+      spaces: [],
+      activity: [],
+      transfers: [],
+      alerts: [],
+    };
+    mocks.hookResult.traffic = null;
+    mocks.hookResult.healthAlerts = [];
+
+    render(
+      <MemoryRouter>
+        <PortalDashboard />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Quota unavailable")).toBeInTheDocument();
+    expect(screen.getByText("No Storage Space usage available.")).toBeInTheDocument();
+    expect(screen.getByText("No usage trend available.")).toBeInTheDocument();
+    expect(screen.getByText("No Storage Spaces to display.")).toBeInTheDocument();
+    expect(screen.getByText("No recent activity.")).toBeInTheDocument();
+    expect(screen.getByText("No recent transfers.")).toBeInTheDocument();
+    expect(screen.getByText("No alerts to display.")).toBeInTheDocument();
+  });
 });

@@ -215,28 +215,28 @@ Objective: remove or deprecate backend surfaces that no longer match Portal V3.
 
 Objective: make the Portal feature set safe to ship and maintain.
 
-- [ ] Add a focused Portal test suite command or documented test group for
+- [x] Add a focused Portal test suite command or documented test group for
   frontend and backend checks.
-- [ ] Add route/access tests proving Portal does not expose Browser, Manager,
+- [x] Add route/access tests proving Portal does not expose Browser, Manager,
   or Admin-only pages.
-- [ ] Add regression tests for Viewer, Editor, and Owner permissions across
+- [x] Add regression tests for Viewer, Editor, and Owner permissions across
   list, download, upload, share, and settings flows.
-- [ ] Add user documentation for the final Portal V3 workflows.
-- [ ] Add developer documentation for Portal data flow, service boundaries,
+- [x] Add user documentation for the final Portal V3 workflows.
+- [x] Add developer documentation for Portal data flow, service boundaries,
   Storage Space abstraction, and mock policy.
-- [ ] Add release notes for breaking route/API removals.
-- [ ] Verify bundle/dead-code checks after removing mock and legacy code.
-- [ ] Verify that Portal works with no billing, no quota, no traffic metrics,
+- [x] Add release notes for breaking route/API removals.
+- [x] Verify bundle/dead-code checks after removing mock and legacy code.
+- [x] Verify that Portal works with no billing, no quota, no traffic metrics,
   no shares, no transfers, and no alerts.
 
 ## Global Validation
 
-- [ ] `rtk npm run typecheck`
-- [ ] Targeted Portal frontend tests.
-- [ ] Backend Portal tests.
-- [ ] Permission non-regression tests.
-- [ ] `rtk npm run deadcode:check`
-- [ ] `rtk git diff --check`
+- [x] `rtk npm run typecheck`
+- [x] Targeted Portal frontend tests.
+- [x] Backend Portal tests.
+- [x] Permission non-regression tests.
+- [x] `rtk npm run deadcode:check`
+- [x] `rtk git diff --check`
 - [ ] Desktop visual QA.
 - [ ] Mobile visual QA.
 - [ ] Manual final-user workflow:

@@ -20,7 +20,15 @@ from app.db import (
 )
 from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
-from app.models.portal import PortalAccessKey, PortalAlert, PortalIAMUser, PortalState, PortalStorageSpaceSummary, PortalUsage
+from app.models.portal import (
+    PortalAccessKey,
+    PortalAlert,
+    PortalIAMUser,
+    PortalState,
+    PortalStorageSpaceShare,
+    PortalStorageSpaceSummary,
+    PortalUsage,
+)
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import s3_client
@@ -958,6 +966,138 @@ def test_upload_storage_space_object_allows_editor_and_rejects_viewer(monkeypatc
     viewer_access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     with pytest.raises(RuntimeError, match="Upload not allowed"):
         service.upload_storage_space_object(user, viewer_access, "research-data", "raw-data/denied.csv", b"sample")
+
+
+def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypatch, db_session):
+    account = S3Account(name="portal-role-matrix", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    actor = User(email="matrix-actor@example.com", hashed_password="x", role="ui_user")
+    target = User(email="matrix-target@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, actor, target])
+    db_session.commit()
+
+    service = PortalService(db_session)
+    role_map = {"bucket-research-data": "Viewer"}
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="research-data",
+                name="Research Data",
+                role=role_map["bucket-research-data"],
+                internal_bucket_name="bucket-research-data",
+            )
+        ],
+    )
+    monkeypatch.setattr(service, "list_existing_user_storage_space_access", lambda *_args, **_kwargs: role_map)
+
+    class FakeBody:
+        def iter_chunks(self, chunk_size):  # noqa: ARG002
+            return iter([b"content"])
+
+    class FakeClient:
+        def __init__(self):
+            self.uploads = 0
+            self.puts = 0
+            self.deletes = 0
+
+        def list_objects_v2(self, **kwargs):  # noqa: ARG002
+            return {"Contents": [], "CommonPrefixes": [], "IsTruncated": False}
+
+        def get_object(self, **kwargs):  # noqa: ARG002
+            return {"Body": FakeBody(), "ContentType": "text/plain"}
+
+        def upload_fileobj(self, *args, **kwargs):  # noqa: ARG002
+            self.uploads += 1
+
+        def put_object(self, **kwargs):  # noqa: ARG002
+            self.puts += 1
+
+        def delete_object(self, **kwargs):  # noqa: ARG002
+            self.deletes += 1
+
+    fake_client = FakeClient()
+    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: fake_client)
+    granted_shares = []
+    monkeypatch.setattr(service, "_get_iam_service", lambda _account: object())
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(
+        service,
+        "_ensure_portal_user",
+        lambda target_user, scoped_account, _iam_service: (
+            AccountIAMUser(
+                user_id=target_user.id,
+                account_id=scoped_account.id,
+                iam_user_id=f"iam-{target_user.id}",
+                iam_username=f"iam-{target_user.id}",
+            ),
+            IAMUser(name=f"iam-{target_user.id}", arn=f"arn:aws:iam:::user/iam-{target_user.id}"),
+            False,
+        ),
+    )
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "_set_user_storage_space_policy",
+        lambda _iam_service, iam_username, bucket_name, role: granted_shares.append((iam_username, bucket_name, role)),
+    )
+    monkeypatch.setattr(
+        service,
+        "list_storage_space_shares",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceShare(
+                id=f"research-data:{target.id}",
+                storage_space_id="research-data",
+                storage_space_name="Research Data",
+                user_id=target.id,
+                email=target.email,
+                role="Viewer",
+                direction="by_me",
+                activity_label="Active",
+            )
+        ],
+    )
+    access = _portal_access(account, actor, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+
+    def assert_file_capabilities(role, *, can_write: bool, can_share: bool):
+        role_map["bucket-research-data"] = role
+
+        listing = service.list_storage_space_objects(actor, access, "research-data")
+        stream, content_type, filename = service.download_storage_space_object(actor, access, "research-data", "raw-data/file.txt")
+
+        assert listing.objects == []
+        assert list(stream) == [b"content"]
+        assert content_type == "text/plain"
+        assert filename == "file.txt"
+
+        if can_write:
+            service.upload_storage_space_object(actor, access, "research-data", "raw-data/file.txt", b"content")
+            service.create_storage_space_folder(actor, access, "research-data", "raw-data", "reports")
+            service.delete_storage_space_object(actor, access, "research-data", "raw-data/file.txt")
+        else:
+            with pytest.raises(RuntimeError, match="Upload not allowed"):
+                service.upload_storage_space_object(actor, access, "research-data", "raw-data/file.txt", b"content")
+            with pytest.raises(RuntimeError, match="Folder creation not allowed"):
+                service.create_storage_space_folder(actor, access, "research-data", "raw-data", "reports")
+            with pytest.raises(RuntimeError, match="Delete not allowed"):
+                service.delete_storage_space_object(actor, access, "research-data", "raw-data/file.txt")
+
+        if can_share:
+            share = service.set_storage_space_share(actor, access, target, "research-data", "Viewer")
+            assert share.email == target.email
+        else:
+            with pytest.raises(RuntimeError, match="Owner role required"):
+                service.set_storage_space_share(actor, access, target, "research-data", "Viewer")
+
+    assert_file_capabilities("Viewer", can_write=False, can_share=False)
+    assert_file_capabilities("Editor", can_write=True, can_share=False)
+    assert_file_capabilities("Owner", can_write=True, can_share=True)
+    assert granted_shares == [(f"iam-{target.id}", "bucket-research-data", "Viewer")]
+    assert ("GET", "/portal/settings") not in {
+        (method, route.path)
+        for route in portal_router.router.routes
+        for method in getattr(route, "methods", set())
+    }
 
 
 def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(monkeypatch, db_session):

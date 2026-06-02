@@ -30,4 +30,24 @@ describe("portal routes", () => {
     expect(childPaths).not.toContain("manage");
     expect(childPaths).not.toContain("billing");
   });
+
+  it("does not expose Browser Manager Admin or mock administration pages inside portal", () => {
+    const portalRoute = findRouteByPath(createAppRoutes() as Array<{ path?: string; children?: unknown[] }>, "/portal");
+    const childPaths = new Set(((portalRoute?.children ?? []) as Array<{ path?: string }>).map((route) => route.path).filter(Boolean));
+
+    [
+      "admin",
+      "manager",
+      "browser",
+      "buckets",
+      "users",
+      "groups",
+      "policies",
+      "access-keys",
+      "iam-compliance",
+      "account-settings",
+    ].forEach((path) => {
+      expect(childPaths.has(path)).toBe(false);
+    });
+  });
 });

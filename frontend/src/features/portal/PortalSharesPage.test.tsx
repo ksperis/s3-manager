@@ -108,4 +108,17 @@ describe("PortalSharesPage", () => {
       expect(mocks.listPublicLinksMock).toHaveBeenCalledWith("101", "research-data", { includeRevoked: true });
     });
   });
+
+  it("shows empty states when shares and public links are absent", async () => {
+    const user = userEvent.setup();
+    mocks.listSharesMock.mockResolvedValue([]);
+    mocks.listPublicLinksMock.mockResolvedValue([]);
+
+    render(<PortalSharesPage />);
+
+    await user.click(screen.getByRole("button", { name: "Shared by me" }));
+    expect(await screen.findByText("No shares to display.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Public links" }));
+    expect(await screen.findByText("No public links to display.")).toBeInTheDocument();
+  });
 });
