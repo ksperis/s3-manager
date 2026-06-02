@@ -169,7 +169,7 @@ export default function TopbarDropdownSelect({
         }}
         className={
           compactOnNarrow && !iconOnly
-            ? `inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-2.5 min-[560px]:px-3 text-left shadow-sm transition hover:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-500 dark:focus-visible:ring-offset-slate-900 ${open ? "border-primary/70" : ""}`
+            ? `inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 min-[560px]:px-3 text-left shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-blue-500 dark:focus-visible:ring-offset-slate-900 ${open ? "border-blue-400" : ""}`
             : undefined
         }
       />

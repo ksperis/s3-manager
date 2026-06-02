@@ -21,14 +21,17 @@ vi.mock("react-router-dom", async () => {
 });
 
 vi.mock("../../api/cephAdmin", () => ({
+  backupCephAdminBucketConfigs: mocks.noopAsync,
   deleteCephAdminBucketLogging: mocks.noopAsync,
   deleteCephAdminBucketCors: mocks.noopAsync,
   deleteCephAdminBucketLifecycle: mocks.noopAsync,
+  deleteCephAdminBucketNotifications: mocks.noopAsync,
   deleteCephAdminBucketPolicy: mocks.noopAsync,
   getCephAdminBucketCors: mocks.noopAsync,
   getCephAdminBucketEncryption: mocks.noopAsync,
   getCephAdminBucketLifecycle: mocks.noopAsync,
   getCephAdminBucketLogging: mocks.noopAsync,
+  getCephAdminBucketNotifications: mocks.noopAsync,
   getCephAdminBucketPolicy: mocks.noopAsync,
   getCephAdminBucketProperties: mocks.noopAsync,
   getCephAdminBucketPublicAccessBlock: mocks.noopAsync,
@@ -37,6 +40,7 @@ vi.mock("../../api/cephAdmin", () => ({
   putCephAdminBucketLogging: mocks.noopAsync,
   putCephAdminBucketCors: mocks.noopAsync,
   putCephAdminBucketLifecycle: mocks.noopAsync,
+  putCephAdminBucketNotifications: mocks.noopAsync,
   putCephAdminBucketPolicy: mocks.noopAsync,
   refreshCephAdminBucketListingCache: mocks.refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning: mocks.noopAsync,
@@ -52,11 +56,13 @@ vi.mock("../../api/storageOps", () => ({
   deleteStorageOpsBucketCors: mocks.noopAsync,
   deleteStorageOpsBucketLifecycle: mocks.noopAsync,
   deleteStorageOpsBucketLogging: mocks.noopAsync,
+  deleteStorageOpsBucketNotifications: mocks.noopAsync,
   deleteStorageOpsBucketPolicy: mocks.noopAsync,
   getStorageOpsBucketCors: mocks.noopAsync,
   getStorageOpsBucketEncryption: mocks.noopAsync,
   getStorageOpsBucketLifecycle: mocks.noopAsync,
   getStorageOpsBucketLogging: mocks.noopAsync,
+  getStorageOpsBucketNotifications: mocks.noopAsync,
   getStorageOpsBucketPolicy: mocks.noopAsync,
   getStorageOpsBucketProperties: mocks.noopAsync,
   getStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
@@ -65,6 +71,7 @@ vi.mock("../../api/storageOps", () => ({
   putStorageOpsBucketCors: mocks.noopAsync,
   putStorageOpsBucketLifecycle: mocks.noopAsync,
   putStorageOpsBucketLogging: mocks.noopAsync,
+  putStorageOpsBucketNotifications: mocks.noopAsync,
   putStorageOpsBucketPolicy: mocks.noopAsync,
   refreshStorageOpsBucketListingCache: mocks.refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning: mocks.noopAsync,
@@ -126,6 +133,12 @@ function createDeferred<T>() {
     reject = rej;
   });
   return { promise, resolve, reject };
+}
+
+function getTableOverflowContainer() {
+  const container = screen.getByRole("table").parentElement;
+  expect(container).not.toBeNull();
+  return container as HTMLElement;
 }
 
 describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
@@ -221,6 +234,50 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
       }),
       expect.any(Object)
     );
+  });
+
+  it("hides the horizontal table overflow behind the advanced filter drawer while buckets are loading", async () => {
+    const pending = createDeferred<{
+      items: Array<{ name: string; owner: string }>;
+      total: number;
+      page: number;
+      page_size: number;
+      has_next: boolean;
+      stats_available: boolean;
+    }>();
+    mocks.listCephAdminBuckets.mockReturnValueOnce(pending.promise);
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench
+          mode="ceph-admin"
+          shell={{
+            pageDescription: "Ceph buckets",
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Loading buckets...")).toBeInTheDocument();
+    expect(getTableOverflowContainer()).toHaveClass("overflow-x-auto");
+    expect(screen.getByRole("table")).toHaveClass("!table-auto", "!w-max", "min-w-full");
+
+    fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
+
+    expect(screen.getByText("Buckets listing").closest(".fixed")).toHaveClass("z-[46]");
+    expect(getTableOverflowContainer()).toHaveClass("overflow-x-hidden");
+    expect(getTableOverflowContainer()).not.toHaveClass("overflow-x-auto");
+
+    pending.resolve({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+      stats_available: true,
+    });
+
+    expect(await screen.findByText("No buckets.")).toBeInTheDocument();
   });
 
   it("clears the current rows and shows loading while a new filter request is in flight", async () => {

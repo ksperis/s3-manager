@@ -138,10 +138,10 @@ def compare_bucket_pair(
     payload: ManagerBucketCompareRequest,
     request: Request,
     db: Session = Depends(get_db),
+    _tool_user: User = Depends(require_bucket_compare_enabled),
     source_account: S3Account = Depends(get_account_context),
     actor=Depends(get_current_account_admin),
     service: BucketsService = Depends(get_buckets_service),
-    _: None = Depends(require_bucket_compare_enabled),
 ) -> ManagerBucketCompareResult:
     target_account = get_account_context(
         request=request,
@@ -209,11 +209,11 @@ def run_compare_bucket_action(
     payload: ManagerBucketCompareActionRequest,
     request: Request,
     db: Session = Depends(get_db),
+    _tool_user: User = Depends(require_bucket_compare_enabled),
     source_account: S3Account = Depends(get_account_context),
     actor: User = Depends(get_current_account_admin),
     service: BucketsService = Depends(get_buckets_service),
     audit_service: AuditService = Depends(get_audit_logger),
-    _: None = Depends(require_bucket_compare_enabled),
 ) -> ManagerBucketCompareActionResult:
     target_account = get_account_context(
         request=request,

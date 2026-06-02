@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from app.models.bucket import (
     BucketLifecycleConfig,
     BucketLoggingConfiguration,
+    BucketNotificationConfiguration,
     BucketObjectLock,
     BucketProperties,
     BucketPublicAccessBlock,
@@ -716,6 +717,73 @@ def test_ceph_admin_bucket_listing_any_mixed_filter_prefers_bulk_field_rules(mon
     assert captured["requested"] == {"versioning"}
     assert captured["include_tags"] is False
     assert [item.name for item in response.items] == ["bucket-a", "bucket-b"]
+
+
+def test_ceph_admin_bucket_listing_notifications_include_and_filter(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-configured", "owner": "owner-a"},
+        {"name": "bucket-empty", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=166, payload=payload)
+
+    def fake_get_notifications(self, bucket_name, *_args, **_kwargs):  # noqa: ANN001, ARG001
+        if bucket_name == "bucket-configured":
+            return BucketNotificationConfiguration(
+                configuration={
+                    "TopicConfigurations": [
+                        {
+                            "Id": "topic-1",
+                            "TopicArn": "arn:aws:sns:us-east-1:123456789012:bucket-events",
+                            "Events": ["s3:ObjectCreated:*"],
+                        }
+                    ]
+                }
+            )
+        return BucketNotificationConfiguration(configuration={"TopicConfigurations": [], "QueueConfigurations": [{}]})
+
+    monkeypatch.setattr(BucketsService, "get_bucket_notifications", fake_get_notifications)
+
+    included = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=["notifications"],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert included.items[0].features is not None
+    assert included.items[0].features["notifications"].state == "Configured"
+    assert included.items[0].features["notifications"].tone == "active"
+    assert included.items[1].features is not None
+    assert included.items[1].features["notifications"].state == "Not set"
+    assert included.items[1].features["notifications"].tone == "inactive"
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "notifications", "state": "enabled"},
+            ],
+        }
+    )
+
+    filtered = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in filtered.items] == ["bucket-configured"]
 
 
 def test_ceph_admin_bucket_listing_tag_filter_matches_s3_tags(monkeypatch: pytest.MonkeyPatch):
@@ -1430,6 +1498,92 @@ def test_ceph_admin_bucket_listing_lifecycle_rule_name_can_be_negated_with_quant
     assert [item.name for item in response.items] == ["bucket-a"]
 
 
+def test_ceph_admin_bucket_listing_lifecycle_rule_status_filters_same_rule(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+        {"name": "bucket-c", "owner": "owner-c"},
+        {"name": "bucket-d", "owner": "owner-d"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=204, payload=payload)
+
+    lifecycle_by_bucket = {
+        "bucket-a": [
+            {"ID": "cleanup", "Status": "Disabled", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}}
+        ],
+        "bucket-b": [{"ID": "cleanup", "Status": "Disabled"}],
+        "bucket-c": [
+            {"ID": "cleanup", "Status": "Enabled", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}}
+        ],
+        "bucket-d": [],
+    }
+
+    def fake_get_lifecycle(self, name: str, account):
+        return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    status_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_rule_status",
+                    "op": "eq",
+                    "value": "Disabled",
+                }
+            ],
+        }
+    )
+    status_response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=status_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in status_response.items] == ["bucket-a", "bucket-b"]
+
+    combined_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_rule_status",
+                    "op": "eq",
+                    "value": "Disabled",
+                },
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_abort_multipart_days",
+                    "op": "gte",
+                    "value": 7,
+                },
+            ],
+        }
+    )
+    combined_response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=combined_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in combined_response.items] == ["bucket-a"]
+
+
 @pytest.mark.parametrize(
     ("op", "value", "expected"),
     [
@@ -1937,6 +2091,33 @@ def test_ceph_admin_bucket_listing_advanced_progress_is_monotonic():
     assert percents[-1] == 100
 
 
+def test_ceph_admin_bucket_listing_scan_reports_item_progress():
+    payload = [{"name": f"bucket-{idx:03d}", "owner": "owner-a"} for idx in range(101)]
+    ctx, _ = _build_ctx(endpoint_id=3011, payload=payload)
+    snapshots: list[buckets_router._BucketListingProgressSnapshot] = []
+    advanced_filter = json.dumps({"match": "all", "rules": [{"field": "owner", "op": "contains", "value": "owner"}]})
+
+    response = buckets_router._compute_bucket_listing(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+        progress_callback=snapshots.append,
+        cancel_check=None,
+    )
+
+    scan_snapshots = [snapshot for snapshot in snapshots if snapshot.stage == "scan_entries"]
+    assert response.total == 101
+    assert any(snapshot.processed == 100 and snapshot.total == 101 for snapshot in scan_snapshots)
+    assert scan_snapshots[-1].processed == 101
+    assert scan_snapshots[-1].total == 101
+
+
 def test_ceph_admin_bucket_stream_requires_advanced_filter_payload():
     async def _run() -> None:
         request = SimpleNamespace(is_disconnected=lambda: asyncio.sleep(0, result=False))
@@ -2203,6 +2384,82 @@ def test_ceph_admin_owner_quota_filter_for_user_owner_is_deduplicated_and_cached
     assert [item.name for item in first.items] == ["bucket-a"]
     assert [item.name for item in second.items] == ["bucket-b"]
     assert rgw_admin.get_user_calls == 1
+
+
+def test_ceph_admin_bucket_listing_filters_by_owner_suspended_status():
+    payload = [
+        {"name": "bucket-active", "owner": "user-active"},
+        {"name": "bucket-suspended", "owner": "user-suspended"},
+    ]
+    ctx, rgw_admin = _build_ctx(
+        endpoint_id=405,
+        payload=payload,
+        user_details={
+            (None, "user-active"): {"uid": "user-active", "display_name": "Active User", "suspended": False},
+            (None, "user-suspended"): {
+                "uid": "user-suspended",
+                "display_name": "Suspended User",
+                "suspended": True,
+            },
+        },
+    )
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"field": "owner_suspended", "op": "eq", "value": True},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=["owner_suspended"],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-suspended"]
+    assert response.items[0].owner_suspended is True
+    assert rgw_admin.get_user_calls == 2
+
+
+def test_ceph_admin_bucket_listing_owner_suspended_column_treats_missing_flag_as_active():
+    payload = [
+        {"name": "bucket-active", "owner": "user-active"},
+        {"name": "bucket-suspended", "owner": "user-suspended"},
+    ]
+    ctx, _ = _build_ctx(
+        endpoint_id=406,
+        payload=payload,
+        user_details={
+            (None, "user-active"): {"uid": "user-active", "display_name": "Active User"},
+            (None, "user-suspended"): {
+                "uid": "user-suspended",
+                "display_name": "Suspended User",
+                "suspended": "suspended",
+            },
+        },
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=["owner_suspended"],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.owner_suspended for item in response.items] == [False, True]
 
 
 def test_ceph_admin_owner_quota_usage_percent_filter_uses_global_owner_usage():

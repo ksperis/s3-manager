@@ -281,11 +281,6 @@ frontend-browser-e2e:
   stage: test
   image: mcr.microsoft.com/playwright:v1.58.2-noble
   needs: []
-  services:
-    - name: ghcr.io/getmoto/motoserver:5.1.18
-      alias: moto
-      variables:
-        S3_IGNORE_SUBDOMAIN_BUCKETNAME: "true"
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
@@ -293,9 +288,12 @@ frontend-browser-e2e:
       when: never
     - when: on_success
   variables:
-    E2E_S3_ENDPOINT: http://moto:5000
+    E2E_S3_ENDPOINT: http://localhost:5000
     E2E_S3_ACCESS_KEY: minio
     E2E_S3_SECRET_KEY: minio123
+    E2E_START_MOTO: "true"
+    E2E_MOTO_COMMAND: "../backend/.venv/bin/moto_server -H 0.0.0.0 -p 5000"
+    S3_IGNORE_SUBDOMAIN_BUCKETNAME: "true"
   before_script:
     - mkdir -p gl-test-reports
     - rm -f backend/.env
@@ -314,7 +312,7 @@ frontend-browser-e2e:
     - rm -rf backend/.venv
     - python3 -m venv backend/.venv
     - backend/.venv/bin/python -m pip install --upgrade pip
-    - backend/.venv/bin/python -m pip install -r backend/requirements-test.txt
+    - backend/.venv/bin/python -m pip install -r backend/requirements-browser-e2e.txt
   script:
     - cd frontend
     - npm ci

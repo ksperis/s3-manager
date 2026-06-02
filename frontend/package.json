@@ -12,6 +12,7 @@
     "lint:browser": "eslint src/features/browser/BrowserPage.tsx src/features/browser/BrowserObjectDetailsModal.tsx src/features/browser/BrowserDialogModals.tsx --ext .ts,.tsx",
     "test": "vitest run",
     "test:ci": "vitest run --reporter=default --reporter=junit --outputFile=../gl-test-reports/frontend-junit.xml",
+    "test:portal": "vitest run src/features/portal src/api/portal.test.ts src/router.portal.test.tsx",
     "test:watch": "vitest",
     "test:a11y": "vitest run --testNamePattern=a11y",
     "test:e2e": "playwright test -c playwright.e2e.config.ts",

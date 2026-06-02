@@ -132,12 +132,12 @@ export default function BrowserSettingsPage() {
               ...prev,
               browser: defaults.browser,
               general: {
-                ...prev.general,
-                browser_root_enabled: defaults.general.browser_root_enabled,
-                browser_manager_enabled: defaults.general.browser_manager_enabled,
-                browser_ceph_admin_enabled: defaults.general.browser_ceph_admin_enabled,
-              },
-            }
+              ...prev.general,
+              browser_root_enabled: defaults.general.browser_root_enabled,
+              browser_manager_enabled: defaults.general.browser_manager_enabled,
+              browser_ceph_admin_enabled: defaults.general.browser_ceph_admin_enabled,
+            },
+          }
           : defaults
       );
     } catch (err) {

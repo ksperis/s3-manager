@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   AccountUserLink,
   ImportS3AccountPayload,
@@ -10,18 +11,24 @@ import {
   S3AccountSummary,
   createS3Account,
   deleteS3Account,
+  fetchAccountPortalSettings,
   getS3Account,
   importS3Accounts,
   listS3Accounts,
+  updateAccountPortalSettings,
   updateS3Account,
 } from "../../api/accounts";
+import type { PortalSettingsOverride } from "../../api/appSettings";
+import type { PortalAccountSettings } from "../../api/portal";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { listMinimalUsers, UserSummary } from "../../api/users";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import PaginationControls from "../../components/PaginationControls";
+import { PortalSettingsItem, PortalSettingsSection } from "../../components/PortalSettingsLayout";
 import StorageUsageCard from "../../components/StorageUsageCard";
 import TableEmptyState from "../../components/TableEmptyState";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
@@ -33,15 +40,69 @@ import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { useAdminAccountStats } from "./useAdminAccountStats";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
+import { confirmAction } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole } from "../../utils/workspaces";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 
 type SortField = "name" | "rgw_account_id";
-type EditTab = "general" | "users";
+type EditTab = "general" | "users" | "portal";
+type TriState = "inherit" | "enabled" | "disabled";
+type PolicyMode = "inherit" | "actions";
 type TextMatchMode = "contains" | "exact";
+type PortalAccountRole = "portal_none" | "portal_user" | "portal_manager";
+type PortalOverrideFormSnapshot = {
+  bucketCreate: TriState;
+  accessKeyCreate: TriState;
+  versioning: TriState;
+  lifecycle: TriState;
+  cors: TriState;
+  corsOriginsOverride: boolean;
+  corsOriginsText: string;
+  managerPolicyMode: PolicyMode;
+  managerPolicyActionsText: string;
+  userPolicyMode: PolicyMode;
+  userPolicyActionsText: string;
+  bucketPolicyMode: PolicyMode;
+  bucketPolicyActionsText: string;
+};
+
+const hasOwn = (value: Record<string, unknown> | null | undefined, key: string) =>
+  Boolean(value && Object.prototype.hasOwnProperty.call(value, key));
+
+const normalizeListInput = (value: string): string[] =>
+  value
+    .split(/[\n,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+const resolveTriState = (value?: boolean | null): TriState => {
+  if (value == null) return "inherit";
+  return value ? "enabled" : "disabled";
+};
+
+const toOverrideValue = (value: TriState): boolean | undefined => {
+  if (value === "inherit") return undefined;
+  return value === "enabled";
+};
+
+const buildPortalOverrideFormSignature = (snapshot: PortalOverrideFormSnapshot) =>
+  stableSignature({ portalOverrides: snapshot });
+
+const PORTAL_ROLE_OPTIONS: { value: PortalAccountRole; label: string }[] = [
+  { value: "portal_none", label: "No portal access" },
+  { value: "portal_user", label: "Portal user" },
+  { value: "portal_manager", label: "Portal manager" },
+];
+
+function normalizePortalRole(value?: string | null): PortalAccountRole {
+  if (value === "portal_user" || value === "portal_manager") return value;
+  return "portal_none";
+}
 
 export default function S3AccountsPage() {
+  const { generalSettings } = useGeneralSettings();
+  const portalEnabled = generalSettings.portal_enabled;
   const [accounts, setS3Accounts] = useState<S3Account[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,7 +154,26 @@ export default function S3AccountsPage() {
     user_links: [] as AccountUserLink[],
   });
   const [editInitialSignature, setEditInitialSignature] = useState("");
+  const [portalInitialSignature, setPortalInitialSignature] = useState("");
   const [editTab, setEditTab] = useState<EditTab>("general");
+  const [portalAccountSettings, setPortalAccountSettings] = useState<PortalAccountSettings | null>(null);
+  const [portalSettingsLoading, setPortalSettingsLoading] = useState(false);
+  const [portalSettingsError, setPortalSettingsError] = useState<string | null>(null);
+  const [portalSettingsSaving, setPortalSettingsSaving] = useState(false);
+  const [portalSettingsMessage, setPortalSettingsMessage] = useState<string | null>(null);
+  const [adminPortalBucketCreateOverride, setAdminPortalBucketCreateOverride] = useState<TriState>("inherit");
+  const [adminPortalAccessKeyCreateOverride, setAdminPortalAccessKeyCreateOverride] = useState<TriState>("inherit");
+  const [adminBucketVersioningOverride, setAdminBucketVersioningOverride] = useState<TriState>("inherit");
+  const [adminBucketLifecycleOverride, setAdminBucketLifecycleOverride] = useState<TriState>("inherit");
+  const [adminBucketCorsOverride, setAdminBucketCorsOverride] = useState<TriState>("inherit");
+  const [adminBucketCorsOriginsOverride, setAdminBucketCorsOriginsOverride] = useState(false);
+  const [adminBucketCorsOriginsText, setAdminBucketCorsOriginsText] = useState("");
+  const [adminManagerPolicyMode, setAdminManagerPolicyMode] = useState<PolicyMode>("inherit");
+  const [adminManagerPolicyActionsText, setAdminManagerPolicyActionsText] = useState("");
+  const [adminUserPolicyMode, setAdminUserPolicyMode] = useState<PolicyMode>("inherit");
+  const [adminUserPolicyActionsText, setAdminUserPolicyActionsText] = useState("");
+  const [adminBucketPolicyMode, setAdminBucketPolicyMode] = useState<PolicyMode>("inherit");
+  const [adminBucketPolicyActionsText, setAdminBucketPolicyActionsText] = useState("");
   const [deletingS3AccountId, setDeletingS3AccountId] = useState<number | null>(null);
   const [accountToDelete, setS3AccountToDelete] = useState<S3Account | null>(null);
   const [deleteFromRgw, setDeleteFromRgw] = useState(false);
@@ -129,8 +209,53 @@ export default function S3AccountsPage() {
     adminEnabled &&
     editingEndpointCanWrite &&
     Boolean(editingS3Account?.rgw_account_id);
+  const effectivePortalSettings = portalAccountSettings?.effective ?? null;
+  const portalManagerOverride = portalAccountSettings?.portal_manager_override ?? null;
   const showGeneralTab = editTab === "general";
   const showUsersTab = editTab === "users";
+  const showPortalTab = portalEnabled && editTab === "portal";
+  const hasPortalManagerOverrides = useMemo(() => {
+    if (!portalManagerOverride) return false;
+    if (
+      portalManagerOverride.allow_portal_key != null ||
+      portalManagerOverride.allow_portal_user_bucket_create != null ||
+      portalManagerOverride.allow_portal_user_access_key_create != null
+    ) {
+      return true;
+    }
+    if (portalManagerOverride.bucket_defaults) {
+      if (
+        portalManagerOverride.bucket_defaults.versioning != null ||
+        portalManagerOverride.bucket_defaults.enable_cors != null ||
+        portalManagerOverride.bucket_defaults.enable_lifecycle != null ||
+        portalManagerOverride.bucket_defaults.cors_allowed_origins != null
+      ) {
+        return true;
+      }
+    }
+    const managerPolicy = portalManagerOverride.iam_group_manager_policy;
+    if (
+      hasOwn(managerPolicy as Record<string, unknown> | null, "actions") ||
+      hasOwn(managerPolicy as Record<string, unknown> | null, "advanced_policy")
+    ) {
+      return true;
+    }
+    const userPolicy = portalManagerOverride.iam_group_user_policy;
+    if (
+      hasOwn(userPolicy as Record<string, unknown> | null, "actions") ||
+      hasOwn(userPolicy as Record<string, unknown> | null, "advanced_policy")
+    ) {
+      return true;
+    }
+    const bucketPolicy = portalManagerOverride.bucket_access_policy;
+    if (
+      hasOwn(bucketPolicy as Record<string, unknown> | null, "actions") ||
+      hasOwn(bucketPolicy as Record<string, unknown> | null, "advanced_policy")
+    ) {
+      return true;
+    }
+    return false;
+  }, [portalManagerOverride]);
   const {
     catalog: adminTagCatalog,
     loading: adminTagCatalogLoading,
@@ -280,6 +405,7 @@ export default function S3AccountsPage() {
       id: link.user_id,
       label: link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`,
       account_admin: Boolean(link.account_admin),
+      account_role: normalizePortalRole(link.account_role),
     }));
   }, [editForm.user_links, userLabelById]);
   const availableUsers = useMemo(() => {
@@ -293,6 +419,108 @@ export default function S3AccountsPage() {
     () => availableUsers.slice(0, MAX_LINK_OPTIONS),
     [availableUsers]
   );
+
+  useEffect(() => {
+    setPortalAccountSettings(null);
+    setPortalSettingsError(null);
+    setPortalSettingsMessage(null);
+    setPortalSettingsLoading(false);
+    setPortalInitialSignature("");
+    if (!editingAccountId || !portalEnabled) return;
+    setPortalSettingsLoading(true);
+    fetchAccountPortalSettings(editingAccountId)
+      .then((data) => setPortalAccountSettings(data))
+      .catch((err) => {
+        console.error(err);
+        setPortalSettingsError(extractApiError(err, "Unable to load portal overrides."));
+      })
+      .finally(() => setPortalSettingsLoading(false));
+  }, [editingAccountId, portalEnabled]);
+
+  useEffect(() => {
+    if (!portalEnabled && editTab === "portal") {
+      setEditTab("general");
+    }
+  }, [editTab, portalEnabled]);
+
+  useEffect(() => {
+    if (!portalAccountSettings) {
+      setAdminPortalBucketCreateOverride("inherit");
+      setAdminPortalAccessKeyCreateOverride("inherit");
+      setAdminBucketVersioningOverride("inherit");
+      setAdminBucketLifecycleOverride("inherit");
+      setAdminBucketCorsOverride("inherit");
+      setAdminBucketCorsOriginsOverride(false);
+      setAdminBucketCorsOriginsText("");
+      setAdminManagerPolicyMode("inherit");
+      setAdminManagerPolicyActionsText("");
+      setAdminUserPolicyMode("inherit");
+      setAdminUserPolicyActionsText("");
+      setAdminBucketPolicyMode("inherit");
+      setAdminBucketPolicyActionsText("");
+      return;
+    }
+    const override = portalAccountSettings.admin_override;
+    const effective = portalAccountSettings.effective;
+    const bucketCreate = resolveTriState(override.allow_portal_user_bucket_create);
+    const accessKeyCreate = resolveTriState(override.allow_portal_user_access_key_create);
+    const bucketDefaultsOverride = override.bucket_defaults;
+    const versioning = resolveTriState(bucketDefaultsOverride?.versioning);
+    const lifecycle = resolveTriState(bucketDefaultsOverride?.enable_lifecycle);
+    const cors = resolveTriState(bucketDefaultsOverride?.enable_cors);
+    const corsOriginsOverride = Boolean(bucketDefaultsOverride && bucketDefaultsOverride.cors_allowed_origins != null);
+    const corsOriginsText = corsOriginsOverride
+      ? (bucketDefaultsOverride?.cors_allowed_origins ?? []).join("\n")
+      : (effective.bucket_defaults.cors_allowed_origins || []).join("\n");
+
+    const managerOverride = override.iam_group_manager_policy;
+    const managerHasActions = hasOwn(managerOverride as Record<string, unknown> | null, "actions");
+    const managerPolicyMode: PolicyMode = managerHasActions ? "actions" : "inherit";
+    const managerPolicyActionsText = (
+      managerOverride?.actions ?? (effective.iam_group_manager_policy.actions || [])
+    ).join("\n");
+
+    const userOverride = override.iam_group_user_policy;
+    const userHasActions = hasOwn(userOverride as Record<string, unknown> | null, "actions");
+    const userPolicyMode: PolicyMode = userHasActions ? "actions" : "inherit";
+    const userPolicyActionsText = (userOverride?.actions ?? (effective.iam_group_user_policy.actions || [])).join("\n");
+
+    const bucketOverride = override.bucket_access_policy;
+    const bucketHasActions = hasOwn(bucketOverride as Record<string, unknown> | null, "actions");
+    const bucketPolicyMode: PolicyMode = bucketHasActions ? "actions" : "inherit";
+    const bucketPolicyActionsText = (bucketOverride?.actions ?? (effective.bucket_access_policy.actions || [])).join("\n");
+
+    setAdminPortalBucketCreateOverride(bucketCreate);
+    setAdminPortalAccessKeyCreateOverride(accessKeyCreate);
+    setAdminBucketVersioningOverride(versioning);
+    setAdminBucketLifecycleOverride(lifecycle);
+    setAdminBucketCorsOverride(cors);
+    setAdminBucketCorsOriginsOverride(corsOriginsOverride);
+    setAdminBucketCorsOriginsText(corsOriginsText);
+    setAdminManagerPolicyMode(managerPolicyMode);
+    setAdminManagerPolicyActionsText(managerPolicyActionsText);
+    setAdminUserPolicyMode(userPolicyMode);
+    setAdminUserPolicyActionsText(userPolicyActionsText);
+    setAdminBucketPolicyMode(bucketPolicyMode);
+    setAdminBucketPolicyActionsText(bucketPolicyActionsText);
+    setPortalInitialSignature(
+      buildPortalOverrideFormSignature({
+        bucketCreate,
+        accessKeyCreate,
+        versioning,
+        lifecycle,
+        cors,
+        corsOriginsOverride,
+        corsOriginsText,
+        managerPolicyMode,
+        managerPolicyActionsText,
+        userPolicyMode,
+        userPolicyActionsText,
+        bucketPolicyMode,
+        bucketPolicyActionsText,
+      })
+    );
+  }, [portalAccountSettings]);
 
   const toggleSort = (field: SortField) => {
     setSort((prev) => {
@@ -523,7 +751,7 @@ export default function S3AccountsPage() {
     if (account.user_links && account.user_links.length > 0) {
       return account.user_links;
     }
-    return (account.user_ids ?? []).map((id) => ({ user_id: id, account_admin: false }));
+    return (account.user_ids ?? []).map((id) => ({ user_id: id, account_admin: false, account_role: "portal_none" }));
   };
 
   const deleteModalUnknownResources =
@@ -577,13 +805,51 @@ export default function S3AccountsPage() {
     setShowUserPanel(false);
     setUserSelections([]);
     setEditInitialSignature("");
+    setPortalInitialSignature("");
   };
   const editCurrentSignature = useMemo(
     () => stableSignature({ editForm: { ...editForm, tags: normalizeUiTags(editForm.tags) } }),
     [editForm]
   );
+  const portalCurrentSignature = useMemo(
+    () =>
+      buildPortalOverrideFormSignature({
+        bucketCreate: adminPortalBucketCreateOverride,
+        accessKeyCreate: adminPortalAccessKeyCreateOverride,
+        versioning: adminBucketVersioningOverride,
+        lifecycle: adminBucketLifecycleOverride,
+        cors: adminBucketCorsOverride,
+        corsOriginsOverride: adminBucketCorsOriginsOverride,
+        corsOriginsText: adminBucketCorsOriginsText,
+        managerPolicyMode: adminManagerPolicyMode,
+        managerPolicyActionsText: adminManagerPolicyActionsText,
+        userPolicyMode: adminUserPolicyMode,
+        userPolicyActionsText: adminUserPolicyActionsText,
+        bucketPolicyMode: adminBucketPolicyMode,
+        bucketPolicyActionsText: adminBucketPolicyActionsText,
+      }),
+    [
+      adminBucketCorsOriginsOverride,
+      adminBucketCorsOriginsText,
+      adminBucketCorsOverride,
+      adminBucketLifecycleOverride,
+      adminBucketPolicyActionsText,
+      adminBucketPolicyMode,
+      adminBucketVersioningOverride,
+      adminManagerPolicyActionsText,
+      adminManagerPolicyMode,
+      adminPortalAccessKeyCreateOverride,
+      adminPortalBucketCreateOverride,
+      adminUserPolicyActionsText,
+      adminUserPolicyMode,
+    ]
+  );
   const editCloseGuard = useUnsavedChangesGuard({
-    hasUnsavedChanges: Boolean(editingS3Account && editInitialSignature && editCurrentSignature !== editInitialSignature),
+    hasUnsavedChanges: Boolean(
+      editingS3Account &&
+        ((editInitialSignature && editCurrentSignature !== editInitialSignature) ||
+          (portalEnabled && portalInitialSignature && portalCurrentSignature !== portalInitialSignature))
+    ),
     onClose: closeEditS3AccountModal,
   });
 
@@ -605,6 +871,7 @@ export default function S3AccountsPage() {
         detail.user_links?.map((link) => ({
           user_id: link.user_id,
           account_admin: Boolean(link.account_admin),
+          account_role: normalizePortalRole(link.account_role),
           user_email: link.user_email ?? undefined,
         })) ?? [],
     };
@@ -645,6 +912,84 @@ export default function S3AccountsPage() {
       setActionMessage("S3Account updated");
     } catch (err) {
       setActionError(extractError(err));
+    }
+  };
+
+  const buildAdminPortalOverridePayload = (): PortalSettingsOverride => {
+    const payload: PortalSettingsOverride = {};
+    const allowBucketCreateValue = toOverrideValue(adminPortalBucketCreateOverride);
+    if (allowBucketCreateValue !== undefined) {
+      payload.allow_portal_user_bucket_create = allowBucketCreateValue;
+    }
+    const allowAccessKeyCreateValue = toOverrideValue(adminPortalAccessKeyCreateOverride);
+    if (allowAccessKeyCreateValue !== undefined) {
+      payload.allow_portal_user_access_key_create = allowAccessKeyCreateValue;
+    }
+
+    const bucketDefaults: NonNullable<PortalSettingsOverride["bucket_defaults"]> = {};
+    const versioningValue = toOverrideValue(adminBucketVersioningOverride);
+    if (versioningValue !== undefined) {
+      bucketDefaults.versioning = versioningValue;
+    }
+    const lifecycleValue = toOverrideValue(adminBucketLifecycleOverride);
+    if (lifecycleValue !== undefined) {
+      bucketDefaults.enable_lifecycle = lifecycleValue;
+    }
+    const corsValue = toOverrideValue(adminBucketCorsOverride);
+    if (corsValue !== undefined) {
+      bucketDefaults.enable_cors = corsValue;
+    }
+    if (adminBucketCorsOriginsOverride) {
+      bucketDefaults.cors_allowed_origins = normalizeListInput(adminBucketCorsOriginsText);
+    }
+    if (Object.keys(bucketDefaults).length > 0) {
+      payload.bucket_defaults = bucketDefaults;
+    }
+
+    if (adminManagerPolicyMode === "actions") {
+      payload.iam_group_manager_policy = { actions: normalizeListInput(adminManagerPolicyActionsText) };
+    }
+    if (adminUserPolicyMode === "actions") {
+      payload.iam_group_user_policy = { actions: normalizeListInput(adminUserPolicyActionsText) };
+    }
+    if (adminBucketPolicyMode === "actions") {
+      payload.bucket_access_policy = { actions: normalizeListInput(adminBucketPolicyActionsText) };
+    }
+    return payload;
+  };
+
+  const handleSaveAdminOverrides = async () => {
+    if (!editingAccountId || !portalAccountSettings || portalSettingsSaving) return;
+    setPortalSettingsSaving(true);
+    setPortalSettingsError(null);
+    setPortalSettingsMessage(null);
+    try {
+      const updated = await updateAccountPortalSettings(editingAccountId, buildAdminPortalOverridePayload());
+      setPortalAccountSettings(updated);
+      setPortalSettingsMessage("Portal overrides saved.");
+    } catch (err) {
+      console.error(err);
+      setPortalSettingsError(extractApiError(err, "Unable to save portal overrides."));
+    } finally {
+      setPortalSettingsSaving(false);
+    }
+  };
+
+  const handleResetAdminOverrides = async () => {
+    if (!editingAccountId || portalSettingsSaving) return;
+    if (!confirmAction("Reset portal overrides for this account?")) return;
+    setPortalSettingsSaving(true);
+    setPortalSettingsError(null);
+    setPortalSettingsMessage(null);
+    try {
+      const updated = await updateAccountPortalSettings(editingAccountId, {});
+      setPortalAccountSettings(updated);
+      setPortalSettingsMessage("Portal overrides reset.");
+    } catch (err) {
+      console.error(err);
+      setPortalSettingsError(extractApiError(err, "Unable to reset portal overrides."));
+    } finally {
+      setPortalSettingsSaving(false);
     }
   };
 
@@ -1107,6 +1452,19 @@ export default function S3AccountsPage() {
               >
                 Linked UI users
               </button>
+              {portalEnabled && (
+                <button
+                  type="button"
+                  onClick={() => setEditTab("portal")}
+                  className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                    editTab === "portal"
+                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                  }`}
+                >
+                  Portal overrides
+                </button>
+              )}
             </div>
             {showGeneralTab && (
               <StorageUsageCard
@@ -1213,6 +1571,9 @@ export default function S3AccountsPage() {
                           <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Admin
                           </th>
+                          <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Portal role
+                          </th>
                           <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Actions
                           </th>
@@ -1221,7 +1582,7 @@ export default function S3AccountsPage() {
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {assignedUsers.length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                            <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
                               No linked users yet.
                             </td>
                           </tr>
@@ -1246,6 +1607,28 @@ export default function S3AccountsPage() {
                                   />
                                   Admin
                                 </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <select
+                                  value={u.account_role}
+                                  onChange={(e) =>
+                                    setEditForm((prev) => ({
+                                      ...prev,
+                                      user_links: prev.user_links.map((link) =>
+                                        link.user_id === u.id
+                                          ? { ...link, account_role: normalizePortalRole(e.target.value) }
+                                          : link
+                                      ),
+                                    }))
+                                  }
+                                  className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                >
+                                  {PORTAL_ROLE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
                               </td>
                               <td className="px-3 py-2 text-right">
                                 <button
@@ -1354,6 +1737,7 @@ export default function S3AccountsPage() {
                               const toAdd = userSelections.map((id) => ({
                                 user_id: id,
                                 account_admin: userAdminChoice[id] ?? false,
+                                account_role: "portal_none" as PortalAccountRole,
                                 user_email: userLabelById.get(id) ?? undefined,
                               }));
                               setEditForm((prev) => ({
@@ -1372,6 +1756,273 @@ export default function S3AccountsPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+              {showPortalTab && (
+                <div className="ui-surface-card p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Portal overrides</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        Force settings for this account. Admin overrides take precedence over portal manager overrides.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleResetAdminOverrides}
+                        disabled={!portalAccountSettings || portalSettingsSaving}
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200"
+                      >
+                        Reset overrides
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveAdminOverrides}
+                        disabled={!portalAccountSettings || portalSettingsSaving}
+                        className="rounded-md bg-primary px-3 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                      >
+                        {portalSettingsSaving ? "Saving..." : "Save overrides"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    {portalSettingsError && <PageBanner tone="error">{portalSettingsError}</PageBanner>}
+                    {portalSettingsMessage && <PageBanner tone="success">{portalSettingsMessage}</PageBanner>}
+                    {portalSettingsLoading && !portalSettingsError && (
+                      <PageBanner tone="info">Loading portal settings...</PageBanner>
+                    )}
+                    {hasPortalManagerOverrides && (
+                      <PageBanner tone="warning">Portal manager overrides are active for this account.</PageBanner>
+                    )}
+                    {portalAccountSettings && effectivePortalSettings && (
+                      <div className="space-y-4">
+                        <PortalSettingsSection title="UI" layout="grid">
+                          <PortalSettingsItem
+                            title="Bucket management"
+                            description={`Effective for portal users: ${
+                              effectivePortalSettings.allow_portal_user_bucket_create ? "enabled" : "disabled"
+                            }`}
+                            action={
+                              <select
+                                value={adminPortalBucketCreateOverride}
+                                onChange={(e) => setAdminPortalBucketCreateOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                          <PortalSettingsItem
+                            title="Access key management"
+                            description={`Effective for portal users: ${
+                              effectivePortalSettings.allow_portal_user_access_key_create ? "enabled" : "disabled"
+                            }`}
+                            action={
+                              <select
+                                value={adminPortalAccessKeyCreateOverride}
+                                onChange={(e) => setAdminPortalAccessKeyCreateOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                        </PortalSettingsSection>
+
+                        <PortalSettingsSection title="IAM POLICIES" layout="stack">
+                          <PortalSettingsItem
+                            title="Policy portal-manager"
+                            description={`Mode: ${adminManagerPolicyMode}`}
+                            action={
+                              <select
+                                value={adminManagerPolicyMode}
+                                onChange={(e) => {
+                                  const mode = e.target.value as PolicyMode;
+                                  setAdminManagerPolicyMode(mode);
+                                  if (mode === "actions" && !adminManagerPolicyActionsText) {
+                                    setAdminManagerPolicyActionsText(
+                                      (effectivePortalSettings.iam_group_manager_policy.actions || []).join("\n")
+                                    );
+                                  }
+                                }}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="actions">Actions</option>
+                              </select>
+                            }
+                          >
+                            {adminManagerPolicyMode === "actions" && (
+                              <textarea
+                                value={adminManagerPolicyActionsText}
+                                onChange={(e) => setAdminManagerPolicyActionsText(e.target.value)}
+                                className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                rows={4}
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              />
+                            )}
+                          </PortalSettingsItem>
+
+                          <PortalSettingsItem
+                            title="Policy portal-user"
+                            description={`Mode: ${adminUserPolicyMode}`}
+                            action={
+                              <select
+                                value={adminUserPolicyMode}
+                                onChange={(e) => {
+                                  const mode = e.target.value as PolicyMode;
+                                  setAdminUserPolicyMode(mode);
+                                  if (mode === "actions" && !adminUserPolicyActionsText) {
+                                    setAdminUserPolicyActionsText(
+                                      (effectivePortalSettings.iam_group_user_policy.actions || []).join("\n")
+                                    );
+                                  }
+                                }}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="actions">Actions</option>
+                              </select>
+                            }
+                          >
+                            {adminUserPolicyMode === "actions" && (
+                              <textarea
+                                value={adminUserPolicyActionsText}
+                                onChange={(e) => setAdminUserPolicyActionsText(e.target.value)}
+                                className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                rows={4}
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              />
+                            )}
+                          </PortalSettingsItem>
+
+                          <PortalSettingsItem
+                            title="Policy bucket access"
+                            description={`Mode: ${adminBucketPolicyMode}`}
+                            action={
+                              <select
+                                value={adminBucketPolicyMode}
+                                onChange={(e) => {
+                                  const mode = e.target.value as PolicyMode;
+                                  setAdminBucketPolicyMode(mode);
+                                  if (mode === "actions" && !adminBucketPolicyActionsText) {
+                                    setAdminBucketPolicyActionsText(
+                                      (effectivePortalSettings.bucket_access_policy.actions || []).join("\n")
+                                    );
+                                  }
+                                }}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="actions">Actions</option>
+                              </select>
+                            }
+                          >
+                            {adminBucketPolicyMode === "actions" && (
+                              <textarea
+                                value={adminBucketPolicyActionsText}
+                                onChange={(e) => setAdminBucketPolicyActionsText(e.target.value)}
+                                className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                rows={4}
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              />
+                            )}
+                          </PortalSettingsItem>
+                        </PortalSettingsSection>
+
+                        <PortalSettingsSection title="BUCKET DEFAULTS" layout="grid">
+                          <PortalSettingsItem
+                            title="Versioning"
+                            description={`Effective: ${effectivePortalSettings.bucket_defaults.versioning ? "enabled" : "disabled"}`}
+                            action={
+                              <select
+                                value={adminBucketVersioningOverride}
+                                onChange={(e) => setAdminBucketVersioningOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                          <PortalSettingsItem
+                            title="Lifecycle"
+                            description={`Effective: ${
+                              effectivePortalSettings.bucket_defaults.enable_lifecycle ? "enabled" : "disabled"
+                            }`}
+                            action={
+                              <select
+                                value={adminBucketLifecycleOverride}
+                                onChange={(e) => setAdminBucketLifecycleOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                          <PortalSettingsItem
+                            title="CORS"
+                            description={`Effective: ${
+                              effectivePortalSettings.bucket_defaults.enable_cors ? "enabled" : "disabled"
+                            }`}
+                            action={
+                              <select
+                                value={adminBucketCorsOverride}
+                                onChange={(e) => setAdminBucketCorsOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                          <PortalSettingsItem
+                            title="CORS origins"
+                            description={adminBucketCorsOriginsOverride ? "Override active" : "Inherits defaults"}
+                            className="md:col-span-2"
+                            action={
+                              <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                                <input
+                                  type="checkbox"
+                                  checked={adminBucketCorsOriginsOverride}
+                                  onChange={(e) => setAdminBucketCorsOriginsOverride(e.target.checked)}
+                                  className={uiCheckboxClass}
+                                  disabled={portalSettingsLoading || portalSettingsSaving}
+                                />
+                                <span>Override</span>
+                              </label>
+                            }
+                          >
+                            <textarea
+                              value={adminBucketCorsOriginsText}
+                              onChange={(e) => setAdminBucketCorsOriginsText(e.target.value)}
+                              className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              rows={3}
+                              placeholder="https://portal.example.com"
+                              disabled={!adminBucketCorsOriginsOverride || portalSettingsLoading || portalSettingsSaving}
+                            />
+                          </PortalSettingsItem>
+                        </PortalSettingsSection>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               <div className="flex items-center justify-end gap-3">
@@ -1530,15 +2181,21 @@ export default function S3AccountsPage() {
                       <div className="flex flex-wrap gap-2">
                         {accountUserLinks.map((link) => {
                           const isAccountAdmin = Boolean(link.account_admin);
+                          const portalRole = normalizePortalRole(link.account_role);
                           return (
                             <span
-                              key={`${account.id}-${link.user_id}-${isAccountAdmin ? "admin" : "user"}`}
+                              key={`${account.id}-${link.user_id}-${isAccountAdmin ? "admin" : "user"}-${portalRole}`}
                               className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
                             >
                               <span>{link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`}</span>
                               {isAccountAdmin && (
                                 <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                                   Admin
+                                </span>
+                              )}
+                              {portalRole !== "portal_none" && (
+                                <span className="rounded-full bg-sky-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
+                                  {portalRole === "portal_manager" ? "Portal manager" : "Portal user"}
                                 </span>
                               )}
                             </span>

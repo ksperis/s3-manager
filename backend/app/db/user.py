@@ -27,6 +27,10 @@ class User(Base):
     is_root = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_ceph_admin = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_storage_ops = Column(Boolean, default=False, nullable=False, server_default="0")
+    can_access_manager_bucket_compare = Column(Boolean, default=False, nullable=False, server_default="0")
+    can_access_manager_bucket_integrity_check = Column(Boolean, default=False, nullable=False, server_default="0")
+    can_access_manager_bucket_migration = Column(Boolean, default=False, nullable=False, server_default="0")
+    can_access_manager_ceph_s3_user_keys = Column(Boolean, default=False, nullable=False, server_default="0")
     auth_provider = Column(String, nullable=True)
     auth_provider_subject = Column(String, nullable=True)
     created_at = Column(DateTime, default=utcnow)
@@ -57,6 +61,11 @@ class User(Base):
         "UserS3User",
         back_populates="user",
         overlaps="s3_users",
+    )
+    portal_iam_links = relationship(
+        "AccountIAMUser",
+        back_populates="user",
+        overlaps="accounts,account_links",
     )
     # User-scoped S3 connections (credential-first).
     s3_connections = relationship(

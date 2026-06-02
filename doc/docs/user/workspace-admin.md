@@ -26,7 +26,7 @@ Platform and tenant-entry resources are configured and auditable.
 ## Limits / feature flags
 
 !!! note
-    Billing, Endpoint Status, and some browser settings are visible only when corresponding features are enabled.
+    Billing, Endpoint Status, Portal, and some browser settings are visible only when corresponding features are enabled.
 
 !!! note
     UI User role and entitlement rules:
@@ -38,6 +38,7 @@ Platform and tenant-entry resources are configured and auditable.
     - `ui_superadmin` role assignment/promotion is restricted to superadmin users.
     - `can_access_ceph_admin` can be granted only by superadmin users, and only for `ui_admin` or `ui_superadmin`.
     - `can_access_storage_ops` can be granted by `ui_admin` or `ui_superadmin` for `ui_user`, `ui_admin`, or `ui_superadmin`.
+    - Manager tool access can be configured by `ui_admin` or `ui_superadmin` from the **Manager tools** tab. Each tool also requires its matching global Manager setting to be enabled.
     - Entitlements are automatically disabled when the target role does not support them.
 
 ## Related pages

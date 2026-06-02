@@ -41,6 +41,12 @@ def test_seed_super_admin_if_empty_creates_user_when_db_is_empty(db_session, mon
     created = db_session.query(User).filter(User.email == "admin@example.com").first()
     assert created is not None
     assert created.role == UserRole.UI_SUPERADMIN.value
+    assert created.can_access_ceph_admin is True
+    assert created.can_access_storage_ops is True
+    assert created.can_access_manager_bucket_compare is True
+    assert created.can_access_manager_bucket_integrity_check is True
+    assert created.can_access_manager_bucket_migration is True
+    assert created.can_access_manager_ceph_s3_user_keys is True
     assert verify_password("superstrongpass456", created.hashed_password)
 
 

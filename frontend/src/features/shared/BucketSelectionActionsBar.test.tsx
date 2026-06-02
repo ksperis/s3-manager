@@ -62,4 +62,16 @@ describe("BucketSelectionActionsBar progress", () => {
     fireEvent.click(screen.getByRole("button", { name: "Check integrity" }));
     expect(onShowIntegrityModal).toHaveBeenCalledTimes(1);
   });
+
+  it("opens the config backup action for ceph-admin selections", () => {
+    const onShowConfigBackupModal = vi.fn();
+    render(<BucketSelectionActionsBar {...baseProps} onShowConfigBackupModal={onShowConfigBackupModal} />);
+    fireEvent.click(screen.getByRole("button", { name: "Backup configs" }));
+    expect(onShowConfigBackupModal).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides config backup for storage-ops selections", () => {
+    render(<BucketSelectionActionsBar {...baseProps} isStorageOps onShowConfigBackupModal={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Backup configs" })).not.toBeInTheDocument();
+  });
 });

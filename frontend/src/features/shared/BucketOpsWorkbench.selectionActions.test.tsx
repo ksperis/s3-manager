@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  backupCephAdminBucketConfigs: vi.fn(),
   listCephAdminBuckets: vi.fn(),
   streamCephAdminBuckets: vi.fn(),
   refreshCephAdminBucketListingCache: vi.fn(),
@@ -21,14 +23,17 @@ vi.mock("react-router-dom", async () => {
 });
 
 vi.mock("../../api/cephAdmin", () => ({
+  backupCephAdminBucketConfigs: mocks.backupCephAdminBucketConfigs,
   deleteCephAdminBucketLogging: mocks.noopAsync,
   deleteCephAdminBucketCors: mocks.noopAsync,
   deleteCephAdminBucketLifecycle: mocks.noopAsync,
+  deleteCephAdminBucketNotifications: mocks.noopAsync,
   deleteCephAdminBucketPolicy: mocks.noopAsync,
   getCephAdminBucketCors: mocks.noopAsync,
   getCephAdminBucketEncryption: mocks.noopAsync,
   getCephAdminBucketLifecycle: mocks.noopAsync,
   getCephAdminBucketLogging: mocks.noopAsync,
+  getCephAdminBucketNotifications: mocks.noopAsync,
   getCephAdminBucketPolicy: mocks.noopAsync,
   getCephAdminBucketProperties: mocks.noopAsync,
   getCephAdminBucketPublicAccessBlock: mocks.noopAsync,
@@ -37,6 +42,7 @@ vi.mock("../../api/cephAdmin", () => ({
   putCephAdminBucketLogging: mocks.noopAsync,
   putCephAdminBucketCors: mocks.noopAsync,
   putCephAdminBucketLifecycle: mocks.noopAsync,
+  putCephAdminBucketNotifications: mocks.noopAsync,
   putCephAdminBucketPolicy: mocks.noopAsync,
   refreshCephAdminBucketListingCache: mocks.refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning: mocks.noopAsync,
@@ -52,11 +58,13 @@ vi.mock("../../api/storageOps", () => ({
   deleteStorageOpsBucketCors: mocks.noopAsync,
   deleteStorageOpsBucketLifecycle: mocks.noopAsync,
   deleteStorageOpsBucketLogging: mocks.noopAsync,
+  deleteStorageOpsBucketNotifications: mocks.noopAsync,
   deleteStorageOpsBucketPolicy: mocks.noopAsync,
   getStorageOpsBucketCors: mocks.noopAsync,
   getStorageOpsBucketEncryption: mocks.noopAsync,
   getStorageOpsBucketLifecycle: mocks.noopAsync,
   getStorageOpsBucketLogging: mocks.noopAsync,
+  getStorageOpsBucketNotifications: mocks.noopAsync,
   getStorageOpsBucketPolicy: mocks.noopAsync,
   getStorageOpsBucketProperties: mocks.noopAsync,
   getStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
@@ -65,6 +73,7 @@ vi.mock("../../api/storageOps", () => ({
   putStorageOpsBucketCors: mocks.noopAsync,
   putStorageOpsBucketLifecycle: mocks.noopAsync,
   putStorageOpsBucketLogging: mocks.noopAsync,
+  putStorageOpsBucketNotifications: mocks.noopAsync,
   putStorageOpsBucketPolicy: mocks.noopAsync,
   refreshStorageOpsBucketListingCache: mocks.refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning: mocks.noopAsync,
@@ -80,7 +89,7 @@ vi.mock("../cephAdmin/CephAdminEndpointContext", () => ({
     selectedEndpoint: {
       id: 7,
       name: "Archive",
-      capabilities: { metrics: false, static_website: true, sse: true },
+      capabilities: { metrics: false, static_website: true, sns: true, sse: true },
       tags: [],
     },
     endpoints: [],
@@ -105,7 +114,13 @@ vi.mock("../manager/BucketDetailPage", () => ({
 }));
 
 vi.mock("./BucketOpsBulkUpdateModal", () => ({
-  default: () => null,
+  default: ({
+    open,
+    children,
+  }: {
+    open: boolean;
+    children: ReactNode;
+  }) => (open ? <div role="dialog" aria-label="Bulk update">{children}</div> : null),
 }));
 
 vi.mock("./BucketOpsRowActionsMenu", () => ({
@@ -115,15 +130,27 @@ vi.mock("./BucketOpsRowActionsMenu", () => ({
 vi.mock("./BucketSelectionActionsBar", () => ({
   default: ({
     exportSelectedBuckets,
+    onShowConfigBackupModal,
     selectionActionProgress,
+    openBulkUpdateModal,
   }: {
     exportSelectedBuckets: (format: "text" | "csv" | "json") => Promise<void> | void;
+    onShowConfigBackupModal?: () => void;
     selectionActionProgress?: { label: string; completed: number; total: number } | null;
+    openBulkUpdateModal: () => void;
   }) => (
     <div>
       <button type="button" onClick={() => void exportSelectedBuckets("csv")}>
         Trigger CSV export
       </button>
+      <button type="button" onClick={openBulkUpdateModal}>
+        Trigger bulk update
+      </button>
+      {onShowConfigBackupModal ? (
+        <button type="button" onClick={onShowConfigBackupModal}>
+          Trigger config backup
+        </button>
+      ) : null}
       {selectionActionProgress ? (
         <p>
           {selectionActionProgress.label} · {selectionActionProgress.completed} / {selectionActionProgress.total}
@@ -191,12 +218,21 @@ function createBucketListMock(allBuckets: Array<Record<string, unknown>>) {
 
 describe("BucketOpsWorkbench selection actions", () => {
   beforeEach(() => {
+    mocks.backupCephAdminBucketConfigs.mockReset();
     mocks.listCephAdminBuckets.mockReset();
     mocks.streamCephAdminBuckets.mockReset();
     mocks.refreshCephAdminBucketListingCache.mockReset();
     mocks.refreshStorageOpsBucketListingCache.mockReset();
     mocks.refreshCephAdminBucketListingCache.mockResolvedValue({ refreshed: true });
     mocks.refreshStorageOpsBucketListingCache.mockResolvedValue({ refreshed: true });
+    mocks.backupCephAdminBucketConfigs.mockResolvedValue({
+      kind: "ceph-admin.bucket-config-backup",
+      version: 1,
+      generated_at: "2026-05-26T10:00:00Z",
+      source: { surface: "ceph-admin", endpoint_id: 7, endpoint_name: "Archive" },
+      features: ["quota", "versioning"],
+      buckets: [],
+    });
     mocks.noopAsync.mockClear();
     mocks.navigate.mockReset();
     window.localStorage.clear();
@@ -357,5 +393,60 @@ describe("BucketOpsWorkbench selection actions", () => {
         with_stats: true,
       })
     );
+  });
+
+  it("backs up selected bucket configs and downloads the JSON payload", async () => {
+    const allBuckets = buildBuckets(1);
+    mocks.listCephAdminBuckets.mockImplementation(createBucketListMock(allBuckets));
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="ceph-admin" shell={{ pageDescription: "Ceph buckets" }} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger config backup" }));
+
+    expect(await screen.findByRole("dialog", { name: "Backup bucket configs" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Download JSON" }));
+
+    await waitFor(() => expect(mocks.backupCephAdminBucketConfigs).toHaveBeenCalledTimes(1));
+    expect(mocks.backupCephAdminBucketConfigs).toHaveBeenCalledWith(7, {
+      buckets: ["bucket-001"],
+      features: [
+        "quota",
+        "versioning",
+        "object_lock",
+        "public_access_block",
+        "lifecycle",
+        "cors",
+        "policy",
+        "access_logging",
+        "tags",
+      ],
+    });
+    expect(window.URL.createObjectURL).toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+  });
+
+  it("offers bulk notification configuration operations", async () => {
+    const allBuckets = buildBuckets(1);
+    mocks.listCephAdminBuckets.mockImplementation(createBucketListMock(allBuckets));
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="ceph-admin" shell={{ pageDescription: "Ceph buckets" }} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger bulk update" }));
+
+    expect(await screen.findByRole("dialog", { name: "Bulk update" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Add or update notification configurations" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Delete notification configurations" })).toBeInTheDocument();
   });
 });

@@ -10,8 +10,8 @@ import time
 import pytest
 from fastapi import HTTPException
 
-from app.db import S3Connection, User, UserRole
-from app.models.bucket import Bucket
+from app.db import S3Account, S3Connection, User, UserRole
+from app.models.bucket import Bucket, BucketLifecycleConfig
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketSummary
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
@@ -274,6 +274,17 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
 
 def test_storage_ops_stream_emits_progress_and_result(client, monkeypatch):
     def fake_compute_listing(**kwargs):  # noqa: ARG001
+        progress_callback = kwargs.get("progress_callback")
+        if progress_callback:
+            progress_callback(
+                storage_ops_router.ListingProgressSnapshot(
+                    percent=30,
+                    stage="context_listing",
+                    processed=1,
+                    total=2,
+                    message="Loading context bucket listings",
+                )
+            )
         return PaginatedStorageOpsBucketsResponse(
             items=[],
             total=0,
@@ -294,9 +305,64 @@ def test_storage_ops_stream_emits_progress_and_result(client, monkeypatch):
         assert response.status_code == 200
         assert "event: progress" in response.text
         assert "event: result" in response.text
+        assert "event: done" in response.text
+        assert '"processed":1' in response.text
+        assert '"total":2' in response.text
     finally:
         app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+
+
+def test_storage_ops_listing_reports_context_progress(monkeypatch):
+    contexts = [
+        ExecutionContext(
+            kind="account",
+            id=f"acct-{idx}",
+            display_name=f"Account {idx}",
+            endpoint_name="Endpoint One",
+            capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+        )
+        for idx in range(101)
+    ]
+
+    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
+        assert workspace == "manager"
+        return contexts
+
+    def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
+        return SimpleNamespace(context_id=account_ref)
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            return [Bucket(name=f"{account.context_id}-bucket")]
+
+    monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
+    monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
+    snapshots = []
+
+    response = storage_ops_router._compute_storage_ops_listing(
+        request=SimpleNamespace(),
+        db=SimpleNamespace(),
+        user=_admin_user(),
+        service=FakeBucketsService(),
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=json.dumps({"match": "all", "rules": [{"field": "name", "op": "contains", "value": "bucket"}]}),
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        progress_callback=snapshots.append,
+        cancel_check=None,
+    )
+
+    context_snapshots = [snapshot for snapshot in snapshots if snapshot.stage == "context_listing"]
+    assert response.total == 101
+    assert any(snapshot.processed == 100 and snapshot.total == 101 for snapshot in context_snapshots)
+    assert context_snapshots[-1].processed == 101
+    assert context_snapshots[-1].total == 101
+    assert snapshots[-1].percent == 100
 
 
 def test_storage_ops_query_endpoint_matches_get(client, monkeypatch):
@@ -581,6 +647,63 @@ def test_storage_ops_context_filters_match_context_id():
         account=SimpleNamespace(),
     )
     assert [bucket.bucket_name for bucket in result] == ["beta"]
+
+
+def test_storage_ops_lifecycle_rule_status_filter_uses_context_lifecycle_lookup():
+    buckets = [
+        StorageOpsBucketSummary(
+            name="alpha",
+            bucket_name="alpha",
+            context_id="1",
+            context_name="Account A",
+            context_kind="account",
+            endpoint_name="Primary Endpoint",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+        StorageOpsBucketSummary(
+            name="beta",
+            bucket_name="beta",
+            context_id="1",
+            context_name="Account A",
+            context_kind="account",
+            endpoint_name="Primary Endpoint",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+    ]
+    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_rule_status",
+                    "op": "eq",
+                    "value": "Disabled",
+                }
+            ],
+        }
+    )
+
+    class FakeBucketsService:
+        def get_lifecycle(self, name: str, account):  # noqa: ARG002
+            rules = (
+                [{"ID": "cleanup", "Status": "Disabled"}]
+                if name == "alpha"
+                else [{"ID": "cleanup", "Status": "Enabled"}]
+            )
+            return BucketLifecycleConfig(rules=rules)
+
+    result = storage_ops_router._apply_advanced_filter_for_context(
+        buckets,
+        parsed_filter,
+        service=FakeBucketsService(),
+        account=SimpleNamespace(),
+    )
+    assert [bucket.bucket_name for bucket in result] == ["alpha"]
 
 
 def test_storage_ops_context_filters_match_s3_user_kind():
@@ -952,6 +1075,78 @@ def test_storage_ops_applies_cheap_field_prefilter_before_feature_enrichment(cli
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
 
+def test_storage_ops_notifications_feature_filter_uses_enrichment(monkeypatch):
+    captured: dict[str, object] = {}
+    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "notifications", "state": "enabled"},
+            ],
+        }
+    )
+    account = S3Account(
+        name="storage-ops-notifications",
+        rgw_account_id="RGW00000000000000001",
+        rgw_access_key="AKIA_TEST",
+        rgw_secret_key="SECRET_TEST",
+    )
+    context = storage_ops_router._StorageOpsResolvedContext(
+        ref=storage_ops_router._StorageOpsContextRef(
+            context_id="1",
+            context_name="Account A",
+            context_kind="account",
+            endpoint_name="Primary",
+        ),
+        account=account,
+    )
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            return [Bucket(name="alpha"), Bucket(name="beta")]
+
+    def fake_enrich_buckets(buckets, requested_features, include_tags, service, account):  # noqa: ANN001, ARG001
+        captured["requested_features"] = requested_features
+        captured["include_tags"] = include_tags
+        enriched: list[CephAdminBucketSummary] = []
+        for bucket in buckets:
+            tone = "active" if bucket.name == "alpha" else "inactive"
+            state = "Configured" if bucket.name == "alpha" else "Not set"
+            enriched.append(
+                CephAdminBucketSummary(
+                    name=bucket.name,
+                    tenant=bucket.tenant,
+                    owner=bucket.owner,
+                    owner_name=bucket.owner_name,
+                    features={
+                        "notifications": {"state": state, "tone": tone},
+                    },
+                )
+            )
+        return enriched
+
+    monkeypatch.setattr(storage_ops_router, "_enrich_buckets", fake_enrich_buckets)
+    monkeypatch.setattr(storage_ops_router, "get_cached_bucket_listing_for_account", lambda **kwargs: kwargs["builder"]())
+
+    result = storage_ops_router._list_context_buckets(
+        context=context,
+        service=FakeBucketsService(),
+        needs_stats=False,
+        requested_features={"notifications"},
+        include_tags=False,
+        parsed_filter=parsed_filter,
+        normalized_search="",
+        filter_requires_owner_name=False,
+        filter_requires_owner_suspended=False,
+        filter_requires_owner_quota=False,
+        owner_usage_required=False,
+    )
+
+    assert captured["requested_features"] == {"notifications"}
+    assert captured["include_tags"] is False
+    assert [bucket.bucket_name for bucket in result] == ["alpha"]
+
+
 def test_storage_ops_owner_quota_and_usage_use_context_principal_and_resolve_connection_once(client, monkeypatch):
     identity_calls: list[int] = []
 
@@ -1113,6 +1308,82 @@ def test_storage_ops_bucket_quota_usage_percent_filter_forces_stats_and_filters_
         payload = response.json()
         assert [item["name"] for item in payload["items"]] == ["1::alpha"]
         assert stats_flags == [True]
+    finally:
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
+        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+        app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
+
+
+def test_storage_ops_bucket_listing_filters_by_owner_suspended_status(client, monkeypatch):
+    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
+        assert workspace == "manager"
+        return [
+            ExecutionContext(
+                kind="account",
+                id="active",
+                display_name="Active user",
+                endpoint_name="Primary",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+            ),
+            ExecutionContext(
+                kind="account",
+                id="suspended",
+                display_name="Suspended user",
+                endpoint_name="Primary",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+            ),
+        ]
+
+    def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
+        return SimpleNamespace(
+            context_id=account_ref,
+            rgw_account_id=None,
+            rgw_user_uid=f"user-{account_ref}",
+            storage_endpoint=SimpleNamespace(id=21),
+        )
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            return [Bucket(name=f"bucket-{account.context_id}")]
+
+    def fake_enrich_buckets(
+        self,
+        buckets,
+        *,
+        include_name=False,
+        include_suspended=False,
+        include_quota=False,
+        include_usage=False,
+        usage_by_key=None,
+    ):  # noqa: ANN001, ARG002
+        assert include_suspended is True
+        for bucket in buckets:
+            bucket.owner_suspended = bucket.owner == "user-suspended"
+        return buckets
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "owner_suspended", "op": "eq", "value": True}],
+        }
+    )
+
+    monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
+    monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
+    monkeypatch.setattr(storage_ops_router.BucketOwnerMetadataService, "enrich_buckets", fake_enrich_buckets)
+
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
+    app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
+    try:
+        response = client.get(
+            "/api/storage-ops/buckets",
+            params={"advanced_filter": advanced_filter, "with_stats": "false"},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert [item["name"] for item in payload["items"]] == ["suspended::bucket-suspended"]
+        assert payload["items"][0]["owner_suspended"] is True
     finally:
         app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)

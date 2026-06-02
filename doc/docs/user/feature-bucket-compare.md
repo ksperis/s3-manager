@@ -8,6 +8,7 @@ Use this guide when you need to compare bucket states before migration or remedi
 
 - Access to `/manager/bucket-compare`.
 - `bucket_compare_enabled` set to true.
+- A UI user with **Manager tools > Bucket compare** access enabled.
 - Context with bucket management capability.
 
 ## Steps
@@ -30,7 +31,7 @@ apply the same safeguard to a single key.
 ## Limits / feature flags
 
 !!! note
-    Tool visibility depends on global feature flag and context requirements.
+    Tool visibility depends on the global feature flag, per-user Manager tool access, and context requirements.
 
 !!! note
     Object rows shown in content diff sections are samples of up to 1000 objects

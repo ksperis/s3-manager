@@ -8,7 +8,7 @@ Use this guide to migrate buckets between contexts with verification and operato
 
 - Access to `/manager/migrations`.
 - `bucket_migration_enabled` enabled.
-- Role authorized for migration (`ui_admin`, `ui_superadmin`, and optionally `ui_user` when allowed).
+- A UI user with **Manager tools > Bucket migration** access enabled.
 
 ## Steps
 
@@ -33,7 +33,7 @@ Migration runs with explicit progress, safety checks, and auditable operator dec
 ## Limits / feature flags
 
 !!! note
-    Feature requires `bucket_migration_enabled`. UI user access depends on `allow_ui_user_bucket_migration`. Some options only apply to same-endpoint scenarios and capability checks.
+    Feature requires `bucket_migration_enabled` globally and the per-user Manager tool right `bucket_migration`. Some options only apply to same-endpoint scenarios and capability checks.
 
 ## Related pages
 

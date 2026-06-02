@@ -133,6 +133,7 @@ type ColumnId =
   | "bucket_policy"
   | "cors"
   | "access_logging"
+  | "notifications"
   | "quota_status";
 
 const COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.v1";
@@ -160,6 +161,7 @@ const loadVisibleColumns = (): ColumnId[] => {
       "bucket_policy",
       "cors",
       "access_logging",
+      "notifications",
       "quota_status",
     ]);
     const cleaned = parsed.filter((v) => typeof v === "string" && allowed.has(v as ColumnId)) as ColumnId[];
@@ -216,6 +218,7 @@ export default function BucketsPage() {
   );
   const endpointCaps = selectedS3Account?.storage_endpoint_capabilities ?? null;
   const usageFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
+  const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
   const staticWebsiteFeatureEnabled = endpointCaps?.static_website === true;
   const quotaFeatureEnabled = selectedS3Account?.endpoint_provider === "ceph";
   const metricColumnOptions = useMemo(
@@ -245,8 +248,13 @@ export default function BucketsPage() {
         { id: "bucket_policy" as const, label: "Bucket policy", key: "bucket_policy" },
         { id: "cors" as const, label: "CORS", key: "cors" },
         { id: "access_logging" as const, label: "Access logging", key: "access_logging" },
-      ].filter((option) => option.id !== "static_website" || staticWebsiteFeatureEnabled),
-    [staticWebsiteFeatureEnabled]
+        { id: "notifications" as const, label: "Notifications", key: "notifications" },
+      ].filter(
+        (option) =>
+          (option.id !== "static_website" || staticWebsiteFeatureEnabled) &&
+          (option.id !== "notifications" || snsFeatureEnabled)
+      ),
+    [snsFeatureEnabled, staticWebsiteFeatureEnabled]
   );
   const accountLabel = selectedS3Account
     ? formatAccountLabel(selectedS3Account, defaultEndpointId, defaultEndpointName)
@@ -395,6 +403,7 @@ export default function BucketsPage() {
     setVisibleColumns((prev) => {
       const next = prev.filter((column) => {
         if (column === "static_website" && !staticWebsiteFeatureEnabled) return false;
+        if (column === "notifications" && !snsFeatureEnabled) return false;
         if (
           (column === "quota_max_size_bytes" || column === "quota_max_objects" || column === "quota_status") &&
           !quotaFeatureEnabled
@@ -405,7 +414,7 @@ export default function BucketsPage() {
       });
       return next.length === prev.length ? prev : next;
     });
-  }, [quotaFeatureEnabled, staticWebsiteFeatureEnabled]);
+  }, [quotaFeatureEnabled, snsFeatureEnabled, staticWebsiteFeatureEnabled]);
 
   useEffect(() => {
     if (!showColumnPicker) return;

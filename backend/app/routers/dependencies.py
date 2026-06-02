@@ -6,7 +6,7 @@ import hashlib
 from app.utils.time import utcnow
 from dataclasses import dataclass, field
 import logging
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 from fastapi import Depends, HTTPException, Query, Request, status, Header
 from fastapi.security import OAuth2PasswordBearer
@@ -16,6 +16,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import decode_token
 from app.db import (
+    AccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -48,11 +49,38 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login")
 ManagerActor = Union[User, ManagerSessionPrincipal]
+ManagerToolKey = Literal[
+    "bucket_compare",
+    "bucket_integrity_check",
+    "bucket_migration",
+    "ceph_s3_user_keys",
+]
+
+_MANAGER_TOOL_ACCESS_FIELDS: dict[ManagerToolKey, str] = {
+    "bucket_compare": "can_access_manager_bucket_compare",
+    "bucket_integrity_check": "can_access_manager_bucket_integrity_check",
+    "bucket_migration": "can_access_manager_bucket_migration",
+    "ceph_s3_user_keys": "can_access_manager_ceph_s3_user_keys",
+}
+
+_MANAGER_TOOL_GLOBAL_FIELDS: dict[ManagerToolKey, tuple[str, str]] = {
+    "bucket_compare": ("bucket_compare_enabled", "Bucket compare feature is disabled"),
+    "bucket_integrity_check": ("bucket_integrity_check_enabled", "Bucket integrity check feature is disabled"),
+    "bucket_migration": ("bucket_migration_enabled", "Bucket migration feature is disabled"),
+    "ceph_s3_user_keys": ("manager_ceph_s3_user_keys_enabled", "Ceph key management feature is disabled"),
+}
+
+_MANAGER_TOOL_ROLES = {
+    UserRole.UI_SUPERADMIN.value,
+    UserRole.UI_ADMIN.value,
+    UserRole.UI_USER.value,
+}
 
 
 @dataclass
 class AccountCapabilities:
     can_manage_buckets: bool = False
+    can_manage_portal_users: bool = False
     can_manage_iam: bool = False
     can_view_root_key: bool = False
     using_root_key: bool = False
@@ -64,6 +92,7 @@ class AccountAccess:
     actor: ManagerActor
     membership: Optional[UserS3Account]
     capabilities: AccountCapabilities
+    role: str = AccountRole.PORTAL_NONE.value
 
 
 @dataclass
@@ -583,6 +612,8 @@ def get_account_context(
         if s3_user_id is not None:
             return _resolve_s3_user_context(db, actor, s3_user_id)
         account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
+        if _is_portal_browser_request(request, surface):
+            return _resolve_portal_browser_context(db, actor, account, link)
         capabilities = _manager_membership_capabilities(link)
         if not capabilities.can_manage_buckets:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
@@ -651,6 +682,113 @@ def get_account_access(
     account = _resolve_session_account(db, actor, account_id)
     capabilities = _membership_capabilities(None, actor)
     return AccountAccess(account=account, actor=actor, membership=None, capabilities=capabilities)
+
+
+def _portal_membership_capabilities(link: Optional[UserS3Account]) -> tuple[str, AccountCapabilities]:
+    if not link:
+        return AccountRole.PORTAL_NONE.value, AccountCapabilities()
+    role = link.account_role or AccountRole.PORTAL_NONE.value
+    if role == AccountRole.PORTAL_NONE.value:
+        return role, AccountCapabilities()
+    can_manage_portal_users = role == AccountRole.PORTAL_MANAGER.value
+    can_manage_buckets = role == AccountRole.PORTAL_MANAGER.value
+    return role, AccountCapabilities(
+        can_manage_buckets=can_manage_buckets,
+        can_manage_portal_users=can_manage_portal_users,
+        can_manage_iam=False,
+        can_view_root_key=False,
+        using_root_key=False,
+    )
+
+
+def _validate_portal_account_surface(account: S3Account) -> None:
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires a storage endpoint")
+    if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires a Ceph RGW account")
+    if not account.rgw_account_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires an RGW account")
+    if not resolve_feature_flags(endpoint).iam_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal is disabled for this endpoint")
+
+
+def _is_portal_browser_request(request: Optional[Request], surface: str) -> bool:
+    if surface != "browser" or request is None:
+        return False
+    workspace = (request.headers.get("X-S3-Workspace") or "").strip().lower()
+    return workspace == "portal"
+
+
+def _resolve_portal_browser_context(
+    db: Session,
+    user: User,
+    account: S3Account,
+    link: UserS3Account,
+) -> S3Account:
+    app_settings = load_app_settings()
+    if not app_settings.general.portal_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal feature is disabled")
+    if not app_settings.general.browser_portal_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser is disabled for Portal workspace")
+
+    _validate_portal_account_surface(account)
+    role, portal_capabilities = _portal_membership_capabilities(link)
+    if role == AccountRole.PORTAL_NONE.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
+
+    from app.services.portal_service import PortalService
+
+    try:
+        access_key, secret_key = PortalService(db).get_portal_credentials(user, account, role)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    if not access_key or not secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Portal credentials are not configured for this account",
+        )
+
+    account.set_session_credentials(access_key, secret_key)
+    account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
+        can_manage_buckets=True,
+        can_manage_portal_users=portal_capabilities.can_manage_portal_users,
+        can_manage_iam=False,
+        can_view_root_key=False,
+        using_root_key=False,
+    )
+    account._portal_browser_role = role  # type: ignore[attr-defined]
+    return account
+
+
+def get_portal_account_access(
+    account_ref: Optional[str] = Query(default=None, alias="account_id"),
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+) -> AccountAccess:
+    account_id, s3_user_id, connection_id, ceph_admin_endpoint_id = _parse_account_selector(account_ref)
+    if s3_user_id is not None or connection_id is not None or ceph_admin_endpoint_id is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
+
+    account, link = _resolve_user_account_link(db, user, account_id, allow_default=False)
+    _validate_portal_account_surface(account)
+
+    role, capabilities = _portal_membership_capabilities(link)
+    if role == AccountRole.PORTAL_NONE.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
+    return AccountAccess(account=account, actor=user, membership=link, capabilities=capabilities, role=role)
+
+
+def require_portal_manager(access: AccountAccess = Depends(get_portal_account_access)) -> AccountAccess:
+    if not access.capabilities.can_manage_portal_users:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager rights required for this account")
+    return access
+
+
+def require_portal_buckets(access: AccountAccess = Depends(get_portal_account_access)) -> AccountAccess:
+    if not access.capabilities.can_manage_buckets:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management not allowed for this account")
+    return access
 
 
 def _ensure_manager_capabilities(account: S3Account, require_iam: bool = False, require_usage: bool = False) -> None:
@@ -760,15 +898,29 @@ def require_metrics_capable_manager(
     )
 
 
-def _ensure_bucket_migration_allowed(user: User) -> None:
+def _manager_tool_global_state(tool: ManagerToolKey) -> tuple[bool, str]:
     app_settings = load_app_settings()
-    if not app_settings.general.bucket_migration_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket migration feature is disabled")
-    if is_admin_ui_role(user.role):
-        return
-    if user.role == UserRole.UI_USER.value and bool(app_settings.general.allow_ui_user_bucket_migration):
+    global_field, disabled_detail = _MANAGER_TOOL_GLOBAL_FIELDS[tool]
+    return bool(getattr(app_settings.general, global_field)), disabled_detail
+
+
+def user_has_manager_tool_access(user: User, tool: ManagerToolKey) -> bool:
+    return bool(getattr(user, _MANAGER_TOOL_ACCESS_FIELDS[tool], False))
+
+
+def ensure_manager_tool_allowed(user: User, tool: ManagerToolKey) -> None:
+    enabled, disabled_detail = _manager_tool_global_state(tool)
+    if not enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=disabled_detail)
+    if user.role not in _MANAGER_TOOL_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    if user_has_manager_tool_access(user, tool):
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+
+def _ensure_bucket_migration_allowed(user: User) -> None:
+    ensure_manager_tool_allowed(user, "bucket_migration")
 
 
 def _manager_link_allows_bucket_migration(
@@ -863,21 +1015,21 @@ def get_current_bucket_migration_scope(
     )
 
 
-def require_bucket_compare_enabled() -> None:
-    app_settings = load_app_settings()
-    if not app_settings.general.bucket_compare_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket compare feature is disabled")
+def require_bucket_compare_enabled(user: User = Depends(get_current_user)) -> User:
+    ensure_manager_tool_allowed(user, "bucket_compare")
+    return user
 
 
-def require_bucket_integrity_check_enabled() -> None:
-    app_settings = load_app_settings()
-    if not app_settings.general.bucket_integrity_check_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket integrity check feature is disabled")
+def require_bucket_integrity_check_enabled(user: User = Depends(get_current_user)) -> User:
+    ensure_manager_tool_allowed(user, "bucket_integrity_check")
+    return user
 
 
-def is_manager_ceph_s3_user_keys_available(account: S3Account) -> bool:
-    app_settings = load_app_settings()
-    if not bool(app_settings.general.manager_ceph_s3_user_keys_enabled):
+def is_manager_ceph_s3_user_keys_available(account: S3Account, user: Optional[User] = None) -> bool:
+    enabled, _ = _manager_tool_global_state("ceph_s3_user_keys")
+    if not enabled:
+        return False
+    if user is not None and not user_has_manager_tool_access(user, "ceph_s3_user_keys"):
         return False
 
     s3_user_id = getattr(account, "s3_user_id", None)
@@ -905,9 +1057,11 @@ def is_manager_ceph_s3_user_keys_available(account: S3Account) -> bool:
 
 
 def require_manager_ceph_s3_user_keys(
+    user: User = Depends(get_current_user),
     account: S3Account = Depends(get_account_context),
 ) -> S3Account:
-    if not is_manager_ceph_s3_user_keys_available(account):
+    ensure_manager_tool_allowed(user, "ceph_s3_user_keys")
+    if not is_manager_ceph_s3_user_keys_available(account, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Ceph key management is not available for this context",
@@ -937,6 +1091,13 @@ def require_browser_enabled() -> None:
     settings = load_app_settings()
     if not settings.general.browser_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser feature is disabled")
+
+
+def require_portal_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.portal_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal feature is disabled")
+
 
 def require_manager_context_enabled() -> None:
     settings = load_app_settings()

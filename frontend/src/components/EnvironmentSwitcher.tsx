@@ -139,7 +139,7 @@ export default function EnvironmentSwitcher({
       triggerLabel="Workspace"
       title="Switch workspace"
       align="right"
-      widthClassName={widthClassName ?? (iconOnly ? "w-9" : "w-44 xl:w-56")}
+      widthClassName={widthClassName ?? (iconOnly ? "w-10" : "w-44 xl:w-56")}
       menuMinWidthClassName={menuMinWidthClassName}
       compactOnNarrow={compactOnNarrow ?? !iconOnly}
       triggerMode={triggerMode}

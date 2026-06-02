@@ -4,7 +4,7 @@
  */
 import { type KeyboardEvent as ReactKeyboardEvent, ReactNode, Suspense, lazy, useEffect, useId, useMemo, useRef, useState } from "react";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../utils/workspaces";
-import { useWorkspaceSwitcherModel } from "./EnvironmentSwitcher";
+import type { WorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import { useGeneralSettings } from "./GeneralSettingsContext";
 import Modal from "./Modal";
 import ThemeToggle from "./ThemeToggle";
@@ -24,6 +24,8 @@ type TopbarProps = {
   showMobileMenuButton?: boolean;
   mobileMenuOpen?: boolean;
   onMobileMenuToggle?: () => void;
+  showWorkspaceSwitcher?: boolean;
+  workspaceSwitcher?: WorkspaceSwitcherModel | null;
 };
 
 type StoredAccountLink = {
@@ -70,10 +72,11 @@ export default function Topbar({
   showMobileMenuButton = false,
   mobileMenuOpen = false,
   onMobileMenuToggle,
+  showWorkspaceSwitcher = true,
+  workspaceSwitcher,
 }: TopbarProps) {
   const { generalSettings } = useGeneralSettings();
   const storedUser = useMemo(() => readStoredUser() as StoredTopbarUser | null, []);
-  const workspaceSwitcher = useWorkspaceSwitcherModel();
   const isS3Session = storedUser?.authType === "s3_session";
   const canManagePrivateConnections =
     !isS3Session &&
@@ -389,9 +392,9 @@ export default function Topbar({
     <>
       <div
         data-topbar
-        className="fixed inset-x-0 top-0 z-[45] border-b border-slate-200/80 bg-gradient-to-r from-white/95 via-white/90 to-slate-50/90 shadow-sm backdrop-blur supports-[backdrop-filter]:backdrop-blur dark:border-slate-800 dark:from-slate-900/95 dark:via-slate-900/90 dark:to-slate-950/90"
+        className="z-[45] shrink-0 border-b border-slate-200 bg-white shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950"
       >
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-2 px-3 sm:gap-3 sm:px-6">
+        <div className="flex h-16 min-w-0 items-center gap-2 px-3 sm:gap-3 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             {showMobileMenuButton && (
               <button
@@ -400,13 +403,13 @@ export default function Topbar({
                 aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"}
                 aria-controls="mobile-navigation-panel"
                 aria-expanded={mobileMenuOpen}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-primary-500 dark:focus-visible:ring-offset-slate-900 md:hidden"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-500 dark:focus-visible:ring-offset-slate-900 md:hidden"
               >
                 <HamburgerIcon className="h-4 w-4" />
               </button>
             )}
 
-            {workspaceSwitcher ? (
+            {showWorkspaceSwitcher && workspaceSwitcher ? (
               <div className="relative min-w-0 shrink-0">
                 <button
                   ref={workspaceTriggerRef}
@@ -421,7 +424,7 @@ export default function Topbar({
                     event.preventDefault();
                     setWorkspaceMenuOpen(true);
                   }}
-                  className={`inline-flex h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-2 text-left shadow-sm transition hover:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-500 dark:focus-visible:ring-offset-slate-900 ${
+                  className={`inline-flex h-10 min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 text-left shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-900 dark:hover:border-blue-500 dark:focus-visible:ring-offset-slate-900 ${
                     workspaceMenuOpen ? "border-primary/70" : ""
                   }`}
                 >
@@ -502,9 +505,9 @@ export default function Topbar({
                   </AnchoredPortalMenu>
                 )}
               </div>
-            ) : (
+            ) : showWorkspaceSwitcher ? (
               <div className="flex min-w-0 items-center gap-2">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-200">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white">
                   <CubeIcon className="h-4 w-4" />
                 </span>
                 <span className="min-w-0 leading-[1.05]">
@@ -512,7 +515,7 @@ export default function Topbar({
                   {section && <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">{section}</span>}
                 </span>
               </div>
-            )}
+            ) : null}
 
             {hasAdaptiveControls ? (
               <div ref={controlsStripRef} className="flex min-w-0 flex-1 items-center pl-1">
@@ -547,13 +550,13 @@ export default function Topbar({
                   event.preventDefault();
                   setAccountMenuOpen(true);
                 }}
-                className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-2 py-1 text-left shadow-sm transition hover:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:hover:border-primary-500 dark:focus-visible:ring-offset-slate-900"
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-transparent bg-transparent px-1.5 py-1 text-left transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:hover:bg-slate-900 dark:focus-visible:ring-offset-slate-900"
               >
-                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-100 ui-caption font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 ui-caption font-semibold text-blue-700 dark:bg-blue-900/50 dark:text-blue-100">
                   {accountInitial}
                 </span>
                 <span className="hidden min-w-0 sm:flex sm:max-w-32 lg:max-w-40 sm:flex-col sm:items-start">
-                  <span className="ui-caption uppercase tracking-wide text-slate-400 dark:text-slate-500">Account</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500">Account</span>
                   <span className="w-full truncate ui-caption font-semibold text-slate-700 dark:text-slate-100">
                     {accountDisplay}
                   </span>

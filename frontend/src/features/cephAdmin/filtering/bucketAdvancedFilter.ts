@@ -1,6 +1,7 @@
 export type FeatureTriState = "any" | "true" | "false";
 export type NumericComparisonOpUi = "=" | "!=" | ">" | ">=" | "<" | "<=";
 export type LifecycleRuleNameMode = "any" | "has_named" | "has_not_named";
+export type LifecycleRuleStatusValue = "" | "Enabled" | "Disabled";
 export type PresenceMode = "any" | "has" | "has_not";
 export type LifecycleRuleTypeValue =
   | ""
@@ -14,6 +15,7 @@ export type LifecycleRuleTypeValue =
 export type FeatureDetailFilters = {
   lifecycleRuleNameMode: LifecycleRuleNameMode;
   lifecycleRuleName: string;
+  lifecycleRuleStatus: LifecycleRuleStatusValue;
   lifecycleRuleTypeMode: PresenceMode;
   lifecycleRuleTypeValue: LifecycleRuleTypeValue;
   lifecycleExpirationDaysOp: NumericComparisonOpUi;
@@ -48,6 +50,7 @@ export type FeatureDetailFilterKey = keyof FeatureDetailFilters;
 export const defaultFeatureDetailFilters: FeatureDetailFilters = {
   lifecycleRuleNameMode: "any",
   lifecycleRuleName: "",
+  lifecycleRuleStatus: "",
   lifecycleRuleTypeMode: "any",
   lifecycleRuleTypeValue: "",
   lifecycleExpirationDaysOp: "=",
@@ -89,6 +92,7 @@ const NUMERIC_UI_TO_RULE_OP: Record<NumericComparisonOpUi, "eq" | "neq" | "gt" |
 
 const TRI_STATES: FeatureTriState[] = ["any", "true", "false"];
 const LIFECYCLE_NAME_MODES: LifecycleRuleNameMode[] = ["any", "has_named", "has_not_named"];
+const LIFECYCLE_RULE_STATUSES: Exclude<LifecycleRuleStatusValue, "">[] = ["Enabled", "Disabled"];
 const PRESENCE_MODES: PresenceMode[] = ["any", "has", "has_not"];
 const NUMERIC_UI_OPS: NumericComparisonOpUi[] = ["=", "!=", ">", ">=", "<", "<="];
 const LIFECYCLE_RULE_TYPES: Exclude<LifecycleRuleTypeValue, "">[] = [
@@ -116,6 +120,11 @@ export const sanitizeFeatureDetailFilters = (value: unknown): FeatureDetailFilte
   const lifecycleRuleNameMode = LIFECYCLE_NAME_MODES.includes(raw.lifecycleRuleNameMode as LifecycleRuleNameMode)
     ? (raw.lifecycleRuleNameMode as LifecycleRuleNameMode)
     : defaultFeatureDetailFilters.lifecycleRuleNameMode;
+  const lifecycleRuleStatus = LIFECYCLE_RULE_STATUSES.includes(
+    raw.lifecycleRuleStatus as Exclude<LifecycleRuleStatusValue, "">
+  )
+    ? (raw.lifecycleRuleStatus as Exclude<LifecycleRuleStatusValue, "">)
+    : defaultFeatureDetailFilters.lifecycleRuleStatus;
   const lifecycleRuleTypeMode = PRESENCE_MODES.includes(raw.lifecycleRuleTypeMode as PresenceMode)
     ? (raw.lifecycleRuleTypeMode as PresenceMode)
     : defaultFeatureDetailFilters.lifecycleRuleTypeMode;
@@ -168,6 +177,7 @@ export const sanitizeFeatureDetailFilters = (value: unknown): FeatureDetailFilte
   return {
     lifecycleRuleNameMode,
     lifecycleRuleName: asString(raw.lifecycleRuleName),
+    lifecycleRuleStatus,
     lifecycleRuleTypeMode,
     lifecycleRuleTypeValue,
     lifecycleExpirationDaysOp,
@@ -223,6 +233,15 @@ export const buildFeatureDetailRules = (filters: FeatureDetailFilters): Array<Re
       rule.quantifier = "none";
     }
     rules.push(rule);
+  }
+
+  if (filters.lifecycleRuleStatus) {
+    rules.push({
+      feature: "lifecycle_rules",
+      param: "lifecycle_rule_status",
+      op: "eq",
+      value: filters.lifecycleRuleStatus,
+    });
   }
 
   if (filters.lifecycleRuleTypeMode !== "any" && filters.lifecycleRuleTypeValue) {
@@ -381,6 +400,9 @@ export const featureDetailSummaryItems = (
   }
   if (filters.lifecycleRuleNameMode === "has_not_named" && lifecycleRuleName) {
     summary.push({ field: "lifecycleRuleName", label: `Lifecycle rule name absent: ${lifecycleRuleName}` });
+  }
+  if (filters.lifecycleRuleStatus) {
+    summary.push({ field: "lifecycleRuleStatus", label: `Lifecycle rule status: ${filters.lifecycleRuleStatus}` });
   }
   if (filters.lifecycleRuleTypeMode !== "any" && filters.lifecycleRuleTypeValue) {
     const typeLabel = LIFECYCLE_RULE_TYPE_LABELS[filters.lifecycleRuleTypeValue] ?? filters.lifecycleRuleTypeValue;

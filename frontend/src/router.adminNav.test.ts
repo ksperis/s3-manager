@@ -9,21 +9,28 @@ function getSettingsLink(label: string, options: Parameters<typeof buildAdminNav
 
 describe("buildAdminNav", () => {
   it("sets explicit hint for disabled Browser settings link", () => {
-    const browserLink = getSettingsLink("Browser", [false, false, false, true]);
+    const browserLink = getSettingsLink("Browser", [true, false, false, false, true]);
 
     expect(browserLink?.disabled).toBe(true);
     expect(browserLink?.disabledHint).toBe("Browser feature is disabled in General settings.");
   });
 
   it("does not set hint when Browser settings link is enabled", () => {
-    const browserLink = getSettingsLink("Browser", [true, true, false, true]);
+    const browserLink = getSettingsLink("Browser", [true, true, true, false, true]);
 
     expect(browserLink?.disabled).toBe(false);
     expect(browserLink?.disabledHint).toBeUndefined();
   });
 
+  it("sets explicit hint for disabled Portal settings link", () => {
+    const portalLink = getSettingsLink("Portal", [false, true, false, false, true]);
+
+    expect(portalLink?.disabled).toBe(true);
+    expect(portalLink?.disabledHint).toBe("Portal feature is disabled in General settings.");
+  });
+
   it("does not expose API Tokens in settings navigation", () => {
-    const settingsSection = buildAdminNav(true, true, true, true).find((section) => section.label === "Settings");
+    const settingsSection = buildAdminNav(true, true, true, true, true).find((section) => section.label === "Settings");
     const apiTokensLink = settingsSection?.links.find((link) => link.label === "API Tokens");
 
     expect(apiTokensLink).toBeUndefined();

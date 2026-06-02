@@ -26,10 +26,9 @@ const generalSettingsState = {
   quota_alerts_enabled: false,
   usage_history_enabled: false,
   bucket_migration_enabled: false,
-  bucket_compare_enabled: false,
-  bucket_integrity_check_enabled: false,
+  bucket_compare_enabled: true,
+  bucket_integrity_check_enabled: true,
   manager_ceph_s3_user_keys_enabled: true,
-  allow_ui_user_bucket_migration: false,
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,
@@ -223,22 +222,24 @@ describe("UsersPage modal tabs", () => {
     expect(screen.getByPlaceholderText("jane.doe@example.com")).toBeInTheDocument();
   });
 
-  it("shows Access tab and keeps access toggles out of General in create modal", async () => {
+  it("shows Workspaces tab and keeps workspace toggles out of General in create modal", async () => {
     render(<UsersPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
     expect(screen.getByRole("button", { name: "General" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Associations" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Access" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Workspaces" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Access" })).not.toBeInTheDocument();
     expect(screen.queryByText("Ceph Admin access")).not.toBeInTheDocument();
     expect(screen.queryByText("Storage Ops access")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Workspaces" }));
+    expect(screen.getByText("Mass management workspaces")).toBeInTheDocument();
     expect(screen.getByText("Ceph Admin access")).toBeInTheDocument();
     expect(screen.getByText("Storage Ops access")).toBeInTheDocument();
   });
 
-  it("shows Access tab and keeps access toggles out of General in edit modal", async () => {
+  it("shows Workspaces tab and keeps workspace toggles out of General in edit modal", async () => {
     listUsersMock.mockResolvedValue({
       items: [
         {
@@ -262,13 +263,83 @@ describe("UsersPage modal tabs", () => {
 
     expect(screen.getByRole("button", { name: "General" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Associations" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Access" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Workspaces" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Access" })).not.toBeInTheDocument();
     expect(screen.queryByText("Ceph Admin access")).not.toBeInTheDocument();
     expect(screen.queryByText("Storage Ops access")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Workspaces" }));
+    expect(screen.getByText("Mass management workspaces")).toBeInTheDocument();
     expect(screen.getByText("Ceph Admin access")).toBeInTheDocument();
     expect(screen.getByText("Storage Ops access")).toBeInTheDocument();
+  });
+
+  it("shows Manager tools only in edit modal and submits per-tool access", async () => {
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 10,
+          email: "edit.tools@example.com",
+          role: "ui_admin",
+          can_access_ceph_admin: false,
+          can_access_storage_ops: false,
+          manager_tool_access: {
+            bucket_compare: false,
+            bucket_integrity_check: true,
+            bucket_migration: true,
+            ceph_s3_user_keys: false,
+          },
+          accounts: [],
+          account_links: [],
+          s3_users: [],
+          s3_connections: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+    expect(screen.queryByRole("button", { name: "Manager tools" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manager tools" }));
+
+    expect(screen.getByText("Bucket tools")).toBeInTheDocument();
+    expect(screen.getByText("Ceph tools")).toBeInTheDocument();
+    const bucketToolsGroup = screen.getByText("Bucket tools").closest("div");
+    expect(bucketToolsGroup).not.toBeNull();
+    expect(within(bucketToolsGroup as HTMLElement).getByText("Bucket compare")).toBeInTheDocument();
+    expect(within(bucketToolsGroup as HTMLElement).getByText("Bucket integrity check")).toBeInTheDocument();
+    expect(within(bucketToolsGroup as HTMLElement).getByText("Bucket migration")).toBeInTheDocument();
+
+    const compareToggle = screen.getByRole("checkbox", { name: /Bucket compare/i });
+    const migrationToggle = screen.getByRole("checkbox", { name: /Bucket migration/i });
+    expect(compareToggle).not.toBeChecked();
+    expect(migrationToggle).toBeDisabled();
+    expect(screen.getByText("Disabled globally")).toBeInTheDocument();
+
+    fireEvent.click(compareToggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateUserMock).toHaveBeenCalled();
+    });
+    expect(updateUserMock).toHaveBeenCalledWith(
+      10,
+      expect.objectContaining({
+        manager_tool_access: {
+          bucket_compare: true,
+          bucket_integrity_check: true,
+          bucket_migration: true,
+          ceph_s3_user_keys: false,
+        },
+      })
+    );
   });
 
   it("keeps role access note hidden by default in create modal and shows it on info icon click", async () => {
@@ -328,7 +399,8 @@ describe("UsersPage modal tabs", () => {
 
     fireEvent.change(screen.getByPlaceholderText("jane.doe@example.com"), { target: { value: "ops@example.com" } });
     fireEvent.change(screen.getByPlaceholderText("•••••••"), { target: { value: "secret-123" } });
-    fireEvent.click(screen.getByRole("button", { name: "Access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Workspaces" }));
+    expect(screen.getByText("Mass management workspaces")).toBeInTheDocument();
     expect(screen.getByText("Storage Ops access")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: "Allow access to /storage-ops" }));
     fireEvent.click(screen.getByRole("button", { name: "Create" }));

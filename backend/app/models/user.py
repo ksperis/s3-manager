@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from app.models.pagination import PaginatedResponse
 
 UiLanguage = Literal["en", "fr", "de"]
@@ -32,6 +32,14 @@ class LinkedS3Connection(BaseModel):
 class AccountMembership(BaseModel):
     account_id: int
     account_admin: Optional[bool] = None
+    account_role: Optional[str] = None
+
+
+class ManagerToolAccess(BaseModel):
+    bucket_compare: bool = False
+    bucket_integrity_check: bool = False
+    bucket_migration: bool = False
+    ceph_s3_user_keys: bool = False
 
 
 class UserSummary(BaseModel):
@@ -52,6 +60,7 @@ class User(BaseModel):
     is_root: bool = False
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
+    manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False
@@ -67,6 +76,7 @@ class UserCreate(BaseModel):
     is_root: bool = False
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
+    manager_tool_access: Optional[ManagerToolAccess] = None
 
 
 class UserUpdate(BaseModel):
@@ -77,6 +87,7 @@ class UserUpdate(BaseModel):
     is_root: Optional[bool] = None
     can_access_ceph_admin: Optional[bool] = None
     can_access_storage_ops: Optional[bool] = None
+    manager_tool_access: Optional[ManagerToolAccess] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
 
@@ -94,6 +105,7 @@ class UserAssignS3Account(BaseModel):
     account_id: int
     account_root: Optional[bool] = None
     account_admin: Optional[bool] = None
+    account_role: Optional[str] = None
 
 
 class UserOut(BaseModel):
@@ -108,6 +120,7 @@ class UserOut(BaseModel):
     is_root: bool = False
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
+    manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False

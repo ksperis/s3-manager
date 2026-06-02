@@ -7,6 +7,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { logout as logoutRequest } from "../api/auth";
 import Header from "./Header";
 import Sidebar, { SidebarLink, SidebarSection } from "./Sidebar";
+import { useWorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import {
   DESKTOP_SIDEBAR_SESSION_STORAGE_KEY,
   SIDEBAR_COMPACT_WIDTH,
@@ -36,10 +37,12 @@ type LayoutProps = {
   hideTopbar?: boolean;
   topbarAction?: ReactNode;
   sidebarAction?: ReactNode;
+  sidebarFooter?: ReactNode;
   hideSidebar?: boolean;
   mainClassName?: string;
   disableMainScroll?: boolean;
   fullHeight?: boolean;
+  children?: ReactNode;
 };
 
 function getUserEmail(): string | null {
@@ -70,10 +73,12 @@ export default function Layout({
   hideTopbar = false,
   topbarAction,
   sidebarAction,
+  sidebarFooter,
   hideSidebar = false,
   mainClassName,
   disableMainScroll = false,
   fullHeight = false,
+  children,
 }: LayoutProps) {
   const location = useLocation();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -87,6 +92,7 @@ export default function Layout({
   const shouldShowSidebar = !hideSidebar;
   const desktopSidebarCompact = isSidebarCompact(desktopSidebarWidth);
   const userEmail = getUserEmail();
+  const workspaceSwitcher = useWorkspaceSwitcherModel();
   const logout = () => {
     void logoutRequest().catch((err) => {
       console.warn("Unable to revoke refresh session", err);
@@ -100,11 +106,11 @@ export default function Layout({
   const heroInlineAction = topbarContent || hasTopbarControls ? undefined : headerInlineAction;
   const resolvedInlineTopbarContent = topbarContent ?? (hasTopbarControls ? undefined : headerInlineAction);
   const mainOverflowClass = disableMainScroll ? "overflow-hidden" : "overflow-y-auto";
-  const mainClasses = `flex min-h-0 flex-1 flex-col ${mainOverflowClass} bg-surface px-3 pb-8 pt-3 sm:px-6 dark:bg-slate-950${
+  const mainClasses = `flex min-h-0 min-w-0 flex-1 flex-col ${mainOverflowClass} bg-[#f6f8fc] px-3 pb-8 pt-4 sm:px-6 dark:bg-slate-950${
     mainClassName ? ` ${mainClassName}` : ""
   }`;
   const rootHeightClass = fullHeight ? "h-[100dvh]" : "h-screen";
-  const drawerTopClass = hideTopbar ? "top-0" : "top-14";
+  const drawerTopClass = hideTopbar ? "top-0" : "top-16";
 
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -209,67 +215,80 @@ export default function Layout({
     }
   };
 
+  const handleDesktopSidebarCollapseToggle = () => {
+    setDesktopSidebarWidth((current) =>
+      isSidebarCompact(current) ? SIDEBAR_DEFAULT_WIDTH : SIDEBAR_COMPACT_WIDTH
+    );
+  };
+
   return (
-    <div className={`flex ${rootHeightClass} flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50`}>
-      {!hideTopbar && (
-        <Topbar
-          projectName={projectName}
-          section={headerTitle}
-          inlineContent={resolvedInlineTopbarContent}
-          controlsContent={topbarControls}
-          controlDescriptors={topbarControlDescriptors}
-          userEmail={userEmail}
-          onLogout={logout}
-          contextAction={topbarAction}
-          showMobileMenuButton={shouldShowSidebar}
-          mobileMenuOpen={mobileSidebarOpen}
-          onMobileMenuToggle={() => setMobileSidebarOpen((open) => !open)}
+    <div className={`flex ${rootHeightClass} overflow-hidden bg-[#f6f8fc] text-slate-900 dark:bg-slate-950 dark:text-slate-50`}>
+      {shouldShowSidebar && (
+        <Sidebar
+          title={sidebarTitle}
+          sections={navSections}
+          links={navLinks}
+          headerAction={sidebarAction}
+          footer={sidebarFooter}
+          width={desktopSidebarWidth}
+          compact={desktopSidebarCompact}
+          resizing={desktopSidebarDragging}
+          onResizeStart={handleDesktopSidebarResizeStart}
+          onResizeKeyDown={handleDesktopSidebarResizeKeyDown}
+          onCollapseToggle={handleDesktopSidebarCollapseToggle}
+          workspaceSwitcher={workspaceSwitcher}
         />
       )}
-      {shouldShowSidebar && (
-        <div
-          className={`fixed inset-x-0 bottom-0 ${drawerTopClass} z-[44] md:hidden ${
-            mobileSidebarOpen ? "pointer-events-auto" : "pointer-events-none"
-          }`}
-          aria-hidden={!mobileSidebarOpen}
-        >
-          <button
-            type="button"
-            tabIndex={mobileSidebarOpen ? 0 : -1}
-            aria-label="Close mobile navigation"
-            onClick={() => setMobileSidebarOpen(false)}
-            className={`absolute inset-0 bg-slate-950/45 transition-opacity duration-200 ${
-              mobileSidebarOpen ? "opacity-100" : "opacity-0"
-            }`}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {!hideTopbar && (
+          <Topbar
+            projectName={projectName}
+            section={headerTitle}
+            inlineContent={resolvedInlineTopbarContent}
+            controlsContent={topbarControls}
+            controlDescriptors={topbarControlDescriptors}
+            userEmail={userEmail}
+            onLogout={logout}
+            contextAction={topbarAction}
+            showMobileMenuButton={shouldShowSidebar}
+            mobileMenuOpen={mobileSidebarOpen}
+            onMobileMenuToggle={() => setMobileSidebarOpen((open) => !open)}
+            showWorkspaceSwitcher={!shouldShowSidebar}
+            workspaceSwitcher={workspaceSwitcher}
           />
-          <div id="mobile-navigation-panel" className="absolute left-0 top-0 h-full w-[18.5rem] max-w-[86vw]">
-            <Sidebar
-              variant="mobile"
-              className={`shadow-2xl transition-transform duration-200 ${
-                mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
-              }`}
-              title={sidebarTitle}
-              sections={navSections}
-              links={navLinks}
-              headerAction={sidebarAction}
-              onNavigate={() => setMobileSidebarOpen(false)}
-            />
-          </div>
-        </div>
-      )}
-      <div className={`flex min-h-0 flex-1 overflow-hidden ${hideTopbar ? "pt-0" : "pt-14"}`}>
+        )}
         {shouldShowSidebar && (
-          <Sidebar
-            title={sidebarTitle}
-            sections={navSections}
-            links={navLinks}
-            headerAction={sidebarAction}
-            width={desktopSidebarWidth}
-            compact={desktopSidebarCompact}
-            resizing={desktopSidebarDragging}
-            onResizeStart={handleDesktopSidebarResizeStart}
-            onResizeKeyDown={handleDesktopSidebarResizeKeyDown}
-          />
+          <div
+            className={`fixed inset-x-0 bottom-0 ${drawerTopClass} z-[44] md:hidden ${
+              mobileSidebarOpen ? "pointer-events-auto" : "pointer-events-none"
+            }`}
+            aria-hidden={!mobileSidebarOpen}
+          >
+            <button
+              type="button"
+              tabIndex={mobileSidebarOpen ? 0 : -1}
+              aria-label="Close mobile navigation"
+              onClick={() => setMobileSidebarOpen(false)}
+              className={`absolute inset-0 bg-slate-950/45 transition-opacity duration-200 ${
+                mobileSidebarOpen ? "opacity-100" : "opacity-0"
+              }`}
+            />
+            <div id="mobile-navigation-panel" className="absolute left-0 top-0 h-full w-[18.5rem] max-w-[86vw]">
+              <Sidebar
+                variant="mobile"
+                className={`shadow-2xl transition-transform duration-200 ${
+                  mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                }`}
+                title={sidebarTitle}
+                sections={navSections}
+                links={navLinks}
+                headerAction={sidebarAction}
+                footer={sidebarFooter}
+                workspaceSwitcher={workspaceSwitcher}
+                onNavigate={() => setMobileSidebarOpen(false)}
+              />
+            </div>
+          </div>
         )}
         <main className={mainClasses}>
           {!hideHeader && (
@@ -280,8 +299,8 @@ export default function Layout({
               inlineAction={heroInlineAction}
             />
           )}
-          <div className="flex min-h-0 flex-1 flex-col space-y-4">
-            <Outlet />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col space-y-4">
+            {children ?? <Outlet />}
           </div>
         </main>
       </div>

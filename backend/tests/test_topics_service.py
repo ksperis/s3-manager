@@ -1,5 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import json
+
 from app.db import S3Account
 from app.services import sns_client
 from app.services.topics_service import TopicsService
@@ -37,6 +39,92 @@ def test_set_topic_configuration_skips_noop(monkeypatch):
     )
 
     assert result == {"push-endpoint": "https://example.com/webhook", "verify-ssl": False}
+    assert calls == []
+
+
+def test_parse_topic_configuration_normalizes_ceph_endpoint():
+    service = TopicsService()
+    arn = "arn:aws:sns:lab:tenant:topic"
+    attributes = {
+        "TopicArn": arn,
+        "Name": "topic",
+        "User": "tenant",
+        "Policy": '{"Version":"2012-10-17","Statement":[]}',
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow"}],
+        "EndPoint": json.dumps(
+            {
+                "EndpointAddress": "https://example.com/webhook",
+                "EndpointArgs": "verify-ssl=false&persistent=true&time_to_live=60&empty=&HasStoredSecret=true",
+                "EndpointTopic": "topic",
+                "HasStoredSecret": "true",
+            }
+        ),
+        "OpaqueData": "trace=lab",
+    }
+
+    result = service._parse_configurable_attributes(attributes)
+
+    assert result == {
+        "push-endpoint": "https://example.com/webhook",
+        "verify-ssl": False,
+        "persistent": True,
+        "time_to_live": 60,
+        "OpaqueData": "trace=lab",
+    }
+    assert "EndPoint" not in result
+    assert "EndpointTopic" not in result
+    assert "HasStoredSecret" not in result
+    assert "Policy" not in result
+    assert "Version" not in result
+    assert "Statement" not in result
+
+
+def test_set_topic_configuration_skips_noop_for_ceph_endpoint(monkeypatch):
+    service = TopicsService()
+    arn = "arn:aws:sns:lab:tenant:topic"
+    attributes = {
+        "TopicArn": arn,
+        "Name": "topic",
+        "User": "tenant",
+        "EndPoint": json.dumps(
+            {
+                "EndpointAddress": "https://example.com/webhook",
+                "EndpointArgs": "verify-ssl=false&persistent=true&time_to_live=60",
+                "EndpointTopic": "topic",
+                "HasStoredSecret": "false",
+            }
+        ),
+        "OpaqueData": "trace=lab",
+    }
+
+    monkeypatch.setattr(sns_client, "get_topic_attributes", lambda *_, **__: attributes)
+    calls: list[dict] = []
+
+    def fake_set_topic_attributes(topic_arn, attrs, access_key=None, secret_key=None, **kwargs):
+        calls.append({"topic_arn": topic_arn, "attrs": attrs})
+
+    monkeypatch.setattr(sns_client, "set_topic_attributes", fake_set_topic_attributes)
+
+    result = service.set_topic_configuration(
+        _account(),
+        arn,
+        {
+            "push-endpoint": "https://example.com/webhook",
+            "verify-ssl": False,
+            "persistent": True,
+            "time_to_live": 60,
+            "OpaqueData": "trace=lab",
+        },
+    )
+
+    assert result == {
+        "push-endpoint": "https://example.com/webhook",
+        "verify-ssl": False,
+        "persistent": True,
+        "time_to_live": 60,
+        "OpaqueData": "trace=lab",
+    }
     assert calls == []
 
 

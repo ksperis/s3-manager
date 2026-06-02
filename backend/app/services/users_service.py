@@ -11,6 +11,8 @@ from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core.security import get_password_hash, verify_password
 from app.db import (
+    AccountIAMUser,
+    AccountRole,
     ApiToken,
     AuditLog,
     BucketMigration,
@@ -30,6 +32,7 @@ from app.models.user import (
     AccountMembership,
     LinkedS3Connection,
     LinkedS3User,
+    ManagerToolAccess,
     UserCreate,
     UserOut,
     UserSummary,
@@ -37,6 +40,14 @@ from app.models.user import (
     validate_password_policy,
 )
 logger = logging.getLogger(__name__)
+
+
+MANAGER_TOOL_ROLES = {
+    UserRole.UI_SUPERADMIN.value,
+    UserRole.UI_ADMIN.value,
+    UserRole.UI_USER.value,
+}
+ACCOUNT_ROLE_VALUES = {entry.value for entry in AccountRole}
 
 
 class UsersService:
@@ -88,9 +99,11 @@ class UsersService:
         can_access_ceph_admin = bool(payload.can_access_ceph_admin) if is_admin_ui_role(role) else False
         can_access_storage_ops = (
             bool(payload.can_access_storage_ops)
-            if role in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}
+            if role in MANAGER_TOOL_ROLES
             else False
         )
+        manager_tool_access = payload.manager_tool_access or ManagerToolAccess()
+        manager_tools_supported = role in MANAGER_TOOL_ROLES
         user = User(
             email=payload.email,
             full_name=payload.full_name,
@@ -101,6 +114,18 @@ class UsersService:
             is_root=is_root,
             can_access_ceph_admin=can_access_ceph_admin,
             can_access_storage_ops=can_access_storage_ops,
+            can_access_manager_bucket_compare=(
+                bool(manager_tool_access.bucket_compare) if manager_tools_supported else False
+            ),
+            can_access_manager_bucket_integrity_check=(
+                bool(manager_tool_access.bucket_integrity_check) if manager_tools_supported else False
+            ),
+            can_access_manager_bucket_migration=(
+                bool(manager_tool_access.bucket_migration) if manager_tools_supported else False
+            ),
+            can_access_manager_ceph_s3_user_keys=(
+                bool(manager_tool_access.ceph_s3_user_keys) if manager_tools_supported else False
+            ),
         )
         self.db.add(user)
         self.db.commit()
@@ -136,11 +161,28 @@ class UsersService:
         if payload.can_access_storage_ops is not None:
             user.can_access_storage_ops = (
                 bool(payload.can_access_storage_ops)
-                if next_role in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}
+                if next_role in MANAGER_TOOL_ROLES
                 else False
             )
-        elif next_role not in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}:
+        elif next_role not in MANAGER_TOOL_ROLES:
             user.can_access_storage_ops = False
+        if payload.manager_tool_access is not None:
+            manager_tool_access = payload.manager_tool_access
+            if next_role in MANAGER_TOOL_ROLES:
+                user.can_access_manager_bucket_compare = bool(manager_tool_access.bucket_compare)
+                user.can_access_manager_bucket_integrity_check = bool(manager_tool_access.bucket_integrity_check)
+                user.can_access_manager_bucket_migration = bool(manager_tool_access.bucket_migration)
+                user.can_access_manager_ceph_s3_user_keys = bool(manager_tool_access.ceph_s3_user_keys)
+            else:
+                user.can_access_manager_bucket_compare = False
+                user.can_access_manager_bucket_integrity_check = False
+                user.can_access_manager_bucket_migration = False
+                user.can_access_manager_ceph_s3_user_keys = False
+        elif next_role not in MANAGER_TOOL_ROLES:
+            user.can_access_manager_bucket_compare = False
+            user.can_access_manager_bucket_integrity_check = False
+            user.can_access_manager_bucket_migration = False
+            user.can_access_manager_ceph_s3_user_keys = False
         if not is_admin_ui_role(next_role):
             user.quota_alerts_global_watch = False
         if payload.s3_user_ids is not None:
@@ -217,6 +259,11 @@ class UsersService:
             if not bool(row[1])
         ]
         # Remove dependent links/tokens first to satisfy FK constraints on PostgreSQL.
+        (
+            self.db.query(AccountIAMUser)
+            .filter(AccountIAMUser.user_id == user.id)
+            .delete(synchronize_session=False)
+        )
         (
             self.db.query(UserS3Account)
             .filter(UserS3Account.user_id == user.id)
@@ -412,6 +459,7 @@ class UsersService:
         *,
         role: Optional[str] = None,
         account_admin: Optional[bool] = None,
+        account_role: Optional[str] = None,
     ) -> User:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -429,14 +477,23 @@ class UsersService:
             user.role = role
         if user.role == UserRole.UI_NONE.value:
             user.role = UserRole.UI_USER.value
+        if account_role is not None and account_role not in ACCOUNT_ROLE_VALUES:
+            raise ValueError("Invalid account role")
+        next_account_role = (
+            account_role
+            if account_role is not None
+            else (link.account_role if link else AccountRole.PORTAL_NONE.value)
+        )
         if not link:
             link = UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
                 is_root=bool(account_root),
+                account_role=next_account_role,
             )
         link.is_root = bool(account_root)
         link.account_admin = bool(account_admin if account_admin is not None else link.account_admin or account_root)
+        link.account_role = next_account_role
         link.updated_at = utcnow()
         self.db.add(link)
         self.db.add(user)
@@ -472,18 +529,19 @@ class UsersService:
                     AccountMembership(
                         account_id=link.account_id,
                         account_admin=link.account_admin,
+                        account_role=link.account_role,
                     )
                     for link in user.account_links
                 ]
                 account_ids = [link.account_id for link in user.account_links]
         except DetachedInstanceError:
             account_rows = (
-                self.db.query(UserS3Account.account_id, UserS3Account.account_admin)
+                self.db.query(UserS3Account.account_id, UserS3Account.account_admin, UserS3Account.account_role)
                 .filter(UserS3Account.user_id == user.id)
                 .all()
             )
             account_links = [
-                AccountMembership(account_id=row[0], account_admin=row[1]) for row in account_rows
+                AccountMembership(account_id=row[0], account_admin=row[1], account_role=row[2]) for row in account_rows
             ]
             account_ids = [row[0] for row in account_rows]
         try:
@@ -554,6 +612,12 @@ class UsersService:
             is_root=user.is_root,
             can_access_ceph_admin=bool(user.can_access_ceph_admin),
             can_access_storage_ops=bool(user.can_access_storage_ops),
+            manager_tool_access=ManagerToolAccess(
+                bucket_compare=bool(user.can_access_manager_bucket_compare),
+                bucket_integrity_check=bool(user.can_access_manager_bucket_integrity_check),
+                bucket_migration=bool(user.can_access_manager_bucket_migration),
+                ceph_s3_user_keys=bool(user.can_access_manager_ceph_s3_user_keys),
+            ),
             ui_language=user.ui_language,
             quota_alerts_enabled=bool(user.quota_alerts_enabled),
             quota_alerts_global_watch=bool(user.quota_alerts_global_watch),

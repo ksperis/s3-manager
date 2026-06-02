@@ -100,7 +100,11 @@ def get_manager_context(
     elif access_mode == "connection":
         iam_identity = connection_iam_identity
 
-    manager_ceph_keys_enabled = is_manager_ceph_s3_user_keys_available(account)
+    manager_ceph_keys_enabled = (
+        is_manager_ceph_s3_user_keys_available(account, actor)
+        if isinstance(actor, User)
+        else False
+    )
 
     return ManagerContext(
         access_mode=access_mode,

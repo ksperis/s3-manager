@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from datetime import datetime, timezone
+import logging
 from threading import Lock
 from typing import Any, Callable, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
 
 from app.models.ceph_admin import (
     CephAdminEntityMetrics,
@@ -28,6 +30,8 @@ from app.routers.ceph_admin.listing_common import (
     EndpointCacheEntry as _common_EndpointCacheEntry,
     EndpointListCacheKey as _common_EndpointListCacheKey,
     EndpointPayloadCacheKey as _common_EndpointPayloadCacheKey,
+    ListingProgressEmitter as _common_ListingProgressEmitter,
+    ListingProgressSnapshot as _common_ListingProgressSnapshot,
     apply_advanced_filter as _common_apply_advanced_filter,
     apply_simple_search as _common_apply_simple_search,
     coerce_number as _common_coerce_number,
@@ -43,15 +47,20 @@ from app.routers.ceph_admin.listing_common import (
     parse_int as _common_parse_int,
     serialize_filter as _common_serialize_filter,
     sort_value as _common_sort_value,
+    interpolate_progress_percent as _common_interpolate_progress_percent,
+    invoke_cancel_check as _common_invoke_cancel_check,
+    stream_listing_response as _common_stream_listing_response,
 )
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.services.rgw_admin import RGWAdminError
+from app.services.bucket_listing_shared import _is_advanced_filter_stream_payload as _shared_is_advanced_filter_stream_payload
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.rgw import extract_bucket_list
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import compute_usage_ratio_percent, summarize_bucket_usage
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/users", tags=["ceph-admin-users"])
+logger = logging.getLogger(__name__)
 
 USERS_LIST_CACHE_TTL_SECONDS = 30.0
 USERS_LIST_CACHE_MAX_ENTRIES = 64
@@ -314,68 +323,89 @@ def _enrich_users(
     users: list[CephAdminRgwUserSummary],
     requested: set[str],
     ctx: CephAdminContext,
+    *,
+    progress: _common_ListingProgressEmitter | None = None,
+    progress_stage: str = "detail_enrichment",
+    progress_message: str = "Loading user details",
+    progress_start: int = 50,
+    progress_end: int = 64,
+    cancel_check: Callable[[], None] | None = None,
 ) -> list[CephAdminRgwUserSummary]:
     if not users or not requested:
         return users
     account_name_by_id: dict[str, Optional[str]] = {}
     enriched: list[CephAdminRgwUserSummary] = []
-    for item in users:
+    total = len(users)
+    for index, item in enumerate(users, start=1):
+        _common_invoke_cancel_check(cancel_check)
         user = _clone_user(item)
         try:
             payload = ctx.rgw_admin.get_user(user.uid, tenant=user.tenant, allow_not_found=True)
         except RGWAdminError as exc:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-        if not payload or payload.get("not_found"):
-            enriched.append(user)
-            continue
-        user_payload = _extract_user_payload(payload)
-        account_id = _normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
-        if "account" in requested:
-            user.account_id = account_id
-            payload_account_name = _normalize_optional_str(
-                payload.get("account_name") or user_payload.get("account_name")
-            )
-            if account_id:
-                if account_id not in account_name_by_id:
-                    account_payload = None
-                    if _optional_account_lookup_enabled(ctx) is not False:
-                        try:
-                            account_payload = ctx.rgw_admin.get_account(
-                                account_id,
-                                allow_not_found=True,
-                                allow_not_implemented=True,
-                            )
-                        except RGWAdminError as exc:
-                            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-                    account_name_by_id[account_id] = _normalize_optional_str(
-                        account_payload.get("name") if isinstance(account_payload, dict) else None
-                    )
-                user.account_name = account_name_by_id.get(account_id) or payload_account_name
-            else:
-                user.account_name = payload_account_name
-        if "profile" in requested:
-            user.full_name = _normalize_optional_str(user_payload.get("display_name") or payload.get("display_name"))
-            user.email = _normalize_optional_str(user_payload.get("email") or payload.get("email"))
-        if "status" in requested:
-            user.suspended = _parse_suspended(user_payload.get("suspended") or payload.get("suspended"))
-        if "limits" in requested:
-            user.max_buckets = _parse_int(user_payload.get("max_buckets") or payload.get("max_buckets"))
-        if "quota" in requested:
-            quota_size, quota_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
-            user.quota_max_size_bytes = quota_size
-            user.quota_max_objects = quota_objects
-        if "usage" in requested:
-            lookup_uid = f"{user.tenant}${user.uid}" if user.tenant else user.uid
-            try:
-                buckets_payload = ctx.rgw_admin.get_all_buckets(uid=lookup_uid, with_stats=True)
-            except RGWAdminError as exc:
-                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-            _bucket_usage, total_bytes, total_objects, _bucket_count = summarize_bucket_usage(
-                extract_bucket_list(buckets_payload)
-            )
-            user.used_bytes = total_bytes
-            user.object_count = total_objects
+        if payload and not payload.get("not_found"):
+            user_payload = _extract_user_payload(payload)
+            account_id = _normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
+            if "account" in requested:
+                user.account_id = account_id
+                payload_account_name = _normalize_optional_str(
+                    payload.get("account_name") or user_payload.get("account_name")
+                )
+                if account_id:
+                    if account_id not in account_name_by_id:
+                        account_payload = None
+                        if _optional_account_lookup_enabled(ctx) is not False:
+                            try:
+                                account_payload = ctx.rgw_admin.get_account(
+                                    account_id,
+                                    allow_not_found=True,
+                                    allow_not_implemented=True,
+                                )
+                            except RGWAdminError as exc:
+                                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+                        account_name_by_id[account_id] = _normalize_optional_str(
+                            account_payload.get("name") if isinstance(account_payload, dict) else None
+                        )
+                    user.account_name = account_name_by_id.get(account_id) or payload_account_name
+                else:
+                    user.account_name = payload_account_name
+            if "profile" in requested:
+                user.full_name = _normalize_optional_str(user_payload.get("display_name") or payload.get("display_name"))
+                user.email = _normalize_optional_str(user_payload.get("email") or payload.get("email"))
+            if "status" in requested:
+                user.suspended = _parse_suspended(user_payload.get("suspended") or payload.get("suspended"))
+            if "limits" in requested:
+                user.max_buckets = _parse_int(user_payload.get("max_buckets") or payload.get("max_buckets"))
+            if "quota" in requested:
+                quota_size, quota_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
+                user.quota_max_size_bytes = quota_size
+                user.quota_max_objects = quota_objects
+            if "usage" in requested:
+                lookup_uid = f"{user.tenant}${user.uid}" if user.tenant else user.uid
+                try:
+                    buckets_payload = ctx.rgw_admin.get_all_buckets(uid=lookup_uid, with_stats=True)
+                except RGWAdminError as exc:
+                    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+                _bucket_usage, total_bytes, total_objects, _bucket_count = summarize_bucket_usage(
+                    extract_bucket_list(buckets_payload)
+                )
+                user.used_bytes = total_bytes
+                user.object_count = total_objects
         enriched.append(user)
+        if progress is not None:
+            progress.emit(
+                percent=_common_interpolate_progress_percent(
+                    progress_start,
+                    progress_end,
+                    processed=index,
+                    total=total,
+                ),
+                stage=progress_stage,
+                processed=index,
+                total=total,
+                message=progress_message,
+            )
+        _common_invoke_cancel_check(cancel_check)
     return enriched
 
 
@@ -663,8 +693,8 @@ def _apply_caps_update(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.get("", response_model=PaginatedCephAdminUsersResponse)
-def list_rgw_users(
+def _compute_users_listing(
+    *,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
     search: str | None = Query(None),
@@ -673,10 +703,17 @@ def list_rgw_users(
     sort_dir: str = Query("asc"),
     include: list[str] = Query(default=[]),
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
+    progress_callback: Callable[[_common_ListingProgressSnapshot], None] | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> PaginatedCephAdminUsersResponse:
+    progress = _common_ListingProgressEmitter(progress_callback)
+    progress.emit(percent=0, stage="prepare", message="Preparing advanced search", force=True)
+    _common_invoke_cancel_check(cancel_check)
+
     include_set = _parse_includes(include)
     requested = include_set & {"account", "profile", "status", "limits", "quota"}
     parsed_advanced_filter = _parse_advanced_filter(advanced_filter)
+    advanced_filter_active = bool(parsed_advanced_filter and parsed_advanced_filter.rules)
     cache_key = _UsersListCacheKey(
         endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
         advanced_filter=_serialize_filter(parsed_advanced_filter),
@@ -685,6 +722,8 @@ def list_rgw_users(
     )
 
     def build_listing() -> list[CephAdminRgwUserSummary]:
+        progress.emit(percent=10, stage="load_entries", message="Loading RGW users", force=True)
+        _common_invoke_cancel_check(cancel_check)
         payload = _get_cached_rgw_users_payload(ctx)
         results: list[CephAdminRgwUserSummary] = []
         for entry in payload or []:
@@ -698,14 +737,52 @@ def list_rgw_users(
                 continue
             tenant, user_uid = _split_tenant_uid(uid)
             results.append(CephAdminRgwUserSummary(uid=user_uid if tenant else uid, tenant=tenant))
+        progress.emit(
+            percent=35,
+            stage="scan_entries",
+            processed=len(results),
+            total=len(results),
+            message="RGW user scanning completed",
+            force=True,
+        )
+        _common_invoke_cancel_check(cancel_check)
 
         advanced_fields = _common_collect_filter_fields(parsed_advanced_filter)
         sort_fields = {sort_by} if sort_by else {"uid"}
         needed_for_listing = _includes_for_user_fields(advanced_fields | sort_fields)
         if needed_for_listing:
-            results = _enrich_users(results, needed_for_listing, ctx)
+            progress.emit(
+                percent=50,
+                stage="detail_enrichment",
+                processed=0,
+                total=len(results),
+                message="Loading user details",
+                force=True,
+            )
+            results = _enrich_users(
+                results,
+                needed_for_listing,
+                ctx,
+                progress=progress,
+                progress_stage="detail_enrichment",
+                progress_message="Loading user details",
+                progress_start=50,
+                progress_end=64,
+                cancel_check=cancel_check,
+            )
+            _common_invoke_cancel_check(cancel_check)
 
+        if advanced_filter_active:
+            progress.emit(
+                percent=65,
+                stage="expensive_filters",
+                processed=0,
+                total=len(results),
+                message="Applying advanced filters",
+                force=True,
+            )
         results = _common_apply_advanced_filter(results, parsed_advanced_filter, _match_user_rules)
+        _common_invoke_cancel_check(cancel_check)
 
         def sort_key(item: CephAdminRgwUserSummary):
             if sort_by == "tenant":
@@ -735,6 +812,15 @@ def list_rgw_users(
         return results
 
     results = _get_cached_users_listing(cache_key, build_listing)
+    progress.emit(
+        percent=75,
+        stage="listing_ready",
+        processed=len(results),
+        total=len(results),
+        message="Base listing ready",
+        force=True,
+    )
+    _common_invoke_cancel_check(cancel_check)
     filtered_results = _common_apply_simple_search(
         results,
         search=search,
@@ -744,6 +830,15 @@ def list_rgw_users(
             needle in user.uid.lower() or needle in (user.tenant or "").lower()
         ),
     )
+    progress.emit(
+        percent=85,
+        stage="paginate",
+        processed=len(filtered_results),
+        total=len(filtered_results),
+        message="Preparing result page",
+        force=True,
+    )
+    _common_invoke_cancel_check(cancel_check)
     page_items, total, has_next = _common_paginate(
         filtered_results,
         page=page,
@@ -751,7 +846,35 @@ def list_rgw_users(
         clone=_clone_user_list,
     )
     if requested and page_items:
-        page_items = _enrich_users(page_items, requested, ctx)
+        progress.emit(
+            percent=92,
+            stage="page_enrichment",
+            processed=0,
+            total=len(page_items),
+            message="Loading page details",
+            force=True,
+        )
+        page_items = _enrich_users(
+            page_items,
+            requested,
+            ctx,
+            progress=progress,
+            progress_stage="page_enrichment",
+            progress_message="Loading page details",
+            progress_start=92,
+            progress_end=99,
+            cancel_check=cancel_check,
+        )
+        _common_invoke_cancel_check(cancel_check)
+
+    progress.emit(
+        percent=100,
+        stage="finalize",
+        processed=total,
+        total=total,
+        message="Search completed",
+        force=True,
+    )
 
     return PaginatedCephAdminUsersResponse(
         items=page_items,
@@ -759,6 +882,66 @@ def list_rgw_users(
         page=page,
         page_size=page_size,
         has_next=has_next,
+    )
+
+
+@router.get("", response_model=PaginatedCephAdminUsersResponse)
+def list_rgw_users(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+    search: str | None = Query(None),
+    advanced_filter: str | None = Query(None),
+    sort_by: str = Query("uid"),
+    sort_dir: str = Query("asc"),
+    include: list[str] = Query(default=[]),
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> PaginatedCephAdminUsersResponse:
+    return _compute_users_listing(
+        page=page,
+        page_size=page_size,
+        search=search,
+        advanced_filter=advanced_filter,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        include=include,
+        ctx=ctx,
+    )
+
+
+@router.get("/stream")
+async def stream_rgw_users(
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+    search: str | None = Query(None),
+    advanced_filter: str | None = Query(None),
+    sort_by: str = Query("uid"),
+    sort_dir: str = Query("asc"),
+    include: list[str] = Query(default=[]),
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> StreamingResponse:
+    if not _shared_is_advanced_filter_stream_payload(advanced_filter):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="advanced_filter must be provided as a JSON payload for streaming search",
+        )
+
+    return _common_stream_listing_response(
+        request,
+        compute=lambda progress_callback, cancel_check: _compute_users_listing(
+            page=page,
+            page_size=page_size,
+            search=search,
+            advanced_filter=advanced_filter,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            include=include,
+            ctx=ctx,
+            progress_callback=progress_callback,
+            cancel_check=cancel_check,
+        ),
+        logger=logger,
+        failure_message="RGW users streaming search failed",
     )
 
 

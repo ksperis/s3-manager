@@ -46,6 +46,7 @@ const FEATURE_FIELDS = [
   "ceph_admin_enabled",
   "storage_ops_enabled",
   "browser_enabled",
+  "portal_enabled",
   "billing_enabled",
   "endpoint_status_enabled",
 ] as const;
@@ -230,7 +231,7 @@ export default function GeneralSettingsPage() {
                 bucket_migration_enabled: prev.general.bucket_migration_enabled,
                 bucket_compare_enabled: prev.general.bucket_compare_enabled,
                 bucket_integrity_check_enabled: prev.general.bucket_integrity_check_enabled,
-                allow_ui_user_bucket_migration: prev.general.allow_ui_user_bucket_migration,
+                manager_ceph_s3_user_keys_enabled: prev.general.manager_ceph_s3_user_keys_enabled,
               },
               quota_notifications: defaults.quota_notifications,
               branding: defaults.branding,
@@ -328,6 +329,24 @@ export default function GeneralSettingsPage() {
                   {getFeatureLockHint("browser_enabled") && (
                     <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
                       {getFeatureLockHint("browser_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="Portal feature"
+                  description="Self-service workspace governed by explicit per-account portal roles."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={Boolean(settings.general.portal_enabled)}
+                      disabled={isFeatureLocked("portal_enabled")}
+                      onChange={(value) => handleToggle("portal_enabled", value)}
+                      ariaLabel="Portal feature"
+                    />
+                  }
+                >
+                  {getFeatureLockHint("portal_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("portal_enabled")}
                     </p>
                   )}
                 </PortalSettingsItem>

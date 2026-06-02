@@ -11,6 +11,7 @@ from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validat
 class AccountUserLink(BaseModel):
     user_id: int
     account_admin: Optional[bool] = None
+    account_role: Optional[str] = None
     user_email: Optional[str] = None
 
 

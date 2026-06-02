@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, Optional
+from urllib.parse import parse_qsl
 
 from app.db import S3Account
 from app.models.topic import Topic
@@ -21,11 +22,19 @@ class TopicsService:
         "Name",
         "Owner",
         "Policy",
+        "Version",
+        "Statement",
+        "Id",
         "User",
+        "EndPoint",
+        "EndpointAddress",
+        "EndpointArgs",
+        "EndpointTopic",
         "SubscriptionsConfirmed",
         "SubscriptionsPending",
         "SubscriptionsDeleted",
         "EffectiveDeliveryPolicy",
+        "HasStoredSecret",
     }
 
     def __init__(self) -> None:
@@ -54,16 +63,57 @@ class TopicsService:
 
     def _parse_configurable_attributes(self, attributes: dict) -> Optional[dict]:
         configuration: dict[str, Any] = {}
+        configuration.update(self._parse_endpoint_configuration(attributes.get("EndPoint")))
         for key, value in attributes.items():
             if not isinstance(key, str):
                 continue
             if key in self._CONFIG_EXCLUDED_KEYS:
                 continue
             parsed = self._coerce_attribute_value(value)
-            if parsed is None:
+            if parsed is None or parsed == "":
                 continue
             configuration[key] = parsed
         return configuration or None
+
+    def _parse_endpoint_configuration(self, value: Any) -> dict[str, Any]:
+        endpoint = self._coerce_attribute_value(value)
+        if not isinstance(endpoint, dict):
+            return {}
+
+        configuration: dict[str, Any] = {}
+        endpoint_address = endpoint.get("EndpointAddress")
+        if endpoint_address:
+            configuration["push-endpoint"] = str(endpoint_address)
+
+        for key, raw_arg_value in self._parse_endpoint_args(endpoint.get("EndpointArgs")).items():
+            if not isinstance(key, str) or not key:
+                continue
+            if key in self._CONFIG_EXCLUDED_KEYS:
+                continue
+            parsed = self._coerce_attribute_value(raw_arg_value)
+            if parsed is None or parsed == "":
+                continue
+            configuration[key] = parsed
+
+        return configuration
+
+    def _parse_endpoint_args(self, value: Any) -> dict[str, Any]:
+        if value is None:
+            return {}
+        parsed = self._coerce_attribute_value(value)
+        if isinstance(parsed, dict):
+            return parsed
+        if isinstance(parsed, list):
+            args: dict[str, Any] = {}
+            for item in parsed:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    key, arg_value = item
+                    if isinstance(key, str):
+                        args[key] = arg_value
+            return args
+        if isinstance(parsed, str):
+            return {key: arg_value for key, arg_value in parse_qsl(parsed, keep_blank_values=True) if key}
+        return {}
 
     def _coerce_attribute_value(self, value: Any) -> Any:
         if value is None:

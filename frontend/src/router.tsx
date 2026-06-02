@@ -31,6 +31,7 @@ const loadS3UserKeysPage = () => import("./features/admin/S3UserKeysPage");
 const loadS3ConnectionsPage = () => import("./features/admin/S3ConnectionsPage");
 const loadGeneralSettingsPage = () => import("./features/admin/GeneralSettingsPage");
 const loadManagerSettingsPage = () => import("./features/admin/ManagerSettingsPage");
+const loadAdminPortalSettingsPage = () => import("./features/admin/PortalSettingsPage");
 const loadBrowserSettingsPage = () => import("./features/admin/BrowserSettingsPage");
 const loadKeyRotationPage = () => import("./features/admin/KeyRotationPage");
 const loadFeatureDisabledPage = () => import("./features/shared/FeatureDisabledPage");
@@ -60,6 +61,16 @@ const loadManagerMigrationWizardPage = () => import("./features/manager/ManagerM
 const loadManagerBucketComparePage = () => import("./features/manager/ManagerBucketComparePage");
 const loadManagerBucketIntegrityPage = () => import("./features/manager/ManagerBucketIntegrityPage");
 const loadManagerCephKeysPage = () => import("./features/manager/ManagerCephKeysPage");
+const loadPortalLayout = () => import("./features/portal/PortalLayout");
+const loadPortalDashboard = () => import("./features/portal/PortalDashboard");
+const loadPortalStorageSpacesPage = () => import("./features/portal/PortalStorageSpacesPage");
+const loadPortalStorageSpaceDetailPage = () => import("./features/portal/PortalStorageSpaceDetailPage");
+const loadPortalObjectDetailPage = () => import("./features/portal/PortalObjectDetailPage");
+const loadPortalSharesPage = () => import("./features/portal/PortalSharesPage");
+const loadPortalActivityPage = () => import("./features/portal/PortalActivityPage");
+const loadPortalTransfersPage = () => import("./features/portal/PortalTransfersPage");
+const loadPortalUsagePage = () => import("./features/portal/PortalUsagePage");
+const loadPortalSettingsPage = () => import("./features/portal/PortalSettingsPage");
 const loadBrowserLayout = () => import("./features/browser/BrowserLayout");
 const loadCephAdminLayout = () => import("./features/cephAdmin/CephAdminLayout");
 const loadCephAdminDashboard = () => import("./features/cephAdmin/CephAdminDashboard");
@@ -88,6 +99,7 @@ const S3UserKeysPage = lazy(loadS3UserKeysPage);
 const S3ConnectionsPage = lazy(loadS3ConnectionsPage);
 const GeneralSettingsPage = lazy(loadGeneralSettingsPage);
 const ManagerSettingsPage = lazy(loadManagerSettingsPage);
+const AdminPortalSettingsPage = lazy(loadAdminPortalSettingsPage);
 const BrowserSettingsPage = lazy(loadBrowserSettingsPage);
 const KeyRotationPage = lazy(loadKeyRotationPage);
 const FeatureDisabledPage = lazy(loadFeatureDisabledPage);
@@ -117,6 +129,16 @@ const ManagerMigrationWizardPage = lazy(loadManagerMigrationWizardPage);
 const ManagerBucketComparePage = lazy(loadManagerBucketComparePage);
 const ManagerBucketIntegrityPage = lazy(loadManagerBucketIntegrityPage);
 const ManagerCephKeysPage = lazy(loadManagerCephKeysPage);
+const PortalLayout = lazy(loadPortalLayout);
+const PortalDashboard = lazy(loadPortalDashboard);
+const PortalStorageSpacesPage = lazy(loadPortalStorageSpacesPage);
+const PortalStorageSpaceDetailPage = lazy(loadPortalStorageSpaceDetailPage);
+const PortalObjectDetailPage = lazy(loadPortalObjectDetailPage);
+const PortalSharesPage = lazy(loadPortalSharesPage);
+const PortalActivityPage = lazy(loadPortalActivityPage);
+const PortalTransfersPage = lazy(loadPortalTransfersPage);
+const PortalUsagePage = lazy(loadPortalUsagePage);
+const PortalSettingsPage = lazy(loadPortalSettingsPage);
 const BrowserLayout = lazy(loadBrowserLayout);
 const CephAdminLayout = lazy(loadCephAdminLayout);
 const CephAdminDashboard = lazy(loadCephAdminDashboard);
@@ -146,6 +168,7 @@ function RouteFallback() {
 }
 
 export const buildAdminNav = (
+  portalEnabled: boolean,
   browserEnabled: boolean,
   billingEnabled: boolean,
   endpointStatusEnabled: boolean,
@@ -159,6 +182,12 @@ export const buildAdminNav = (
       label: "Browser",
       disabled: !browserEnabled,
       disabledHint: !browserEnabled ? "Browser feature is disabled in General settings." : undefined,
+    },
+    {
+      to: "/admin/portal-settings",
+      label: "Portal",
+      disabled: !portalEnabled,
+      disabledHint: !portalEnabled ? "Portal feature is disabled in General settings." : undefined,
     },
     { to: "/admin/key-rotation", label: "Key Rotation" },
   ];
@@ -226,6 +255,7 @@ function AdminLayoutShell() {
   const currentUser = getStoredUser();
   const canConfigureApp = isSuperAdminRole(currentUser?.role);
   const adminNav = buildAdminNav(
+    generalSettings.portal_enabled,
     generalSettings.browser_enabled,
     generalSettings.billing_enabled,
     generalSettings.endpoint_status_enabled,
@@ -244,6 +274,11 @@ function AdminLayoutShell() {
 function AdminBillingRoute() {
   const { generalSettings } = useGeneralSettings();
   return generalSettings.billing_enabled ? <BillingPage /> : <FeatureDisabledPage feature="Billing" />;
+}
+
+function AdminPortalSettingsRoute() {
+  const { generalSettings } = useGeneralSettings();
+  return generalSettings.portal_enabled ? <AdminPortalSettingsPage /> : <FeatureDisabledPage feature="Portal" />;
 }
 
 function AdminEndpointStatusRoute() {
@@ -277,11 +312,16 @@ function RoleRedirect() {
   return <Navigate to={destination} replace />;
 }
 
-function RequireFeature({ feature }: { feature: "manager" | "browser" }) {
+function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal" }) {
   const { generalSettings } = useGeneralSettings();
-  const enabled = feature === "manager" ? generalSettings.manager_enabled : generalSettings.browser_enabled;
+  const enabled =
+    feature === "manager"
+      ? generalSettings.manager_enabled
+      : feature === "browser"
+        ? generalSettings.browser_enabled
+        : generalSettings.portal_enabled;
   if (!enabled) {
-    const label = feature === "manager" ? "Manager" : "Browser";
+    const label = feature === "manager" ? "Manager" : feature === "browser" ? "Browser" : "Portal";
     return <FeatureDisabledPage feature={label} />;
   }
   return <Outlet />;
@@ -348,8 +388,8 @@ function canAccessManagerMigration(
   user: SessionUser | null
 ): boolean {
   if (!generalSettings.bucket_migration_enabled || !user?.role) return false;
-  if (isAdminLikeRole(user.role)) return true;
-  return user.role === USER_ROLE && generalSettings.allow_ui_user_bucket_migration;
+  if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
+  return Boolean(user.manager_tool_access?.bucket_migration);
 }
 
 function canAccessManagerBucketCompare(
@@ -358,6 +398,7 @@ function canAccessManagerBucketCompare(
 ): boolean {
   if (!generalSettings.bucket_compare_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
+  if (!user.manager_tool_access?.bucket_compare) return false;
   return user.capabilities?.can_manage_buckets !== false;
 }
 
@@ -367,6 +408,7 @@ function canAccessManagerBucketIntegrity(
 ): boolean {
   if (!generalSettings.bucket_integrity_check_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
+  if (!user.manager_tool_access?.bucket_integrity_check) return false;
   return user.capabilities?.can_manage_buckets !== false;
 }
 
@@ -441,6 +483,7 @@ export function createAppRoutes() {
             <Route element={<RequireRole roles={[SUPERADMIN_ROLE]} />}>
               <Route path="general-settings" element={<GeneralSettingsPage />} />
               <Route path="manager-settings" element={<ManagerSettingsPage />} />
+              <Route path="portal-settings" element={<AdminPortalSettingsRoute />} />
               <Route path="browser-settings" element={<BrowserSettingsPage />} />
               <Route path="key-rotation" element={<KeyRotationPage />} />
             </Route>
@@ -517,6 +560,19 @@ export function createAppRoutes() {
         </Route>
 
         <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
+          <Route element={<RequireFeature feature="portal" />}>
+            <Route path="/portal" element={<PortalLayout />}>
+              <Route index element={<PortalDashboard />} />
+              <Route path="storage-spaces" element={<PortalStorageSpacesPage />} />
+              <Route path="storage-spaces/:spaceId/objects/*" element={<PortalObjectDetailPage />} />
+              <Route path="storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
+              <Route path="shares" element={<PortalSharesPage />} />
+              <Route path="activity" element={<PortalActivityPage />} />
+              <Route path="transfers" element={<PortalTransfersPage />} />
+              <Route path="usage" element={<PortalUsagePage />} />
+              <Route path="settings" element={<PortalSettingsPage />} />
+            </Route>
+          </Route>
         </Route>
       </Route>
 

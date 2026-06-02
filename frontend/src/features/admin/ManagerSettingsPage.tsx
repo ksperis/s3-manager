@@ -36,20 +36,6 @@ export default function ManagerSettingsPage() {
     setSettings((prev) => (prev ? { ...prev, manager: { ...prev.manager, allow_manager_user_usage_stats: value } } : prev));
   };
 
-  const handleToggleAllowUiUserBucketMigration = (value: boolean) => {
-    setSettings((prev) =>
-      prev
-        ? {
-            ...prev,
-            general: {
-              ...prev.general,
-              allow_ui_user_bucket_migration: value,
-            },
-          }
-        : prev
-    );
-  };
-
   const handleToggleBucketMigrationTool = (value: boolean) => {
     setSettings((prev) => {
       if (!prev) return prev;
@@ -58,7 +44,6 @@ export default function ManagerSettingsPage() {
         general: {
           ...prev.general,
           bucket_migration_enabled: value,
-          allow_ui_user_bucket_migration: value ? prev.general.allow_ui_user_bucket_migration : false,
         },
       };
     });
@@ -192,7 +177,6 @@ export default function ManagerSettingsPage() {
                     bucket_compare_enabled: defaults.general.bucket_compare_enabled,
                     bucket_integrity_check_enabled: defaults.general.bucket_integrity_check_enabled,
                     manager_ceph_s3_user_keys_enabled: defaults.general.manager_ceph_s3_user_keys_enabled,
-                    allow_ui_user_bucket_migration: defaults.general.allow_ui_user_bucket_migration,
                   },
                 }
               : defaults
@@ -305,22 +289,6 @@ export default function ManagerSettingsPage() {
                     />
                   }
                 />
-                <PortalSettingsItem
-                  title="Allow UI User access to bucket migration"
-                  description="When enabled, standard UI users can access the bucket migration tool. Otherwise it stays restricted to UI Admin."
-                  action={
-                    <PortalSettingsToggleAction
-                      checked={Boolean(settings.general.allow_ui_user_bucket_migration)}
-                      disabled={!settings.general.bucket_migration_enabled}
-                      onChange={(value) => handleToggleAllowUiUserBucketMigration(value)}
-                      ariaLabel="Allow UI User access to bucket migration"
-                    />
-                  }
-                >
-                  {!settings.general.bucket_migration_enabled && (
-                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">Enable "Bucket migration tool" first.</p>
-                  )}
-                </PortalSettingsItem>
               </PortalSettingsSection>
 
               <div className="my-4 border-t border-slate-200 dark:border-slate-700" />

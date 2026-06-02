@@ -23,6 +23,7 @@ type BucketSelectionActionsBarProps = {
   exportSelectedBuckets: (format: SelectionExportFormat) => Promise<void> | void;
   selectionActionProgress?: ActionProgressState | null;
   isStorageOps: boolean;
+  onShowConfigBackupModal?: () => void;
   onShowCompareModal: () => void;
   onShowIntegrityModal: () => void;
   openBulkUpdateModal: () => void;
@@ -43,6 +44,7 @@ export default function BucketSelectionActionsBar({
   exportSelectedBuckets,
   selectionActionProgress,
   isStorageOps,
+  onShowConfigBackupModal,
   onShowCompareModal,
   onShowIntegrityModal,
   openBulkUpdateModal,
@@ -211,6 +213,15 @@ export default function BucketSelectionActionsBar({
           >
             Check integrity
           </button>
+          {!isStorageOps && onShowConfigBackupModal && (
+            <button
+              type="button"
+              onClick={onShowConfigBackupModal}
+              className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+            >
+              Backup configs
+            </button>
+          )}
           {!isStorageOps && (
             <button
               type="button"

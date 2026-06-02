@@ -8,6 +8,7 @@ from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
 from .base import Base
+from .enums import AccountRole
 
 
 class S3Account(Base):
@@ -24,6 +25,7 @@ class S3Account(Base):
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)
+    portal_settings_override = Column(Text, nullable=True)
 
     storage_endpoint = relationship("StorageEndpoint", lazy="joined")
 
@@ -37,6 +39,11 @@ class S3Account(Base):
         "UserS3Account",
         back_populates="account",
         overlaps="users,accounts,account_links",
+    )
+    portal_iam_links = relationship(
+        "AccountIAMUser",
+        back_populates="account",
+        overlaps="users,account_links",
     )
     tag_links = relationship("S3AccountTag", back_populates="account", cascade="all, delete-orphan")
 
@@ -75,6 +82,12 @@ class UserS3Account(Base):
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
     is_root = Column(Boolean, nullable=False, default=False, server_default="0")
     account_admin = Column(Boolean, nullable=False, default=False, server_default="0")
+    account_role = Column(
+        String,
+        nullable=False,
+        default=AccountRole.PORTAL_NONE.value,
+        server_default=AccountRole.PORTAL_NONE.value,
+    )
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, nullable=False)
 
@@ -87,4 +100,32 @@ class UserS3Account(Base):
         "S3Account",
         back_populates="user_links",
         overlaps="users,accounts,account_links",
+    )
+
+
+class AccountIAMUser(Base):
+    __tablename__ = "account_iam_users"
+    __table_args__ = (
+        UniqueConstraint("user_id", "account_id", name="uq_account_iam_user"),
+        UniqueConstraint("iam_user_id", name="uq_account_iam_user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
+    iam_user_id = Column(String, nullable=False)
+    iam_username = Column(String, nullable=True)
+    active_access_key = Column(String, nullable=True)
+    active_secret_key = Column(EncryptedString, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    user = relationship(
+        "User",
+        back_populates="portal_iam_links",
+        overlaps="accounts,account_links",
+    )
+    account = relationship(
+        "S3Account",
+        back_populates="portal_iam_links",
+        overlaps="users,account_links",
     )

@@ -8,6 +8,14 @@ import { PaginatedResponse } from "./types";
 export type AccountMembership = {
   account_id: number;
   account_admin?: boolean | null;
+  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
+};
+
+export type ManagerToolAccess = {
+  bucket_compare: boolean;
+  bucket_integrity_check: boolean;
+  bucket_migration: boolean;
+  ceph_s3_user_keys: boolean;
 };
 
 export type User = {
@@ -19,6 +27,7 @@ export type User = {
   role?: string | null;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
+  manager_tool_access?: ManagerToolAccess | null;
   ui_language?: "en" | "fr" | "de" | null;
   quota_alerts_enabled?: boolean;
   quota_alerts_global_watch?: boolean;
@@ -50,6 +59,7 @@ export type CreateUserPayload = {
   role?: string;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
+  manager_tool_access?: ManagerToolAccess | null;
 };
 
 export type UpdateUserPayload = {
@@ -58,6 +68,7 @@ export type UpdateUserPayload = {
   role?: string;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
+  manager_tool_access?: ManagerToolAccess | null;
   is_active?: boolean;
   s3_user_ids?: number[] | null;
   s3_connection_ids?: number[] | null;
@@ -120,10 +131,12 @@ export async function assignUserToS3Account(
   userId: number,
   accountId: number,
   accountAdmin?: boolean | null,
+  accountRole?: AccountMembership["account_role"],
 ): Promise<User> {
   const { data } = await client.post<User>(`/admin/users/${userId}/assign-account`, {
     account_id: accountId,
     account_admin: accountAdmin,
+    account_role: accountRole,
   });
   return data;
 }

@@ -70,6 +70,10 @@ def _seed_super_admin_if_needed(db: Session) -> bool:
         role=UserRole.UI_SUPERADMIN.value,
         can_access_ceph_admin=True,
         can_access_storage_ops=True,
+        can_access_manager_bucket_compare=True,
+        can_access_manager_bucket_integrity_check=True,
+        can_access_manager_bucket_migration=True,
+        can_access_manager_ceph_s3_user_keys=True,
     )
     db.add(admin_user)
     db.commit()

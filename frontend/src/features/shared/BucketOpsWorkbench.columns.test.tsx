@@ -24,14 +24,17 @@ vi.mock("react-router-dom", async () => {
 });
 
 vi.mock("../../api/cephAdmin", () => ({
+  backupCephAdminBucketConfigs: mocks.noopAsync,
   deleteCephAdminBucketLogging: mocks.noopAsync,
   deleteCephAdminBucketCors: mocks.noopAsync,
   deleteCephAdminBucketLifecycle: mocks.noopAsync,
+  deleteCephAdminBucketNotifications: mocks.noopAsync,
   deleteCephAdminBucketPolicy: mocks.noopAsync,
   getCephAdminBucketCors: mocks.noopAsync,
   getCephAdminBucketEncryption: mocks.noopAsync,
   getCephAdminBucketLifecycle: mocks.noopAsync,
   getCephAdminBucketLogging: mocks.noopAsync,
+  getCephAdminBucketNotifications: mocks.noopAsync,
   getCephAdminBucketPolicy: mocks.noopAsync,
   getCephAdminBucketProperties: mocks.noopAsync,
   getCephAdminBucketPublicAccessBlock: mocks.noopAsync,
@@ -40,6 +43,7 @@ vi.mock("../../api/cephAdmin", () => ({
   putCephAdminBucketLogging: mocks.noopAsync,
   putCephAdminBucketCors: mocks.noopAsync,
   putCephAdminBucketLifecycle: mocks.noopAsync,
+  putCephAdminBucketNotifications: mocks.noopAsync,
   putCephAdminBucketPolicy: mocks.noopAsync,
   refreshCephAdminBucketListingCache: mocks.refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning: mocks.noopAsync,
@@ -55,11 +59,13 @@ vi.mock("../../api/storageOps", () => ({
   deleteStorageOpsBucketCors: mocks.noopAsync,
   deleteStorageOpsBucketLifecycle: mocks.noopAsync,
   deleteStorageOpsBucketLogging: mocks.noopAsync,
+  deleteStorageOpsBucketNotifications: mocks.noopAsync,
   deleteStorageOpsBucketPolicy: mocks.noopAsync,
   getStorageOpsBucketCors: mocks.noopAsync,
   getStorageOpsBucketEncryption: mocks.noopAsync,
   getStorageOpsBucketLifecycle: mocks.noopAsync,
   getStorageOpsBucketLogging: mocks.noopAsync,
+  getStorageOpsBucketNotifications: mocks.noopAsync,
   getStorageOpsBucketPolicy: mocks.noopAsync,
   getStorageOpsBucketProperties: mocks.noopAsync,
   getStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
@@ -68,6 +74,7 @@ vi.mock("../../api/storageOps", () => ({
   putStorageOpsBucketCors: mocks.noopAsync,
   putStorageOpsBucketLifecycle: mocks.noopAsync,
   putStorageOpsBucketLogging: mocks.noopAsync,
+  putStorageOpsBucketNotifications: mocks.noopAsync,
   putStorageOpsBucketPolicy: mocks.noopAsync,
   refreshStorageOpsBucketListingCache: mocks.refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning: mocks.noopAsync,
@@ -158,6 +165,16 @@ function renderStorageOps() {
       />
     </MemoryRouter>
   );
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 describe("BucketOpsWorkbench atomic quota columns", () => {
@@ -310,6 +327,58 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     expect(payload.rules).toEqual(expect.arrayContaining([{ field: "endpoint_name", op: "eq", value: "Archive" }]));
   });
 
+  it("shows detailed advanced search progress while streaming bucket filters", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+    const pending = deferred<typeof baseResponse & { items: Array<typeof baseBucket> }>();
+    mocks.streamStorageOpsBuckets.mockImplementationOnce((...args: unknown[]) => {
+      const options = args[2] as
+        | {
+            onProgress?: (event: {
+              request_id: string;
+              percent: number;
+              stage: string;
+              processed: number;
+              total: number;
+              message: string;
+            }) => void;
+          }
+        | undefined;
+      options?.onProgress?.({
+        request_id: "progress-1",
+        percent: 48,
+        stage: "context_listing",
+        processed: 4,
+        total: 12,
+        message: "Loading context bucket listings",
+      });
+      return pending.promise;
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
+
+    const contextFilter = await screen.findByLabelText("Filter contexts");
+    fireEvent.change(contextFilter, { target: { value: "Account" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+
+    expect(await screen.findByText(/Advanced search in progress/)).toBeInTheDocument();
+    expect(screen.getByText(/Loading context bucket listings · 4 \/ 12/)).toBeInTheDocument();
+
+    pending.resolve({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+    await waitFor(() => {
+      expect(screen.queryByText(/Advanced search in progress/)).not.toBeInTheDocument();
+    });
+  });
+
   it("flushes the backend cache before reloading storage ops buckets", async () => {
     mocks.listStorageOpsBuckets.mockResolvedValue({
       items: [baseBucket],
@@ -354,6 +423,29 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     );
   });
 
+  it("loads and renders the owner suspended column in storage ops", async () => {
+    window.localStorage.setItem(
+      STORAGE_OPS_COLUMNS_STORAGE_KEY,
+      JSON.stringify(["context_name", "owner_suspended"])
+    );
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [{ ...baseBucket, owner_suspended: true }],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    await waitFor(() => expect(mocks.listStorageOpsBuckets).toHaveBeenCalledTimes(2));
+    expect(mocks.listStorageOpsBuckets.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({
+        include: ["owner_suspended"],
+        with_stats: false,
+      })
+    );
+    expect(screen.getByText("Owner suspended")).toBeInTheDocument();
+    expect(screen.getByText("Yes")).toBeInTheDocument();
+  });
+
   it("loads owner usage percentage columns with owner quota metadata and stats", async () => {
     window.localStorage.setItem(
       STORAGE_OPS_COLUMNS_STORAGE_KEY,
@@ -378,6 +470,38 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         with_stats: true,
       })
     );
+  });
+
+  it("exposes the Notifications column in storage ops and requests notifications enrichment", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [
+        {
+          ...baseBucket,
+          features: {
+            notifications: { state: "Configured", tone: "active" },
+          },
+        },
+      ],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    const notificationsColumn = await screen.findByLabelText("Notifications");
+    expect(notificationsColumn).toBeInTheDocument();
+
+    fireEvent.click(notificationsColumn);
+
+    await waitFor(() =>
+      expect(mocks.listStorageOpsBuckets.mock.calls.at(-1)?.[1]).toEqual(
+        expect.objectContaining({
+          include: expect.arrayContaining(["notifications"]),
+        })
+      )
+    );
+    expect(await screen.findByText("Configured")).toBeInTheDocument();
   });
 
   it("groups bucket and owner quota picker options behind detail toggles", async () => {

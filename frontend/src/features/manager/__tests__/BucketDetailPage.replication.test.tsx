@@ -122,6 +122,7 @@ describe("BucketDetailPage replication state", () => {
           sse: true,
           metrics: true,
           replication: true,
+          sns: true,
         },
       },
     });
@@ -246,6 +247,8 @@ describe("BucketDetailPage replication state", () => {
       </MemoryRouter>
     );
 
+    expect(screen.queryByText("Replication")).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "Advanced" }));
 
     expect(getCephAdminBucketReplicationMock).not.toHaveBeenCalled();
@@ -256,6 +259,61 @@ describe("BucketDetailPage replication state", () => {
     expect(within(replicationShell).getByRole("button", { name: "Clear" })).toBeDisabled();
     expect(within(replicationShell).getByRole("button", { name: "Save" })).toBeDisabled();
     expect(within(replicationCard).getByLabelText("Role ARN")).toBeDisabled();
+  });
+
+  it("shows the Notifications overview badge when SNS is enabled", async () => {
+    getCephAdminBucketNotificationsMock.mockResolvedValueOnce({
+      configuration: {
+        TopicConfigurations: [
+          {
+            Id: "topic-1",
+            TopicArn: "arn:aws:sns:us-east-1:123456789012:bucket-events",
+            Events: ["s3:ObjectCreated:*"],
+          },
+        ],
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getCephAdminBucketNotificationsMock).toHaveBeenCalled();
+    });
+
+    expect(screen.getByText("Notifications")).toBeInTheDocument();
+    expect(screen.getAllByText("Configured").length).toBeGreaterThan(0);
+  });
+
+  it("hides the Notifications overview badge when SNS is disabled", async () => {
+    useCephAdminEndpointMock.mockReturnValue({
+      selectedEndpointId: 1,
+      selectedEndpoint: {
+        name: "endpoint-1",
+        capabilities: {
+          static_website: true,
+          sse: true,
+          metrics: true,
+          replication: true,
+          sns: false,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(listCephAdminBucketsMock).toHaveBeenCalled();
+    });
+
+    expect(screen.queryByText("Notifications")).not.toBeInTheDocument();
   });
 
   it("keeps notifications card neutral for TopicConfigurations empty draft-equivalent payload", async () => {

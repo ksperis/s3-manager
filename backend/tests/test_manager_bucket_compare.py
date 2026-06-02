@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from starlette.requests import Request
 
+from app.db import User, UserRole
 from app.models.app_settings import AppSettings
 from app.models.ceph_admin import CephAdminBucketConfigDiff, CephAdminBucketContentDiff
 from app.models.manager_bucket_compare import ManagerBucketCompareActionRequest, ManagerBucketCompareRequest
@@ -29,6 +30,16 @@ def _build_request(account_id: str | None = None, path: str = "/api/manager/buck
 
 def _build_account(account_id: int):
     return SimpleNamespace(id=account_id)
+
+
+def _tool_user(*, bucket_compare: bool = True) -> User:
+    return User(
+        email="compare-tool@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+        can_access_manager_bucket_compare=bucket_compare,
+    )
 
 
 class _RecordingAudit:
@@ -291,10 +302,22 @@ def test_require_bucket_compare_enabled_blocks_when_feature_disabled(monkeypatch
     monkeypatch.setattr(dependencies_router, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
-        dependencies_router.require_bucket_compare_enabled()
+        dependencies_router.require_bucket_compare_enabled(_tool_user())
 
     assert exc.value.status_code == 403
     assert "bucket compare feature is disabled" in str(exc.value.detail).lower()
+
+
+def test_require_bucket_compare_enabled_blocks_without_user_tool_access(monkeypatch):
+    settings = AppSettings()
+    settings.general.bucket_compare_enabled = True
+    monkeypatch.setattr(dependencies_router, "load_app_settings", lambda: settings)
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies_router.require_bucket_compare_enabled(_tool_user(bucket_compare=False))
+
+    assert exc.value.status_code == 403
+    assert str(exc.value.detail) == "Not authorized"
 
 
 def test_compare_bucket_action_sync_source_only(monkeypatch):
@@ -608,7 +631,7 @@ def test_compare_bucket_action_feature_off_returns_403(monkeypatch):
             source_account=_build_account(1),
             actor=SimpleNamespace(),
             service=buckets_router.BucketsService(),
-            _=dependencies_router.require_bucket_compare_enabled(),
+            _tool_user=dependencies_router.require_bucket_compare_enabled(_tool_user()),
         )
 
     assert exc.value.status_code == 403

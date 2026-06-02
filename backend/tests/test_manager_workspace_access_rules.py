@@ -8,8 +8,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.db import S3Account, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
-from app.models.app_settings import AppSettings
+from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
+from app.models.app_settings import AppSettings, GeneralSettings
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.routers import dependencies
 from app.routers.manager import context as manager_context_router
@@ -75,12 +75,14 @@ def _build_linked_s3_user_context(
     *,
     endpoint: StorageEndpoint,
     email: str = "manager-ceph-keys-s3u@example.com",
+    ceph_keys_access: bool = False,
 ):
     user = User(
         email=email,
         hashed_password="x",
         is_active=True,
         role=UserRole.UI_USER.value,
+        can_access_manager_ceph_s3_user_keys=ceph_keys_access,
     )
     s3_user = S3User(
         name="managed-s3-user",
@@ -115,6 +117,109 @@ def test_manager_membership_without_admin_is_forbidden():
     with pytest.raises(HTTPException) as exc:
         dependencies._manager_membership_capabilities(link)
     assert exc.value.status_code == 403
+
+
+def test_manager_workspace_rejects_portal_role_without_account_admin(db_session):
+    user = User(
+        email="portal-role-not-manager@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    account = S3Account(
+        name="portal-role-not-manager-account",
+        rgw_account_id="RGWPORTALROLE0001",
+        rgw_access_key="AK-ROOT",
+        rgw_secret_key="SK-ROOT",
+    )
+    db_session.add_all([user, account])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(account)
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            account_admin=False,
+            is_root=False,
+            account_role=AccountRole.PORTAL_MANAGER.value,
+        )
+    )
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies.get_account_context(
+            request=_request("/api/manager/buckets"),
+            account_ref=str(account.id),
+            actor=user,
+            db=db_session,
+        )
+
+    assert exc.value.status_code == 403
+
+
+def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db_session, monkeypatch):
+    endpoint = StorageEndpoint(
+        name="portal-browser-ceph",
+        endpoint_url="https://portal-browser.example.com",
+        provider="ceph",
+        features_config="features:\n  iam:\n    enabled: true\n",
+    )
+    user = User(
+        email="portal-browser-user@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    account = S3Account(
+        name="portal-browser-account",
+        rgw_account_id="RGWPORTALBROWSER0001",
+        rgw_access_key="AK-ROOT",
+        rgw_secret_key="SK-ROOT",
+        storage_endpoint=endpoint,
+    )
+    db_session.add_all([endpoint, user, account])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(account)
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            account_admin=False,
+            is_root=False,
+            account_role=AccountRole.PORTAL_USER.value,
+        )
+    )
+    db_session.commit()
+    monkeypatch.setattr(
+        dependencies,
+        "load_app_settings",
+        lambda: AppSettings(
+            general=GeneralSettings(
+                portal_enabled=True,
+                browser_enabled=True,
+                browser_portal_enabled=True,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.portal_service.PortalService.get_portal_credentials",
+        lambda self, user_arg, account_arg, account_role: ("AK-PORTAL", "SK-PORTAL"),
+    )
+
+    account_ctx = dependencies.get_account_context(
+        request=_request("/api/browser/buckets", headers={"X-S3-Workspace": "portal"}),
+        account_ref=str(account.id),
+        actor=user,
+        db=db_session,
+    )
+
+    assert account_ctx.effective_rgw_credentials() == ("AK-PORTAL", "SK-PORTAL")
+    caps = getattr(account_ctx, "_manager_capabilities", None)
+    assert caps is not None
+    assert caps.using_root_key is False
+    assert caps.can_manage_iam is False
 
 
 def test_manager_membership_account_admin_uses_root_key_capabilities():
@@ -563,11 +668,31 @@ def test_manager_context_s3_user_enables_ceph_keys_when_management_possible(db_s
         db_session,
         endpoint=endpoint,
         email="manager-ceph-keys-ok@example.com",
+        ceph_keys_access=True,
     )
 
     payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
     assert payload.access_mode == "s3_user"
     assert payload.manager_ceph_keys_enabled is True
+
+
+def test_manager_context_s3_user_disables_ceph_keys_without_user_tool_access(db_session, monkeypatch):
+    settings = AppSettings()
+    settings.general.manager_ceph_s3_user_keys_enabled = True
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
+
+    endpoint = _ceph_s3_user_management_endpoint(name="ceph-s3u-keys-no-user-access")
+    user, account = _build_linked_s3_user_context(
+        db_session,
+        endpoint=endpoint,
+        email="manager-ceph-keys-no-user-access@example.com",
+        ceph_keys_access=False,
+    )
+
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.access_mode == "s3_user"
+    assert payload.manager_ceph_keys_enabled is False
 
 
 @pytest.mark.parametrize(
@@ -595,6 +720,7 @@ def test_manager_context_s3_user_disables_ceph_keys_when_management_not_possible
         db_session,
         endpoint=endpoint,
         email=f"manager-ceph-keys-ko-{endpoint.name}@example.com",
+        ceph_keys_access=True,
     )
 
     payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)

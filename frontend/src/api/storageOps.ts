@@ -7,11 +7,13 @@ import {
   deleteBucketCors,
   deleteBucketLifecycle,
   deleteBucketLogging,
+  deleteBucketNotifications,
   deleteBucketPolicyApi,
   getBucketCors,
   getBucketEncryption,
   getBucketLifecycle,
   getBucketLogging,
+  getBucketNotifications,
   getBucketPolicy,
   getBucketProperties,
   getBucketPublicAccessBlock,
@@ -19,6 +21,7 @@ import {
   putBucketCors,
   putBucketLifecycle,
   putBucketLogging,
+  putBucketNotifications,
   putBucketPolicy,
   setBucketVersioning,
   updateBucketObjectLock,
@@ -30,6 +33,7 @@ import type {
   BucketEncryptionConfiguration,
   BucketLifecycleConfig,
   BucketLoggingConfiguration,
+  BucketNotificationConfiguration,
   BucketObjectLockConfiguration,
   BucketObjectLockUpdatePayload,
   BucketPolicy,
@@ -265,6 +269,28 @@ export async function putStorageOpsBucketLogging(
 export async function deleteStorageOpsBucketLogging(_scopeId: number, bucketRef: string): Promise<void> {
   const { contextId, bucketName } = resolveBucketTarget(bucketRef);
   await deleteBucketLogging(contextId, bucketName);
+}
+
+export async function getStorageOpsBucketNotifications(
+  _scopeId: number,
+  bucketRef: string
+): Promise<BucketNotificationConfiguration> {
+  const { contextId, bucketName } = resolveBucketTarget(bucketRef);
+  return getBucketNotifications(contextId, bucketName);
+}
+
+export async function putStorageOpsBucketNotifications(
+  _scopeId: number,
+  bucketRef: string,
+  configuration: Record<string, unknown>
+): Promise<BucketNotificationConfiguration> {
+  const { contextId, bucketName } = resolveBucketTarget(bucketRef);
+  return putBucketNotifications(contextId, bucketName, configuration);
+}
+
+export async function deleteStorageOpsBucketNotifications(_scopeId: number, bucketRef: string): Promise<void> {
+  const { contextId, bucketName } = resolveBucketTarget(bucketRef);
+  await deleteBucketNotifications(contextId, bucketName);
 }
 
 export async function getStorageOpsBucketWebsite(

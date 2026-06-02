@@ -232,6 +232,20 @@ function getOtherBucketsPanel() {
   return within(section);
 }
 
+async function waitForOpenedMoreMenu(previousMenus: Set<HTMLElement>) {
+  let openedMenu: HTMLElement | undefined;
+  await waitFor(() => {
+    openedMenu = screen
+      .queryAllByRole("menu", { name: "More" })
+      .find((menu) => !previousMenus.has(menu));
+    expect(openedMenu).toBeTruthy();
+  });
+  if (!openedMenu) {
+    throw new Error("Unable to find opened More menu");
+  }
+  return openedMenu;
+}
+
 function seedBrowserRootUiState(value: unknown) {
   window.localStorage.setItem(
     BROWSER_ROOT_UI_STATE_STORAGE_KEY,
@@ -267,15 +281,7 @@ async function openContextMoreMenu(user: ReturnType<typeof userEvent.setup>) {
       ? getContextToolbar()
       : getActionsToolbar();
   await user.click(within(toolbar).getByRole("button", { name: "More" }));
-  await waitFor(() => {
-    const menus = screen.queryAllByRole("menu", { name: "More" });
-    expect(menus.some((menu) => !previousMenus.has(menu))).toBe(true);
-  });
-  const menus = screen.queryAllByRole("menu", { name: "More" });
-  return (
-    menus.find((menu) => !previousMenus.has(menu)) ??
-    (menus[menus.length - 1] as HTMLElement)
-  ) as HTMLElement;
+  return waitForOpenedMoreMenu(previousMenus);
 }
 
 function expectPassiveStatusBadge(badge: HTMLElement) {
@@ -291,15 +297,7 @@ async function openActionsMoreMenu(user: ReturnType<typeof userEvent.setup>) {
   await user.click(
     within(getActionsToolbar()).getByRole("button", { name: "More" }),
   );
-  await waitFor(() => {
-    const menus = screen.queryAllByRole("menu", { name: "More" });
-    expect(menus.some((menu) => !previousMenus.has(menu))).toBe(true);
-  });
-  const menus = screen.queryAllByRole("menu", { name: "More" });
-  return (
-    menus.find((menu) => !previousMenus.has(menu)) ??
-    (menus[menus.length - 1] as HTMLElement)
-  ) as HTMLElement;
+  return waitForOpenedMoreMenu(previousMenus);
 }
 
 async function openColumnsSubmenuFromMore(

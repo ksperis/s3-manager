@@ -79,6 +79,28 @@ const buildAttributeDrafts = (configuration: Record<string, unknown> | null | un
     .map(([key, value]) => ({ key, value: formatAttributeValue(value) }));
 };
 
+const readPushEndpointValue = (configuration: Record<string, unknown> | null | undefined): string => {
+  const value = configuration?.["push-endpoint"];
+  return typeof value === "string" ? value : "";
+};
+
+const readVerifySslValue = (configuration: Record<string, unknown> | null | undefined): boolean => {
+  const value = configuration?.["verify-ssl"];
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["false", "0", "no", "off"].includes(normalized)) {
+      return false;
+    }
+    if (["true", "1", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+  }
+  return true;
+};
+
 const buildAttributesSignature = (
   pushEndpointValue: string,
   verifySslValue: boolean,
@@ -157,10 +179,8 @@ export default function TopicsPage() {
 
   const applyAttributesConfiguration = (configuration: Record<string, unknown> | null | undefined) => {
     const config = configuration ?? {};
-    const pushEndpoint =
-      typeof config["push-endpoint"] === "string" ? (config["push-endpoint"] as string) : "";
-    const verifySsl =
-      typeof config["verify-ssl"] === "boolean" ? Boolean(config["verify-ssl"]) : true;
+    const pushEndpoint = readPushEndpointValue(config);
+    const verifySsl = readVerifySslValue(config);
 
     setPushEndpointValue(pushEndpoint);
     setVerifySslValue(verifySsl);
@@ -307,8 +327,8 @@ export default function TopicsPage() {
     applyAttributesConfiguration(topic.configuration ?? {});
     setAttributesInitialSignature(
       buildAttributesSignature(
-        typeof topic.configuration?.["push-endpoint"] === "string" ? (topic.configuration["push-endpoint"] as string) : "",
-        typeof topic.configuration?.["verify-ssl"] === "boolean" ? Boolean(topic.configuration["verify-ssl"]) : true,
+        readPushEndpointValue(topic.configuration),
+        readVerifySslValue(topic.configuration),
         buildAttributeDrafts(topic.configuration ?? {})
       )
     );
@@ -320,8 +340,8 @@ export default function TopicsPage() {
         applyAttributesConfiguration(configuration);
         setAttributesInitialSignature(
           buildAttributesSignature(
-            typeof configuration["push-endpoint"] === "string" ? (configuration["push-endpoint"] as string) : "",
-            typeof configuration["verify-ssl"] === "boolean" ? Boolean(configuration["verify-ssl"]) : true,
+            readPushEndpointValue(configuration),
+            readVerifySslValue(configuration),
             buildAttributeDrafts(configuration)
           )
         );
@@ -382,8 +402,8 @@ export default function TopicsPage() {
       applyAttributesConfiguration(newConfig);
       setAttributesInitialSignature(
         buildAttributesSignature(
-          typeof newConfig["push-endpoint"] === "string" ? (newConfig["push-endpoint"] as string) : "",
-          typeof newConfig["verify-ssl"] === "boolean" ? Boolean(newConfig["verify-ssl"]) : true,
+          readPushEndpointValue(newConfig),
+          readVerifySslValue(newConfig),
           buildAttributeDrafts(newConfig)
         )
       );

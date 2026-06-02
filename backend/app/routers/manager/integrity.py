@@ -46,9 +46,9 @@ def _require_bucket_management_context(account: S3Account) -> None:
 def stream_manager_bucket_integrity_check(
     payload: BucketIntegrityCheckRequest,
     request: Request,
+    _tool_user: object = Depends(require_bucket_integrity_check_enabled),
     account: S3Account = Depends(get_account_context),
     _: object = Depends(get_current_account_admin),
-    __: None = Depends(require_bucket_integrity_check_enabled),
 ) -> StreamingResponse:
     bucket_names = _require_buckets_payload(payload)
     _require_bucket_management_context(account)

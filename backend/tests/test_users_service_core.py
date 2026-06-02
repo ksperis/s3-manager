@@ -84,6 +84,10 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
     assert admin.role == UserRole.UI_SUPERADMIN.value
     assert admin.can_access_ceph_admin is False
     assert admin.can_access_storage_ops is False
+    assert admin.can_access_manager_bucket_compare is False
+    assert admin.can_access_manager_bucket_integrity_check is False
+    assert admin.can_access_manager_bucket_migration is False
+    assert admin.can_access_manager_ceph_s3_user_keys is False
 
     with pytest.raises(ValueError, match="User already exists"):
         service.create_super_admin(
@@ -106,11 +110,21 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
             role=UserRole.UI_ADMIN.value,
             can_access_ceph_admin=True,
             can_access_storage_ops=True,
+            manager_tool_access={
+                "bucket_compare": True,
+                "bucket_integrity_check": True,
+                "bucket_migration": True,
+                "ceph_s3_user_keys": True,
+            },
         )
     )
     assert created.role == UserRole.UI_ADMIN.value
     assert created.can_access_ceph_admin is True
     assert created.can_access_storage_ops is True
+    assert created.can_access_manager_bucket_compare is True
+    assert created.can_access_manager_bucket_integrity_check is True
+    assert created.can_access_manager_bucket_migration is True
+    assert created.can_access_manager_ceph_s3_user_keys is True
 
     assert service.authenticate("ui-admin@example.com", "wrong-password") is None
     authenticated = service.authenticate("ui-admin@example.com", "verylongpass123")
@@ -148,6 +162,12 @@ def test_update_user_and_link_validations(db_session):
             is_root=True,
             can_access_ceph_admin=True,
             can_access_storage_ops=True,
+            manager_tool_access={
+                "bucket_compare": True,
+                "bucket_integrity_check": False,
+                "bucket_migration": True,
+                "ceph_s3_user_keys": False,
+            },
             s3_user_ids=[s3_user.id],
             s3_connection_ids=[shared_conn.id],
         ),
@@ -157,9 +177,37 @@ def test_update_user_and_link_validations(db_session):
     # Non-admin roles cannot keep ceph-admin access.
     assert updated.can_access_ceph_admin is False
     assert updated.can_access_storage_ops is True
+    assert updated.can_access_manager_bucket_compare is True
+    assert updated.can_access_manager_bucket_integrity_check is False
+    assert updated.can_access_manager_bucket_migration is True
+    assert updated.can_access_manager_ceph_s3_user_keys is False
     assert updated.quota_alerts_global_watch is False
     assert updated.is_active is False
     assert updated.is_root is True
+
+
+def test_update_user_clears_manager_tools_for_no_access_role(db_session):
+    service = UsersService(db_session)
+    user = _seed_user(db_session, "manager-tools-clear@example.com", role=UserRole.UI_ADMIN.value)
+
+    updated = service.update_user(
+        user.id,
+        UserUpdate(
+            role=UserRole.UI_NONE.value,
+            manager_tool_access={
+                "bucket_compare": True,
+                "bucket_integrity_check": True,
+                "bucket_migration": True,
+                "ceph_s3_user_keys": True,
+            },
+        ),
+    )
+
+    assert updated.role == UserRole.UI_NONE.value
+    assert updated.can_access_manager_bucket_compare is False
+    assert updated.can_access_manager_bucket_integrity_check is False
+    assert updated.can_access_manager_bucket_migration is False
+    assert updated.can_access_manager_ceph_s3_user_keys is False
 
 
 def test_update_user_allows_storage_ops_for_admin_like_role(db_session):

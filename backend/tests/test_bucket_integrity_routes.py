@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from app.db import StorageEndpoint
+from app.db import StorageEndpoint, User, UserRole
 from app.main import app
 from app.models.app_settings import AppSettings
 from app.models.bucket_integrity import BucketIntegrityCheckProgress, BucketIntegrityCheckRequest, BucketIntegrityCheckResult
@@ -48,16 +48,38 @@ def _result(status: str = "passed") -> BucketIntegrityCheckResult:
     )
 
 
+def _manager_tool_user(*, bucket_integrity_check: bool = True) -> User:
+    return User(
+        email="integrity-tool@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+        can_access_manager_bucket_integrity_check=bucket_integrity_check,
+    )
+
+
 def test_require_bucket_integrity_enabled_blocks_when_feature_disabled(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_integrity_check_enabled = False
     monkeypatch.setattr(dependencies_router, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
-        dependencies_router.require_bucket_integrity_check_enabled()
+        dependencies_router.require_bucket_integrity_check_enabled(_manager_tool_user())
 
     assert exc.value.status_code == 403
     assert "bucket integrity check feature is disabled" in str(exc.value.detail).lower()
+
+
+def test_require_bucket_integrity_enabled_blocks_without_user_tool_access(monkeypatch):
+    settings = AppSettings()
+    settings.general.bucket_integrity_check_enabled = True
+    monkeypatch.setattr(dependencies_router, "load_app_settings", lambda: settings)
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies_router.require_bucket_integrity_check_enabled(_manager_tool_user(bucket_integrity_check=False))
+
+    assert exc.value.status_code == 403
+    assert str(exc.value.detail) == "Not authorized"
 
 
 def test_manager_integrity_route_streams_progress_and_result(monkeypatch):
@@ -120,6 +142,7 @@ def test_manager_integrity_route_returns_403_when_flag_disabled(monkeypatch):
         _manager_capabilities=SimpleNamespace(can_manage_buckets=True),
     )
     app.dependency_overrides[manager_integrity.get_current_account_admin] = lambda: SimpleNamespace(id=1)
+    app.dependency_overrides[dependencies_router.get_current_user] = lambda: _manager_tool_user()
     try:
         with TestClient(app) as client:
             response = client.post(

@@ -244,7 +244,7 @@ export default function ManagerCephKeysPage() {
       ) : !managerCephKeysEnabled ? (
         <PageEmptyState
           title="Ceph key management is unavailable for this context"
-          description="The selected context does not expose RGW access-key management. Check the feature toggle, endpoint provider, admin feature, and Ceph admin credentials."
+          description="The selected context does not expose RGW access-key management. Check the user tool access, feature toggle, endpoint provider, admin feature, and Ceph admin credentials."
           primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
           tone="warning"
         />

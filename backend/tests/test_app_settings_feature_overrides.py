@@ -17,6 +17,7 @@ def _runtime_settings(**overrides):
         "app_settings_path": None,
         "feature_manager_enabled": None,
         "feature_browser_enabled": None,
+        "feature_portal_enabled": None,
         "feature_ceph_admin_enabled": None,
         "feature_storage_ops_enabled": None,
         "feature_billing_enabled": None,
@@ -33,6 +34,7 @@ def test_load_app_settings_applies_feature_env_overrides(monkeypatch, tmp_path):
     persisted = AppSettings()
     persisted.general.manager_enabled = False
     persisted.general.browser_enabled = True
+    persisted.general.portal_enabled = False
     persisted.general.ceph_admin_enabled = True
     settings_path.write_text(persisted.model_dump_json(indent=2), encoding="utf-8")
 
@@ -40,12 +42,17 @@ def test_load_app_settings_applies_feature_env_overrides(monkeypatch, tmp_path):
     monkeypatch.setattr(
         app_settings_service,
         "get_settings",
-        lambda: _runtime_settings(feature_manager_enabled=True, feature_browser_enabled=False),
+        lambda: _runtime_settings(
+            feature_manager_enabled=True,
+            feature_browser_enabled=False,
+            feature_portal_enabled=True,
+        ),
     )
 
     effective = app_settings_service.load_app_settings()
     assert effective.general.manager_enabled is True
     assert effective.general.browser_enabled is False
+    assert effective.general.portal_enabled is True
     # Not forced: persisted value is preserved.
     assert effective.general.ceph_admin_enabled is True
 
@@ -84,6 +91,7 @@ def test_general_feature_locks_only_use_dedicated_feature_sources(monkeypatch):
         "get_settings",
         lambda: _runtime_settings(
             feature_manager_enabled=False,
+            feature_portal_enabled=True,
             feature_billing_enabled=None,
             feature_endpoint_status_enabled=None,
             billing_enabled=False,
@@ -95,6 +103,10 @@ def test_general_feature_locks_only_use_dedicated_feature_sources(monkeypatch):
     assert locks.manager_enabled.forced is True
     assert locks.manager_enabled.value is False
     assert locks.manager_enabled.source == "FEATURE_MANAGER_ENABLED"
+
+    assert locks.portal_enabled.forced is True
+    assert locks.portal_enabled.value is True
+    assert locks.portal_enabled.source == "FEATURE_PORTAL_ENABLED"
 
     assert locks.billing_enabled.forced is False
     assert locks.billing_enabled.value is None
@@ -129,9 +141,19 @@ def test_manager_ceph_s3_user_keys_flag_default_enabled():
     assert settings.general.manager_ceph_s3_user_keys_enabled is True
 
 
-def test_bucket_integrity_check_flag_default_disabled():
+def test_portal_feature_flag_default_disabled():
     settings = AppSettings()
-    assert settings.general.bucket_integrity_check_enabled is False
+    assert settings.general.portal_enabled is False
+
+
+def test_bucket_integrity_check_flag_default_enabled():
+    settings = AppSettings()
+    assert settings.general.bucket_integrity_check_enabled is True
+
+
+def test_bucket_compare_flag_default_enabled():
+    settings = AppSettings()
+    assert settings.general.bucket_compare_enabled is True
 
 
 def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path):

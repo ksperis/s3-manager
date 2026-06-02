@@ -1,6 +1,9 @@
 import type { MockRule } from "../types";
 
 const NOW = "2026-03-08T09:00:00Z";
+const MB = 1024 ** 2;
+const GB = 1024 ** 3;
+const TB = 1024 ** 4;
 
 const ADMIN_ACCOUNTS_MINIMAL = [
   {
@@ -10,9 +13,9 @@ const ADMIN_ACCOUNTS_MINIMAL = [
     tags: [{ id: 901, label: "prod", color_key: "emerald", scope: "standard" }],
     user_ids: [1, 2, 3],
     user_links: [
-      { user_id: 1, account_admin: true, user_email: "admin.docs@example.com" },
-      { user_id: 2, account_admin: true, user_email: "platform.admin@example.com" },
-      { user_id: 3, account_admin: false, user_email: "storage.user@example.com" },
+      { user_id: 1, account_admin: true, account_role: "portal_manager", user_email: "admin.docs@example.com" },
+      { user_id: 2, account_admin: true, account_role: "portal_manager", user_email: "platform.admin@example.com" },
+      { user_id: 3, account_admin: false, account_role: "portal_user", user_email: "storage.user@example.com" },
     ],
     rgw_account_id: "RGW-HELIOS",
     storage_endpoint_id: 11,
@@ -25,7 +28,7 @@ const ADMIN_ACCOUNTS_MINIMAL = [
     name: "Northwind Ops",
     tags: [{ id: 902, label: "ops", color_key: "sky", scope: "standard" }],
     user_ids: [2],
-    user_links: [{ user_id: 2, account_admin: true, user_email: "platform.admin@example.com" }],
+    user_links: [{ user_id: 2, account_admin: true, account_role: "portal_none", user_email: "platform.admin@example.com" }],
     rgw_account_id: "RGW-NORTHWIND",
     storage_endpoint_id: 12,
     storage_endpoint_name: "Archive",
@@ -40,8 +43,14 @@ const ADMIN_UI_USERS = [
     role: "ui_superadmin",
     can_access_ceph_admin: true,
     can_access_storage_ops: true,
+    manager_tool_access: {
+      bucket_compare: true,
+      bucket_integrity_check: true,
+      bucket_migration: true,
+      ceph_s3_user_keys: true,
+    },
     accounts: [101],
-    account_links: [{ account_id: 101, account_admin: true }],
+    account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
     s3_users: [901],
     s3_user_details: [{ id: 901, name: "helios-admin" }],
     s3_connections: [701],
@@ -54,10 +63,16 @@ const ADMIN_UI_USERS = [
     role: "ui_admin",
     can_access_ceph_admin: true,
     can_access_storage_ops: true,
+    manager_tool_access: {
+      bucket_compare: true,
+      bucket_integrity_check: true,
+      bucket_migration: true,
+      ceph_s3_user_keys: true,
+    },
     accounts: [101, 102],
     account_links: [
-      { account_id: 101, account_admin: true },
-      { account_id: 102, account_admin: true },
+      { account_id: 101, account_admin: true, account_role: "portal_manager" },
+      { account_id: 102, account_admin: true, account_role: "portal_none" },
     ],
     s3_users: [903],
     s3_user_details: [{ id: 903, name: "platform-admin" }],
@@ -71,8 +86,14 @@ const ADMIN_UI_USERS = [
     role: "ui_user",
     can_access_ceph_admin: false,
     can_access_storage_ops: true,
+    manager_tool_access: {
+      bucket_compare: true,
+      bucket_integrity_check: true,
+      bucket_migration: true,
+      ceph_s3_user_keys: true,
+    },
     accounts: [101],
-    account_links: [{ account_id: 101, account_admin: false }],
+    account_links: [{ account_id: 101, account_admin: false, account_role: "portal_user" }],
     s3_users: [904],
     s3_user_details: [{ id: 904, name: "storage-user-helios" }],
     s3_connections: [701],
@@ -183,13 +204,15 @@ const GENERAL_SETTINGS = {
   browser_enabled: true,
   browser_root_enabled: true,
   browser_manager_enabled: true,
+  browser_portal_enabled: true,
   browser_ceph_admin_enabled: true,
+  portal_enabled: true,
   billing_enabled: false,
   endpoint_status_enabled: true,
   bucket_migration_enabled: true,
   bucket_compare_enabled: true,
   bucket_integrity_check_enabled: true,
-  allow_ui_user_bucket_migration: true,
+  manager_ceph_s3_user_keys_enabled: true,
   allow_login_access_keys: false,
   allow_login_endpoint_list: true,
   allow_login_custom_endpoint: false,
@@ -414,6 +437,373 @@ const MANAGER_MIGRATIONS = [
     updated_at: NOW,
   },
 ];
+
+const PORTAL_ACCOUNTS = [
+  {
+    id: "101",
+    db_id: 101,
+    name: "Helios Retail",
+    tags: [{ id: 901, label: "prod", color_key: "emerald", scope: "standard" }],
+    quota_max_size_gb: 10,
+    quota_max_objects: 100_000,
+    rgw_account_id: "RGW-HELIOS",
+    storage_endpoint_id: 11,
+    storage_endpoint_name: "Default",
+    storage_endpoint_url: "https://s3-default.docs.example.com",
+    storage_endpoint_capabilities: {
+      iam: true,
+      sns: true,
+      usage: true,
+      metrics: true,
+      static_website: true,
+      sts: false,
+      replication: true,
+    },
+  },
+];
+
+const PORTAL_STATE = {
+  account_id: 101,
+  iam_provisioned: true,
+  iam_user: {
+    iam_user_id: "AIDAEXAMPLEPORTAL",
+    iam_username: "portal-user-helios",
+    arn: "arn:aws:iam::111111111111:user/portal-user-helios",
+    created_at: NOW,
+  },
+  access_keys: [
+    {
+      access_key_id: "AKIAHELIOSPORTALROOT",
+      status: "Active",
+      created_at: NOW,
+      is_active: true,
+      is_portal: true,
+      deletable: false,
+    },
+    {
+      access_key_id: "AKIAHELIOSPORTAL001",
+      status: "Active",
+      created_at: NOW,
+      is_active: true,
+      is_portal: false,
+      deletable: true,
+    },
+  ],
+  buckets: MANAGER_BUCKETS,
+  total_buckets: MANAGER_BUCKETS.length,
+  s3_endpoint: "https://s3-default.docs.example.com",
+  used_bytes: Math.round(8.32 * TB),
+  used_objects: 17_100_000,
+  quota_max_size_bytes: 20 * TB,
+  quota_max_objects: 30_000_000,
+  account_role: "portal_user",
+  can_manage_buckets: true,
+  can_manage_portal_users: false,
+};
+
+const PORTAL_SETTINGS = {
+  allow_portal_key: true,
+  allow_portal_user_bucket_create: true,
+  allow_portal_user_access_key_create: true,
+  max_portal_user_access_keys: 2,
+  iam_group_manager_policy: {
+    actions: ["s3:*"],
+    advanced_policy: null,
+  },
+  iam_group_user_policy: {
+    actions: ["s3:GetObject", "s3:ListBucket"],
+    advanced_policy: null,
+  },
+  bucket_access_policy: {
+    actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+    advanced_policy: null,
+  },
+  bucket_defaults: {
+    versioning: true,
+    enable_cors: true,
+    enable_lifecycle: true,
+    cors_allowed_origins: ["https://app.example.com"],
+  },
+  override_policy: {
+    allow_portal_key: true,
+    allow_portal_user_bucket_create: true,
+    allow_portal_user_access_key_create: true,
+    iam_group_manager_policy: { actions: true, advanced_policy: true },
+    iam_group_user_policy: { actions: true, advanced_policy: true },
+    bucket_access_policy: { actions: true, advanced_policy: true },
+    bucket_defaults: {
+      versioning: true,
+      enable_cors: true,
+      enable_lifecycle: true,
+      cors_allowed_origins: true,
+    },
+  },
+};
+
+const PORTAL_TRAFFIC = {
+  window: "day",
+  start: "2026-03-08T00:00:00Z",
+  end: NOW,
+  resolution: "hour",
+  bucket_filter: null,
+  data_points: 5,
+  series: [
+    { timestamp: "2026-05-01T00:00:00Z", bytes_in: Math.round(540 * GB), bytes_out: Math.round(260 * GB), ops: 1_800_000, success_ops: 1_790_000 },
+    { timestamp: "2026-05-07T00:00:00Z", bytes_in: Math.round(710 * GB), bytes_out: Math.round(340 * GB), ops: 2_100_000, success_ops: 2_080_000 },
+    { timestamp: "2026-05-14T00:00:00Z", bytes_in: Math.round(880 * GB), bytes_out: Math.round(430 * GB), ops: 2_400_000, success_ops: 2_380_000 },
+    { timestamp: "2026-05-21T00:00:00Z", bytes_in: Math.round(1.0 * TB), bytes_out: Math.round(520 * GB), ops: 2_800_000, success_ops: 2_780_000 },
+    { timestamp: "2026-05-28T00:00:00Z", bytes_in: Math.round(1.1 * TB), bytes_out: Math.round(550 * GB), ops: 3_500_000, success_ops: 3_470_000 },
+  ],
+  totals: { bytes_in: Math.round(4.2 * TB), bytes_out: Math.round(2.1 * TB), ops: 12_600_000, success_ops: 12_500_000, success_rate: 0.992 },
+  bucket_rankings: [
+    { bucket: "genomics-2026", bytes_total: Math.round(3.0 * TB), bytes_in: Math.round(2.0 * TB), bytes_out: Math.round(1.0 * TB), ops: 7_200_000, success_ops: 7_160_000, success_ratio: 0.994 },
+    { bucket: "photos", bytes_total: Math.round(2.1 * TB), bytes_in: Math.round(1.4 * TB), bytes_out: Math.round(700 * GB), ops: 3_400_000, success_ops: 3_360_000, success_ratio: 0.988 },
+  ],
+  user_rankings: [
+    { user: "storage.user@example.com", bytes_total: Math.round(6.3 * TB), bytes_in: Math.round(4.2 * TB), bytes_out: Math.round(2.1 * TB), ops: 12_600_000, success_ops: 12_500_000, success_ratio: 0.992 },
+  ],
+  request_breakdown: [{ group: "GetObject", bytes_in: 0, bytes_out: Math.round(2.1 * TB), ops: 8_400_000 }],
+  category_breakdown: [{ category: "read", bytes_in: 0, bytes_out: Math.round(2.1 * TB), ops: 8_400_000 }],
+};
+
+const PORTAL_STORAGE_SPACES = [
+  {
+    id: "genomics-2026",
+    name: "genomics-2026",
+    role: "Owner",
+    status: "Active",
+    region: "eu-west-1",
+    created_at: "2024-03-12T10:00:00Z",
+    used_bytes: Math.round(3.42 * TB),
+    object_count: 12_800_000,
+    quota_max_size_bytes: 10 * TB,
+    quota_max_objects: 30_000_000,
+    internal_bucket_name: "genomics-2026",
+    description: "Genomics sequencing workspace",
+  },
+  {
+    id: "photos",
+    name: "photos",
+    role: "Viewer",
+    status: "Shared",
+    region: "eu-west-3",
+    created_at: "2023-05-10T10:00:00Z",
+    used_bytes: Math.round(3.2 * TB),
+    object_count: 2_800_000,
+    quota_max_size_bytes: 8 * TB,
+    quota_max_objects: 10_000_000,
+    internal_bucket_name: "photos",
+    description: "Shared media storage",
+  },
+  {
+    id: "datasets",
+    name: "datasets",
+    role: "Editor",
+    status: "Active",
+    region: "eu-west-1",
+    created_at: "2023-03-16T10:00:00Z",
+    used_bytes: Math.round(1.7 * TB),
+    object_count: 1_500_000,
+    quota_max_size_bytes: 5 * TB,
+    quota_max_objects: 5_000_000,
+    internal_bucket_name: "datasets",
+    description: "Curated analytics datasets",
+  },
+];
+
+const PORTAL_ACTIVITY = [
+  {
+    id: 1,
+    created_at: NOW,
+    actor: "Alice",
+    action: "Uploaded",
+    target: "sample_001.fastq.gz",
+    storage_space_id: "genomics-2026",
+    storage_space_name: "genomics-2026",
+    ip_address: "192.168.1.10",
+    status: "success",
+  },
+  {
+    id: 2,
+    created_at: "2026-03-08T08:42:00Z",
+    actor: "Bob",
+    action: "Shared",
+    target: "photos",
+    storage_space_id: "photos",
+    storage_space_name: "photos",
+    ip_address: "192.168.1.23",
+    status: "success",
+  },
+  {
+    id: 3,
+    created_at: "2026-03-08T08:15:00Z",
+    actor: "Laurent",
+    action: "Downloaded",
+    target: "README.txt",
+    storage_space_id: "genomics-2026",
+    storage_space_name: "genomics-2026",
+    ip_address: "192.168.1.10",
+    status: "success",
+  },
+];
+
+const PORTAL_TRANSFERS = [
+  {
+    id: "transfer-genomics-001",
+    name: "sample_001.fastq.gz",
+    direction: "Upload",
+    status: "Completed",
+    progress: 100,
+    size_bytes: Math.round(2.4 * GB),
+    storage_space_id: "genomics-2026",
+    storage_space_name: "genomics-2026",
+    started_at: "2026-03-08T08:55:00Z",
+    eta_label: "Completed",
+    speed_label: "95 MB/s",
+  },
+  {
+    id: "transfer-datasets-001",
+    name: "clinical-export.csv",
+    direction: "Download",
+    status: "Uploading",
+    progress: 64,
+    size_bytes: 180 * MB,
+    storage_space_id: "datasets",
+    storage_space_name: "datasets",
+    started_at: "2026-03-08T08:58:00Z",
+    eta_label: "1m 20s",
+    speed_label: "18 MB/s",
+  },
+];
+
+const PORTAL_ALERTS = [
+  {
+    id: "quota-genomics",
+    tone: "warning",
+    title: "Quota is getting close",
+    description: "genomics-2026 is above one third of its allocated storage.",
+    severity_label: "Warning",
+    storage_space_id: "genomics-2026",
+    created_at: NOW,
+  },
+  {
+    id: "expiring-public-link",
+    tone: "info",
+    title: "Shared link expiring",
+    description: "A review link expires in 2 days.",
+    severity_label: "Info",
+    storage_space_id: "photos",
+    created_at: NOW,
+  },
+];
+
+const PORTAL_OBJECTS_BY_SPACE: Record<string, { prefixes: string[]; objects: Array<Record<string, unknown>> }> = {
+  "genomics-2026": {
+    prefixes: [
+      "raw-data/",
+      "raw-data/2024/",
+      "raw-data/2024/03/",
+      "raw-data/2024/03/01-fastq/",
+      "raw-data/2024/03/02-aligned/",
+      "raw-data/2024/03/03-variants/",
+      "reports/",
+    ],
+    objects: [
+      {
+        key: "raw-data/2024/03/sample_001.fastq.gz",
+        name: "sample_001.fastq.gz",
+        size: Math.round(2.4 * GB),
+        last_modified: "2024-03-12T10:15:43Z",
+      },
+      {
+        key: "raw-data/2024/03/sample_002.fastq.gz",
+        name: "sample_002.fastq.gz",
+        size: Math.round(2.5 * GB),
+        last_modified: "2024-03-12T10:17:00Z",
+      },
+      {
+        key: "raw-data/2024/03/sample_003.fastq.gz",
+        name: "sample_003.fastq.gz",
+        size: Math.round(2.4 * GB),
+        last_modified: "2024-03-12T10:18:00Z",
+      },
+      {
+        key: "raw-data/2024/03/README.txt",
+        name: "README.txt",
+        size: Math.round(2.1 * 1024),
+        last_modified: "2024-03-12T10:20:00Z",
+      },
+      {
+        key: "reports/q1-summary.pdf",
+        name: "q1-summary.pdf",
+        size: Math.round(4.8 * MB),
+        last_modified: "2024-03-15T09:00:00Z",
+      },
+    ],
+  },
+  photos: {
+    prefixes: ["2024/", "shared/"],
+    objects: [
+      {
+        key: "2024/image_001.jpg",
+        name: "image_001.jpg",
+        size: Math.round(4.2 * MB),
+        last_modified: "2024-06-10T10:21:00Z",
+      },
+    ],
+  },
+  datasets: {
+    prefixes: ["exports/"],
+    objects: [
+      {
+        key: "exports/clinical-export.csv",
+        name: "clinical-export.csv",
+        size: 180 * MB,
+        last_modified: NOW,
+      },
+    ],
+  },
+};
+
+const PORTAL_BILLING_ME = {
+  month: "2026-05",
+  subject_type: "account",
+  subject_id: 101,
+  name: "Helios Retail",
+  rgw_identifier: "RGW-HELIOS",
+  daily: [
+    { day: "2026-05-01", storage_bytes: Math.round(7.6 * TB), bytes_in: 340 * GB, bytes_out: 180 * GB, ops_total: 1_800_000 },
+    { day: "2026-05-07", storage_bytes: Math.round(7.8 * TB), bytes_in: 390 * GB, bytes_out: 210 * GB, ops_total: 2_100_000 },
+    { day: "2026-05-14", storage_bytes: Math.round(8.0 * TB), bytes_in: 420 * GB, bytes_out: 260 * GB, ops_total: 2_400_000 },
+    { day: "2026-05-21", storage_bytes: Math.round(8.15 * TB), bytes_in: 510 * GB, bytes_out: 290 * GB, ops_total: 2_800_000 },
+    { day: "2026-05-28", storage_bytes: Math.round(8.32 * TB), bytes_in: 640 * GB, bytes_out: 340 * GB, ops_total: 3_500_000 },
+  ],
+  usage: {
+    bytes_in: Math.round(4.2 * TB),
+    bytes_out: Math.round(2.1 * TB),
+    ops_total: 12_600_000,
+    ops_breakdown: { GetObject: 8_400_000, PutObject: 2_100_000, ListBucket: 2_100_000 },
+  },
+  storage: {
+    avg_bytes: Math.round(8.1 * TB),
+    avg_gb_month: 8_294,
+    total_objects: 17_100_000,
+  },
+  coverage: {
+    days_collected: 28,
+    days_in_month: 31,
+    coverage_ratio: 0.9,
+  },
+  cost: {
+    currency: "EUR",
+    storage_cost: 184.32,
+    egress_cost: 42.18,
+    ingress_cost: 0,
+    requests_cost: 8.72,
+    total_cost: 235.22,
+    rate_card_name: "Docs QA baseline",
+  },
+};
 
 const WORKSPACE_HEALTH = {
   generated_at: NOW,
@@ -657,6 +1047,59 @@ function parseBucketName(pathname: string): string {
   return decodeURIComponent(match?.[1] ?? "helios-retail-logs");
 }
 
+function parseStorageSpaceId(pathname: string): string {
+  const match = pathname.match(/\/storage-spaces\/(.+?)(?:\/|$)/);
+  return decodeURIComponent(match?.[1] ?? "genomics-2026");
+}
+
+function normalizePortalPrefix(value: string | null): string {
+  if (!value) return "";
+  return value.endsWith("/") ? value : `${value}/`;
+}
+
+function listPortalObjectsForPrefix(
+  value: { prefixes: string[]; objects: Array<Record<string, unknown>> },
+  rawPrefix: string | null,
+) {
+  const prefix = normalizePortalPrefix(rawPrefix);
+  if (!prefix) {
+    return {
+      prefixes: value.prefixes.filter((candidate) => !candidate.replace(/\/$/, "").includes("/")),
+      objects: value.objects.filter((item) => {
+        const key = typeof item.key === "string" ? item.key : "";
+        return !key.includes("/");
+      }),
+    };
+  }
+
+  const childPrefixes = new Set<string>();
+  const objects = value.objects.filter((item) => {
+    const key = typeof item.key === "string" ? item.key : "";
+    if (!key.startsWith(prefix)) return false;
+    const relative = key.slice(prefix.length);
+    if (!relative) return false;
+    if (relative.includes("/")) {
+      const [segment] = relative.split("/");
+      if (segment) childPrefixes.add(`${prefix}${segment}/`);
+      return false;
+    }
+    return true;
+  });
+
+  const prefixes = value.prefixes
+    .filter((candidate) => candidate.startsWith(prefix) && candidate !== prefix)
+    .filter((candidate) => {
+      const relative = candidate.slice(prefix.length).replace(/\/$/, "");
+      return Boolean(relative) && !relative.includes("/");
+    });
+
+  childPrefixes.forEach((candidate) => prefixes.push(candidate));
+  return {
+    prefixes: Array.from(new Set(prefixes)).sort(),
+    objects,
+  };
+}
+
 export function buildBaseRules(): MockRule[] {
   return [
     {
@@ -707,6 +1150,7 @@ export function buildBaseRules(): MockRule[] {
         total_users: 7,
         total_admins: 2,
         total_none_users: 1,
+        total_portal_users: 3,
         total_s3_users: 9,
         assigned_accounts: 4,
         unassigned_accounts: 1,
@@ -858,6 +1302,174 @@ export function buildBaseRules(): MockRule[] {
       body: {
         items: MANAGER_MIGRATIONS,
       },
+    },
+    {
+      id: "portal-accounts",
+      path: /^\/portal\/accounts$/,
+      body: PORTAL_ACCOUNTS,
+    },
+    {
+      id: "portal-eligibility",
+      path: /^\/portal\/eligibility$/,
+      body: {
+        eligible: true,
+        reasons: [],
+      },
+    },
+    {
+      id: "portal-state",
+      path: /^\/portal\/state$/,
+      body: PORTAL_STATE,
+    },
+    {
+      id: "portal-usage",
+      path: /^\/portal\/usage$/,
+      body: {
+        used_bytes: PORTAL_STATE.used_bytes,
+        used_objects: PORTAL_STATE.used_objects,
+      },
+    },
+    {
+      id: "portal-endpoint-health",
+      path: /^\/portal\/endpoint-health$/,
+      body: WORKSPACE_HEALTH,
+    },
+    {
+      id: "portal-traffic",
+      path: /^\/portal\/traffic$/,
+      body: PORTAL_TRAFFIC,
+    },
+    {
+      id: "portal-storage-spaces",
+      path: /^\/portal\/storage-spaces$/,
+      body: ({ url }) => {
+        const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
+        if (!search) return PORTAL_STORAGE_SPACES;
+        return PORTAL_STORAGE_SPACES.filter((space) => space.name.toLowerCase().includes(search));
+      },
+    },
+    {
+      id: "portal-storage-space-detail",
+      path: /^\/portal\/storage-spaces\/[^/]+$/,
+      body: ({ url }) => {
+        const spaceId = parseStorageSpaceId(url.pathname);
+        return PORTAL_STORAGE_SPACES.find((space) => space.id === spaceId) ?? PORTAL_STORAGE_SPACES[0];
+      },
+    },
+    {
+      id: "portal-storage-space-objects",
+      path: /^\/portal\/storage-spaces\/[^/]+\/objects$/,
+      body: ({ url }) => {
+        const spaceId = parseStorageSpaceId(url.pathname);
+        const value = PORTAL_OBJECTS_BY_SPACE[spaceId] ?? PORTAL_OBJECTS_BY_SPACE["genomics-2026"];
+        const filtered = listPortalObjectsForPrefix(value, url.searchParams.get("prefix"));
+        return {
+          prefix: normalizePortalPrefix(url.searchParams.get("prefix")),
+          objects: filtered.objects,
+          prefixes: filtered.prefixes,
+          is_truncated: false,
+          next_continuation_token: null,
+        };
+      },
+    },
+    {
+      id: "portal-storage-space-object-detail",
+      path: /^\/portal\/storage-spaces\/[^/]+\/objects\/detail$/,
+      body: ({ url }) => {
+        const key = url.searchParams.get("key") ?? "raw-data/2024/03/sample_001.fastq.gz";
+        const spaceId = parseStorageSpaceId(url.pathname);
+        const value = PORTAL_OBJECTS_BY_SPACE[spaceId] ?? PORTAL_OBJECTS_BY_SPACE["genomics-2026"];
+        const object = value.objects.find((item) => item.key === key) ?? value.objects[0];
+        return {
+          key,
+          name: object?.name ?? key.split("/").pop() ?? key,
+          size: object?.size ?? Math.round(2.4 * GB),
+          last_modified: object?.last_modified ?? "2024-03-12T10:15:43Z",
+          content_type: key.endsWith(".txt") ? "text/plain" : "application/gzip",
+          storage_class: "STANDARD",
+          encryption: "AES256",
+          preview_type: key.endsWith(".txt") ? "text" : "unavailable",
+          preview_text: key.endsWith(".txt") ? "README for the selected storage space." : null,
+          preview_unavailable_reason: key.endsWith(".txt") ? null : "Preview is available only for small text files.",
+        };
+      },
+    },
+    {
+      id: "portal-storage-space-public-links",
+      path: /^\/portal\/storage-spaces\/[^/]+\/public-links$/,
+      body: ({ url }) => {
+        const spaceId = parseStorageSpaceId(url.pathname);
+        const space = PORTAL_STORAGE_SPACES.find((item) => item.id === spaceId) ?? PORTAL_STORAGE_SPACES[0];
+        return [
+          {
+            id: 42,
+            storage_space_id: space.id,
+            storage_space_name: space.name,
+            object_key: "raw-data/2024/03/sample_001.fastq.gz",
+            object_name: "sample_001.fastq.gz",
+            url: "/api/portal/public-links/docs-token/download",
+            label: "Review link",
+            created_by_email: "storage.user@example.com",
+            created_at: NOW,
+            expires_at: "2026-06-10T10:00:00Z",
+            revoked_at: null,
+            status: "Active",
+          },
+        ];
+      },
+    },
+    {
+      id: "portal-storage-space-shares",
+      path: /^\/portal\/storage-spaces\/[^/]+\/shares$/,
+      body: ({ url }) => {
+        const spaceId = parseStorageSpaceId(url.pathname);
+        const space = PORTAL_STORAGE_SPACES.find((item) => item.id === spaceId) ?? PORTAL_STORAGE_SPACES[0];
+        return [
+          {
+            id: `share-${space.id}-alice`,
+            storage_space_id: space.id,
+            storage_space_name: space.name,
+            user_id: 3,
+            email: "alice@example.com",
+            role: "Editor",
+            direction: "by_me",
+            activity_label: "2h ago",
+          },
+          {
+            id: `share-${space.id}-bob`,
+            storage_space_id: space.id,
+            storage_space_name: space.name,
+            user_id: 4,
+            email: "bob@example.com",
+            role: "Viewer",
+            direction: "with_me",
+            activity_label: "1d ago",
+          },
+        ];
+      },
+    },
+    {
+      id: "portal-activity-v3",
+      path: /^\/portal\/activity$/,
+      body: PORTAL_ACTIVITY,
+    },
+    {
+      id: "portal-transfers-v3",
+      path: /^\/portal\/transfers$/,
+      body: PORTAL_TRANSFERS,
+    },
+    {
+      id: "portal-alerts-v3",
+      path: /^\/portal\/alerts$/,
+      body: PORTAL_ALERTS,
+    },
+    {
+      id: "portal-billing-me",
+      path: /^\/portal\/billing\/me$/,
+      body: ({ url }) => ({
+        ...PORTAL_BILLING_ME,
+        month: url.searchParams.get("month") ?? PORTAL_BILLING_ME.month,
+      }),
     },
     {
       id: "ceph-endpoints",

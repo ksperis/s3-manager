@@ -4,6 +4,33 @@
  */
 export type TextMatchMode = "contains" | "exact";
 export type FilterCostLevel = "none" | "low" | "medium" | "high";
+export type AdvancedSearchProgress = {
+  active: boolean;
+  determinate: boolean;
+  percent: number;
+  stage: string;
+  message: string;
+  processed: number;
+  total: number;
+};
+
+type AdvancedSearchProgressEvent = {
+  percent?: number;
+  stage?: string;
+  message?: string;
+  processed?: number;
+  total?: number;
+};
+
+export const INACTIVE_ADVANCED_PROGRESS: AdvancedSearchProgress = {
+  active: false,
+  determinate: true,
+  percent: 0,
+  stage: "",
+  message: "",
+  processed: 0,
+  total: 0,
+};
 
 export const FILTER_COST_LABEL: Record<FilterCostLevel, string> = {
   none: "No additional cost",
@@ -37,6 +64,71 @@ export const renderFilterCostIndicator = (level: FilterCostLevel, tooltip: strin
         />
       ))}
     </span>
+  );
+};
+
+export function isCancelledError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  if (typeof err !== "object" || err === null) return false;
+  const name = "name" in err ? String((err as { name?: unknown }).name ?? "") : "";
+  const code = "code" in err ? String((err as { code?: unknown }).code ?? "") : "";
+  return name === "CanceledError" || code === "ERR_CANCELED";
+}
+
+export const formatAdvancedSearchStage = (stage: string) => {
+  if (!stage.trim()) return "";
+  return stage
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
+export const progressFromAdvancedSearchEvent = (event: AdvancedSearchProgressEvent): AdvancedSearchProgress => {
+  const rawPercent = Number(event.percent);
+  const percent = Number.isFinite(rawPercent) ? Math.max(0, Math.min(100, Math.round(rawPercent))) : 0;
+  const rawProcessed = Number(event.processed);
+  const rawTotal = Number(event.total);
+  const total = Number.isFinite(rawTotal) ? Math.max(0, Math.round(rawTotal)) : 0;
+  const processed = Number.isFinite(rawProcessed) ? Math.max(0, Math.min(total || Number.MAX_SAFE_INTEGER, Math.round(rawProcessed))) : 0;
+  return {
+    active: true,
+    determinate: true,
+    percent,
+    stage: event.stage || "",
+    message: event.message || "Running advanced search...",
+    processed,
+    total,
+  };
+};
+
+export const renderAdvancedSearchProgress = (progress: AdvancedSearchProgress) => {
+  if (!progress.active) return null;
+  const percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
+  const progressDetails = progress.total > 0 ? ` · ${progress.processed} / ${progress.total}` : "";
+  return (
+    <div className="mb-3 rounded-xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-slate-900/70">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
+          {progress.determinate ? `Advanced search in progress · ${percent}%` : "Advanced search in progress..."}
+        </p>
+        {(progress.message || progress.stage) && (
+          <p className="ui-caption text-slate-500 dark:text-slate-400">
+            {progress.message || formatAdvancedSearchStage(progress.stage)}
+            {progressDetails}
+          </p>
+        )}
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" role="progressbar">
+        {progress.determinate ? (
+          <div
+            className="h-full rounded-full bg-primary transition-[width] duration-150 ease-out"
+            style={{ width: `${percent}%` }}
+          />
+        ) : (
+          <div className="h-full w-full animate-pulse rounded-full bg-primary/70" />
+        )}
+      </div>
+    </div>
   );
 };
 

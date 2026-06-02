@@ -11,6 +11,7 @@
 - Auth/users
 - Admin
 - Manager
+- Portal
 - Browser
 - Ceph Admin
 - Internal cron endpoints

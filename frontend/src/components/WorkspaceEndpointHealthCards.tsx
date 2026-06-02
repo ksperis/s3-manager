@@ -189,9 +189,6 @@ export default function WorkspaceEndpointHealthCards({
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${incidentStateBadgeClass(incident.ongoing)}`}>
                       {incident.ongoing ? "In progress" : "Resolved"}
                     </span>
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${statusPillClass(incident.status)}`}>
-                      {statusLabel(incident.status)}
-                    </span>
                   </div>
                 </div>
                 <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">

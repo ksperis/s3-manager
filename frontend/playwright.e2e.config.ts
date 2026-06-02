@@ -4,6 +4,7 @@ import { defineConfig } from "@playwright/test";
 
 const frontendUrl = "http://127.0.0.1:4173";
 const backendHealthUrl = "http://127.0.0.1:8000/health";
+const motoServerUrl = process.env.E2E_S3_ENDPOINT ?? "http://localhost:5000";
 const storageStatePath = "./e2e/.auth/browser-user.json";
 const backendPython =
   process.env.E2E_PYTHON_BIN ??
@@ -12,6 +13,35 @@ const backendPython =
     : existsSync("../backend/.venv/bin/python")
       ? "../backend/.venv/bin/python"
       : "python3");
+const shouldStartMoto =
+  process.env.E2E_START_MOTO === "true" || Boolean(process.env.E2E_MOTO_COMMAND);
+const motoServerCommand =
+  process.env.E2E_MOTO_COMMAND ?? "moto_server -H 0.0.0.0 -p 5000";
+
+const webServer = [
+  ...(shouldStartMoto
+    ? [
+        {
+          command: motoServerCommand,
+          url: motoServerUrl,
+          timeout: 120_000,
+          reuseExistingServer: !process.env.CI,
+        },
+      ]
+    : []),
+  {
+    command: `${backendPython} ../backend/tests_browser_e2e/serve.py`,
+    url: backendHealthUrl,
+    timeout: 120_000,
+    reuseExistingServer: !process.env.CI,
+  },
+  {
+    command: "npm run dev -- --host 127.0.0.1 --port 4173",
+    url: frontendUrl,
+    timeout: 120_000,
+    reuseExistingServer: !process.env.CI,
+  },
+];
 
 export default defineConfig({
   testDir: "./e2e",
@@ -49,18 +79,5 @@ export default defineConfig({
       },
     },
   ],
-  webServer: [
-    {
-      command: `${backendPython} ../backend/tests_browser_e2e/serve.py`,
-      url: backendHealthUrl,
-      timeout: 120_000,
-      reuseExistingServer: !process.env.CI,
-    },
-    {
-      command: "npm run dev -- --host 127.0.0.1 --port 4173",
-      url: frontendUrl,
-      timeout: 120_000,
-      reuseExistingServer: !process.env.CI,
-    },
-  ],
+  webServer,
 });

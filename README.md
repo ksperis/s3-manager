@@ -18,7 +18,7 @@ It can also be used solely through the integrated S3 browser for direct object a
 - **Admin**: platform governance, endpoints, users, and settings.
 - **Manager**: bucket and IAM administration in account context.
 - **Browser**: direct object operations.
-- **Portal**: guided self-service workflows (**temporarily removed**).
+- **Portal**: explicit self-service workspace backed by RGW IAM.
 - **Ceph-admin**: Ceph RGW cluster-wide administration.
 
 ## Workspace features
@@ -69,14 +69,13 @@ It can also be used solely through the integrated S3 browser for direct object a
 
 ### Portal
 
-> Note: the Portal feature is temporarily removed; this screenshot is kept as historical documentation.
-
 <a href="https://ksperis.github.io/s3-manager/user/screenshots-gallery/#portal">
   <img src="doc/docs/assets/screenshots/user/workspace-portal.light.png" alt="Portal" width="560">
 </a>
 
-- Historical workspace for guided self-service workflows.
-- Temporarily removed from the active product surface.
+- Self-service dashboard for eligible Ceph RGW accounts with IAM enabled.
+- Access is explicit per account with `portal_user` or `portal_manager`.
+- `/manager` access remains separate and still requires account admin/root links.
 
 ## Quick Start (Docker Compose)
 

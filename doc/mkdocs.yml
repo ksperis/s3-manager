@@ -70,6 +70,7 @@ nav:
       - "Feature: Endpoint Status in Admin": user/feature-endpoint-status-admin.md
       - "Feature: Billing in Admin": user/feature-billing-admin.md
       - "Workspace: Manager": user/workspace-manager.md
+      - "Workspace: Portal": user/workspace-portal.md
       - "Workspace: Browser": user/workspace-browser.md
       - "Workspace: Ceph Admin": user/workspace-ceph-admin.md
       - "Workspace: Storage Ops": user/workspace-storage-ops.md

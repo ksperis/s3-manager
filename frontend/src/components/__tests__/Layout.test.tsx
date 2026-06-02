@@ -10,8 +10,22 @@ import {
   SIDEBAR_MAX_WIDTH,
 } from "../sidebarSizing";
 
+const mocks = vi.hoisted(() => ({
+  workspaceSwitcherModel: null as {
+    currentWorkspaceId: string;
+    currentWorkspaceLabel: string;
+    options: Array<{ value: string; label: string }>;
+    onChange: (next: string) => void;
+  } | null,
+}));
+
 vi.mock("../../api/auth", () => ({
   logout: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock("../EnvironmentSwitcher", () => ({
+  useWorkspaceSwitcherModel: () => mocks.workspaceSwitcherModel,
+  workspaceIconById: () => null,
 }));
 
 vi.mock("../Header", () => ({
@@ -23,12 +37,14 @@ vi.mock("../Topbar", () => ({
     mobileMenuOpen,
     onMobileMenuToggle,
     showMobileMenuButton,
+    showWorkspaceSwitcher,
   }: {
     mobileMenuOpen: boolean;
     onMobileMenuToggle: () => void;
     showMobileMenuButton?: boolean;
+    showWorkspaceSwitcher?: boolean;
   }) => (
-    <div data-testid="layout-topbar">
+    <div data-testid="layout-topbar" data-show-workspace-switcher={String(showWorkspaceSwitcher)}>
       {showMobileMenuButton ? (
         <button type="button" aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"} onClick={onMobileMenuToggle}>
           Menu
@@ -83,6 +99,7 @@ function getMobileSidebar(container: HTMLElement) {
 describe("Layout", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
+    mocks.workspaceSwitcherModel = null;
   });
 
   it("restores the desktop sidebar width from session storage", () => {
@@ -96,6 +113,15 @@ describe("Layout", () => {
       "aria-valuenow",
       "320"
     );
+  });
+
+  it("lets route content shrink so wide inner lists can scroll horizontally", () => {
+    const { container } = renderLayout();
+    const main = container.querySelector("main");
+    const outletWrapper = screen.getByText("Dashboard content").parentElement;
+
+    expect(main).toHaveClass("min-w-0");
+    expect(outletWrapper).toHaveClass("min-w-0");
   });
 
   it("supports pointer resize with compact and max-width bounds", () => {
@@ -143,5 +169,52 @@ describe("Layout", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Close mobile navigation" }));
     expect(mobileSidebar).toHaveClass("-translate-x-full");
+  });
+
+  it("renders the workspace switcher in the sidebar when the sidebar is visible", () => {
+    const onWorkspaceChange = vi.fn();
+    mocks.workspaceSwitcherModel = {
+      currentWorkspaceId: "manager",
+      currentWorkspaceLabel: "Manager",
+      options: [
+        { value: "manager", label: "Manager" },
+        { value: "portal", label: "Portal" },
+      ],
+      onChange: onWorkspaceChange,
+    };
+
+    const { container } = renderLayout();
+    const desktopSidebar = getDesktopSidebar(container);
+
+    expect(screen.getByTestId("layout-topbar")).toHaveAttribute("data-show-workspace-switcher", "false");
+    const switcher = within(desktopSidebar).getByRole("button", { name: "Switch workspace" });
+    expect(switcher).toHaveTextContent("S3 Manager");
+    expect(switcher).toHaveTextContent("Manager");
+  });
+
+  it("keeps the workspace switcher in the topbar when the sidebar is hidden", () => {
+    mocks.workspaceSwitcherModel = {
+      currentWorkspaceId: "browser",
+      currentWorkspaceLabel: "Browser",
+      options: [
+        { value: "manager", label: "Manager" },
+        { value: "browser", label: "Browser" },
+      ],
+      onChange: vi.fn(),
+    };
+
+    const { container } = render(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <Routes>
+          <Route path="/browser" element={<Layout headerTitle="Browser" hideHeader hideSidebar />}>
+            <Route index element={<div>Browser content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(container.querySelector('[data-sidebar-variant="desktop"]')).not.toBeInTheDocument();
+    expect(screen.getByTestId("layout-topbar")).toHaveAttribute("data-show-workspace-switcher", "true");
+    expect(screen.getByText("Browser content")).toBeInTheDocument();
   });
 });

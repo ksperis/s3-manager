@@ -60,7 +60,6 @@ function buildSettings(): AppSettings {
       bucket_compare_enabled: true,
       bucket_integrity_check_enabled: false,
       manager_ceph_s3_user_keys_enabled: false,
-      allow_ui_user_bucket_migration: false,
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
       allow_login_custom_endpoint: false,

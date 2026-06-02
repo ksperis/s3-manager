@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 import logging
 
 from app.db import (
+    AccountIAMUser,
+    AccountRole,
     AuditLog,
     BillingAssignment,
     BillingStorageDaily,
@@ -44,6 +46,7 @@ from app.utils.s3_account_ordering import s3_account_name_order_by
 
 
 logger = logging.getLogger(__name__)
+ACCOUNT_ROLE_VALUES = {entry.value for entry in AccountRole}
 
 
 class S3AccountsService:
@@ -459,6 +462,7 @@ class S3AccountsService:
                 UserS3Account.account_id,
                 UserS3Account.user_id,
                 UserS3Account.account_admin,
+                UserS3Account.account_role,
                 User.email,
             )
             .join(User, User.id == UserS3Account.user_id)
@@ -471,7 +475,7 @@ class S3AccountsService:
         )
         user_ids_by_account: dict[int, list[int]] = {}
         user_links_by_account: dict[int, list[AccountUserLink]] = {}
-        for account_id, user_id, account_admin, user_email in rows:
+        for account_id, user_id, account_admin, account_role, user_email in rows:
             normalized_account_id = int(account_id)
             normalized_user_id = int(user_id)
             user_ids_by_account.setdefault(normalized_account_id, []).append(normalized_user_id)
@@ -479,6 +483,7 @@ class S3AccountsService:
                 AccountUserLink(
                     user_id=normalized_user_id,
                     account_admin=account_admin,
+                    account_role=account_role,
                     user_email=user_email,
                 )
             )
@@ -903,6 +908,13 @@ class S3AccountsService:
                     account_admin = db_link.account_admin if db_link else False
                 else:
                     account_admin = bool(link.account_admin)
+                if link.account_role is not None and link.account_role not in ACCOUNT_ROLE_VALUES:
+                    raise ValueError("Invalid account role")
+                account_role = (
+                    link.account_role
+                    if link.account_role is not None
+                    else (db_link.account_role if db_link else AccountRole.PORTAL_NONE.value)
+                )
                 if not db_link:
                     user = self.db.query(User).filter(User.id == user_id).first()
                     if not user:
@@ -914,8 +926,10 @@ class S3AccountsService:
                         user_id=user_id,
                         account_id=account.id,
                         is_root=False,
+                        account_role=account_role,
                     )
                 db_link.account_admin = account_admin
+                db_link.account_role = account_role
                 db_link.updated_at = utcnow()
                 self.db.add(db_link)
 
@@ -1018,6 +1032,7 @@ class S3AccountsService:
             )
 
     def _remove_account_entry(self, account: S3Account) -> None:
+        self.db.query(AccountIAMUser).filter(AccountIAMUser.account_id == account.id).delete()
         self.db.query(UserS3Account).filter(UserS3Account.account_id == account.id).delete()
         (
             self.db.query(BillingAssignment)

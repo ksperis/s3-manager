@@ -15,6 +15,7 @@ from app.core.config import collect_secret_warnings, get_settings, has_non_local
 from app.core.database import SessionLocal, engine, is_sqlite_malformed_database_error, is_sqlite_url
 from app.core.db_init import init_db
 from app.routers import auth, users, settings as public_settings, browser as user_browser
+from app.routers import portal
 from app.routers import execution_contexts
 from app.routers import connections as user_connections
 from app.routers.admin import s3_accounts as admin_s3_accounts
@@ -62,6 +63,7 @@ from app.routers.dependencies import (
     require_ceph_admin_enabled,
     require_manager_context_enabled,
     require_manager_enabled,
+    require_portal_enabled,
     require_storage_ops_enabled,
 )
 
@@ -181,6 +183,11 @@ app.include_router(
     user_browser.router,
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_browser_enabled)],
+)
+app.include_router(
+    portal.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_portal_enabled)],
 )
 app.include_router(
     iam_users.router,

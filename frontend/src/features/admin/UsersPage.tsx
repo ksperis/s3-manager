@@ -5,6 +5,7 @@
 import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CreateUserPayload,
+  ManagerToolAccess,
   UpdateUserPayload,
   User,
   assignUserToS3Account,
@@ -23,6 +24,11 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
+import {
+  PortalSettingsItem,
+  PortalSettingsSection,
+  PortalSettingsToggleAction,
+} from "../../components/PortalSettingsLayout";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -34,18 +40,47 @@ import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
-type UserModalTab = "general" | "associations" | "access";
+type UserModalTab = "general" | "associations" | "access" | "manager_tools";
 type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 
 type AccountSelection = {
   id: number;
   account_admin?: boolean;
+  account_role?: PortalAccountRole;
 };
+
+type PortalAccountRole = "portal_none" | "portal_user" | "portal_manager";
 
 type Option = {
   id: number;
   label: string;
 };
+
+const DEFAULT_MANAGER_TOOL_ACCESS: ManagerToolAccess = {
+  bucket_compare: false,
+  bucket_integrity_check: false,
+  bucket_migration: false,
+  ceph_s3_user_keys: false,
+};
+const PORTAL_ROLE_OPTIONS: { value: PortalAccountRole; label: string }[] = [
+  { value: "portal_none", label: "No portal access" },
+  { value: "portal_user", label: "Portal user" },
+  { value: "portal_manager", label: "Portal manager" },
+];
+
+function normalizePortalRole(value?: string | null): PortalAccountRole {
+  if (value === "portal_user" || value === "portal_manager") return value;
+  return "portal_none";
+}
+
+function normalizeManagerToolAccess(access?: ManagerToolAccess | null): ManagerToolAccess {
+  return {
+    bucket_compare: Boolean(access?.bucket_compare),
+    bucket_integrity_check: Boolean(access?.bucket_integrity_check),
+    bucket_migration: Boolean(access?.bucket_migration),
+    ceph_s3_user_keys: Boolean(access?.ceph_s3_user_keys),
+  };
+}
 
 const userModalTabsContainerClass =
   "flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60";
@@ -58,9 +93,10 @@ const userModalTabButtonClass = (active: boolean) =>
 const userModalLabelClass = "ui-body font-medium text-slate-700 dark:text-slate-200";
 const userModalFieldClass =
   "rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
-const userModalToggleLabelClass = "inline-flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200";
 const userModalCancelButtonClass =
   "rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800";
+const userModalSettingsGroupClass =
+  "rounded-xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40";
 const roleAccessHelpItems = [
   { role: "No Access", access: "No workspace access (profile only)" },
   { role: "User", access: "Non-admin workspaces only" },
@@ -71,9 +107,11 @@ const roleAccessHelpItems = [
 function UserModalPrimaryTabs({
   activeTab,
   onTabChange,
+  showManagerTools = false,
 }: {
   activeTab: UserModalTab;
   onTabChange: (tab: UserModalTab) => void;
+  showManagerTools?: boolean;
 }) {
   return (
     <div className={userModalTabsContainerClass}>
@@ -96,8 +134,17 @@ function UserModalPrimaryTabs({
         onClick={() => onTabChange("access")}
         className={userModalTabButtonClass(activeTab === "access")}
       >
-        Access
+        Workspaces
       </button>
+      {showManagerTools && (
+        <button
+          type="button"
+          onClick={() => onTabChange("manager_tools")}
+          className={userModalTabButtonClass(activeTab === "manager_tools")}
+        >
+          Manager tools
+        </button>
+      )}
     </div>
   );
 }
@@ -260,6 +307,9 @@ const AssociationsTabs = ({
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Admin
                         </th>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Portal role
+                        </th>
                         <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Actions
                         </th>
@@ -268,7 +318,7 @@ const AssociationsTabs = ({
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                       {accounts.selected.length === 0 ? (
                         <tr>
-                          <td colSpan={3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
                             No account linked yet.
                           </td>
                         </tr>
@@ -295,6 +345,27 @@ const AssociationsTabs = ({
                                   />
                                   Admin
                                 </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <select
+                                  value={normalizePortalRole(entry.account_role)}
+                                  onChange={(e) =>
+                                    accounts.setSelected((prev) =>
+                                      prev.map((item) =>
+                                        item.id === entry.id
+                                          ? { ...item, account_role: normalizePortalRole(e.target.value) }
+                                          : item
+                                      )
+                                    )
+                                  }
+                                  className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                >
+                                  {PORTAL_ROLE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
                               </td>
                               <td className="px-3 py-2 text-right">
                                 <button
@@ -405,7 +476,7 @@ const AssociationsTabs = ({
                             if (accounts.selections.length === 0) return;
                             const next = accounts.selections.map((accountId) => {
                               const account_admin = accounts.adminChoice[accountId] ?? false;
-                              return { id: accountId, account_admin };
+                              return { id: accountId, account_admin, account_role: "portal_none" as PortalAccountRole };
                             });
                             accounts.setSelected((prev) => [...prev, ...next]);
                             accounts.setSelections([]);
@@ -771,7 +842,7 @@ export default function UsersPage() {
       accountAdminChoice: {},
     })
   );
-  const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<{ id: number; account_admin?: boolean }[]>([]);
+  const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<AccountSelection[]>([]);
   const [createSelectedS3Users, setCreateSelectedS3Users] = useState<number[]>([]);
   const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
   const [createAccountAdminChoice, setCreateAccountAdminChoice] = useState<Record<number, boolean>>({});
@@ -800,7 +871,7 @@ export default function UsersPage() {
       accountAdminChoice: {},
     })
   );
-  const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<{ id: number; account_admin?: boolean }[]>([]);
+  const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<AccountSelection[]>([]);
   const [editSelectedS3Users, setEditSelectedS3Users] = useState<number[]>([]);
   const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
   const [editAccountAdminChoice, setEditAccountAdminChoice] = useState<Record<number, boolean>>({});
@@ -988,10 +1059,45 @@ export default function UsersPage() {
   const editTargetSupportsCephAdmin = editRoleValue === "ui_admin" || editRoleValue === "ui_superadmin";
   const editTargetSupportsStorageOps =
     editRoleValue === "ui_user" || editRoleValue === "ui_admin" || editRoleValue === "ui_superadmin";
+  const editTargetSupportsManagerTools = editTargetSupportsStorageOps;
   const createCanGrantCephAdmin = currentIsSuperAdmin && createTargetSupportsCephAdmin;
   const createCanGrantStorageOps = currentIsAdminLike && createTargetSupportsStorageOps;
   const editCanGrantCephAdmin = currentIsSuperAdmin && editTargetSupportsCephAdmin;
   const editCanGrantStorageOps = currentIsAdminLike && editTargetSupportsStorageOps;
+  const managerToolDefinitions = useMemo(
+    () => [
+      {
+        key: "bucket_compare" as const,
+        title: "Bucket compare",
+        description: "Allow access to Manager > Tools > Compare.",
+        enabled: Boolean(generalSettings.bucket_compare_enabled),
+      },
+      {
+        key: "bucket_integrity_check" as const,
+        title: "Bucket integrity check",
+        description: "Allow access to Manager > Tools > Integrity.",
+        enabled: Boolean(generalSettings.bucket_integrity_check_enabled),
+      },
+      {
+        key: "bucket_migration" as const,
+        title: "Bucket migration",
+        description: "Allow access to Manager > Tools > Migration.",
+        enabled: Boolean(generalSettings.bucket_migration_enabled),
+      },
+      {
+        key: "ceph_s3_user_keys" as const,
+        title: "Ceph S3 User keys",
+        description: "Allow access to Manager > Ceph > Access keys.",
+        enabled: Boolean(generalSettings.manager_ceph_s3_user_keys_enabled),
+      },
+    ],
+    [
+      generalSettings.bucket_compare_enabled,
+      generalSettings.bucket_integrity_check_enabled,
+      generalSettings.bucket_migration_enabled,
+      generalSettings.manager_ceph_s3_user_keys_enabled,
+    ]
+  );
 
   const formatLastLogin = (value?: string | null) => {
     if (!value) return "-";
@@ -1007,20 +1113,29 @@ export default function UsersPage() {
     const adminByAccountId = new Map<number, boolean>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
     );
+    const portalRoleByAccountId = new Map<number, PortalAccountRole>(
+      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
+    );
     return (
       <div className="flex flex-wrap gap-2">
         {user.accounts.map((id) => {
           const label = accountOptionsById.get(Number(id))?.name ?? `Account #${id}`;
           const isAccountAdmin = adminByAccountId.get(Number(id)) === true;
+          const portalRole = portalRoleByAccountId.get(Number(id)) ?? "portal_none";
           return (
             <span
-              key={`${id}-${isAccountAdmin ? "admin" : "user"}`}
+              key={`${id}-${isAccountAdmin ? "admin" : "user"}-${portalRole}`}
               className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
             >
               <span>{label}</span>
               {isAccountAdmin && (
                 <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                   Admin
+                </span>
+              )}
+              {portalRole !== "portal_none" && (
+                <span className="rounded-full bg-sky-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
+                  {portalRole === "portal_manager" ? "Portal manager" : "Portal user"}
                 </span>
               )}
             </span>
@@ -1420,7 +1535,8 @@ export default function UsersPage() {
             assignUserToS3Account(
               created.id,
               Number(entry.id),
-              entry.account_admin ?? false
+              entry.account_admin ?? false,
+              normalizePortalRole(entry.account_role)
             )
           )
         );
@@ -1463,16 +1579,21 @@ export default function UsersPage() {
         normalizedRole === "ui_user" || normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin"
           ? Boolean(user.can_access_storage_ops)
           : false,
+      manager_tool_access: normalizeManagerToolAccess(user.manager_tool_access),
     };
     setEditingUser(user);
     setEditForm(nextEditForm);
     const accountAdmins = new Map<number, boolean>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
     );
+    const accountRoles = new Map<number, PortalAccountRole>(
+      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
+    );
     const selectedAccounts =
       user.accounts?.map((id) => ({
         id: Number(id),
         account_admin: accountAdmins.get(Number(id)) ?? false,
+        account_role: accountRoles.get(Number(id)) ?? "portal_none",
       })) ?? [];
     setEditSelectedS3Accounts(selectedAccounts);
     const nextSelectedS3Users = user.s3_users ? user.s3_users.map((id) => Number(id)) : [];
@@ -1546,19 +1667,41 @@ export default function UsersPage() {
         currentIsAdminLike && (nextRole === "ui_user" || nextRole === "ui_admin" || nextRole === "ui_superadmin")
           ? Boolean(editForm.can_access_storage_ops ?? editingUser.can_access_storage_ops)
           : false;
+      payload.manager_tool_access =
+        nextRole === "ui_user" || nextRole === "ui_admin" || nextRole === "ui_superadmin"
+          ? normalizeManagerToolAccess(editForm.manager_tool_access ?? editingUser.manager_tool_access)
+          : { ...DEFAULT_MANAGER_TOOL_ACCESS };
       payload.s3_user_ids = editSelectedS3Users;
       payload.s3_connection_ids = editSelectedS3Connections;
-      await updateUser(editingUser.id, payload);
+      const updatedUser = await updateUser(editingUser.id, payload);
+      if (currentUserId !== null && currentUserId === editingUser.id && typeof window !== "undefined") {
+        const storedRaw = localStorage.getItem("user");
+        if (storedRaw) {
+          try {
+            const stored = JSON.parse(storedRaw) as Record<string, unknown>;
+            localStorage.setItem("user", JSON.stringify({ ...stored, ...updatedUser }));
+          } catch {
+            localStorage.setItem("user", JSON.stringify(updatedUser));
+          }
+        }
+      }
       const existing = editingUser.accounts ? editingUser.accounts.map((id) => Number(id)) : [];
       const existingAdminById = new Map<number, boolean>(
         (editingUser.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
+      );
+      const existingRoleById = new Map<number, PortalAccountRole>(
+        (editingUser.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
       );
       const selectedIds = editSelectedS3Accounts.map((entry) => Number(entry.id));
       const toAdd = editSelectedS3Accounts.filter((entry) => !existing.includes(Number(entry.id)));
       const toRemove = existing.filter((id) => !selectedIds.includes(id));
       const toUpdateLinks = editSelectedS3Accounts.filter((entry) => {
         const currentAdmin = existingAdminById.get(Number(entry.id)) ?? false;
-        return existing.includes(Number(entry.id)) && currentAdmin !== Boolean(entry.account_admin);
+        const currentRole = existingRoleById.get(Number(entry.id)) ?? "portal_none";
+        return (
+          existing.includes(Number(entry.id)) &&
+          (currentAdmin !== Boolean(entry.account_admin) || currentRole !== normalizePortalRole(entry.account_role))
+        );
       });
 
       if (toAdd.length > 0) {
@@ -1567,7 +1710,8 @@ export default function UsersPage() {
             assignUserToS3Account(
               editingUser.id,
               Number(entry.id),
-              entry.account_admin ?? false
+              entry.account_admin ?? false,
+              normalizePortalRole(entry.account_role)
             )
           )
         );
@@ -1578,7 +1722,8 @@ export default function UsersPage() {
             assignUserToS3Account(
               editingUser.id,
               Number(entry.id),
-              entry.account_admin ?? false
+              entry.account_admin ?? false,
+              normalizePortalRole(entry.account_role)
             )
           )
         );
@@ -1587,7 +1732,7 @@ export default function UsersPage() {
         const account = accountOptionsById.get(Number(accountId));
         if (!account) continue;
         const remainingLinks =
-          (account.user_links ?? account.user_ids?.map((id) => ({ user_id: id, account_admin: false })) ?? [])
+          (account.user_links ?? account.user_ids?.map((id) => ({ user_id: id, account_admin: false, account_role: "portal_none" })) ?? [])
             .filter((link) => link.user_id !== editingUser.id);
         await updateS3Account(Number(accountId), { user_links: remainingLinks });
       }
@@ -1739,49 +1884,49 @@ export default function UsersPage() {
             )}
 
             {createModalTab === "access" && (
-              <div className="grid grid-cols-1 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className={userModalLabelClass}>Ceph Admin access</label>
-                  <label className={userModalToggleLabelClass}>
-                    <input
-                      type="checkbox"
-                      checked={createCanGrantCephAdmin && Boolean(form.can_access_ceph_admin)}
-                      disabled={!createCanGrantCephAdmin}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          can_access_ceph_admin: e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60 dark:border-slate-600"
-                    />
-                    <span>Allow access to /ceph-admin</span>
-                  </label>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Grantable only by Superadmin for roles "Admin" and "Superadmin".
-                  </p>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className={userModalLabelClass}>Storage Ops access</label>
-                  <label className={userModalToggleLabelClass}>
-                    <input
-                      type="checkbox"
-                      checked={createCanGrantStorageOps && Boolean(form.can_access_storage_ops)}
-                      disabled={!createCanGrantStorageOps}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          can_access_storage_ops: e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60 dark:border-slate-600"
-                    />
-                    <span>Allow access to /storage-ops</span>
-                  </label>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.
-                  </p>
-                </div>
+              <div className={userModalSettingsGroupClass}>
+                <PortalSettingsSection
+                  title="Mass management workspaces"
+                  description="Additional operational workspaces available to this UI user."
+                  layout="stack"
+                >
+                  <PortalSettingsItem
+                    title="Ceph Admin access"
+                    description='Allow access to /ceph-admin. Grantable only by Superadmin for roles "Admin" and "Superadmin".'
+                    className={!createCanGrantCephAdmin ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                    action={
+                      <PortalSettingsToggleAction
+                        checked={createCanGrantCephAdmin && Boolean(form.can_access_ceph_admin)}
+                        disabled={!createCanGrantCephAdmin}
+                        onChange={(value) =>
+                          setForm((f) => ({
+                            ...f,
+                            can_access_ceph_admin: value,
+                          }))
+                        }
+                        ariaLabel="Allow access to /ceph-admin"
+                      />
+                    }
+                  />
+                  <PortalSettingsItem
+                    title="Storage Ops access"
+                    description='Allow access to /storage-ops. Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.'
+                    className={!createCanGrantStorageOps ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                    action={
+                      <PortalSettingsToggleAction
+                        checked={createCanGrantStorageOps && Boolean(form.can_access_storage_ops)}
+                        disabled={!createCanGrantStorageOps}
+                        onChange={(value) =>
+                          setForm((f) => ({
+                            ...f,
+                            can_access_storage_ops: value,
+                          }))
+                        }
+                        ariaLabel="Allow access to /storage-ops"
+                      />
+                    }
+                  />
+                </PortalSettingsSection>
               </div>
             )}
 
@@ -2022,7 +2167,7 @@ export default function UsersPage() {
             </PageBanner>
           )}
           <form onSubmit={submitEdit} className="space-y-4">
-            <UserModalPrimaryTabs activeTab={editModalTab} onTabChange={setEditModalTab} />
+            <UserModalPrimaryTabs activeTab={editModalTab} onTabChange={setEditModalTab} showManagerTools />
 
             {editModalTab === "general" && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -2080,48 +2225,136 @@ export default function UsersPage() {
             )}
 
             {editModalTab === "access" && (
-              <div className="grid grid-cols-1 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className={userModalLabelClass}>Ceph Admin access</label>
-                  <label className={userModalToggleLabelClass}>
-                    <input
-                      type="checkbox"
-                      checked={editCanGrantCephAdmin && Boolean(editForm.can_access_ceph_admin)}
-                      disabled={!editCanGrantCephAdmin}
-                      onChange={(e) =>
-                        setEditForm((f) => ({
-                          ...f,
-                          can_access_ceph_admin: e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60 dark:border-slate-600"
-                    />
-                    <span>Allow access to /ceph-admin</span>
-                  </label>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Grantable only by Superadmin for roles "Admin" and "Superadmin".
-                  </p>
+              <div className={userModalSettingsGroupClass}>
+                <PortalSettingsSection
+                  title="Mass management workspaces"
+                  description="Additional operational workspaces available to this UI user."
+                  layout="stack"
+                >
+                  <PortalSettingsItem
+                    title="Ceph Admin access"
+                    description='Allow access to /ceph-admin. Grantable only by Superadmin for roles "Admin" and "Superadmin".'
+                    className={!editCanGrantCephAdmin ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                    action={
+                      <PortalSettingsToggleAction
+                        checked={editCanGrantCephAdmin && Boolean(editForm.can_access_ceph_admin)}
+                        disabled={!editCanGrantCephAdmin}
+                        onChange={(value) =>
+                          setEditForm((f) => ({
+                            ...f,
+                            can_access_ceph_admin: value,
+                          }))
+                        }
+                        ariaLabel="Allow access to /ceph-admin"
+                      />
+                    }
+                  />
+                  <PortalSettingsItem
+                    title="Storage Ops access"
+                    description='Allow access to /storage-ops. Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.'
+                    className={!editCanGrantStorageOps ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                    action={
+                      <PortalSettingsToggleAction
+                        checked={editCanGrantStorageOps && Boolean(editForm.can_access_storage_ops)}
+                        disabled={!editCanGrantStorageOps}
+                        onChange={(value) =>
+                          setEditForm((f) => ({
+                            ...f,
+                            can_access_storage_ops: value,
+                          }))
+                        }
+                        ariaLabel="Allow access to /storage-ops"
+                      />
+                    }
+                  />
+                </PortalSettingsSection>
+              </div>
+            )}
+
+            {editModalTab === "manager_tools" && (
+              <div className="space-y-4">
+                {!editTargetSupportsManagerTools && (
+                  <PageBanner tone="warning">
+                    Manager tool access requires the target role to be User, Admin, or Superadmin.
+                  </PageBanner>
+                )}
+                <div className={userModalSettingsGroupClass}>
+                  <PortalSettingsSection
+                    title="Bucket tools"
+                    description="Manager tools for bucket-level operations."
+                    layout="stack"
+                  >
+                    {managerToolDefinitions
+                      .filter((tool) => tool.key !== "ceph_s3_user_keys")
+                      .map((tool) => {
+                        const access = normalizeManagerToolAccess(editForm.manager_tool_access ?? editingUser.manager_tool_access);
+                        const disabled = !editTargetSupportsManagerTools || !tool.enabled;
+                        return (
+                          <PortalSettingsItem
+                            key={tool.key}
+                            title={tool.title}
+                            description={tool.description}
+                            className={disabled ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                            action={
+                              <PortalSettingsToggleAction
+                                checked={Boolean(access[tool.key])}
+                                disabled={disabled}
+                                onChange={(value) =>
+                                  setEditForm((f) => ({
+                                    ...f,
+                                    manager_tool_access: {
+                                      ...normalizeManagerToolAccess(f.manager_tool_access ?? editingUser.manager_tool_access),
+                                      [tool.key]: value,
+                                    },
+                                  }))
+                                }
+                                ariaLabel={tool.title}
+                                badge={{ visible: !tool.enabled, label: "Disabled globally", tone: "neutral" }}
+                              />
+                            }
+                          />
+                        );
+                      })}
+                  </PortalSettingsSection>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className={userModalLabelClass}>Storage Ops access</label>
-                  <label className={userModalToggleLabelClass}>
-                    <input
-                      type="checkbox"
-                      checked={editCanGrantStorageOps && Boolean(editForm.can_access_storage_ops)}
-                      disabled={!editCanGrantStorageOps}
-                      onChange={(e) =>
-                        setEditForm((f) => ({
-                          ...f,
-                          can_access_storage_ops: e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60 dark:border-slate-600"
-                    />
-                    <span>Allow access to /storage-ops</span>
-                  </label>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.
-                  </p>
+                <div className={userModalSettingsGroupClass}>
+                  <PortalSettingsSection
+                    title="Ceph tools"
+                    description="Manager tools for Ceph-specific S3 User workflows."
+                    layout="stack"
+                  >
+                    {managerToolDefinitions
+                      .filter((tool) => tool.key === "ceph_s3_user_keys")
+                      .map((tool) => {
+                        const access = normalizeManagerToolAccess(editForm.manager_tool_access ?? editingUser.manager_tool_access);
+                        const disabled = !editTargetSupportsManagerTools || !tool.enabled;
+                        return (
+                          <PortalSettingsItem
+                            key={tool.key}
+                            title={tool.title}
+                            description={tool.description}
+                            className={disabled ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                            action={
+                              <PortalSettingsToggleAction
+                                checked={Boolean(access[tool.key])}
+                                disabled={disabled}
+                                onChange={(value) =>
+                                  setEditForm((f) => ({
+                                    ...f,
+                                    manager_tool_access: {
+                                      ...normalizeManagerToolAccess(f.manager_tool_access ?? editingUser.manager_tool_access),
+                                      [tool.key]: value,
+                                    },
+                                  }))
+                                }
+                                ariaLabel={tool.title}
+                                badge={{ visible: !tool.enabled, label: "Disabled globally", tone: "neutral" }}
+                              />
+                            }
+                          />
+                        );
+                      })}
+                  </PortalSettingsSection>
                 </div>
               </div>
             )}

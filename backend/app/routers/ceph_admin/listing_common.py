@@ -2,21 +2,34 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import asyncio
 from collections import OrderedDict
 from dataclasses import dataclass
 import json
+import logging
+from contextlib import suppress
 from threading import Lock
 from time import monotonic
+import threading
+import uuid
 from typing import Any, Callable, Type, TypeVar
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
-from app.services.bucket_listing_shared import parse_includes as parse_bucket_listing_includes
+from app.services.bucket_listing_shared import (
+    _format_sse_event,
+    parse_includes as parse_bucket_listing_includes,
+)
 
 _K = TypeVar("_K")
 _T = TypeVar("_T")
 _R = TypeVar("_R")
+
+PROGRESS_EMIT_EVERY_ITEMS = 100
+PROGRESS_EMIT_MIN_INTERVAL_SECONDS = 0.2
+SSE_KEEPALIVE_INTERVAL_SECONDS = 10.0
 
 
 @dataclass(frozen=True)
@@ -37,6 +50,187 @@ class EndpointCacheEntry:
     endpoint_id: int
     expires_at: float
     value: Any
+
+
+@dataclass(frozen=True)
+class ListingProgressSnapshot:
+    percent: int
+    stage: str
+    processed: int
+    total: int
+    message: str | None = None
+
+
+class ListingCancelled(RuntimeError):
+    pass
+
+
+class ListingProgressEmitter:
+    def __init__(self, callback: Callable[[ListingProgressSnapshot], None] | None) -> None:
+        self._callback = callback
+        self._last_emitted_at = 0.0
+        self._last_snapshot: ListingProgressSnapshot | None = None
+
+    def emit(
+        self,
+        *,
+        percent: int,
+        stage: str,
+        processed: int = 0,
+        total: int = 0,
+        message: str | None = None,
+        force: bool = False,
+    ) -> None:
+        if self._callback is None:
+            return
+        clamped_percent = max(0, min(100, int(percent)))
+        if self._last_snapshot is not None:
+            clamped_percent = max(clamped_percent, self._last_snapshot.percent)
+        snapshot = ListingProgressSnapshot(
+            percent=clamped_percent,
+            stage=stage,
+            processed=max(0, int(processed)),
+            total=max(0, int(total)),
+            message=message,
+        )
+        now = monotonic()
+        if not force:
+            is_progress_tick = snapshot.processed > 0 and (snapshot.processed % PROGRESS_EMIT_EVERY_ITEMS == 0)
+            interval_elapsed = (now - self._last_emitted_at) >= PROGRESS_EMIT_MIN_INTERVAL_SECONDS
+            if snapshot == self._last_snapshot:
+                return
+            if not is_progress_tick and not interval_elapsed and snapshot.processed != snapshot.total:
+                return
+        self._last_emitted_at = now
+        self._last_snapshot = snapshot
+        self._callback(snapshot)
+
+
+def invoke_cancel_check(cancel_check: Callable[[], None] | None) -> None:
+    if cancel_check is None:
+        return
+    cancel_check()
+
+
+def interpolate_progress_percent(start: int, end: int, *, processed: int, total: int) -> int:
+    clamped_start = max(0, min(100, int(start)))
+    clamped_end = max(clamped_start, min(100, int(end)))
+    safe_total = max(0, int(total))
+    if safe_total <= 0:
+        return clamped_start
+    safe_processed = max(0, min(safe_total, int(processed)))
+    span = clamped_end - clamped_start
+    return clamped_start + round((span * safe_processed) / safe_total)
+
+
+def normalize_http_error_detail(detail: object) -> object:
+    if isinstance(detail, (str, int, float, bool)) or detail is None:
+        return detail
+    if isinstance(detail, (list, dict)):
+        return detail
+    return str(detail)
+
+
+def stream_listing_response(
+    request: Request,
+    *,
+    compute: Callable[[Callable[[ListingProgressSnapshot], None], Callable[[], None]], Any],
+    logger: logging.Logger,
+    failure_message: str,
+) -> StreamingResponse:
+    request_id = uuid.uuid4().hex
+
+    async def event_generator():
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        cancel_event = threading.Event()
+
+        def push_message(payload: str | None) -> None:
+            loop.call_soon_threadsafe(queue.put_nowait, payload)
+
+        def progress_callback(snapshot: ListingProgressSnapshot) -> None:
+            payload: dict[str, object] = {
+                "request_id": request_id,
+                "percent": snapshot.percent,
+                "stage": snapshot.stage,
+                "processed": snapshot.processed,
+                "total": snapshot.total,
+            }
+            if snapshot.message:
+                payload["message"] = snapshot.message
+            push_message(_format_sse_event("progress", payload))
+
+        def cancel_check() -> None:
+            if cancel_event.is_set():
+                raise ListingCancelled()
+
+        def worker() -> None:
+            try:
+                result = compute(progress_callback, cancel_check)
+                payload = result.model_dump(mode="json") if hasattr(result, "model_dump") else result.dict()
+                push_message(_format_sse_event("result", payload))
+                push_message(_format_sse_event("done", {"request_id": request_id}))
+            except ListingCancelled:
+                return
+            except HTTPException as exc:
+                push_message(
+                    _format_sse_event(
+                        "error",
+                        {
+                            "request_id": request_id,
+                            "detail": normalize_http_error_detail(exc.detail),
+                        },
+                    )
+                )
+                push_message(_format_sse_event("done", {"request_id": request_id}))
+            except Exception as exc:  # pragma: no cover
+                logger.exception("%s: %s", failure_message, exc)
+                push_message(
+                    _format_sse_event(
+                        "error",
+                        {
+                            "request_id": request_id,
+                            "detail": str(exc),
+                        },
+                    )
+                )
+                push_message(_format_sse_event("done", {"request_id": request_id}))
+            finally:
+                push_message(None)
+
+        worker_task = asyncio.create_task(asyncio.to_thread(worker))
+        try:
+            while True:
+                if await request.is_disconnected():
+                    cancel_event.set()
+                    break
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=SSE_KEEPALIVE_INTERVAL_SECONDS)
+                except asyncio.TimeoutError:
+                    if await request.is_disconnected():
+                        cancel_event.set()
+                        break
+                    yield ": keepalive\n\n"
+                    continue
+                if message is None:
+                    break
+                yield message
+        finally:
+            cancel_event.set()
+            if not worker_task.done():
+                worker_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await asyncio.wait_for(worker_task, timeout=0.1)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def parse_includes(include: list[str]) -> set[str]:

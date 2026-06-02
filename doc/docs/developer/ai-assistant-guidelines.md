@@ -50,8 +50,8 @@ It defines the executor identity used for S3 operations and may be:
 
 - No S3 or IAM action may bypass an IAM or S3 decision.
 - The application must never "fix" IAM or invent privileges.
-- UI rights such as manager, browser, ceph-admin, or storage-ops gate access to
-  surfaces and context selection only. They do not replace storage-side
+- UI rights such as manager, portal, browser, ceph-admin, or storage-ops gate
+  access to surfaces and context selection only. They do not replace storage-side
   authorization.
 
 ### Controlled orchestration
@@ -73,6 +73,10 @@ Managed workflows may use dedicated technical IAM identities only when:
   S3 configuration console for S3 accounts, S3 connections, and legacy S3
   users. It should map directly to S3 and IAM APIs without semantic
   simplification.
+- `/portal`
+  Self-service account workspace for explicit `portal_user` and
+  `portal_manager` account links. It is backed by Ceph RGW IAM users, groups,
+  policies, and access keys; it is not a substitute for `/manager`.
 - `/browser`
   Bucket and object exploration for S3 accounts, S3 connections, legacy S3
   users, and authorized Ceph Admin endpoint contexts.
@@ -84,8 +88,9 @@ Internal APIs under `/internal` are non-UI operational endpoints.
 
 ### UI access is not storage permission
 
-Access to `/manager` and `/browser` is controlled by explicit bindings, feature
-flags, connection access flags, and role-based checks for Ceph Admin.
+Access to `/manager`, `/portal`, and `/browser` is controlled by explicit
+bindings, feature flags, connection access flags, and role-based checks for
+Ceph Admin.
 
 Actual storage permissions are dictated by IAM and S3. The backend must not
 guess, reconstruct, or silently widen those permissions.
@@ -97,6 +102,7 @@ as:
 
 - account root credentials
 - workflow IAM credentials
+- portal IAM credentials
 - S3 connection credentials
 - legacy S3 user credentials
 - session credentials when available
@@ -106,6 +112,8 @@ Execution rules:
 
 - `/manager` and `/browser` APIs that depend on account context require explicit
   `account_id` for UI users.
+- `/portal` APIs require explicit account context and must reject connection,
+  legacy S3 user, and Ceph Admin contexts.
 - `X-Manager-Access-Mode` is ignored in manager account context; account root
   credentials remain the source of execution.
 - Session principals may default to their bound account when `account_id` is

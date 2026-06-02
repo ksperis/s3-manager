@@ -1,0 +1,2 @@
+-r requirements-test.txt
+moto[server]==5.1.18

@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { GeneralSettings } from "../api/appSettings";
+import type { ManagerToolAccess } from "../api/users";
 
 export const WORKSPACE_STORAGE_KEY = "selectedWorkspace";
 
@@ -10,7 +11,7 @@ const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
 
-export type WorkspaceId = "admin" | "ceph-admin" | "storage-ops" | "manager" | "browser";
+export type WorkspaceId = "admin" | "ceph-admin" | "storage-ops" | "manager" | "portal" | "browser";
 
 export type WorkspaceOption = {
   id: WorkspaceId;
@@ -25,8 +26,13 @@ export type SessionUser = {
   ui_language?: "en" | "fr" | "de" | null;
   can_access_ceph_admin?: boolean | null;
   can_access_storage_ops?: boolean | null;
+  manager_tool_access?: ManagerToolAccess | null;
   authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
-  account_links?: { account_id: number; account_admin?: boolean | null }[] | null;
+  account_links?: {
+    account_id: number;
+    account_admin?: boolean | null;
+    account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
+  }[] | null;
   s3_users?: number[] | null;
   s3_user_details?: { id: number; name?: string | null }[] | null;
   s3_connections?: number[] | null;
@@ -48,6 +54,7 @@ const ALL_WORKSPACES: WorkspaceOption[] = [
   { id: "ceph-admin", label: "Ceph Admin (RGW)", path: "/ceph-admin" },
   { id: "storage-ops", label: "Storage Ops", path: "/storage-ops" },
   { id: "manager", label: "Manager (admin tenant)", path: "/manager" },
+  { id: "portal", label: "Portal (self-service)", path: "/portal" },
   { id: "browser", label: "Browser (objects)", path: "/browser" },
 ];
 
@@ -80,6 +87,7 @@ export function readStoredWorkspaceId(): WorkspaceId | null {
     stored === "ceph-admin" ||
     stored === "storage-ops" ||
     stored === "manager" ||
+    stored === "portal" ||
     stored === "browser"
   ) {
     return stored;
@@ -89,10 +97,15 @@ export function readStoredWorkspaceId(): WorkspaceId | null {
 
 function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[] {
   if (!user || !user.role) return [];
+  const links = user.account_links ?? [];
+  const hasPortalAccess = links.some(
+    (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
+  );
   if (isAdminLikeRole(user.role)) {
     return ALL_WORKSPACES.filter((workspace) => {
       if (workspace.id === "ceph-admin") return Boolean(user.can_access_ceph_admin);
       if (workspace.id === "storage-ops") return Boolean(user.can_access_storage_ops);
+      if (workspace.id === "portal") return hasPortalAccess;
       return true;
     });
   }
@@ -106,7 +119,6 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
       return false;
     });
   }
-  const links = user.account_links ?? [];
   const s3UserDetails = user.s3_user_details ?? [];
   const s3UserIds = user.s3_users ?? [];
   const connectionDetails = user.s3_connection_details ?? [];
@@ -131,6 +143,7 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
   return ALL_WORKSPACES.filter((workspace) => {
     if (workspace.id === "storage-ops") return Boolean(user.can_access_storage_ops);
     if (workspace.id === "manager") return hasManagerAccess;
+    if (workspace.id === "portal") return hasPortalAccess;
     if (workspace.id === "browser") return hasBrowserAccess;
     return false;
   });
@@ -143,6 +156,7 @@ export function resolveAvailableWorkspacesWithFlags(
   const filtered = resolveAvailableWorkspaces(user).filter((workspace) => {
     if (workspace.id === "ceph-admin") return generalSettings.ceph_admin_enabled;
     if (workspace.id === "storage-ops") return generalSettings.storage_ops_enabled;
+    if (workspace.id === "portal") return generalSettings.portal_enabled;
     if (workspace.id === "manager") {
       if (!generalSettings.manager_enabled) return false;
       if (user?.role !== USER_ROLE || user?.authType === "s3_session") return true;
@@ -182,6 +196,9 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
     return "/unauthorized";
   }
   const links = user.account_links ?? [];
+  const hasPortalAccess = links.some(
+    (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
+  );
   const s3UserDetails = user.s3_user_details ?? [];
   const s3UserIds = user.s3_users ?? [];
   const connectionDetails = user.s3_connection_details ?? [];
@@ -208,6 +225,7 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
 
   if (generalSettings.manager_enabled && hasManagerAccess) return "/manager";
   if (generalSettings.storage_ops_enabled && Boolean(user.can_access_storage_ops)) return "/storage-ops";
+  if (generalSettings.portal_enabled && hasPortalAccess) return "/portal";
   if (generalSettings.browser_enabled && generalSettings.browser_root_enabled && hasBrowserAccess) return "/browser";
   return "/unauthorized";
 }

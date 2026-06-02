@@ -277,6 +277,7 @@ class AdminAutomationService:
                         full_name=spec.full_name,
                         role=spec.role,
                         is_root=bool(spec.is_root),
+                        manager_tool_access=spec.manager_tool_access,
                     )
                 )
                 audit_service.record_action(
@@ -788,6 +789,16 @@ class AdminAutomationService:
         if "is_root" in fields_set and spec.is_root is not None:
             if bool(spec.is_root) != bool(user.is_root):
                 diff["is_root"] = {"from": bool(user.is_root), "to": bool(spec.is_root)}
+        if "manager_tool_access" in fields_set and spec.manager_tool_access is not None:
+            current_access = {
+                "bucket_compare": bool(user.can_access_manager_bucket_compare),
+                "bucket_integrity_check": bool(user.can_access_manager_bucket_integrity_check),
+                "bucket_migration": bool(user.can_access_manager_bucket_migration),
+                "ceph_s3_user_keys": bool(user.can_access_manager_ceph_s3_user_keys),
+            }
+            desired_access = spec.manager_tool_access.model_dump()
+            if desired_access != current_access:
+                diff["manager_tool_access"] = {"from": current_access, "to": desired_access}
         if item.set_password and spec.password:
             diff["password"] = {"from": "<redacted>", "to": "<redacted>"}
         if "s3_user_ids" in fields_set and spec.s3_user_ids is not None:

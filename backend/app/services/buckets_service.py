@@ -13,6 +13,10 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.db import S3Account
 from app.services.object_diff_common import compare_object_entries
 from app.services import s3_client
+from app.services.bucket_notification_state import (
+    account_sns_feature_enabled,
+    is_bucket_notification_configuration_configured,
+)
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.models.bucket import (
     Bucket,
@@ -55,6 +59,7 @@ from app.utils.usage_stats import extract_usage_stats
 from app.utils.size_units import size_to_bytes
 
 logger = logging.getLogger(__name__)
+
 
 BucketCompareRemediationAction = Literal["sync_source_only", "sync_different", "delete_target_only"]
 
@@ -226,6 +231,7 @@ class BucketsService:
             "bucket_policy",
             "cors",
             "access_logging",
+            "notifications",
         }
         requested = {key for key in include if key in allowed}
         if not requested:
@@ -238,6 +244,8 @@ class BucketsService:
         wants_website = "static_website" in requested
         wants_policy = "bucket_policy" in requested
         wants_logging = "access_logging" in requested
+        wants_notifications = "notifications" in requested
+        sns_feature_enabled = account_sns_feature_enabled(account)
 
         def unavailable() -> BucketFeatureStatus:
             return BucketFeatureStatus(state="Unavailable", tone="unknown")
@@ -391,6 +399,17 @@ class BucketsService:
                     feature_map["access_logging"] = active("Enabled") if enabled else inactive("Disabled")
                 except RuntimeError:
                     feature_map["access_logging"] = unavailable()
+
+            if wants_notifications and "notifications" in requested:
+                if not sns_feature_enabled:
+                    feature_map["notifications"] = unavailable()
+                else:
+                    try:
+                        notifications = self.get_bucket_notifications(bucket.name, account)
+                        configured = is_bucket_notification_configuration_configured(notifications.configuration)
+                        feature_map["notifications"] = active("Configured") if configured else inactive("Not set")
+                    except RuntimeError:
+                        feature_map["notifications"] = unavailable()
 
             if feature_map:
                 features = feature_map
@@ -787,7 +806,7 @@ class BucketsService:
         target_bucket: str,
         target_account: S3Account,
         *,
-        diff_sample_limit: int = 200,
+        diff_sample_limit: int = 1000,
         ignore_modified_after: Optional[datetime] = None,
     ) -> CephAdminBucketContentDiff:
         source_objects_raw = self._list_bucket_objects_for_compare(source_bucket, source_account)

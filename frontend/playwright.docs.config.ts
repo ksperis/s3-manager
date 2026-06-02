@@ -2,10 +2,10 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./scripts/docs-screenshots",
-  testMatch: "generate.spec.ts",
+  testMatch: ["generate.spec.ts", "portalV3VisualQa.spec.ts"],
   fullyParallel: false,
   workers: 1,
-  timeout: 120_000,
+  timeout: 240_000,
   retries: 0,
   reporter: [["list"]],
   use: {

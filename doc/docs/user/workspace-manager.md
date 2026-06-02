@@ -28,7 +28,7 @@ Tenant resources are managed in the right scope with explicit context control.
 ## Limits / feature flags
 
 !!! note
-    IAM pages depend on endpoint IAM capability. Tools depend on `bucket_compare_enabled`, `bucket_integrity_check_enabled`, `bucket_migration_enabled`, and role-based permissions.
+    IAM pages depend on endpoint IAM capability. Tools depend on `bucket_compare_enabled`, `bucket_integrity_check_enabled`, `bucket_migration_enabled`, `manager_ceph_s3_user_keys_enabled`, and the per-user Manager tools access configured on the UI user.
 
 ## Related pages
 
