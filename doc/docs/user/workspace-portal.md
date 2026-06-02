@@ -30,6 +30,30 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 Portal actions stay user-oriented and use the storage permissions configured by
 the platform as the source of truth.
 
+## Usage, alerts, and availability
+
+Portal metrics are scoped to the selected Portal account and use bytes for
+storage and traffic values. Object counts are counts reported by the storage
+backend.
+
+- **Storage used** comes from the Portal usage API. When account-level usage is
+  unavailable, Portal may use the sum of visible Storage Space usage. If neither
+  source is available, the metric is shown as unavailable.
+- **Quota** comes from the account quota exposed to Portal. If no quota is
+  configured or metrics are disabled for the endpoint, Portal shows a clear
+  unavailable state instead of treating the quota as unlimited.
+- **Usage by Storage Space** is based on real per-space usage returned by the
+  Portal usage API. When the backend cannot report per-space values, the chart
+  is hidden behind an unavailable state.
+- **Traffic and requests** come from traffic metrics for the selected account.
+  If traffic collection is disabled or temporarily unavailable, Portal shows the
+  last billing-derived values when available, otherwise an unavailable state.
+- **Billing source** is optional. It appears only when billing is enabled and
+  the selected account has billing data for the month.
+- **Alerts** are deduplicated and ordered by severity. They can include quota
+  near limit, public Storage Space or public link, expiring public link, failed
+  transfer, and degraded storage endpoint signals.
+
 ## Limits / feature flags
 
 !!! note

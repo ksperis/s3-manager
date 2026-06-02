@@ -59,6 +59,7 @@ from app.models.portal import (
     PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
     PortalUsage,
+    PortalUsageStorageSpace,
 )
 from app.services.app_settings_service import load_app_settings
 from app.services import s3_client
@@ -2635,10 +2636,9 @@ class PortalService:
     ) -> list[PortalAlert]:
         alerts: list[PortalAlert] = []
         try:
-            quota_bytes, _ = self._account_quota(access.account)
             usage = self.get_usage(user, access)
-            if usage.used_bytes is not None and quota_bytes and quota_bytes > 0:
-                ratio = usage.used_bytes / quota_bytes
+            if usage.used_bytes is not None and usage.quota_max_size_bytes and usage.quota_max_size_bytes > 0:
+                ratio = usage.used_bytes / usage.quota_max_size_bytes
                 if ratio >= 0.8:
                     percent_used = round(ratio * 100)
                     alerts.append(
@@ -2670,6 +2670,34 @@ class PortalService:
         now = utcnow()
         link_cutoff = now + timedelta(days=7)
         visible_spaces = self._visible_storage_space_lookup(user, access)
+        active_public_links = (
+            self.db.query(DBPortalPublicLink)
+            .filter(
+                DBPortalPublicLink.account_id == access.account.id,
+                DBPortalPublicLink.revoked_at.is_(None),
+                (DBPortalPublicLink.expires_at.is_(None) | (DBPortalPublicLink.expires_at >= now)),
+            )
+            .order_by(DBPortalPublicLink.created_at.desc(), DBPortalPublicLink.id.desc())
+            .limit(20)
+            .all()
+        )
+        for link in active_public_links:
+            storage_space = visible_spaces.get(link.bucket_name)
+            if storage_space is None:
+                continue
+            alerts.append(
+                PortalAlert(
+                    id=f"public-link-{link.id}",
+                    tone="warning",
+                    title="Public link active",
+                    description=f"{self._object_name(link.object_key)} is shared through a public link.",
+                    severity_label="Warning",
+                    storage_space_id=storage_space.id,
+                    created_at=link.created_at,
+                )
+            )
+            break
+
         public_links = (
             self.db.query(DBPortalPublicLink)
             .filter(
@@ -2722,7 +2750,67 @@ class PortalService:
                     created_at=failed_transfer.started_at,
                 )
             )
-        return alerts[: min(max(limit, 1), 100)]
+        return self.dedupe_portal_alerts(alerts)[: min(max(limit, 1), 100)]
+
+    @staticmethod
+    def dedupe_portal_alerts(alerts: list[PortalAlert]) -> list[PortalAlert]:
+        severity_rank = {"danger": 0, "warning": 1, "info": 2}
+        label_by_tone = {"danger": "Critical", "warning": "Warning", "info": "Info"}
+        deduped: dict[str, PortalAlert] = {}
+        order: list[str] = []
+        for alert in alerts:
+            key = alert.id
+            existing = deduped.get(key)
+            normalized = alert.model_copy(
+                update={
+                    "severity_label": alert.severity_label or label_by_tone.get(alert.tone, "Info"),
+                }
+            )
+            if existing is None:
+                deduped[key] = normalized
+                order.append(key)
+                continue
+            if severity_rank.get(normalized.tone, 9) < severity_rank.get(existing.tone, 9):
+                deduped[key] = normalized
+
+        def sort_key(key: str) -> tuple[int, float, int]:
+            alert = deduped[key]
+            created_at = alert.created_at
+            if created_at is None:
+                timestamp = 0.0
+            else:
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                timestamp = created_at.timestamp()
+            return (severity_rank.get(alert.tone, 9), -timestamp, order.index(key))
+
+        return [deduped[key] for key in sorted(order, key=sort_key)]
+
+    def _usage_storage_space_breakdown(
+        self,
+        user: User,
+        access: "AccountAccess",
+        usage_by_bucket: dict[str, tuple[Optional[int], Optional[int]]],
+    ) -> list[PortalUsageStorageSpace]:
+        try:
+            spaces = self.list_storage_spaces(user, access)
+        except RuntimeError:
+            return []
+        breakdown: list[PortalUsageStorageSpace] = []
+        for space in spaces:
+            bucket_name = space.internal_bucket_name or space.id
+            usage_bytes, usage_objects = usage_by_bucket.get(bucket_name, (space.used_bytes, space.object_count))
+            breakdown.append(
+                PortalUsageStorageSpace(
+                    id=space.id,
+                    name=space.name,
+                    used_bytes=usage_bytes,
+                    object_count=usage_objects,
+                    quota_max_size_bytes=space.quota_max_size_bytes,
+                    quota_max_objects=space.quota_max_objects,
+                )
+            )
+        return breakdown
 
     def get_state(self, user: User, access: "AccountAccess") -> PortalState:
         account = access.account
@@ -2804,21 +2892,35 @@ class PortalService:
 
     def get_usage(self, user: User, access: "AccountAccess") -> PortalUsage:
         account = access.account
+        quota_max_size_bytes, quota_max_objects = self._account_quota(account)
         if not access.capabilities.can_manage_buckets:
             allowed = set(self.list_existing_user_bucket_access(user, account, access.role))
             if not allowed:
-                return PortalUsage(used_bytes=None, used_objects=None)
+                return PortalUsage(
+                    used_bytes=None,
+                    used_objects=None,
+                    quota_max_size_bytes=quota_max_size_bytes,
+                    quota_max_objects=quota_max_objects,
+                    storage_spaces=[],
+                )
             try:
                 rgw_admin = self._supervision_admin_for_account(account)
                 bucket_payloads = self._admin_bucket_list(account, admin=rgw_admin)
             except (RGWAdminError, RuntimeError) as exc:  # pragma: no cover - defensive path
                 logger.warning("Unable to list scoped bucket usage for portal user %s: %s", user.email, exc)
-                return PortalUsage(used_bytes=None, used_objects=None)
+                return PortalUsage(
+                    used_bytes=None,
+                    used_objects=None,
+                    quota_max_size_bytes=quota_max_size_bytes,
+                    quota_max_objects=quota_max_objects,
+                    storage_spaces=self._usage_storage_space_breakdown(user, access, {}),
+                )
 
             total_bytes = 0
             total_objects = 0
             has_bytes = False
             has_objects = False
+            usage_by_bucket: dict[str, tuple[Optional[int], Optional[int]]] = {}
             for item in bucket_payloads:
                 if not isinstance(item, dict):
                     continue
@@ -2827,6 +2929,7 @@ class PortalService:
                     continue
                 usage = item.get("usage")
                 usage_bytes, usage_objects = extract_usage_stats(usage)
+                usage_by_bucket[bucket_name] = (usage_bytes, usage_objects)
                 if usage_bytes is not None:
                     total_bytes += usage_bytes
                     has_bytes = True
@@ -2836,15 +2939,25 @@ class PortalService:
             return PortalUsage(
                 used_bytes=total_bytes if has_bytes else None,
                 used_objects=total_objects if has_objects else None,
+                quota_max_size_bytes=quota_max_size_bytes,
+                quota_max_objects=quota_max_objects,
+                storage_spaces=self._usage_storage_space_breakdown(user, access, usage_by_bucket),
             )
         used_bytes, used_objects = self._account_usage_summary(account)
+        usage_by_bucket: dict[str, tuple[Optional[int], Optional[int]]] = {}
+        bucket_bytes, bucket_objects, _ = self._account_usage(account, usage_map=usage_by_bucket)
         if used_bytes is None or used_objects is None:
-            bucket_bytes, bucket_objects, _ = self._account_usage(account)
             if used_bytes is None:
                 used_bytes = bucket_bytes
             if used_objects is None:
                 used_objects = bucket_objects
-        return PortalUsage(used_bytes=used_bytes, used_objects=used_objects)
+        return PortalUsage(
+            used_bytes=used_bytes,
+            used_objects=used_objects,
+            quota_max_size_bytes=quota_max_size_bytes,
+            quota_max_objects=quota_max_objects,
+            storage_spaces=self._usage_storage_space_breakdown(user, access, usage_by_bucket),
+        )
 
     def get_bucket_stats(self, user: User, access: "AccountAccess", bucket_name: str) -> Bucket:
         if not bucket_name:

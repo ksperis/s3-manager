@@ -168,12 +168,14 @@ export function buildPortalWorkspaceModel({
   userEmail: string | null;
 }): PortalWorkspaceModel {
   const accountName = account?.name ?? userEmail?.split("@")[0] ?? "Portal";
+  const usageBySpace = new Map((usage?.storage_spaces ?? []).map((space) => [space.id, space]));
   const spaces = (storageSpaces ?? []).map((storageSpace) => {
+    const usageSpace = usageBySpace.get(storageSpace.id);
     const role = roleFromStorageSpace(storageSpace);
     const name = storageSpace.name || prettyName(storageSpace.id);
     return {
       id: storageSpace.id,
-      name,
+      name: usageSpace?.name ?? name,
       internalName: storageSpace.internal_bucket_name ?? null,
       description: storageSpace.description ?? `${name} storage space`,
       ownerLabel: storageSpace.owner_label ?? null,
@@ -185,9 +187,9 @@ export function buildPortalWorkspaceModel({
       access: "Unavailable" as const,
       region: storageSpace.region ?? null,
       createdLabel: createdLabel(storageSpace.created_at),
-      usedBytes: storageSpace.used_bytes ?? null,
-      quotaBytes: storageSpace.quota_max_size_bytes ?? null,
-      objectCount: storageSpace.object_count ?? null,
+      usedBytes: usageSpace?.used_bytes ?? storageSpace.used_bytes ?? null,
+      quotaBytes: usageSpace?.quota_max_size_bytes ?? storageSpace.quota_max_size_bytes ?? null,
+      objectCount: usageSpace?.object_count ?? storageSpace.object_count ?? null,
       createdAt: storageSpace.created_at ?? null,
       archivedAt: storageSpace.archived_at ?? null,
       shareCount: null,
@@ -207,8 +209,8 @@ export function buildPortalWorkspaceModel({
     usageTrend: [],
     usedBytes: usage?.used_bytes ?? state?.used_bytes ?? spaceUsedBytes,
     usedObjects: usage?.used_objects ?? state?.used_objects ?? spaceObjectCount,
-    quotaBytes: state?.quota_max_size_bytes ?? null,
-    quotaObjects: state?.quota_max_objects ?? null,
+    quotaBytes: usage?.quota_max_size_bytes ?? state?.quota_max_size_bytes ?? null,
+    quotaObjects: usage?.quota_max_objects ?? state?.quota_max_objects ?? null,
     requestCount: null,
     dataInBytes: null,
     dataOutBytes: null,

@@ -64,4 +64,54 @@ describe("buildPortalWorkspaceModel", () => {
     expect(workspace.dataInBytes).toBeNull();
     expect(workspace.dataOutBytes).toBeNull();
   });
+
+  it("prefers PortalUsage quotas and per-space usage when API data is available", () => {
+    const workspace = buildPortalWorkspaceModel({
+      account: { id: "101", name: "Account 101", tags: [] },
+      state: {
+        account_id: 101,
+        iam_user: {},
+        access_keys: [],
+        buckets: [],
+        quota_max_size_bytes: 10_000,
+        quota_max_objects: 1_000,
+      },
+      storageSpaces: [
+        {
+          id: "research-data",
+          name: "Research Data",
+          role: "Owner",
+          status: "Active",
+          used_bytes: null,
+          object_count: null,
+        },
+      ],
+      usage: {
+        used_bytes: 900,
+        used_objects: 90,
+        quota_max_size_bytes: 1_000,
+        quota_max_objects: 100,
+        storage_spaces: [
+          {
+            id: "research-data",
+            name: "Research Data",
+            used_bytes: 700,
+            object_count: 70,
+            quota_max_size_bytes: 800,
+          },
+        ],
+      },
+      userEmail: "manager@example.com",
+    });
+
+    expect(workspace.usedBytes).toBe(900);
+    expect(workspace.usedObjects).toBe(90);
+    expect(workspace.quotaBytes).toBe(1_000);
+    expect(workspace.quotaObjects).toBe(100);
+    expect(workspace.spaces[0]).toMatchObject({
+      usedBytes: 700,
+      objectCount: 70,
+      quotaBytes: 800,
+    });
+  });
 });

@@ -172,43 +172,43 @@ Objective: make Portal file operations reliable without becoming Browser.
 
 Objective: turn usage and alerts into reliable user-facing signals.
 
-- [ ] Verify `PortalUsage`, traffic, billing, and Storage Space usage agree on
+- [x] Verify `PortalUsage`, traffic, billing, and Storage Space usage agree on
   units, nullability, and account scope.
-- [ ] Add Storage Space usage breakdown from real backend data if any remaining
+- [x] Add Storage Space usage breakdown from real backend data if any remaining
   values are derived from mocks.
-- [ ] Add clear unavailable states for missing quota, missing traffic, missing
+- [x] Add clear unavailable states for missing quota, missing traffic, missing
   billing, and missing per-space usage.
-- [ ] Add alert deduplication and severity rules for:
+- [x] Add alert deduplication and severity rules for:
   - quota near limit;
   - public Storage Space or public link;
   - expiring link;
   - failed transfer;
   - degraded endpoint.
-- [ ] Add dashboard wiring tests proving alerts, activity, transfers, and usage
+- [x] Add dashboard wiring tests proving alerts, activity, transfers, and usage
   are rendered from real API responses.
-- [ ] Add backend tests for alert generation, tenant isolation, endpoint health
+- [x] Add backend tests for alert generation, tenant isolation, endpoint health
   fallback, and empty alert lists.
-- [ ] Document what each Portal metric means and when it can be unavailable.
+- [x] Document what each Portal metric means and when it can be unavailable.
 
 ## Step 7 - Legacy Portal Backend Cleanup
 
 Objective: remove or deprecate backend surfaces that no longer match Portal V3.
 
-- [ ] Inventory legacy Portal endpoints that are no longer called by the V3 UI.
-- [ ] Decide for each legacy endpoint whether it should be removed, kept
+- [x] Inventory legacy Portal endpoints that are no longer called by the V3 UI.
+- [x] Decide for each legacy endpoint whether it should be removed, kept
   temporarily for compatibility, or moved to `/manager` or `/admin`.
-- [ ] Deprecate or remove legacy `/portal/buckets` endpoints once Storage Space
+- [x] Deprecate or remove legacy `/portal/buckets` endpoints once Storage Space
   endpoints fully cover required behavior.
-- [ ] Deprecate or remove old Portal bucket-user management endpoints if they
+- [x] Deprecate or remove old Portal bucket-user management endpoints if they
   are replaced by Storage Space shares.
-- [ ] Deprecate or remove advanced Portal access-key management endpoints if
+- [x] Deprecate or remove advanced Portal access-key management endpoints if
   they are not part of the simplified Portal product.
-- [ ] Deprecate or remove Portal compliance endpoints that expose advanced
+- [x] Deprecate or remove Portal compliance endpoints that expose advanced
   backend concepts not intended for end users.
-- [ ] Keep backend permission checks and audit logging for any retained
+- [x] Keep backend permission checks and audit logging for any retained
   mutating endpoints.
-- [ ] Update API client code and tests after each removal.
-- [ ] Update documentation and changelog notes for removed or deprecated
+- [x] Update API client code and tests after each removal.
+- [x] Update documentation and changelog notes for removed or deprecated
   endpoints.
 
 ## Step 8 - Tests, Documentation And Release Readiness

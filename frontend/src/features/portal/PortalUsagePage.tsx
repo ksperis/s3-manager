@@ -115,6 +115,18 @@ export default function PortalUsagePage() {
   }, [accountIdForApi, hasAccountContext, month]);
 
   const storageBySpace = useMemo(() => {
+    const usageSpaces = usage?.storage_spaces ?? [];
+    if (usageSpaces.length > 0) {
+      return usageSpaces
+        .map((space) => ({
+          id: space.id,
+          name: space.name,
+          usedBytes: space.used_bytes ?? null,
+          objectCount: space.object_count ?? null,
+          quotaBytes: space.quota_max_size_bytes ?? null,
+        }))
+        .filter((space) => space.usedBytes != null || space.objectCount != null);
+    }
     const apiSpaces = storageSpaces ?? [];
     return apiSpaces
       .map((space) => {
@@ -128,7 +140,7 @@ export default function PortalUsagePage() {
         };
       })
       .filter((space) => space.usedBytes != null || space.objectCount != null);
-  }, [storageSpaces, workspace.spaces]);
+  }, [storageSpaces, usage?.storage_spaces, workspace.spaces]);
 
   const totalUsedBytes =
     usage?.used_bytes ??
@@ -140,7 +152,7 @@ export default function PortalUsagePage() {
     (storageBySpace.some((space) => space.objectCount != null)
       ? storageBySpace.reduce((sum, space) => sum + (space.objectCount ?? 0), 0)
       : null);
-  const quotaBytes = state?.quota_max_size_bytes ?? null;
+  const quotaBytes = usage?.quota_max_size_bytes ?? state?.quota_max_size_bytes ?? null;
   const quotaPercent = percent(totalUsedBytes, quotaBytes);
   const trafficTotals = traffic?.totals ?? null;
   const billingUsage = billing?.usage ?? null;
@@ -190,6 +202,14 @@ export default function PortalUsagePage() {
     value: space.usedBytes ?? 0,
     color: COLORS[index] ?? "#94a3b8",
   }));
+  const trafficUnavailable = !trafficLoading && !traffic && !billingUsage;
+  const perSpaceUsageUnavailable = storageBySpace.length === 0;
+  const availabilityNotes = [
+    quotaBytes == null ? "Quota unavailable" : null,
+    trafficUnavailable ? "Traffic unavailable" : null,
+    billingUnavailable ? "Billing unavailable" : null,
+    perSpaceUsageUnavailable ? "Per-space usage unavailable" : null,
+  ].filter((item): item is string => Boolean(item));
 
   if (accountLoading || loading) {
     return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Loading analytics...</div></PortalV3Page>;
@@ -230,6 +250,14 @@ export default function PortalUsagePage() {
       {usageError ? (
         <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
           Usage metrics are unavailable from the storage endpoint. Available billing or traffic data is still shown.
+        </div>
+      ) : null}
+
+      {availabilityNotes.length > 0 ? (
+        <div className="flex flex-wrap gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm" aria-label="Metric availability">
+          {availabilityNotes.map((note) => (
+            <PortalV3Badge key={note} tone="neutral">{note}</PortalV3Badge>
+          ))}
         </div>
       ) : null}
 

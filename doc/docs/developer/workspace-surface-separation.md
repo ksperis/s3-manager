@@ -53,6 +53,28 @@ Portal administration mock pages such as `/portal/users`, `/portal/groups`,
 the V3 production surface. They can return later only as real user-facing
 Portal features or isolated demo/test fixtures.
 
+## Portal Backend Cleanup Notes
+
+Portal V3 uses Storage Space, file, share, activity, transfer, usage, alert,
+billing-source, health, and simple settings endpoints only. Legacy backend
+routes that exposed bucket-centric or advanced identity concepts have been
+removed from the Portal router and API client:
+
+- `/portal/buckets*`;
+- `/portal/bootstrap`;
+- `/portal/users*` bucket-grant and Portal user-management routes;
+- `/portal/access-keys*`;
+- `/portal/account-settings`;
+- `/portal/iam-compliance*`.
+- `/portal/settings` advanced Portal settings payloads.
+
+Use `/portal/storage-spaces*` and `/portal/storage-spaces/{spaceId}/shares*`
+for end-user collaboration workflows. Use `/admin/accounts/{accountId}/portal-settings`
+for Portal override governance. Native IAM, policy compliance, access-key, and
+bucket administration workflows belong outside the Portal user surface. Future
+Portal preferences should use a simple user-preference contract, not the
+advanced Portal settings payload.
+
 ## Portal V3 Fallback Policy
 
 Production Portal pages use real Portal APIs first. When a backend capability

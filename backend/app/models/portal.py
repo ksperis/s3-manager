@@ -51,9 +51,21 @@ class PortalState(BaseModel):
     can_manage_portal_users: bool = False
 
 
+class PortalUsageStorageSpace(BaseModel):
+    id: str
+    name: str
+    used_bytes: Optional[int] = None
+    object_count: Optional[int] = None
+    quota_max_size_bytes: Optional[int] = None
+    quota_max_objects: Optional[int] = None
+
+
 class PortalUsage(BaseModel):
     used_bytes: Optional[int] = None
     used_objects: Optional[int] = None
+    quota_max_size_bytes: Optional[int] = None
+    quota_max_objects: Optional[int] = None
+    storage_spaces: list[PortalUsageStorageSpace] = Field(default_factory=list)
 
 
 PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner"]

@@ -25,7 +25,12 @@ const mocks = vi.hoisted(() => ({
         quota_max_size_bytes: 1024,
       },
     ],
-    usage: { used_bytes: 512, used_objects: 12 },
+    usage: {
+      used_bytes: 512,
+      used_objects: 12,
+      quota_max_size_bytes: 1024,
+      storage_spaces: [{ id: "research-data", name: "Research Data", used_bytes: 512, object_count: 12 }],
+    },
     usageError: null,
     traffic: {
       series: [
@@ -66,7 +71,12 @@ describe("PortalUsagePage", () => {
         quota_max_size_bytes: 1024,
       },
     ];
-    mocks.hookResult.usage = { used_bytes: 512, used_objects: 12 };
+    mocks.hookResult.usage = {
+      used_bytes: 512,
+      used_objects: 12,
+      quota_max_size_bytes: 1024,
+      storage_spaces: [{ id: "research-data", name: "Research Data", used_bytes: 512, object_count: 12 }],
+    };
     mocks.hookResult.usageError = null;
     mocks.hookResult.traffic = {
       series: [
@@ -107,14 +117,16 @@ describe("PortalUsagePage", () => {
     mocks.hookResult.storageSpaces = [
       { id: "empty-space", name: "Empty Space", role: "Viewer", used_bytes: null, object_count: null, quota_max_size_bytes: null },
     ];
-    mocks.hookResult.usage = { used_bytes: null, used_objects: null };
+    mocks.hookResult.usage = { used_bytes: null, used_objects: null, storage_spaces: [] };
     mocks.hookResult.traffic = null;
     mocks.hookResult.state = { quota_max_size_bytes: null };
     mocks.billingMock.mockRejectedValue(new Error("billing disabled"));
 
     render(<PortalUsagePage />);
 
-    expect(screen.getByText("Quota unavailable")).toBeInTheDocument();
+    expect(screen.getAllByText("Quota unavailable").length).toBeGreaterThan(0);
+    expect(screen.getByText("Traffic unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Per-space usage unavailable")).toBeInTheDocument();
     expect(screen.getByText("No per-storage-space usage metrics available.")).toBeInTheDocument();
     expect(screen.getByText("No bandwidth trend available.")).toBeInTheDocument();
     await waitFor(() => {

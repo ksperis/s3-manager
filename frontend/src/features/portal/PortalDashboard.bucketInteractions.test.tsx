@@ -112,6 +112,9 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.getByText("Recent activity")).toBeInTheDocument();
     expect(screen.getByText("Recent transfers")).toBeInTheDocument();
     expect(screen.getByText("Alerts")).toBeInTheDocument();
+    expect(screen.getByText(/manager@example.com uploaded report.pdf/i)).toBeInTheDocument();
+    expect(screen.getAllByText("report.pdf").length).toBeGreaterThan(0);
+    expect(screen.getByText("Storage quota is getting close")).toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Open in Browser/i)).not.toBeInTheDocument();
   });

@@ -2,15 +2,25 @@
 # Licensed under the Apache License, Version 2.0
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException
 
-from app.db import AuditLog, AccountIAMUser, AccountRole, PortalPublicLink, PortalStorageSpaceMetadata, S3Account, User, UserS3Account
+from app.db import (
+    AuditLog,
+    AccountIAMUser,
+    AccountRole,
+    PortalPublicLink,
+    PortalStorageSpaceMetadata,
+    S3Account,
+    StorageEndpoint,
+    User,
+    UserS3Account,
+)
 from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
-from app.models.portal import PortalAccessKey, PortalIAMUser, PortalState, PortalStorageSpaceSummary, PortalUsage
+from app.models.portal import PortalAccessKey, PortalAlert, PortalIAMUser, PortalState, PortalStorageSpaceSummary, PortalUsage
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import s3_client
@@ -1234,6 +1244,45 @@ def test_portal_activity_and_transfers_are_filtered_by_visible_storage_spaces(mo
         service.list_portal_activity(user, access, space_id="hidden-data")
 
 
+def test_portal_usage_exposes_quota_and_real_storage_space_breakdown(monkeypatch, db_session):
+    account = S3Account(name="portal-usage", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="usage@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    service = PortalService(db_session)
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    monkeypatch.setattr(service, "_account_quota", lambda _account: (1_000, 100))
+    monkeypatch.setattr(service, "_account_usage_summary", lambda _account: (900, 90))
+
+    def fake_account_usage(_account, usage_map=None):
+        if usage_map is not None:
+            usage_map["research-data"] = (700, 70)
+            usage_map["archive"] = (200, 20)
+        return 900, 90, 2
+
+    monkeypatch.setattr(service, "_account_usage", fake_account_usage)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(id="research-data", name="Research Data", role="Owner", internal_bucket_name="research-data"),
+            PortalStorageSpaceSummary(id="archive", name="Archive", role="Owner", internal_bucket_name="archive"),
+        ],
+    )
+
+    usage = service.get_usage(user, access)
+
+    assert usage.used_bytes == 900
+    assert usage.used_objects == 90
+    assert usage.quota_max_size_bytes == 1_000
+    assert usage.quota_max_objects == 100
+    assert [(space.id, space.used_bytes, space.object_count) for space in usage.storage_spaces] == [
+        ("research-data", 700, 70),
+        ("archive", 200, 20),
+    ]
+
+
 def test_portal_alerts_are_derived_from_quota_public_spaces_and_transfer_errors(monkeypatch, db_session):
     account = S3Account(name="portal-alerts", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="alerts@example.com", hashed_password="x", role="ui_user")
@@ -1255,6 +1304,17 @@ def test_portal_alerts_are_derived_from_quota_public_spaces_and_transfer_errors(
             metadata_json=json.dumps({"storage_space_id": "public-data"}),
         )
     )
+    db_session.add(
+        PortalPublicLink(
+            token="expiring-token",
+            account_id=account.id,
+            bucket_name="public-data",
+            object_key="shared/report.pdf",
+            created_by_user_id=user.id,
+            created_by_email=user.email,
+            expires_at=(datetime.now(timezone.utc) + timedelta(days=1)).replace(tzinfo=None),
+        )
+    )
     db_session.commit()
     service = PortalService(db_session)
     monkeypatch.setattr(
@@ -1265,15 +1325,114 @@ def test_portal_alerts_are_derived_from_quota_public_spaces_and_transfer_errors(
         ],
     )
     monkeypatch.setattr(service, "_account_quota", lambda _account: (100, None))
-    monkeypatch.setattr(service, "get_usage", lambda *_args, **_kwargs: PortalUsage(used_bytes=90, used_objects=None))
+    monkeypatch.setattr(
+        service,
+        "get_usage",
+        lambda *_args, **_kwargs: PortalUsage(used_bytes=90, used_objects=None, quota_max_size_bytes=100),
+    )
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     alerts = service.list_portal_alerts(user, access)
 
-    assert [alert.id for alert in alerts[:2]] == ["quota-near", "public-space-public-data"]
-    assert alerts[2].id.startswith("transfer-failed-audit-")
-    assert alerts[0].severity_label == "Warning"
-    assert alerts[-1].description == "failed.zip failed recently."
+    assert alerts[0].id == "public-space-public-data"
+    assert alerts[0].severity_label == "Critical"
+    warning_ids = [alert.id for alert in alerts[1:]]
+    assert "quota-near" in warning_ids
+    assert any(alert_id.startswith("public-link-") for alert_id in warning_ids)
+    assert any(alert_id.startswith("link-expiring-") for alert_id in warning_ids)
+    assert any(alert_id.startswith("transfer-failed-audit-") for alert_id in warning_ids)
+    assert any("public link" in alert.description for alert in alerts)
+    assert any("expires soon" in alert.description for alert in alerts)
+    assert any(alert.description == "failed.zip failed recently." for alert in alerts)
+
+
+def test_portal_alert_deduplication_keeps_highest_severity():
+    alerts = PortalService.dedupe_portal_alerts(
+        [
+            PortalAlert(
+                id="endpoint-degraded",
+                tone="warning",
+                title="Endpoint degraded",
+                description="Storage is degraded.",
+                severity_label="Warning",
+            ),
+            PortalAlert(
+                id="endpoint-degraded",
+                tone="danger",
+                title="Endpoint down",
+                description="Storage is unavailable.",
+                severity_label="Critical",
+            ),
+        ]
+    )
+
+    assert len(alerts) == 1
+    assert alerts[0].tone == "danger"
+    assert alerts[0].severity_label == "Critical"
+
+
+def test_portal_endpoint_alerts_report_degraded_endpoint(monkeypatch, db_session):
+    endpoint = StorageEndpoint(name="endpoint-alert", endpoint_url="https://s3.example.test")
+    account = S3Account(name="portal-health", storage_endpoint=endpoint)
+    user = User(email="health@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([endpoint, account, user])
+    db_session.commit()
+
+    class FakeGeneral:
+        endpoint_status_enabled = True
+
+    class FakeSettings:
+        general = FakeGeneral()
+
+    class FakeHealthService:
+        def __init__(self, _db):
+            pass
+
+        def build_workspace_health_overview(self, endpoint_id):
+            assert endpoint_id == endpoint.id
+            return {"down_count": 0, "degraded_count": 1}
+
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: FakeSettings())
+    monkeypatch.setattr(portal_router, "HealthCheckService", FakeHealthService)
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    alerts = portal_router._portal_endpoint_alerts(access, db_session)
+
+    assert [(alert.id, alert.tone, alert.severity_label) for alert in alerts] == [
+        ("endpoint-degraded", "warning", "Warning")
+    ]
+
+
+def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch, db_session):
+    account = S3Account(name="portal-alert-empty", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    other_account = S3Account(name="portal-alert-other", rgw_access_key="ROOT-AK2", rgw_secret_key="ROOT-SK2")
+    user = User(email="empty-alerts@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, other_account, user])
+    db_session.commit()
+    db_session.add(
+        PortalPublicLink(
+            token="other-token",
+            account_id=other_account.id,
+            bucket_name="research-data",
+            object_key="shared/report.pdf",
+            created_by_user_id=user.id,
+            created_by_email=user.email,
+            expires_at=(datetime.now(timezone.utc) + timedelta(days=1)).replace(tzinfo=None),
+        )
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        service,
+        "get_usage",
+        lambda *_args, **_kwargs: PortalUsage(used_bytes=None, used_objects=None, quota_max_size_bytes=None),
+    )
+    monkeypatch.setattr(service, "list_portal_transfers", lambda *_args, **_kwargs: [])
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    assert service.list_portal_alerts(user, access) == []
 
 
 def test_download_storage_space_object_streams_visible_object(monkeypatch, db_session):
@@ -1546,360 +1705,37 @@ def test_create_access_key_allows_when_below_limit(monkeypatch, db_session):
     assert iam_service.create_calls == 1
 
 
-def test_create_portal_access_key_allows_portal_user_when_option_enabled(db_session):
-    account = S3Account(name="portal-account-user-create-key", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-user-create-key@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = AccountAccess(
-        account=account,
-        actor=user,
-        membership=None,
-        role=AccountRole.PORTAL_USER.value,
-        capabilities=AccountCapabilities(
-            can_manage_buckets=False,
-            can_manage_portal_users=False,
-            can_manage_iam=False,
-            can_view_root_key=False,
-            using_root_key=False,
-        ),
-    )
-
-    class _FakeService:
-        def __init__(self):
-            self.create_access_key_calls = 0
-
-        def get_effective_portal_settings(self, account):  # noqa: ARG002
-            return PortalSettings(allow_portal_user_access_key_create=True)
-
-        def create_access_key(self, user_obj, access_obj):  # noqa: ARG002
-            self.create_access_key_calls += 1
-            return PortalAccessKey(
-                access_key_id="AK-NEW",
-                status="Active",
-                created_at="2026-01-03T00:00:00Z",
-                is_active=True,
-                is_portal=False,
-                deletable=True,
-                secret_access_key="SK-NEW",
-            )
-
-    class _FakeAuditService:
-        def __init__(self):
-            self.actions = []
-
-        def record_action(self, **kwargs):
-            self.actions.append(kwargs)
-
-    service = _FakeService()
-    audit_service = _FakeAuditService()
-
-    created = portal_router.create_portal_access_key(access=access, audit_service=audit_service, service=service)
-
-    assert created.access_key_id == "AK-NEW"
-    assert service.create_access_key_calls == 1
-    assert len(audit_service.actions) == 1
-    assert audit_service.actions[0]["action"] == "create_access_key"
-    assert audit_service.actions[0]["metadata"]["access_key_id"] == "AK-NEW"
-
-
-def test_create_portal_access_key_returns_409_when_limit_reached(db_session):
-    account = S3Account(name="portal-account-user-create-key-limit", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-user-create-key-limit@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = AccountAccess(
-        account=account,
-        actor=user,
-        membership=None,
-        role=AccountRole.PORTAL_USER.value,
-        capabilities=AccountCapabilities(
-            can_manage_buckets=False,
-            can_manage_portal_users=False,
-            can_manage_iam=False,
-            can_view_root_key=False,
-            using_root_key=False,
-        ),
-    )
-
-    class _FakeService:
-        def get_effective_portal_settings(self, account):  # noqa: ARG002
-            return PortalSettings(allow_portal_user_access_key_create=True)
-
-        def create_access_key(self, user_obj, access_obj):  # noqa: ARG002
-            raise PortalAccessKeyLimitExceeded("Maximum IAM user keys reached (2). Delete a key before creating a new one.")
-
-    class _FakeAuditService:
-        def record_action(self, **kwargs):  # noqa: ARG002
-            raise AssertionError("Audit should not be called when key creation is rejected")
-
-    service = _FakeService()
-    audit_service = _FakeAuditService()
-
-    with pytest.raises(HTTPException) as exc:
-        portal_router.create_portal_access_key(access=access, audit_service=audit_service, service=service)
-
-    assert exc.value.status_code == 409
-    assert "Maximum IAM user keys reached" in str(exc.value.detail)
-
-
-def test_delete_portal_access_key_allows_portal_user_when_option_enabled(db_session):
-    account = S3Account(name="portal-account-user-delete-key", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-user-delete-key@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = AccountAccess(
-        account=account,
-        actor=user,
-        membership=None,
-        role=AccountRole.PORTAL_USER.value,
-        capabilities=AccountCapabilities(
-            can_manage_buckets=False,
-            can_manage_portal_users=False,
-            can_manage_iam=False,
-            can_view_root_key=False,
-            using_root_key=False,
-        ),
-    )
-
-    class _FakeService:
-        def __init__(self):
-            self.delete_access_key_calls = 0
-
-        def get_effective_portal_settings(self, account):  # noqa: ARG002
-            return PortalSettings(allow_portal_user_access_key_create=True)
-
-        def delete_access_key(self, user_obj, access_obj, access_key_id):  # noqa: ARG002
-            if access_key_id != "AK-DEL":
-                raise AssertionError("Unexpected key id")
-            self.delete_access_key_calls += 1
-
-    class _FakeAuditService:
-        def __init__(self):
-            self.actions = []
-
-        def record_action(self, **kwargs):
-            self.actions.append(kwargs)
-
-    service = _FakeService()
-    audit_service = _FakeAuditService()
-
-    portal_router.delete_portal_access_key(access_key_id="AK-DEL", access=access, audit_service=audit_service, service=service)
-
-    assert service.delete_access_key_calls == 1
-    assert len(audit_service.actions) == 1
-    assert audit_service.actions[0]["action"] == "delete_access_key"
-    assert audit_service.actions[0]["metadata"]["access_key_id"] == "AK-DEL"
-
-
-def test_delete_portal_access_key_rejects_portal_user_when_option_disabled(db_session):
-    account = S3Account(name="portal-account-user-delete-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-user-delete-denied@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = AccountAccess(
-        account=account,
-        actor=user,
-        membership=None,
-        role=AccountRole.PORTAL_USER.value,
-        capabilities=AccountCapabilities(
-            can_manage_buckets=False,
-            can_manage_portal_users=False,
-            can_manage_iam=False,
-            can_view_root_key=False,
-            using_root_key=False,
-        ),
-    )
-
-    class _FakeService:
-        def __init__(self):
-            self.delete_access_key_calls = 0
-
-        def get_effective_portal_settings(self, account):  # noqa: ARG002
-            return PortalSettings(allow_portal_user_access_key_create=False)
-
-        def delete_access_key(self, user_obj, access_obj, access_key_id):  # noqa: ARG002
-            self.delete_access_key_calls += 1
-
-    class _FakeAuditService:
-        def record_action(self, **kwargs):  # noqa: ARG002
-            raise AssertionError("Audit should not be called when deletion is forbidden")
-
-    service = _FakeService()
-    audit_service = _FakeAuditService()
-
-    with pytest.raises(HTTPException) as exc:
-        portal_router.delete_portal_access_key(access_key_id="AK-DEL", access=access, audit_service=audit_service, service=service)
-
-    assert exc.value.status_code == 403
-    assert service.delete_access_key_calls == 0
-
-
-def test_delete_portal_bucket_allows_portal_user_when_option_enabled(db_session):
-    account = S3Account(name="portal-account-user-delete-bucket", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-user-delete-bucket@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = AccountAccess(
-        account=account,
-        actor=user,
-        membership=None,
-        role=AccountRole.PORTAL_USER.value,
-        capabilities=AccountCapabilities(
-            can_manage_buckets=False,
-            can_manage_portal_users=False,
-            can_manage_iam=False,
-            can_view_root_key=False,
-            using_root_key=False,
-        ),
-    )
-
-    class _FakeService:
-        def __init__(self):
-            self.delete_bucket_calls = []
-
-        def get_effective_portal_settings(self, account):  # noqa: ARG002
-            return PortalSettings(allow_portal_user_bucket_create=True)
-
-        def list_existing_user_bucket_access(self, user_obj, account_obj, account_role):  # noqa: ARG002
-            if account_role != AccountRole.PORTAL_USER.value:
-                raise AssertionError("Unexpected role")
-            return ["bucket-a"]
-
-        def delete_bucket(self, user_obj, access_obj, bucket_name, force=False, use_root=False):  # noqa: ARG002
-            self.delete_bucket_calls.append((bucket_name, force, use_root))
-
-    class _FakeAuditService:
-        def __init__(self):
-            self.actions = []
-
-        def record_action(self, **kwargs):
-            self.actions.append(kwargs)
-
-    service = _FakeService()
-    audit_service = _FakeAuditService()
-
-    result = portal_router.delete_portal_bucket(
-        bucket_name="bucket-a",
-        force=False,
-        access=access,
-        audit_service=audit_service,
-        service=service,
-    )
-
-    assert result["message"] == "Bucket 'bucket-a' deleted"
-    assert service.delete_bucket_calls == [("bucket-a", False, True)]
-    assert len(audit_service.actions) == 1
-    assert audit_service.actions[0]["action"] == "delete_bucket"
-    assert audit_service.actions[0]["metadata"]["force"] is False
-
-
-def test_delete_portal_bucket_rejects_portal_user_when_option_disabled(db_session):
-    account = S3Account(name="portal-account-user-delete-bucket-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-user-delete-bucket-denied@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = AccountAccess(
-        account=account,
-        actor=user,
-        membership=None,
-        role=AccountRole.PORTAL_USER.value,
-        capabilities=AccountCapabilities(
-            can_manage_buckets=False,
-            can_manage_portal_users=False,
-            can_manage_iam=False,
-            can_view_root_key=False,
-            using_root_key=False,
-        ),
-    )
-
-    class _FakeService:
-        def __init__(self):
-            self.delete_bucket_calls = 0
-
-        def get_effective_portal_settings(self, account):  # noqa: ARG002
-            return PortalSettings(allow_portal_user_bucket_create=False)
-
-        def list_existing_user_bucket_access(self, user_obj, account_obj, account_role):  # noqa: ARG002
-            return ["bucket-a"]
-
-        def delete_bucket(self, user_obj, access_obj, bucket_name, force=False, use_root=False):  # noqa: ARG002
-            self.delete_bucket_calls += 1
-
-    class _FakeAuditService:
-        def record_action(self, **kwargs):  # noqa: ARG002
-            raise AssertionError("Audit should not be called when deletion is forbidden")
-
-    service = _FakeService()
-    audit_service = _FakeAuditService()
-
-    with pytest.raises(HTTPException) as exc:
-        portal_router.delete_portal_bucket(
-            bucket_name="bucket-a",
-            force=False,
-            access=access,
-            audit_service=audit_service,
-            service=service,
-        )
-
-    assert exc.value.status_code == 403
-    assert service.delete_bucket_calls == 0
-
-
-def test_delete_portal_bucket_rejects_portal_user_when_bucket_not_granted(db_session):
-    account = S3Account(name="portal-account-user-delete-bucket-no-access", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-user-delete-bucket-no-access@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = AccountAccess(
-        account=account,
-        actor=user,
-        membership=None,
-        role=AccountRole.PORTAL_USER.value,
-        capabilities=AccountCapabilities(
-            can_manage_buckets=False,
-            can_manage_portal_users=False,
-            can_manage_iam=False,
-            can_view_root_key=False,
-            using_root_key=False,
-        ),
-    )
-
-    class _FakeService:
-        def __init__(self):
-            self.delete_bucket_calls = 0
-
-        def get_effective_portal_settings(self, account):  # noqa: ARG002
-            return PortalSettings(allow_portal_user_bucket_create=True)
-
-        def list_existing_user_bucket_access(self, user_obj, account_obj, account_role):  # noqa: ARG002
-            return ["bucket-x"]
-
-        def delete_bucket(self, user_obj, access_obj, bucket_name, force=False, use_root=False):  # noqa: ARG002
-            self.delete_bucket_calls += 1
-
-    class _FakeAuditService:
-        def record_action(self, **kwargs):  # noqa: ARG002
-            raise AssertionError("Audit should not be called when deletion is forbidden")
-
-    service = _FakeService()
-    audit_service = _FakeAuditService()
-
-    with pytest.raises(HTTPException) as exc:
-        portal_router.delete_portal_bucket(
-            bucket_name="bucket-a",
-            force=False,
-            access=access,
-            audit_service=audit_service,
-            service=service,
-        )
-
-    assert exc.value.status_code == 403
-    assert service.delete_bucket_calls == 0
+def test_portal_router_no_longer_exposes_legacy_backend_surfaces():
+    route_keys = {
+        (method, route.path)
+        for route in portal_router.router.routes
+        for method in getattr(route, "methods", set())
+    }
+
+    removed_routes = {
+        ("GET", "/portal/buckets"),
+        ("POST", "/portal/bootstrap"),
+        ("GET", "/portal/buckets/{bucket_name}/users"),
+        ("GET", "/portal/buckets/{bucket_name}/stats"),
+        ("POST", "/portal/buckets"),
+        ("DELETE", "/portal/buckets/{bucket_name}"),
+        ("GET", "/portal/access-keys"),
+        ("POST", "/portal/access-keys"),
+        ("POST", "/portal/access-keys/portal/rotate"),
+        ("PUT", "/portal/access-keys/{access_key_id}/status"),
+        ("DELETE", "/portal/access-keys/{access_key_id}"),
+        ("GET", "/portal/account-settings"),
+        ("PUT", "/portal/account-settings"),
+        ("GET", "/portal/iam-compliance"),
+        ("POST", "/portal/iam-compliance/apply"),
+        ("GET", "/portal/settings"),
+        ("GET", "/portal/users"),
+        ("POST", "/portal/users"),
+        ("GET", "/portal/users/{user_id}/buckets"),
+        ("POST", "/portal/users/{user_id}/buckets"),
+        ("DELETE", "/portal/users/{user_id}/buckets/{bucket}"),
+        ("PUT", "/portal/users/{user_id}"),
+        ("DELETE", "/portal/users/{user_id}"),
+    }
+
+    assert removed_routes.isdisjoint(route_keys)
