@@ -1317,15 +1317,6 @@ export function buildBaseRules(): MockRule[] {
       },
     },
     {
-      id: "portal-bootstrap",
-      method: "POST",
-      path: /^\/portal\/bootstrap$/,
-      body: {
-        ...PORTAL_STATE,
-        just_created: true,
-      },
-    },
-    {
       id: "portal-state",
       path: /^\/portal\/state$/,
       body: PORTAL_STATE,
@@ -1382,6 +1373,52 @@ export function buildBaseRules(): MockRule[] {
       },
     },
     {
+      id: "portal-storage-space-object-detail",
+      path: /^\/portal\/storage-spaces\/[^/]+\/objects\/detail$/,
+      body: ({ url }) => {
+        const key = url.searchParams.get("key") ?? "raw-data/2024/03/sample_001.fastq.gz";
+        const spaceId = parseStorageSpaceId(url.pathname);
+        const value = PORTAL_OBJECTS_BY_SPACE[spaceId] ?? PORTAL_OBJECTS_BY_SPACE["genomics-2026"];
+        const object = value.objects.find((item) => item.key === key) ?? value.objects[0];
+        return {
+          key,
+          name: object?.name ?? key.split("/").pop() ?? key,
+          size: object?.size ?? Math.round(2.4 * GB),
+          last_modified: object?.last_modified ?? "2024-03-12T10:15:43Z",
+          content_type: key.endsWith(".txt") ? "text/plain" : "application/gzip",
+          storage_class: "STANDARD",
+          encryption: "AES256",
+          preview_type: key.endsWith(".txt") ? "text" : "unavailable",
+          preview_text: key.endsWith(".txt") ? "README for the selected storage space." : null,
+          preview_unavailable_reason: key.endsWith(".txt") ? null : "Preview is available only for small text files.",
+        };
+      },
+    },
+    {
+      id: "portal-storage-space-public-links",
+      path: /^\/portal\/storage-spaces\/[^/]+\/public-links$/,
+      body: ({ url }) => {
+        const spaceId = parseStorageSpaceId(url.pathname);
+        const space = PORTAL_STORAGE_SPACES.find((item) => item.id === spaceId) ?? PORTAL_STORAGE_SPACES[0];
+        return [
+          {
+            id: 42,
+            storage_space_id: space.id,
+            storage_space_name: space.name,
+            object_key: "raw-data/2024/03/sample_001.fastq.gz",
+            object_name: "sample_001.fastq.gz",
+            url: "/api/portal/public-links/docs-token/download",
+            label: "Review link",
+            created_by_email: "storage.user@example.com",
+            created_at: NOW,
+            expires_at: "2026-06-10T10:00:00Z",
+            revoked_at: null,
+            status: "Active",
+          },
+        ];
+      },
+    },
+    {
       id: "portal-storage-space-shares",
       path: /^\/portal\/storage-spaces\/[^/]+\/shares$/,
       body: ({ url }) => {
@@ -1433,155 +1470,6 @@ export function buildBaseRules(): MockRule[] {
         ...PORTAL_BILLING_ME,
         month: url.searchParams.get("month") ?? PORTAL_BILLING_ME.month,
       }),
-    },
-    {
-      id: "portal-settings",
-      path: /^\/portal\/settings$/,
-      body: PORTAL_SETTINGS,
-    },
-    {
-      id: "portal-account-settings",
-      path: /^\/portal\/account-settings$/,
-      body: {
-        effective: PORTAL_SETTINGS,
-        admin_override: {},
-        portal_manager_override: {},
-        override_policy: PORTAL_SETTINGS.override_policy,
-      },
-    },
-    {
-      id: "portal-iam-compliance",
-      path: /^\/portal\/iam-compliance$/,
-      body: {
-        ok: true,
-        issues: [],
-      },
-    },
-    {
-      id: "portal-buckets",
-      path: /^\/portal\/buckets$/,
-      body: ({ url }) => {
-        const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
-        if (!search) return MANAGER_BUCKETS;
-        return MANAGER_BUCKETS.filter((bucket) => bucket.name.toLowerCase().includes(search));
-      },
-    },
-    {
-      id: "portal-create-bucket",
-      method: "POST",
-      path: /^\/portal\/buckets$/,
-      body: ({ requestBodyText }) => {
-        let payload: { name?: string } = {};
-        try {
-          payload = JSON.parse(requestBodyText || "{}") as { name?: string };
-        } catch {
-          payload = {};
-        }
-        return {
-          name: payload.name ?? "new-portal-bucket",
-          creation_date: NOW,
-          owner: "RGW-HELIOS",
-          owner_name: "Helios Platform",
-          used_bytes: 0,
-          object_count: 0,
-          tags: [],
-          features: {
-            versioning: { state: "enabled", tone: "active" },
-          },
-        };
-      },
-    },
-    {
-      id: "portal-delete-bucket",
-      method: "DELETE",
-      path: /^\/portal\/buckets\/[^/]+$/,
-      status: 204,
-      body: undefined,
-    },
-    {
-      id: "portal-bucket-stats",
-      path: /^\/portal\/buckets\/[^/]+\/stats$/,
-      body: ({ url }) => {
-        const bucketName = parseBucketName(url.pathname);
-        const bucket = MANAGER_BUCKETS.find((item) => item.name === bucketName);
-        return {
-          name: bucketName,
-          used_bytes: bucket?.used_bytes ?? 0,
-          object_count: bucket?.object_count ?? 0,
-        };
-      },
-    },
-    {
-      id: "portal-bucket-users",
-      path: /^\/portal\/buckets\/[^/]+\/users$/,
-      body: [
-        { id: 3, email: "storage.user@example.com", role: "ui_user", iam_username: "portal-user-helios", iam_only: false },
-        { id: 2, email: "platform.admin@example.com", role: "ui_admin", iam_username: "portal-manager-helios", iam_only: false },
-      ],
-    },
-    {
-      id: "portal-access-keys-list",
-      path: /^\/portal\/access-keys$/,
-      body: PORTAL_STATE.access_keys,
-    },
-    {
-      id: "portal-access-key-create",
-      method: "POST",
-      path: /^\/portal\/access-keys$/,
-      status: 201,
-      body: {
-        access_key_id: "AKIAHELIOSPORTAL002",
-        secret_access_key: "docs-secret",
-        status: "Active",
-        created_at: NOW,
-        is_active: true,
-        is_portal: false,
-        deletable: true,
-      },
-    },
-    {
-      id: "portal-access-key-status",
-      method: "PUT",
-      path: /^\/portal\/access-keys\/[^/]+\/status$/,
-      body: ({ requestBodyText, url }) => {
-        let payload: { active?: boolean } = {};
-        try {
-          payload = JSON.parse(requestBodyText || "{}") as { active?: boolean };
-        } catch {
-          payload = {};
-        }
-        const active = payload.active !== false;
-        return {
-          access_key_id: decodeURIComponent(url.pathname.split("/").at(-2) ?? "AKIAHELIOSPORTAL001"),
-          status: active ? "Active" : "Inactive",
-          created_at: NOW,
-          is_active: active,
-          is_portal: false,
-          deletable: true,
-        };
-      },
-    },
-    {
-      id: "portal-access-key-delete",
-      method: "DELETE",
-      path: /^\/portal\/access-keys\/[^/]+$/,
-      status: 204,
-      body: undefined,
-    },
-    {
-      id: "portal-users",
-      path: /^\/portal\/users$/,
-      body: [
-        { id: 3, email: "storage.user@example.com", role: "ui_user", iam_username: "portal-user-helios", iam_only: false },
-        { id: 2, email: "platform.admin@example.com", role: "ui_admin", iam_username: "portal-manager-helios", iam_only: false },
-      ],
-    },
-    {
-      id: "portal-user-buckets",
-      path: /^\/portal\/users\/\d+\/buckets$/,
-      body: {
-        buckets: ["helios-retail-logs"],
-      },
     },
     {
       id: "ceph-endpoints",

@@ -237,9 +237,9 @@ Objective: make the Portal feature set safe to ship and maintain.
 - [x] Permission non-regression tests.
 - [x] `rtk npm run deadcode:check`
 - [x] `rtk git diff --check`
-- [ ] Desktop visual QA.
-- [ ] Mobile visual QA.
-- [ ] Manual final-user workflow:
+- [x] Desktop visual QA.
+- [x] Mobile visual QA.
+- [x] Manual final-user workflow:
   - see dashboard;
   - open a Storage Space;
   - browse files;
