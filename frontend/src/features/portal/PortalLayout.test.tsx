@@ -71,7 +71,7 @@ describe("PortalLayout", () => {
     vi.clearAllMocks();
   });
 
-  it("uses the shared shell with sidebar workspace selector and keeps the portal account selector in the topbar", async () => {
+  it("uses the shared shell with workspace and portal account selectors in the topbar", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
       "user",
@@ -112,9 +112,9 @@ describe("PortalLayout", () => {
     const desktopSidebar = container.querySelector('[data-sidebar-variant="desktop"]') as HTMLElement;
     expect(desktopSidebar).not.toBeNull();
     await waitFor(() => {
-      expect(within(desktopSidebar).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Portal");
+      expect(within(topbar).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Portal");
     });
-    expect(within(topbar).queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
+    expect(within(desktopSidebar).queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
     expect(within(desktopSidebar).queryByRole("button", { name: "Select portal account" })).not.toBeInTheDocument();
     expect(within(desktopSidebar).queryByText("Helios Retail")).not.toBeInTheDocument();
 

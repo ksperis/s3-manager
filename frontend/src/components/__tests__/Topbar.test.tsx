@@ -147,20 +147,18 @@ describe("Topbar account menu", () => {
     );
 
     const switcher = screen.getByRole("button", { name: "Switch workspace" });
-    expect(switcher).toHaveTextContent("S3 Manager");
+    expect(switcher).toHaveTextContent("Workspace");
     expect(switcher).toHaveTextContent("Browser");
+    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
 
     await user.click(switcher);
     await user.click(await screen.findByRole("option", { name: "Manager" }));
     expect(onChange).toHaveBeenCalledWith("manager");
   });
 
-  it("moves only the workspace selector into the sidebar chrome when available", async () => {
+  it("keeps workspace and account controls in the topbar when the sidebar is visible", async () => {
     const originalWidth = window.innerWidth;
     Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1280 });
-    const sidebarChromeSlot = document.createElement("div");
-    sidebarChromeSlot.id = "app-sidebar-chrome-slot";
-    document.body.appendChild(sidebarChromeSlot);
 
     try {
       render(
@@ -196,18 +194,14 @@ describe("Topbar account menu", () => {
         />
       );
 
-      await waitFor(() => {
-        expect(within(sidebarChromeSlot).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Manager");
-      });
-
       const topbar = document.querySelector("[data-topbar]");
       expect(topbar).not.toBeNull();
-      expect(within(topbar as HTMLElement).queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
+      expect(within(topbar as HTMLElement).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Manager");
       expect(within(topbar as HTMLElement).getByRole("button", { name: "Select context account" })).toHaveTextContent(
         "Lab account"
       );
+      expect(within(topbar as HTMLElement).getByRole("button", { name: "Search" })).toBeInTheDocument();
     } finally {
-      sidebarChromeSlot.remove();
       Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: originalWidth });
     }
   });

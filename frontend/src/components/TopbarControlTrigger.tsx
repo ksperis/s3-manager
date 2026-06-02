@@ -52,31 +52,33 @@ export default function TopbarControlTrigger({
       onKeyDown={onKeyDown}
       className={
         className ??
-        `inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white text-left shadow-sm transition hover:border-primary-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-primary-400 dark:focus-visible:ring-offset-slate-900 ${
-          iconOnly ? iconModeClassName ?? "w-8 justify-center px-0" : "w-full px-2"
-        } ${open ? "border-blue-400" : ""}`
+        `shell-control inline-flex items-center rounded-lg border text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 ${
+          iconOnly ? iconModeClassName ?? "h-9 w-9 justify-center px-0" : "h-10 w-full gap-2.5 px-3"
+        } ${open ? "shell-control-active" : ""}`
       }
     >
       {iconOnly ? (
         <>
-          <span className="text-slate-500 dark:text-slate-300">{icon}</span>
+          <span className="shell-icon-muted">{icon}</span>
           <span className="sr-only">{value}</span>
         </>
       ) : (
         <>
-          <span
-            className={
-              iconSlotClassName ??
-              "flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-100"
-            }
-          >
-            {icon}
-          </span>
+          {icon ? (
+            <span
+              className={
+                iconSlotClassName ??
+                "shell-menu-muted shell-icon-muted flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+              }
+            >
+              {icon}
+            </span>
+          ) : null}
           <div className="min-w-0 flex-1 leading-tight">
-            <span className="block truncate text-[9px] font-semibold uppercase text-slate-500 dark:text-slate-400">{label}</span>
+            <span className="shell-muted-text block truncate text-[10px] font-medium">{label}</span>
             <span
               data-slot="topbar-trigger-value"
-              className="mt-px block min-w-0 truncate text-[12px] font-semibold leading-4 text-slate-950 dark:text-slate-100"
+              className="mt-0.5 block min-w-0 truncate text-[12px] font-semibold leading-4 text-[var(--shell-text)]"
             >
               {value}
             </span>
@@ -90,7 +92,7 @@ export default function TopbarControlTrigger({
             </div>
           ) : null}
           <ChevronDownIcon
-            className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform dark:text-slate-300 ${open ? "rotate-180" : ""}`}
+            className={`shell-icon-muted h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
           />
         </>
       )}

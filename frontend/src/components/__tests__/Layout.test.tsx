@@ -3,12 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import Layout from "../Layout";
-import {
-  DESKTOP_SIDEBAR_SESSION_STORAGE_KEY,
-  SIDEBAR_COLLAPSE_THRESHOLD,
-  SIDEBAR_COMPACT_WIDTH,
-  SIDEBAR_MAX_WIDTH,
-} from "../sidebarSizing";
+import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_DEFAULT_WIDTH } from "../sidebarSizing";
 
 const mocks = vi.hoisted(() => ({
   workspaceSwitcherModel: null as {
@@ -102,17 +97,12 @@ describe("Layout", () => {
     mocks.workspaceSwitcherModel = null;
   });
 
-  it("restores the desktop sidebar width from session storage", () => {
-    window.sessionStorage.setItem(DESKTOP_SIDEBAR_SESSION_STORAGE_KEY, "320");
-
+  it("renders the desktop sidebar at the fixed expanded width", () => {
     const { container } = renderLayout();
     const desktopSidebar = getDesktopSidebar(container);
 
-    expect(desktopSidebar).toHaveStyle({ width: "320px" });
-    expect(within(desktopSidebar).getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute(
-      "aria-valuenow",
-      "320"
-    );
+    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_DEFAULT_WIDTH}px` });
+    expect(within(desktopSidebar).queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
   });
 
   it("lets route content shrink so wide inner lists can scroll horizontally", () => {
@@ -124,34 +114,16 @@ describe("Layout", () => {
     expect(outletWrapper).toHaveClass("min-w-0");
   });
 
-  it("supports pointer resize with compact and max-width bounds", () => {
+  it("collapses and expands the desktop sidebar", () => {
     const { container } = renderLayout();
     const desktopSidebar = getDesktopSidebar(container);
-    const separator = within(desktopSidebar).getByRole("separator", { name: "Resize sidebar" });
 
-    fireEvent.pointerDown(separator, { button: 0, clientX: 256 });
-    fireEvent.pointerMove(window, { clientX: 180 });
-    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_COMPACT_WIDTH}px` });
-
-    fireEvent.pointerMove(window, { clientX: 640 });
-    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_MAX_WIDTH}px` });
-    fireEvent.pointerUp(window);
-  });
-
-  it("supports keyboard resize and hides sidebar action in compact mode", () => {
-    const { container } = renderLayout();
-    const desktopSidebar = getDesktopSidebar(container);
-    const separator = within(desktopSidebar).getByRole("separator", { name: "Resize sidebar" });
-
-    fireEvent.keyDown(separator, { key: "Home" });
+    fireEvent.click(within(desktopSidebar).getByRole("button", { name: "Collapse sidebar" }));
     expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_COMPACT_WIDTH}px` });
     expect(within(desktopSidebar).queryByText("Quick action")).not.toBeInTheDocument();
 
-    fireEvent.keyDown(separator, { key: "ArrowRight" });
-    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_COLLAPSE_THRESHOLD}px` });
-
-    fireEvent.keyDown(separator, { key: "End" });
-    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_MAX_WIDTH}px` });
+    fireEvent.click(within(desktopSidebar).getByRole("button", { name: "Expand sidebar" }));
+    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_DEFAULT_WIDTH}px` });
     expect(within(desktopSidebar).getByText("Quick action")).toBeInTheDocument();
   });
 

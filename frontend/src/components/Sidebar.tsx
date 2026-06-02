@@ -2,15 +2,9 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import {
-  CSSProperties,
-  ReactNode,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { CSSProperties, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH } from "./sidebarSizing";
+import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_DEFAULT_WIDTH } from "./sidebarSizing";
 
 export const SIDEBAR_CHROME_SLOT_ID = "app-sidebar-chrome-slot";
 export const SIDEBAR_CHROME_SLOT_EVENT = "s3-manager-sidebar-chrome-slot-change";
@@ -44,10 +38,6 @@ type SidebarProps = {
   className?: string;
   onNavigate?: () => void;
   compact?: boolean;
-  width?: number;
-  resizing?: boolean;
-  onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
-  onResizeKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   onCollapseToggle?: () => void;
 };
 
@@ -65,10 +55,6 @@ export default function Sidebar({
   className,
   onNavigate,
   compact = false,
-  width,
-  resizing = false,
-  onResizeStart,
-  onResizeKeyDown,
   onCollapseToggle,
 }: SidebarProps) {
   const effectiveSections: SidebarSection[] = useMemo(
@@ -83,6 +69,8 @@ export default function Sidebar({
     });
     return initial;
   });
+  const [navScrolling, setNavScrolling] = useState(false);
+  const navScrollTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     setCollapsedSections((previous) => {
@@ -103,101 +91,85 @@ export default function Sidebar({
     }));
   };
 
-  const sidebarWidth = variant === "desktop" ? width ?? SIDEBAR_DEFAULT_WIDTH : undefined;
-
   useEffect(() => {
-    if (variant !== "desktop" || !sidebarWidth) return;
-    document.documentElement.style.setProperty("--s3-manager-sidebar-width", `${sidebarWidth}px`);
     return () => {
-      document.documentElement.style.removeProperty("--s3-manager-sidebar-width");
+      if (navScrollTimeoutRef.current !== null) {
+        window.clearTimeout(navScrollTimeoutRef.current);
+      }
     };
-  }, [sidebarWidth, variant]);
+  }, []);
 
-  useEffect(() => {
-    if (variant !== "desktop" || typeof window === "undefined") return;
-    window.dispatchEvent(new Event(SIDEBAR_CHROME_SLOT_EVENT));
-    return () => {
-      window.dispatchEvent(new Event(SIDEBAR_CHROME_SLOT_EVENT));
-    };
-  }, [compact, sidebarWidth, variant]);
+  const handleNavScroll = () => {
+    setNavScrolling(true);
+    if (navScrollTimeoutRef.current !== null) {
+      window.clearTimeout(navScrollTimeoutRef.current);
+    }
+    navScrollTimeoutRef.current = window.setTimeout(() => {
+      setNavScrolling(false);
+      navScrollTimeoutRef.current = null;
+    }, 900);
+  };
 
   const baseLinkClasses = compact
-    ? "group relative flex h-9 items-center justify-center rounded-md px-2 ui-caption font-semibold leading-4 transition"
-    : "group relative flex h-8 items-center justify-between gap-2 overflow-hidden rounded-md px-2.5 ui-caption font-semibold leading-4 transition";
-  const inactiveLinkClasses =
-    "text-slate-700 hover:bg-white hover:text-slate-950 hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50";
+    ? "group relative flex h-9 items-center justify-center rounded-md px-2 text-[12px] font-medium leading-4 transition"
+    : "group relative flex h-9 items-center justify-between gap-2 overflow-hidden rounded-md px-2.5 text-[12px] font-medium leading-4 transition";
+  const inactiveLinkClasses = "shell-sidebar-item";
   const activeLinkClasses =
     compact
-      ? "bg-primary-50 text-primary-700 shadow-sm dark:bg-primary-950/45 dark:text-primary-100"
-      : "bg-primary-50 text-primary-800 shadow-sm before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-r-full before:bg-primary-600 dark:bg-primary-950/45 dark:text-primary-100 dark:before:bg-primary-300";
+      ? "shell-sidebar-item-active"
+      : "shell-sidebar-item-active before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-r-full before:bg-primary";
   const badgeClasses = "shrink-0 rounded-full px-1.5 py-0.5 ui-caption font-semibold";
-  const activeBadgeClasses = "bg-primary-200/80 text-primary-900 dark:bg-primary-800/70 dark:text-primary-100";
-  const inactiveBadgeClasses =
-    "bg-slate-100 text-slate-600 group-hover:bg-slate-200/90 group-hover:text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:group-hover:bg-slate-700 dark:group-hover:text-slate-100";
+  const activeBadgeClasses = "bg-primary/15 text-primary-700 dark:text-primary-100";
+  const inactiveBadgeClasses = "shell-menu-muted shell-muted-text";
   const containerClasses =
     variant === "desktop"
-      ? `relative hidden h-full shrink-0 border-r border-slate-200 bg-slate-50/95 dark:border-slate-800 dark:bg-[#070d18] md:flex md:flex-col ${
-          compact ? "px-1.5" : "px-0"
-        } ${resizing ? "" : "transition-[width,padding] duration-200 ease-out"}`
-      : "flex h-full flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-[#070d18]";
+      ? "shell-sidebar relative hidden h-full shrink-0 border-r md:flex md:flex-col transition-[width] duration-200 ease-out"
+      : "shell-sidebar flex h-full flex-col border-r";
   const rootClassName = className ? `${containerClasses} ${className}` : containerClasses;
   const iconClasses = "h-4 w-4";
   const rootStyle: CSSProperties | undefined =
-    variant === "desktop" && sidebarWidth
+    variant === "desktop"
       ? {
-          width: `${sidebarWidth}px`,
-        }
-      : undefined;
-  const chromeSlotStyle: CSSProperties | undefined =
-    variant === "desktop" && sidebarWidth
-      ? {
-          width: `${sidebarWidth}px`,
-        }
-      : undefined;
-  const navStyle: CSSProperties | undefined =
-    variant === "desktop" && !compact
-      ? {
-          paddingTop: "var(--s3-manager-sidebar-nav-offset, 0.75rem)",
+          width: `${compact ? SIDEBAR_COMPACT_WIDTH : SIDEBAR_DEFAULT_WIDTH}px`,
         }
       : undefined;
 
   return (
     <aside className={rootClassName} style={rootStyle} data-sidebar-variant={variant}>
-      {variant === "desktop" && !compact ? (
-        <div
-          id={SIDEBAR_CHROME_SLOT_ID}
-          className="fixed left-0 top-0 z-[46] hidden overflow-visible border-r border-slate-200 bg-slate-50/95 dark:border-slate-800 dark:bg-[#070d18] md:block"
-          style={chromeSlotStyle}
-          data-sidebar-chrome-slot
-        />
-      ) : null}
+      <div className={`flex h-14 shrink-0 items-center border-b border-[color:var(--shell-border)] ${compact ? "justify-center px-2" : "gap-3 px-4"}`}>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-[0_10px_20px_rgba(37,99,235,0.22)]">
+          <BrandCubeIcon className="h-4 w-4" />
+        </span>
+        {!compact && <span className="truncate text-[14px] font-semibold leading-none text-[var(--shell-text)]">S3 Manager</span>}
+      </div>
       <nav
-        className={`flex min-h-0 flex-1 flex-col overflow-y-auto pb-3 ${compact ? "gap-2 px-0 py-3" : "gap-3 px-2.5"}`}
-        style={navStyle}
+        className={`shell-sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto ${navScrolling ? "shell-sidebar-scroll-active" : ""} ${compact ? "gap-1.5 px-2 py-3" : "gap-2 px-2.5 py-3"}`}
+        onScroll={handleNavScroll}
         aria-label={`${title} navigation`}
       >
         {!compact && headerAction ? <div className="pb-1">{headerAction}</div> : null}
-        {effectiveSections.map((section) => {
+        {effectiveSections.map((section, index) => {
           const collapsible = isSectionCollapsible(section);
           const isCollapsed = compact ? false : collapsedSections[section.label];
+          const showSeparator = index < effectiveSections.length - 1;
           return (
             <section
               key={section.label}
-              className="space-y-1.5"
+              className={`${showSeparator && !compact ? "border-b border-[color:var(--shell-border-soft)] pb-3" : ""} space-y-1.5`}
             >
               {compact ? (
-                <div className="mx-auto my-1 h-px w-6 rounded-full bg-slate-200 dark:bg-slate-700" />
+                <div className="mx-auto my-1 h-px w-5 rounded-full bg-[var(--shell-border)]" />
               ) : collapsible ? (
                 <button
                   type="button"
                   onClick={() => toggleSection(section.label, collapsible)}
-                  className="flex h-5 w-full items-center justify-between rounded-md px-1.5 text-[10px] font-bold uppercase text-slate-500 transition hover:bg-white hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-900 dark:hover:text-slate-300"
+                  className="shell-section-label flex h-5 w-full items-center justify-between rounded-md px-2 text-[10px] font-semibold uppercase transition hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]"
                 >
                   <span>{section.label}</span>
                   <SidebarChevronIcon className={`h-3.5 w-3.5 transition-transform ${isCollapsed ? "" : "rotate-90"}`} />
                 </button>
               ) : (
-                <div className="px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-500">
+                <div className="shell-section-label px-2 text-[10px] font-semibold uppercase">
                   {section.label}
                 </div>
               )}
@@ -213,7 +185,7 @@ export default function Sidebar({
                           title={link.disabledHint ?? DEFAULT_DISABLED_HINT}
                         >
                           <div className={`flex min-w-0 items-center ${compact ? "" : "gap-1.5"}`}>
-                            <span className={`shrink-0 text-slate-500 dark:text-slate-400 ${iconClasses}`}>
+                            <span className={`shell-icon-muted shrink-0 ${iconClasses}`}>
                               {link.icon ?? resolveSidebarLinkIcon(link)}
                             </span>
                             {!compact && <span className="truncate">{link.label}</span>}
@@ -239,8 +211,8 @@ export default function Sidebar({
                                 <span
                                   className={`shrink-0 ${
                                     isActive
-                                      ? "text-primary-700 dark:text-primary-200"
-                                      : "text-slate-500 group-hover:text-slate-700 dark:text-slate-400 dark:group-hover:text-slate-200"
+                                      ? "text-[var(--shell-selected-text)]"
+                                      : "shell-icon-muted group-hover:text-[var(--shell-icon)]"
                                   } ${iconClasses}`}
                                 >
                                   {link.icon ?? resolveSidebarLinkIcon(link)}
@@ -264,15 +236,15 @@ export default function Sidebar({
           );
         })}
       </nav>
-      {footer ? <div className={`shrink-0 overflow-hidden border-t border-slate-200 dark:border-slate-800 ${compact ? "p-2" : "p-3"}`}>{footer}</div> : null}
+      {footer ? <div className={`shrink-0 overflow-hidden border-t border-[color:var(--shell-border)] text-[var(--shell-text)] ${compact ? "p-2" : "p-3"}`}>{footer}</div> : null}
       {variant === "desktop" && onCollapseToggle ? (
-        <div className={`shrink-0 border-t border-slate-200 dark:border-slate-800 ${compact ? "p-2" : "p-3"}`}>
+        <div className={`shrink-0 border-t border-[color:var(--shell-border)] ${compact ? "p-2" : "p-2.5"}`}>
           <button
             type="button"
             onClick={onCollapseToggle}
             aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
             title={compact ? "Expand" : undefined}
-            className={`flex h-8 w-full items-center rounded-md text-[12px] font-semibold text-slate-600 transition hover:bg-white hover:text-slate-950 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50 ${
+            className={`shell-sidebar-item flex h-8 w-full items-center rounded-md text-[12px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
               compact ? "justify-center px-2" : "gap-2 px-2.5"
             }`}
           >
@@ -281,31 +253,16 @@ export default function Sidebar({
           </button>
         </div>
       ) : null}
-      {variant === "desktop" && onResizeStart && onResizeKeyDown ? (
-        <div className="absolute inset-y-0 right-0 flex w-4 translate-x-1/2 items-center justify-center">
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize sidebar"
-            aria-valuemin={SIDEBAR_COMPACT_WIDTH}
-            aria-valuemax={SIDEBAR_MAX_WIDTH}
-            aria-valuenow={width}
-            tabIndex={0}
-            onPointerDown={onResizeStart}
-            onKeyDown={onResizeKeyDown}
-            className="group flex h-full w-4 cursor-col-resize touch-none items-center justify-center outline-none focus-visible:rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          >
-            <span
-              className={`block h-24 w-[3px] rounded-full transition ${
-                resizing
-                  ? "bg-primary shadow-[0_0_0_6px_rgba(14,165,233,0.14)] dark:shadow-[0_0_0_6px_rgba(56,189,248,0.14)]"
-                  : "bg-slate-300/90 group-hover:bg-primary/70 group-focus-visible:bg-primary/80 dark:bg-slate-600/90 dark:group-hover:bg-primary-300/80 dark:group-focus-visible:bg-primary-300"
-              }`}
-            />
-          </div>
-        </div>
-      ) : null}
     </aside>
+  );
+}
+
+function BrandCubeIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="m12 4.5 6 3.4v6.8l-6 3.8-6-3.8V7.9l6-3.4Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M12 12.1 18 7.9M12 12.1 6 7.9M12 12.1v6.4" />
+    </svg>
   );
 }
 
