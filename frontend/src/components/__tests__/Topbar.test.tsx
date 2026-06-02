@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Topbar from "../Topbar";
@@ -153,5 +153,62 @@ describe("Topbar account menu", () => {
     await user.click(switcher);
     await user.click(await screen.findByRole("option", { name: "Manager" }));
     expect(onChange).toHaveBeenCalledWith("manager");
+  });
+
+  it("moves only the workspace selector into the sidebar chrome when available", async () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1280 });
+    const sidebarChromeSlot = document.createElement("div");
+    sidebarChromeSlot.id = "app-sidebar-chrome-slot";
+    document.body.appendChild(sidebarChromeSlot);
+
+    try {
+      render(
+        <Topbar
+          userEmail="admin@example.com"
+          section="Manager"
+          showMobileMenuButton
+          showWorkspaceSwitcher
+          workspaceSwitcher={{
+            currentWorkspaceId: "manager",
+            currentWorkspaceLabel: "Manager",
+            options: [
+              { value: "manager", label: "Manager" },
+              { value: "browser", label: "Browser" },
+            ],
+            onChange: vi.fn(),
+          }}
+          controlDescriptors={[
+            {
+              id: "account",
+              icon: null,
+              selectedLabel: "Lab account",
+              priority: 10,
+              estimatedIconWidth: 36,
+              estimatedLabelWidth: 180,
+              renderControl: () => (
+                <button type="button" aria-label="Select context account">
+                  Account Lab account
+                </button>
+              ),
+            },
+          ]}
+        />
+      );
+
+      await waitFor(() => {
+        expect(within(sidebarChromeSlot).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Manager");
+      });
+
+      const topbar = document.querySelector("[data-topbar]");
+      expect(topbar).not.toBeNull();
+      expect(within(topbar as HTMLElement).queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
+      expect(within(topbar as HTMLElement).getByRole("button", { name: "Select context account" })).toHaveTextContent(
+        "Lab account"
+      );
+    } finally {
+      sidebarChromeSlot.remove();
+      Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: originalWidth });
+    }
   });
 });

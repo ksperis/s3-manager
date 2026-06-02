@@ -3,7 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { type KeyboardEvent as ReactKeyboardEvent, ReactNode, Suspense, lazy, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../utils/workspaces";
+import { SIDEBAR_CHROME_SLOT_EVENT, SIDEBAR_CHROME_SLOT_ID } from "./Sidebar";
 import type { WorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import { useGeneralSettings } from "./GeneralSettingsContext";
 import Modal from "./Modal";
@@ -96,6 +98,7 @@ export default function Topbar({
     typeof window !== "undefined" ? window.innerWidth < 768 : false
   );
   const [controlsAvailableWidth, setControlsAvailableWidth] = useState<number>(Number.POSITIVE_INFINITY);
+  const [sidebarChromeTarget, setSidebarChromeTarget] = useState<HTMLElement | null>(null);
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -128,6 +131,8 @@ export default function Topbar({
     zIndexClass: "z-[70]",
   });
 
+  const sidebarChromeRequested = showMobileMenuButton && !isMobileViewport;
+  const sidebarChromeEnabled = sidebarChromeRequested && Boolean(sidebarChromeTarget);
   const adaptiveControlDescriptors = useMemo(
     () => (controlDescriptors?.filter((control) => control.id !== "workspace") ?? []),
     [controlDescriptors]
@@ -175,6 +180,24 @@ export default function Topbar({
       window.removeEventListener("orientationchange", updateViewport);
     };
   }, []);
+
+  useEffect(() => {
+    if (!sidebarChromeRequested || typeof document === "undefined") {
+      setSidebarChromeTarget(null);
+      return;
+    }
+
+    const syncSidebarChromeTarget = () => {
+      const target = document.getElementById(SIDEBAR_CHROME_SLOT_ID);
+      setSidebarChromeTarget((current) => (current === target ? current : target));
+    };
+
+    syncSidebarChromeTarget();
+    window.addEventListener(SIDEBAR_CHROME_SLOT_EVENT, syncSidebarChromeTarget);
+    return () => {
+      window.removeEventListener(SIDEBAR_CHROME_SLOT_EVENT, syncSidebarChromeTarget);
+    };
+  }, [sidebarChromeRequested]);
 
   useEffect(() => {
     if (!hasAdaptiveControls) return;
@@ -397,14 +420,156 @@ export default function Topbar({
   const workspaceTriggerLabel = workspaceSwitcher
     ? compactWorkspaceLabel(workspaceSwitcher.currentWorkspaceLabel)
     : compactWorkspaceLabel(section);
+  const showWorkspaceInSidebar = sidebarChromeEnabled && showWorkspaceSwitcher;
+  const showWorkspaceInTopbar = showWorkspaceSwitcher && !showWorkspaceInSidebar;
+  const topbarOffsetClass = showMobileMenuButton ? "md:pl-[var(--s3-manager-sidebar-width,196px)]" : "";
+
+  const renderWorkspaceSelector = (placement: "sidebar" | "topbar") => {
+    const sidebarPlacement = placement === "sidebar";
+
+    if (workspaceSwitcher) {
+      return (
+        <div className="relative min-w-0 shrink-0">
+          <button
+            ref={workspaceTriggerRef}
+            type="button"
+            onClick={() => setWorkspaceMenuOpen((open) => !open)}
+            aria-label="Switch workspace"
+            aria-haspopup="listbox"
+            aria-expanded={workspaceMenuOpen}
+            aria-controls={workspaceMenuOpen ? workspaceListboxId : undefined}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+              event.preventDefault();
+              setWorkspaceMenuOpen(true);
+            }}
+            className={`inline-flex min-w-0 items-center gap-2 rounded-lg border text-left shadow-sm transition hover:border-primary-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:hover:border-primary-400 dark:focus-visible:ring-offset-slate-900 ${
+              sidebarPlacement
+                ? "h-12 w-full border-slate-300/80 bg-white px-3 dark:border-slate-700 dark:bg-slate-900"
+                : "h-9 border-slate-200 bg-white px-2 dark:border-slate-700 dark:bg-slate-900"
+            } ${workspaceMenuOpen ? "border-primary/70" : ""}`}
+          >
+            <span
+              className={`flex shrink-0 items-center justify-center rounded-md bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-200 ${
+                sidebarPlacement ? "h-8 w-8" : "h-6 w-6"
+              }`}
+            >
+              <CubeIcon className={sidebarPlacement ? "h-5 w-5" : "h-4 w-4"} />
+            </span>
+            <span className="min-w-0 leading-[1.05]">
+              <span className="block truncate ui-caption font-semibold text-slate-900 dark:text-slate-50">{projectLabel}</span>
+              <span className="mt-px block truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                {workspaceTriggerLabel}
+              </span>
+            </span>
+            <ChevronDownIcon
+              className={`ml-auto h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform dark:text-slate-300 ${
+                workspaceMenuOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          {workspaceMenuOpen && (
+            <AnchoredPortalMenu
+              open={workspaceMenuOpen}
+              anchorRef={workspaceTriggerRef}
+              placement="bottom-start"
+              minWidth={240}
+              className="overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+            >
+              <div ref={workspaceMenuSurfaceRef}>
+                <div
+                  id={workspaceListboxId}
+                  ref={workspaceListboxRef}
+                  className="max-h-72 overflow-y-auto focus:outline-none"
+                  role="listbox"
+                  tabIndex={0}
+                  aria-label="Switch workspace"
+                  aria-activedescendant={
+                    workspaceActiveIndex >= 0 ? `${workspaceListboxId}-option-${workspaceActiveIndex}` : undefined
+                  }
+                  onKeyDown={handleWorkspaceListboxKeyDown}
+                >
+                  {workspaceOptions.map((option, index) => {
+                    const active = workspaceSwitcher.currentWorkspaceId === option.value;
+                    const highlighted = workspaceOptions[workspaceActiveIndex]?.value === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        id={`${workspaceListboxId}-option-${index}`}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        tabIndex={-1}
+                        onMouseEnter={() => setWorkspaceActiveIndex(index)}
+                        onClick={() => activateWorkspaceByIndex(index)}
+                        className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition ${
+                          active
+                            ? "bg-primary-50 text-primary-900 dark:bg-primary-900/30 dark:text-primary-100"
+                            : highlighted
+                              ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                              : "text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        <span className="mt-0.5 h-4 w-4 shrink-0">
+                          {active ? <CheckIcon className="h-4 w-4" /> : null}
+                        </span>
+                        {option.icon && (
+                          <span className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-300">{option.icon}</span>
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate ui-caption font-semibold">{option.label}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </AnchoredPortalMenu>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className={`flex min-w-0 items-center gap-2 ${sidebarPlacement ? "h-12 rounded-lg border border-slate-300/80 bg-white px-3 shadow-sm dark:border-slate-700 dark:bg-slate-900" : ""}`}>
+        <span
+          className={`flex shrink-0 items-center justify-center rounded-md bg-primary-600 text-white ${
+            sidebarPlacement ? "h-8 w-8" : "h-7 w-7"
+          }`}
+        >
+          <CubeIcon className={sidebarPlacement ? "h-5 w-5" : "h-4 w-4"} />
+        </span>
+        <span className="min-w-0 leading-[1.05]">
+          <span className="block truncate ui-caption font-semibold text-slate-900 dark:text-slate-50">{projectLabel}</span>
+          {workspaceTriggerLabel && (
+            <span className="mt-px block truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              {workspaceTriggerLabel}
+            </span>
+          )}
+        </span>
+      </div>
+    );
+  };
+
+  const sidebarChrome =
+    sidebarChromeTarget && showWorkspaceInSidebar
+      ? createPortal(
+          <div className="pointer-events-none flex flex-col bg-slate-50/95 px-2 py-1.5 dark:bg-[#070d18]">
+            <div className="pointer-events-auto min-w-0">{renderWorkspaceSelector("sidebar")}</div>
+          </div>,
+          sidebarChromeTarget
+        )
+      : null;
 
   return (
     <>
+      {sidebarChrome}
       <div
         data-topbar
-        className="z-[45] shrink-0 border-b border-slate-200 bg-white/95 shadow-[0_1px_0_rgba(15,23,42,0.03)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/95"
+        className="z-[45] shrink-0 border-b border-slate-200 bg-white shadow-[0_1px_0_rgba(15,23,42,0.03)] dark:border-slate-800 dark:bg-[#070d18]"
       >
-        <div className="flex h-12 min-w-0 items-center gap-2 px-2.5 sm:gap-3 sm:px-3">
+        <div className={`flex h-12 min-w-0 items-center gap-2 px-2.5 sm:gap-3 sm:px-3 ${topbarOffsetClass}`}>
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             {showMobileMenuButton && (
               <button
@@ -419,115 +584,7 @@ export default function Topbar({
               </button>
             )}
 
-            {showWorkspaceSwitcher && workspaceSwitcher ? (
-              <div className="relative min-w-0 shrink-0">
-                <button
-                  ref={workspaceTriggerRef}
-                  type="button"
-                  onClick={() => setWorkspaceMenuOpen((open) => !open)}
-                  aria-label="Switch workspace"
-                  aria-haspopup="listbox"
-                  aria-expanded={workspaceMenuOpen}
-                  aria-controls={workspaceMenuOpen ? workspaceListboxId : undefined}
-                  onKeyDown={(event) => {
-                    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-                    event.preventDefault();
-                    setWorkspaceMenuOpen(true);
-                  }}
-                  className={`inline-flex h-9 min-w-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 text-left shadow-sm transition hover:border-primary-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-900 dark:hover:border-primary-400 dark:focus-visible:ring-offset-slate-900 ${
-                    workspaceMenuOpen ? "border-primary/70" : ""
-                  }`}
-                >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-200">
-                    <CubeIcon className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0 leading-[1.05]">
-                    <span className="block truncate ui-caption font-semibold text-slate-900 dark:text-slate-50">{projectLabel}</span>
-                    <span className="mt-px block truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                      {workspaceTriggerLabel}
-                    </span>
-                  </span>
-                  <ChevronDownIcon
-                    className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform dark:text-slate-300 ${
-                      workspaceMenuOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-
-                {workspaceMenuOpen && (
-                  <AnchoredPortalMenu
-                    open={workspaceMenuOpen}
-                    anchorRef={workspaceTriggerRef}
-                    placement="bottom-start"
-                    minWidth={240}
-                    className="overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
-                  >
-                    <div ref={workspaceMenuSurfaceRef}>
-                      <div
-                        id={workspaceListboxId}
-                        ref={workspaceListboxRef}
-                        className="max-h-72 overflow-y-auto focus:outline-none"
-                        role="listbox"
-                        tabIndex={0}
-                        aria-label="Switch workspace"
-                        aria-activedescendant={
-                          workspaceActiveIndex >= 0 ? `${workspaceListboxId}-option-${workspaceActiveIndex}` : undefined
-                        }
-                        onKeyDown={handleWorkspaceListboxKeyDown}
-                      >
-                        {workspaceOptions.map((option, index) => {
-                          const active = workspaceSwitcher.currentWorkspaceId === option.value;
-                          const highlighted = workspaceOptions[workspaceActiveIndex]?.value === option.value;
-                          return (
-                            <button
-                              key={option.value}
-                              id={`${workspaceListboxId}-option-${index}`}
-                              type="button"
-                              role="option"
-                              aria-selected={active}
-                              tabIndex={-1}
-                              onMouseEnter={() => setWorkspaceActiveIndex(index)}
-                              onClick={() => activateWorkspaceByIndex(index)}
-                              className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition ${
-                                active
-                                  ? "bg-primary-50 text-primary-900 dark:bg-primary-900/30 dark:text-primary-100"
-                                  : highlighted
-                                    ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"
-                                    : "text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
-                              }`}
-                            >
-                              <span className="mt-0.5 h-4 w-4 shrink-0">
-                                {active ? <CheckIcon className="h-4 w-4" /> : null}
-                              </span>
-                              {option.icon && (
-                                <span className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-300">{option.icon}</span>
-                              )}
-                              <span className="min-w-0">
-                                <span className="block truncate ui-caption font-semibold">{option.label}</span>
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </AnchoredPortalMenu>
-                )}
-              </div>
-            ) : showWorkspaceSwitcher ? (
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary-600 text-white">
-                  <CubeIcon className="h-4 w-4" />
-                </span>
-                <span className="min-w-0 leading-[1.05]">
-                  <span className="block truncate ui-caption font-semibold text-slate-900 dark:text-slate-50">{projectLabel}</span>
-                  {workspaceTriggerLabel && (
-                    <span className="mt-px block truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                      {workspaceTriggerLabel}
-                    </span>
-                  )}
-                </span>
-              </div>
-            ) : null}
+            {showWorkspaceInTopbar ? renderWorkspaceSelector("topbar") : null}
 
             {hasAdaptiveControls ? (
               <div ref={controlsStripRef} className="flex min-w-0 flex-1 items-center pl-1">

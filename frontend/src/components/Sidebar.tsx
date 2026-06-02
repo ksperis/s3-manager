@@ -10,7 +10,10 @@ import {
   useState,
 } from "react";
 import { NavLink } from "react-router-dom";
-import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_MAX_WIDTH } from "./sidebarSizing";
+import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH } from "./sidebarSizing";
+
+export const SIDEBAR_CHROME_SLOT_ID = "app-sidebar-chrome-slot";
+export const SIDEBAR_CHROME_SLOT_EVENT = "s3-manager-sidebar-chrome-slot-change";
 
 export type SidebarLink = {
   to: string;
@@ -100,38 +103,77 @@ export default function Sidebar({
     }));
   };
 
+  const sidebarWidth = variant === "desktop" ? width ?? SIDEBAR_DEFAULT_WIDTH : undefined;
+
+  useEffect(() => {
+    if (variant !== "desktop" || !sidebarWidth) return;
+    document.documentElement.style.setProperty("--s3-manager-sidebar-width", `${sidebarWidth}px`);
+    return () => {
+      document.documentElement.style.removeProperty("--s3-manager-sidebar-width");
+    };
+  }, [sidebarWidth, variant]);
+
+  useEffect(() => {
+    if (variant !== "desktop" || typeof window === "undefined") return;
+    window.dispatchEvent(new Event(SIDEBAR_CHROME_SLOT_EVENT));
+    return () => {
+      window.dispatchEvent(new Event(SIDEBAR_CHROME_SLOT_EVENT));
+    };
+  }, [compact, sidebarWidth, variant]);
+
   const baseLinkClasses = compact
     ? "group relative flex h-9 items-center justify-center rounded-md px-2 ui-caption font-semibold leading-4 transition"
     : "group relative flex h-8 items-center justify-between gap-2 overflow-hidden rounded-md px-2.5 ui-caption font-semibold leading-4 transition";
   const inactiveLinkClasses =
-    "text-slate-700 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800/80 dark:hover:text-slate-50";
+    "text-slate-700 hover:bg-white hover:text-slate-950 hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50";
   const activeLinkClasses =
     compact
-      ? "bg-blue-50 text-blue-700 shadow-sm dark:bg-blue-950/40 dark:text-blue-100"
-      : "bg-blue-50 text-blue-700 shadow-sm before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-r-full before:bg-blue-600 dark:bg-blue-950/40 dark:text-blue-100 dark:before:bg-blue-300";
+      ? "bg-primary-50 text-primary-700 shadow-sm dark:bg-primary-950/45 dark:text-primary-100"
+      : "bg-primary-50 text-primary-800 shadow-sm before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-r-full before:bg-primary-600 dark:bg-primary-950/45 dark:text-primary-100 dark:before:bg-primary-300";
   const badgeClasses = "shrink-0 rounded-full px-1.5 py-0.5 ui-caption font-semibold";
   const activeBadgeClasses = "bg-primary-200/80 text-primary-900 dark:bg-primary-800/70 dark:text-primary-100";
   const inactiveBadgeClasses =
     "bg-slate-100 text-slate-600 group-hover:bg-slate-200/90 group-hover:text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:group-hover:bg-slate-700 dark:group-hover:text-slate-100";
   const containerClasses =
     variant === "desktop"
-      ? `relative hidden h-full shrink-0 border-r border-slate-200 bg-white/95 dark:border-slate-800 dark:bg-slate-950 md:flex md:flex-col ${
+      ? `relative hidden h-full shrink-0 border-r border-slate-200 bg-slate-50/95 dark:border-slate-800 dark:bg-[#070d18] md:flex md:flex-col ${
           compact ? "px-1.5" : "px-0"
         } ${resizing ? "" : "transition-[width,padding] duration-200 ease-out"}`
-      : "flex h-full flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950";
+      : "flex h-full flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-[#070d18]";
   const rootClassName = className ? `${containerClasses} ${className}` : containerClasses;
-  const iconClasses = compact ? "h-4 w-4" : "h-3.5 w-3.5";
+  const iconClasses = "h-4 w-4";
   const rootStyle: CSSProperties | undefined =
-    variant === "desktop" && width
+    variant === "desktop" && sidebarWidth
       ? {
-          width: `${width}px`,
+          width: `${sidebarWidth}px`,
+        }
+      : undefined;
+  const chromeSlotStyle: CSSProperties | undefined =
+    variant === "desktop" && sidebarWidth
+      ? {
+          width: `${sidebarWidth}px`,
+        }
+      : undefined;
+  const navStyle: CSSProperties | undefined =
+    variant === "desktop" && !compact
+      ? {
+          paddingTop: "var(--s3-manager-sidebar-nav-offset, 0.75rem)",
         }
       : undefined;
 
   return (
     <aside className={rootClassName} style={rootStyle} data-sidebar-variant={variant}>
+      {variant === "desktop" && !compact ? (
+        <div
+          id={SIDEBAR_CHROME_SLOT_ID}
+          className="fixed left-0 top-0 z-[46] hidden overflow-visible border-r border-slate-200 bg-slate-50/95 dark:border-slate-800 dark:bg-[#070d18] md:block"
+          style={chromeSlotStyle}
+          data-sidebar-chrome-slot
+        />
+      ) : null}
       <nav
-        className={`flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-3 ${compact ? "px-0" : "px-2.5"}`}
+        className={`flex min-h-0 flex-1 flex-col overflow-y-auto pb-3 ${compact ? "gap-2 px-0 py-3" : "gap-3 px-2.5"}`}
+        style={navStyle}
         aria-label={`${title} navigation`}
       >
         {!compact && headerAction ? <div className="pb-1">{headerAction}</div> : null}
@@ -141,21 +183,21 @@ export default function Sidebar({
           return (
             <section
               key={section.label}
-              className="space-y-1"
+              className="space-y-1.5"
             >
               {compact ? (
-                <div className="mx-auto my-1 h-1 w-6 rounded-full bg-slate-200 dark:bg-slate-700" />
+                <div className="mx-auto my-1 h-px w-6 rounded-full bg-slate-200 dark:bg-slate-700" />
               ) : collapsible ? (
                 <button
                   type="button"
                   onClick={() => toggleSection(section.label, collapsible)}
-                  className="flex h-5 w-full items-center justify-between rounded-md px-1.5 text-[10px] font-bold uppercase text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-200"
+                  className="flex h-5 w-full items-center justify-between rounded-md px-1.5 text-[10px] font-bold uppercase text-slate-500 transition hover:bg-white hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-900 dark:hover:text-slate-300"
                 >
                   <span>{section.label}</span>
                   <SidebarChevronIcon className={`h-3.5 w-3.5 transition-transform ${isCollapsed ? "" : "rotate-90"}`} />
                 </button>
               ) : (
-                <div className="px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">
+                <div className="px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-500">
                   {section.label}
                 </div>
               )}
@@ -198,7 +240,7 @@ export default function Sidebar({
                                   className={`shrink-0 ${
                                     isActive
                                       ? "text-primary-700 dark:text-primary-200"
-                                      : "text-slate-500 dark:text-slate-400"
+                                      : "text-slate-500 group-hover:text-slate-700 dark:text-slate-400 dark:group-hover:text-slate-200"
                                   } ${iconClasses}`}
                                 >
                                   {link.icon ?? resolveSidebarLinkIcon(link)}
@@ -230,7 +272,7 @@ export default function Sidebar({
             onClick={onCollapseToggle}
             aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
             title={compact ? "Expand" : undefined}
-            className={`flex h-8 w-full items-center rounded-md text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50 ${
+            className={`flex h-8 w-full items-center rounded-md text-[12px] font-semibold text-slate-600 transition hover:bg-white hover:text-slate-950 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50 ${
               compact ? "justify-center px-2" : "gap-2 px-2.5"
             }`}
           >
