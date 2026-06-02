@@ -26,10 +26,14 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
    - quota and usage columns are available as single-line atomic columns so on-screen review and CSV export stay aligned.
    - the **Notifications** column can be added to inspect bucket notification
      configuration across supported contexts.
+   - bucket notification configurations can be added, updated, previewed, or
+     deleted in bulk from the same action flow as lifecycle rules.
 5. In **Advanced filter**, use the compact **Context** and **Endpoint**
    selectors to pick authorized scopes directly. Their quick filters match
    names, types, and standard tags, and **Select filtered** / **Deselect
    filtered** apply to the currently filtered list.
+   The shared feature-detail filters also support lifecycle rule status, such
+   as locating buckets with disabled lifecycle rules.
 6. During long bulk actions (copy, preview, apply, and large exports), follow the in-page progress bars to track completion and failures.
 7. Use **Context**, **Kind**, and **Endpoint** columns to distinguish identical bucket names across contexts.
 8. Bucket listings are cached for up to 30 minutes per authorized context. Use **Refresh** in the bucket workbench to flush cached listings and reload the current view.

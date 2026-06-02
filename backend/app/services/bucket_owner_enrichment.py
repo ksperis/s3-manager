@@ -34,6 +34,7 @@ class BucketOwnerIdentity:
 @dataclass
 class BucketOwnerMetadata:
     owner_name: str | None = None
+    suspended: bool | None = None
     quota_max_size_bytes: int | None = None
     quota_max_objects: int | None = None
 
@@ -65,6 +66,28 @@ def _normalize_optional_str(value: object) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _parse_owner_suspended(*values: object) -> bool | None:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)) and value in {0, 1}:
+            return bool(value)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "y", "on", "suspended"}:
+                return True
+            if normalized in {"false", "0", "no", "n", "off", "active", "enabled", "disabled"}:
+                return False
+    return None
+
+
+def _nested_payload(payload: dict, key: str) -> dict:
+    nested = payload.get(key)
+    return nested if isinstance(nested, dict) else {}
 
 
 def _normalize_owner_identity(tenant: str | None, owner: str | None) -> BucketOwnerIdentity | None:
@@ -258,6 +281,7 @@ class BucketOwnerMetadataService:
         buckets: list[CephAdminBucketSummary],
         *,
         include_name: bool = False,
+        include_suspended: bool = False,
         include_quota: bool = False,
         include_usage: bool = False,
         usage_by_key: dict[str, BucketOwnerUsage] | None = None,
@@ -266,7 +290,7 @@ class BucketOwnerMetadataService:
             return buckets
         if include_usage:
             apply_bucket_owner_usage_map(buckets, usage_by_key or compute_bucket_owner_usage(buckets))
-        if not include_name and not include_quota:
+        if not include_name and not include_suspended and not include_quota:
             return buckets
 
         owner_targets: dict[str, BucketOwnerIdentity] = {}
@@ -278,6 +302,8 @@ class BucketOwnerMetadataService:
             for bucket in buckets:
                 if include_name:
                     bucket.owner_name = None
+                if include_suspended:
+                    bucket.owner_suspended = None
                 if include_quota:
                     bucket.owner_quota_max_size_bytes = None
                     bucket.owner_quota_max_objects = None
@@ -288,15 +314,31 @@ class BucketOwnerMetadataService:
         user_targets = [item for item in owner_targets.values() if item.owner_kind == "user"]
 
         if account_targets:
-            metadata_by_key.update(self._resolve_account_metadata(account_targets, include_name=include_name, include_quota=include_quota))
+            metadata_by_key.update(
+                self._resolve_account_metadata(
+                    account_targets,
+                    include_name=include_name,
+                    include_suspended=include_suspended,
+                    include_quota=include_quota,
+                )
+            )
         if user_targets:
-            metadata_by_key.update(self._resolve_user_metadata(user_targets, include_name=include_name, include_quota=include_quota))
+            metadata_by_key.update(
+                self._resolve_user_metadata(
+                    user_targets,
+                    include_name=include_name,
+                    include_suspended=include_suspended,
+                    include_quota=include_quota,
+                )
+            )
 
         for bucket in buckets:
             owner_key = owner_identity_key(bucket.tenant, bucket.owner)
             metadata = metadata_by_key.get(owner_key) if owner_key else None
             if include_name:
                 bucket.owner_name = metadata.owner_name if metadata else None
+            if include_suspended:
+                bucket.owner_suspended = metadata.suspended if metadata else None
             if include_quota:
                 bucket.owner_quota_max_size_bytes = metadata.quota_max_size_bytes if metadata else None
                 bucket.owner_quota_max_objects = metadata.quota_max_objects if metadata else None
@@ -307,6 +349,7 @@ class BucketOwnerMetadataService:
         owners: list[BucketOwnerIdentity],
         *,
         include_name: bool,
+        include_suspended: bool,
         include_quota: bool,
     ) -> dict[str, BucketOwnerMetadata]:
         metadata_by_key: dict[str, BucketOwnerMetadata] = {}
@@ -324,13 +367,23 @@ class BucketOwnerMetadataService:
             detail = listing_entry or self._get_account_detail(identity.owner)
             quota_size = quota_objects = None
             owner_name = None
+            suspended = None
             if isinstance(detail, dict):
                 if include_name:
                     owner_name = _normalize_optional_str(detail.get("name") or detail.get("account_name"))
+                if include_suspended:
+                    suspended = _parse_owner_suspended(
+                        detail.get("suspended"),
+                        detail.get("status"),
+                        detail.get("state"),
+                    )
+                    if suspended is None:
+                        suspended = False
                 if include_quota:
                     quota_size, quota_objects = extract_quota_limits(detail, keys=("quota", "account_quota"))
             metadata_by_key[identity.key] = BucketOwnerMetadata(
                 owner_name=owner_name,
+                suspended=suspended,
                 quota_max_size_bytes=quota_size,
                 quota_max_objects=quota_objects,
             )
@@ -341,17 +394,31 @@ class BucketOwnerMetadataService:
         owners: list[BucketOwnerIdentity],
         *,
         include_name: bool,
+        include_suspended: bool,
         include_quota: bool,
     ) -> dict[str, BucketOwnerMetadata]:
         if len(owners) <= 1:
-            return {owner.key: self._build_user_metadata(owner, include_name=include_name, include_quota=include_quota) for owner in owners}
+            return {
+                owner.key: self._build_user_metadata(
+                    owner,
+                    include_name=include_name,
+                    include_suspended=include_suspended,
+                    include_quota=include_quota,
+                )
+                for owner in owners
+            }
 
         max_workers = min(OWNER_LOOKUP_MAX_WORKERS, len(owners))
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="bucket-owner-user") as executor:
             results = executor.map(
                 lambda owner: (
                     owner.key,
-                    self._build_user_metadata(owner, include_name=include_name, include_quota=include_quota),
+                    self._build_user_metadata(
+                        owner,
+                        include_name=include_name,
+                        include_suspended=include_suspended,
+                        include_quota=include_quota,
+                    ),
                 ),
                 owners,
             )
@@ -362,17 +429,32 @@ class BucketOwnerMetadataService:
         identity: BucketOwnerIdentity,
         *,
         include_name: bool,
+        include_suspended: bool,
         include_quota: bool,
     ) -> BucketOwnerMetadata:
         payload = self._get_user_detail(identity.owner, tenant=identity.tenant)
         if not isinstance(payload, dict):
             return BucketOwnerMetadata()
+        user_payload = _nested_payload(payload, "user")
         owner_name = _normalize_optional_str(payload.get("display_name")) if include_name else None
+        suspended = None
+        if include_suspended:
+            suspended = _parse_owner_suspended(
+                payload.get("suspended"),
+                user_payload.get("suspended"),
+                payload.get("status"),
+                user_payload.get("status"),
+                payload.get("state"),
+                user_payload.get("state"),
+            )
+            if suspended is None:
+                suspended = False
         quota_size = quota_objects = None
         if include_quota:
             quota_size, quota_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
         return BucketOwnerMetadata(
             owner_name=owner_name,
+            suspended=suspended,
             quota_max_size_bytes=quota_size,
             quota_max_objects=quota_objects,
         )

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,6 +27,7 @@ vi.mock("../../api/cephAdmin", () => ({
   deleteCephAdminBucketLogging: mocks.noopAsync,
   deleteCephAdminBucketCors: mocks.noopAsync,
   deleteCephAdminBucketLifecycle: mocks.noopAsync,
+  deleteCephAdminBucketNotifications: mocks.noopAsync,
   deleteCephAdminBucketPolicy: mocks.noopAsync,
   getCephAdminBucketCors: mocks.noopAsync,
   getCephAdminBucketEncryption: mocks.noopAsync,
@@ -40,6 +42,7 @@ vi.mock("../../api/cephAdmin", () => ({
   putCephAdminBucketLogging: mocks.noopAsync,
   putCephAdminBucketCors: mocks.noopAsync,
   putCephAdminBucketLifecycle: mocks.noopAsync,
+  putCephAdminBucketNotifications: mocks.noopAsync,
   putCephAdminBucketPolicy: mocks.noopAsync,
   refreshCephAdminBucketListingCache: mocks.refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning: mocks.noopAsync,
@@ -55,6 +58,7 @@ vi.mock("../../api/storageOps", () => ({
   deleteStorageOpsBucketCors: mocks.noopAsync,
   deleteStorageOpsBucketLifecycle: mocks.noopAsync,
   deleteStorageOpsBucketLogging: mocks.noopAsync,
+  deleteStorageOpsBucketNotifications: mocks.noopAsync,
   deleteStorageOpsBucketPolicy: mocks.noopAsync,
   getStorageOpsBucketCors: mocks.noopAsync,
   getStorageOpsBucketEncryption: mocks.noopAsync,
@@ -69,6 +73,7 @@ vi.mock("../../api/storageOps", () => ({
   putStorageOpsBucketCors: mocks.noopAsync,
   putStorageOpsBucketLifecycle: mocks.noopAsync,
   putStorageOpsBucketLogging: mocks.noopAsync,
+  putStorageOpsBucketNotifications: mocks.noopAsync,
   putStorageOpsBucketPolicy: mocks.noopAsync,
   refreshStorageOpsBucketListingCache: mocks.refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning: mocks.noopAsync,
@@ -84,7 +89,7 @@ vi.mock("../cephAdmin/CephAdminEndpointContext", () => ({
     selectedEndpoint: {
       id: 7,
       name: "Archive",
-      capabilities: { metrics: false, static_website: true, sse: true },
+      capabilities: { metrics: false, static_website: true, sns: true, sse: true },
       tags: [],
     },
     endpoints: [],
@@ -109,7 +114,13 @@ vi.mock("../manager/BucketDetailPage", () => ({
 }));
 
 vi.mock("./BucketOpsBulkUpdateModal", () => ({
-  default: () => null,
+  default: ({
+    open,
+    children,
+  }: {
+    open: boolean;
+    children: ReactNode;
+  }) => (open ? <div role="dialog" aria-label="Bulk update">{children}</div> : null),
 }));
 
 vi.mock("./BucketOpsRowActionsMenu", () => ({
@@ -121,14 +132,19 @@ vi.mock("./BucketSelectionActionsBar", () => ({
     exportSelectedBuckets,
     onShowConfigBackupModal,
     selectionActionProgress,
+    openBulkUpdateModal,
   }: {
     exportSelectedBuckets: (format: "text" | "csv" | "json") => Promise<void> | void;
     onShowConfigBackupModal?: () => void;
     selectionActionProgress?: { label: string; completed: number; total: number } | null;
+    openBulkUpdateModal: () => void;
   }) => (
     <div>
       <button type="button" onClick={() => void exportSelectedBuckets("csv")}>
         Trigger CSV export
+      </button>
+      <button type="button" onClick={openBulkUpdateModal}>
+        Trigger bulk update
       </button>
       {onShowConfigBackupModal ? (
         <button type="button" onClick={onShowConfigBackupModal}>
@@ -413,5 +429,24 @@ describe("BucketOpsWorkbench selection actions", () => {
     });
     expect(window.URL.createObjectURL).toHaveBeenCalled();
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+  });
+
+  it("offers bulk notification configuration operations", async () => {
+    const allBuckets = buildBuckets(1);
+    mocks.listCephAdminBuckets.mockImplementation(createBucketListMock(allBuckets));
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="ceph-admin" shell={{ pageDescription: "Ceph buckets" }} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger bulk update" }));
+
+    expect(await screen.findByRole("dialog", { name: "Bulk update" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Add or update notification configurations" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Delete notification configurations" })).toBeInTheDocument();
   });
 });

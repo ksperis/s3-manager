@@ -28,6 +28,7 @@ vi.mock("../../api/cephAdmin", () => ({
   deleteCephAdminBucketLogging: mocks.noopAsync,
   deleteCephAdminBucketCors: mocks.noopAsync,
   deleteCephAdminBucketLifecycle: mocks.noopAsync,
+  deleteCephAdminBucketNotifications: mocks.noopAsync,
   deleteCephAdminBucketPolicy: mocks.noopAsync,
   getCephAdminBucketCors: mocks.noopAsync,
   getCephAdminBucketEncryption: mocks.noopAsync,
@@ -42,6 +43,7 @@ vi.mock("../../api/cephAdmin", () => ({
   putCephAdminBucketLogging: mocks.noopAsync,
   putCephAdminBucketCors: mocks.noopAsync,
   putCephAdminBucketLifecycle: mocks.noopAsync,
+  putCephAdminBucketNotifications: mocks.noopAsync,
   putCephAdminBucketPolicy: mocks.noopAsync,
   refreshCephAdminBucketListingCache: mocks.refreshCephAdminBucketListingCache,
   setCephAdminBucketVersioning: mocks.noopAsync,
@@ -57,6 +59,7 @@ vi.mock("../../api/storageOps", () => ({
   deleteStorageOpsBucketCors: mocks.noopAsync,
   deleteStorageOpsBucketLifecycle: mocks.noopAsync,
   deleteStorageOpsBucketLogging: mocks.noopAsync,
+  deleteStorageOpsBucketNotifications: mocks.noopAsync,
   deleteStorageOpsBucketPolicy: mocks.noopAsync,
   getStorageOpsBucketCors: mocks.noopAsync,
   getStorageOpsBucketEncryption: mocks.noopAsync,
@@ -71,6 +74,7 @@ vi.mock("../../api/storageOps", () => ({
   putStorageOpsBucketCors: mocks.noopAsync,
   putStorageOpsBucketLifecycle: mocks.noopAsync,
   putStorageOpsBucketLogging: mocks.noopAsync,
+  putStorageOpsBucketNotifications: mocks.noopAsync,
   putStorageOpsBucketPolicy: mocks.noopAsync,
   refreshStorageOpsBucketListingCache: mocks.refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning: mocks.noopAsync,
@@ -417,6 +421,29 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         with_stats: false,
       })
     );
+  });
+
+  it("loads and renders the owner suspended column in storage ops", async () => {
+    window.localStorage.setItem(
+      STORAGE_OPS_COLUMNS_STORAGE_KEY,
+      JSON.stringify(["context_name", "owner_suspended"])
+    );
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [{ ...baseBucket, owner_suspended: true }],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    await waitFor(() => expect(mocks.listStorageOpsBuckets).toHaveBeenCalledTimes(2));
+    expect(mocks.listStorageOpsBuckets.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({
+        include: ["owner_suspended"],
+        with_stats: false,
+      })
+    );
+    expect(screen.getByText("Owner suspended")).toBeInTheDocument();
+    expect(screen.getByText("Yes")).toBeInTheDocument();
   });
 
   it("loads owner usage percentage columns with owner quota metadata and stats", async () => {

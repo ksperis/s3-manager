@@ -62,6 +62,7 @@ class CephAdminBucketSummary(BaseModel):
     tenant: Optional[str] = None
     owner: Optional[str] = None
     owner_name: Optional[str] = None
+    owner_suspended: Optional[bool] = None
     used_bytes: Optional[int] = None
     object_count: Optional[int] = None
     quota_max_size_bytes: Optional[int] = None
@@ -291,6 +292,7 @@ BucketFilterField = Literal[
     "tenant",
     "owner",
     "owner_name",
+    "owner_suspended",
     "owner_kind",
     "context_id",
     "context_name",
@@ -352,6 +354,7 @@ BucketFeatureState = Literal[
 ]
 BucketFeatureParam = Literal[
     "lifecycle_rule_id",
+    "lifecycle_rule_status",
     "lifecycle_rule_type",
     "lifecycle_expiration_days",
     "lifecycle_noncurrent_expiration_days",
@@ -430,6 +433,7 @@ class CephAdminBucketFilterRule(BaseModel):
                 assert self.param is not None
                 allowed: dict[BucketFeatureParam, tuple[set[str], set[str], bool]] = {
                     "lifecycle_rule_id": ({"lifecycle_rules"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
+                    "lifecycle_rule_status": ({"lifecycle_rules"}, {"eq", "neq"}, True),
                     "lifecycle_rule_type": ({"lifecycle_rules"}, {"has", "has_not"}, True),
                     "lifecycle_expiration_days": ({"lifecycle_rules"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
                     "lifecycle_noncurrent_expiration_days": ({"lifecycle_rules"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),

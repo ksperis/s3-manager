@@ -547,6 +547,7 @@ export type CephAdminBucket = {
   tenant?: string | null;
   owner?: string | null;
   owner_name?: string | null;
+  owner_suspended?: boolean | null;
   context_id?: string | null;
   context_name?: string | null;
   context_kind?: "account" | "connection" | "s3_user" | null;
