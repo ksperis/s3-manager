@@ -136,7 +136,7 @@ export default function Sidebar({
 
   return (
     <aside className={rootClassName} style={rootStyle} data-sidebar-variant={variant}>
-      <div className={`flex h-14 shrink-0 items-center border-b border-[color:var(--shell-border)] ${compact ? "justify-center px-2" : "gap-3 px-4"}`}>
+      <div className={`relative flex h-14 shrink-0 items-center after:absolute after:bottom-0 after:left-0 after:right-px after:h-px after:bg-[var(--shell-border)] ${compact ? "justify-center px-2" : "gap-3 px-4"}`}>
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-[0_10px_20px_rgba(37,99,235,0.22)]">
           <BrandCubeIcon className="h-4 w-4" />
         </span>
