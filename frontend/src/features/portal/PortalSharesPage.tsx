@@ -15,8 +15,14 @@ import {
   type PortalStorageSpaceRole,
   type PortalStorageSpaceShare,
 } from "../../api/portal";
+import PageBanner from "../../components/PageBanner";
+import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
+import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import UiBadge from "../../components/ui/UiBadge";
+import UiButton from "../../components/ui/UiButton";
+import UiCard from "../../components/ui/UiCard";
 import { extractApiError } from "../../utils/apiError";
-import { PortalV3Badge, PortalV3Card, PortalV3Page, PortalV3PageHeader } from "./PortalV3Components";
 import type { PortalWorkspaceRole } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
@@ -41,8 +47,8 @@ type ShareRow = {
 };
 
 function roleTone(role: PortalWorkspaceRole) {
-  if (role === "Owner") return "blue";
-  if (role === "Editor") return "green";
+  if (role === "Owner") return "primary";
+  if (role === "Editor") return "success";
   return "neutral";
 }
 
@@ -73,7 +79,7 @@ function SharesTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="portal-v3-table min-w-[760px]">
+      <table className="ui-data-table min-w-[760px]">
         <thead>
           <tr>
             <th>Name</th>
@@ -103,7 +109,7 @@ function SharesTable({
                     ))}
                   </select>
                 ) : (
-                  <PortalV3Badge tone={roleTone(share.access)}>{share.access}</PortalV3Badge>
+                  <UiBadge tone={roleTone(share.access)}>{share.access}</UiBadge>
                 )}
               </td>
               <td>{share.expiresLabel ?? "-"}</td>
@@ -115,7 +121,7 @@ function SharesTable({
                       type="button"
                       disabled={busyShareId === share.id}
                       onClick={() => onRevoke(share)}
-                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 shadow-sm hover:border-rose-200 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      className={tableDeleteActionClasses}
                     >
                       Revoke
                     </button>
@@ -329,38 +335,29 @@ export default function PortalSharesPage() {
   const shares = rows[activeTab];
 
   if (accountLoading || loading) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Loading shares...</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="info">Loading shares...</PageBanner></div>;
   }
 
   if (accountError || error || !hasAccountContext) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">{accountError ?? error ?? "Select an account."}</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone={accountError || error ? "error" : "info"}>{accountError ?? error ?? "Select an account."}</PageBanner></div>;
   }
 
   return (
-    <PortalV3Page>
-      <PortalV3PageHeader title="Shares" description="Manage shared access with Viewer, Editor, and Owner roles." />
-      {sharesError ? (
-        <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-          {sharesError}
-        </div>
-      ) : null}
-      <PortalV3Card>
-        <div className="mb-3 flex gap-7 border-b border-slate-100">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={activeTab === tab.id ? "portal-v3-tab portal-v3-tab-active" : "portal-v3-tab"}
-            >
-              {tab.label}
-            </button>
-          ))}
+    <div className="space-y-4">
+      <PageHeader
+        title="Shares"
+        description="Manage shared access with Viewer, Editor, and Owner roles."
+        breadcrumbs={[{ label: "Portal" }, { label: "Shares" }]}
+      />
+      {sharesError ? <PageBanner tone="warning">{sharesError}</PageBanner> : null}
+      <UiCard>
+        <div className="mb-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+          <PageTabs tabs={[...tabs]} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as ShareTab)} variant="bar" />
         </div>
         {sharesLoading ? <div className="mb-3 text-xs font-semibold text-slate-500">Loading share permissions...</div> : null}
         {activeTab === "links" ? (
           <div className="overflow-x-auto">
-            <table className="portal-v3-table min-w-[860px]">
+            <table className="ui-data-table min-w-[860px]">
               <thead>
                 <tr>
                   <th>Storage Space</th>
@@ -376,7 +373,7 @@ export default function PortalSharesPage() {
                   <tr key={link.id}>
                     <td className="font-bold text-slate-950">{link.storage_space_name}</td>
                     <td>{link.object_name}</td>
-                    <td>{link.status}</td>
+                    <td><UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{link.status}</UiBadge></td>
                     <td>{link.expires_at ? new Date(link.expires_at).toLocaleDateString() : "-"}</td>
                     <td className="max-w-[260px] truncate text-blue-700">{link.url}</td>
                     <td className="text-right">
@@ -385,7 +382,7 @@ export default function PortalSharesPage() {
                           type="button"
                           disabled={busyShareId === `public-link-${link.id}`}
                           onClick={() => handleRevokePublicLink(link)}
-                          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 shadow-sm hover:border-rose-200 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          className={tableDeleteActionClasses}
                         >
                           Revoke
                         </button>
@@ -415,10 +412,10 @@ export default function PortalSharesPage() {
         <div className="mt-4 flex items-center justify-between text-[11px] font-semibold text-slate-500">
           <span>{shares.length} of {shares.length}</span>
         </div>
-      </PortalV3Card>
+      </UiCard>
 
       {activeTab !== "links" ? (
-        <PortalV3Card title="Create a new share">
+        <UiCard title="Create a new share">
           <div className="grid gap-3 md:grid-cols-[1fr_180px_160px_auto]">
             <select className="ui-control h-8 py-1.5 text-xs" value={selectedSpaceId} onChange={(event) => setSelectedSpaceId(event.target.value)}>
               {workspace.spaces.map((space) => (
@@ -440,14 +437,14 @@ export default function PortalSharesPage() {
               type="button"
               disabled={!accountIdForApi || !selectedSpaceId || !email.trim() || busyShareId === "new"}
               onClick={handleCreateShare}
-              className="h-8 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className={tableActionButtonClasses}
             >
               Create share
             </button>
           </div>
-        </PortalV3Card>
+        </UiCard>
       ) : (
-        <PortalV3Card title="Create a public link">
+        <UiCard title="Create a public link">
           <div className="grid gap-3 md:grid-cols-[180px_1fr_220px_auto]">
             <select className="ui-control h-8 py-1.5 text-xs" value={selectedSpaceId} onChange={(event) => setSelectedSpaceId(event.target.value)}>
               {workspace.spaces.filter((space) => space.role === "Owner").map((space) => (
@@ -456,17 +453,16 @@ export default function PortalSharesPage() {
             </select>
             <input className="ui-control h-8 text-xs" value={publicObjectKey} onChange={(event) => setPublicObjectKey(event.target.value)} placeholder="path/to/object.ext" />
             <input type="datetime-local" className="ui-control h-8 text-xs" value={publicLinkExpiration} onChange={(event) => setPublicLinkExpiration(event.target.value)} aria-label="Public link expiration" />
-            <button
-              type="button"
+            <UiButton
               disabled={!accountIdForApi || !selectedSpaceId || !publicObjectKey.trim() || busyShareId === "public-link"}
               onClick={handleCreatePublicLink}
-              className="h-8 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-8 px-3 py-1.5"
             >
               Create link
-            </button>
+            </UiButton>
           </div>
-        </PortalV3Card>
+        </UiCard>
       )}
-    </PortalV3Page>
+    </div>
   );
 }

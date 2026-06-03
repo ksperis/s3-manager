@@ -119,7 +119,7 @@ export default function Sidebar({
       ? "shell-sidebar-item-active"
       : "shell-sidebar-item-active before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-r-full before:bg-primary";
   const badgeClasses = "shrink-0 rounded-full px-1.5 py-0.5 ui-caption font-semibold";
-  const activeBadgeClasses = "bg-primary/15 text-primary-700 dark:text-primary-100";
+  const activeBadgeClasses = "bg-primary/15 text-primary-700 dark:text-[var(--shell-selected-text)]";
   const inactiveBadgeClasses = "shell-menu-muted shell-muted-text";
   const containerClasses =
     variant === "desktop"

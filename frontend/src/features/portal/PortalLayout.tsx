@@ -113,7 +113,6 @@ function PortalShell() {
       sidebarTitle="PORTAL"
       hideHeader
       topbarControlDescriptors={topbarControlDescriptors}
-      mainClassName="portal-v3"
     />
   );
 }

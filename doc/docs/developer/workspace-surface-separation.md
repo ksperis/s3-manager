@@ -50,12 +50,12 @@ Portal canonical routes are:
 
 Portal administration mock pages such as `/portal/users`, `/portal/groups`,
 `/portal/policies`, and `/portal/access-keys` are intentionally not routed in
-the V3 production surface. They can return later only as real user-facing
+the production Portal surface. They can return later only as real user-facing
 Portal features or isolated demo/test fixtures.
 
 ## Portal Backend Cleanup Notes
 
-Portal V3 uses Storage Space, file, share, activity, transfer, usage, alert,
+Portal uses Storage Space, file, share, activity, transfer, usage, alert,
 billing-source, health, and simple settings endpoints only. Legacy backend
 routes that exposed bucket-centric or advanced identity concepts have been
 removed from the Portal router and API client:
@@ -77,7 +77,7 @@ advanced Portal settings payload.
 
 ### Breaking API Notes
 
-Portal V3 clients must not call the removed legacy endpoints listed above.
+Portal clients must not call the removed legacy endpoints listed above.
 Use these replacement surfaces instead:
 
 - Storage Space list/detail/create/update: `/portal/storage-spaces*`.
@@ -86,7 +86,7 @@ Use these replacement surfaces instead:
 - Collaboration: `/portal/storage-spaces/{spaceId}/shares*`.
 - Public links: `/portal/storage-spaces/{spaceId}/public-links*`.
 - Usage, activity, transfers, alerts, traffic, health, and billing source:
-  the remaining Portal V3 read endpoints.
+  the remaining Portal read endpoints.
 - Portal override governance:
   `/admin/accounts/{accountId}/portal-settings`.
 
@@ -134,7 +134,7 @@ The Portal backend tests include permission regressions for `Viewer`, `Editor`,
 and `Owner` across object listing, download, upload, folder creation, delete,
 sharing, and removed advanced settings routes.
 
-## Portal V3 Fallback Policy
+## Portal Fallback Policy
 
 Production Portal pages use real Portal APIs first. When a backend capability
 is absent, the UI must show an empty or unavailable state instead of generated
@@ -143,9 +143,9 @@ production-looking data.
 Allowed deterministic fixture data is limited to tests, docs screenshots, and
 isolated demo setup. It must not be imported by production Portal pages.
 
-## Portal V3 Visual QA
+## Portal Visual QA
 
-Portal V3 has a deterministic local QA scenario in the docs screenshot
+Portal has a deterministic local QA scenario in the docs screenshot
 Playwright setup:
 
 - authenticated user: `storage.user@example.com`;
@@ -166,7 +166,7 @@ from `frontend/` and are committed under
 - `portal-usage`;
 - `portal-settings`.
 
-`portalV3VisualQa.spec.ts` also opens these Portal routes in desktop and mobile
+`portalVisualQa.spec.ts` also opens these Portal routes in desktop and mobile
 viewports:
 
 - `/portal`

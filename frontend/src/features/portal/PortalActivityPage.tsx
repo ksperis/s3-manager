@@ -3,7 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useMemo, useState } from "react";
-import { PortalV3Card, PortalV3Page, PortalV3PageHeader } from "./PortalV3Components";
+import PageBanner from "../../components/PageBanner";
+import PageHeader from "../../components/PageHeader";
+import UiCard from "../../components/ui/UiCard";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 export default function PortalActivityPage() {
@@ -25,22 +27,23 @@ export default function PortalActivityPage() {
   );
 
   if (accountLoading || loading) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Loading activity...</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="info">Loading activity...</PageBanner></div>;
   }
 
   if (accountError || error || !hasAccountContext) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">{accountError ?? error ?? "Select an account."}</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone={accountError || error ? "error" : "info"}>{accountError ?? error ?? "Select an account."}</PageBanner></div>;
   }
 
   return (
-    <PortalV3Page>
-      <PortalV3PageHeader
+    <div className="space-y-4">
+      <PageHeader
         title="Activity"
         description="Overview of actions in your account."
+        breadcrumbs={[{ label: "Portal" }, { label: "Activity" }]}
         right={<div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Current period</div>}
       />
 
-      <PortalV3Card>
+      <UiCard>
         <div className="mb-4 flex flex-wrap gap-3">
           <select className="ui-control h-8 w-44 py-1.5 text-xs" value={actionFilter} onChange={(event) => setActionFilter(event.target.value)}>
             {actionOptions.map((action) => (
@@ -55,7 +58,7 @@ export default function PortalActivityPage() {
           </select>
         </div>
         <div className="overflow-x-auto">
-          <table className="portal-v3-table min-w-[860px]">
+          <table className="ui-data-table min-w-[860px]">
             <thead>
               <tr>
                 <th>Time</th>
@@ -90,7 +93,7 @@ export default function PortalActivityPage() {
         <div className="mt-4 flex items-center justify-between text-[11px] font-semibold text-slate-500">
           <span>{rows.length} of {workspace.activity.length}</span>
         </div>
-      </PortalV3Card>
-    </PortalV3Page>
+      </UiCard>
+    </div>
   );
 }

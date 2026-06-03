@@ -89,7 +89,7 @@ export default function Layout({
   const heroInlineAction = topbarContent || hasTopbarControls ? undefined : headerInlineAction;
   const resolvedInlineTopbarContent = topbarContent ?? (hasTopbarControls ? undefined : headerInlineAction);
   const mainOverflowClass = disableMainScroll ? "overflow-hidden" : "overflow-y-auto";
-  const mainClasses = `shell-page flex min-h-0 min-w-0 flex-1 flex-col ${mainOverflowClass} px-3 pb-8 pt-4 sm:px-6${
+  const mainClasses = `shell-page flex min-h-0 min-w-0 flex-1 flex-col ${mainOverflowClass} px-4 pb-8 pt-4 sm:px-8${
     mainClassName ? ` ${mainClassName}` : ""
   }`;
   const rootHeightClass = fullHeight ? "h-[100dvh]" : "h-screen";

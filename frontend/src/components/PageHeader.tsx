@@ -4,14 +4,14 @@
  */
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { cx, uiButtonBaseClass, uiButtonVariants, uiCardClass } from "./ui/styles";
+import { cx, uiButtonBaseClass, uiButtonVariants } from "./ui/styles";
 
 type Breadcrumb = { label: string; to?: string };
 type Action = {
   label: string;
   onClick?: () => void;
   to?: string;
-  variant?: "primary" | "ghost" | "danger";
+  variant?: "primary" | "secondary" | "ghost" | "danger";
   disabled?: boolean;
 };
 
@@ -32,81 +32,79 @@ export default function PageHeader({
   inlineContent,
   rightContent,
 }: PageHeaderProps) {
+  const renderActions = () =>
+    actions.map((action) => {
+      const classes =
+        action.variant === "danger"
+          ? uiButtonVariants.danger
+          : action.variant === "secondary"
+            ? uiButtonVariants.secondary
+            : action.variant === "ghost"
+              ? uiButtonVariants.ghost
+              : uiButtonVariants.primary;
+      const base = cx(uiButtonBaseClass, "h-8 px-3 py-1.5 text-xs", action.disabled && "pointer-events-none opacity-60");
+      if (action.to) {
+        return (
+          <Link
+            key={action.label}
+            to={action.to}
+            aria-disabled={action.disabled ? true : undefined}
+            tabIndex={action.disabled ? -1 : undefined}
+            className={cx(base, classes)}
+          >
+            {action.label}
+          </Link>
+        );
+      }
+      return (
+        <button
+          key={action.label}
+          onClick={action.onClick}
+          className={cx(base, classes)}
+          type="button"
+          disabled={action.disabled}
+        >
+          {action.label}
+        </button>
+      );
+    });
+
   return (
-    <header
-      className={cx(
-        uiCardClass,
-        "overflow-hidden bg-gradient-to-r from-white via-white to-slate-50/80 px-4 py-4 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70"
-      )}
-    >
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div className="min-w-0 space-y-3">
-          {breadcrumbs.length > 0 && (
-            <nav className="flex flex-wrap items-center gap-2 ui-caption font-medium text-slate-500 dark:text-slate-400">
-              {breadcrumbs.map((bc, idx) => (
-                <span key={bc.label} className="flex items-center gap-2">
-                  {bc.to ? (
-                    <Link to={bc.to} className="hover:text-primary-700 dark:hover:text-primary-200">
-                      {bc.label}
-                    </Link>
-                  ) : (
-                    <span>{bc.label}</span>
-                  )}
-                  {idx < breadcrumbs.length - 1 && <span className="text-slate-400 dark:text-slate-600">/</span>}
-                </span>
-              ))}
-            </nav>
-          )}
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="ui-title font-semibold text-slate-900 dark:text-white">{title}</h1>
-              {inlineContent ? <div className="flex flex-wrap items-center gap-2">{inlineContent}</div> : null}
-            </div>
-            {description ? (
-              <p className="max-w-3xl ui-body text-slate-600 dark:text-slate-300">{description}</p>
-            ) : null}
-          </div>
-        </div>
-        {rightContent ? (
-          <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto xl:justify-end">{rightContent}</div>
-        ) : actions.length > 0 ? (
-          <div className="flex w-full flex-wrap gap-2 xl:w-auto xl:justify-end">
-            {actions.map((action) => {
-              const classes =
-                action.variant === "danger"
-                  ? uiButtonVariants.danger
-                  : action.variant === "ghost"
-                    ? uiButtonVariants.ghost
-                    : uiButtonVariants.primary;
-              const base = cx(uiButtonBaseClass, "py-1.5", action.disabled && "pointer-events-none opacity-60");
-              if (action.to) {
-                return (
-                  <Link
-                    key={action.label}
-                    to={action.to}
-                    aria-disabled={action.disabled ? true : undefined}
-                    tabIndex={action.disabled ? -1 : undefined}
-                    className={cx(base, classes)}
-                  >
-                    {action.label}
+    <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        {breadcrumbs.length > 0 && (
+          <nav className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold leading-4 text-slate-400 dark:text-slate-500">
+            {breadcrumbs.map((bc, idx) => (
+              <span key={bc.label} className="flex items-center gap-1.5">
+                {bc.to ? (
+                  <Link to={bc.to} className="transition hover:text-primary-700 dark:hover:text-primary-200">
+                    {bc.label}
                   </Link>
-                );
-              }
-              return (
-                <button
-                  key={action.label}
-                  onClick={action.onClick}
-                  className={cx(base, classes)}
-                  type="button"
-                  disabled={action.disabled}
-                >
-                  {action.label}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+                ) : (
+                  <span>{bc.label}</span>
+                )}
+                {idx < breadcrumbs.length - 1 && <span className="text-slate-300 dark:text-slate-600">/</span>}
+              </span>
+            ))}
+          </nav>
+        )}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h1 className="text-[17px] font-bold leading-6 text-slate-950 dark:text-white">{title}</h1>
+          {inlineContent ? <div className="flex flex-wrap items-center gap-2">{inlineContent}</div> : null}
+        </div>
+        {description ? <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p> : null}
       </div>
+      {rightContent || actions.length > 0 ? (
+        <div
+          className={cx(
+            "flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end",
+            breadcrumbs.length > 0 && "sm:pt-6"
+          )}
+        >
+          {rightContent}
+          {renderActions()}
+        </div>
+      ) : null}
     </header>
   );
 }

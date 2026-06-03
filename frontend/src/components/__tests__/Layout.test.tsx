@@ -114,6 +114,13 @@ describe("Layout", () => {
     expect(outletWrapper).toHaveClass("min-w-0");
   });
 
+  it("keeps a slightly wider page gutter on standard workspaces", () => {
+    const { container } = renderLayout();
+    const main = container.querySelector("main");
+
+    expect(main).toHaveClass("px-4", "sm:px-8");
+  });
+
   it("collapses and expands the desktop sidebar", () => {
     const { container } = renderLayout();
     const desktopSidebar = getDesktopSidebar(container);

@@ -11,6 +11,13 @@ import {
   uploadPortalStorageSpaceObject,
   type PortalStorageObjectListing,
 } from "../../api/portal";
+import PageBanner from "../../components/PageBanner";
+import PageHeader from "../../components/PageHeader";
+import { tableActionButtonClasses, tableIconActionButtonClasses } from "../../components/tableActionClasses";
+import UiBadge from "../../components/ui/UiBadge";
+import UiButton from "../../components/ui/UiButton";
+import UiCard from "../../components/ui/UiCard";
+import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import {
@@ -19,7 +26,6 @@ import {
   type PortalWorkspaceFile,
   type PortalWorkspaceSpace,
 } from "./portalWorkspaceModel";
-import { PortalV3Badge, PortalV3Card, PortalV3Page, PortalV3Progress, PortalV3Search } from "./PortalV3Components";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 
@@ -74,7 +80,7 @@ function HeaderIconButton({ label, children, onClick }: { label: string; childre
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-xs font-bold text-slate-600 shadow-sm hover:border-blue-200 hover:text-blue-700"
+      className={tableIconActionButtonClasses}
     >
       {children}
     </button>
@@ -93,12 +99,12 @@ function ObjectMetricCard({
   progress?: number;
 }) {
   return (
-    <div className="portal-v3-card px-4 py-3">
+    <UiCard bodyClassName="px-4 py-3">
       <div className="text-[11px] font-semibold text-slate-500">{label}</div>
       <div className="mt-2 text-[20px] font-bold leading-6 text-slate-950">{value}</div>
       <div className="mt-1 text-[11px] font-medium text-slate-500">{detail}</div>
-      {progress != null ? <div className="mt-3"><PortalV3Progress value={progress} /></div> : null}
-    </div>
+      {progress != null ? <div className="mt-3"><UiProgressBar value={progress} /></div> : null}
+    </UiCard>
   );
 }
 
@@ -127,9 +133,9 @@ function PrefixBreadcrumbs({ space, prefix }: { space: PortalWorkspaceSpace; pre
 }
 
 function statusTone(space: PortalWorkspaceSpace) {
-  if (space.status === "Attention") return "amber";
-  if (space.status === "Shared") return "blue";
-  return "green";
+  if (space.status === "Attention") return "warning";
+  if (space.status === "Shared") return "primary";
+  return "success";
 }
 
 function nameFromPrefix(prefix: string): string {
@@ -328,15 +334,15 @@ export default function PortalStorageSpaceDetailPage() {
   };
 
   if (accountLoading || loading) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Loading storage space...</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="info">Loading storage space...</PageBanner></div>;
   }
 
   if (accountError || error) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-rose-600">{accountError ?? error}</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="error">{accountError ?? error}</PageBanner></div>;
   }
 
   if (!hasAccountContext || !space) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Storage space not available.</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="info">Storage space not available.</PageBanner></div>;
   }
 
   const fileEntries = childObjects.filter((file) => file.kind === "file");
@@ -346,58 +352,31 @@ export default function PortalStorageSpaceDetailPage() {
   const lastActivity = workspace.activity.find((item) => item.spaceId === space.id)?.actor ?? "-";
 
   return (
-    <PortalV3Page>
-      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-5 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-          <Link to="/portal/storage-spaces" className="text-blue-700 hover:text-blue-800">
-            Storage Spaces
-          </Link>
-          <span className="text-slate-300">›</span>
-          <span className="text-slate-700">{space.name}</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <PortalV3Search value={query} onChange={setQuery} placeholder="Rechercher..." className="w-full sm:w-56" />
-        </div>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title={space.name}
+        description={`${space.description} Created ${space.createdLabel}. Region: ${space.region ?? "-"}.`}
+        breadcrumbs={[{ label: "Portal" }, { label: "Storage Spaces", to: "/portal/storage-spaces" }, { label: space.name }]}
+        inlineContent={<UiBadge tone={statusTone(space)}>{space.status}</UiBadge>}
+        actions={[{ label: "Partager", to: "/portal/shares", variant: "secondary" }]}
+      />
 
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-[26px] font-bold leading-8 text-slate-950">{space.name}</h1>
-            <PortalV3Badge tone={statusTone(space)}>{space.status}</PortalV3Badge>
-          </div>
-          <p className="mt-2 text-xs font-medium text-slate-500">
-            Créé le {space.createdLabel} <span className="px-2 text-slate-300">•</span> Région: {space.region ?? "-"}{" "}
-          </p>
-          <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-500">{space.description}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link to="/portal/shares" className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700">
-            Partager
-          </Link>
-        </div>
-      </header>
-
-      {message ? <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">{message}</div> : null}
-      {objectsError ? (
-        <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-          {objectsError}
-        </div>
-      ) : null}
+      {message ? <PageBanner tone="info">{message}</PageBanner> : null}
+      {objectsError ? <PageBanner tone="warning">{objectsError}</PageBanner> : null}
 
       {space.role === "Owner" ? (
-        <PortalV3Card title="Storage Space details">
+        <UiCard title="Storage Space details">
           <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto_auto]">
             <input className="ui-control h-9 text-xs" value={metadataName} onChange={(event) => setMetadataName(event.target.value)} aria-label="Storage Space name" />
             <input className="ui-control h-9 text-xs" value={metadataDescription} onChange={(event) => setMetadataDescription(event.target.value)} aria-label="Storage Space description" />
-            <button type="button" disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">
+            <UiButton disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 px-3 py-1.5">
               Save
-            </button>
-            <button type="button" disabled={metadataBusy} onClick={handleArchive} className="h-9 rounded-md border border-amber-200 bg-white px-3 text-xs font-bold text-amber-700 disabled:cursor-not-allowed disabled:opacity-60">
+            </UiButton>
+            <UiButton variant="warning" disabled={metadataBusy} onClick={handleArchive} className="h-9 px-3 py-1.5">
               Archive
-            </button>
+            </UiButton>
           </div>
-        </PortalV3Card>
+        </UiCard>
       ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -412,19 +391,25 @@ export default function PortalStorageSpaceDetailPage() {
         <ObjectMetricCard label="Dernière activité" value={lastActivity === "-" ? "-" : "Récente"} detail={lastActivity === "-" ? "Aucune activité disponible" : `Par ${lastActivity}`} />
       </section>
 
-      <PortalV3Card>
+      <UiCard>
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-2">
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} aria-label="Sélectionner un fichier à téléverser" />
-            <button type="button" onClick={handleUploadClick} disabled={uploading || !accountIdForApi} className="inline-flex h-9 items-center justify-center rounded-md border border-blue-600 bg-blue-600 px-3 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+            <UiButton onClick={handleUploadClick} disabled={uploading || !accountIdForApi} className="h-9 px-3 py-1.5">
               {uploading ? "Téléversement..." : "Téléverser"}
-            </button>
-            <button type="button" onClick={() => setShowFolderForm((value) => !value)} disabled={!accountIdForApi || space.role === "Viewer"} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+            </UiButton>
+            <UiButton variant="secondary" onClick={() => setShowFolderForm((value) => !value)} disabled={!accountIdForApi || space.role === "Viewer"} className="h-9 px-3 py-1.5">
               Nouveau dossier
-            </button>
+            </UiButton>
           </div>
           <div className="flex flex-wrap gap-2">
-            <PortalV3Search value={query} onChange={setQuery} placeholder="Rechercher des objets..." className="w-full sm:w-64" />
+            <input
+              type="search"
+              className="ui-control h-9 w-full py-1.5 text-xs sm:w-64"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Rechercher des objets..."
+            />
             <HeaderIconButton label="Actualiser" onClick={() => setRefreshIndex((value) => value + 1)}>↻</HeaderIconButton>
           </div>
         </div>
@@ -432,9 +417,9 @@ export default function PortalStorageSpaceDetailPage() {
         {showFolderForm ? (
           <div className="mb-4 grid gap-2 rounded-md border border-slate-100 bg-slate-50 p-3 sm:grid-cols-[1fr_auto]">
             <input className="ui-control h-9 text-xs" value={folderNameValue} onChange={(event) => setFolderNameValue(event.target.value)} placeholder="Nom du dossier" />
-            <button type="button" onClick={handleCreateFolder} disabled={!folderNameValue.trim() || folderBusy} className="h-9 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">
+            <UiButton onClick={handleCreateFolder} disabled={!folderNameValue.trim() || folderBusy} className="h-9 px-3 py-1.5">
               {folderBusy ? "Création..." : "Créer"}
-            </button>
+            </UiButton>
           </div>
         ) : null}
 
@@ -443,7 +428,7 @@ export default function PortalStorageSpaceDetailPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="portal-v3-table min-w-[840px]">
+          <table className="ui-data-table min-w-[840px]">
             <thead>
               <tr>
                 <th className="w-8"><input type="checkbox" aria-label="Select all objects" className="h-3.5 w-3.5 rounded border-slate-300" /></th>
@@ -483,7 +468,7 @@ export default function PortalStorageSpaceDetailPage() {
                   <td>{file.kind === "folder" ? "-" : formatBytes(file.sizeBytes)}</td>
                   <td>{file.updatedLabel}</td>
                   <td className="text-right">
-                    <button type="button" aria-label={`Actions ${file.name}`} className="rounded px-2 py-1 text-lg leading-none text-slate-500 hover:bg-slate-50 hover:text-slate-800">
+                    <button type="button" aria-label={`Actions ${file.name}`} className={tableIconActionButtonClasses}>
                       ⋮
                     </button>
                   </td>
@@ -500,7 +485,7 @@ export default function PortalStorageSpaceDetailPage() {
           </table>
         </div>
         <div className="mt-4 text-xs font-semibold text-slate-500">{childObjects.length} éléments</div>
-      </PortalV3Card>
-    </PortalV3Page>
+      </UiCard>
+    </div>
   );
 }

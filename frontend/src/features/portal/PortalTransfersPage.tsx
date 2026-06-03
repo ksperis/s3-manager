@@ -3,16 +3,21 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useMemo, useState } from "react";
+import PageBanner from "../../components/PageBanner";
+import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
+import UiBadge from "../../components/ui/UiBadge";
+import UiCard from "../../components/ui/UiCard";
+import UiProgressBar from "../../components/ui/UiProgressBar";
 import { formatBytes } from "../../utils/format";
-import { PortalV3Badge, PortalV3Card, PortalV3Page, PortalV3PageHeader, PortalV3Progress } from "./PortalV3Components";
 import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 const tabs = ["All", "Uploads", "Downloads"];
 
 function statusTone(status: PortalWorkspaceTransfer["status"]) {
-  if (status === "Failed") return "rose";
-  if (status === "Uploading" || status === "Queued") return "blue";
+  if (status === "Failed") return "danger";
+  if (status === "Uploading" || status === "Queued") return "primary";
   return "neutral";
 }
 
@@ -26,26 +31,31 @@ export default function PortalTransfersPage() {
   }, [activeTab, workspace.transfers]);
 
   if (accountLoading || loading) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Loading transfers...</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="info">Loading transfers...</PageBanner></div>;
   }
 
   if (accountError || error || !hasAccountContext) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">{accountError ?? error ?? "Select an account."}</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone={accountError || error ? "error" : "info"}>{accountError ?? error ?? "Select an account."}</PageBanner></div>;
   }
 
   return (
-    <PortalV3Page>
-      <PortalV3PageHeader title="Transfers" description="Monitor ongoing and completed transfers." />
-      <PortalV3Card>
-        <div className="mb-3 flex gap-7 border-b border-slate-100">
-          {tabs.map((tab) => (
-            <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={activeTab === tab ? "portal-v3-tab portal-v3-tab-active" : "portal-v3-tab"}>
-              {tab}
-            </button>
-          ))}
+    <div className="space-y-4">
+      <PageHeader
+        title="Transfers"
+        description="Monitor ongoing and completed transfers."
+        breadcrumbs={[{ label: "Portal" }, { label: "Transfers" }]}
+      />
+      <UiCard>
+        <div className="mb-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+          <PageTabs
+            tabs={tabs.map((tab) => ({ id: tab, label: tab }))}
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            variant="bar"
+          />
         </div>
         <div className="overflow-x-auto">
-          <table className="portal-v3-table min-w-[850px]">
+          <table className="ui-data-table min-w-[850px]">
             <thead>
               <tr>
                 <th>Name</th>
@@ -63,10 +73,10 @@ export default function PortalTransfersPage() {
                 <tr key={transfer.id}>
                   <td className="font-bold text-slate-950">{transfer.name}</td>
                   <td>{transfer.direction}</td>
-                  <td><PortalV3Badge tone={statusTone(transfer.status)}>{transfer.status}</PortalV3Badge></td>
+                  <td><UiBadge tone={statusTone(transfer.status)}>{transfer.status}</UiBadge></td>
                   <td>
                     <div className="flex items-center gap-2">
-                      <div className="w-28"><PortalV3Progress value={transfer.progress} /></div>
+                      <div className="w-28"><UiProgressBar value={transfer.progress} /></div>
                       <span>{transfer.progress}%</span>
                     </div>
                   </td>
@@ -89,7 +99,7 @@ export default function PortalTransfersPage() {
           </table>
         </div>
         <div className="mt-3 text-[11px] text-slate-400">Total visible size: {formatBytes(transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0))}</div>
-      </PortalV3Card>
-    </PortalV3Page>
+      </UiCard>
+    </div>
   );
 }

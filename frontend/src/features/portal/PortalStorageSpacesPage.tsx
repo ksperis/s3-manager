@@ -3,31 +3,28 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { createPortalStorageSpace, type PortalStorageSpaceRole } from "../../api/portal";
+import PageBanner from "../../components/PageBanner";
+import PageHeader from "../../components/PageHeader";
+import UiBadge from "../../components/ui/UiBadge";
+import UiButton from "../../components/ui/UiButton";
+import UiCard from "../../components/ui/UiCard";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { storageSpacePath, type PortalWorkspaceAccess, type PortalWorkspaceSpace } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
-import {
-  PortalV3Badge,
-  PortalV3Card,
-  PortalV3Link,
-  PortalV3Page,
-  PortalV3PageHeader,
-  PortalV3Search,
-} from "./PortalV3Components";
 
 function statusTone(space: PortalWorkspaceSpace) {
   if (space.status === "Archived") return "neutral";
-  if (space.status === "Attention") return "amber";
-  if (space.status === "Shared") return "blue";
-  return "green";
+  if (space.status === "Attention") return "warning";
+  if (space.status === "Shared") return "primary";
+  return "success";
 }
 
 function accessTone(access: PortalWorkspaceAccess) {
-  if (access === "Public") return "rose";
-  if (access === "Public Read") return "amber";
+  if (access === "Public") return "danger";
+  if (access === "Public Read") return "warning";
   return "neutral";
 }
 
@@ -87,35 +84,28 @@ export default function PortalStorageSpacesPage() {
   };
 
   if (accountLoading || loading) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Loading storage spaces...</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="info">Loading storage spaces...</PageBanner></div>;
   }
 
   if (accountError || error) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-rose-600">{accountError ?? error}</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="error">{accountError ?? error}</PageBanner></div>;
   }
 
   if (!hasAccountContext) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Select an account to view storage spaces.</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="info">Select an account to view storage spaces.</PageBanner></div>;
   }
 
   return (
-    <PortalV3Page>
-      <PortalV3PageHeader
+    <div className="space-y-4">
+      <PageHeader
         title="Storage Spaces"
         description="Manage your storage spaces and their configuration."
-        right={canCreate ? (
-          <button
-            type="button"
-            onClick={() => setShowCreate((value) => !value)}
-            className="inline-flex h-9 items-center justify-center rounded-md bg-blue-600 px-3 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
-          >
-            Create storage space
-          </button>
-        ) : undefined}
+        breadcrumbs={[{ label: "Portal" }, { label: "Storage Spaces" }]}
+        actions={canCreate ? [{ label: "Create storage space", onClick: () => setShowCreate((value) => !value) }] : []}
       />
 
       {showCreate ? (
-        <PortalV3Card title="Create Storage Space">
+        <UiCard title="Create Storage Space">
           <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_180px_auto]">
             <input className="ui-control h-9 text-xs" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Name" />
             <input className="ui-control h-9 text-xs" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder="Description" />
@@ -125,17 +115,23 @@ export default function PortalStorageSpacesPage() {
               <option value="Team">Team</option>
               <option value="Workspace">Workspace</option>
             </select>
-            <button type="button" disabled={!newName.trim() || createBusy} onClick={handleCreate} className="h-9 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">
+            <UiButton disabled={!newName.trim() || createBusy} onClick={handleCreate} className="h-9 px-3 py-1.5">
               {createBusy ? "Creating..." : "Create"}
-            </button>
+            </UiButton>
           </div>
           {createError ? <div className="mt-3 text-xs font-semibold text-rose-600">{createError}</div> : null}
-        </PortalV3Card>
+        </UiCard>
       ) : null}
 
-      <PortalV3Card>
+      <UiCard>
         <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_160px_160px_180px]">
-          <PortalV3Search value={query} onChange={setQuery} placeholder="Search storage spaces..." />
+          <input
+            type="search"
+            className="ui-control h-9 py-1.5 text-xs"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search storage spaces..."
+          />
           <select className="ui-control h-9 py-1.5 text-xs" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as PortalStorageSpaceRole | "all")}>
             <option value="all">All roles</option>
             <option value="Owner">Owner</option>
@@ -157,7 +153,7 @@ export default function PortalStorageSpacesPage() {
           </select>
         </div>
         <div className="overflow-x-auto">
-          <table className="portal-v3-table min-w-[840px]">
+          <table className="ui-data-table min-w-[840px]">
             <thead>
               <tr>
                 <th>Name</th>
@@ -183,9 +179,9 @@ export default function PortalStorageSpacesPage() {
                   <td>{formatBytes(space.usedBytes)}</td>
                   <td>{space.createdLabel}</td>
                   <td>{space.region}</td>
-                  <td><PortalV3Badge tone={statusTone(space)}>{space.status === "Active" ? "Enabled" : space.status}</PortalV3Badge></td>
-                  <td><PortalV3Badge tone={accessTone(space.access)}>{space.access}</PortalV3Badge></td>
-                  <td className="text-right"><PortalV3Link to={storageSpacePath(space)}>Open</PortalV3Link></td>
+                  <td><UiBadge tone={statusTone(space)}>{space.status === "Active" ? "Enabled" : space.status}</UiBadge></td>
+                  <td><UiBadge tone={accessTone(space.access)}>{space.access}</UiBadge></td>
+                  <td className="text-right"><Link to={storageSpacePath(space)}>Open</Link></td>
                 </tr>
               ))}
               {filteredSpaces.length === 0 ? (
@@ -201,7 +197,7 @@ export default function PortalStorageSpacesPage() {
         <div className="mt-4 flex items-center justify-between text-[11px] font-semibold text-slate-500">
           <span>{filteredSpaces.length} of {workspace.spaces.length}</span>
         </div>
-      </PortalV3Card>
-    </PortalV3Page>
+      </UiCard>
+    </div>
   );
 }

@@ -93,6 +93,9 @@ describe("PortalLayout", () => {
     expect(screen.getAllByText("S3 Manager").length).toBeGreaterThan(0);
     const topbar = container.querySelector("[data-topbar]") as HTMLElement;
     expect(topbar).not.toBeNull();
+    const main = container.querySelector("main");
+    expect(main).toHaveClass("px-4", "sm:px-8");
+    expect(main?.className).not.toMatch(/portal/);
 
     const nav = screen.getByRole("navigation", { name: "PORTAL navigation" });
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([

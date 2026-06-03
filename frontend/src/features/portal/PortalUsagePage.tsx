@@ -4,17 +4,16 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { getPortalBillingMe, type BillingSubjectDetail } from "../../api/billing";
+import DonutChart from "../../components/DonutChart";
+import MiniLineChart from "../../components/MiniLineChart";
+import PageBanner from "../../components/PageBanner";
+import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
+import StatCards from "../../components/StatCards";
+import UiBadge from "../../components/ui/UiBadge";
+import UiCard from "../../components/ui/UiCard";
+import UiProgressBar from "../../components/ui/UiProgressBar";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
-import {
-  PortalV3Badge,
-  PortalV3Card,
-  PortalV3Donut,
-  PortalV3MetricCard,
-  PortalV3MiniLineChart,
-  PortalV3Page,
-  PortalV3PageHeader,
-  PortalV3Progress,
-} from "./PortalV3Components";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 const COLORS = ["#2563eb", "#14b8a6", "#64748b", "#f59e0b", "#ef4444", "#94a3b8"];
@@ -65,6 +64,7 @@ function trendLabels(points: Array<{ label: string }>): string[] {
 
 export default function PortalUsagePage() {
   const [month, setMonth] = useState(currentMonth());
+  const [activeTab, setActiveTab] = useState("Overview");
   const [billing, setBilling] = useState<BillingSubjectDetail | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingUnavailable, setBillingUnavailable] = useState(false);
@@ -212,18 +212,19 @@ export default function PortalUsagePage() {
   ].filter((item): item is string => Boolean(item));
 
   if (accountLoading || loading) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Loading analytics...</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="info">Loading analytics...</PageBanner></div>;
   }
 
   if (accountError || error || !hasAccountContext) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">{accountError ?? error ?? "Select an account."}</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone={accountError || error ? "error" : "info"}>{accountError ?? error ?? "Select an account."}</PageBanner></div>;
   }
 
   return (
-    <PortalV3Page>
-      <PortalV3PageHeader
+    <div className="space-y-4">
+      <PageHeader
         title="Usage & Analytics"
         description="Track storage, bandwidth, requests and billing sources for this workspace."
+        breadcrumbs={[{ label: "Portal" }, { label: "Usage & Analytics" }]}
         right={
           <label className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm">
             <span>Month</span>
@@ -237,47 +238,43 @@ export default function PortalUsagePage() {
         }
       />
 
-      <div className="border-b border-slate-200">
-        <div className="flex gap-7 overflow-x-auto">
-          {["Overview", "Storage", "Bandwidth", "Requests", "Billing source"].map((tab, index) => (
-            <button key={tab} type="button" className={index === 0 ? "portal-v3-tab portal-v3-tab-active" : "portal-v3-tab"}>
-              {tab}
-            </button>
-          ))}
-        </div>
+      <div className="border-b border-slate-200 pb-3 dark:border-slate-800">
+        <PageTabs
+          tabs={["Overview", "Storage", "Bandwidth", "Requests", "Billing source"].map((tab) => ({ id: tab, label: tab }))}
+          activeTab={activeTab}
+          onChange={setActiveTab}
+          variant="bar"
+        />
       </div>
 
       {usageError ? (
-        <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-          Usage metrics are unavailable from the storage endpoint. Available billing or traffic data is still shown.
-        </div>
+        <PageBanner tone="warning">Usage metrics are unavailable from the storage endpoint. Available billing or traffic data is still shown.</PageBanner>
       ) : null}
 
       {availabilityNotes.length > 0 ? (
         <div className="flex flex-wrap gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm" aria-label="Metric availability">
           {availabilityNotes.map((note) => (
-            <PortalV3Badge key={note} tone="neutral">{note}</PortalV3Badge>
+            <UiBadge key={note} tone="neutral">{note}</UiBadge>
           ))}
         </div>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <PortalV3MetricCard
-          label="Storage Used"
-          value={formatBytes(totalUsedBytes)}
-          delta={quotaPercent == null ? "Quota unavailable" : `${formatPercentage(quotaPercent)} used`}
-        />
-        <PortalV3MetricCard label="Objects" value={formatCompactNumber(totalObjects)} delta={metricDelta(totalObjects != null ? "tracked" : null)} tone="blue" />
-        <PortalV3MetricCard label="Data In" value={formatBytes(dataInBytes)} delta={trafficLoading ? "Loading traffic" : metricDelta(dataInBytes != null ? "from traffic" : null)} tone="green" />
-        <PortalV3MetricCard label="Data Out" value={formatBytes(dataOutBytes)} delta={trafficLoading ? "Loading traffic" : metricDelta(dataOutBytes != null ? "from traffic" : null)} tone="amber" />
-        <PortalV3MetricCard label="Requests" value={formatCompactNumber(requestCount)} delta={metricDelta(requestCount != null ? "operations" : null)} tone="blue" />
-      </section>
+      <StatCards
+        columns={4}
+        stats={[
+          { label: "Storage Used", value: formatBytes(totalUsedBytes), hint: quotaPercent == null ? "Quota unavailable" : `${formatPercentage(quotaPercent)} used` },
+          { label: "Objects", value: formatCompactNumber(totalObjects), hint: metricDelta(totalObjects != null ? "tracked" : null) },
+          { label: "Data In", value: formatBytes(dataInBytes), hint: trafficLoading ? "Loading traffic" : metricDelta(dataInBytes != null ? "from traffic" : null) },
+          { label: "Data Out", value: formatBytes(dataOutBytes), hint: trafficLoading ? "Loading traffic" : metricDelta(dataOutBytes != null ? "from traffic" : null) },
+          { label: "Requests", value: formatCompactNumber(requestCount), hint: metricDelta(requestCount != null ? "operations" : null) },
+        ]}
+      />
 
       <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <PortalV3Card title="Storage over time" description="Uses billing daily storage when collection is enabled.">
+        <UiCard title="Storage over time" description="Uses billing daily storage when collection is enabled.">
           {storageTrendValues.length > 0 ? (
             <>
-              <PortalV3MiniLineChart values={storageTrendValues} />
+              <MiniLineChart values={storageTrendValues} />
               <div className="mt-2 flex justify-between text-[11px] font-semibold text-slate-400">
                 {labels.map((label) => (
                   <span key={label}>{label}</span>
@@ -287,12 +284,12 @@ export default function PortalUsagePage() {
           ) : (
             <EmptyState>No storage trend data available for this month.</EmptyState>
           )}
-        </PortalV3Card>
+        </UiCard>
 
-        <PortalV3Card title="Usage by storage space">
+        <UiCard title="Usage by storage space">
           {storageBySpace.length > 0 && totalUsedBytes != null ? (
             <div className="grid gap-4 md:grid-cols-[190px_1fr] md:items-center">
-              <PortalV3Donut segments={donutSegments} center={formatBytes(totalUsedBytes)} caption="total used" />
+              <DonutChart segments={donutSegments} center={formatBytes(totalUsedBytes)} caption="total used" />
               <div className="space-y-3">
                 {storageBySpace.slice(0, 6).map((space, index) => {
                   const share = percent(space.usedBytes, totalUsedBytes) ?? 0;
@@ -304,7 +301,7 @@ export default function PortalUsagePage() {
                       </div>
                       <span className="shrink-0 text-slate-500">{formatBytes(space.usedBytes)}</span>
                       <div className="col-span-2">
-                        <PortalV3Progress value={share} />
+                        <UiProgressBar value={share} />
                       </div>
                     </div>
                   );
@@ -314,14 +311,14 @@ export default function PortalUsagePage() {
           ) : (
             <EmptyState>No per-storage-space usage metrics available.</EmptyState>
           )}
-        </PortalV3Card>
+        </UiCard>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-3">
-        <PortalV3Card title="Bandwidth trend" description="Ingress and egress combined.">
+        <UiCard title="Bandwidth trend" description="Ingress and egress combined.">
           {trafficTrendValues.length > 0 ? (
             <>
-              <PortalV3MiniLineChart values={trafficTrendValues} />
+              <MiniLineChart values={trafficTrendValues} />
               <div className="mt-2 flex justify-between text-[11px] font-semibold text-slate-400">
                 {labels.map((label) => (
                   <span key={label}>{label}</span>
@@ -331,12 +328,12 @@ export default function PortalUsagePage() {
           ) : (
             <EmptyState>No bandwidth trend available.</EmptyState>
           )}
-        </PortalV3Card>
+        </UiCard>
 
-        <PortalV3Card title="Request trend" description="Total operations over time.">
+        <UiCard title="Request trend" description="Total operations over time.">
           {requestTrendValues.length > 0 ? (
             <>
-              <PortalV3MiniLineChart values={requestTrendValues} />
+              <MiniLineChart values={requestTrendValues} />
               <div className="mt-2 flex justify-between text-[11px] font-semibold text-slate-400">
                 {labels.map((label) => (
                   <span key={label}>{label}</span>
@@ -346,9 +343,9 @@ export default function PortalUsagePage() {
           ) : (
             <EmptyState>No request trend available.</EmptyState>
           )}
-        </PortalV3Card>
+        </UiCard>
 
-        <PortalV3Card title="Billing source" description="Cost and monthly collection coverage when billing is enabled.">
+        <UiCard title="Billing source" description="Cost and monthly collection coverage when billing is enabled.">
           {billingLoading ? (
             <EmptyState>Loading billing source data...</EmptyState>
           ) : billing ? (
@@ -363,9 +360,9 @@ export default function PortalUsagePage() {
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="font-semibold text-slate-500">Coverage</span>
-                <PortalV3Badge tone={billingCoverage && billingCoverage.coverage_ratio >= 0.9 ? "green" : "amber"}>
+                <UiBadge tone={billingCoverage && billingCoverage.coverage_ratio >= 0.9 ? "success" : "warning"}>
                   {billingCoverage ? `${billingCoverage.days_collected}/${billingCoverage.days_in_month} days` : "Unavailable"}
-                </PortalV3Badge>
+                </UiBadge>
               </div>
               <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
                 {cost?.rate_card_name ? `Rate card: ${cost.rate_card_name}` : "No rate card attached."}
@@ -374,8 +371,8 @@ export default function PortalUsagePage() {
           ) : (
             <EmptyState>{billingUnavailable ? "Billing source is disabled or unavailable." : "No billing source data available."}</EmptyState>
           )}
-        </PortalV3Card>
+        </UiCard>
       </section>
-    </PortalV3Page>
+    </div>
   );
 }

@@ -1449,17 +1449,17 @@ export function buildBaseRules(): MockRule[] {
       },
     },
     {
-      id: "portal-activity-v3",
+      id: "portal-activity",
       path: /^\/portal\/activity$/,
       body: PORTAL_ACTIVITY,
     },
     {
-      id: "portal-transfers-v3",
+      id: "portal-transfers",
       path: /^\/portal\/transfers$/,
       body: PORTAL_TRANSFERS,
     },
     {
-      id: "portal-alerts-v3",
+      id: "portal-alerts",
       path: /^\/portal\/alerts$/,
       body: PORTAL_ALERTS,
     },
