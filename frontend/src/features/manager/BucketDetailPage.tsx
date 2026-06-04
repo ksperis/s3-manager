@@ -1452,6 +1452,27 @@ export default function BucketDetailPage({
     }
   };
 
+  const addExpirationExampleRule = () => {
+    const currentDaysRaw = expireCurrentDays.trim();
+    const noncurrentDaysRaw = expireNoncurrentDays.trim();
+    if (!currentDaysRaw && !noncurrentDaysRaw) {
+      setLifecycleError("Provide current or noncurrent expiration days.");
+      return;
+    }
+
+    const rule: Record<string, unknown> = {
+      Status: "Enabled",
+      Filter: { Prefix: expirePrefix },
+    };
+    if (currentDaysRaw) {
+      rule.Expiration = { Days: Number(currentDaysRaw) };
+    }
+    if (noncurrentDaysRaw) {
+      rule.NoncurrentVersionExpiration = { NoncurrentDays: Number(noncurrentDaysRaw) };
+    }
+    void handleAddExampleRule(rule);
+  };
+
   const [transitionCurrentDays, setTransitionCurrentDays] = useState("30");
   const [transitionNoncurrentDays, setTransitionNoncurrentDays] = useState("60");
   const [transitionStorageClass, setTransitionStorageClass] = useState("GLACIER");
@@ -3591,14 +3612,7 @@ export default function BucketDetailPage({
                                   <div className="mt-2 flex justify-end">
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        handleAddExampleRule({
-                                          Status: "Enabled",
-                                          Filter: { Prefix: expirePrefix },
-                                          Expiration: { Days: Number(expireCurrentDays) || 0 },
-                                          NoncurrentVersionExpiration: { NoncurrentDays: Number(expireNoncurrentDays) || 0 },
-                                        })
-                                      }
+                                      onClick={addExpirationExampleRule}
                                       className="ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
                                       disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                     >

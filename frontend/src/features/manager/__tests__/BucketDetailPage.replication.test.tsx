@@ -21,6 +21,7 @@ const getBucketAclMock = vi.fn();
 const getBucketCorsMock = vi.fn();
 const getBucketTagsMock = vi.fn();
 const getBucketPublicAccessBlockMock = vi.fn();
+const putBucketLifecycleMock = vi.fn();
 const listObjectsMock = vi.fn();
 const listCephAdminBucketsMock = vi.fn();
 const getCephAdminBucketPropertiesMock = vi.fn();
@@ -37,6 +38,7 @@ const getCephAdminBucketAclMock = vi.fn();
 const getCephAdminBucketCorsMock = vi.fn();
 const getCephAdminBucketTagsMock = vi.fn();
 const getCephAdminBucketPublicAccessBlockMock = vi.fn();
+const putCephAdminBucketLifecycleMock = vi.fn();
 const setCephAdminBucketVersioningMock = vi.fn();
 const updateCephAdminBucketObjectLockMock = vi.fn();
 const fetchCephAdminClusterTrafficMock = vi.fn();
@@ -59,6 +61,7 @@ vi.mock("../../../api/buckets", async () => {
     getBucketCors: (...args: unknown[]) => getBucketCorsMock(...args),
     getBucketTags: (...args: unknown[]) => getBucketTagsMock(...args),
     getBucketPublicAccessBlock: (...args: unknown[]) => getBucketPublicAccessBlockMock(...args),
+    putBucketLifecycle: (...args: unknown[]) => putBucketLifecycleMock(...args),
   };
 });
 
@@ -81,6 +84,7 @@ vi.mock("../../../api/cephAdmin", async () => {
     getCephAdminBucketCors: (...args: unknown[]) => getCephAdminBucketCorsMock(...args),
     getCephAdminBucketTags: (...args: unknown[]) => getCephAdminBucketTagsMock(...args),
     getCephAdminBucketPublicAccessBlock: (...args: unknown[]) => getCephAdminBucketPublicAccessBlockMock(...args),
+    putCephAdminBucketLifecycle: (...args: unknown[]) => putCephAdminBucketLifecycleMock(...args),
     setCephAdminBucketVersioning: (...args: unknown[]) => setCephAdminBucketVersioningMock(...args),
     updateCephAdminBucketObjectLock: (...args: unknown[]) => updateCephAdminBucketObjectLockMock(...args),
     fetchCephAdminClusterTraffic: (...args: unknown[]) => fetchCephAdminClusterTrafficMock(...args),
@@ -144,6 +148,7 @@ describe("BucketDetailPage replication state", () => {
       block_public_policy: false,
       restrict_public_buckets: false,
     });
+    putBucketLifecycleMock.mockImplementation((_accountId, _bucketName, rules) => Promise.resolve({ rules }));
     getBucketReplicationMock.mockResolvedValue({ configuration: {} });
     listObjectsMock.mockResolvedValue({ prefix: "", objects: [], prefixes: [], is_truncated: false });
     listCephAdminBucketsMock.mockResolvedValue({
@@ -179,6 +184,7 @@ describe("BucketDetailPage replication state", () => {
       block_public_policy: false,
       restrict_public_buckets: false,
     });
+    putCephAdminBucketLifecycleMock.mockImplementation((_endpointId, _bucketName, rules) => Promise.resolve({ rules }));
     getCephAdminBucketReplicationMock.mockResolvedValue({
       configuration: { Role: "" },
     });
@@ -439,6 +445,49 @@ describe("BucketDetailPage replication state", () => {
     expect(screen.getByTestId("bucket-feature-versioning")).toBeInTheDocument();
     expect(screen.getByTestId("bucket-feature-lifecycle")).toBeInTheDocument();
     expect(screen.getByTestId("bucket-feature-tags")).toBeInTheDocument();
+  });
+
+  it("omits blank Rule 3 lifecycle expiration fields from the quick-add payload", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getCephAdminBucketLifecycleMock).toHaveBeenCalled();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Properties" }));
+    await user.click(screen.getByRole("button", { name: "Show editor" }));
+    await user.click(screen.getByRole("button", { name: "Quick add" }));
+
+    const rule3 = screen.getByText("Rule 3: current/noncurrent expiration").closest("div") as HTMLElement;
+    const noncurrentDaysInput = within(rule3).getByLabelText("Noncurrent versions expiration (days)");
+    const addRule3Button = within(rule3).getByRole("button", { name: "Add" });
+
+    await user.clear(noncurrentDaysInput);
+    await user.click(addRule3Button);
+
+    expect(await screen.findByText("Provide current or noncurrent expiration days.")).toBeInTheDocument();
+    expect(putCephAdminBucketLifecycleMock).not.toHaveBeenCalled();
+
+    await user.type(noncurrentDaysInput, "90");
+    await user.click(addRule3Button);
+
+    await waitFor(() => {
+      expect(putCephAdminBucketLifecycleMock).toHaveBeenCalled();
+    });
+
+    const savedRules = putCephAdminBucketLifecycleMock.mock.calls[0][2] as Record<string, unknown>[];
+    expect(savedRules).toHaveLength(1);
+    expect(savedRules[0]).toMatchObject({
+      Status: "Enabled",
+      Filter: { Prefix: "" },
+      NoncurrentVersionExpiration: { NoncurrentDays: 90 },
+    });
+    expect(savedRules[0]).not.toHaveProperty("Expiration");
   });
 
   it("disables server access logging when the endpoint does not implement it", async () => {
