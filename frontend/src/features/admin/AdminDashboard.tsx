@@ -4,33 +4,162 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getBillingSummary } from "../../api/billing";
-import { fetchHealthSummary, fetchHealthWorkspaceOverview, WorkspaceEndpointHealthOverviewResponse } from "../../api/healthchecks";
+import { listAuditLogs, type AuditLogEntry } from "../../api/audit";
+import {
+  fetchHealthOverview,
+  fetchHealthSummary,
+  fetchHealthWorkspaceOverview,
+  type EndpointHealthOverviewResponse,
+  type HealthCheckStatus,
+  type WorkspaceEndpointHealthEntry,
+  type WorkspaceEndpointHealthOverviewResponse,
+  type WorkspaceEndpointIncidentEntry,
+} from "../../api/healthchecks";
 import { dismissOnboarding, fetchOnboardingStatus, type OnboardingStatus } from "../../api/onboarding";
-import { AdminSummary, fetchAdminSummary } from "../../api/stats";
+import {
+  type AdminStorageStats,
+  type AdminSummary,
+  type AdminTrafficStats,
+  fetchAdminStorage,
+  fetchAdminSummary,
+  fetchAdminTraffic,
+} from "../../api/stats";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
-import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
-import StatCards from "../../components/StatCards";
-import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
+import PageHeader from "../../components/PageHeader";
+import {
+  type WorkspaceDashboardFeature,
+  type WorkspaceDashboardFeatureGroup,
+  type WorkspaceDashboardStatCardItem,
+  WorkspaceDashboardStatCard,
+  WorkspaceDashboardUnavailableFrame,
+  WorkspaceFeatureSummaryCard,
+  WorkspaceHealthScorePanel,
+  type WorkspacePlatformMetric,
+  WorkspacePlatformMetricCard,
+  WorkspaceStatusDot,
+  WorkspaceStatusPill,
+  WorkspaceStatusCounter,
+} from "../../components/WorkspaceDashboardKit";
+import WorkspaceIncidentsCard from "../../components/WorkspaceIncidentsCard";
 import UiBadge from "../../components/ui/UiBadge";
-import { cx, uiButtonBaseClass, uiButtonVariants, uiCardClass, uiCardMutedClass } from "../../components/ui/styles";
+import {
+  cx,
+  uiButtonBaseClass,
+  uiButtonVariants,
+  uiCardClass,
+  uiCardMutedClass,
+  uiMutedTextClass,
+} from "../../components/ui/styles";
+import {
+  BucketIcon,
+  FolderIcon,
+  InfoIcon,
+  LinkIcon,
+  OpenIcon,
+  RefreshIcon,
+  SettingsIcon,
+} from "../browser/browserIcons";
 import { extractApiError } from "../../utils/apiError";
+import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
+import setupIllustration from "./assets/admin-dashboard-setup.png";
+import mapDark from "./assets/admin-dashboard-map-dark.png";
+import mapLight from "./assets/admin-dashboard-map-light.png";
 
 const ENDPOINT_STATUS_MAX_AGE_HOURS = 24;
 const ENDPOINT_STATUS_MAX_AGE_MS = ENDPOINT_STATUS_MAX_AGE_HOURS * 60 * 60 * 1000;
+const MAX_ENDPOINT_ROWS = 6;
 
-function utcMonthKey(value: Date): string {
-  const year = value.getUTCFullYear();
-  const month = `${value.getUTCMonth() + 1}`.padStart(2, "0");
-  return `${year}-${month}`;
-}
+const MOCK_ENDPOINTS: WorkspaceEndpointHealthEntry[] = [
+  {
+    endpoint_id: -1,
+    name: "INRAE-eprod-debug",
+    endpoint_url: "https://example.invalid",
+    status: "up",
+    checked_at: "2026-06-05T11:15:00Z",
+    latency_ms: 76,
+    check_mode: "http",
+  },
+  {
+    endpoint_id: -2,
+    name: "INRAE-eprod-geo-tls",
+    endpoint_url: "https://example.invalid",
+    status: "up",
+    checked_at: "2026-06-05T11:15:00Z",
+    latency_ms: 86,
+    check_mode: "http",
+  },
+  {
+    endpoint_id: -3,
+    name: "INRAE-eprod-geo-idf",
+    endpoint_url: "https://example.invalid",
+    status: "down",
+    checked_at: "2026-06-05T11:15:00Z",
+    latency_ms: null,
+    check_mode: "http",
+  },
+];
 
-function getYesterdayUtc(now = new Date()): Date {
-  const midnightUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  midnightUtc.setUTCDate(midnightUtc.getUTCDate() - 1);
-  return midnightUtc;
-}
+const MOCK_INCIDENTS: WorkspaceEndpointIncidentEntry[] = [
+  {
+    endpoint_id: -1,
+    endpoint_name: "LAB 81",
+    status: "down",
+    start: "2026-06-05T07:55:00Z",
+    end: null,
+    duration_minutes: null,
+    check_mode: "http",
+    ongoing: true,
+    recent: true,
+  },
+  {
+    endpoint_id: -2,
+    endpoint_name: "INRAE-eprod-tls",
+    status: "degraded",
+    start: "2026-06-03T15:20:00Z",
+    end: "2026-06-05T07:55:00Z",
+    duration_minutes: 2435,
+    check_mode: "http",
+    ongoing: false,
+    recent: true,
+  },
+];
+
+const MOCK_AUDIT_LOGS: AuditLogEntry[] = [
+  {
+    id: -1,
+    created_at: "2026-06-05T11:14:00Z",
+    user_email: "admin@example.com",
+    user_role: "ui_superadmin",
+    scope: "admin",
+    action: "storage_endpoint.health_up",
+    entity_type: "endpoint",
+    entity_id: "INRAE-eprod-idf",
+    status: "success",
+  },
+  {
+    id: -2,
+    created_at: "2026-06-05T11:11:00Z",
+    user_email: "admin@example.com",
+    user_role: "ui_superadmin",
+    scope: "admin",
+    action: "auth.login",
+    entity_type: "user",
+    entity_id: "admin@example.com",
+    status: "success",
+  },
+  {
+    id: -3,
+    created_at: "2026-06-05T10:58:00Z",
+    user_email: "admin@example.com",
+    user_role: "ui_superadmin",
+    scope: "manager",
+    action: "bucket.created",
+    entity_type: "bucket",
+    entity_id: "research-team",
+    status: "success",
+  },
+];
 
 function parseBackendIsoDate(value?: string | null): Date | null {
   if (!value) return null;
@@ -41,77 +170,555 @@ function parseBackendIsoDate(value?: string | null): Date | null {
   return parsed;
 }
 
+function formatTimestamp(value?: string | Date | null): string {
+  if (!value) return "-";
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return typeof value === "string" ? value : "-";
+  return parsed.toLocaleString();
+}
+
+function formatRelativeTime(value?: string | null, now = Date.now()): string {
+  const parsed = parseBackendIsoDate(value);
+  if (!parsed) return "just now";
+  const diffMs = Math.max(0, now - parsed.getTime());
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatLatency(value?: number | null): string {
+  if (value == null) return "-";
+  return `${Math.round(value)} ms`;
+}
+
+function formatCheckMode(mode?: string | null): string {
+  return (mode || "http").toUpperCase();
+}
+
+function computeHealthScore(data?: EndpointHealthOverviewResponse | null): number | null {
+  const availabilityValues =
+    data?.endpoints
+      .map((endpoint) => endpoint.availability_pct)
+      .filter((value): value is number => value != null && Number.isFinite(value)) ?? [];
+  if (availabilityValues.length === 0) return null;
+  const totalAvailability = availabilityValues.reduce((total, value) => total + value, 0);
+  return Math.round(totalAvailability / availabilityValues.length);
+}
+
+function formatAuditAction(log: AuditLogEntry): string {
+  const action = log.action.replace(/[._-]+/g, " ").trim();
+  if (log.action.includes("login")) return `User ${log.user_email} logged in`;
+  if (log.entity_type === "bucket" && log.entity_id) return `Bucket "${log.entity_id}" ${action}`;
+  if (log.entity_type === "endpoint" && log.entity_id) return `Endpoint ${log.entity_id} ${action}`;
+  if (log.entity_id) return `${log.entity_type ?? "Entity"} ${log.entity_id} ${action}`;
+  return action.charAt(0).toUpperCase() + action.slice(1);
+}
+
+function trafficOpsSeries(traffic: AdminTrafficStats | null): number[] {
+  return (traffic?.series ?? []).map((point) => point.ops ?? 0).filter((value) => Number.isFinite(value));
+}
+
+function AdminDashboardMap() {
+  return (
+    <div className="h-[148px] overflow-hidden rounded-md border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface-muted)]">
+      <img src={mapLight} alt="" className="block h-full w-full object-cover dark:hidden" />
+      <img src={mapDark} alt="" className="hidden h-full w-full object-cover dark:block" />
+    </div>
+  );
+}
+
+function OnboardingPanel({
+  onboarding,
+  error,
+  dismissBusy,
+  onDismiss,
+}: {
+  onboarding: OnboardingStatus;
+  error: string | null;
+  dismissBusy: boolean;
+  onDismiss: () => void;
+}) {
+  return (
+    <section className={cx(uiCardClass, "px-5 py-5")}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 w-full flex-1 flex-col gap-5 xl:flex-row xl:items-center">
+          <img
+            src={setupIllustration}
+            alt=""
+            className="hidden h-28 w-28 shrink-0 object-contain md:block"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">
+                  Welcome! Let&apos;s finish your initial setup.
+                </h2>
+                <p className={cx("mt-1 ui-body", uiMutedTextClass)}>
+                  Complete the two base steps below to unlock the rest of the console.
+                </p>
+              </div>
+            </div>
+            {error && <p className="mt-3 ui-caption font-semibold text-rose-600 dark:text-rose-300">{error}</p>}
+            <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_240px]">
+              <SetupStep
+                index={1}
+                title="Secure the default admin"
+                description="Change the seeded admin email and password so credentials are no longer active."
+                done={onboarding.seed_user_configured}
+                action={{ label: "Go to UI users", to: "/admin/users" }}
+              />
+              <SetupStep
+                index={2}
+                title="Configure a storage endpoint"
+                description="Add at least one S3 or Ceph endpoint so the platform can manage accounts and users."
+                done={onboarding.endpoint_configured}
+                action={{ label: "Configure endpoints", to: "/admin/storage-endpoints" }}
+              />
+              <div className={cx(uiCardMutedClass, "px-4 py-3")}>
+                <p className="ui-body font-semibold text-[var(--ui-text)]">Next steps</p>
+                <div className="mt-3 space-y-2">
+                  <Link to="/admin/users" className="flex items-center gap-2 ui-caption font-medium text-primary">
+                    <OpenIcon className="h-3.5 w-3.5" /> Add UI user
+                  </Link>
+                  <Link to="/admin/s3-accounts" className="flex items-center gap-2 ui-caption font-medium text-primary">
+                    <OpenIcon className="h-3.5 w-3.5" /> Create account
+                  </Link>
+                  <Link to="/admin/audit" className="flex items-center gap-2 ui-caption font-medium text-primary">
+                    <OpenIcon className="h-3.5 w-3.5" /> View audit trail
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          disabled={!onboarding.can_dismiss || dismissBusy}
+          className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "shrink-0 self-start px-2 py-1 sm:self-auto")}
+        >
+          {dismissBusy ? "Dismissing..." : "Dismiss checklist"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function SetupStep({
+  index,
+  title,
+  description,
+  done,
+  action,
+}: {
+  index: number;
+  title: string;
+  description: string;
+  done: boolean;
+  action: { label: string; to: string };
+}) {
+  return (
+    <div className={cx(uiCardMutedClass, "flex min-h-[118px] flex-col justify-between gap-3 px-4 py-3")}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 gap-3">
+          <span
+            className={cx(
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ui-caption font-semibold",
+              done
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950 dark:text-emerald-100"
+                : "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950 dark:text-amber-100"
+            )}
+          >
+            {index}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block ui-body font-semibold text-[var(--ui-text)]">{title}</span>
+            <span className={cx("mt-1 block ui-caption", uiMutedTextClass)}>{description}</span>
+          </span>
+        </div>
+        <UiBadge tone={done ? "success" : "warning"}>{done ? "Done" : "Pending"}</UiBadge>
+      </div>
+      <Link to={action.to} className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "w-fit px-3 py-1.5")}>
+        {action.label}
+        <OpenIcon className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  );
+}
+
+function EndpointHealthSection({
+  data,
+  loading,
+  unavailableReason,
+}: {
+  data: WorkspaceEndpointHealthOverviewResponse | null;
+  loading: boolean;
+  unavailableReason?: string | null;
+}) {
+  const displayData =
+    data ??
+    ({
+      generated_at: "2026-06-05T11:15:00Z",
+      incident_highlight_minutes: 720,
+      endpoint_count: 9,
+      up_count: 8,
+      degraded_count: 0,
+      down_count: 1,
+      unknown_count: 0,
+      endpoints: MOCK_ENDPOINTS,
+      incidents: MOCK_INCIDENTS,
+    } satisfies WorkspaceEndpointHealthOverviewResponse);
+  const content = (
+    <div className="grid gap-3 xl:grid-cols-[1.08fr_0.92fr]">
+      <EndpointHealthCard data={displayData} loading={loading} />
+      <WorkspaceIncidentsCard
+        incidents={displayData.incidents}
+        loading={loading}
+        incidentHighlightMinutes={displayData.incident_highlight_minutes}
+        action={{ to: "/admin/endpoint-status", label: "View all incidents" }}
+        showEmptyState
+      />
+    </div>
+  );
+
+  if (!unavailableReason) return content;
+  return <WorkspaceDashboardUnavailableFrame reason={unavailableReason}>{content}</WorkspaceDashboardUnavailableFrame>;
+}
+
+function EndpointHealthCard({ data, loading }: { data: WorkspaceEndpointHealthOverviewResponse; loading: boolean }) {
+  const endpoints = data.endpoints.slice(0, MAX_ENDPOINT_ROWS);
+  return (
+    <section className={cx(uiCardClass, "p-4")}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="ui-body font-semibold text-[var(--ui-text)]">Endpoint Health</h2>
+          <p className={cx("ui-caption", uiMutedTextClass)}>Real-time status and latency.</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className={cx("ui-caption", uiMutedTextClass)}>Updated {formatTimestamp(data.generated_at)}</span>
+          <Link to="/admin/endpoint-status" className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-2.5 py-1.5")}>
+            Open Endpoint Status
+          </Link>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className={cx(uiCardMutedClass, "mt-4 h-48 animate-pulse")} />
+      ) : (
+        <>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <WorkspaceStatusCounter label="Up" value={data.up_count} status="up" />
+            <WorkspaceStatusCounter label="Degraded" value={data.degraded_count} status="degraded" />
+            <WorkspaceStatusCounter label="Down" value={data.down_count} status="down" />
+            <WorkspaceStatusCounter label="Unknown" value={data.unknown_count} status="unknown" />
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <div className="space-y-1.5">
+              {endpoints.length === 0 ? (
+                <p className={cx("ui-caption", uiMutedTextClass)}>No endpoint linked to this workspace context.</p>
+              ) : (
+                endpoints.map((endpoint) => (
+                  <EndpointRow key={endpoint.endpoint_id} endpoint={endpoint} />
+                ))
+              )}
+              {data.endpoints.length > MAX_ENDPOINT_ROWS && (
+                <p className="ui-caption font-medium text-primary">+ {data.endpoints.length - MAX_ENDPOINT_ROWS} more endpoint(s)</p>
+              )}
+            </div>
+            <AdminDashboardMap />
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-3 ui-caption text-[var(--ui-text-muted)]">
+            <LegendItem label={`Up (${data.up_count})`} status="up" />
+            <LegendItem label={`Degraded (${data.degraded_count})`} status="degraded" />
+            <LegendItem label={`Down (${data.down_count})`} status="down" />
+            <LegendItem label={`Unknown (${data.unknown_count})`} status="unknown" />
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function EndpointRow({ endpoint }: { endpoint: WorkspaceEndpointHealthEntry }) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_54px_52px_112px_auto] items-center gap-2 ui-caption">
+      <span className="flex min-w-0 items-center gap-2 font-semibold text-[var(--ui-text)]">
+        <WorkspaceStatusDot status={endpoint.status} className="shrink-0" />
+        <span className="truncate">{endpoint.name}</span>
+      </span>
+      <span className={uiMutedTextClass}>{formatLatency(endpoint.latency_ms)}</span>
+      <span className={uiMutedTextClass}>{formatCheckMode(endpoint.check_mode)}</span>
+      <span className={cx("truncate", uiMutedTextClass)}>{formatTimestamp(endpoint.checked_at)}</span>
+      <WorkspaceStatusPill status={endpoint.status} />
+    </div>
+  );
+}
+
+function LegendItem({ label, status }: { label: string; status: HealthCheckStatus }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <WorkspaceStatusDot status={status} />
+      {label}
+    </span>
+  );
+}
+
+function PlatformSummary({
+  storage,
+  storageLoading,
+  storageError,
+  traffic,
+  trafficLoading,
+  trafficError,
+  healthScore,
+  healthScoreLoading,
+  healthScoreUnavailableReason,
+}: {
+  storage: AdminStorageStats | null;
+  storageLoading: boolean;
+  storageError: string | null;
+  traffic: AdminTrafficStats | null;
+  trafficLoading: boolean;
+  trafficError: string | null;
+  healthScore: number | null;
+  healthScoreLoading: boolean;
+  healthScoreUnavailableReason?: string | null;
+}) {
+  const storageTotals = storage?.storage_totals;
+  const requestsSeries = trafficOpsSeries(traffic);
+  const storageReason = storageError || (!storageLoading && !storage ? "Storage metrics are not available." : undefined);
+  const trafficReason = trafficError || (!trafficLoading && !traffic ? "Usage logs are not available." : undefined);
+  const metrics: WorkspacePlatformMetric[] = [
+    {
+      label: "Buckets",
+      value: storageLoading ? "..." : formatCompactNumber(storageTotals?.bucket_count ?? storage?.total_buckets ?? null),
+      tone: "blue",
+      unavailableReason: storageReason || "Trend unavailable",
+    },
+    {
+      label: "Objects",
+      value: storageLoading ? "..." : formatCompactNumber(storageTotals?.object_count ?? null),
+      tone: "violet",
+      unavailableReason: storageReason || "Trend unavailable",
+    },
+    {
+      label: "Stored data",
+      value: storageLoading ? "..." : formatBytes(storageTotals?.used_bytes ?? null),
+      tone: "emerald",
+      unavailableReason: storageReason || "Trend unavailable",
+    },
+    {
+      label: "Requests (24h)",
+      value: trafficLoading ? "..." : formatCompactNumber(traffic?.totals.ops ?? null),
+      delta: trafficReason ? undefined : traffic?.totals.success_rate != null ? `${formatPercentage(traffic.totals.success_rate * 100)} success` : undefined,
+      series: requestsSeries.length > 0 ? requestsSeries : undefined,
+      tone: "blue",
+      unavailableReason: trafficReason || (requestsSeries.length === 0 && !trafficLoading ? "Trend unavailable" : undefined),
+    },
+  ];
+
+  return (
+    <section className={cx(uiCardClass, "px-4 py-3")}>
+      <h2 className="ui-section text-[var(--ui-text)]">Platform summary</h2>
+      <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_116px]">
+        <div className="grid gap-y-4 md:grid-cols-2 xl:grid-cols-4 xl:gap-y-0">
+          {metrics.map((metric) => (
+            <WorkspacePlatformMetricCard key={metric.label} metric={metric} />
+          ))}
+        </div>
+        <div className="border-t border-[color:var(--ui-border-soft)] pt-3 xl:border-l xl:border-t-0 xl:pl-3 xl:pt-0">
+          <WorkspaceHealthScorePanel score={healthScore} loading={healthScoreLoading} unavailableReason={healthScoreUnavailableReason} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RecentActivityCard({
+  logs,
+  loading,
+  unavailableReason,
+}: {
+  logs: AuditLogEntry[];
+  loading: boolean;
+  unavailableReason?: string | null;
+}) {
+  const displayLogs = logs.length > 0 ? logs : MOCK_AUDIT_LOGS;
+  const content = (
+    <section className={cx(uiCardClass, "h-full p-4")}>
+      <h2 className="ui-body font-semibold text-[var(--ui-text)]">Recent activity</h2>
+      {loading ? (
+        <div className="mt-4 space-y-3">
+          {[1, 2, 3].map((key) => (
+            <div key={key} className={cx(uiCardMutedClass, "h-8 animate-pulse")} />
+          ))}
+        </div>
+      ) : logs.length === 0 && !unavailableReason ? (
+        <div className={cx(uiCardMutedClass, "mt-4 border-dashed px-3 py-6 text-center ui-caption", uiMutedTextClass)}>
+          No recent audit activity.
+        </div>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {displayLogs.slice(0, 3).map((log) => (
+            <li key={log.id} className="flex items-start justify-between gap-4 ui-caption">
+              <span className="flex min-w-0 items-start gap-2">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                <span className="min-w-0 truncate text-[var(--ui-text)]">{formatAuditAction(log)}</span>
+              </span>
+              <span className={cx("shrink-0", uiMutedTextClass)}>{formatRelativeTime(log.created_at)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Link to="/admin/audit" className="mt-5 inline-flex items-center gap-2 ui-caption font-semibold text-primary">
+        View audit logs
+        <OpenIcon className="h-3.5 w-3.5" />
+      </Link>
+    </section>
+  );
+  if (!unavailableReason) return content;
+  return <WorkspaceDashboardUnavailableFrame reason={unavailableReason} className="h-full">{content}</WorkspaceDashboardUnavailableFrame>;
+}
+
 export default function AdminDashboard() {
   const [summary, setSummary] = useState<AdminSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
-  const [billingFreshnessWarning, setBillingFreshnessWarning] = useState<string | null>(null);
   const [endpointFreshnessWarning, setEndpointFreshnessWarning] = useState<string | null>(null);
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
+  const [healthOverview, setHealthOverview] = useState<EndpointHealthOverviewResponse | null>(null);
+  const [healthOverviewLoading, setHealthOverviewLoading] = useState(false);
+  const [healthOverviewError, setHealthOverviewError] = useState<string | null>(null);
+  const [storage, setStorage] = useState<AdminStorageStats | null>(null);
+  const [storageLoading, setStorageLoading] = useState(true);
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const [traffic, setTraffic] = useState<AdminTrafficStats | null>(null);
+  const [trafficLoading, setTrafficLoading] = useState(true);
+  const [trafficError, setTrafficError] = useState<string | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(true);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const [dismissBusy, setDismissBusy] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const { generalSettings } = useGeneralSettings();
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const data = await fetchAdminSummary();
-        setSummary(data);
-        setError(null);
-      } catch (err) {
-        setError(extractApiError(err, "Unable to load admin overview."));
-      }
-    };
-    load();
-  }, []);
-
-  useEffect(() => {
-    const loadOnboarding = async () => {
-      try {
-        const data = await fetchOnboardingStatus();
-        setOnboarding(data);
-        setOnboardingError(null);
-      } catch (err) {
-        setOnboardingError(extractApiError(err, "Unable to load onboarding status."));
-      }
-    };
-    loadOnboarding();
-  }, []);
-
-  useEffect(() => {
-    if (!generalSettings.billing_enabled) {
-      setBillingFreshnessWarning(null);
-      return;
-    }
     let cancelled = false;
-    const verifyBillingFreshness = async () => {
-      try {
-        const yesterday = getYesterdayUtc();
-        const expectedMonth = utcMonthKey(yesterday);
-        const expectedCollectedDays = yesterday.getUTCDate();
-        const summaryData = await getBillingSummary(expectedMonth);
+    setSummaryLoading(true);
+    fetchAdminSummary()
+      .then((data) => {
         if (cancelled) return;
-        if (summaryData.coverage.days_collected < expectedCollectedDays) {
-          const expectedDay = yesterday.toISOString().slice(0, 10);
-          setBillingFreshnessWarning(
-            `Billing collection seems stale: expected data up to ${expectedDay}, but only ${summaryData.coverage.days_collected} day(s) are collected for ${expectedMonth}.`
-          );
-          return;
-        }
-        setBillingFreshnessWarning(null);
-      } catch {
-        if (!cancelled) {
-          setBillingFreshnessWarning("Billing is enabled, but freshness could not be verified from billing data.");
-        }
-      }
-    };
-    verifyBillingFreshness();
+        setSummary(data);
+        setSummaryError(null);
+        setLastUpdated(new Date());
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSummary(null);
+        setSummaryError(extractApiError(err, "Unable to load admin overview."));
+      })
+      .finally(() => {
+        if (!cancelled) setSummaryLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [generalSettings.billing_enabled]);
+  }, [refreshNonce]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchOnboardingStatus()
+      .then((data) => {
+        if (cancelled) return;
+        setOnboarding(data);
+        setOnboardingError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setOnboardingError(extractApiError(err, "Unable to load onboarding status."));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshNonce]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setStorageLoading(true);
+    setStorageError(null);
+    fetchAdminStorage()
+      .then((data) => {
+        if (cancelled) return;
+        setStorage(data);
+        setLastUpdated(new Date());
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setStorage(null);
+        setStorageError(extractApiError(err, "Storage metrics are not available."));
+      })
+      .finally(() => {
+        if (!cancelled) setStorageLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshNonce]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTrafficLoading(true);
+    setTrafficError(null);
+    fetchAdminTraffic("day")
+      .then((data) => {
+        if (cancelled) return;
+        setTraffic(data);
+        setLastUpdated(new Date());
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setTraffic(null);
+        setTrafficError(extractApiError(err, "Usage logs are not available."));
+      })
+      .finally(() => {
+        if (!cancelled) setTrafficLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshNonce]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAuditLoading(true);
+    setAuditError(null);
+    listAuditLogs({ limit: 3 })
+      .then((data) => {
+        if (cancelled) return;
+        setAuditLogs(data.logs ?? []);
+        setLastUpdated(new Date());
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setAuditLogs([]);
+        setAuditError(extractApiError(err, "Audit activity is not available."));
+      })
+      .finally(() => {
+        if (!cancelled) setAuditLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshNonce]);
 
   useEffect(() => {
     if (!generalSettings.endpoint_status_enabled) {
@@ -119,6 +726,9 @@ export default function AdminDashboard() {
       setWorkspaceHealth(null);
       setWorkspaceHealthError(null);
       setWorkspaceHealthLoading(false);
+      setHealthOverview(null);
+      setHealthOverviewError(null);
+      setHealthOverviewLoading(false);
       return;
     }
     let cancelled = false;
@@ -161,7 +771,7 @@ export default function AdminDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [generalSettings.endpoint_status_enabled]);
+  }, [generalSettings.endpoint_status_enabled, refreshNonce]);
 
   useEffect(() => {
     if (!generalSettings.endpoint_status_enabled) return;
@@ -172,6 +782,7 @@ export default function AdminDashboard() {
       .then((data) => {
         if (cancelled) return;
         setWorkspaceHealth(data);
+        setLastUpdated(new Date());
       })
       .catch((err) => {
         if (cancelled) return;
@@ -186,7 +797,33 @@ export default function AdminDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [generalSettings.endpoint_status_enabled]);
+  }, [generalSettings.endpoint_status_enabled, refreshNonce]);
+
+  useEffect(() => {
+    if (!generalSettings.endpoint_status_enabled) return;
+    let cancelled = false;
+    setHealthOverviewLoading(true);
+    setHealthOverviewError(null);
+    fetchHealthOverview("week")
+      .then((data) => {
+        if (cancelled) return;
+        setHealthOverview(data);
+        setLastUpdated(new Date());
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setHealthOverview(null);
+        setHealthOverviewError(extractApiError(err, "7-day endpoint health history is not available."));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setHealthOverviewLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [generalSettings.endpoint_status_enabled, refreshNonce]);
 
   const handleDismissOnboarding = async () => {
     if (!onboarding?.can_dismiss) return;
@@ -201,79 +838,13 @@ export default function AdminDashboard() {
     }
   };
 
-  const cards = useMemo(
-    () =>
-      summary
-        ? [
-            {
-              label: "UI users",
-              value: (summary.total_users ?? 0) + (summary.total_admins ?? 0) + (summary.total_none_users ?? 0),
-              hint: `Admins: ${summary.total_admins ?? 0} | Users: ${summary.total_users ?? 0} | None: ${
-                summary.total_none_users ?? 0
-              }`,
-              to: "/admin/users",
-            },
-            {
-              label: "Endpoints",
-              value: summary.total_endpoints ?? 0,
-              hint: `Ceph: ${summary.total_ceph_endpoints ?? 0} | Other: ${summary.total_other_endpoints ?? 0}`,
-              to: "/admin/storage-endpoints",
-            },
-            {
-              label: "Accounts",
-              value: summary.total_accounts,
-              hint: `Assigned: ${summary.assigned_accounts ?? 0} | Unassigned: ${summary.unassigned_accounts ?? 0}`,
-              to: "/admin/s3-accounts",
-            },
-            {
-              label: "S3 users",
-              value: summary.total_s3_users ?? 0,
-              hint: `Assigned: ${summary.assigned_s3_users ?? 0} | Unassigned: ${summary.unassigned_s3_users ?? 0}`,
-              to: "/admin/s3-users",
-            },
-            {
-              label: "Shared S3 Connections",
-              value: summary.total_shared_connections ?? 0,
-              hint: "Admin-managed shared S3 connections",
-              to: "/admin/s3-connections",
-            },
-          ]
-        : [],
-    [summary]
-  );
-
-  const coreFeatures = useMemo(
+  const coreFeatures = useMemo<WorkspaceDashboardFeature[]>(
     () => [
-      {
-        id: "manager",
-        label: "Manager",
-        enabled: generalSettings.manager_enabled,
-        massManagement: false,
-      },
-      {
-        id: "browser",
-        label: "Browser",
-        enabled: generalSettings.browser_enabled,
-        massManagement: false,
-      },
-      {
-        id: "portal",
-        label: "Portal",
-        enabled: generalSettings.portal_enabled,
-        massManagement: false,
-      },
-      {
-        id: "ceph_admin",
-        label: "Ceph Admin",
-        enabled: generalSettings.ceph_admin_enabled,
-        massManagement: true,
-      },
-      {
-        id: "storage_ops",
-        label: "Storage Ops",
-        enabled: generalSettings.storage_ops_enabled,
-        massManagement: true,
-      },
+      { id: "manager", label: "Manager", enabled: generalSettings.manager_enabled },
+      { id: "browser", label: "Browser", enabled: generalSettings.browser_enabled },
+      { id: "portal", label: "Portal", enabled: generalSettings.portal_enabled },
+      { id: "ceph_admin", label: "Ceph Admin", enabled: generalSettings.ceph_admin_enabled, massManagement: true },
+      { id: "storage_ops", label: "Storage Ops", enabled: generalSettings.storage_ops_enabled, massManagement: true },
     ],
     [
       generalSettings.browser_enabled,
@@ -284,32 +855,12 @@ export default function AdminDashboard() {
     ]
   );
 
-  const extraFeatures = useMemo(
+  const extraFeatures = useMemo<WorkspaceDashboardFeature[]>(
     () => [
-      {
-        id: "billing",
-        label: "Billing",
-        enabled: generalSettings.billing_enabled,
-        massManagement: false,
-      },
-      {
-        id: "endpoint_status",
-        label: "Endpoint Status",
-        enabled: generalSettings.endpoint_status_enabled,
-        massManagement: false,
-      },
-      {
-        id: "quota_alerts",
-        label: "Quota alerts",
-        enabled: generalSettings.quota_alerts_enabled,
-        massManagement: false,
-      },
-      {
-        id: "usage_history",
-        label: "Usage history",
-        enabled: generalSettings.usage_history_enabled,
-        massManagement: false,
-      },
+      { id: "billing", label: "Billing", enabled: generalSettings.billing_enabled },
+      { id: "endpoint_status", label: "Endpoint Status", enabled: generalSettings.endpoint_status_enabled },
+      { id: "quota_alerts", label: "Quota alerts", enabled: generalSettings.quota_alerts_enabled },
+      { id: "usage_history", label: "Usage history", enabled: generalSettings.usage_history_enabled },
     ],
     [
       generalSettings.billing_enabled,
@@ -319,175 +870,153 @@ export default function AdminDashboard() {
     ]
   );
 
-  const featureGroups = useMemo(
+  const featureGroups = useMemo<WorkspaceDashboardFeatureGroup[]>(
     () => [
-      {
-        title: "Core features",
-        features: coreFeatures,
-      },
-      {
-        title: "Extra features",
-        features: extraFeatures,
-      },
+      { title: "Core features", features: coreFeatures },
+      { title: "Extra features", features: extraFeatures },
     ],
     [coreFeatures, extraFeatures]
   );
 
+  const statCards = useMemo<WorkspaceDashboardStatCardItem[]>(() => {
+    const totalUiUsers = (summary?.total_users ?? 0) + (summary?.total_admins ?? 0) + (summary?.total_none_users ?? 0);
+    return [
+      {
+        id: "ui-users",
+        label: "UI Users",
+        value: totalUiUsers,
+        hint: `Admins: ${summary?.total_admins ?? 0}  Users: ${summary?.total_users ?? 0}`,
+        to: "/admin/users",
+        tone: "indigo",
+        icon: <InfoIcon className="h-5 w-5" />,
+      },
+      {
+        id: "accounts-primary",
+        label: "Accounts",
+        value: summary?.total_accounts ?? 0,
+        hint: `Assigned: ${summary?.assigned_accounts ?? 0}`,
+        to: "/admin/s3-accounts",
+        tone: "amber",
+        icon: <FolderIcon className="h-5 w-5" />,
+      },
+      {
+        id: "s3-users",
+        label: "S3 Users",
+        value: summary?.total_s3_users ?? 0,
+        hint: `Assigned: ${summary?.assigned_s3_users ?? 0}`,
+        to: "/admin/s3-users",
+        tone: "emerald",
+        icon: <SettingsIcon className="h-5 w-5" />,
+      },
+      {
+        id: "shared-s3-connections",
+        label: "Shared S3 Connections",
+        value: summary?.total_shared_connections ?? 0,
+        hint: "Admin-managed",
+        to: "/admin/s3-connections",
+        tone: "violet",
+        icon: <LinkIcon className="h-5 w-5" />,
+      },
+      {
+        id: "endpoints",
+        label: "Endpoints",
+        value: summary?.total_endpoints ?? 0,
+        hint: `Ceph: ${summary?.total_ceph_endpoints ?? 0}  Other: ${summary?.total_other_endpoints ?? 0}`,
+        to: "/admin/storage-endpoints",
+        tone: "blue",
+        icon: <BucketIcon className="h-5 w-5" />,
+      },
+    ];
+  }, [summary]);
+
+  const endpointUnavailableReason = !generalSettings.endpoint_status_enabled
+    ? "Endpoint Status feature is disabled."
+    : workspaceHealthError
+      ? workspaceHealthError
+      : !workspaceHealthLoading && workspaceHealth && workspaceHealth.endpoint_count === 0
+        ? "Endpoint Status has no endpoint data yet."
+        : null;
+  const healthScore = computeHealthScore(healthOverview);
+  const healthScoreUnavailableReason =
+    endpointUnavailableReason ||
+    healthOverviewError ||
+    (healthScore == null && !healthOverviewLoading ? "7-day endpoint health history is not available." : null);
+  const refreshing =
+    summaryLoading || storageLoading || trafficLoading || auditLoading || workspaceHealthLoading || healthOverviewLoading;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="admin-dashboard">
       <PageHeader
         title="Admin overview"
+        description="Monitor the health and status of your S3 infrastructure."
         breadcrumbs={[{ label: "Admin" }, { label: "Dashboard" }]}
+        rightContent={
+          <div className="flex items-center gap-3">
+            <span className={cx("hidden ui-caption sm:inline", uiMutedTextClass)}>
+              Updated {lastUpdated ? formatTimestamp(lastUpdated) : "-"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setRefreshNonce((current) => current + 1)}
+              aria-label="Refresh admin dashboard"
+              title="Refresh"
+              className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "h-8 w-8 px-0 py-0")}
+              disabled={refreshing}
+            >
+              <RefreshIcon className={cx("h-4 w-4", refreshing && "animate-spin")} />
+            </button>
+          </div>
+        }
       />
 
       {onboarding && !onboarding.dismissed && (
-        <div className={cx(uiCardClass, "px-6 py-5")}>
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-2">
-              <h2 className="ui-subtitle font-semibold text-slate-900 dark:text-white">
-                Welcome! Let&apos;s finish your initial setup.
-              </h2>
-              <p className="ui-body text-slate-600 dark:text-slate-300">
-                Complete the two base steps below to unlock the rest of the console. You can dismiss this checklist once the base
-                setup is done.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleDismissOnboarding}
-              disabled={!onboarding.can_dismiss || dismissBusy}
-              className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "rounded-lg px-4 py-2 ui-body disabled:opacity-50")}
-            >
-              {dismissBusy ? "Dismissing..." : "Dismiss checklist"}
-            </button>
-          </div>
-
-          {onboardingError && <p className="mt-3 ui-body text-rose-600">{onboardingError}</p>}
-
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <div className={cx(uiCardMutedClass, "px-4 py-4")}>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">1. Secure the default admin</p>
-                  <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">
-                    Change the seeded admin email and password so the default credentials are no longer active.
-                  </p>
-                </div>
-                <UiBadge tone={onboarding.seed_user_configured ? "success" : "warning"} className="px-3 py-1">
-                  {onboarding.seed_user_configured ? "Done" : "Pending"}
-                </UiBadge>
-              </div>
-              <div className="mt-3">
-                <Link
-                  to="/admin/users"
-                  className={cx(uiButtonBaseClass, uiButtonVariants.primary, "rounded-lg")}
-                >
-                  Go to UI users
-                </Link>
-              </div>
-            </div>
-
-            <div className={cx(uiCardMutedClass, "px-4 py-4")}>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">2. Configure a storage endpoint</p>
-                  <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">
-                    Add at least one S3 or Ceph endpoint so the platform can manage accounts and users.
-                  </p>
-                </div>
-                <UiBadge tone={onboarding.endpoint_configured ? "success" : "warning"} className="px-3 py-1">
-                  {onboarding.endpoint_configured ? "Done" : "Pending"}
-                </UiBadge>
-              </div>
-              <div className="mt-3">
-                <Link
-                  to="/admin/storage-endpoints"
-                  className={cx(uiButtonBaseClass, uiButtonVariants.primary, "rounded-lg")}
-                >
-                  Configure endpoints
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          <div className={cx(uiCardMutedClass, "mt-5 border-dashed px-4 py-4")}>
-            <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Next steps</p>
-            <p className="mt-2 ui-caption text-slate-600 dark:text-slate-300">
-              Add a UI user, create an account, and link that account to the UI user.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-3">
-              <Link
-                to="/admin/users"
-                className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "rounded-lg")}
-              >
-                Add UI user
-              </Link>
-              <Link
-                to="/admin/s3-accounts"
-                className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "rounded-lg")}
-              >
-                Create account
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {billingFreshnessWarning && <PageBanner tone="warning">{billingFreshnessWarning}</PageBanner>}
-      {endpointFreshnessWarning && <PageBanner tone="warning">{endpointFreshnessWarning}</PageBanner>}
-      {error && <PageBanner tone="error">{error}</PageBanner>}
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {featureGroups.map((group) => {
-          const enabledFeatures = group.features.filter((feature) => feature.enabled);
-
-          return (
-            <section
-              key={group.title}
-              aria-label={`${group.title} summary`}
-              className={cx(uiCardClass, "flex min-h-[96px] flex-col gap-3 p-3")}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="ui-body font-semibold text-slate-900 dark:text-white">{group.title}</h2>
-                <UiBadge tone={enabledFeatures.length > 0 ? "success" : "neutral"} className="px-2 py-0 text-[11px] leading-5">
-                  {enabledFeatures.length} enabled
-                </UiBadge>
-              </div>
-              {enabledFeatures.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {enabledFeatures.map((feature) => (
-                    <UiBadge key={feature.id} tone="success" className="gap-1.5 px-2 py-0 text-[11px] leading-5">
-                      <span>{feature.label}</span>
-                      {feature.massManagement && (
-                        <span
-                          title="Mass management"
-                          className="rounded-full border border-emerald-300 bg-emerald-50 px-1 text-[9px] font-bold leading-3 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950 dark:text-emerald-200"
-                        >
-                          MM
-                        </span>
-                      )}
-                    </UiBadge>
-                  ))}
-                </div>
-              ) : (
-                <p className="ui-caption text-slate-500 dark:text-slate-400">None enabled</p>
-              )}
-            </section>
-          );
-        })}
-      </div>
-
-      {generalSettings.endpoint_status_enabled && (
-        <WorkspaceEndpointHealthCards
-          data={workspaceHealth}
-          loading={workspaceHealthLoading}
-          error={workspaceHealthError}
-          title="Endpoint Health"
-          action={{ to: "/admin/endpoint-status", label: "Open Endpoint Status" }}
+        <OnboardingPanel
+          onboarding={onboarding}
+          error={onboardingError}
+          dismissBusy={dismissBusy}
+          onDismiss={handleDismissOnboarding}
         />
       )}
 
-      <StatCards stats={cards} columns={3} />
+      {endpointFreshnessWarning && <PageBanner tone="warning">{endpointFreshnessWarning}</PageBanner>}
+      {summaryError && <PageBanner tone="error">{summaryError}</PageBanner>}
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        {statCards.map((card) => (
+          <WorkspaceDashboardStatCard key={card.id} card={card} loading={summaryLoading} />
+        ))}
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        {featureGroups.map((group) => (
+          <WorkspaceFeatureSummaryCard key={group.title} group={group} />
+        ))}
+      </div>
+
+      <EndpointHealthSection
+        data={workspaceHealth}
+        loading={workspaceHealthLoading}
+        unavailableReason={endpointUnavailableReason}
+      />
+
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,0.9fr)]">
+        <PlatformSummary
+          storage={storage}
+          storageLoading={storageLoading}
+          storageError={storageError}
+          traffic={traffic}
+          trafficLoading={trafficLoading}
+          trafficError={trafficError}
+          healthScore={healthScore}
+          healthScoreLoading={healthOverviewLoading}
+          healthScoreUnavailableReason={healthScoreUnavailableReason}
+        />
+        <RecentActivityCard
+          logs={auditLogs}
+          loading={auditLoading}
+          unavailableReason={auditError}
+        />
+      </div>
     </div>
   );
 }

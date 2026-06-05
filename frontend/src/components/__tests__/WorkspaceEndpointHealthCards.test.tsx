@@ -72,4 +72,43 @@ describe("WorkspaceEndpointHealthCards", () => {
     expect(incidents.queryByText("Unknown")).not.toBeInTheDocument();
     expect(screen.getAllByText("Down")).toHaveLength(1);
   });
+
+  it("uses the shared compact incident model for resolved rows", () => {
+    const { container } = render(
+      <WorkspaceEndpointHealthCards
+        data={workspaceHealth}
+        loading={false}
+        showStatusCounters={false}
+      />
+    );
+
+    const resolvedRow = container.querySelector('[data-incident-state="resolved"]');
+    expect(resolvedRow).not.toBeNull();
+    expect(resolvedRow?.className).toContain("border-[color:var(--ui-border-soft)]");
+    expect(resolvedRow?.className).not.toContain("border-rose");
+    expect(resolvedRow?.querySelector('[aria-hidden="true"]')?.getAttribute("class")).toContain("bg-emerald-500");
+  });
+
+  it("summarizes incidents beyond the five visible rows", () => {
+    const { container } = render(
+      <WorkspaceEndpointHealthCards
+        data={{
+          ...workspaceHealth,
+          incidents: Array.from({ length: 7 }, (_, index) => ({
+            ...workspaceHealth.incidents[index % workspaceHealth.incidents.length],
+            endpoint_id: 100 + index,
+            endpoint_name: `Endpoint ${index + 1}`,
+            start: `2026-03-12T0${index}:00:00Z`,
+            ongoing: index === 0,
+          })),
+        }}
+        loading={false}
+        showStatusCounters={false}
+      />
+    );
+
+    expect(screen.getByText("+ 2 more incident(s)")).toBeInTheDocument();
+    expect(screen.getByText("Endpoint 1")).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-incident-state]")).toHaveLength(5);
+  });
 });

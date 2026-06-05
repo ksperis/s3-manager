@@ -3,39 +3,18 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { Link } from "react-router-dom";
-import { HealthCheckStatus, WorkspaceEndpointHealthOverviewResponse } from "../api/healthchecks";
+import type { WorkspaceEndpointHealthOverviewResponse } from "../api/healthchecks";
+import { WorkspaceStatusCounter, WorkspaceStatusDot, WorkspaceStatusPill } from "./WorkspaceDashboardKit";
+import WorkspaceIncidentsCard from "./WorkspaceIncidentsCard";
 import {
   cx,
   uiButtonBaseClass,
   uiButtonVariants,
   uiCardClass,
-  uiCardMutedClass,
   uiMutedTextClass,
   uiPanelMutedClass,
   uiTitleTextClass,
 } from "./ui/styles";
-
-function statusLabel(status: HealthCheckStatus) {
-  if (status === "up") return "Up";
-  if (status === "degraded") return "Degraded";
-  if (status === "down") return "Down";
-  return "Unknown";
-}
-
-function statusPillClass(status: HealthCheckStatus) {
-  if (status === "up") return "border border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950 dark:text-emerald-100";
-  if (status === "degraded") return "border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950 dark:text-amber-100";
-  if (status === "down") return "border border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/50 dark:bg-rose-950 dark:text-rose-100";
-  return "border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] text-[var(--ui-text)]";
-}
-
-function statusStatCardClass(status: "up" | "degraded" | "down" | "unknown", value: number) {
-  if (value <= 0) return "border-[color:var(--ui-border)] bg-[var(--ui-surface)] text-[var(--ui-text)]";
-  if (status === "up") return "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950 dark:text-emerald-100";
-  if (status === "degraded") return "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950 dark:text-amber-100";
-  if (status === "down") return "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/50 dark:bg-rose-950 dark:text-rose-100";
-  return "border-[color:var(--ui-border)] bg-[var(--ui-surface)] text-[var(--ui-text)]";
-}
 
 function formatLatency(value?: number | null) {
   if (value == null) return "-";
@@ -51,22 +30,6 @@ function formatTimestamp(value?: string | null) {
 
 function formatCheckMode(mode?: string | null) {
   return (mode || "http").toUpperCase();
-}
-
-function incidentStateBadgeClass(ongoing: boolean) {
-  if (ongoing) {
-    return "border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950 dark:text-amber-100";
-  }
-  return "border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] text-[var(--ui-text)]";
-}
-
-function formatIncidentWindow(minutes?: number | null) {
-  const value = Math.max(1, Number(minutes ?? 720));
-  if (value % 60 === 0) {
-    const hours = value / 60;
-    return `${hours} hour${hours > 1 ? "s" : ""}`;
-  }
-  return `${value} minute${value > 1 ? "s" : ""}`;
 }
 
 type WorkspaceEndpointHealthCardsProps = {
@@ -89,12 +52,6 @@ export default function WorkspaceEndpointHealthCards({
   showStatusCounters = true,
 }: WorkspaceEndpointHealthCardsProps) {
   const incidents = data?.incidents ?? [];
-  const orderedIncidents = [...incidents].sort((left, right) => {
-    if (left.ongoing !== right.ongoing) return left.ongoing ? -1 : 1;
-    const leftStart = new Date(left.start).getTime();
-    const rightStart = new Date(right.start).getTime();
-    return rightStart - leftStart;
-  });
   const showIncidents = !loading && !error && incidents.length > 0;
 
   return (
@@ -140,10 +97,7 @@ export default function WorkspaceEndpointHealthCards({
                   { key: "down" as const, label: "Down", value: data?.down_count ?? 0 },
                   { key: "unknown" as const, label: "Unknown", value: data?.unknown_count ?? 0 },
                 ].map((item) => (
-                  <div key={item.key} className={`rounded-lg border px-2.5 py-2 ${statusStatCardClass(item.key, item.value)}`}>
-                    <p className="ui-caption font-medium opacity-85">{item.label}</p>
-                    <p className="mt-1 ui-body font-semibold">{item.value}</p>
-                  </div>
+                  <WorkspaceStatusCounter key={item.key} label={item.label} value={item.value} status={item.key} />
                 ))}
               </div>
             )}
@@ -154,17 +108,18 @@ export default function WorkspaceEndpointHealthCards({
               {(data?.endpoints ?? []).slice(0, 6).map((endpoint) => (
                 <div
                   key={endpoint.endpoint_id}
-                  className={cx(uiCardMutedClass, "flex flex-wrap items-center justify-between gap-2 px-3 py-2")}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)]/45 px-3 py-2 dark:bg-transparent"
                 >
                   <div className="min-w-0">
-                    <p className={cx("truncate ui-caption", uiTitleTextClass)}>{endpoint.name}</p>
+                    <p className={cx("flex min-w-0 items-center gap-2 truncate ui-caption", uiTitleTextClass)}>
+                      <WorkspaceStatusDot status={endpoint.status} className="shrink-0" />
+                      <span className="truncate">{endpoint.name}</span>
+                    </p>
                     <p className={cx("truncate ui-caption", uiMutedTextClass)}>
                       {formatLatency(endpoint.latency_ms)} · {formatCheckMode(endpoint.check_mode)} · {formatTimestamp(endpoint.checked_at)}
                     </p>
                   </div>
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 ui-caption font-semibold ${statusPillClass(endpoint.status)}`}>
-                    {statusLabel(endpoint.status)}
-                  </span>
+                  <WorkspaceStatusPill status={endpoint.status} className="ui-caption" />
                 </div>
               ))}
               {(data?.endpoints ?? []).length > 6 && (
@@ -178,40 +133,12 @@ export default function WorkspaceEndpointHealthCards({
       </section>
 
       {showIncidents && (
-        <section className={cx(uiCardClass, "p-4")}>
-          <p className={cx("ui-body", uiTitleTextClass)}>Ongoing / Recent Incidents</p>
-          <p className={cx("ui-caption", uiMutedTextClass)}>
-            Ongoing incidents and incidents ended in the last {formatIncidentWindow(data?.incident_highlight_minutes)}.
-          </p>
-          <div className="mt-3 space-y-2">
-            {orderedIncidents.slice(0, 5).map((incident, index) => (
-              <div
-                key={`${incident.endpoint_id}-${incident.start}-${index}`}
-                className={`rounded-lg border px-3 py-2 ${
-                  incident.ongoing
-                    ? "border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950"
-                    : "border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)]"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className={cx("ui-caption", uiTitleTextClass)}>{incident.endpoint_name}</p>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${incidentStateBadgeClass(incident.ongoing)}`}>
-                      {incident.ongoing ? "In progress" : "Resolved"}
-                    </span>
-                  </div>
-                </div>
-                <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
-                  {incident.ongoing ? "Ongoing since" : "From"} {formatTimestamp(incident.start)}
-                  {incident.end ? ` to ${formatTimestamp(incident.end)}` : ""}
-                </p>
-              </div>
-            ))}
-            {orderedIncidents.length > 5 && (
-              <p className={cx("ui-caption", uiMutedTextClass)}>+{orderedIncidents.length - 5} more incident(s).</p>
-            )}
-          </div>
-        </section>
+        <WorkspaceIncidentsCard
+          incidents={incidents}
+          loading={false}
+          incidentHighlightMinutes={data?.incident_highlight_minutes}
+          action={action}
+        />
       )}
     </div>
   );
