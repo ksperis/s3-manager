@@ -4,14 +4,14 @@
  */
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { cx, uiButtonBaseClass, uiButtonVariants } from "./ui/styles";
+import { cx, uiButtonBaseClass, uiButtonVariants, uiMutedTextClass, uiTitleTextClass } from "./ui/styles";
 
 type Breadcrumb = { label: string; to?: string };
 type Action = {
   label: string;
   onClick?: () => void;
   to?: string;
-  variant?: "primary" | "secondary" | "ghost" | "danger";
+  variant?: "primary" | "secondary" | "ghost" | "danger" | "neutral";
   disabled?: boolean;
 };
 
@@ -41,7 +41,9 @@ export default function PageHeader({
             ? uiButtonVariants.secondary
             : action.variant === "ghost"
               ? uiButtonVariants.ghost
-              : uiButtonVariants.primary;
+              : action.variant === "neutral"
+                ? uiButtonVariants.neutral
+                : uiButtonVariants.primary;
       const base = cx(uiButtonBaseClass, "h-8 px-3 py-1.5 text-xs", action.disabled && "pointer-events-none opacity-60");
       if (action.to) {
         return (
@@ -73,7 +75,7 @@ export default function PageHeader({
     <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
         {breadcrumbs.length > 0 && (
-          <nav className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold leading-4 text-slate-400 dark:text-slate-500">
+          <nav className={cx("mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold leading-4", uiMutedTextClass)}>
             {breadcrumbs.map((bc, idx) => (
               <span key={bc.label} className="flex items-center gap-1.5">
                 {bc.to ? (
@@ -83,16 +85,16 @@ export default function PageHeader({
                 ) : (
                   <span>{bc.label}</span>
                 )}
-                {idx < breadcrumbs.length - 1 && <span className="text-slate-300 dark:text-slate-600">/</span>}
+                {idx < breadcrumbs.length - 1 && <span className="opacity-55">/</span>}
               </span>
             ))}
           </nav>
         )}
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h1 className="text-[17px] font-bold leading-6 text-slate-950 dark:text-white">{title}</h1>
+          <h1 className={cx("text-[17px] font-bold leading-6", uiTitleTextClass)}>{title}</h1>
           {inlineContent ? <div className="flex flex-wrap items-center gap-2">{inlineContent}</div> : null}
         </div>
-        {description ? <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p> : null}
+        {description ? <p className={cx("mt-1 max-w-3xl text-xs leading-5", uiMutedTextClass)}>{description}</p> : null}
       </div>
       {rightContent || actions.length > 0 ? (
         <div

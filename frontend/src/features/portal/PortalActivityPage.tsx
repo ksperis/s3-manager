@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import UiCard from "../../components/ui/UiCard";
+import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 export default function PortalActivityPage() {
@@ -40,7 +41,7 @@ export default function PortalActivityPage() {
         title="Activity"
         description="Overview of actions in your account."
         breadcrumbs={[{ label: "Portal" }, { label: "Activity" }]}
-        right={<div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">Current period</div>}
+        right={<div className={cx(uiCardMutedClass, "px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>Current period</div>}
       />
 
       <UiCard>
@@ -73,7 +74,7 @@ export default function PortalActivityPage() {
               {rows.map((item) => (
                 <tr key={item.id}>
                   <td>{item.timeLabel}</td>
-                  <td className="font-bold text-slate-950">{item.actor}</td>
+                  <td className={uiTitleTextClass}>{item.actor}</td>
                   <td>{item.action}</td>
                   <td>{item.target}</td>
                   <td>{item.spaceName}</td>
@@ -82,7 +83,7 @@ export default function PortalActivityPage() {
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-xs font-semibold text-slate-500">
+                  <td colSpan={6} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
                     No activity to display.
                   </td>
                 </tr>
@@ -90,7 +91,7 @@ export default function PortalActivityPage() {
             </tbody>
           </table>
         </div>
-        <div className="mt-4 flex items-center justify-between text-[11px] font-semibold text-slate-500">
+        <div className={cx("mt-4 flex items-center justify-between text-[11px] font-semibold", uiMutedTextClass)}>
           <span>{rows.length} of {workspace.activity.length}</span>
         </div>
       </UiCard>

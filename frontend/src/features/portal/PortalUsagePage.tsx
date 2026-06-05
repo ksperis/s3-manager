@@ -13,6 +13,7 @@ import StatCards from "../../components/StatCards";
 import UiBadge from "../../components/ui/UiBadge";
 import UiCard from "../../components/ui/UiCard";
 import UiProgressBar from "../../components/ui/UiProgressBar";
+import { cx, uiCardMutedClass, uiInputClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
@@ -49,7 +50,7 @@ function metricDelta(value?: string | null): string {
 
 function EmptyState({ children }: { children: string }) {
   return (
-    <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-6 text-center text-xs font-semibold text-slate-500">
+    <div className={cx(uiCardMutedClass, "px-3 py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
       {children}
     </div>
   );
@@ -226,13 +227,13 @@ export default function PortalUsagePage() {
         description="Track storage, bandwidth, requests and billing sources for this workspace."
         breadcrumbs={[{ label: "Portal" }, { label: "Usage & Analytics" }]}
         right={
-          <label className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm">
+          <label className={cx(uiCardMutedClass, "flex h-8 items-center gap-2 px-3 text-xs font-semibold", uiMutedTextClass)}>
             <span>Month</span>
             <input
               type="month"
               value={month}
               onChange={(event) => setMonth(event.target.value)}
-              className="w-[120px] border-0 bg-transparent p-0 text-xs font-semibold text-slate-700 outline-none"
+              className={cx(uiInputClass, "h-6 w-[120px] border-0 bg-transparent p-0 text-xs font-semibold shadow-none")}
             />
           </label>
         }
@@ -252,7 +253,7 @@ export default function PortalUsagePage() {
       ) : null}
 
       {availabilityNotes.length > 0 ? (
-        <div className="flex flex-wrap gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm" aria-label="Metric availability">
+        <div className={cx(uiCardMutedClass, "flex flex-wrap gap-2 px-3 py-2 text-xs font-semibold", uiMutedTextClass)} aria-label="Metric availability">
           {availabilityNotes.map((note) => (
             <UiBadge key={note} tone="neutral">{note}</UiBadge>
           ))}
@@ -297,9 +298,9 @@ export default function PortalUsagePage() {
                     <div key={space.id} className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-xs">
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="h-2 w-2 rounded-full" style={{ background: COLORS[index] ?? "#94a3b8" }} />
-                        <span className="truncate font-semibold text-slate-700">{space.name}</span>
+                        <span className={cx("truncate font-semibold", uiTitleTextClass)}>{space.name}</span>
                       </div>
-                      <span className="shrink-0 text-slate-500">{formatBytes(space.usedBytes)}</span>
+                      <span className={cx("shrink-0", uiMutedTextClass)}>{formatBytes(space.usedBytes)}</span>
                       <div className="col-span-2">
                         <UiProgressBar value={share} />
                       </div>
@@ -351,20 +352,20 @@ export default function PortalUsagePage() {
           ) : billing ? (
             <div className="space-y-4 text-xs">
               <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold text-slate-500">Estimated cost</span>
-                <span className="text-lg font-bold text-slate-950">{formatCurrency(cost?.total_cost, cost?.currency)}</span>
+                <span className={cx("font-semibold", uiMutedTextClass)}>Estimated cost</span>
+                <span className={cx("text-lg", uiTitleTextClass)}>{formatCurrency(cost?.total_cost, cost?.currency)}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold text-slate-500">Average storage</span>
-                <span className="font-bold text-slate-800">{formatBytes(billing.storage.avg_bytes)}</span>
+                <span className={cx("font-semibold", uiMutedTextClass)}>Average storage</span>
+                <span className={uiTitleTextClass}>{formatBytes(billing.storage.avg_bytes)}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold text-slate-500">Coverage</span>
+                <span className={cx("font-semibold", uiMutedTextClass)}>Coverage</span>
                 <UiBadge tone={billingCoverage && billingCoverage.coverage_ratio >= 0.9 ? "success" : "warning"}>
                   {billingCoverage ? `${billingCoverage.days_collected}/${billingCoverage.days_in_month} days` : "Unavailable"}
                 </UiBadge>
               </div>
-              <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+              <div className={cx(uiCardMutedClass, "px-3 py-2 text-[11px] font-semibold", uiMutedTextClass)}>
                 {cost?.rate_card_name ? `Rate card: ${cost.rate_card_name}` : "No rate card attached."}
               </div>
             </div>

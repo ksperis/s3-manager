@@ -341,7 +341,7 @@ export default function AdminDashboard() {
       />
 
       {onboarding && !onboarding.dismissed && (
-        <div className={cx(uiCardClass, "rounded-2xl px-6 py-5")}>
+        <div className={cx(uiCardClass, "px-6 py-5")}>
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="space-y-2">
               <h2 className="ui-subtitle font-semibold text-slate-900 dark:text-white">
@@ -410,7 +410,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className={cx(uiCardClass, "mt-5 rounded-xl border-dashed px-4 py-4")}>
+          <div className={cx(uiCardMutedClass, "mt-5 border-dashed px-4 py-4")}>
             <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Next steps</p>
             <p className="mt-2 ui-caption text-slate-600 dark:text-slate-300">
               Add a UI user, create an account, and link that account to the UI user.
@@ -461,7 +461,7 @@ export default function AdminDashboard() {
                       {feature.massManagement && (
                         <span
                           title="Mass management"
-                          className="rounded-full border border-emerald-300/80 bg-white/70 px-1 text-[9px] font-bold leading-3 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-950/50 dark:text-emerald-200"
+                          className="rounded-full border border-emerald-300 bg-emerald-50 px-1 text-[9px] font-bold leading-3 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950 dark:text-emerald-200"
                         >
                           MM
                         </span>

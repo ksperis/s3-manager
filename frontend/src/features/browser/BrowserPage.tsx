@@ -38,6 +38,9 @@ import {
   uiCardClass,
   uiCardMutedClass,
   uiCheckboxClass,
+  uiMenuClass,
+  uiMutedTextClass,
+  uiPanelMutedClass,
 } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
@@ -841,22 +844,22 @@ const BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES: Record<
   unknown: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
 };
 const browserSectionEyebrowClasses =
-  "ui-caption font-semibold text-slate-500 dark:text-slate-400";
+  cx("ui-caption font-semibold", uiMutedTextClass);
 const browserShellClasses =
   cx(
     uiCardClass,
-    "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-gradient-to-r from-white via-white to-slate-50/80 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70",
+    "flex min-h-0 flex-1 flex-col overflow-hidden",
   );
 const browserSubtleSurfaceClasses =
-  cx(uiCardMutedClass, "rounded-xl shadow-none");
+  cx(uiCardMutedClass, "shadow-none");
 const browserToolbarShellClasses =
-  "flex flex-col gap-2 rounded-xl border border-slate-200/90 bg-slate-50/80 p-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 lg:flex-row lg:items-center lg:justify-between";
+  cx(uiPanelMutedClass, "flex flex-col gap-2 p-2 lg:flex-row lg:items-center lg:justify-between");
 const browserToolbarPathStripClasses =
-  "flex min-w-0 flex-1 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm dark:border-slate-700 dark:bg-slate-900";
+  "flex min-w-0 flex-1 items-center gap-1 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2.5 py-1.5 shadow-[var(--ui-shadow-soft)]";
 const browserToolbarControlsGroupClasses =
-  "flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-1.5 py-0.5 shadow-sm dark:border-slate-700 dark:bg-slate-900";
+  "flex shrink-0 items-center gap-1.5 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-1.5 py-0.5 shadow-[var(--ui-shadow-soft)]";
 const browserFloatingMenuClasses =
-  "overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900";
+  cx(uiMenuClass, "overflow-hidden p-1.5");
 const browserInputClasses =
   cx(toolbarCompactInputClasses, "w-full py-2 font-medium");
 const browserSearchInputClasses =
@@ -867,18 +870,18 @@ const browserSearchInputClasses =
 const browserSelectClasses =
   cx(toolbarCompactSelectClasses, "h-9 w-full");
 const browserOptionCardClasses =
-  "inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 ui-caption font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
+  "inline-flex items-center gap-2 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2.5 py-1.5 ui-caption font-medium text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)]";
 const browserSearchLabelClasses =
-  "ui-caption font-medium text-slate-500 dark:text-slate-400";
+  cx("ui-caption font-medium", uiMutedTextClass);
 const browserSearchStatusChipClasses =
-  "inline-flex max-w-full items-center gap-1 rounded-md border border-slate-200 bg-slate-50/90 px-2 py-1 ui-caption text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200";
+  "inline-flex max-w-full items-center gap-1 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-2 py-1 ui-caption text-[var(--ui-text-muted)] shadow-[var(--ui-shadow-soft)]";
 const browserExplorerShellClasses =
   cx(
     uiCardClass,
-    "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-gradient-to-b from-white via-white to-slate-50/70 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/65",
+    "relative flex min-h-0 flex-1 flex-col overflow-hidden",
   );
 const inspectorTabListClasses =
-  "flex flex-nowrap gap-1 rounded-xl border border-slate-200 bg-slate-50/80 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/50";
+  "flex flex-nowrap gap-1 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-1 shadow-[var(--ui-shadow-soft)]";
 const inspectorTabBaseClasses =
   "inline-flex min-w-0 flex-1 items-center justify-center rounded-md border px-2.5 py-1.5 text-center ui-caption font-semibold whitespace-nowrap transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const inspectorTabInactiveClasses =
@@ -892,7 +895,7 @@ const inspectorSectionCardClasses =
 const inspectorSectionTitleClasses =
   "ui-caption font-semibold text-slate-500 dark:text-slate-400";
 const inspectorEmptyStateClasses =
-  "rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-4 ui-caption text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400";
+  "rounded-lg border border-dashed border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-4 ui-caption text-[var(--ui-text-muted)]";
 const inspectorInlineActionClasses =
   "ui-caption font-semibold text-slate-500 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200 dark:disabled:text-slate-500";
 const getMultipartUploadEntryId = (
@@ -13689,7 +13692,7 @@ export default function BrowserPage({
 
             {isInspectorPanelVisible && (
               <div className="flex min-h-0 h-full flex-col gap-3">
-                <div className="ui-surface-card flex min-h-0 h-full flex-1 flex-col rounded-xl bg-gradient-to-r from-white via-white to-slate-50/80 px-3 py-3 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70">
+                <div className="ui-surface-card flex min-h-0 h-full flex-1 flex-col px-3 py-3">
                   <div
                     className={inspectorTabListClasses}
                     role="tablist"
@@ -14324,7 +14327,7 @@ export default function BrowserPage({
                                 Clear
                               </button>
                             </div>
-                            <div className="rounded-lg border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-sky-50 px-3 py-2.5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900/60 dark:to-slate-900">
+                            <div className="rounded-lg border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface-muted)] px-3 py-2.5 shadow-[var(--ui-shadow-soft)]">
                               <div className="flex items-center gap-3">
                                 <div
                                   className={`flex h-10 w-10 items-center justify-center rounded-lg border ui-caption font-bold ${

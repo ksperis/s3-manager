@@ -11,6 +11,7 @@ import StatCards from "../../components/StatCards";
 import UiBadge from "../../components/ui/UiBadge";
 import UiCard from "../../components/ui/UiCard";
 import UiProgressBar from "../../components/ui/UiProgressBar";
+import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
@@ -37,7 +38,7 @@ function transferTone(status: string) {
 
 function EmptyState({ children }: { children: string }) {
   return (
-    <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-4 text-xs font-semibold text-slate-500">
+    <div className={cx(uiCardMutedClass, "px-3 py-4 text-xs font-semibold", uiMutedTextClass)}>
       {children}
     </div>
   );
@@ -91,7 +92,7 @@ export default function PortalDashboard() {
         description={`Welcome back, ${workspace.accountName}`}
         breadcrumbs={[{ label: "Portal" }, { label: "Dashboard" }]}
         right={
-          <div className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm">
+          <div className={cx(uiCardMutedClass, "flex h-8 items-center gap-2 px-3 text-xs font-semibold", uiMutedTextClass)}>
             <span>Current period</span>
           </div>
         }
@@ -121,9 +122,9 @@ export default function PortalDashboard() {
                   <div key={space.id} className="flex items-center justify-between gap-3 text-xs">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="h-2 w-2 rounded-full" style={{ background: DONUT_COLORS[index] ?? "#94a3b8" }} />
-                      <span className="truncate font-semibold text-slate-700">{space.name}</span>
+                      <span className={cx("truncate font-semibold", uiTitleTextClass)}>{space.name}</span>
                     </div>
-                    <span className="shrink-0 text-slate-500">{formatBytes(space.usedBytes)}</span>
+                    <span className={cx("shrink-0", uiMutedTextClass)}>{formatBytes(space.usedBytes)}</span>
                   </div>
                 ))}
               </div>
@@ -156,7 +157,7 @@ export default function PortalDashboard() {
             {topSpaces.map((space) => (
               <div key={space.id} className="grid grid-cols-[1fr_auto] gap-3">
                 <Link to={storageSpacePath(space)} className="text-xs font-semibold">{space.name}</Link>
-                <span className="text-xs font-semibold text-slate-500">{formatBytes(space.usedBytes)}</span>
+                <span className={cx("text-xs font-semibold", uiMutedTextClass)}>{formatBytes(space.usedBytes)}</span>
                 <div className="col-span-2">
                   <UiProgressBar value={percent(space.usedBytes, workspace.usedBytes)} />
                 </div>
@@ -184,16 +185,16 @@ export default function PortalDashboard() {
         <UiCard title="Recent transfers" actions={<Link to="/portal/transfers" className="ui-caption font-semibold">View all transfers</Link>}>
           <div className="space-y-2">
             {workspace.transfers.slice(0, 5).map((transfer) => (
-              <div key={transfer.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2">
+              <div key={transfer.id} className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--ui-border-soft)] px-3 py-2">
                 <div className="min-w-0">
-                  <div className="truncate text-xs font-bold text-slate-800">{transfer.name}</div>
-                  <div className="truncate text-[11px] text-slate-500">{transfer.direction} - {transfer.startedLabel}</div>
+                  <div className={cx("truncate text-xs", uiTitleTextClass)}>{transfer.name}</div>
+                  <div className={cx("truncate text-[11px]", uiMutedTextClass)}>{transfer.direction} - {transfer.startedLabel}</div>
                 </div>
                 <UiBadge tone={transferTone(transfer.status)}>{transfer.status}</UiBadge>
               </div>
             ))}
             {workspace.transfers.length === 0 ? (
-              <div className="rounded-md border border-slate-100 px-3 py-4 text-xs font-semibold text-slate-500">
+              <div className={cx(uiCardMutedClass, "px-3 py-4 text-xs font-semibold", uiMutedTextClass)}>
                 No recent transfers.
               </div>
             ) : null}
@@ -203,10 +204,10 @@ export default function PortalDashboard() {
         <UiCard title="Alerts" actions={<Link to="/portal/activity" className="ui-caption font-semibold">View all alerts</Link>}>
           <div className="space-y-2">
             {alerts.map((alert) => (
-              <div key={alert.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2">
+              <div key={alert.id} className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--ui-border-soft)] px-3 py-2">
                 <div className="min-w-0">
-                  <div className="truncate text-xs font-bold text-slate-800">{alert.title}</div>
-                  <div className="truncate text-[11px] text-slate-500">{alert.description}</div>
+                  <div className={cx("truncate text-xs", uiTitleTextClass)}>{alert.title}</div>
+                  <div className={cx("truncate text-[11px]", uiMutedTextClass)}>{alert.description}</div>
                 </div>
                 <UiBadge tone={alertTone(alert.tone)}>{alert.severityLabel ?? "Info"}</UiBadge>
               </div>

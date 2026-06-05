@@ -515,7 +515,7 @@ export default function Topbar({
     <>
       <div
         data-topbar
-        className="shell-topbar z-[45] shrink-0 border-b shadow-[0_1px_0_rgba(15,23,42,0.02)]"
+        className="shell-topbar z-[45] shrink-0"
       >
         <div className="flex h-14 min-w-0 items-center gap-2.5 px-3 sm:px-4">
           <div className="flex min-w-0 flex-1 items-center gap-2">

@@ -22,6 +22,18 @@ type TopbarControlTriggerProps = {
   buttonRef?: Ref<HTMLButtonElement>;
 };
 
+type TopbarStaticControlProps = {
+  mode: "icon" | "icon_label";
+  label: string;
+  value: string;
+  icon?: ReactNode;
+  ariaLabel: string;
+  title?: string;
+  className?: string;
+  valueClassName?: string;
+  iconSlotClassName?: string;
+};
+
 export default function TopbarControlTrigger({
   mode,
   label,
@@ -97,6 +109,58 @@ export default function TopbarControlTrigger({
         </>
       )}
     </button>
+  );
+}
+
+export function TopbarStaticControl({
+  mode,
+  label,
+  value,
+  icon,
+  ariaLabel,
+  title,
+  className,
+  valueClassName,
+  iconSlotClassName,
+}: TopbarStaticControlProps) {
+  const iconOnly = mode === "icon";
+  const controlClassName = `shell-control inline-flex items-center rounded-lg border text-left ${
+    iconOnly ? "h-9 w-9 justify-center px-0" : "h-10 min-w-[12rem] gap-2.5 px-3"
+  } ${className ?? ""}`;
+
+  if (iconOnly) {
+    return (
+      <button type="button" aria-label={ariaLabel} title={title ?? value} className={controlClassName}>
+        <span className="shell-icon-muted">{icon}</span>
+        <span className="sr-only">{value}</span>
+      </button>
+    );
+  }
+
+  return (
+    <div role="group" aria-label={ariaLabel} title={title ?? value} className={controlClassName}>
+      {icon ? (
+        <span
+          className={
+            iconSlotClassName ??
+            "shell-menu-muted shell-icon-muted flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+          }
+        >
+          {icon}
+        </span>
+      ) : null}
+      <div className="min-w-0 flex-1 leading-tight">
+        <span className="shell-muted-text block truncate text-[10px] font-medium">{label}</span>
+        <span
+          data-slot="topbar-static-value"
+          className={`mt-0.5 block min-w-0 truncate text-[12px] font-semibold leading-4 text-[var(--shell-text)] ${
+            valueClassName ?? ""
+          }`}
+        >
+          {value}
+        </span>
+      </div>
+    </div>
   );
 }
 

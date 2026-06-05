@@ -1264,10 +1264,10 @@ export default function CephAdminUsersPage() {
                     <button
                       type="button"
                       onClick={advancedFilterCloseGuard.requestClose}
-                      className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+                      className="absolute inset-0 bg-slate-950/45"
                       aria-label="Close advanced filter drawer"
                     />
-                    <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                    <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-[color:var(--ui-border)] bg-[var(--ui-surface)] shadow-[var(--shell-menu-shadow)]">
                       <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
                         <div className="flex items-start justify-between gap-3">
                           <div>

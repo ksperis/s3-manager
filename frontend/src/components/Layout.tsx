@@ -183,7 +183,7 @@ export default function Layout({
               <div id="mobile-navigation-panel" className="absolute left-0 top-0 h-full w-[16rem] max-w-[86vw]">
                 <Sidebar
                   variant="mobile"
-                  className={`shadow-2xl transition-transform duration-200 ${
+                  className={`shadow-[var(--shell-menu-shadow)] transition-transform duration-200 ${
                     mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
                   }`}
                   title={sidebarTitle}

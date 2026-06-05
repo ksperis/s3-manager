@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { Link } from "react-router-dom";
-import { cx, uiCardClass } from "./ui/styles";
+import { cx, uiCardClass, uiLabelClass, uiMutedTextClass, uiTitleTextClass } from "./ui/styles";
 
 type Stat = {
   label: string;
@@ -19,16 +19,19 @@ type StatCardsProps = {
 
 export default function StatCards({ stats, columns = 3 }: StatCardsProps) {
   const grid = columns === 4 ? "lg:grid-cols-4" : columns === 2 ? "lg:grid-cols-2" : "lg:grid-cols-3";
-  const baseClasses = cx(uiCardClass, "flex h-full flex-col gap-2 px-4 py-4 transition hover:-translate-y-[1px] hover:shadow-md");
+  const baseClasses = cx(
+    uiCardClass,
+    "flex h-full flex-col gap-2 px-4 py-4 transition hover:-translate-y-[1px] hover:shadow-[var(--shell-menu-shadow)]"
+  );
 
   return (
     <div className={`grid gap-4 sm:grid-cols-2 ${grid}`}>
       {stats.map((item) => {
         const content = (
           <>
-            <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
-            <p className="mt-1.5 ui-title font-semibold text-slate-900 dark:text-white">{item.value}</p>
-            {item.hint && <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">{item.hint}</p>}
+            <p className={uiLabelClass}>{item.label}</p>
+            <p className={cx("mt-1.5 ui-title", uiTitleTextClass)}>{item.value}</p>
+            {item.hint && <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>{item.hint}</p>}
           </>
         );
 

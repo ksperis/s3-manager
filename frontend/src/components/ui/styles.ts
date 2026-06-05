@@ -14,24 +14,63 @@ export const uiCardClass = "ui-surface-card";
 
 export const uiCardMutedClass = "ui-surface-muted";
 
+export const uiPanelClass =
+  "rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)]";
+
+export const uiPanelMutedClass =
+  "rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)]";
+
+export const uiSectionHeaderClass =
+  "border-b border-[color:var(--ui-border-soft)] px-4 py-3";
+
+export const uiSectionHeaderLargeClass =
+  "border-b border-[color:var(--ui-border-soft)] px-4 py-4";
+
+export const uiDividerClass = "border-[color:var(--ui-border-soft)]";
+
+export const uiTitleTextClass = "font-semibold text-[var(--ui-text)]";
+
+export const uiMutedTextClass = "text-[var(--ui-text-muted)]";
+
 export const uiInputClass = "ui-control";
 
 export const uiCheckboxClass =
-  "h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600";
+  "h-4 w-4 rounded border-[color:var(--ui-border)] text-primary focus:ring-primary";
 
 export const uiLabelClass =
-  "ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
+  "ui-caption font-semibold uppercase tracking-wide text-[var(--ui-text-muted)]";
 
 export const uiButtonBaseClass = "ui-button-base";
 
-export const uiButtonVariants: Record<"primary" | "secondary" | "ghost" | "warning" | "danger", string> = {
+export const uiButtonVariants: Record<"primary" | "secondary" | "ghost" | "warning" | "danger" | "neutral", string> = {
   primary: "ui-button-primary",
   secondary: "ui-button-secondary",
+  neutral: "ui-button-secondary",
   ghost:
-    "border border-slate-200 text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-200",
+    "border border-transparent text-[var(--ui-text)] hover:border-[color:var(--ui-border)] hover:bg-[var(--ui-hover)] hover:text-primary",
   warning: "ui-button-warning",
   danger: "ui-button-danger",
 };
+
+export const uiIconButtonClass =
+  "inline-flex h-8 w-8 items-center justify-center rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] text-[var(--ui-text-muted)] shadow-[var(--ui-shadow-soft)] transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60";
+
+export const uiMenuClass =
+  "rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] text-[var(--ui-text)] shadow-[var(--shell-menu-shadow)]";
+
+export const uiMenuItemClass =
+  "rounded-md px-2.5 py-1.5 text-left transition hover:bg-[var(--ui-hover)]";
+
+export const uiToolbarClass =
+  "border-b border-[color:var(--ui-border-soft)]";
+
+export const uiToolbarSecondaryClass =
+  "border-t border-[color:var(--ui-border-soft)] bg-[var(--ui-surface-muted)] px-4 py-4";
+
+export const uiDataTableClass = "ui-data-table";
+
+export const uiTableContainerClass =
+  "overflow-x-auto rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)]";
 
 export const uiToneBadgeClasses: Record<UiTone, string> = {
   neutral: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200",

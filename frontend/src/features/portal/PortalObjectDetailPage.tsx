@@ -21,6 +21,7 @@ import { tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
+import { cx, uiCardMutedClass, uiMutedTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
 import {
@@ -330,7 +331,7 @@ export default function PortalObjectDetailPage() {
           <FileIcon />
           <div className="min-w-0">
             <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{object.name || objectName(object.path)}</p>
-            <div className="mt-3 flex max-w-2xl items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+            <div className={cx(uiCardMutedClass, "mt-3 flex max-w-2xl items-center gap-2 px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>
               <span className="min-w-0 flex-1 truncate">{displayPath}</span>
               <button type="button" onClick={copyPath} className="shrink-0 text-blue-700">Copier</button>
             </div>

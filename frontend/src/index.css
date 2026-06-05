@@ -9,14 +9,20 @@
 :root {
   color-scheme: light;
   color: #0f172a;
-  background-color: #f8fafc;
-  --ui-bg: #f8fafc;
+  background-color: #f7f9fc;
+  --ui-bg: #f7f9fc;
   --ui-surface: #ffffff;
-  --ui-surface-muted: #f1f5f9;
+  --ui-surface-muted: #f8fafc;
   --ui-surface-elevated: #ffffff;
-  --ui-border: #cbd5e1;
-  --ui-text: #0f172a;
-  --ui-text-muted: #475569;
+  --ui-border: #dbe3ee;
+  --ui-border-soft: #e8eef6;
+  --ui-text: #0b1f3a;
+  --ui-text-muted: #51617c;
+  --ui-hover: rgb(14 165 233 / 0.08);
+  --ui-selected-bg: rgb(14 165 233 / 0.12);
+  --ui-focus-ring: rgb(14 165 233 / 0.28);
+  --ui-shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.03);
+  --ui-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04);
   --ui-primary-light-50-rgb: 240 249 255;
   --ui-primary-light-100-rgb: 224 242 254;
   --ui-primary-light-200-rgb: 186 230 253;
@@ -78,14 +84,20 @@
 :root.dark {
   color-scheme: dark;
   color: #e2e8f0;
-  background-color: #0b1220;
-  --ui-bg: #0b1220;
-  --ui-surface: #0f172a;
-  --ui-surface-muted: #111827;
-  --ui-surface-elevated: #0b1220;
-  --ui-border: #334155;
-  --ui-text: #e2e8f0;
-  --ui-text-muted: #94a3b8;
+  background-color: #08111f;
+  --ui-bg: #08111f;
+  --ui-surface: #0f1a2b;
+  --ui-surface-muted: #111c2e;
+  --ui-surface-elevated: #142033;
+  --ui-border: rgba(148, 163, 184, 0.22);
+  --ui-border-soft: rgba(148, 163, 184, 0.14);
+  --ui-text: #e7edf5;
+  --ui-text-muted: #9aa8bd;
+  --ui-hover: rgba(255, 255, 255, 0.06);
+  --ui-selected-bg: rgb(var(--ui-primary-500-rgb) / 0.16);
+  --ui-focus-ring: rgb(var(--ui-primary-400-rgb) / 0.3);
+  --ui-shadow-soft: none;
+  --ui-shadow-card: none;
   --ui-primary-50-rgb: var(--ui-primary-dark-50-rgb);
   --ui-primary-100-rgb: var(--ui-primary-dark-100-rgb);
   --ui-primary-200-rgb: var(--ui-primary-dark-200-rgb);
@@ -124,7 +136,9 @@
 
 body {
   font-family: "Inter", system-ui, -apple-system, sans-serif;
-  @apply bg-slate-50 text-sm text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  @apply text-sm antialiased;
 }
 
 @layer base {
@@ -307,35 +321,90 @@ body {
   }
 
   .ui-surface-card {
-    @apply rounded-xl border border-slate-300/90 bg-white/95 shadow-sm shadow-slate-200/50 dark:border-slate-600/70 dark:bg-slate-800/85 dark:shadow-black/20;
+    border: 1px solid var(--ui-border);
+    border-radius: 0.5rem;
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    box-shadow: var(--ui-shadow-card);
   }
 
   .ui-surface-muted {
-    @apply rounded-xl border border-slate-300/80 bg-slate-100/80 shadow-sm shadow-slate-200/40 dark:border-slate-600/60 dark:bg-slate-800/55 dark:shadow-black/10;
+    border: 1px solid var(--ui-border);
+    border-radius: 0.5rem;
+    background: var(--ui-surface-muted);
+    color: var(--ui-text);
+    box-shadow: var(--ui-shadow-soft);
   }
 
   .ui-control {
-    @apply w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
+    border-color: var(--ui-border);
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    box-shadow: var(--ui-shadow-soft);
+    @apply w-full rounded-md border px-3 py-2 ui-body transition disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .ui-control::placeholder {
+    color: var(--ui-text-muted);
+    opacity: 0.72;
+  }
+
+  .ui-control:hover:not(:disabled) {
+    border-color: rgb(var(--ui-primary-300-rgb));
+  }
+
+  .ui-control:focus {
+    border-color: rgb(var(--ui-primary-400-rgb));
+    box-shadow: 0 0 0 2px var(--ui-focus-ring);
+    outline: none;
   }
 
   .ui-button-base {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 ui-caption font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60;
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 ui-caption font-semibold transition disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .ui-button-base:focus-visible {
+    outline: 2px solid rgb(var(--ui-primary-500-rgb));
+    outline-offset: 2px;
   }
 
   .ui-button-primary {
-    @apply bg-primary text-white shadow-sm hover:bg-primary-600;
+    background: var(--ui-primary-strong);
+    color: #ffffff;
+    box-shadow: var(--ui-shadow-soft);
+  }
+
+  .ui-button-primary:hover:not(:disabled) {
+    background: rgb(var(--ui-primary-700-rgb));
   }
 
   .ui-button-secondary {
-    @apply border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600;
+    border: 1px solid var(--ui-border);
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    box-shadow: var(--ui-shadow-soft);
+  }
+
+  .ui-button-secondary:hover:not(:disabled) {
+    border-color: rgb(var(--ui-primary-300-rgb));
+    background: var(--ui-hover);
   }
 
   .ui-button-warning {
-    @apply border border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:border-amber-800;
+    @apply border border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/45 dark:bg-amber-950 dark:text-amber-100;
+  }
+
+  .ui-button-warning:hover:not(:disabled) {
+    @apply border-amber-400 bg-amber-100 dark:border-amber-400/60 dark:bg-amber-900;
   }
 
   .ui-button-danger {
-    @apply bg-rose-600 text-white shadow-sm hover:bg-rose-700;
+    @apply bg-rose-600 text-white;
+    box-shadow: var(--ui-shadow-soft);
+  }
+
+  .ui-button-danger:hover:not(:disabled) {
+    @apply bg-rose-700;
   }
 
   .ui-data-table {
@@ -346,15 +415,20 @@ body {
   }
 
   .ui-data-table th {
-    @apply border-b border-slate-200 bg-slate-50 px-3 py-2 text-left font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300;
+    border-bottom: 1px solid var(--ui-border);
+    background: var(--ui-surface-muted);
+    color: var(--ui-text-muted);
+    @apply px-3 py-2 text-left font-semibold;
   }
 
   .ui-data-table td {
-    @apply border-b border-slate-200 px-3 py-2 text-slate-700 align-middle dark:border-slate-800 dark:text-slate-200;
+    border-bottom: 1px solid var(--ui-border-soft);
+    color: var(--ui-text);
+    @apply px-3 py-2 align-middle;
   }
 
   .ui-data-table tbody tr:hover td {
-    @apply bg-slate-50/70 dark:bg-slate-900/50;
+    background: var(--ui-hover);
   }
 
 }

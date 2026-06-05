@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { formatPercentage } from "../utils/format";
+import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "./ui/styles";
 
 export type UsageTileProps = {
   label: string;
@@ -32,11 +33,11 @@ export default function UsageTile({
   const ratioLabel = ratio !== null ? formatPercentage(ratio) : "—";
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-slate-200/80 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className={cx(uiCardMutedClass, "flex flex-col gap-3 p-3")}>
       <div className="flex items-center gap-3">
         <div className="shrink-0">
           {ratio === null ? (
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-slate-200 ui-caption font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            <div className={cx("flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-[color:var(--ui-border)] ui-caption font-semibold", uiMutedTextClass)}>
               N/A
             </div>
           ) : (
@@ -44,21 +45,21 @@ export default function UsageTile({
           )}
         </div>
         <div className="flex-1 space-y-1">
-          <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">{label}</p>
-          <p className="ui-title font-semibold text-slate-900 dark:text-white">
+          <p className={cx("ui-caption font-semibold", uiMutedTextClass)}>{label}</p>
+          <p className={cx("ui-title", uiTitleTextClass)}>
             {usedDisplay}
-            {unitHint && hasUsage && <span className="ml-1 ui-caption font-normal text-slate-500 dark:text-slate-400">{unitHint}</span>}
+            {unitHint && hasUsage && <span className={cx("ml-1 ui-caption font-normal", uiMutedTextClass)}>{unitHint}</span>}
           </p>
           {quotaDisplay ? (
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
+            <p className={cx("ui-caption", uiMutedTextClass)}>
               {usedDisplay} / {quotaDisplay} · {ratioLabel}
             </p>
           ) : (
-            <p className="ui-caption text-slate-500 dark:text-slate-400">{emptyHint ?? "No quota defined."}</p>
+            <p className={cx("ui-caption", uiMutedTextClass)}>{emptyHint ?? "No quota defined."}</p>
           )}
         </div>
       </div>
-      <div className="h-1 rounded-full bg-slate-100 dark:bg-slate-800">
+      <div className="h-1 rounded-full bg-[var(--ui-hover)]">
         <div
           className={`h-full rounded-full ${getBarColor(ratio ?? 0)}`}
           style={{ width: `${ratio ?? 0}%` }}
@@ -84,7 +85,7 @@ function UsageGauge({ ratio }: { ratio: number }) {
         background: `conic-gradient(${color} ${angle}deg, ${track} ${angle}deg 360deg)`,
       }}
     >
-      <div className="absolute inset-1.5 flex items-center justify-center rounded-full bg-white ui-caption font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+      <div className={cx("absolute inset-1.5 flex items-center justify-center rounded-full bg-[var(--ui-surface)] ui-caption", uiTitleTextClass)}>
         {formatPercentage(clamped)}
       </div>
     </div>

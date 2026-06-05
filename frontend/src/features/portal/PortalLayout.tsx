@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 import Layout from "../../components/Layout";
 import type { SidebarSection } from "../../components/Sidebar";
+import { TopbarStaticControl } from "../../components/TopbarControlTrigger";
 import TopbarDropdownSelect, { type TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
 import type { TopbarControlDescriptor, TopbarControlRenderMode } from "../../components/topbarControlsLayout";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
@@ -59,30 +60,25 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
 
   if (mode === "icon") {
     return (
-      <button
-        type="button"
-        aria-label={`Portal account ${selectedLabel}`}
+      <TopbarStaticControl
+        mode="icon"
+        label="Account"
+        value={selectedLabel}
+        icon={<AccountControlIcon className="h-4 w-4" />}
+        ariaLabel={`Portal account ${selectedLabel}`}
         title={selectedLabel}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-      >
-        <AccountControlIcon className="h-4 w-4" />
-      </button>
+      />
     );
   }
   return (
-    <div className="inline-flex h-9 min-w-[12rem] items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-100">
-        <AccountControlIcon className="h-4 w-4" />
-      </span>
-      <span className="min-w-0 leading-tight">
-        <span className="block truncate text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">
-          Account
-        </span>
-        <span className="mt-px block min-w-0 truncate text-[13px] font-semibold leading-4 text-slate-950 dark:text-slate-100">
-          {selectedLabel}
-        </span>
-      </span>
-    </div>
+    <TopbarStaticControl
+      mode="icon_label"
+      label="Account"
+      value={selectedLabel}
+      icon={<AccountControlIcon className="h-4 w-4" />}
+      ariaLabel={`Portal account ${selectedLabel}`}
+      title={selectedLabel}
+    />
   );
 }
 

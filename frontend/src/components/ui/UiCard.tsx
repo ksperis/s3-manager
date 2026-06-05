@@ -3,7 +3,14 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { ReactNode } from "react";
-import { cx, uiCardClass, uiCardMutedClass } from "./styles";
+import {
+  cx,
+  uiCardClass,
+  uiCardMutedClass,
+  uiMutedTextClass,
+  uiSectionHeaderClass,
+  uiTitleTextClass,
+} from "./styles";
 
 type UiCardProps = {
   title?: string;
@@ -27,10 +34,10 @@ export default function UiCard({
   return (
     <section className={cx(muted ? uiCardMutedClass : uiCardClass, className)}>
       {(title || description || actions) && (
-        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3 dark:border-slate-800">
+        <header className={cx("flex flex-wrap items-start justify-between gap-3", uiSectionHeaderClass)}>
           <div className="min-w-0">
-            {title && <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-50">{title}</h3>}
-            {description && <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">{description}</p>}
+            {title && <h3 className={cx("ui-subtitle", uiTitleTextClass)}>{title}</h3>}
+            {description && <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>{description}</p>}
           </div>
           {actions ? <div className="shrink-0">{actions}</div> : null}
         </header>
@@ -39,4 +46,3 @@ export default function UiCard({
     </section>
   );
 }
-

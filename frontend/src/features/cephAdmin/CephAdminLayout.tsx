@@ -5,6 +5,7 @@
 import { Outlet, useLocation } from "react-router-dom";
 import Layout from "../../components/Layout";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
+import { TopbarStaticControl } from "../../components/TopbarControlTrigger";
 import TopbarDropdownSelect, { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
 import { SidebarSection } from "../../components/Sidebar";
 import PageBanner from "../../components/PageBanner";
@@ -174,37 +175,31 @@ function CephAdminShell() {
         ) : undefined,
     };
   });
-  const pillClasses =
-    "inline-flex h-9 min-w-[12rem] items-center rounded-md border border-slate-200 bg-white px-2.5 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900";
   const selectedEndpointLabel = selectedEndpoint ? selectedEndpoint.name : loading ? "Loading..." : "No endpoint selected";
 
   const renderStaticEndpointPill = (mode: "icon" | "icon_label") => {
     if (mode === "icon") {
       return (
-        <button
-          type="button"
-          aria-label={`Endpoint ${selectedEndpointLabel}`}
+        <TopbarStaticControl
+          mode="icon"
+          label="Endpoint"
+          value={selectedEndpointLabel}
+          icon={<EndpointIcon className="h-4 w-4" />}
+          ariaLabel={`Endpoint ${selectedEndpointLabel}`}
           title={selectedEndpoint?.endpoint_url ?? selectedEndpointLabel}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-        >
-          <EndpointIcon className="h-4 w-4" />
-        </button>
+        />
       );
     }
     return (
-      <div className={`${pillClasses} gap-2`}>
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-100">
-          <EndpointIcon className="h-4 w-4" />
-        </span>
-        <span className="min-w-0 leading-tight">
-          <span className="block truncate text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">
-            Endpoint
-          </span>
-          <span className="mt-px block max-w-[20rem] truncate text-[13px] font-semibold leading-4 text-slate-950 dark:text-slate-100">
-            {selectedEndpointLabel}
-          </span>
-        </span>
-      </div>
+      <TopbarStaticControl
+        mode="icon_label"
+        label="Endpoint"
+        value={selectedEndpointLabel}
+        icon={<EndpointIcon className="h-4 w-4" />}
+        ariaLabel={`Endpoint ${selectedEndpointLabel}`}
+        title={selectedEndpoint?.endpoint_url ?? selectedEndpointLabel}
+        valueClassName="max-w-[20rem]"
+      />
     );
   };
 

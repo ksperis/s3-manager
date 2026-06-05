@@ -21,9 +21,14 @@ import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiDetails from "../../components/ui/UiDetails";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import {
+  cx,
+  uiButtonBaseClass,
+  uiButtonVariants,
+  uiCardMutedClass,
   uiCheckboxClass,
   uiFeatureStateHighlightFieldClasses,
   uiFeatureStateHighlightLabelClasses,
+  uiMenuClass,
   type UiTone,
   type UiFeatureStateTone,
 } from "../../components/ui/styles";
@@ -8113,7 +8118,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                     loadingDetails ||
                     advancedProgress.active
                   }
-                  className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                  className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 ui-caption")}
                   title="Flush cached bucket listings and reload"
                 >
                   <RefreshIcon className={`h-3.5 w-3.5 ${cacheRefreshLoading ? "animate-spin" : ""}`} />
@@ -8123,12 +8128,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                   <button
                     type="button"
                     onClick={() => setShowColumnPicker((prev) => !prev)}
-                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                    className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "rounded-md px-2.5 py-1.5 ui-caption")}
                   >
                     Columns
                   </button>
                   {showColumnPicker && (
-                    <div className="absolute right-0 z-30 mt-2 w-96 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                    <div className={cx(uiMenuClass, "absolute right-0 z-30 mt-2 w-96 max-w-[calc(100vw-2rem)] p-3")}>
                       <ColumnVisibilityPicker
                         selectedCount={visibleColumns.length}
                         onReset={resetColumns}
@@ -8190,7 +8195,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
               </div>
             </div>
           </div>
-          <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="border-t border-[color:var(--ui-border-soft)] bg-[var(--ui-surface-muted)] px-4 py-4">
             <div className="space-y-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -8296,11 +8301,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                   <button
                     type="button"
                     onClick={advancedFilterCloseGuard.requestClose}
-                    className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+                    className="absolute inset-0 bg-slate-950/45"
                     aria-label="Close advanced filter drawer"
                   />
-                  <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-                    <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                  <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-[color:var(--ui-border)] bg-[var(--ui-surface)] shadow-[var(--shell-menu-shadow)]">
+                    <div className="border-b border-[color:var(--ui-border-soft)] px-4 py-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Advanced filter</p>
@@ -8330,7 +8335,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                         <button
                           type="button"
                           onClick={advancedFilterCloseGuard.requestClose}
-                          className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                          className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "rounded-md px-2.5 py-1.5 ui-caption")}
                         >
                           Close
                         </button>
@@ -8339,7 +8344,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
                     <div className="flex-1 overflow-y-auto px-4 py-4">
                       <div className="space-y-4">
-                        <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+                        <section className={cx(uiCardMutedClass, "p-3")}>
                           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Draft summary
                           </p>
@@ -8361,7 +8366,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           )}
                         </section>
 
-                        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
                           <div className="mb-3 flex items-center justify-between">
                             <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               <span>Identity and tags</span>
@@ -8772,7 +8777,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           </div>
                         </section>
 
-                        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
                           <div className="mb-3 flex items-center justify-between">
                             <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               <span>Storage Metrics and Quota</span>
@@ -8920,7 +8925,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           </div>
                         </section>
 
-                        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
                           <div className="mb-3 flex items-center justify-between">
                             <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               <span>Feature states</span>
@@ -8982,7 +8987,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           </div>
                         </section>
 
-                        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
                           <div className="mb-3 flex items-center justify-between">
                             <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               <span>Feature details</span>
@@ -9476,7 +9481,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                       </div>
                     </div>
 
-                    <div className="border-t border-slate-200 bg-white/95 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/95">
+                    <div className="border-t border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)] px-4 py-3">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <p className="ui-caption text-slate-500 dark:text-slate-400">
                           {hasPendingAdvancedChanges
@@ -9581,7 +9586,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         {selectAllProgress && <ActionProgressCard progress={selectAllProgress} busy className="mb-3" />}
 
         {advancedProgress.active && (
-          <div className="mb-3 rounded-xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-slate-900/70">
+          <div className="mb-3 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
                 {advancedProgress.determinate
