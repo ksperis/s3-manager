@@ -60,8 +60,14 @@ function resolveUiRoleLabel(user: StoredTopbarUser | null): string {
   return "Unknown";
 }
 
+function compactWorkspaceLabel(label?: string | null): string {
+  const normalized = (label ?? "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+  if (!normalized) return "Workspace";
+  if (normalized.toLowerCase() === "administration") return "Admin";
+  return normalized;
+}
+
 export default function Topbar({
-  projectName,
   section,
   inlineContent,
   controlsContent,
@@ -386,16 +392,133 @@ export default function Topbar({
     }
   };
 
-  const projectLabel = projectName ?? "S3 Manager";
+  const workspaceTriggerLabel = workspaceSwitcher
+    ? compactWorkspaceLabel(workspaceSwitcher.currentWorkspaceLabel)
+    : compactWorkspaceLabel(section);
+  const showWorkspaceInTopbar = showWorkspaceSwitcher;
+
+  const renderWorkspaceSelector = (placement: "sidebar" | "topbar") => {
+    const sidebarPlacement = placement === "sidebar";
+
+    if (workspaceSwitcher) {
+      return (
+        <div className="relative min-w-0 shrink-0">
+          <button
+            ref={workspaceTriggerRef}
+            type="button"
+            onClick={() => setWorkspaceMenuOpen((open) => !open)}
+            aria-label="Switch workspace"
+            aria-haspopup="listbox"
+            aria-expanded={workspaceMenuOpen}
+            aria-controls={workspaceMenuOpen ? workspaceListboxId : undefined}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+              event.preventDefault();
+              setWorkspaceMenuOpen(true);
+            }}
+            className={`shell-control inline-flex min-w-0 items-center rounded-lg border text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+              sidebarPlacement
+                ? "h-10 w-full px-3"
+                : "h-10 w-[140px] px-3"
+            } ${workspaceMenuOpen ? "shell-control-active" : ""}`}
+          >
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="shell-muted-text block truncate text-[10px] font-medium">Workspace</span>
+              <span className="mt-0.5 block truncate text-[12px] font-semibold leading-4 text-[var(--shell-text)]">
+                {workspaceTriggerLabel}
+              </span>
+            </span>
+            <ChevronDownIcon
+              className={`shell-icon-muted ml-2 h-4 w-4 shrink-0 transition-transform ${
+                workspaceMenuOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          {workspaceMenuOpen && (
+            <AnchoredPortalMenu
+              open={workspaceMenuOpen}
+              anchorRef={workspaceTriggerRef}
+              placement="bottom-start"
+              minWidth={240}
+              className="shell-menu overflow-hidden rounded-lg border p-1.5"
+            >
+              <div ref={workspaceMenuSurfaceRef}>
+                <div
+                  id={workspaceListboxId}
+                  ref={workspaceListboxRef}
+                  className="max-h-72 overflow-y-auto focus:outline-none"
+                  role="listbox"
+                  tabIndex={0}
+                  aria-label="Switch workspace"
+                  aria-activedescendant={
+                    workspaceActiveIndex >= 0 ? `${workspaceListboxId}-option-${workspaceActiveIndex}` : undefined
+                  }
+                  onKeyDown={handleWorkspaceListboxKeyDown}
+                >
+                  {workspaceOptions.map((option, index) => {
+                    const active = workspaceSwitcher.currentWorkspaceId === option.value;
+                    const highlighted = workspaceOptions[workspaceActiveIndex]?.value === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        id={`${workspaceListboxId}-option-${index}`}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        tabIndex={-1}
+                        onMouseEnter={() => setWorkspaceActiveIndex(index)}
+                        onClick={() => activateWorkspaceByIndex(index)}
+                        className={`flex w-full items-start gap-2 rounded-md px-3 py-1.5 text-left transition ${
+                          active
+                            ? "shell-menu-item-active"
+                            : highlighted
+                              ? "shell-menu-item-highlighted"
+                              : "shell-menu-item hover:bg-[var(--shell-hover)]"
+                        }`}
+                      >
+                        <span className="mt-0.5 h-4 w-4 shrink-0">
+                          {active ? <CheckIcon className="h-4 w-4" /> : null}
+                        </span>
+                        {option.icon && (
+                          <span className="shell-icon-muted mt-0.5 h-4 w-4 shrink-0">{option.icon}</span>
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate ui-caption font-semibold">{option.label}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </AnchoredPortalMenu>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className={`shell-control flex min-w-0 items-center gap-2 rounded-lg border ${sidebarPlacement ? "h-10 px-3" : "h-10 w-[140px] px-3"}`}>
+        <span className="min-w-0 leading-[1.05]">
+          <span className="shell-muted-text block truncate text-[10px] font-medium">Workspace</span>
+          {workspaceTriggerLabel && (
+            <span className="mt-0.5 block truncate text-[12px] font-semibold leading-4 text-[var(--shell-text)]">
+              {workspaceTriggerLabel}
+            </span>
+          )}
+        </span>
+      </div>
+    );
+  };
 
   return (
     <>
       <div
         data-topbar
-        className="z-[45] shrink-0 border-b border-slate-200 bg-white shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950"
+        className="shell-topbar z-[45] shrink-0"
       >
-        <div className="flex h-16 min-w-0 items-center gap-2 px-3 sm:gap-3 sm:px-6">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <div className="flex h-14 min-w-0 items-center gap-2.5 px-3 sm:px-4">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {showMobileMenuButton && (
               <button
                 type="button"
@@ -403,122 +526,16 @@ export default function Topbar({
                 aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"}
                 aria-controls="mobile-navigation-panel"
                 aria-expanded={mobileMenuOpen}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-500 dark:focus-visible:ring-offset-slate-900 md:hidden"
+                className="shell-control inline-flex h-9 w-9 items-center justify-center rounded-lg border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:hidden"
               >
                 <HamburgerIcon className="h-4 w-4" />
               </button>
             )}
 
-            {showWorkspaceSwitcher && workspaceSwitcher ? (
-              <div className="relative min-w-0 shrink-0">
-                <button
-                  ref={workspaceTriggerRef}
-                  type="button"
-                  onClick={() => setWorkspaceMenuOpen((open) => !open)}
-                  aria-label="Switch workspace"
-                  aria-haspopup="listbox"
-                  aria-expanded={workspaceMenuOpen}
-                  aria-controls={workspaceMenuOpen ? workspaceListboxId : undefined}
-                  onKeyDown={(event) => {
-                    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-                    event.preventDefault();
-                    setWorkspaceMenuOpen(true);
-                  }}
-                  className={`inline-flex h-10 min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 text-left shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-900 dark:hover:border-blue-500 dark:focus-visible:ring-offset-slate-900 ${
-                    workspaceMenuOpen ? "border-primary/70" : ""
-                  }`}
-                >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-200">
-                    <CubeIcon className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0 leading-[1.05]">
-                    <span className="block truncate ui-caption font-semibold text-slate-900 dark:text-slate-50">{projectLabel}</span>
-                    {section && (
-                      <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">
-                        {section}
-                      </span>
-                    )}
-                  </span>
-                  <ChevronDownIcon
-                    className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform dark:text-slate-300 ${
-                      workspaceMenuOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-
-                {workspaceMenuOpen && (
-                  <AnchoredPortalMenu
-                    open={workspaceMenuOpen}
-                    anchorRef={workspaceTriggerRef}
-                    placement="bottom-start"
-                    minWidth={240}
-                    className="overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
-                  >
-                    <div ref={workspaceMenuSurfaceRef}>
-                      <div
-                        id={workspaceListboxId}
-                        ref={workspaceListboxRef}
-                        className="max-h-72 overflow-y-auto focus:outline-none"
-                        role="listbox"
-                        tabIndex={0}
-                        aria-label="Switch workspace"
-                        aria-activedescendant={
-                          workspaceActiveIndex >= 0 ? `${workspaceListboxId}-option-${workspaceActiveIndex}` : undefined
-                        }
-                        onKeyDown={handleWorkspaceListboxKeyDown}
-                      >
-                        {workspaceOptions.map((option, index) => {
-                          const active = workspaceSwitcher.currentWorkspaceId === option.value;
-                          const highlighted = workspaceOptions[workspaceActiveIndex]?.value === option.value;
-                          return (
-                            <button
-                              key={option.value}
-                              id={`${workspaceListboxId}-option-${index}`}
-                              type="button"
-                              role="option"
-                              aria-selected={active}
-                              tabIndex={-1}
-                              onMouseEnter={() => setWorkspaceActiveIndex(index)}
-                              onClick={() => activateWorkspaceByIndex(index)}
-                              className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition ${
-                                active
-                                  ? "bg-primary-50 text-primary-900 dark:bg-primary-900/30 dark:text-primary-100"
-                                  : highlighted
-                                    ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"
-                                    : "text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
-                              }`}
-                            >
-                              <span className="mt-0.5 h-4 w-4 shrink-0">
-                                {active ? <CheckIcon className="h-4 w-4" /> : null}
-                              </span>
-                              {option.icon && (
-                                <span className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-300">{option.icon}</span>
-                              )}
-                              <span className="min-w-0">
-                                <span className="block truncate ui-caption font-semibold">{option.label}</span>
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </AnchoredPortalMenu>
-                )}
-              </div>
-            ) : showWorkspaceSwitcher ? (
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white">
-                  <CubeIcon className="h-4 w-4" />
-                </span>
-                <span className="min-w-0 leading-[1.05]">
-                  <span className="block truncate ui-caption font-semibold text-slate-900 dark:text-slate-50">{projectLabel}</span>
-                  {section && <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">{section}</span>}
-                </span>
-              </div>
-            ) : null}
+            {showWorkspaceInTopbar ? renderWorkspaceSelector("topbar") : null}
 
             {hasAdaptiveControls ? (
-              <div ref={controlsStripRef} className="flex min-w-0 flex-1 items-center pl-1">
+              <div ref={controlsStripRef} className="flex min-w-0 flex-1 items-center">
                 <div className="flex min-w-0 items-center gap-2">
                   {inlineControls.map((entry) => {
                     return <div key={entry.id}>{entry.descriptor.renderControl(entry.mode)}</div>;
@@ -526,7 +543,7 @@ export default function Topbar({
                 </div>
               </div>
             ) : (
-              controlsContent && <div className="hidden min-w-0 items-center pl-1 md:flex">{controlsContent}</div>
+              controlsContent && <div className="hidden min-w-0 items-center md:flex">{controlsContent}</div>
             )}
           </div>
 
@@ -534,6 +551,15 @@ export default function Topbar({
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             {contextAction && <div className="hidden sm:flex">{contextAction}</div>}
+
+            <button
+              type="button"
+              aria-label="Search"
+              title="Search"
+              className="shell-icon-button inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <SearchIcon className="h-4 w-4" />
+            </button>
 
             <ThemeToggle />
 
@@ -550,19 +576,16 @@ export default function Topbar({
                   event.preventDefault();
                   setAccountMenuOpen(true);
                 }}
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-transparent bg-transparent px-1.5 py-1 text-left transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:hover:bg-slate-900 dark:focus-visible:ring-offset-slate-900"
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-transparent bg-transparent px-1.5 text-left transition hover:bg-[var(--shell-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 ui-caption font-semibold text-blue-700 dark:bg-blue-900/50 dark:text-blue-100">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-[12px] font-semibold text-primary-700 dark:bg-primary-900/45 dark:text-primary-100">
                   {accountInitial}
                 </span>
-                <span className="hidden min-w-0 sm:flex sm:max-w-32 lg:max-w-40 sm:flex-col sm:items-start">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500">Account</span>
-                  <span className="w-full truncate ui-caption font-semibold text-slate-700 dark:text-slate-100">
-                    {accountDisplay}
-                  </span>
+                <span className="hidden min-w-0 max-w-40 truncate text-[12px] font-semibold text-[var(--shell-text)] sm:block lg:max-w-52">
+                  {accountDisplay}
                 </span>
                 <ChevronDownIcon
-                  className={`h-3.5 w-3.5 text-slate-500 transition-transform dark:text-slate-300 ${
+                  className={`shell-icon-muted h-4 w-4 transition-transform ${
                     accountMenuOpen ? "rotate-180" : ""
                   }`}
                 />
@@ -575,13 +598,13 @@ export default function Topbar({
                     ref={accountMenuSurfaceRef}
                     role="menu"
                     aria-label="Account actions"
-                    className="w-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                    className="shell-menu w-72 rounded-lg border p-1.5"
                   >
-                    <div className="mb-1 rounded-lg border border-slate-200/70 bg-slate-50/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/70">
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">Signed in as</p>
-                      <p className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">{accountDisplay}</p>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        <span className="inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
+                    <div className="shell-menu-muted mb-1 rounded-md border px-2.5 py-2">
+                      <p className="shell-muted-text ui-caption">Signed in as</p>
+                      <p className="truncate ui-caption font-semibold text-[var(--shell-text)]">{accountDisplay}</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        <span className="shell-menu-muted inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold text-[var(--shell-text)]">
                           {uiRoleLabel}
                         </span>
                       </div>
@@ -592,14 +615,14 @@ export default function Topbar({
                       role="menuitem"
                       data-account-menu-item="true"
                       onClick={openProfileModal}
-                      className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                      className="shell-menu-item flex w-full items-start gap-2 rounded-md px-2.5 py-1.5 text-left transition"
                     >
-                      <UserIcon className="mt-0.5 h-4 w-4 text-slate-500 dark:text-slate-300" />
+                      <UserIcon className="shell-icon-muted mt-0.5 h-4 w-4" />
                       <span>
-                        <span className="block ui-caption font-semibold text-slate-800 dark:text-slate-100">
+                        <span className="block ui-caption font-semibold text-[var(--shell-text)]">
                           User profile
                         </span>
-                        <span className="block ui-caption text-slate-500 dark:text-slate-400">
+                        <span className="shell-muted-text block ui-caption">
                           Identity, password, preferences
                         </span>
                       </span>
@@ -611,14 +634,14 @@ export default function Topbar({
                         role="menuitem"
                         data-account-menu-item="true"
                         onClick={openConnectionsModal}
-                        className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                        className="shell-menu-item flex w-full items-start gap-2 rounded-md px-2.5 py-1.5 text-left transition"
                       >
-                        <LinkIcon className="mt-0.5 h-4 w-4 text-slate-500 dark:text-slate-300" />
+                        <LinkIcon className="shell-icon-muted mt-0.5 h-4 w-4" />
                         <span>
-                          <span className="block ui-caption font-semibold text-slate-800 dark:text-slate-100">
+                          <span className="block ui-caption font-semibold text-[var(--shell-text)]">
                             Private S3 connections
                           </span>
-                          <span className="block ui-caption text-slate-500 dark:text-slate-400">
+                          <span className="shell-muted-text block ui-caption">
                             Manage your endpoints and credentials
                           </span>
                         </span>
@@ -631,27 +654,27 @@ export default function Topbar({
                         role="menuitem"
                         data-account-menu-item="true"
                         onClick={openApiTokensModal}
-                        className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                        className="shell-menu-item flex w-full items-start gap-2 rounded-md px-2.5 py-1.5 text-left transition"
                       >
-                        <ApiKeyIcon className="mt-0.5 h-4 w-4 text-slate-500 dark:text-slate-300" />
+                        <ApiKeyIcon className="shell-icon-muted mt-0.5 h-4 w-4" />
                         <span>
-                          <span className="block ui-caption font-semibold text-slate-800 dark:text-slate-100">
+                          <span className="block ui-caption font-semibold text-[var(--shell-text)]">
                             API tokens
                           </span>
-                          <span className="block ui-caption text-slate-500 dark:text-slate-400">
+                          <span className="shell-muted-text block ui-caption">
                             Manage admin automation tokens
                           </span>
                         </span>
                       </button>
                     )}
 
-                    <div className="my-1 border-t border-slate-200 dark:border-slate-700" />
+                    <div className="my-1 border-t border-[color:var(--shell-border-soft)]" />
                     <button
                       type="button"
                       role="menuitem"
                       data-account-menu-item="true"
                       onClick={triggerLogout}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left ui-caption font-semibold text-primary-700 transition hover:bg-primary-50 dark:text-primary-200 dark:hover:bg-primary-900/40"
+                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left ui-caption font-semibold text-primary-700 transition hover:bg-primary-50 dark:text-primary-200 dark:hover:bg-white/[0.06]"
                     >
                       <LogoutIcon className="h-4 w-4" />
                       <span>Sign out</span>
@@ -715,11 +738,11 @@ export default function Topbar({
   );
 }
 
-function CubeIcon(props: React.SVGProps<SVGSVGElement>) {
+function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="m12 12 8-4.5M12 12 4 7.5M12 12v9" />
+      <circle cx="11" cy="11" r="6.5" strokeWidth={1.7} />
+      <path strokeLinecap="round" strokeWidth={1.7} d="m16 16 4.5 4.5" />
     </svg>
   );
 }

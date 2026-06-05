@@ -5,7 +5,7 @@
 import { ReactNode, RefObject, useEffect, useId, useRef, useState } from "react";
 import UiButton from "./ui/UiButton";
 import { getFocusableElements, trapFocusWithin } from "./ui/focusTrap";
-import { cx, uiCardClass } from "./ui/styles";
+import { cx, uiCardClass, uiDividerClass, uiTitleTextClass } from "./ui/styles";
 
 const modalStack: string[] = [];
 const modalStackListeners = new Set<() => void>();
@@ -122,7 +122,7 @@ export default function Modal({
 
   return (
     <div
-      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm`}
+      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/50 px-4 py-6`}
       role="presentation"
       onMouseDown={(event) => {
         if (!isTopModal(modalId)) return;
@@ -139,10 +139,10 @@ export default function Modal({
         aria-labelledby={ariaLabelledby ?? fallbackTitleId}
         aria-describedby={ariaDescribedby}
         tabIndex={-1}
-        className={cx("w-full rounded-2xl shadow-2xl", uiCardClass, maxWidthClass)}
+        className={cx("w-full shadow-[var(--shell-menu-shadow)]", uiCardClass, maxWidthClass)}
       >
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
-          <h3 id={fallbackTitleId} className="ui-subtitle font-semibold text-slate-800 dark:text-slate-50">
+        <div className={cx("flex items-center justify-between border-b px-6 py-4", uiDividerClass)}>
+          <h3 id={fallbackTitleId} className={cx("ui-subtitle", uiTitleTextClass)}>
             {title}
           </h3>
           <UiButton variant="ghost" onClick={onClose} className="py-1" aria-label="Close modal">

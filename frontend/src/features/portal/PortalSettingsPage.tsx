@@ -2,7 +2,12 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { PortalV3Badge, PortalV3Card, PortalV3Page, PortalV3PageHeader } from "./PortalV3Components";
+import { useState } from "react";
+import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
+import UiBadge from "../../components/ui/UiBadge";
+import UiButton from "../../components/ui/UiButton";
+import UiCard from "../../components/ui/UiCard";
 
 function readUser() {
   if (typeof window === "undefined") return { email: "laurent@example.com", name: "Laurent" };
@@ -21,20 +26,22 @@ function readUser() {
 
 export default function PortalSettingsPage() {
   const user = readUser();
+  const [activeTab, setActiveTab] = useState("General");
   return (
-    <PortalV3Page>
-      <PortalV3PageHeader title="Settings" description="Configure your account and preferences." />
-      <div className="border-b border-slate-200">
-        <div className="flex gap-7">
-          {["General", "Security", "Notifications"].map((tab, index) => (
-            <button key={tab} type="button" className={index === 0 ? "portal-v3-tab portal-v3-tab-active" : "portal-v3-tab"}>
-              {tab}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="Settings"
+        description="Configure your account and preferences."
+        breadcrumbs={[{ label: "Portal" }, { label: "Settings" }]}
+      />
+      <PageTabs
+        tabs={["General", "Security", "Notifications"].map((tab) => ({ id: tab, label: tab }))}
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        variant="bar"
+      />
       <section className="grid gap-4 xl:grid-cols-3">
-        <PortalV3Card title="Account">
+        <UiCard title="Account">
           <dl className="space-y-4 text-xs">
             <div>
               <dt className="font-bold text-slate-400">Account name</dt>
@@ -53,31 +60,31 @@ export default function PortalSettingsPage() {
               <dd className="mt-1 font-semibold text-slate-800">Europe/Paris</dd>
             </div>
           </dl>
-          <button type="button" className="mt-6 h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm">Edit</button>
-        </PortalV3Card>
+          <UiButton variant="secondary" className="mt-6 h-8 px-3 py-1.5">Edit</UiButton>
+        </UiCard>
 
-        <PortalV3Card title="Security">
+        <UiCard title="Security">
           <dl className="space-y-4 text-xs">
             <div>
               <dt className="font-bold text-slate-400">Password</dt>
               <dd className="mt-1 flex items-center justify-between gap-3 font-semibold text-slate-800">
                 <span>********</span>
-                <button type="button" className="h-7 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-700 shadow-sm">Change</button>
+                <UiButton variant="secondary" className="h-7 px-3 py-1">Change</UiButton>
               </dd>
             </div>
             <div>
               <dt className="font-bold text-slate-400">MFA</dt>
-              <dd className="mt-1"><PortalV3Badge tone="green">Enabled</PortalV3Badge></dd>
+              <dd className="mt-1"><UiBadge tone="success">Enabled</UiBadge></dd>
             </div>
             <div>
               <dt className="font-bold text-slate-400">Session timeout</dt>
               <dd className="mt-1 font-semibold text-slate-800">1 hour</dd>
             </div>
           </dl>
-          <button type="button" className="mt-6 h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm">Edit</button>
-        </PortalV3Card>
+          <UiButton variant="secondary" className="mt-6 h-8 px-3 py-1.5">Edit</UiButton>
+        </UiCard>
 
-        <PortalV3Card title="Preferences">
+        <UiCard title="Preferences">
           <dl className="space-y-4 text-xs">
             <div>
               <dt className="font-bold text-slate-400">Theme</dt>
@@ -102,9 +109,9 @@ export default function PortalSettingsPage() {
               </dd>
             </div>
           </dl>
-          <button type="button" className="mt-6 h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm">Edit</button>
-        </PortalV3Card>
+          <UiButton variant="secondary" className="mt-6 h-8 px-3 py-1.5">Edit</UiButton>
+        </UiCard>
       </section>
-    </PortalV3Page>
+    </div>
   );
 }

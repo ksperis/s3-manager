@@ -212,7 +212,7 @@ export default function BrowserBucketsPanel({
     <div
       className={cx(
         uiCardClass,
-        "flex h-full min-h-0 min-w-0 flex-col rounded-xl bg-gradient-to-r from-white via-white to-slate-50/80 p-3 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70",
+        "flex h-full min-h-0 min-w-0 flex-col p-3",
       )}
     >
       <div className="shrink-0">

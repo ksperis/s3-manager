@@ -5,7 +5,7 @@
 import { BucketOverview } from "../api/stats";
 import { formatBytes, formatCompactNumber } from "../utils/format";
 import PageBanner from "./PageBanner";
-import { cx, uiCardClass, uiCardMutedClass } from "./ui/styles";
+import { cx, uiCardClass, uiCardMutedClass, uiLabelClass, uiMutedTextClass, uiTitleTextClass } from "./ui/styles";
 import UsageTile from "./UsageTile";
 
 type QuotaProps = {
@@ -43,7 +43,7 @@ export default function StorageUsageCard({
     <section className={cx(uiCardClass, "space-y-4 p-4")}>
       <header className="space-y-1">
         <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage Usage</p>
-        <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">
+        <h3 className={cx("ui-section", uiTitleTextClass)}>
           {accountName ? `Storage usage for ${accountName}` : "S3Account storage usage"}
         </h3>
       </header>
@@ -106,9 +106,9 @@ type BucketStatProps = {
 function BucketStatCard({ label, value, hint }: BucketStatProps) {
   return (
     <div className={cx(uiCardMutedClass, "p-3")}>
-      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1.5 ui-title font-semibold text-slate-900 dark:text-white">{value}</p>
-      {hint && <p className="ui-caption text-slate-500 dark:text-slate-400">{hint}</p>}
+      <p className={uiLabelClass}>{label}</p>
+      <p className={cx("mt-1.5 ui-title", uiTitleTextClass)}>{value}</p>
+      {hint && <p className={cx("ui-caption", uiMutedTextClass)}>{hint}</p>}
     </div>
   );
 }

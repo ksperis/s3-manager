@@ -5,7 +5,7 @@
 import axios from "axios";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { uiCheckboxClass } from "../../components/ui/styles";
+import { cx, uiCardMutedClass, uiCheckboxClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import {
   Bucket,
   BucketAcl,
@@ -1452,6 +1452,27 @@ export default function BucketDetailPage({
     }
   };
 
+  const addExpirationExampleRule = () => {
+    const currentDaysRaw = expireCurrentDays.trim();
+    const noncurrentDaysRaw = expireNoncurrentDays.trim();
+    if (!currentDaysRaw && !noncurrentDaysRaw) {
+      setLifecycleError("Provide current or noncurrent expiration days.");
+      return;
+    }
+
+    const rule: Record<string, unknown> = {
+      Status: "Enabled",
+      Filter: { Prefix: expirePrefix },
+    };
+    if (currentDaysRaw) {
+      rule.Expiration = { Days: Number(currentDaysRaw) };
+    }
+    if (noncurrentDaysRaw) {
+      rule.NoncurrentVersionExpiration = { NoncurrentDays: Number(noncurrentDaysRaw) };
+    }
+    void handleAddExampleRule(rule);
+  };
+
   const [transitionCurrentDays, setTransitionCurrentDays] = useState("30");
   const [transitionNoncurrentDays, setTransitionNoncurrentDays] = useState("60");
   const [transitionStorageClass, setTransitionStorageClass] = useState("GLACIER");
@@ -2879,7 +2900,7 @@ export default function BucketDetailPage({
                     emptyHint="No object quota configured."
                   />
                 </div>
-                <div className="rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+                <div className={cx(uiCardMutedClass, "px-4 py-3")}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Bucket properties</p>
@@ -2972,9 +2993,9 @@ export default function BucketDetailPage({
                       <UiInlineMessage tone="error">{objectsError}</UiInlineMessage>
                     )}
 
-                    <div className="rounded-xl border border-slate-200 dark:border-slate-800">
-                      <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
-                        <thead className="bg-slate-50 dark:bg-slate-900/50">
+                    <div className={uiTableContainerClass}>
+                      <table className={cx(uiDataTableClass, "min-w-full ui-body")}>
+                        <thead>
                           <tr>
                             <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               Name
@@ -3344,13 +3365,13 @@ export default function BucketDetailPage({
                       {lifecycleStatus && (
                         <UiInlineMessage tone="success" className="mt-2">{lifecycleStatus}</UiInlineMessage>
                       )}
-                      <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/40">
+                      <div className={cx(uiCardMutedClass, "mt-3 px-3 py-2")}>
                         {(lifecycle.rules?.length ?? 0) === 0 ? (
                           <p className="ui-caption text-slate-600 dark:text-slate-300">No rules configured on this bucket.</p>
                         ) : (
                           <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-200 ui-caption dark:divide-slate-800">
-                              <thead className="bg-slate-100 dark:bg-slate-900/60">
+                            <table className={cx(uiDataTableClass, "min-w-full ui-caption")}>
+                              <thead>
                                 <tr>
                                   <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     ID
@@ -3591,14 +3612,7 @@ export default function BucketDetailPage({
                                   <div className="mt-2 flex justify-end">
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        handleAddExampleRule({
-                                          Status: "Enabled",
-                                          Filter: { Prefix: expirePrefix },
-                                          Expiration: { Days: Number(expireCurrentDays) || 0 },
-                                          NoncurrentVersionExpiration: { NoncurrentDays: Number(expireNoncurrentDays) || 0 },
-                                        })
-                                      }
+                                      onClick={addExpirationExampleRule}
                                       className="ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
                                       disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                     >

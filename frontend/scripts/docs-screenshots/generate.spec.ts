@@ -127,7 +127,18 @@ async function captureScenarioVariant(
   const debugScenarioId = `${scenario.id}.${variant}`;
   try {
     await page.emulateMedia({ colorScheme: variant });
-    const mockRegistry = await registerApiMocks(page, scenario.mockRules, debugScenarioId);
+    const mockRegistry = await registerApiMocks(
+      page,
+      [
+        {
+          id: "current-user",
+          path: /^\/users\/me$/,
+          body: scenario.storage.user,
+        },
+        ...scenario.mockRules,
+      ],
+      debugScenarioId
+    );
     await seedLocalStorage(page, { ...scenario.storage, theme: variant });
 
     await page.goto(scenario.route, { waitUntil: "domcontentloaded" });

@@ -9,14 +9,20 @@
 :root {
   color-scheme: light;
   color: #0f172a;
-  background-color: #f8fafc;
-  --ui-bg: #f8fafc;
+  background-color: #f7f9fc;
+  --ui-bg: #f7f9fc;
   --ui-surface: #ffffff;
-  --ui-surface-muted: #f1f5f9;
+  --ui-surface-muted: #f8fafc;
   --ui-surface-elevated: #ffffff;
-  --ui-border: #cbd5e1;
-  --ui-text: #0f172a;
-  --ui-text-muted: #475569;
+  --ui-border: #dbe3ee;
+  --ui-border-soft: #e8eef6;
+  --ui-text: #0b1f3a;
+  --ui-text-muted: #51617c;
+  --ui-hover: rgb(14 165 233 / 0.08);
+  --ui-selected-bg: rgb(14 165 233 / 0.12);
+  --ui-focus-ring: rgb(14 165 233 / 0.28);
+  --ui-shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.03);
+  --ui-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04);
   --ui-primary-light-50-rgb: 240 249 255;
   --ui-primary-light-100-rgb: 224 242 254;
   --ui-primary-light-200-rgb: 186 230 253;
@@ -55,19 +61,43 @@
   --ui-success: #059669;
   --ui-warning: #d97706;
   --ui-danger: #e11d48;
+  --shell-page-bg: #f7f9fc;
+  --shell-sidebar-bg: #ffffff;
+  --shell-topbar-bg: #ffffff;
+  --shell-control-bg: #ffffff;
+  --shell-control-hover-bg: #f8fafc;
+  --shell-menu-bg: #ffffff;
+  --shell-muted-bg: #f8fafc;
+  --shell-border: #dbe3ee;
+  --shell-border-soft: #e8eef6;
+  --shell-text: #0b1f3a;
+  --shell-muted: #51617c;
+  --shell-icon: #334866;
+  --shell-icon-muted: #63718a;
+  --shell-hover: rgb(var(--ui-primary-500-rgb) / 0.08);
+  --shell-selected-bg: rgb(var(--ui-primary-500-rgb) / 0.12);
+  --shell-selected-text: rgb(var(--ui-primary-600-rgb));
+  --shell-control-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  --shell-menu-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
 }
 
 :root.dark {
   color-scheme: dark;
   color: #e2e8f0;
-  background-color: #0b1220;
-  --ui-bg: #0b1220;
-  --ui-surface: #0f172a;
-  --ui-surface-muted: #111827;
-  --ui-surface-elevated: #0b1220;
-  --ui-border: #334155;
-  --ui-text: #e2e8f0;
-  --ui-text-muted: #94a3b8;
+  background-color: #08111f;
+  --ui-bg: #08111f;
+  --ui-surface: #0f1a2b;
+  --ui-surface-muted: #111c2e;
+  --ui-surface-elevated: #142033;
+  --ui-border: rgba(148, 163, 184, 0.22);
+  --ui-border-soft: rgba(148, 163, 184, 0.14);
+  --ui-text: #e7edf5;
+  --ui-text-muted: #9aa8bd;
+  --ui-hover: rgba(255, 255, 255, 0.06);
+  --ui-selected-bg: rgb(var(--ui-primary-500-rgb) / 0.16);
+  --ui-focus-ring: rgb(var(--ui-primary-400-rgb) / 0.3);
+  --ui-shadow-soft: none;
+  --ui-shadow-card: none;
   --ui-primary-50-rgb: var(--ui-primary-dark-50-rgb);
   --ui-primary-100-rgb: var(--ui-primary-dark-100-rgb);
   --ui-primary-200-rgb: var(--ui-primary-dark-200-rgb);
@@ -84,11 +114,31 @@
   --ui-success: #34d399;
   --ui-warning: #fbbf24;
   --ui-danger: #fb7185;
+  --shell-page-bg: #08111f;
+  --shell-sidebar-bg: #0b1421;
+  --shell-topbar-bg: #0b1421;
+  --shell-control-bg: rgba(255, 255, 255, 0.045);
+  --shell-control-hover-bg: rgba(255, 255, 255, 0.07);
+  --shell-menu-bg: #0f1a2b;
+  --shell-muted-bg: rgba(255, 255, 255, 0.045);
+  --shell-border: rgba(148, 163, 184, 0.18);
+  --shell-border-soft: rgba(148, 163, 184, 0.12);
+  --shell-text: #e7edf5;
+  --shell-muted: #9aa8bd;
+  --shell-icon: #d5deeb;
+  --shell-icon-muted: #9aa8bd;
+  --shell-hover: rgba(255, 255, 255, 0.06);
+  --shell-selected-bg: rgb(var(--ui-primary-500-rgb) / 0.16);
+  --shell-selected-text: #e7edf5;
+  --shell-control-shadow: none;
+  --shell-menu-shadow: 0 18px 36px rgba(0, 0, 0, 0.32);
 }
 
 body {
   font-family: "Inter", system-ui, -apple-system, sans-serif;
-  @apply bg-slate-50 text-sm text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  @apply text-sm antialiased;
 }
 
 @layer base {
@@ -110,6 +160,142 @@ body {
 }
 
 @layer components {
+  .shell-page {
+    background: var(--shell-page-bg);
+    color: var(--shell-text);
+  }
+
+  .shell-sidebar,
+  .shell-topbar {
+    border-color: var(--shell-border);
+    color: var(--shell-text);
+  }
+
+  .shell-sidebar {
+    background: var(--shell-sidebar-bg);
+  }
+
+  .shell-topbar {
+    background: var(--shell-topbar-bg);
+  }
+
+  .shell-control {
+    border-color: var(--shell-border);
+    background: var(--shell-control-bg);
+    color: var(--shell-text);
+    box-shadow: var(--shell-control-shadow);
+  }
+
+  .shell-control:hover {
+    border-color: rgb(var(--ui-primary-300-rgb));
+    background: var(--shell-control-hover-bg);
+  }
+
+  .shell-control-active {
+    border-color: rgb(var(--ui-primary-400-rgb));
+  }
+
+  .shell-icon-button {
+    color: var(--shell-icon);
+  }
+
+  .shell-icon-button:hover {
+    background: var(--shell-hover);
+    color: var(--shell-selected-text);
+  }
+
+  .shell-menu {
+    border-color: var(--shell-border);
+    background: var(--shell-menu-bg);
+    color: var(--shell-text);
+    box-shadow: var(--shell-menu-shadow);
+  }
+
+  .shell-menu-muted {
+    border-color: var(--shell-border-soft);
+    background: var(--shell-muted-bg);
+  }
+
+  .shell-menu-item {
+    color: var(--shell-text);
+  }
+
+  .shell-menu-item:hover,
+  .shell-menu-item-highlighted {
+    background: var(--shell-hover);
+  }
+
+  .shell-menu-item-active {
+    background: var(--shell-selected-bg);
+    color: var(--shell-selected-text);
+  }
+
+  .shell-muted-text {
+    color: var(--shell-muted);
+  }
+
+  .shell-icon-muted {
+    color: var(--shell-icon-muted);
+  }
+
+  .shell-sidebar-item {
+    color: var(--shell-text);
+  }
+
+  .shell-sidebar-item:hover {
+    background: var(--shell-hover);
+    color: var(--shell-text);
+  }
+
+  .shell-sidebar-item-active {
+    background: var(--shell-selected-bg);
+    color: var(--shell-selected-text);
+  }
+
+  .shell-section-label {
+    color: var(--shell-muted);
+    letter-spacing: 0;
+  }
+
+  .shell-sidebar-scroll {
+    overscroll-behavior: contain;
+    scrollbar-color: transparent transparent;
+    scrollbar-width: none;
+  }
+
+  .shell-sidebar-scroll:hover,
+  .shell-sidebar-scroll:focus-within,
+  .shell-sidebar-scroll.shell-sidebar-scroll-active {
+    scrollbar-color: var(--shell-icon-muted) transparent;
+    scrollbar-width: thin;
+  }
+
+  .shell-sidebar-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .shell-sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .shell-sidebar-scroll::-webkit-scrollbar-thumb {
+    min-height: 40px;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: transparent;
+  }
+
+  .shell-sidebar-scroll:hover::-webkit-scrollbar-thumb,
+  .shell-sidebar-scroll:focus-within::-webkit-scrollbar-thumb,
+  .shell-sidebar-scroll.shell-sidebar-scroll-active::-webkit-scrollbar-thumb {
+    background-color: var(--shell-icon-muted);
+  }
+
+  .shell-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: var(--shell-icon);
+  }
+
   .ui-title {
     @apply text-lg font-semibold leading-snug;
   }
@@ -135,104 +321,116 @@ body {
   }
 
   .ui-surface-card {
-    @apply rounded-xl border border-slate-300/90 bg-white/95 shadow-sm shadow-slate-200/50 dark:border-slate-600/70 dark:bg-slate-800/85 dark:shadow-black/20;
+    border: 1px solid var(--ui-border);
+    border-radius: 0.5rem;
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    box-shadow: var(--ui-shadow-card);
   }
 
   .ui-surface-muted {
-    @apply rounded-xl border border-slate-300/80 bg-slate-100/80 shadow-sm shadow-slate-200/40 dark:border-slate-600/60 dark:bg-slate-800/55 dark:shadow-black/10;
+    border: 1px solid var(--ui-border);
+    border-radius: 0.5rem;
+    background: var(--ui-surface-muted);
+    color: var(--ui-text);
+    box-shadow: var(--ui-shadow-soft);
   }
 
   .ui-control {
-    @apply w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
+    border-color: var(--ui-border);
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    box-shadow: var(--ui-shadow-soft);
+    @apply w-full rounded-md border px-3 py-2 ui-body transition disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .ui-control::placeholder {
+    color: var(--ui-text-muted);
+    opacity: 0.72;
+  }
+
+  .ui-control:hover:not(:disabled) {
+    border-color: rgb(var(--ui-primary-300-rgb));
+  }
+
+  .ui-control:focus {
+    border-color: rgb(var(--ui-primary-400-rgb));
+    box-shadow: 0 0 0 2px var(--ui-focus-ring);
+    outline: none;
   }
 
   .ui-button-base {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 ui-caption font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60;
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 ui-caption font-semibold transition disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .ui-button-base:focus-visible {
+    outline: 2px solid rgb(var(--ui-primary-500-rgb));
+    outline-offset: 2px;
   }
 
   .ui-button-primary {
-    @apply bg-primary text-white shadow-sm hover:bg-primary-600;
+    background: var(--ui-primary-strong);
+    color: #ffffff;
+    box-shadow: var(--ui-shadow-soft);
+  }
+
+  .ui-button-primary:hover:not(:disabled) {
+    background: rgb(var(--ui-primary-700-rgb));
   }
 
   .ui-button-secondary {
-    @apply border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600;
+    border: 1px solid var(--ui-border);
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    box-shadow: var(--ui-shadow-soft);
+  }
+
+  .ui-button-secondary:hover:not(:disabled) {
+    border-color: rgb(var(--ui-primary-300-rgb));
+    background: var(--ui-hover);
   }
 
   .ui-button-warning {
-    @apply border border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:border-amber-800;
+    @apply border border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/45 dark:bg-amber-950 dark:text-amber-100;
+  }
+
+  .ui-button-warning:hover:not(:disabled) {
+    @apply border-amber-400 bg-amber-100 dark:border-amber-400/60 dark:bg-amber-900;
   }
 
   .ui-button-danger {
-    @apply bg-rose-600 text-white shadow-sm hover:bg-rose-700;
+    @apply bg-rose-600 text-white;
+    box-shadow: var(--ui-shadow-soft);
   }
 
-  .portal-v3 {
-    --portal-v3-bg: #f4f7fb;
-    --portal-v3-surface: #ffffff;
-    --portal-v3-border: #dbe3ee;
-    --portal-v3-border-soft: #edf1f7;
-    --portal-v3-text: #0b1f3a;
-    --portal-v3-muted: #64748b;
-    --portal-v3-blue: #2563eb;
-    --portal-v3-blue-soft: #eff6ff;
-    background: var(--portal-v3-bg);
-    color: var(--portal-v3-text);
-    letter-spacing: 0;
+  .ui-button-danger:hover:not(:disabled) {
+    @apply bg-rose-700;
   }
 
-  .portal-v3-card {
-    border: 1px solid var(--portal-v3-border);
-    border-radius: 8px;
-    background: var(--portal-v3-surface);
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.045);
-  }
-
-  .portal-v3-muted-card {
-    border: 1px solid var(--portal-v3-border-soft);
-    border-radius: 8px;
-    background: #f8fafc;
-  }
-
-  .portal-v3-table {
+  .ui-data-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    font-size: 12px;
-    line-height: 1.25rem;
+    @apply ui-caption;
   }
 
-  .portal-v3-table th {
-    border-bottom: 1px solid var(--portal-v3-border-soft);
-    background: #f8fafc;
-    padding: 10px 12px;
-    text-align: left;
-    font-weight: 700;
-    color: #475569;
+  .ui-data-table th {
+    border-bottom: 1px solid var(--ui-border);
+    background: var(--ui-surface-muted);
+    color: var(--ui-text-muted);
+    @apply px-3 py-2 text-left font-semibold;
   }
 
-  .portal-v3-table td {
-    border-bottom: 1px solid var(--portal-v3-border-soft);
-    padding: 10px 12px;
-    color: #334155;
-    vertical-align: middle;
+  .ui-data-table td {
+    border-bottom: 1px solid var(--ui-border-soft);
+    color: var(--ui-text);
+    @apply px-3 py-2 align-middle;
   }
 
-  .portal-v3-table tbody tr:hover td {
-    background: #f8fbff;
+  .ui-data-table tbody tr:hover td {
+    background: var(--ui-hover);
   }
 
-  .portal-v3-tab {
-    border-bottom: 2px solid transparent;
-    color: #64748b;
-    font-size: 12px;
-    font-weight: 700;
-    padding: 10px 2px 9px;
-  }
-
-  .portal-v3-tab-active {
-    border-color: var(--portal-v3-blue);
-    color: var(--portal-v3-blue);
-  }
 }
 
 @layer utilities {
@@ -259,6 +457,16 @@ a {
 
 a:hover {
   @apply text-primary-600 dark:text-primary-100;
+}
+
+:root.dark a.shell-sidebar-item,
+:root.dark a.shell-sidebar-item:hover {
+  color: var(--shell-text);
+}
+
+:root.dark a.shell-sidebar-item-active,
+:root.dark a.shell-sidebar-item-active:hover {
+  color: var(--shell-selected-text);
 }
 
 #root {

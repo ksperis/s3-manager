@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import Sidebar from "../Sidebar";
-import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_MAX_WIDTH } from "../sidebarSizing";
+import { SIDEBAR_DEFAULT_WIDTH } from "../sidebarSizing";
 
 describe("Sidebar", () => {
   it("uses disabledHint as title for disabled links", () => {
@@ -92,13 +92,10 @@ describe("Sidebar", () => {
     expect(screen.getByTitle("Unavailable in current context.")).toBeInTheDocument();
   });
 
-  it("renders a resize separator on desktop and no collapse button", () => {
-    render(
+  it("renders a fixed desktop sidebar without a resize separator", () => {
+    const { container } = render(
       <MemoryRouter>
         <Sidebar
-          width={256}
-          onResizeStart={vi.fn()}
-          onResizeKeyDown={vi.fn()}
           sections={[
             {
               label: "Overview",
@@ -109,11 +106,11 @@ describe("Sidebar", () => {
       </MemoryRouter>
     );
 
+    const sidebar = container.querySelector('[data-sidebar-variant="desktop"]') as HTMLElement;
+    expect(sidebar).toHaveStyle({ width: `${SIDEBAR_DEFAULT_WIDTH}px` });
+    expect(screen.getByText("S3 Manager")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /collapse sidebar|expand sidebar/i })).not.toBeInTheDocument();
-    const separator = screen.getByRole("separator", { name: "Resize sidebar" });
-    expect(separator).toHaveAttribute("aria-valuemin", String(SIDEBAR_COMPACT_WIDTH));
-    expect(separator).toHaveAttribute("aria-valuemax", String(SIDEBAR_MAX_WIDTH));
-    expect(separator).toHaveAttribute("aria-valuenow", "256");
+    expect(screen.queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
   });
 
   it("renders the collapse control when a collapse handler is provided", () => {
@@ -121,7 +118,6 @@ describe("Sidebar", () => {
     render(
       <MemoryRouter>
         <Sidebar
-          width={232}
           onCollapseToggle={onCollapseToggle}
           sections={[
             {
@@ -137,20 +133,11 @@ describe("Sidebar", () => {
     expect(onCollapseToggle).toHaveBeenCalledTimes(1);
   });
 
-  it("renders the workspace switcher in the sidebar header", () => {
-    const onWorkspaceChange = vi.fn();
+  it("renders the brand header but keeps workspace selectors out of the sidebar", () => {
     render(
       <MemoryRouter>
         <Sidebar
-          workspaceSwitcher={{
-            currentWorkspaceId: "manager",
-            currentWorkspaceLabel: "Manager",
-            options: [
-              { value: "manager", label: "Manager" },
-              { value: "portal", label: "Portal" },
-            ],
-            onChange: onWorkspaceChange,
-          }}
+          title="MANAGER"
           sections={[
             {
               label: "Overview",
@@ -161,9 +148,10 @@ describe("Sidebar", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Switch workspace" }));
-    fireEvent.click(screen.getByRole("option", { name: "Portal" }));
-    expect(onWorkspaceChange).toHaveBeenCalledWith("portal");
+    expect(screen.getByText("S3 Manager")).toBeInTheDocument();
+    expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "MANAGER navigation" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
   });
 
   it("keeps compact links titled and labeled for assistive tech", () => {

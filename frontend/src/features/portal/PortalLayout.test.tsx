@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -71,7 +71,7 @@ describe("PortalLayout", () => {
     vi.clearAllMocks();
   });
 
-  it("uses the shared shell with workspace selector and keeps the portal account selector in the topbar", async () => {
+  it("uses the shared shell with workspace and portal account selectors in the topbar", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
       "user",
@@ -93,6 +93,9 @@ describe("PortalLayout", () => {
     expect(screen.getAllByText("S3 Manager").length).toBeGreaterThan(0);
     const topbar = container.querySelector("[data-topbar]") as HTMLElement;
     expect(topbar).not.toBeNull();
+    const main = container.querySelector("main");
+    expect(main).toHaveClass("px-4", "sm:px-8");
+    expect(main?.className).not.toMatch(/portal/);
 
     const nav = screen.getByRole("navigation", { name: "PORTAL navigation" });
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
@@ -111,7 +114,10 @@ describe("PortalLayout", () => {
 
     const desktopSidebar = container.querySelector('[data-sidebar-variant="desktop"]') as HTMLElement;
     expect(desktopSidebar).not.toBeNull();
-    expect(within(desktopSidebar).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Portal");
+    await waitFor(() => {
+      expect(within(topbar).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Portal");
+    });
+    expect(within(desktopSidebar).queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
     expect(within(desktopSidebar).queryByRole("button", { name: "Select portal account" })).not.toBeInTheDocument();
     expect(within(desktopSidebar).queryByText("Helios Retail")).not.toBeInTheDocument();
 

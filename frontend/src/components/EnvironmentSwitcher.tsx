@@ -5,25 +5,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useGeneralSettings } from "./GeneralSettingsContext";
-import TopbarDropdownSelect, { TopbarDropdownOption } from "./TopbarDropdownSelect";
+import type { TopbarDropdownOption } from "./TopbarDropdownSelect";
 import { listExecutionContexts } from "../api/executionContexts";
+import { fetchCurrentUser } from "../api/users";
 import {
   WORKSPACE_STORAGE_KEY,
   isAdminLikeRole,
+  type SessionUser,
   type WorkspaceId,
   readStoredUser,
   readStoredWorkspaceId,
   resolveAvailableWorkspacesWithFlags,
   resolveWorkspaceFromPath,
 } from "../utils/workspaces";
-
-type EnvironmentSwitcherProps = {
-  triggerMode?: "icon" | "icon_label";
-  openInPortal?: boolean;
-  widthClassName?: string;
-  menuMinWidthClassName?: string;
-  compactOnNarrow?: boolean;
-};
 
 export type WorkspaceSwitcherModel = {
   currentWorkspaceId: WorkspaceId;
@@ -35,7 +29,7 @@ export type WorkspaceSwitcherModel = {
 export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
   const navigate = useNavigate();
   const location = useLocation();
-  const user = readStoredUser();
+  const [user, setUser] = useState<SessionUser | null>(() => readStoredUser());
   const [workspaceContextAvailability, setWorkspaceContextAvailability] = useState<{
     manager: boolean | null;
     browser: boolean | null;
@@ -44,6 +38,25 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
     browser: null,
   });
   const { generalSettings } = useGeneralSettings();
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !localStorage.getItem("token")) return;
+    let cancelled = false;
+    fetchCurrentUser()
+      .then((currentUser) => {
+        if (cancelled) return;
+        const mergedUser = { ...(readStoredUser() ?? {}), ...currentUser } as SessionUser;
+        localStorage.setItem("user", JSON.stringify(mergedUser));
+        setUser(mergedUser);
+      })
+      .catch(() => {
+        // Auth failures are handled by the API client; keep the stored user until then.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const environments = useMemo(() => {
     const base = resolveAvailableWorkspacesWithFlags(user, generalSettings);
     const isUiUser = user?.role === "ui_user";
@@ -117,45 +130,6 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
     options,
     onChange: handleChange,
   };
-}
-
-export default function EnvironmentSwitcher({
-  triggerMode = "icon_label",
-  openInPortal = true,
-  widthClassName,
-  menuMinWidthClassName = "min-w-48",
-  compactOnNarrow,
-}: EnvironmentSwitcherProps) {
-  const model = useWorkspaceSwitcherModel();
-  if (!model) return null;
-  const iconOnly = triggerMode === "icon";
-
-  return (
-    <TopbarDropdownSelect
-      value={model.currentWorkspaceId}
-      options={model.options}
-      onChange={model.onChange}
-      ariaLabel="Switch workspace"
-      triggerLabel="Workspace"
-      title="Switch workspace"
-      align="right"
-      widthClassName={widthClassName ?? (iconOnly ? "w-10" : "w-44 xl:w-56")}
-      menuMinWidthClassName={menuMinWidthClassName}
-      compactOnNarrow={compactOnNarrow ?? !iconOnly}
-      triggerMode={triggerMode}
-      openInPortal={openInPortal}
-      icon={<WorkspaceIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
-    />
-  );
-}
-
-function WorkspaceIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <rect x="3" y="5" width="18" height="14" rx="2.5" strokeWidth={1.5} />
-      <path strokeLinecap="round" strokeWidth={1.5} d="M3 10h18" />
-    </svg>
-  );
 }
 
 export function workspaceIconById(id: WorkspaceId): React.ReactNode {

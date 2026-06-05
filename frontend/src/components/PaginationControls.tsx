@@ -2,6 +2,9 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import { cx, uiButtonBaseClass, uiButtonVariants, uiDividerClass, uiLabelClass, uiMutedTextClass } from "./ui/styles";
+import { toolbarCompactSelectClasses } from "./toolbarControlClasses";
+
 type PaginationControlsProps = {
   page: number;
   pageSize: number;
@@ -25,15 +28,16 @@ export default function PaginationControls({
   const safePage = Math.min(Math.max(page, 1), totalPages);
   const canPrev = safePage > 1;
   const canNext = safePage < totalPages;
+  const buttonClassName = cx(uiButtonBaseClass, uiButtonVariants.secondary, "rounded-md px-2.5 py-1 ui-caption");
 
   return (
-    <div className="flex flex-col gap-2 border-t border-slate-100 px-4 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:text-slate-300 md:flex-row md:items-center md:justify-between">
+    <div className={cx("flex flex-col gap-2 border-t px-4 py-2 ui-caption md:flex-row md:items-center md:justify-between", uiDividerClass, uiMutedTextClass)}>
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => onPageChange(safePage - 1)}
           disabled={!canPrev || disabled}
-          className="rounded-md border border-slate-200 px-2.5 py-1 ui-caption font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          className={buttonClassName}
         >
           Previous
         </button>
@@ -41,19 +45,19 @@ export default function PaginationControls({
           type="button"
           onClick={() => onPageChange(safePage + 1)}
           disabled={!canNext || disabled}
-          className="rounded-md border border-slate-200 px-2.5 py-1 ui-caption font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          className={buttonClassName}
         >
           Next
         </button>
-        <span className="ui-caption text-slate-500 dark:text-slate-400">
+        <span className={cx("ui-caption", uiMutedTextClass)}>
           Page {safePage} of {totalPages} · {total} result{total === 1 ? "" : "s"}
         </span>
       </div>
       {onPageSizeChange && (
-        <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <label className={cx("flex items-center gap-2", uiLabelClass)}>
           Page size
           <select
-            className="rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            className={cx(toolbarCompactSelectClasses, "px-2 py-1 font-semibold")}
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
             disabled={disabled}

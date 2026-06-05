@@ -1,12 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Topbar from "../Topbar";
-
-vi.mock("../EnvironmentSwitcher", () => ({
-  default: () => <div data-testid="environment-switcher" />,
-  useWorkspaceSwitcherModel: () => null,
-}));
 
 vi.mock("../ThemeToggle", () => ({
   default: () => <button type="button">Theme</button>,
@@ -152,11 +147,62 @@ describe("Topbar account menu", () => {
     );
 
     const switcher = screen.getByRole("button", { name: "Switch workspace" });
-    expect(switcher).toHaveTextContent("S3 Manager");
+    expect(switcher).toHaveTextContent("Workspace");
     expect(switcher).toHaveTextContent("Browser");
+    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
 
     await user.click(switcher);
     await user.click(await screen.findByRole("option", { name: "Manager" }));
     expect(onChange).toHaveBeenCalledWith("manager");
+  });
+
+  it("keeps workspace and account controls in the topbar when the sidebar is visible", async () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1280 });
+
+    try {
+      render(
+        <Topbar
+          userEmail="admin@example.com"
+          section="Manager"
+          showMobileMenuButton
+          showWorkspaceSwitcher
+          workspaceSwitcher={{
+            currentWorkspaceId: "manager",
+            currentWorkspaceLabel: "Manager",
+            options: [
+              { value: "manager", label: "Manager" },
+              { value: "browser", label: "Browser" },
+            ],
+            onChange: vi.fn(),
+          }}
+          controlDescriptors={[
+            {
+              id: "account",
+              icon: null,
+              selectedLabel: "Lab account",
+              priority: 10,
+              estimatedIconWidth: 36,
+              estimatedLabelWidth: 180,
+              renderControl: () => (
+                <button type="button" aria-label="Select context account">
+                  Account Lab account
+                </button>
+              ),
+            },
+          ]}
+        />
+      );
+
+      const topbar = document.querySelector("[data-topbar]");
+      expect(topbar).not.toBeNull();
+      expect(within(topbar as HTMLElement).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Manager");
+      expect(within(topbar as HTMLElement).getByRole("button", { name: "Select context account" })).toHaveTextContent(
+        "Lab account"
+      );
+      expect(within(topbar as HTMLElement).getByRole("button", { name: "Search" })).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: originalWidth });
+    }
   });
 });

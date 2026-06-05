@@ -35,6 +35,14 @@ const adminUser: SessionUser = {
   can_access_storage_ops: true,
 };
 
+const superAdminUser: SessionUser = {
+  id: 2,
+  email: "superadmin@example.com",
+  role: "ui_superadmin",
+  can_access_ceph_admin: true,
+  can_access_storage_ops: true,
+};
+
 describe("resolveAvailableWorkspacesWithFlags", () => {
   afterEach(() => {
     window.localStorage.clear();
@@ -140,6 +148,54 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       label: "Portal (self-service)",
       path: "/portal",
     });
+  });
+
+  it("exposes Portal for admin users with an explicit portal account role", () => {
+    const workspaces = resolveAvailableWorkspacesWithFlags(
+      {
+        ...adminUser,
+        account_links: [{ account_id: 24, account_admin: true, account_role: "portal_manager" }],
+      },
+      {
+        ...baseSettings,
+        portal_enabled: true,
+      }
+    );
+
+    expect(workspaces.find((workspace) => workspace.id === "portal")).toMatchObject({
+      label: "Portal (self-service)",
+      path: "/portal",
+    });
+  });
+
+  it("exposes Portal for superadmin users with an explicit portal account role", () => {
+    const workspaces = resolveAvailableWorkspacesWithFlags(
+      {
+        ...superAdminUser,
+        account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
+      },
+      {
+        ...baseSettings,
+        portal_enabled: true,
+      }
+    );
+
+    expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(true);
+  });
+
+  it("does not expose Portal for admin users without an explicit portal account role", () => {
+    const workspaces = resolveAvailableWorkspacesWithFlags(
+      {
+        ...adminUser,
+        account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
+      },
+      {
+        ...baseSettings,
+        portal_enabled: true,
+      }
+    );
+
+    expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(false);
   });
 
   it("does not expose Portal when the feature flag is disabled", () => {

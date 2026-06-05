@@ -2,20 +2,19 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import { Link } from "react-router-dom";
+import DonutChart from "../../components/DonutChart";
+import MiniLineChart from "../../components/MiniLineChart";
+import PageBanner from "../../components/PageBanner";
+import PageHeader from "../../components/PageHeader";
+import StatCards from "../../components/StatCards";
+import UiBadge from "../../components/ui/UiBadge";
+import UiCard from "../../components/ui/UiCard";
+import UiProgressBar from "../../components/ui/UiProgressBar";
+import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
-import {
-  PortalV3Badge,
-  PortalV3Card,
-  PortalV3Donut,
-  PortalV3Link,
-  PortalV3MetricCard,
-  PortalV3MiniLineChart,
-  PortalV3Page,
-  PortalV3PageHeader,
-  PortalV3Progress,
-} from "./PortalV3Components";
 
 const DONUT_COLORS = ["#2563eb", "#14b8a6", "#64748b", "#f59e0b", "#ef4444", "#94a3b8"];
 
@@ -25,21 +24,21 @@ function percent(used?: number | null, quota?: number | null): number {
 }
 
 function alertTone(tone: string) {
-  if (tone === "danger") return "rose";
-  if (tone === "warning") return "amber";
-  if (tone === "info") return "blue";
+  if (tone === "danger") return "danger";
+  if (tone === "warning") return "warning";
+  if (tone === "info") return "primary";
   return "neutral";
 }
 
 function transferTone(status: string) {
-  if (status === "Failed") return "rose";
-  if (status === "Uploading" || status === "Queued") return "blue";
+  if (status === "Failed") return "danger";
+  if (status === "Uploading" || status === "Queued") return "primary";
   return "neutral";
 }
 
 function EmptyState({ children }: { children: string }) {
   return (
-    <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-4 text-xs font-semibold text-slate-500">
+    <div className={cx(uiCardMutedClass, "px-3 py-4 text-xs font-semibold", uiMutedTextClass)}>
       {children}
     </div>
   );
@@ -64,60 +63,68 @@ export default function PortalDashboard() {
 
   if (accountLoading || loading) {
     return (
-      <PortalV3Page>
-        <div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Loading dashboard...</div>
-      </PortalV3Page>
+      <div className="space-y-4">
+        <PageBanner tone="info">Loading dashboard...</PageBanner>
+      </div>
     );
   }
 
   if (accountError || error) {
     return (
-      <PortalV3Page>
-        <div className="portal-v3-card p-6 text-sm font-semibold text-rose-600">{accountError ?? error}</div>
-      </PortalV3Page>
+      <div className="space-y-4">
+        <PageBanner tone="error">{accountError ?? error}</PageBanner>
+      </div>
     );
   }
 
   if (!hasAccountContext) {
     return (
-      <PortalV3Page>
-        <div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Select an account to open the dashboard.</div>
-      </PortalV3Page>
+      <div className="space-y-4">
+        <PageBanner tone="info">Select an account to open the dashboard.</PageBanner>
+      </div>
     );
   }
 
   return (
-    <PortalV3Page>
-      <PortalV3PageHeader
+    <div className="space-y-4">
+      <PageHeader
         title="Dashboard"
         description={`Welcome back, ${workspace.accountName}`}
+        breadcrumbs={[{ label: "Portal" }, { label: "Dashboard" }]}
         right={
-          <div className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm">
+          <div className={cx(uiCardMutedClass, "flex h-8 items-center gap-2 px-3 text-xs font-semibold", uiMutedTextClass)}>
             <span>Current period</span>
           </div>
         }
       />
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <PortalV3MetricCard label="Total Storage" value={formatBytes(workspace.usedBytes)} delta={workspace.quotaBytes ? `${formatPercentage(percent(workspace.usedBytes, workspace.quotaBytes))} used` : "Quota unavailable"} />
-        <PortalV3MetricCard label="Total Objects" value={formatCompactNumber(workspace.usedObjects)} delta={workspace.usedObjects == null ? "Unavailable" : "Tracked"} tone="blue" />
-        <PortalV3MetricCard label="Requests" value={formatCompactNumber(workspace.requestCount)} delta={trafficLoading ? "Loading traffic" : workspace.requestCount == null ? "Unavailable" : "From traffic"} tone="green" />
-        <PortalV3MetricCard label="Data Out" value={formatBytes(workspace.dataOutBytes)} delta={trafficLoading ? "Loading traffic" : workspace.dataOutBytes == null ? "Unavailable" : "From traffic"} tone="amber" />
-      </section>
+      <StatCards
+        columns={4}
+        stats={[
+          {
+            label: "Total Storage",
+            value: formatBytes(workspace.usedBytes),
+            hint: workspace.quotaBytes ? `${formatPercentage(percent(workspace.usedBytes, workspace.quotaBytes))} used` : "Quota unavailable",
+          },
+          { label: "Total Objects", value: formatCompactNumber(workspace.usedObjects), hint: workspace.usedObjects == null ? "Unavailable" : "Tracked" },
+          { label: "Requests", value: formatCompactNumber(workspace.requestCount), hint: trafficLoading ? "Loading traffic" : workspace.requestCount == null ? "Unavailable" : "From traffic" },
+          { label: "Data Out", value: formatBytes(workspace.dataOutBytes), hint: trafficLoading ? "Loading traffic" : workspace.dataOutBytes == null ? "Unavailable" : "From traffic" },
+        ]}
+      />
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <PortalV3Card title="Storage usage">
+        <UiCard title="Storage usage">
           {topSpaces.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-[220px_1fr] md:items-center">
-              <PortalV3Donut segments={donutSegments} center={formatBytes(workspace.usedBytes)} caption={workspace.quotaBytes ? `of ${formatBytes(workspace.quotaBytes)} used` : "quota unavailable"} />
+              <DonutChart segments={donutSegments} center={formatBytes(workspace.usedBytes)} caption={workspace.quotaBytes ? `of ${formatBytes(workspace.quotaBytes)} used` : "quota unavailable"} />
               <div className="space-y-3">
                 {topSpaces.map((space, index) => (
                   <div key={space.id} className="flex items-center justify-between gap-3 text-xs">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="h-2 w-2 rounded-full" style={{ background: DONUT_COLORS[index] ?? "#94a3b8" }} />
-                      <span className="truncate font-semibold text-slate-700">{space.name}</span>
+                      <span className={cx("truncate font-semibold", uiTitleTextClass)}>{space.name}</span>
                     </div>
-                    <span className="shrink-0 text-slate-500">{formatBytes(space.usedBytes)}</span>
+                    <span className={cx("shrink-0", uiMutedTextClass)}>{formatBytes(space.usedBytes)}</span>
                   </div>
                 ))}
               </div>
@@ -125,12 +132,12 @@ export default function PortalDashboard() {
           ) : (
             <EmptyState>No Storage Space usage available.</EmptyState>
           )}
-        </PortalV3Card>
+        </UiCard>
 
-        <PortalV3Card title="Usage over time">
+        <UiCard title="Usage over time">
           {trendValues.length > 0 ? (
             <>
-              <PortalV3MiniLineChart values={trendValues} />
+              <MiniLineChart values={trendValues} />
               <div className="mt-2 flex justify-between text-[11px] font-semibold text-slate-400">
                 {(trendLabels.length > 0 ? trendLabels : workspace.usageTrend.map((point) => point.label)).map((label) => (
                   <span key={label}>{label}</span>
@@ -141,26 +148,26 @@ export default function PortalDashboard() {
             <EmptyState>No usage trend available.</EmptyState>
           )}
           {trafficLoading ? <div className="mt-2 text-[11px] text-slate-400">Loading live trend...</div> : null}
-        </PortalV3Card>
+        </UiCard>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-4">
-        <PortalV3Card title="Top storage spaces">
+        <UiCard title="Top storage spaces">
           <div className="space-y-3">
             {topSpaces.map((space) => (
               <div key={space.id} className="grid grid-cols-[1fr_auto] gap-3">
-                <PortalV3Link to={storageSpacePath(space)}>{space.name}</PortalV3Link>
-                <span className="text-xs font-semibold text-slate-500">{formatBytes(space.usedBytes)}</span>
+                <Link to={storageSpacePath(space)} className="text-xs font-semibold">{space.name}</Link>
+                <span className={cx("text-xs font-semibold", uiMutedTextClass)}>{formatBytes(space.usedBytes)}</span>
                 <div className="col-span-2">
-                  <PortalV3Progress value={percent(space.usedBytes, workspace.usedBytes)} />
+                  <UiProgressBar value={percent(space.usedBytes, workspace.usedBytes)} />
                 </div>
               </div>
             ))}
             {topSpaces.length === 0 ? <EmptyState>No Storage Spaces to display.</EmptyState> : null}
           </div>
-        </PortalV3Card>
+        </UiCard>
 
-        <PortalV3Card title="Recent activity" action={<PortalV3Link to="/portal/activity">View all activity</PortalV3Link>}>
+        <UiCard title="Recent activity" actions={<Link to="/portal/activity" className="ui-caption font-semibold">View all activity</Link>}>
           <div className="space-y-2">
             {workspace.activity.slice(0, 5).map((item) => (
               <div key={item.id} className="flex items-center gap-2 text-xs">
@@ -173,42 +180,42 @@ export default function PortalDashboard() {
             ))}
             {workspace.activity.length === 0 ? <EmptyState>No recent activity.</EmptyState> : null}
           </div>
-        </PortalV3Card>
+        </UiCard>
 
-        <PortalV3Card title="Recent transfers" action={<PortalV3Link to="/portal/transfers">View all transfers</PortalV3Link>}>
+        <UiCard title="Recent transfers" actions={<Link to="/portal/transfers" className="ui-caption font-semibold">View all transfers</Link>}>
           <div className="space-y-2">
             {workspace.transfers.slice(0, 5).map((transfer) => (
-              <div key={transfer.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2">
+              <div key={transfer.id} className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--ui-border-soft)] px-3 py-2">
                 <div className="min-w-0">
-                  <div className="truncate text-xs font-bold text-slate-800">{transfer.name}</div>
-                  <div className="truncate text-[11px] text-slate-500">{transfer.direction} - {transfer.startedLabel}</div>
+                  <div className={cx("truncate text-xs", uiTitleTextClass)}>{transfer.name}</div>
+                  <div className={cx("truncate text-[11px]", uiMutedTextClass)}>{transfer.direction} - {transfer.startedLabel}</div>
                 </div>
-                <PortalV3Badge tone={transferTone(transfer.status)}>{transfer.status}</PortalV3Badge>
+                <UiBadge tone={transferTone(transfer.status)}>{transfer.status}</UiBadge>
               </div>
             ))}
             {workspace.transfers.length === 0 ? (
-              <div className="rounded-md border border-slate-100 px-3 py-4 text-xs font-semibold text-slate-500">
+              <div className={cx(uiCardMutedClass, "px-3 py-4 text-xs font-semibold", uiMutedTextClass)}>
                 No recent transfers.
               </div>
             ) : null}
           </div>
-        </PortalV3Card>
+        </UiCard>
 
-        <PortalV3Card title="Alerts" action={<PortalV3Link to="/portal/activity">View all alerts</PortalV3Link>}>
+        <UiCard title="Alerts" actions={<Link to="/portal/activity" className="ui-caption font-semibold">View all alerts</Link>}>
           <div className="space-y-2">
             {alerts.map((alert) => (
-              <div key={alert.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2">
+              <div key={alert.id} className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--ui-border-soft)] px-3 py-2">
                 <div className="min-w-0">
-                  <div className="truncate text-xs font-bold text-slate-800">{alert.title}</div>
-                  <div className="truncate text-[11px] text-slate-500">{alert.description}</div>
+                  <div className={cx("truncate text-xs", uiTitleTextClass)}>{alert.title}</div>
+                  <div className={cx("truncate text-[11px]", uiMutedTextClass)}>{alert.description}</div>
                 </div>
-                <PortalV3Badge tone={alertTone(alert.tone)}>{alert.severityLabel ?? "Info"}</PortalV3Badge>
+                <UiBadge tone={alertTone(alert.tone)}>{alert.severityLabel ?? "Info"}</UiBadge>
               </div>
             ))}
             {alerts.length === 0 ? <EmptyState>No alerts to display.</EmptyState> : null}
           </div>
-        </PortalV3Card>
+        </UiCard>
       </section>
-    </PortalV3Page>
+    </div>
   );
 }

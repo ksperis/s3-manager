@@ -3,7 +3,15 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { ReactNode } from "react";
-import { cx, uiCardMutedClass, uiToneBannerClasses } from "./ui/styles";
+import {
+  cx,
+  uiCardMutedClass,
+  uiLabelClass,
+  uiMutedTextClass,
+  uiPanelClass,
+  uiTitleTextClass,
+  uiToneBannerClasses,
+} from "./ui/styles";
 import UiBadge from "./ui/UiBadge";
 
 export type PageControlStripItem = {
@@ -47,13 +55,13 @@ export default function PageControlStrip({
           <UiBadge tone="primary" className="px-2.5 py-1">
             {label}
           </UiBadge>
-          <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">{title}</p>
+          <p className={cx("ui-body", uiTitleTextClass)}>{title}</p>
         </div>
-        {description ? <p className="max-w-4xl ui-caption text-slate-600 dark:text-slate-300">{description}</p> : null}
+        {description ? <p className={cx("max-w-4xl ui-caption", uiMutedTextClass)}>{description}</p> : null}
       </div>
 
       {controls ? (
-        <div className="rounded-xl border border-slate-200/80 bg-white/75 px-3 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-950/40">
+        <div className={cx(uiPanelClass, "px-3 py-3")}>
           {controls}
         </div>
       ) : null}
@@ -63,10 +71,10 @@ export default function PageControlStrip({
           {visibleItems.map((item) => (
             <div
               key={item.label}
-              className="rounded-xl border border-slate-200/80 bg-white/75 px-3 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-950/40"
+              className={cx(uiPanelClass, "px-3 py-3")}
               title={item.title}
             >
-              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <p className={uiLabelClass}>
                 {item.label}
               </p>
               <div className="mt-1 min-w-0">
@@ -75,7 +83,7 @@ export default function PageControlStrip({
                     {item.value}
                   </UiBadge>
                 ) : (
-                  <p className={cx("truncate ui-body font-semibold text-slate-800 dark:text-slate-100", item.mono && "font-mono text-[13px]")}>
+                  <p className={cx("truncate ui-body", uiTitleTextClass, item.mono && "font-mono text-[13px]")}>
                     {item.value}
                   </p>
                 )}

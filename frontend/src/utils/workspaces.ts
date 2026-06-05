@@ -95,12 +95,18 @@ export function readStoredWorkspaceId(): WorkspaceId | null {
   return null;
 }
 
+export function hasPortalWorkspaceAccess(user: SessionUser | null): boolean {
+  return Boolean(
+    user?.account_links?.some(
+      (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
+    )
+  );
+}
+
 function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[] {
   if (!user || !user.role) return [];
   const links = user.account_links ?? [];
-  const hasPortalAccess = links.some(
-    (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
-  );
+  const hasPortalAccess = hasPortalWorkspaceAccess(user);
   if (isAdminLikeRole(user.role)) {
     return ALL_WORKSPACES.filter((workspace) => {
       if (workspace.id === "ceph-admin") return Boolean(user.can_access_ceph_admin);
@@ -196,9 +202,7 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
     return "/unauthorized";
   }
   const links = user.account_links ?? [];
-  const hasPortalAccess = links.some(
-    (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
-  );
+  const hasPortalAccess = hasPortalWorkspaceAccess(user);
   const s3UserDetails = user.s3_user_details ?? [];
   const s3UserIds = user.s3_users ?? [];
   const connectionDetails = user.s3_connection_details ?? [];

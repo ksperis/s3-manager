@@ -169,7 +169,7 @@ export default function TopbarDropdownSelect({
         }}
         className={
           compactOnNarrow && !iconOnly
-            ? `inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 min-[560px]:px-3 text-left shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-blue-500 dark:focus-visible:ring-offset-slate-900 ${open ? "border-blue-400" : ""}`
+            ? `shell-control inline-flex h-10 items-center gap-2.5 rounded-lg border px-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 ${open ? "shell-control-active" : ""}`
             : undefined
         }
       />
@@ -181,7 +181,7 @@ export default function TopbarDropdownSelect({
             anchorRef={triggerRef}
             placement={align === "right" ? "bottom-end" : "bottom-start"}
             minWidth="anchor"
-            className={`${menuMinWidthClassName} overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900`}
+            className={`shell-menu ${menuMinWidthClassName} overflow-hidden rounded-lg border p-1.5`}
           >
             <div ref={menuSurfaceRef}>
               <div
@@ -212,19 +212,19 @@ export default function TopbarDropdownSelect({
                         if (option.value !== value) onChange(option.value);
                         triggerRef.current?.focus();
                       }}
-                      className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition ${
-                        active
-                          ? "bg-primary-50 text-primary-900 dark:bg-primary-900/30 dark:text-primary-100"
+                        className={`flex w-full items-start gap-2 rounded-md px-3 py-1.5 text-left transition ${
+                          active
+                          ? "shell-menu-item-active"
                           : highlighted
-                            ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"
-                          : "text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+                            ? "shell-menu-item-highlighted"
+                          : "shell-menu-item hover:bg-[var(--shell-hover)]"
                       }`}
                     >
                       <span className="mt-0.5 h-4 w-4 shrink-0">
                         {active ? <CheckIcon className="h-4 w-4" /> : null}
                       </span>
                       {option.icon && (
-                        <span className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-300">{option.icon}</span>
+                        <span className="shell-icon-muted mt-0.5 h-4 w-4 shrink-0">{option.icon}</span>
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 items-center gap-2">
@@ -234,7 +234,7 @@ export default function TopbarDropdownSelect({
                           ) : null}
                         </div>
                         {option.description && (
-                          <span className="block truncate ui-caption text-slate-500 dark:text-slate-400">
+                          <span className="shell-muted-text block truncate ui-caption">
                             {option.description}
                           </span>
                         )}
@@ -249,7 +249,7 @@ export default function TopbarDropdownSelect({
         ) : (
           <div
             ref={menuSurfaceRef}
-            className={`absolute ${menuPositionClass} top-[calc(100%+8px)] z-50 ${menuMinWidthClassName} overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900`}
+            className={`shell-menu absolute ${menuPositionClass} top-[calc(100%+6px)] z-50 ${menuMinWidthClassName} overflow-hidden rounded-lg border p-1.5`}
           >
             <div
               id={listboxId}
@@ -279,18 +279,18 @@ export default function TopbarDropdownSelect({
                       if (option.value !== value) onChange(option.value);
                       triggerRef.current?.focus();
                     }}
-                    className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition ${
+                    className={`flex w-full items-start gap-2 rounded-md px-3 py-1.5 text-left transition ${
                       active
-                        ? "bg-primary-50 text-primary-900 dark:bg-primary-900/30 dark:text-primary-100"
+                        ? "shell-menu-item-active"
                         : highlighted
-                          ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"
-                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+                          ? "shell-menu-item-highlighted"
+                        : "shell-menu-item hover:bg-[var(--shell-hover)]"
                     }`}
                   >
                     <span className="mt-0.5 h-4 w-4 shrink-0">
                       {active ? <CheckIcon className="h-4 w-4" /> : null}
                     </span>
-                    {option.icon && <span className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-300">{option.icon}</span>}
+                    {option.icon && <span className="shell-icon-muted mt-0.5 h-4 w-4 shrink-0">{option.icon}</span>}
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="block min-w-0 flex-1 truncate ui-caption font-semibold">{option.label}</span>
@@ -299,7 +299,7 @@ export default function TopbarDropdownSelect({
                         ) : null}
                       </div>
                       {option.description && (
-                        <span className="block truncate ui-caption text-slate-500 dark:text-slate-400">
+                        <span className="shell-muted-text block truncate ui-caption">
                           {option.description}
                         </span>
                       )}

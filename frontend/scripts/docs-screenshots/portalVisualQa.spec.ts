@@ -48,18 +48,29 @@ async function seedPortalSession(page: Page) {
 }
 
 async function openPortalRoute(page: Page, routePath: string, scenarioId: string) {
-  const mockRegistry = await registerApiMocks(page, buildBaseRules(), scenarioId);
+  const mockRegistry = await registerApiMocks(
+    page,
+    [
+      {
+        id: "portal-current-user",
+        path: /^\/users\/me$/,
+        body: portalUser,
+      },
+      ...buildBaseRules(),
+    ],
+    scenarioId
+  );
   await seedPortalSession(page);
   await page.goto(routePath, { waitUntil: "domcontentloaded" });
   return mockRegistry;
 }
 
-test.describe("Portal V3 visual QA", () => {
+test.describe("Portal visual QA", () => {
   for (const viewport of viewports) {
     for (const route of portalRoutes) {
       test(`${viewport.name} ${route.path}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        const mockRegistry = await openPortalRoute(page, route.path, `portal-v3-visual-qa-${viewport.name}-${route.path}`);
+        const mockRegistry = await openPortalRoute(page, route.path, `portal-visual-qa-${viewport.name}-${route.path}`);
 
         const main = page.locator("main");
         await expect(main.getByText(route.expected, { exact: false }).first()).toBeVisible();

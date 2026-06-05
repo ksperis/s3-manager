@@ -3,12 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import Layout from "../Layout";
-import {
-  DESKTOP_SIDEBAR_SESSION_STORAGE_KEY,
-  SIDEBAR_COLLAPSE_THRESHOLD,
-  SIDEBAR_COMPACT_WIDTH,
-  SIDEBAR_MAX_WIDTH,
-} from "../sidebarSizing";
+import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_DEFAULT_WIDTH } from "../sidebarSizing";
 
 const mocks = vi.hoisted(() => ({
   workspaceSwitcherModel: null as {
@@ -102,17 +97,12 @@ describe("Layout", () => {
     mocks.workspaceSwitcherModel = null;
   });
 
-  it("restores the desktop sidebar width from session storage", () => {
-    window.sessionStorage.setItem(DESKTOP_SIDEBAR_SESSION_STORAGE_KEY, "320");
-
+  it("renders the desktop sidebar at the fixed expanded width", () => {
     const { container } = renderLayout();
     const desktopSidebar = getDesktopSidebar(container);
 
-    expect(desktopSidebar).toHaveStyle({ width: "320px" });
-    expect(within(desktopSidebar).getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute(
-      "aria-valuenow",
-      "320"
-    );
+    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_DEFAULT_WIDTH}px` });
+    expect(within(desktopSidebar).queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
   });
 
   it("lets route content shrink so wide inner lists can scroll horizontally", () => {
@@ -124,34 +114,23 @@ describe("Layout", () => {
     expect(outletWrapper).toHaveClass("min-w-0");
   });
 
-  it("supports pointer resize with compact and max-width bounds", () => {
+  it("keeps a slightly wider page gutter on standard workspaces", () => {
     const { container } = renderLayout();
-    const desktopSidebar = getDesktopSidebar(container);
-    const separator = within(desktopSidebar).getByRole("separator", { name: "Resize sidebar" });
+    const main = container.querySelector("main");
 
-    fireEvent.pointerDown(separator, { button: 0, clientX: 256 });
-    fireEvent.pointerMove(window, { clientX: 180 });
-    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_COMPACT_WIDTH}px` });
-
-    fireEvent.pointerMove(window, { clientX: 640 });
-    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_MAX_WIDTH}px` });
-    fireEvent.pointerUp(window);
+    expect(main).toHaveClass("px-4", "sm:px-8");
   });
 
-  it("supports keyboard resize and hides sidebar action in compact mode", () => {
+  it("collapses and expands the desktop sidebar", () => {
     const { container } = renderLayout();
     const desktopSidebar = getDesktopSidebar(container);
-    const separator = within(desktopSidebar).getByRole("separator", { name: "Resize sidebar" });
 
-    fireEvent.keyDown(separator, { key: "Home" });
+    fireEvent.click(within(desktopSidebar).getByRole("button", { name: "Collapse sidebar" }));
     expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_COMPACT_WIDTH}px` });
     expect(within(desktopSidebar).queryByText("Quick action")).not.toBeInTheDocument();
 
-    fireEvent.keyDown(separator, { key: "ArrowRight" });
-    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_COLLAPSE_THRESHOLD}px` });
-
-    fireEvent.keyDown(separator, { key: "End" });
-    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_MAX_WIDTH}px` });
+    fireEvent.click(within(desktopSidebar).getByRole("button", { name: "Expand sidebar" }));
+    expect(desktopSidebar).toHaveStyle({ width: `${SIDEBAR_DEFAULT_WIDTH}px` });
     expect(within(desktopSidebar).getByText("Quick action")).toBeInTheDocument();
   });
 
@@ -160,7 +139,7 @@ describe("Layout", () => {
     const mobileSidebar = getMobileSidebar(container);
     const mobilePanel = container.querySelector("#mobile-navigation-panel");
 
-    expect(mobilePanel).toHaveClass("w-[18.5rem]");
+    expect(mobilePanel).toHaveClass("w-[16rem]");
     expect(within(mobileSidebar).queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
     expect(mobileSidebar).toHaveClass("-translate-x-full");
 
@@ -171,7 +150,7 @@ describe("Layout", () => {
     expect(mobileSidebar).toHaveClass("-translate-x-full");
   });
 
-  it("renders the workspace switcher in the sidebar when the sidebar is visible", () => {
+  it("keeps the workspace switcher in the topbar when the sidebar is visible", () => {
     const onWorkspaceChange = vi.fn();
     mocks.workspaceSwitcherModel = {
       currentWorkspaceId: "manager",
@@ -186,10 +165,8 @@ describe("Layout", () => {
     const { container } = renderLayout();
     const desktopSidebar = getDesktopSidebar(container);
 
-    expect(screen.getByTestId("layout-topbar")).toHaveAttribute("data-show-workspace-switcher", "false");
-    const switcher = within(desktopSidebar).getByRole("button", { name: "Switch workspace" });
-    expect(switcher).toHaveTextContent("S3 Manager");
-    expect(switcher).toHaveTextContent("Manager");
+    expect(screen.getByTestId("layout-topbar")).toHaveAttribute("data-show-workspace-switcher", "true");
+    expect(within(desktopSidebar).queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
   });
 
   it("keeps the workspace switcher in the topbar when the sidebar is hidden", () => {

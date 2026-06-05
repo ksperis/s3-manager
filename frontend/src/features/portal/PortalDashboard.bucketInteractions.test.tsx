@@ -98,7 +98,7 @@ describe("PortalDashboard storage workspace UX", () => {
     vi.clearAllMocks();
   });
 
-  it("shows the v3 dashboard structure without advanced browser actions", () => {
+  it("shows the portal dashboard structure without advanced browser actions", () => {
     render(
       <MemoryRouter>
         <PortalDashboard />

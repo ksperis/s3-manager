@@ -14,13 +14,20 @@ import {
   type PortalPublicLink,
   type PortalStorageObjectDetail,
 } from "../../api/portal";
+import PageBanner from "../../components/PageBanner";
+import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
+import { tableDeleteActionClasses } from "../../components/tableActionClasses";
+import UiBadge from "../../components/ui/UiBadge";
+import UiButton from "../../components/ui/UiButton";
+import UiCard from "../../components/ui/UiCard";
+import { cx, uiCardMutedClass, uiMutedTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
 import {
   storageSpacePath,
   type PortalWorkspaceSpace,
 } from "./portalWorkspaceModel";
-import { PortalV3Card, PortalV3Page } from "./PortalV3Components";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 
@@ -65,38 +72,6 @@ function formatObjectDate(raw?: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function Breadcrumbs({ space, objectPath }: { space: PortalWorkspaceSpace; objectPath: string }) {
-  const segments = objectPath.split("/").filter(Boolean);
-  let cursor = "";
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-      <Link to="/portal/storage-spaces" className="text-blue-700 hover:text-blue-800">
-        Storage Spaces
-      </Link>
-      <span className="text-slate-300">›</span>
-      <Link to={storageSpacePath(space)} className="text-blue-700 hover:text-blue-800">
-        {space.name}
-      </Link>
-      {segments.map((segment, index) => {
-        cursor = `${cursor}${segment}/`;
-        const isLast = index === segments.length - 1;
-        return (
-          <span key={`${cursor}-${index}`} className="inline-flex items-center gap-2">
-            <span className="text-slate-300">›</span>
-            {isLast ? (
-              <span className="text-slate-700">{segment}</span>
-            ) : (
-              <Link to={`${storageSpacePath(space)}?prefix=${encodeURIComponent(cursor)}`} className="text-blue-700 hover:text-blue-800">
-                {segment}
-              </Link>
-            )}
-          </span>
-        );
-      })}
-    </div>
-  );
 }
 
 function FileIcon() {
@@ -223,15 +198,15 @@ export default function PortalObjectDetailPage() {
   );
 
   if (accountLoading || loading) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Loading object...</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="info">Loading object...</PageBanner></div>;
   }
 
   if (accountError || error) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-rose-600">{accountError ?? error}</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="error">{accountError ?? error}</PageBanner></div>;
   }
 
   if (!hasAccountContext || !space || !objectPath) {
-    return <PortalV3Page><div className="portal-v3-card p-6 text-sm font-semibold text-slate-600">Object not available.</div></PortalV3Page>;
+    return <div className="space-y-4"><PageBanner tone="info">Object not available.</PageBanner></div>;
   }
 
   const displayPath = object.path;
@@ -335,60 +310,44 @@ export default function PortalObjectDetailPage() {
   };
 
   return (
-    <PortalV3Page>
-      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-5 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <Breadcrumbs space={space} objectPath={object.path} />
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title={object.name || objectName(object.path)}
+        description={object.path}
+        breadcrumbs={[
+          { label: "Portal" },
+          { label: "Storage Spaces", to: "/portal/storage-spaces" },
+          { label: space.name, to: storageSpacePath(space) },
+          { label: object.name || objectName(object.path) },
+        ]}
+        actions={[
+          { label: downloading ? "Téléchargement..." : "Télécharger", onClick: handleDownload, variant: "secondary", disabled: !accountIdForApi || downloading },
+          { label: linkBusy ? "Partage..." : "Partager", onClick: handleCreatePublicLink, variant: "secondary", disabled: !accountIdForApi || space.role !== "Owner" || linkBusy },
+        ]}
+      />
 
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <UiCard>
         <div className="flex min-w-0 gap-4">
           <FileIcon />
           <div className="min-w-0">
-            <h1 className="truncate text-[26px] font-bold leading-8 text-slate-950">{object.name || objectName(object.path)}</h1>
-            <div className="mt-3 flex max-w-2xl items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{object.name || objectName(object.path)}</p>
+            <div className={cx(uiCardMutedClass, "mt-3 flex max-w-2xl items-center gap-2 px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>
               <span className="min-w-0 flex-1 truncate">{displayPath}</span>
               <button type="button" onClick={copyPath} className="shrink-0 text-blue-700">Copier</button>
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={handleDownload} disabled={!accountIdForApi || downloading} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
-            {downloading ? "Téléchargement..." : "Télécharger"}
-          </button>
-          <button type="button" onClick={handleCreatePublicLink} disabled={!accountIdForApi || space.role !== "Owner" || linkBusy} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
-            {linkBusy ? "Partage..." : "Partager"}
-          </button>
-        </div>
-      </header>
+      </UiCard>
 
-      {downloadMessage ? (
-        <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
-          {downloadMessage}
-        </div>
-      ) : null}
-      {objectError ? (
-        <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-          {objectError}
-        </div>
-      ) : null}
+      {downloadMessage ? <PageBanner tone="info">{downloadMessage}</PageBanner> : null}
+      {objectError ? <PageBanner tone="warning">{objectError}</PageBanner> : null}
 
-      <div className="portal-v3-card px-4">
-        <div className="flex gap-7 overflow-x-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              className={activeTab === tab ? "portal-v3-tab portal-v3-tab-active" : "portal-v3-tab"}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+      <div className="border-b border-slate-200 pb-3 dark:border-slate-800">
+        <PageTabs tabs={tabs.map((tab) => ({ id: tab, label: tab }))} activeTab={activeTab} onChange={setActiveTab} variant="bar" />
       </div>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
-        <PortalV3Card title="Informations générales">
+        <UiCard title="Informations générales">
           <dl className="grid gap-4">
             <DetailRow label="Taille" value={formatBytes(object.sizeBytes)} />
             <DetailRow label="Type de contenu" value={object.type} />
@@ -398,9 +357,9 @@ export default function PortalObjectDetailPage() {
             <DetailRow label="Chemin" value={object.path} />
           </dl>
           {objectLoading ? <div className="mt-4 text-[11px] font-semibold text-slate-400">Chargement des métadonnées...</div> : null}
-        </PortalV3Card>
+        </UiCard>
 
-        <PortalV3Card title="Actions rapides">
+        <UiCard title="Actions rapides">
           <div className="grid gap-4">
             <QuickAction label="Télécharger" onClick={handleDownload} />
             <QuickAction label="Obtenir le lien public" onClick={handleCreatePublicLink} disabled={space.role !== "Owner" || linkBusy} />
@@ -408,11 +367,11 @@ export default function PortalObjectDetailPage() {
             <QuickAction label="Partager cet objet" onClick={handleCreatePublicLink} disabled={space.role !== "Owner" || linkBusy} />
             <QuickAction label={deleteBusy ? "Suppression..." : "Supprimer l'objet"} tone="rose" onClick={handleDelete} disabled={space.role === "Viewer" || deleteBusy} />
           </div>
-        </PortalV3Card>
+        </UiCard>
       </section>
 
       {space.role === "Owner" ? (
-        <PortalV3Card title="Liens publics">
+        <UiCard title="Liens publics">
           <div className="mb-3 grid gap-2 sm:grid-cols-[220px_auto]">
             <input
               type="datetime-local"
@@ -421,12 +380,12 @@ export default function PortalObjectDetailPage() {
               onChange={(event) => setLinkExpiration(event.target.value)}
               aria-label="Expiration du lien public"
             />
-            <button type="button" onClick={handleCreatePublicLink} disabled={linkBusy} className="h-9 rounded-md bg-blue-600 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">
+            <UiButton onClick={handleCreatePublicLink} disabled={linkBusy} className="h-9 px-3 py-1.5">
               {linkBusy ? "Création..." : "Créer un lien"}
-            </button>
+            </UiButton>
           </div>
           <div className="overflow-x-auto">
-            <table className="portal-v3-table min-w-[760px]">
+            <table className="ui-data-table min-w-[760px]">
               <thead>
                 <tr>
                   <th>Objet</th>
@@ -440,12 +399,12 @@ export default function PortalObjectDetailPage() {
                 {publicLinks.map((link) => (
                   <tr key={link.id}>
                     <td className="font-bold text-slate-950">{link.object_name}</td>
-                    <td>{link.status}</td>
+                    <td><UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{link.status}</UiBadge></td>
                     <td>{link.expires_at ? formatObjectDate(link.expires_at) : "-"}</td>
                     <td className="max-w-[260px] truncate text-blue-700">{link.url}</td>
                     <td className="text-right">
                       {link.status === "Active" ? (
-                        <button type="button" onClick={() => handleRevokePublicLink(link)} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 shadow-sm hover:border-rose-200 hover:text-rose-600">
+                        <button type="button" onClick={() => handleRevokePublicLink(link)} className={tableDeleteActionClasses}>
                           Revoke
                         </button>
                       ) : null}
@@ -462,11 +421,11 @@ export default function PortalObjectDetailPage() {
               </tbody>
             </table>
           </div>
-        </PortalV3Card>
+        </UiCard>
       ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
-        <PortalV3Card title="Aperçu rapide">
+        <UiCard title="Aperçu rapide">
           {object.previewType === "text" && object.previewText ? (
             <pre className="max-h-72 overflow-auto rounded-md border border-slate-200 bg-slate-950 p-3 text-xs leading-5 text-slate-50">{object.previewText}</pre>
           ) : (
@@ -479,9 +438,9 @@ export default function PortalObjectDetailPage() {
               Ouvrir dans la liste
             </Link>
           </div>
-        </PortalV3Card>
+        </UiCard>
 
-        <PortalV3Card title="Événements récents">
+        <UiCard title="Événements récents">
           <div className="grid gap-2">
             {workspace.activity.filter((item) => item.target === object.name || item.target === object.path).slice(0, 4).map((item) => (
               <div key={item.id} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
@@ -495,8 +454,8 @@ export default function PortalObjectDetailPage() {
               </div>
             ) : null}
           </div>
-        </PortalV3Card>
+        </UiCard>
       </section>
-    </PortalV3Page>
+    </div>
   );
 }

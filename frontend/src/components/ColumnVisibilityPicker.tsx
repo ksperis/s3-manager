@@ -4,6 +4,16 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import UiCheckboxField from "./ui/UiCheckboxField";
+import {
+  cx,
+  uiButtonBaseClass,
+  uiButtonVariants,
+  uiCardMutedClass,
+  uiDividerClass,
+  uiLabelClass,
+  uiMutedTextClass,
+  uiTitleTextClass,
+} from "./ui/styles";
 
 export type ColumnPickerOption<Id extends string> = {
   id: Id;
@@ -51,7 +61,7 @@ const EMPTY_FEATURE_GROUPS: Array<ColumnPickerExpandableGroup<string>> = [];
 const EMPTY_DETAIL_GROUPS: Array<ColumnPickerDetailGroup<string>> = [];
 
 const detailsButtonClass =
-  "rounded-md border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
+  "rounded-md border border-[color:var(--ui-border)] px-2 py-0.5 ui-caption font-semibold text-[var(--ui-text-muted)] hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60";
 
 function buildInitialExpandedState(groups: Array<{ id: string; defaultExpanded?: boolean }>) {
   return groups.reduce<Record<string, boolean>>((acc, group) => {
@@ -99,13 +109,13 @@ export default function ColumnVisibilityPicker<Id extends string>({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{title}</p>
-          <p className="ui-caption text-slate-500 dark:text-slate-400">{selectedCount} selected</p>
+          <p className={cx("ui-body", uiTitleTextClass)}>{title}</p>
+          <p className={cx("ui-caption", uiMutedTextClass)}>{selectedCount} selected</p>
         </div>
         <button
           type="button"
           onClick={onReset}
-          className="shrink-0 rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+          className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "shrink-0 rounded-md px-2 py-1 ui-caption")}
         >
           Reset
         </button>
@@ -113,8 +123,8 @@ export default function ColumnVisibilityPicker<Id extends string>({
 
       <div className="max-h-[min(70vh,32rem)] space-y-3 overflow-y-auto pr-1">
         {coreGroups.map((group) => (
-          <section key={group.id} className="rounded-lg border border-slate-200/90 bg-slate-50/50 p-2.5 dark:border-slate-700 dark:bg-slate-800/40">
-            <p className="mb-2 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{group.label}</p>
+          <section key={group.id} className={cx(uiCardMutedClass, "p-2.5")}>
+            <p className={cx("mb-2", uiLabelClass)}>{group.label}</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {group.options.map((option) => (
                 <UiCheckboxField
@@ -122,26 +132,26 @@ export default function ColumnVisibilityPicker<Id extends string>({
                   checked={option.checked}
                   onChange={option.onToggle}
                   disabled={option.disabled}
-                  className="w-full rounded-md px-1 py-1 ui-body text-slate-700 hover:bg-white/80 dark:text-slate-200 dark:hover:bg-slate-700/40"
+                  className="w-full rounded-md px-1 py-1 ui-body text-[var(--ui-text)] hover:bg-[var(--ui-hover)]"
                 >
                   <span className="min-w-0 truncate">{option.label}</span>
                 </UiCheckboxField>
               ))}
             </div>
-            {group.helperText ? <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">{group.helperText}</p> : null}
+            {group.helperText ? <p className={cx("mt-2 ui-caption", uiMutedTextClass)}>{group.helperText}</p> : null}
           </section>
         ))}
 
         {detailGroups.length > 0 ? (
-          <section className="rounded-lg border border-slate-200/90 bg-slate-50/50 p-2.5 dark:border-slate-700 dark:bg-slate-800/40">
-            <p className="mb-2 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Details</p>
+          <section className={cx(uiCardMutedClass, "p-2.5")}>
+            <p className={cx("mb-2", uiLabelClass)}>Details</p>
             <div className="space-y-1.5">
               {detailGroups.map((group) => {
                 const expanded = expandedGroups[group.id] === true;
                 return (
-                  <div key={group.id} className="rounded-md border border-slate-200 bg-white/90 p-2 dark:border-slate-700 dark:bg-slate-900/40">
+                  <div key={group.id} className="rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-2">
                     <div className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate ui-body text-slate-700 dark:text-slate-200">{group.label}</span>
+                      <span className={cx("min-w-0 flex-1 truncate ui-body", uiTitleTextClass)}>{group.label}</span>
                       <button
                         type="button"
                         onClick={() => toggleGroup(group.id)}
@@ -152,14 +162,14 @@ export default function ColumnVisibilityPicker<Id extends string>({
                       </button>
                     </div>
                     {expanded ? (
-                      <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 dark:border-slate-700">
+                      <div className={cx("mt-2 space-y-1 border-t pt-2", uiDividerClass)}>
                         {group.details.map((detail) => (
                           <UiCheckboxField
                             key={detail.id}
                             checked={detail.checked}
                             onChange={detail.onToggle}
                             disabled={detail.disabled}
-                            className="w-full rounded-md px-1 py-1 ui-caption text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/70"
+                            className="w-full rounded-md px-1 py-1 ui-caption text-[var(--ui-text-muted)] hover:bg-[var(--ui-hover)]"
                           >
                             <span className="min-w-0 truncate">{detail.label}</span>
                           </UiCheckboxField>
@@ -174,20 +184,20 @@ export default function ColumnVisibilityPicker<Id extends string>({
         ) : null}
 
         {featureGroups.length > 0 ? (
-          <section className="rounded-lg border border-slate-200/90 bg-slate-50/50 p-2.5 dark:border-slate-700 dark:bg-slate-800/40">
-            <p className="mb-2 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
+          <section className={cx(uiCardMutedClass, "p-2.5")}>
+            <p className={cx("mb-2", uiLabelClass)}>Features</p>
             <div className="space-y-1.5">
               {featureGroups.map((group) => {
                 const expanded = expandedGroups[group.id] === true;
                 const details = group.details ?? [];
                 return (
-                  <div key={group.id} className="rounded-md border border-slate-200 bg-white/90 p-2 dark:border-slate-700 dark:bg-slate-900/40">
+                  <div key={group.id} className="rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-2">
                     <div className="flex items-center gap-2">
                       <UiCheckboxField
                         checked={group.checked}
                         onChange={group.onToggle}
                         disabled={group.disabled}
-                        className="min-w-0 flex-1 ui-body text-slate-700 dark:text-slate-200"
+                        className="min-w-0 flex-1 ui-body text-[var(--ui-text)]"
                       >
                         <span className="min-w-0 truncate">{group.label}</span>
                       </UiCheckboxField>
@@ -203,14 +213,14 @@ export default function ColumnVisibilityPicker<Id extends string>({
                       ) : null}
                     </div>
                     {details.length > 0 && expanded ? (
-                      <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 dark:border-slate-700">
+                      <div className={cx("mt-2 space-y-1 border-t pt-2", uiDividerClass)}>
                         {details.map((detail) => (
                           <UiCheckboxField
                             key={detail.id}
                             checked={detail.checked}
                             onChange={detail.onToggle}
                             disabled={detail.disabled}
-                            className="w-full rounded-md px-1 py-1 ui-caption text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/70"
+                            className="w-full rounded-md px-1 py-1 ui-caption text-[var(--ui-text-muted)] hover:bg-[var(--ui-hover)]"
                           >
                             <span className="min-w-0 truncate">{detail.label}</span>
                           </UiCheckboxField>
@@ -221,7 +231,7 @@ export default function ColumnVisibilityPicker<Id extends string>({
                 );
               })}
             </div>
-            {footerNote ? <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">{footerNote}</p> : null}
+            {footerNote ? <p className={cx("mt-2 ui-caption", uiMutedTextClass)}>{footerNote}</p> : null}
           </section>
         ) : null}
       </div>

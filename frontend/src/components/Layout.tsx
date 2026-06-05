@@ -2,22 +2,12 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { logout as logoutRequest } from "../api/auth";
 import Header from "./Header";
 import Sidebar, { SidebarLink, SidebarSection } from "./Sidebar";
 import { useWorkspaceSwitcherModel } from "./EnvironmentSwitcher";
-import {
-  DESKTOP_SIDEBAR_SESSION_STORAGE_KEY,
-  SIDEBAR_COMPACT_WIDTH,
-  SIDEBAR_DEFAULT_WIDTH,
-  SIDEBAR_MAX_WIDTH,
-  SIDEBAR_RESIZE_KEYBOARD_STEP,
-  isSidebarCompact,
-  normalizeSidebarWidth,
-  stepSidebarWidth,
-} from "./sidebarSizing";
 import Topbar from "./Topbar";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
 
@@ -82,15 +72,8 @@ export default function Layout({
 }: LayoutProps) {
   const location = useLocation();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [desktopSidebarWidth, setDesktopSidebarWidth] = useState(() => {
-    if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH;
-    const raw = window.sessionStorage.getItem(DESKTOP_SIDEBAR_SESSION_STORAGE_KEY);
-    return raw ? normalizeSidebarWidth(Number(raw)) : SIDEBAR_DEFAULT_WIDTH;
-  });
-  const [desktopSidebarDragging, setDesktopSidebarDragging] = useState(false);
-  const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const [desktopSidebarCompact, setDesktopSidebarCompact] = useState(false);
   const shouldShowSidebar = !hideSidebar;
-  const desktopSidebarCompact = isSidebarCompact(desktopSidebarWidth);
   const userEmail = getUserEmail();
   const workspaceSwitcher = useWorkspaceSwitcherModel();
   const logout = () => {
@@ -106,11 +89,11 @@ export default function Layout({
   const heroInlineAction = topbarContent || hasTopbarControls ? undefined : headerInlineAction;
   const resolvedInlineTopbarContent = topbarContent ?? (hasTopbarControls ? undefined : headerInlineAction);
   const mainOverflowClass = disableMainScroll ? "overflow-hidden" : "overflow-y-auto";
-  const mainClasses = `flex min-h-0 min-w-0 flex-1 flex-col ${mainOverflowClass} bg-[#f6f8fc] px-3 pb-8 pt-4 sm:px-6 dark:bg-slate-950${
+  const mainClasses = `shell-page flex min-h-0 min-w-0 flex-1 flex-col ${mainOverflowClass} px-4 pb-8 pt-4 sm:px-8${
     mainClassName ? ` ${mainClassName}` : ""
   }`;
   const rootHeightClass = fullHeight ? "h-[100dvh]" : "h-screen";
-  const drawerTopClass = hideTopbar ? "top-0" : "top-16";
+  const drawerTopClass = hideTopbar ? "top-0" : "top-14";
 
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -121,11 +104,6 @@ export default function Layout({
       setMobileSidebarOpen(false);
     }
   }, [shouldShowSidebar]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.sessionStorage.setItem(DESKTOP_SIDEBAR_SESSION_STORAGE_KEY, String(desktopSidebarWidth));
-  }, [desktopSidebarWidth]);
 
   useEffect(() => {
     if (!mobileSidebarOpen) return;
@@ -150,79 +128,12 @@ export default function Layout({
     };
   }, [mobileSidebarOpen]);
 
-  useEffect(() => {
-    if (!desktopSidebarDragging) return;
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const resizeState = sidebarResizeStateRef.current;
-      if (!resizeState) return;
-      const nextWidth = resizeState.startWidth + (event.clientX - resizeState.startX);
-      setDesktopSidebarWidth(normalizeSidebarWidth(nextWidth));
-    };
-
-    const stopDragging = () => {
-      sidebarResizeStateRef.current = null;
-      setDesktopSidebarDragging(false);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopDragging);
-    window.addEventListener("pointercancel", stopDragging);
-
-    return () => {
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopDragging);
-      window.removeEventListener("pointercancel", stopDragging);
-    };
-  }, [desktopSidebarDragging]);
-
-  const handleDesktopSidebarResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    sidebarResizeStateRef.current = {
-      startX: event.clientX,
-      startWidth: desktopSidebarWidth,
-    };
-    setDesktopSidebarDragging(true);
-  };
-
-  const handleDesktopSidebarResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    switch (event.key) {
-      case "ArrowLeft":
-        event.preventDefault();
-        setDesktopSidebarWidth((current) => stepSidebarWidth(current, -SIDEBAR_RESIZE_KEYBOARD_STEP));
-        break;
-      case "ArrowRight":
-        event.preventDefault();
-        setDesktopSidebarWidth((current) => stepSidebarWidth(current, SIDEBAR_RESIZE_KEYBOARD_STEP));
-        break;
-      case "Home":
-        event.preventDefault();
-        setDesktopSidebarWidth(SIDEBAR_COMPACT_WIDTH);
-        break;
-      case "End":
-        event.preventDefault();
-        setDesktopSidebarWidth(SIDEBAR_MAX_WIDTH);
-        break;
-      default:
-        break;
-    }
-  };
-
   const handleDesktopSidebarCollapseToggle = () => {
-    setDesktopSidebarWidth((current) =>
-      isSidebarCompact(current) ? SIDEBAR_DEFAULT_WIDTH : SIDEBAR_COMPACT_WIDTH
-    );
+    setDesktopSidebarCompact((current) => !current);
   };
 
   return (
-    <div className={`flex ${rootHeightClass} overflow-hidden bg-[#f6f8fc] text-slate-900 dark:bg-slate-950 dark:text-slate-50`}>
+    <div className={`shell-page flex ${rootHeightClass} overflow-hidden`}>
       {shouldShowSidebar && (
         <Sidebar
           title={sidebarTitle}
@@ -230,13 +141,8 @@ export default function Layout({
           links={navLinks}
           headerAction={sidebarAction}
           footer={sidebarFooter}
-          width={desktopSidebarWidth}
           compact={desktopSidebarCompact}
-          resizing={desktopSidebarDragging}
-          onResizeStart={handleDesktopSidebarResizeStart}
-          onResizeKeyDown={handleDesktopSidebarResizeKeyDown}
           onCollapseToggle={handleDesktopSidebarCollapseToggle}
-          workspaceSwitcher={workspaceSwitcher}
         />
       )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -253,56 +159,57 @@ export default function Layout({
             showMobileMenuButton={shouldShowSidebar}
             mobileMenuOpen={mobileSidebarOpen}
             onMobileMenuToggle={() => setMobileSidebarOpen((open) => !open)}
-            showWorkspaceSwitcher={!shouldShowSidebar}
+            showWorkspaceSwitcher
             workspaceSwitcher={workspaceSwitcher}
           />
         )}
-        {shouldShowSidebar && (
-          <div
-            className={`fixed inset-x-0 bottom-0 ${drawerTopClass} z-[44] md:hidden ${
-              mobileSidebarOpen ? "pointer-events-auto" : "pointer-events-none"
-            }`}
-            aria-hidden={!mobileSidebarOpen}
-          >
-            <button
-              type="button"
-              tabIndex={mobileSidebarOpen ? 0 : -1}
-              aria-label="Close mobile navigation"
-              onClick={() => setMobileSidebarOpen(false)}
-              className={`absolute inset-0 bg-slate-950/45 transition-opacity duration-200 ${
-                mobileSidebarOpen ? "opacity-100" : "opacity-0"
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {shouldShowSidebar && (
+            <div
+              className={`fixed inset-x-0 bottom-0 ${drawerTopClass} z-[44] md:hidden ${
+                mobileSidebarOpen ? "pointer-events-auto" : "pointer-events-none"
               }`}
-            />
-            <div id="mobile-navigation-panel" className="absolute left-0 top-0 h-full w-[18.5rem] max-w-[86vw]">
-              <Sidebar
-                variant="mobile"
-                className={`shadow-2xl transition-transform duration-200 ${
-                  mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+              aria-hidden={!mobileSidebarOpen}
+            >
+              <button
+                type="button"
+                tabIndex={mobileSidebarOpen ? 0 : -1}
+                aria-label="Close mobile navigation"
+                onClick={() => setMobileSidebarOpen(false)}
+                className={`absolute inset-0 bg-slate-950/45 transition-opacity duration-200 ${
+                  mobileSidebarOpen ? "opacity-100" : "opacity-0"
                 }`}
-                title={sidebarTitle}
-                sections={navSections}
-                links={navLinks}
-                headerAction={sidebarAction}
-                footer={sidebarFooter}
-                workspaceSwitcher={workspaceSwitcher}
-                onNavigate={() => setMobileSidebarOpen(false)}
               />
+              <div id="mobile-navigation-panel" className="absolute left-0 top-0 h-full w-[16rem] max-w-[86vw]">
+                <Sidebar
+                  variant="mobile"
+                  className={`shadow-[var(--shell-menu-shadow)] transition-transform duration-200 ${
+                    mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                  }`}
+                  title={sidebarTitle}
+                  sections={navSections}
+                  links={navLinks}
+                  headerAction={sidebarAction}
+                  footer={sidebarFooter}
+                  onNavigate={() => setMobileSidebarOpen(false)}
+                />
+              </div>
             </div>
-          </div>
-        )}
-        <main className={mainClasses}>
-          {!hideHeader && (
-            <Header
-              title={headerTitle}
-              subtitle={headerSubtitle}
-              context={headerContext}
-              inlineAction={heroInlineAction}
-            />
           )}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col space-y-4">
-            {children ?? <Outlet />}
-          </div>
-        </main>
+          <main className={mainClasses}>
+            {!hideHeader && (
+              <Header
+                title={headerTitle}
+                subtitle={headerSubtitle}
+                context={headerContext}
+                inlineAction={heroInlineAction}
+              />
+            )}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col space-y-4">
+              {children ?? <Outlet />}
+            </div>
+          </main>
+        </div>
       </div>
     </div>
   );
