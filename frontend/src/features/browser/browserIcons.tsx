@@ -181,6 +181,58 @@ export const SettingsIcon = ({ className = "h-4 w-4", ...props }: IconProps) => 
   </svg>
 );
 
+export const UserIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <circle cx="10" cy="6.5" r="2.5" stroke="currentColor" strokeWidth="1.4" />
+    <path
+      d="M4.5 15.5c1.35-2 3-3 5.5-3s4.15 1 5.5 3"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const GroupIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <circle cx="7.2" cy="7.2" r="2.1" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="13" cy="8" r="1.8" stroke="currentColor" strokeWidth="1.4" />
+    <path
+      d="M3.8 15.2c.9-1.55 2.1-2.35 3.8-2.35 1.65 0 2.85.8 3.75 2.35m1.2-2.1c1.25.1 2.25.8 3 2.1"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const ShieldIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <path
+      d="M10 3.5 15.5 5.7v4.8c0 2.8-1.85 4.9-5.5 6.3-3.65-1.4-5.5-3.5-5.5-6.3V5.7L10 3.5Z"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const BellIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <path
+      d="M10 4.2a3.2 3.2 0 0 0-3.2 3.2v2.15c0 .9-.35 1.75-1 2.35l-.8.7h10l-.8-.7c-.65-.6-1-1.45-1-2.35V7.4A3.2 3.2 0 0 0 10 4.2Z"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M8.6 14.5a1.5 1.5 0 0 0 2.8 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
 export const TrashIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
     <path d="M4.5 6.5h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

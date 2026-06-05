@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -83,18 +83,21 @@ describe("manager shell pages", () => {
     window.localStorage.clear();
   });
 
-  it("renders the manager dashboard without a page-level context strip", () => {
+  it("renders the manager dashboard with blurred mock cards when no context is selected", () => {
     render(
       <MemoryRouter>
         <ManagerDashboard />
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Select an account to start")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Manager dashboard" })).toBeInTheDocument();
+    expect(screen.getAllByText("Select an account to display live values.").length).toBeGreaterThan(0);
+    expect(screen.getByText("Top buckets by storage")).toBeInTheDocument();
+    expect(screen.getByText("Recent activity")).toBeInTheDocument();
     expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
   });
 
-  it("hides the dashboard storage usage card and metrics banner when manager stats are unavailable", async () => {
+  it("keeps manager dashboard cards visible with a discrete reason when metrics are unavailable", async () => {
     useS3AccountContextMock.mockReturnValue({
       accounts: [
         {
@@ -122,14 +125,16 @@ describe("manager shell pages", () => {
       </MemoryRouter>
     );
 
-    expect(screen.queryByText("Metrics are unavailable for this context.")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Manager dashboard" })).toBeInTheDocument();
+    expect(screen.getByText("Storage overview")).toBeInTheDocument();
+    expect(screen.getByText("Quota status")).toBeInTheDocument();
+    expect(screen.getAllByText("Metrics are unavailable for this context.").length).toBeGreaterThan(0);
     expect(screen.queryByText("Storage Usage")).not.toBeInTheDocument();
     expect(screen.queryByText(/Storage usage for/)).not.toBeInTheDocument();
-    expect(screen.queryByText("IAM resources")).not.toBeInTheDocument();
-    expect(await screen.findByText("0")).toBeInTheDocument();
+    expect(await screen.findByText("Access management")).toBeInTheDocument();
   });
 
-  it("shows IAM resources for IAM-capable connection contexts", async () => {
+  it("shows access management for IAM-capable connection contexts", async () => {
     useS3AccountContextMock.mockReturnValue({
       accounts: [
         {
@@ -163,12 +168,15 @@ describe("manager shell pages", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("IAM resources")).toBeInTheDocument();
-    expect(useIamOverviewMock).toHaveBeenCalledWith("conn-1", true, true, "connection");
-    expect(await screen.findByText("1")).toBeInTheDocument();
+    await waitFor(() => expect(listBucketsMock).toHaveBeenCalledWith("conn-1", { with_stats: false }));
+    const accessSection = screen.getByText("Access management").closest("section");
+    expect(accessSection).not.toBeNull();
+    expect(useIamOverviewMock).toHaveBeenCalledWith("conn-1", true, true, "connection:0");
+    expect(within(accessSection!).getByText("Users")).toBeInTheDocument();
+    expect(within(accessSection!).getByText("1")).toBeInTheDocument();
   });
 
-  it("keeps the manager dashboard overview grid width stable when storage usage is hidden", async () => {
+  it("keeps the redesigned dashboard structure stable when storage metrics are disabled", async () => {
     useS3AccountContextMock.mockReturnValue({
       accounts: [
         {
@@ -196,15 +204,34 @@ describe("manager shell pages", () => {
       </MemoryRouter>
     );
 
-    const overviewGrid = screen.getByText("IAM resources").closest("section")?.parentElement;
-    expect(overviewGrid).toHaveClass("lg:grid-cols-2");
+    await waitFor(() => expect(listBucketsMock).toHaveBeenCalledWith("account-1", { with_stats: false }));
+    expect(screen.getByTestId("manager-dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Top buckets by storage")).toBeInTheDocument();
+    expect(screen.getByText("Quick actions")).toBeInTheDocument();
+    expect(screen.getByText("Storage backend health")).toBeInTheDocument();
     expect(screen.queryByText("Storage Usage")).not.toBeInTheDocument();
-    expect(screen.queryByText("Metrics are unavailable for this context.")).not.toBeInTheDocument();
-    expect(await screen.findByText("0")).toBeInTheDocument();
+    expect(screen.getAllByText("Metrics are unavailable for this context.").length).toBeGreaterThan(0);
   });
 
-  it("renders a bucket summary card that links to the bucket list", async () => {
+  it("renders a bucket metric card and bucket ranking link", async () => {
     listBucketsMock.mockResolvedValue([{ name: "bucket-a" }, { name: "bucket-b" }]);
+    useManagerStatsMock.mockReturnValue({
+      stats: {
+        total_buckets: 2,
+        total_iam_users: 0,
+        total_iam_groups: 0,
+        total_iam_roles: 0,
+        total_iam_policies: 0,
+        total_bytes: 3_000,
+        total_objects: 12,
+        bucket_usage: [
+          { name: "bucket-a", used_bytes: 2_000, object_count: 8 },
+          { name: "bucket-b", used_bytes: 1_000, object_count: 4 },
+        ],
+      },
+      loading: false,
+      error: null,
+    });
     useS3AccountContextMock.mockReturnValue({
       accounts: [
         {
@@ -221,7 +248,7 @@ describe("manager shell pages", () => {
       hasS3AccountContext: true,
       accountIdForApi: "conn-1",
       accessMode: "default",
-      managerStatsEnabled: false,
+      managerStatsEnabled: true,
       managerStatsMessage: null,
       managerBrowserEnabled: true,
     });
@@ -232,9 +259,9 @@ describe("manager shell pages", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Bucket overview")).toBeInTheDocument();
-    expect(await screen.findByText("2")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /View/ })).toHaveAttribute("href", "/manager/buckets");
+    expect(screen.getByText("Top buckets by storage")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /Buckets\s+2\s+Buckets/i })).toHaveAttribute("href", "/manager/buckets");
+    expect(screen.getByRole("link", { name: /View all buckets/ })).toHaveAttribute("href", "/manager/buckets");
   });
 
   it("renders the manager browser page without a page-level context strip", () => {
