@@ -131,6 +131,10 @@ describe("CephAdminMetricsPage", () => {
     expect(within(trafficCard as HTMLElement).getByText("Bandwidth & requests")).toBeInTheDocument();
     expect(within(trafficCard as HTMLElement).queryByText("Egress")).not.toBeInTheDocument();
     expect(screen.getByText("Owners & buckets")).toBeInTheDocument();
+    const storageCard = screen.getByText("Storage snapshot").closest("section");
+    expect(storageCard).toHaveClass("ui-surface-card");
+    expect(storageCard).not.toHaveClass("rounded-2xl");
+    expect(storageCard?.className).not.toContain("bg-gradient-to-br");
     expect(
       await screen.findByText((_content, element) => element?.textContent?.startsWith("Updated:") ?? false)
     ).toBeInTheDocument();

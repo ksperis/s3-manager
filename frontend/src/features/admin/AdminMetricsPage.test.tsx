@@ -114,6 +114,23 @@ describe("AdminMetricsPage", () => {
     expect(screen.getByText("Bandwidth & requests")).toBeInTheDocument();
   });
 
+  it("renders the storage snapshot with the shared card surface", async () => {
+    listStorageEndpointsMock.mockResolvedValue([makeCephEndpoint()]);
+
+    render(
+      <MemoryRouter>
+        <AdminMetricsPage />
+      </MemoryRouter>
+    );
+
+    const storageCard = (await screen.findByText("Storage snapshot")).closest("section");
+
+    expect(storageCard).not.toBeNull();
+    expect(storageCard).toHaveClass("ui-surface-card");
+    expect(storageCard).not.toHaveClass("rounded-2xl");
+    expect(storageCard?.className).not.toContain("bg-gradient-to-br");
+  });
+
   it("keeps disabled usage logs inside the traffic card without empty counters", async () => {
     listStorageEndpointsMock.mockResolvedValue([makeCephEndpoint()]);
     fetchAdminTrafficMock.mockRejectedValueOnce(makeAxiosError("Usage logs are disabled for this endpoint"));

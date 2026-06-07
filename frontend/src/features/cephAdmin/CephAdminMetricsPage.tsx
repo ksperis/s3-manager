@@ -10,7 +10,7 @@ import {
   fetchCephAdminClusterTraffic,
 } from "../../api/cephAdmin";
 import { TrafficWindow } from "../../api/stats";
-import MetricsTrafficOverview, { MetricsSnapshotCard } from "../../components/MetricsTrafficOverview";
+import MetricsTrafficOverview, { MetricsSnapshotCard, MetricsSummaryCard } from "../../components/MetricsTrafficOverview";
 import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
@@ -207,20 +207,12 @@ export default function CephAdminMetricsPage() {
             />
           ) : storageFeatureEnabled ? (
             <>
-              <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
-                <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
-                  <div>
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage snapshot</p>
-                    <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Stored volume & objects</h3>
-                    <p className="ui-body text-slate-500 dark:text-slate-400">Aggregated stats across the entire RGW cluster.</p>
-                  </div>
-                  {storage?.generated_at && (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Updated:&nbsp;{new Date(storage.generated_at).toLocaleString()}
-                    </p>
-                  )}
-                </header>
-
+              <MetricsSummaryCard
+                eyebrow="Storage snapshot"
+                title="Stored volume & objects"
+                description="Aggregated stats across the entire RGW cluster."
+                updatedAt={storage?.generated_at}
+              >
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <MetricsSnapshotCard
                     label="Stored volume"
@@ -247,7 +239,7 @@ export default function CephAdminMetricsPage() {
                     loading={storageLoading}
                   />
                 </div>
-              </section>
+              </MetricsSummaryCard>
 
               <section className="space-y-4 ui-surface-card p-5">
                 <header className="space-y-1">

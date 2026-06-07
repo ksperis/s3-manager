@@ -62,6 +62,30 @@ export type MetricsSnapshotCardProps = {
   loading?: boolean;
 };
 
+export type MetricsSummaryCardProps = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  updatedAt?: string | null;
+  children: ReactNode;
+};
+
+export function MetricsSummaryCard({ eyebrow, title, description, updatedAt, children }: MetricsSummaryCardProps) {
+  return (
+    <section className={cx(uiCardClass, "space-y-4 p-5")}>
+      <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
+        <div>
+          <p className="ui-caption font-semibold uppercase tracking-wide text-primary">{eyebrow}</p>
+          <h3 className={cx("ui-section", uiTitleTextClass)}>{title}</h3>
+          <p className={cx("ui-body", uiMutedTextClass)}>{description}</p>
+        </div>
+        {updatedAt && <p className={cx("ui-caption", uiMutedTextClass)}>Updated:&nbsp;{new Date(updatedAt).toLocaleString()}</p>}
+      </header>
+      {children}
+    </section>
+  );
+}
+
 export function MetricsSnapshotCard({ label, value, hint, loading }: MetricsSnapshotCardProps) {
   return (
     <div className={cx(uiCardMutedClass, "p-4")}>
