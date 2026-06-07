@@ -457,7 +457,9 @@ def test_create_migration_clamps_requested_parallelism_to_admin_max(db_session):
     assert migration.parallelism_max == 10
 
 
-def test_update_draft_migration_replaces_configuration_and_resets_precheck(db_session):
+def test_update_draft_migration_replaces_configuration_and_resets_precheck(db_session, monkeypatch):
+    import ipaddress
+    monkeypatch.setattr("app.utils.network_targets.resolve_hostname_ips", lambda host: {ipaddress.IPv4Address("8.8.8.8")})
     user = _create_user(db_session)
     source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
     target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
