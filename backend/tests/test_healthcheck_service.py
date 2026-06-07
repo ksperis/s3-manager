@@ -131,3 +131,11 @@ def test_healthcheck_endpoint_lists_are_sorted_by_name_case_insensitive(db_sessi
     assert overview_names == expected
     assert latency_names == expected
     assert workspace_names == expected
+
+
+def test_workspace_health_overview_uses_requested_incident_window(db_session):
+    service = HealthCheckService(db_session)
+
+    payload = service.build_workspace_health_overview(incident_highlight_minutes=7 * 24 * 60)
+
+    assert payload["incident_highlight_minutes"] == 10080

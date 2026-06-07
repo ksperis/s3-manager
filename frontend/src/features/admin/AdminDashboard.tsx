@@ -68,6 +68,7 @@ import mapLight from "./assets/admin-dashboard-map-light.png";
 
 const ENDPOINT_STATUS_MAX_AGE_HOURS = 24;
 const ENDPOINT_STATUS_MAX_AGE_MS = ENDPOINT_STATUS_MAX_AGE_HOURS * 60 * 60 * 1000;
+const ADMIN_INCIDENT_HISTORY_MINUTES = 7 * 24 * 60;
 const MAX_ENDPOINT_ROWS = 6;
 
 const MOCK_ENDPOINTS: WorkspaceEndpointHealthEntry[] = [
@@ -778,7 +779,7 @@ export default function AdminDashboard() {
     let cancelled = false;
     setWorkspaceHealthLoading(true);
     setWorkspaceHealthError(null);
-    fetchHealthWorkspaceOverview()
+    fetchHealthWorkspaceOverview(undefined, ADMIN_INCIDENT_HISTORY_MINUTES)
       .then((data) => {
         if (cancelled) return;
         setWorkspaceHealth(data);

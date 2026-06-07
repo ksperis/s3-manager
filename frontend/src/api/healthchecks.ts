@@ -266,9 +266,15 @@ export async function fetchHealthGlobalIncidents(
   return data;
 }
 
-export async function fetchHealthWorkspaceOverview(endpointId?: number): Promise<WorkspaceEndpointHealthOverviewResponse> {
+export async function fetchHealthWorkspaceOverview(
+  endpointId?: number,
+  incidentHighlightMinutes?: number
+): Promise<WorkspaceEndpointHealthOverviewResponse> {
   const { data } = await client.get<WorkspaceEndpointHealthOverviewResponse>("/admin/health/workspace-overview", {
-    params: endpointId ? { endpoint_id: endpointId } : undefined,
+    params: {
+      ...(endpointId ? { endpoint_id: endpointId } : {}),
+      ...(incidentHighlightMinutes ? { incident_highlight_minutes: incidentHighlightMinutes } : {}),
+    },
   });
   return data;
 }

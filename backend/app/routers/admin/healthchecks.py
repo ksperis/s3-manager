@@ -126,13 +126,19 @@ def health_global_incidents(
 @router.get("/workspace-overview", response_model=WorkspaceEndpointHealthOverviewResponse)
 def workspace_health_overview(
     endpoint_id: int | None = Query(None, ge=1),
+    incident_highlight_minutes: int | None = Query(None, ge=1),
     _: dict = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> WorkspaceEndpointHealthOverviewResponse:
     _ensure_endpoint_status_enabled()
     service = HealthCheckService(db)
     try:
-        return WorkspaceEndpointHealthOverviewResponse(**service.build_workspace_health_overview(endpoint_id=endpoint_id))
+        return WorkspaceEndpointHealthOverviewResponse(
+            **service.build_workspace_health_overview(
+                endpoint_id=endpoint_id,
+                incident_highlight_minutes=incident_highlight_minutes,
+            )
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 

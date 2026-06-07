@@ -198,7 +198,7 @@ describe("AdminDashboard feature summary", () => {
     });
     mocks.fetchHealthWorkspaceOverview.mockResolvedValue({
       generated_at: "2026-05-25T00:00:00Z",
-      incident_highlight_minutes: 720,
+      incident_highlight_minutes: 10080,
       endpoint_count: 9,
       up_count: 8,
       degraded_count: 0,
@@ -367,6 +367,7 @@ describe("AdminDashboard feature summary", () => {
     expect(screen.getByRole("heading", { name: "Admin overview" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Endpoint Health" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Ongoing / Recent Incidents" })).toBeInTheDocument();
+    expect(screen.getByText("Ongoing incidents and incidents ended in the last 7 days.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View all incidents" })).toHaveAttribute("href", "/admin/endpoint-status");
     const platformSummary = screen.getByRole("heading", { name: "Platform summary" }).closest("section");
     expect(platformSummary).not.toBeNull();
@@ -379,6 +380,7 @@ describe("AdminDashboard feature summary", () => {
     expect(mocks.listAuditLogs).toHaveBeenCalledWith({ limit: 3 });
     expect(mocks.fetchAdminTraffic).toHaveBeenCalledWith("day");
     expect(mocks.fetchHealthOverview).toHaveBeenCalledWith("week");
+    expect(mocks.fetchHealthWorkspaceOverview).toHaveBeenCalledWith(undefined, 10080);
   });
 
   it("keeps the admin incident card visible when no incidents are returned", async () => {
@@ -387,7 +389,7 @@ describe("AdminDashboard feature summary", () => {
     });
     mocks.fetchHealthWorkspaceOverview.mockResolvedValue({
       generated_at: "2026-05-25T00:00:00Z",
-      incident_highlight_minutes: 720,
+      incident_highlight_minutes: 10080,
       endpoint_count: 1,
       up_count: 1,
       degraded_count: 0,
@@ -410,6 +412,7 @@ describe("AdminDashboard feature summary", () => {
     await renderDashboard();
 
     expect(screen.getByRole("heading", { name: "Ongoing / Recent Incidents" })).toBeInTheDocument();
+    expect(screen.getByText("Ongoing incidents and incidents ended in the last 7 days.")).toBeInTheDocument();
     expect(await screen.findByText("No ongoing or recent incidents.")).toBeInTheDocument();
   });
 
