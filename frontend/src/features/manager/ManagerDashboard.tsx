@@ -12,12 +12,11 @@ import {
   type WorkspaceEndpointHealthOverviewResponse,
   type WorkspaceEndpointIncidentEntry,
 } from "../../api/healthchecks";
+import { listManagerActivity, type ManagerActivityEntry } from "../../api/managerActivity";
+import { fetchManagerTraffic, type ManagerTrafficStats } from "../../api/stats";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageHeader from "../../components/PageHeader";
-import {
-  WorkspaceDashboardUnavailableFrame,
-  WorkspaceStatusDot,
-} from "../../components/WorkspaceDashboardKit";
+import { WorkspaceStatusDot } from "../../components/WorkspaceDashboardKit";
 import UiBadge from "../../components/ui/UiBadge";
 import {
   cx,
@@ -47,15 +46,6 @@ import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storage
 import { useIamOverview } from "./useIamOverview";
 import { useManagerStats } from "./useManagerStats";
 import { useS3AccountContext } from "./S3AccountContext";
-
-const MOCK_STORAGE_USED_BYTES = 5.3 * 1024 ** 4;
-const MOCK_STORAGE_QUOTA_BYTES = 10 * 1024 ** 4;
-const MOCK_OBJECT_COUNT = 4_200_000;
-const MOCK_OBJECT_QUOTA = 10_000_000;
-const MOCK_BUCKET_COUNT = 128;
-
-const STORAGE_SERIES = [28, 31, 34, 37, 39, 43, 45, 48, 50, 54, 53, 58, 60, 64, 66, 70];
-const GROWTH_SERIES = [16, 22, 20, 28, 25, 36, 34, 42];
 
 type DashboardTone = "blue" | "emerald" | "violet" | "amber";
 
@@ -94,74 +84,6 @@ type QuickAction = {
   unavailableReason?: string | null;
 };
 
-const MOCK_BUCKET_ROWS: BucketRankingRow[] = [
-  { name: "backup-prod", storageBytes: 2.1 * 1024 ** 4, objectCount: 1_200_000, percent: 88 },
-  { name: "archive", storageBytes: 1.8 * 1024 ** 4, objectCount: 4_500_000, percent: 62 },
-  { name: "website-assets", storageBytes: 450 * 1024 ** 3, objectCount: 120_000, percent: 10 },
-  { name: "logs", storageBytes: 320 * 1024 ** 3, objectCount: 2_100_000, percent: 8 },
-  { name: "temp", storageBytes: 190 * 1024 ** 3, objectCount: 310_000, percent: 5 },
-];
-
-const MOCK_ACTIVITY: ActivityRow[] = [
-  {
-    label: "Bucket created",
-    detail: "backup-prod",
-    time: "10:35 AM",
-    tone: "emerald",
-    icon: <BucketIcon className="h-4 w-4" />,
-  },
-  {
-    label: "User added",
-    detail: "jane.doe@example.com",
-    time: "09:22 AM",
-    tone: "blue",
-    icon: <UserIcon className="h-4 w-4" />,
-  },
-  {
-    label: "Policy updated",
-    detail: "ReadOnlyAccess",
-    time: "Yesterday",
-    tone: "amber",
-    icon: <FileIcon className="h-4 w-4" />,
-  },
-  {
-    label: "Lifecycle rule modified",
-    detail: "archive",
-    time: "Yesterday",
-    tone: "violet",
-    icon: <HistoryIcon className="h-4 w-4" />,
-  },
-  {
-    label: "Upload completed",
-    detail: "backup-2026-06-05.zip",
-    time: "Jun 4, 04:15 PM",
-    tone: "emerald",
-    icon: <UploadIcon className="h-4 w-4" />,
-  },
-];
-
-const MOCK_HEALTH_ENDPOINT: WorkspaceEndpointHealthEntry = {
-  endpoint_id: -1,
-  name: "s3-z1",
-  endpoint_url: "https://example.invalid",
-  status: "up",
-  checked_at: "2026-06-05T11:40:27Z",
-  latency_ms: 24,
-  check_mode: "s3",
-};
-
-const MOCK_INCIDENT: WorkspaceEndpointIncidentEntry = {
-  endpoint_id: -1,
-  endpoint_name: "s3-z1",
-  status: "degraded",
-  start: "2026-06-05T10:53:01Z",
-  end: null,
-  duration_minutes: null,
-  check_mode: "s3",
-  ongoing: true,
-  recent: true,
-};
-
 function percent(used?: number | null, quota?: number | null): number | null {
   if (used == null || quota == null || quota <= 0) return null;
   return Math.max(0, Math.min(100, (used / quota) * 100));
@@ -174,12 +96,34 @@ function formatTimestamp(value?: string | Date | null): string {
   return parsed.toLocaleString();
 }
 
+function formatRelativeTime(value?: string | null, now = Date.now()): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const diffMs = Math.max(0, now - parsed.getTime());
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 function formatDashboardNumber(value?: number | null): string {
   if (value == null) return "-";
   return formatCompactNumber(value)
     .replace(/k$/, " K")
     .replace(/M$/, " M")
     .replace(/B$/, " B");
+}
+
+function formatOptionalBytes(value?: number | null): string {
+  return value == null ? "" : formatBytes(value);
+}
+
+function formatOptionalDashboardNumber(value?: number | null): string {
+  return value == null ? "" : formatDashboardNumber(value);
 }
 
 function formatLatency(value?: number | null): string {
@@ -192,6 +136,86 @@ function formatStatus(status: HealthCheckStatus): string {
   if (status === "degraded") return "Degraded";
   if (status === "down") return "Down";
   return "Unknown";
+}
+
+function normalizeActionLabel(action: string): string {
+  return action
+    .replace(/[._-]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^./, (char) => char.toUpperCase());
+}
+
+function activityPresentation(log: ManagerActivityEntry): { label: string; tone: DashboardTone; icon: ReactNode } {
+  const action = log.action.toLowerCase();
+  const entityType = (log.entity_type ?? "").toLowerCase();
+  if (entityType === "bucket" || action.includes("bucket")) {
+    return { label: bucketActionLabel(action), tone: "emerald", icon: <BucketIcon className="h-4 w-4" /> };
+  }
+  if (entityType.includes("user") || action.includes("iam_user") || action.includes("access_key")) {
+    return { label: iamActionLabel(action, "IAM user"), tone: "blue", icon: <UserIcon className="h-4 w-4" /> };
+  }
+  if (entityType.includes("group") || action.includes("iam_group")) {
+    return { label: iamActionLabel(action, "IAM group"), tone: "emerald", icon: <GroupIcon className="h-4 w-4" /> };
+  }
+  if (entityType.includes("role") || action.includes("iam_role")) {
+    return { label: iamActionLabel(action, "IAM role"), tone: "amber", icon: <ShieldIcon className="h-4 w-4" /> };
+  }
+  if (entityType.includes("policy") || action.includes("policy")) {
+    return { label: iamActionLabel(action, "Policy"), tone: "violet", icon: <FileIcon className="h-4 w-4" /> };
+  }
+  if (entityType.includes("topic") || action.includes("topic")) {
+    return { label: genericEntityActionLabel(action, "Topic"), tone: "emerald", icon: <BellIcon className="h-4 w-4" /> };
+  }
+  if (action.includes("migration")) {
+    return { label: genericEntityActionLabel(action, "Migration"), tone: "violet", icon: <HistoryIcon className="h-4 w-4" /> };
+  }
+  if (entityType.includes("object") || action.includes("object")) {
+    return { label: genericEntityActionLabel(action, "Object"), tone: "amber", icon: <UploadIcon className="h-4 w-4" /> };
+  }
+  return { label: normalizeActionLabel(log.action), tone: "blue", icon: <InfoIcon className="h-4 w-4" /> };
+}
+
+function bucketActionLabel(action: string): string {
+  if (action.includes("create")) return "Bucket created";
+  if (action.includes("delete")) return "Bucket deleted";
+  if (action.includes("lifecycle")) return "Lifecycle updated";
+  if (action.includes("versioning")) return "Versioning updated";
+  if (action.includes("notification")) return "Notifications updated";
+  if (action.includes("replication")) return "Replication updated";
+  if (action.includes("policy")) return "Bucket policy updated";
+  if (action.includes("tag")) return "Bucket tags updated";
+  if (action.includes("quota")) return "Bucket quota updated";
+  if (action.includes("compare")) return "Bucket compare updated";
+  return "Bucket updated";
+}
+
+function iamActionLabel(action: string, entityLabel: string): string {
+  if (action.includes("create")) return `${entityLabel} created`;
+  if (action.includes("delete")) return `${entityLabel} deleted`;
+  if (action.includes("attach")) return `${entityLabel} policy attached`;
+  if (action.includes("detach")) return `${entityLabel} policy detached`;
+  if (action.includes("status")) return `${entityLabel} status updated`;
+  if (action.includes("key")) return `${entityLabel} key updated`;
+  if (action.includes("policy")) return `${entityLabel} policy updated`;
+  return `${entityLabel} updated`;
+}
+
+function genericEntityActionLabel(action: string, entityLabel: string): string {
+  if (action.includes("create")) return `${entityLabel} created`;
+  if (action.includes("delete")) return `${entityLabel} deleted`;
+  return `${entityLabel} updated`;
+}
+
+function buildActivityRows(logs: ManagerActivityEntry[]): ActivityRow[] {
+  return logs.map((log) => {
+    const presentation = activityPresentation(log);
+    return {
+      ...presentation,
+      detail: log.entity_id || log.account_name || log.user_email,
+      time: formatRelativeTime(log.created_at),
+    };
+  });
 }
 
 function toneClasses(tone: DashboardTone) {
@@ -224,7 +248,6 @@ function toneClasses(tone: DashboardTone) {
 }
 
 function DashboardUnavailable({
-  reason,
   children,
   className,
 }: {
@@ -232,12 +255,8 @@ function DashboardUnavailable({
   children: ReactNode;
   className?: string;
 }) {
-  if (!reason) return <>{children}</>;
-  return (
-    <WorkspaceDashboardUnavailableFrame reason={reason} className={className}>
-      {children}
-    </WorkspaceDashboardUnavailableFrame>
-  );
+  if (!className) return <>{children}</>;
+  return <div className={className}>{children}</div>;
 }
 
 function ProgressBar({ value, tone = "blue", className }: { value?: number | null; tone?: DashboardTone; className?: string }) {
@@ -246,39 +265,6 @@ function ProgressBar({ value, tone = "blue", className }: { value?: number | nul
     <div className={cx("h-2 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700/60", className)}>
       <div className={cx("h-full rounded-full", toneClasses(tone).bar)} style={{ width }} />
     </div>
-  );
-}
-
-function MiniLineChart({ values, className }: { values: number[]; className?: string }) {
-  const max = Math.max(...values, 1);
-  const min = Math.min(...values);
-  const span = Math.max(max - min, 1);
-  const points = values
-    .map((value, index) => {
-      const x = values.length === 1 ? 0 : (index / (values.length - 1)) * 100;
-      const y = 42 - ((value - min) / span) * 34;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-
-  return (
-    <svg viewBox="0 0 100 48" className={cx("h-full w-full", className)} role="img" aria-label="Storage trend">
-      <defs>
-        <linearGradient id="manager-dashboard-storage-fill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="rgb(var(--ui-primary-500-rgb))" stopOpacity="0.2" />
-          <stop offset="100%" stopColor="rgb(var(--ui-primary-500-rgb))" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={`M0,48 L${points} L100,48 Z`} fill="url(#manager-dashboard-storage-fill)" />
-      <polyline
-        points={points}
-        fill="none"
-        stroke="rgb(var(--ui-primary-500-rgb))"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.8"
-      />
-    </svg>
   );
 }
 
@@ -330,12 +316,13 @@ function StorageOverviewCard({
   quotaBytes,
   unavailableReason,
 }: {
-  usedBytes: number;
+  usedBytes: number | null;
   quotaBytes: number | null;
   unavailableReason?: string | null;
 }) {
-  const usagePercent = percent(usedBytes, quotaBytes) ?? percent(MOCK_STORAGE_USED_BYTES, MOCK_STORAGE_QUOTA_BYTES) ?? 0;
-  const displayQuotaBytes = quotaBytes ?? MOCK_STORAGE_QUOTA_BYTES;
+  const usagePercent = unavailableReason ? null : percent(usedBytes, quotaBytes);
+  const storageValue = unavailableReason ? "" : formatOptionalBytes(usedBytes);
+  const quotaValue = unavailableReason || quotaBytes == null ? "" : formatBytes(quotaBytes);
   const content = (
     <section className={cx(uiCardClass, "h-full p-4")}>
       <div className="flex items-center gap-1.5">
@@ -346,43 +333,28 @@ function StorageOverviewCard({
         <div>
           <p className={cx("ui-body", uiMutedTextClass)}>Storage Used</p>
           <p className="mt-1 text-[24px] font-semibold leading-7 text-[var(--ui-text)]">
-            {formatBytes(usedBytes)} <span className="font-medium text-[var(--ui-text)]/75">/ {formatBytes(displayQuotaBytes)}</span>
+            {storageValue}
+            {quotaValue && <span className="font-medium text-[var(--ui-text)]/75"> / {quotaValue}</span>}
           </p>
         </div>
-        <p className="text-[20px] font-semibold leading-6 text-primary">{formatPercentage(usagePercent)}</p>
+        <p className="text-[20px] font-semibold leading-6 text-primary">{usagePercent == null ? "" : formatPercentage(usagePercent)}</p>
       </div>
-      <ProgressBar value={usagePercent} className="mt-3 h-2.5" />
-      <DashboardUnavailable reason="Usage history is not available for this context." className="mt-3">
-        <div className="h-[66px] border-b border-dashed border-[color:var(--ui-border-soft)]">
-          <MiniLineChart values={STORAGE_SERIES} />
-        </div>
-        <div className="mt-1 flex justify-between text-[11px] font-medium leading-4 text-[var(--ui-text-muted)]">
-          <span>May 7</span>
-          <span>May 14</span>
-          <span>May 21</span>
-          <span>May 28</span>
-          <span>Jun 4</span>
-        </div>
-      </DashboardUnavailable>
+      {usagePercent != null && <ProgressBar value={usagePercent} className="mt-3 h-2.5" />}
+      <div className="mt-3 h-[66px] border-b border-dashed border-[color:var(--ui-border-soft)]" aria-hidden="true" />
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <DashboardUnavailable reason="30-day growth is not available." className="h-full">
-          <div className="rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
+        <div className="h-full">
+          <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
             <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">Growth (30 days)</p>
-            <div className="mt-1 flex items-end justify-between gap-3">
-              <p className="text-[16px] font-semibold leading-5 text-emerald-600 dark:text-emerald-300">+220 GB</p>
-              <MiniLineChart values={GROWTH_SERIES} className="h-8 max-w-[86px]" />
-            </div>
           </div>
-        </DashboardUnavailable>
-        <DashboardUnavailable reason={quotaBytes ? "Projection requires usage history." : "No storage quota defined."} className="h-full">
-          <div className="rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
+        </div>
+        <div className="h-full">
+          <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">Projected full</p>
               <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />
             </div>
-            <p className="mt-1 text-[16px] font-semibold leading-5 text-[var(--ui-text)]">~14 months</p>
           </div>
-        </DashboardUnavailable>
+        </div>
       </div>
     </section>
   );
@@ -401,7 +373,6 @@ function TopBucketsCard({
   rows: BucketRankingRow[];
   unavailableReason?: string | null;
 }) {
-  const displayRows = rows.length > 0 ? rows : MOCK_BUCKET_ROWS;
   const content = (
     <section className={cx(uiCardClass, "h-full p-4")}>
       <div className="flex items-center justify-between gap-3">
@@ -417,7 +388,7 @@ function TopBucketsCard({
         <span className="text-right">Objects</span>
       </div>
       <div className="mt-2 space-y-2">
-        {displayRows.map((row) => (
+        {rows.map((row) => (
           <div
             key={row.name}
             className="grid min-h-7 grid-cols-[minmax(0,1.2fr)_minmax(92px,0.8fr)_minmax(72px,0.5fr)] items-center gap-3"
@@ -447,7 +418,15 @@ function TopBucketsCard({
   );
 }
 
-function RecentActivityCard({ unavailableReason }: { unavailableReason?: string | null }) {
+function RecentActivityCard({
+  rows,
+  loading,
+  unavailableReason,
+}: {
+  rows: ActivityRow[];
+  loading: boolean;
+  unavailableReason?: string | null;
+}) {
   const content = (
     <section className={cx(uiCardClass, "h-full p-4")}>
       <div className="flex items-center justify-between gap-3">
@@ -458,20 +437,32 @@ function RecentActivityCard({ unavailableReason }: { unavailableReason?: string 
         </span>
       </div>
       <div className="mt-3 space-y-2">
-        {MOCK_ACTIVITY.map((activity) => (
-            <div key={`${activity.label}-${activity.detail}`} className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 items-start gap-2.5">
-              <IconBubble tone={activity.tone} className="h-7 w-7 rounded-md">
-                {activity.icon}
-              </IconBubble>
-              <div className="min-w-0">
-                <p className="truncate ui-caption font-semibold text-[var(--ui-text)]">{activity.label}</p>
-                <p className={cx("mt-0.5 truncate ui-caption", uiMutedTextClass)}>{activity.detail}</p>
-              </div>
-            </div>
-            <span className={cx("shrink-0 ui-caption", uiMutedTextClass)}>{activity.time}</span>
+        {loading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((key) => (
+              <div key={key} className="h-8 animate-pulse rounded-md bg-[var(--ui-surface-muted)]" />
+            ))}
           </div>
-        ))}
+        ) : rows.length === 0 && !unavailableReason ? (
+          <div className="rounded-md border border-dashed border-[color:var(--ui-border-soft)] px-3 py-6 text-center ui-caption text-[var(--ui-text-muted)]">
+            No recent activity.
+          </div>
+        ) : (
+          rows.map((activity) => (
+            <div key={`${activity.label}-${activity.detail}-${activity.time}`} className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <IconBubble tone={activity.tone} className="h-7 w-7 rounded-md">
+                  {activity.icon}
+                </IconBubble>
+                <div className="min-w-0">
+                  <p className="truncate ui-caption font-semibold text-[var(--ui-text)]">{activity.label}</p>
+                  <p className={cx("mt-0.5 truncate ui-caption", uiMutedTextClass)}>{activity.detail}</p>
+                </div>
+              </div>
+              <span className={cx("shrink-0 ui-caption", uiMutedTextClass)}>{activity.time}</span>
+            </div>
+          ))
+        )}
       </div>
     </section>
   );
@@ -489,42 +480,56 @@ function QuotaStatusCard({
   objectQuota,
   unavailableReason,
 }: {
-  storageUsed: number;
+  storageUsed: number | null;
   storageQuota: number | null;
-  objectCount: number;
+  objectCount: number | null;
   objectQuota: number | null;
   unavailableReason?: string | null;
 }) {
+  const visibleStorageUsed = unavailableReason ? null : storageUsed;
+  const visibleStorageQuota = unavailableReason ? null : storageQuota;
+  const visibleObjectCount = unavailableReason ? null : objectCount;
+  const visibleObjectQuota = unavailableReason ? null : objectQuota;
+  const storagePercent = percent(visibleStorageUsed, visibleStorageQuota);
+  const objectPercent = percent(visibleObjectCount, visibleObjectQuota);
   const rows = [
     {
       label: "Storage",
-      value: `${formatBytes(storageUsed)} / ${formatBytes(storageQuota ?? MOCK_STORAGE_QUOTA_BYTES)}`,
-      percent: percent(storageUsed, storageQuota) ?? 53,
+      value:
+        visibleStorageUsed == null
+          ? ""
+          : visibleStorageQuota == null
+            ? formatBytes(visibleStorageUsed)
+            : `${formatBytes(visibleStorageUsed)} / ${formatBytes(visibleStorageQuota)}`,
+      percent: storagePercent,
       tone: "blue" as DashboardTone,
       icon: <BucketIcon className="h-3.5 w-3.5" />,
     },
     {
       label: "Objects",
-      value: `${formatDashboardNumber(objectCount)} / ${formatDashboardNumber(objectQuota ?? MOCK_OBJECT_QUOTA)}`,
-      percent: percent(objectCount, objectQuota) ?? 42,
+      value:
+        visibleObjectCount == null
+          ? ""
+          : visibleObjectQuota == null
+            ? formatDashboardNumber(visibleObjectCount)
+            : `${formatDashboardNumber(visibleObjectCount)} / ${formatDashboardNumber(visibleObjectQuota)}`,
+      percent: objectPercent,
       tone: "blue" as DashboardTone,
       icon: <FileIcon className="h-3.5 w-3.5" />,
     },
     {
       label: "Buckets",
-      value: "18 / 100",
-      percent: 18,
+      value: "",
+      percent: null,
       tone: "blue" as DashboardTone,
       icon: <BucketIcon className="h-3.5 w-3.5" />,
-      reason: "Bucket quota is not exposed for this context.",
     },
     {
       label: "Bandwidth (month)",
-      value: "220 GB / 1 TB",
-      percent: 22,
+      value: "",
+      percent: null,
       tone: "violet" as DashboardTone,
       icon: <SettingsIcon className="h-3.5 w-3.5" />,
-      reason: "Bandwidth quota is not exposed for this context.",
     },
   ];
   const content = (
@@ -533,7 +538,7 @@ function QuotaStatusCard({
       <div className="mt-3 space-y-2">
         {rows.map((row) => (
           <div key={row.label} className="relative">
-            <div className={cx("grid grid-cols-[minmax(96px,1fr)_minmax(112px,1.2fr)_42px] items-center gap-2.5", row.reason && "blur-[1.5px]")}>
+            <div className="grid grid-cols-[minmax(96px,1fr)_minmax(112px,1.2fr)_42px] items-center gap-2.5">
               <div className="flex min-w-0 items-center gap-2">
                 <IconBubble tone={row.tone} className="h-6 w-6 rounded-md">
                   {row.icon}
@@ -542,16 +547,15 @@ function QuotaStatusCard({
               </div>
               <div>
                 <p className="ui-caption font-medium text-[var(--ui-text)]">{row.value}</p>
-                <ProgressBar value={row.percent} className="mt-1 h-1.5" />
+                {row.percent != null && <ProgressBar value={row.percent} className="mt-1 h-1.5" />}
               </div>
-              <span className="text-right ui-caption font-semibold text-[var(--ui-text)]">{formatPercentage(row.percent)}</span>
+              <span className="text-right ui-caption font-semibold text-[var(--ui-text)]">
+                {row.percent == null ? "" : formatPercentage(row.percent)}
+              </span>
             </div>
           </div>
         ))}
       </div>
-      <p className="mt-2.5 text-[10px] font-medium leading-3 text-[var(--ui-text-muted)]">
-        Bucket and bandwidth quotas are not exposed for this context.
-      </p>
     </section>
   );
   return (
@@ -608,7 +612,7 @@ function AccessManagementCard({
   counts,
   unavailableReason,
 }: {
-  counts: Array<{ label: string; value: number; to: string; tone: DashboardTone; icon: ReactNode }>;
+  counts: Array<{ label: string; value: number | null; to: string; tone: DashboardTone; icon: ReactNode }>;
   unavailableReason?: string | null;
 }) {
   const content = (
@@ -628,7 +632,7 @@ function AccessManagementCard({
               <span className="truncate ui-caption font-semibold text-[var(--ui-text)]">{item.label}</span>
             </span>
             <span className="flex shrink-0 items-center gap-5">
-              <span className={cx("ui-caption font-semibold", uiMutedTextClass)}>{item.value.toLocaleString()}</span>
+              <span className={cx("ui-caption font-semibold", uiMutedTextClass)}>{item.value == null ? "" : item.value.toLocaleString()}</span>
               <span className="inline-flex items-center gap-1 ui-caption font-semibold text-primary">
                 View all
                 <OpenIcon className="h-3.5 w-3.5" />
@@ -650,9 +654,10 @@ function BackendHealthCard({
   endpoint,
   unavailableReason,
 }: {
-  endpoint: WorkspaceEndpointHealthEntry;
+  endpoint?: WorkspaceEndpointHealthEntry | null;
   unavailableReason?: string | null;
 }) {
+  const showEndpoint = !unavailableReason && endpoint;
   const content = (
     <section className={cx(uiCardClass, "h-full p-[14px]")}>
       <div className="flex items-center gap-1.5">
@@ -660,23 +665,24 @@ function BackendHealthCard({
         <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />
       </div>
       <div className="mt-3 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-2.5">
-        <div className="flex items-center justify-between gap-3">
-          <p className="flex min-w-0 items-center gap-2 ui-caption font-semibold text-[var(--ui-text)]">
-            <WorkspaceStatusDot status={endpoint.status} />
-            <span className="truncate">{endpoint.name}</span>
-          </p>
-          <UiBadge tone={endpoint.status === "up" ? "success" : endpoint.status === "down" ? "danger" : "warning"} className="rounded-md px-2 py-0 text-[11px] leading-5">
-            {formatStatus(endpoint.status)}
-          </UiBadge>
-        </div>
+        {showEndpoint ? (
+          <div className="flex items-center justify-between gap-3">
+            <p className="flex min-w-0 items-center gap-2 ui-caption font-semibold text-[var(--ui-text)]">
+              <WorkspaceStatusDot status={endpoint.status} />
+              <span className="truncate">{endpoint.name}</span>
+            </p>
+            <UiBadge tone={endpoint.status === "up" ? "success" : endpoint.status === "down" ? "danger" : "warning"} className="rounded-md px-2 py-0 text-[11px] leading-5">
+              {formatStatus(endpoint.status)}
+            </UiBadge>
+          </div>
+        ) : (
+          <div className="min-h-5" aria-hidden="true" />
+        )}
         <div className="mt-3 space-y-2">
-          <HealthValue label="Latency (avg)" value={formatLatency(endpoint.latency_ms)} />
-          <HealthValue label="Availability (24h)" value="99.99%" unavailableReason="24h availability is not exposed here." />
-          <HealthValue label="Error rate (24h)" value="0.01%" unavailableReason="24h error rate is not exposed here." />
+          <HealthValue label="Latency (avg)" value={showEndpoint ? formatLatency(endpoint.latency_ms) : ""} />
+          <HealthValue label="Availability (24h)" value="" />
+          <HealthValue label="Error rate (24h)" value="" />
         </div>
-        <p className="mt-2.5 text-[10px] font-medium leading-3 text-[var(--ui-text-muted)]">
-          24h availability and error rate are not exposed here.
-        </p>
       </div>
       <Link to="/manager/metrics" className="mt-2.5 inline-flex items-center gap-2 ui-caption font-semibold text-primary">
         View details
@@ -694,7 +700,6 @@ function BackendHealthCard({
 function HealthValue({
   label,
   value,
-  unavailableReason,
 }: {
   label: string;
   value: string;
@@ -702,7 +707,7 @@ function HealthValue({
 }) {
   return (
     <div>
-      <div className={cx("flex items-center justify-between gap-3", unavailableReason && "blur-[1.5px]")}>
+      <div className="flex items-center justify-between gap-3">
         <span className="ui-caption font-medium text-[var(--ui-text)]">{label}</span>
         <span className="ui-caption font-semibold text-[var(--ui-text)]">{value}</span>
       </div>
@@ -717,14 +722,14 @@ function IncidentStrip({
   incidents: WorkspaceEndpointIncidentEntry[];
   unavailableReason?: string | null;
 }) {
-  const incident = incidents.find((item) => item.ongoing) ?? incidents[0] ?? MOCK_INCIDENT;
+  const incident = incidents.find((item) => item.ongoing) ?? incidents[0] ?? null;
   const hasRealIncident = incidents.length > 0 && !unavailableReason;
   const content = (
     <section className={cx(uiCardClass, "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between")}>
       <div className="min-w-0">
         <h2 className="ui-body font-semibold text-[var(--ui-text)]">Ongoing / Recent incidents</h2>
         <div className="mt-2 flex flex-wrap items-center gap-4">
-          {hasRealIncident ? (
+          {hasRealIncident && incident ? (
             <>
               <span className="flex items-center gap-2 ui-caption font-semibold text-[var(--ui-text)]">
                 <span className={cx("h-2.5 w-2.5 rounded-full", incident.ongoing ? "bg-amber-500" : "bg-emerald-500")} />
@@ -737,8 +742,10 @@ function IncidentStrip({
                 {incident.ongoing ? "Ongoing since" : "Resolved"} {formatTimestamp(incident.start)}
               </span>
             </>
-          ) : (
+          ) : !unavailableReason ? (
             <span className={cx("ui-caption", uiMutedTextClass)}>No ongoing or recent incidents.</span>
+          ) : (
+            <span className="min-h-4" aria-hidden="true" />
           )}
         </div>
       </div>
@@ -801,6 +808,12 @@ export default function ManagerDashboard() {
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [bucketCountLoading, setBucketCountLoading] = useState(false);
   const [bucketCountError, setBucketCountError] = useState<string | null>(null);
+  const [activityLogs, setActivityLogs] = useState<ManagerActivityEntry[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [trafficStats, setTrafficStats] = useState<ManagerTrafficStats | null>(null);
+  const [trafficLoading, setTrafficLoading] = useState(false);
+  const [trafficError, setTrafficError] = useState<string | null>(null);
 
   const selected = useMemo(
     () => accounts.find((account) => account.id === selectedS3AccountId),
@@ -811,6 +824,7 @@ export default function ManagerDashboard() {
   const iamFeatureEnabled = endpointCaps ? endpointCaps.iam !== false : true;
   const contextCanManageIam = selected?.capabilities?.can_manage_iam !== false;
   const usageFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.metrics !== false : true);
+  const trafficFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.usage !== false : true);
   const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
   const isS3User = selectedS3AccountType === "s3_user";
   const canManageIam = !isS3User && contextCanManageIam && iamFeatureEnabled;
@@ -889,6 +903,62 @@ export default function ManagerDashboard() {
     };
   }, [accountIdForApi, hasContext, refreshNonce]);
 
+  useEffect(() => {
+    if (!hasContext) {
+      setActivityLogs([]);
+      setActivityError(null);
+      setActivityLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setActivityLoading(true);
+    setActivityError(null);
+    listManagerActivity(accountIdForApi, { limit: 5 })
+      .then((items) => {
+        if (cancelled) return;
+        setActivityLogs(items);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setActivityLogs([]);
+        setActivityError(extractApiError(err, "Unable to load manager activity."));
+      })
+      .finally(() => {
+        if (!cancelled) setActivityLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, hasContext, refreshNonce]);
+
+  useEffect(() => {
+    if (!hasContext || !trafficFeatureEnabled) {
+      setTrafficStats(null);
+      setTrafficError(null);
+      setTrafficLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTrafficLoading(true);
+    setTrafficError(null);
+    fetchManagerTraffic(accountIdForApi, "day")
+      .then((data) => {
+        if (cancelled) return;
+        setTrafficStats(data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setTrafficStats(null);
+        setTrafficError(extractApiError(err, "Unable to load traffic usage."));
+      })
+      .finally(() => {
+        if (!cancelled) setTrafficLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, hasContext, refreshNonce, trafficFeatureEnabled]);
+
   const accountLabel = selected
     ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
     : sessionS3AccountName ?? "S3 session";
@@ -914,54 +984,55 @@ export default function ManagerDashboard() {
         (!workspaceHealthLoading && workspaceHealth && workspaceHealth.endpoint_count === 0
           ? "Endpoint Status has no endpoint data yet."
           : null));
-  const activityUnavailableReason = noContextReason || "Manager activity stream is not available from this dashboard.";
-  const transferUnavailableReason = noContextReason || "Active transfers are only available while using the object browser.";
-  const storageUsedBytes = metricsUnavailableReason ? MOCK_STORAGE_USED_BYTES : stats?.total_bytes ?? MOCK_STORAGE_USED_BYTES;
+  const activityUnavailableReason = noContextReason || activityError;
+  const trafficUnavailableReason = noContextReason || (!trafficFeatureEnabled ? "Traffic usage is not available for this context." : trafficError);
+  const storageUsedBytes = metricsUnavailableReason ? null : stats?.total_bytes ?? null;
   const storageQuotaBytes =
     selected?.quota_max_size_gb !== undefined && selected?.quota_max_size_gb !== null
       ? selected.quota_max_size_gb * 1024 ** 3
-      : metricsUnavailableReason
-        ? MOCK_STORAGE_QUOTA_BYTES
-        : null;
-  const objectCount = metricsUnavailableReason ? MOCK_OBJECT_COUNT : stats?.total_objects ?? MOCK_OBJECT_COUNT;
+      : null;
+  const objectCount = metricsUnavailableReason ? null : stats?.total_objects ?? null;
   const objectQuota =
     selected?.quota_max_objects !== undefined && selected?.quota_max_objects !== null
       ? selected.quota_max_objects
-      : metricsUnavailableReason
-        ? MOCK_OBJECT_QUOTA
-        : null;
-  const visibleBucketCount = bucketCount ?? (bucketUnavailableReason ? MOCK_BUCKET_COUNT : 0);
-  const storagePercent = percent(storageUsedBytes, storageQuotaBytes) ?? percent(MOCK_STORAGE_USED_BYTES, MOCK_STORAGE_QUOTA_BYTES);
+      : null;
+  const visibleBucketCount = bucketUnavailableReason ? null : bucketCount;
+  const storagePercent = percent(storageUsedBytes, storageQuotaBytes);
+  const uploadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_in ?? null;
+  const downloadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_out ?? null;
+  const trafficValue =
+    uploadBytes == null || downloadBytes == null ? "" : `${formatBytes(uploadBytes)} / ${formatBytes(downloadBytes)}`;
   const bucketRows = buildBucketRows(stats?.bucket_usage ?? []);
+  const activityRows = activityUnavailableReason ? [] : buildActivityRows(activityLogs);
   const topBucketsUnavailableReason =
     metricsUnavailableReason ||
-    (!loading && visibleBucketCount > 0 && bucketRows.length === 0 ? "Bucket storage ranking is not available." : null);
-  const healthEndpoint = workspaceHealth?.endpoints[0] ?? MOCK_HEALTH_ENDPOINT;
+    (!loading && visibleBucketCount != null && visibleBucketCount > 0 && bucketRows.length === 0 ? "Bucket storage ranking is not available." : null);
+  const healthEndpoint = workspaceHealth?.endpoints[0] ?? null;
   const accessCounts = [
     {
       label: "Users",
-      value: iamOverview?.iam_users ?? stats?.total_iam_users ?? 5,
+      value: iamUnavailableReason ? null : iamOverview?.iam_users ?? stats?.total_iam_users ?? null,
       to: "/manager/users",
       tone: "blue" as DashboardTone,
       icon: <UserIcon className="h-4 w-4" />,
     },
     {
       label: "Groups",
-      value: iamOverview?.iam_groups ?? stats?.total_iam_groups ?? 2,
+      value: iamUnavailableReason ? null : iamOverview?.iam_groups ?? stats?.total_iam_groups ?? null,
       to: "/manager/groups",
       tone: "emerald" as DashboardTone,
       icon: <GroupIcon className="h-4 w-4" />,
     },
     {
       label: "Roles",
-      value: iamOverview?.iam_roles ?? stats?.total_iam_roles ?? 0,
+      value: iamUnavailableReason ? null : iamOverview?.iam_roles ?? stats?.total_iam_roles ?? null,
       to: "/manager/roles",
       tone: "amber" as DashboardTone,
       icon: <ShieldIcon className="h-4 w-4" />,
     },
     {
       label: "Policies",
-      value: iamOverview?.iam_policies ?? stats?.total_iam_policies ?? 12,
+      value: iamUnavailableReason ? null : iamOverview?.iam_policies ?? stats?.total_iam_policies ?? null,
       to: "/manager/iam/policies",
       tone: "violet" as DashboardTone,
       icon: <FileIcon className="h-4 w-4" />,
@@ -970,10 +1041,9 @@ export default function ManagerDashboard() {
   const metrics: DashboardMetric[] = [
     {
       label: "Storage used",
-      value: formatBytes(storageUsedBytes),
-      detail: `${formatBytes(storageQuotaBytes)} quota${storagePercent != null ? ` (${formatPercentage(storagePercent)})` : ""}`,
+      value: formatOptionalBytes(storageUsedBytes),
+      detail: storageQuotaBytes == null ? "" : `${formatBytes(storageQuotaBytes)} quota${storagePercent != null ? ` (${formatPercentage(storagePercent)})` : ""}`,
       progress: storagePercent,
-      trend: "+ 220 GB vs last 30 days",
       tone: "blue",
       icon: <BucketIcon className="h-7 w-7" />,
       to: "/manager/metrics",
@@ -981,9 +1051,8 @@ export default function ManagerDashboard() {
     },
     {
       label: "Buckets",
-      value: visibleBucketCount.toLocaleString(),
-      detail: "Buckets",
-      trend: "+ 3 vs last 30 days",
+      value: visibleBucketCount == null ? "" : visibleBucketCount.toLocaleString(),
+      detail: visibleBucketCount == null ? "" : "Buckets",
       tone: "emerald",
       icon: <BucketIcon className="h-7 w-7" />,
       to: "/manager/buckets",
@@ -991,22 +1060,21 @@ export default function ManagerDashboard() {
     },
     {
       label: "Objects",
-      value: formatDashboardNumber(objectCount),
-      detail: "Objects",
-      trend: "+ 520 K vs last 30 days",
+      value: formatOptionalDashboardNumber(objectCount),
+      detail: objectCount == null ? "" : "Objects",
       tone: "violet",
       icon: <FileIcon className="h-7 w-7" />,
       to: "/manager/metrics",
       unavailableReason: metricsUnavailableReason,
     },
     {
-      label: "Active transfers",
-      value: "3",
-      detail: "2 uploads · 1 download",
+      label: "Upload / Download",
+      value: trafficLoading ? "..." : trafficValue,
+      detail: trafficValue ? "Last 24h" : "",
       tone: "amber",
       icon: <UploadIcon className="h-7 w-7" />,
-      to: "/manager/browser",
-      unavailableReason: transferUnavailableReason,
+      to: "/manager/metrics",
+      unavailableReason: trafficUnavailableReason,
     },
   ];
   const quickActions: QuickAction[] = [
@@ -1057,7 +1125,7 @@ export default function ManagerDashboard() {
       unavailableReason: noContextReason || (!snsFeatureEnabled ? "SNS topics are disabled for this endpoint." : null),
     },
   ];
-  const refreshing = loading || iamLoading || bucketCountLoading || workspaceHealthLoading;
+  const refreshing = loading || iamLoading || bucketCountLoading || workspaceHealthLoading || activityLoading || trafficLoading;
 
   const handleRefresh = () => {
     setLastUpdated(new Date());
@@ -1102,7 +1170,7 @@ export default function ManagerDashboard() {
           unavailableReason={metricsUnavailableReason}
         />
         <TopBucketsCard rows={bucketRows} unavailableReason={topBucketsUnavailableReason} />
-        <RecentActivityCard unavailableReason={activityUnavailableReason} />
+        <RecentActivityCard rows={activityRows} loading={activityLoading} unavailableReason={activityUnavailableReason} />
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,0.88fr)_minmax(0,1.28fr)_minmax(0,0.9fr)_minmax(280px,1fr)]">

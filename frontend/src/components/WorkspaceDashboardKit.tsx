@@ -8,8 +8,6 @@ import type { HealthCheckStatus } from "../api/healthchecks";
 import UiBadge from "./ui/UiBadge";
 import { cx, uiCardClass, uiMutedTextClass } from "./ui/styles";
 
-export const WORKSPACE_DASHBOARD_MOCK_SERIES = [24, 38, 31, 56, 49, 68, 45, 76, 61, 72, 58, 81];
-
 export type WorkspaceDashboardFeature = {
   id: string;
   label: string;
@@ -135,7 +133,6 @@ function normalizeSeries(values: number[]): string {
 }
 
 export function WorkspaceDashboardUnavailableFrame({
-  reason,
   children,
   className,
 }: {
@@ -143,45 +140,27 @@ export function WorkspaceDashboardUnavailableFrame({
   children: ReactNode;
   className?: string;
 }) {
-  return (
-    <div className={cx("relative overflow-hidden", className)}>
-      <div aria-hidden="true" className="pointer-events-none select-none blur-[2.5px]">
-        {children}
-      </div>
-      <div className="absolute inset-x-3 bottom-3 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)]/95 px-3 py-2 ui-caption font-medium text-[var(--ui-text-muted)] shadow-[var(--ui-shadow-soft)]">
-        {reason}
-      </div>
-    </div>
-  );
+  return <div className={className}>{children}</div>;
 }
 
 export function WorkspaceDashboardSparkline({
   values,
   tone,
-  unavailableReason,
 }: {
   values: number[];
   tone: WorkspacePlatformMetric["tone"];
   unavailableReason?: string;
 }) {
-  const points = normalizeSeries(values.length > 0 ? values : WORKSPACE_DASHBOARD_MOCK_SERIES);
+  if (values.length === 0) return <div className="h-[30px] w-full" aria-hidden="true" />;
+
+  const points = normalizeSeries(values);
   const chart = (
     <svg viewBox="0 0 96 34" className="h-[30px] w-full" role="img" aria-label="Trend line">
       <polyline points={points} fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={metricToneClass(tone)} />
     </svg>
   );
 
-  if (!unavailableReason) return chart;
-  return (
-    <div className="relative">
-      <div aria-hidden="true" className="blur-[2px]">
-        {chart}
-      </div>
-      <p className="absolute bottom-0 left-0 rounded bg-[var(--ui-surface)]/80 px-1 text-[10px] font-medium leading-3 text-[var(--ui-text-muted)] opacity-75">
-        {unavailableReason}
-      </p>
-    </div>
-  );
+  return chart;
 }
 
 export function WorkspaceDashboardStatCard({
@@ -259,18 +238,18 @@ export function WorkspaceStatusCounter({
   status,
 }: {
   label: string;
-  value: number;
+  value?: number | null;
   status: HealthCheckStatus;
 }) {
   return (
     <div
       className={cx(
         "min-h-[48px] rounded-md border px-3 py-2",
-        statusCounterPanelClass(status, value)
+        statusCounterPanelClass(status, value ?? 0)
       )}
     >
-      <p className={cx("ui-caption font-semibold", statusCounterLabelClass(status, value))}>{label}</p>
-      <p className="mt-1 text-[18px] font-semibold leading-5 text-[var(--ui-text)]">{value}</p>
+      <p className={cx("ui-caption font-semibold", statusCounterLabelClass(status, value ?? 0))}>{label}</p>
+      <p className="mt-1 text-[18px] font-semibold leading-5 text-[var(--ui-text)]">{value == null ? "" : value}</p>
     </div>
   );
 }
@@ -287,21 +266,11 @@ export function WorkspacePlatformMetricCard({ metric }: { metric: WorkspacePlatf
   );
   return (
     <div className="min-w-0 border-l border-[color:var(--ui-border-soft)] px-3 first:border-l-0 first:pl-0 last:pr-0">
-      {metric.unavailableReason && metric.value === "-" ? (
-        <div className="relative">
-          <div aria-hidden="true" className="blur-[2px]">
-            {valueContent}
-          </div>
-          <p className="mt-1 ui-caption text-[var(--ui-text-muted)]">{metric.unavailableReason}</p>
-        </div>
-      ) : (
-        valueContent
-      )}
+      {valueContent}
       <div className="mt-2 max-w-[150px]">
         <WorkspaceDashboardSparkline
-          values={metric.series ?? WORKSPACE_DASHBOARD_MOCK_SERIES}
+          values={metric.series ?? []}
           tone={metric.tone}
-          unavailableReason={metric.unavailableReason && metric.value !== "-" ? metric.unavailableReason : undefined}
         />
       </div>
     </div>
@@ -311,15 +280,14 @@ export function WorkspacePlatformMetricCard({ metric }: { metric: WorkspacePlatf
 export function WorkspaceHealthScorePanel({
   score,
   loading,
-  unavailableReason,
 }: {
   score: number | null;
   loading: boolean;
   unavailableReason?: string | null;
 }) {
-  const displayScore = score ?? 98;
-  const scoreLabel = loading ? "..." : `${displayScore}%`;
-  const scoreCaption = loading ? "Loading" : displayScore >= 90 ? "Excellent" : displayScore >= 70 ? "Good" : "Check";
+  const displayScore = score ?? 0;
+  const scoreLabel = loading ? "..." : score == null ? "" : `${displayScore}%`;
+  const scoreCaption = loading ? "Loading" : score == null ? "" : displayScore >= 90 ? "Excellent" : displayScore >= 70 ? "Good" : "Check";
   const content = (
     <div className="flex h-full min-h-[96px] flex-col items-center justify-center text-center">
       <p className={cx("text-[11px] font-semibold leading-4", uiMutedTextClass)}>Health score</p>
@@ -338,6 +306,5 @@ export function WorkspaceHealthScorePanel({
       </div>
     </div>
   );
-  if (!unavailableReason) return content;
-  return <WorkspaceDashboardUnavailableFrame reason={unavailableReason} className="h-full">{content}</WorkspaceDashboardUnavailableFrame>;
+  return content;
 }

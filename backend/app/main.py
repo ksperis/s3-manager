@@ -46,6 +46,7 @@ from app.routers.internal import healthchecks as internal_healthchecks
 from app.routers.internal import quota_monitor as internal_quota_monitor
 from app.routers.internal import s3_connections as internal_s3_connections
 from app.routers.manager import s3_accounts as manager_accounts
+from app.routers.manager import activity as manager_activity
 from app.routers.manager import buckets as manager_buckets
 from app.routers.manager import context as manager_context
 from app.routers.manager import ceph_keys as manager_ceph_keys
@@ -168,6 +169,11 @@ app.include_router(
     manager_context.router,
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_manager_context_enabled)],
+)
+app.include_router(
+    manager_activity.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
 )
 app.include_router(
     manager_ceph_keys.router,

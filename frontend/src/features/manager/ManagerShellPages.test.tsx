@@ -10,6 +10,8 @@ const useS3AccountContextMock = vi.fn();
 const useManagerStatsMock = vi.fn();
 const useIamOverviewMock = vi.fn();
 const listBucketsMock = vi.fn();
+const listManagerActivityMock = vi.fn();
+const fetchManagerTrafficMock = vi.fn();
 
 vi.mock("./S3AccountContext", () => ({
   useS3AccountContext: () => useS3AccountContextMock(),
@@ -53,6 +55,40 @@ vi.mock("../../api/buckets", async () => {
   };
 });
 
+vi.mock("../../api/managerActivity", () => ({
+  listManagerActivity: (...args: unknown[]) => listManagerActivityMock(...args),
+}));
+
+vi.mock("../../api/stats", async () => {
+  const actual = await vi.importActual<typeof import("../../api/stats")>("../../api/stats");
+  return {
+    ...actual,
+    fetchManagerTraffic: (...args: unknown[]) => fetchManagerTrafficMock(...args),
+  };
+});
+
+function managerTrafficResponse(bytesIn: number, bytesOut: number) {
+  return {
+    window: "day",
+    start: new Date().toISOString(),
+    end: new Date().toISOString(),
+    resolution: "hour",
+    data_points: 0,
+    series: [],
+    totals: {
+      bytes_in: bytesIn,
+      bytes_out: bytesOut,
+      ops: 0,
+      success_ops: 0,
+      success_rate: null,
+    },
+    bucket_rankings: [],
+    user_rankings: [],
+    request_breakdown: [],
+    category_breakdown: [],
+  };
+}
+
 describe("manager shell pages", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -80,10 +116,12 @@ describe("manager shell pages", () => {
       error: null,
     });
     listBucketsMock.mockResolvedValue([]);
+    listManagerActivityMock.mockResolvedValue([]);
+    fetchManagerTrafficMock.mockResolvedValue(managerTrafficResponse(0, 0));
     window.localStorage.clear();
   });
 
-  it("renders the manager dashboard with blurred mock cards when no context is selected", () => {
+  it("renders the manager dashboard without mock values when no context is selected", () => {
     render(
       <MemoryRouter>
         <ManagerDashboard />
@@ -91,13 +129,22 @@ describe("manager shell pages", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Manager dashboard" })).toBeInTheDocument();
-    expect(screen.getAllByText("Select an account to display live values.").length).toBeGreaterThan(0);
     expect(screen.getByText("Top buckets by storage")).toBeInTheDocument();
     expect(screen.getByText("Recent activity")).toBeInTheDocument();
+    expect(screen.getByText("Upload / Download")).toBeInTheDocument();
+    expect(screen.queryByText("Active transfers")).not.toBeInTheDocument();
+    expect(screen.queryByText("Select an account to display live values.")).not.toBeInTheDocument();
+    expect(screen.queryByText("5.3 TB")).not.toBeInTheDocument();
+    expect(screen.queryByText("128")).not.toBeInTheDocument();
+    expect(screen.queryByText("backup-prod")).not.toBeInTheDocument();
+    expect(screen.queryByText("jane.doe@example.com")).not.toBeInTheDocument();
+    expect(screen.queryByText("+ 220 GB vs last 30 days")).not.toBeInTheDocument();
+    expect(screen.queryByText("99.99%")).not.toBeInTheDocument();
     expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
+    expect(fetchManagerTrafficMock).not.toHaveBeenCalled();
   });
 
-  it("keeps manager dashboard cards visible with a discrete reason when metrics are unavailable", async () => {
+  it("keeps manager dashboard cards visible without fallback values when metrics are unavailable", async () => {
     useS3AccountContextMock.mockReturnValue({
       accounts: [
         {
@@ -128,9 +175,16 @@ describe("manager shell pages", () => {
     expect(screen.getByRole("heading", { name: "Manager dashboard" })).toBeInTheDocument();
     expect(screen.getByText("Storage overview")).toBeInTheDocument();
     expect(screen.getByText("Quota status")).toBeInTheDocument();
-    expect(screen.getAllByText("Metrics are unavailable for this context.").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Metrics are unavailable for this context.")).not.toBeInTheDocument();
+    expect(screen.queryByText("5.3 TB")).not.toBeInTheDocument();
+    expect(screen.queryByText("10 TB")).not.toBeInTheDocument();
+    expect(screen.queryByText("4.2 M")).not.toBeInTheDocument();
+    expect(screen.queryByText("220 GB / 1 TB")).not.toBeInTheDocument();
     expect(screen.queryByText("Storage Usage")).not.toBeInTheDocument();
     expect(screen.queryByText(/Storage usage for/)).not.toBeInTheDocument();
+    expect(screen.getByText("Upload / Download")).toBeInTheDocument();
+    expect(screen.queryByText("Active transfers")).not.toBeInTheDocument();
+    expect(fetchManagerTrafficMock).not.toHaveBeenCalled();
     expect(await screen.findByText("Access management")).toBeInTheDocument();
   });
 
@@ -210,7 +264,228 @@ describe("manager shell pages", () => {
     expect(screen.getByText("Quick actions")).toBeInTheDocument();
     expect(screen.getByText("Storage backend health")).toBeInTheDocument();
     expect(screen.queryByText("Storage Usage")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Metrics are unavailable for this context.").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Metrics are unavailable for this context.")).not.toBeInTheDocument();
+    expect(screen.queryByText("5.3 TB")).not.toBeInTheDocument();
+    expect(screen.queryByText("4.2 M")).not.toBeInTheDocument();
+    expect(fetchManagerTrafficMock).not.toHaveBeenCalled();
+  });
+
+  it("renders upload and download volumes from manager traffic usage", async () => {
+    fetchManagerTrafficMock.mockResolvedValue(managerTrafficResponse(2048, 4096));
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "day"));
+    expect(await screen.findByText("2.0 KB / 4.0 KB")).toBeInTheDocument();
+    expect(screen.getByText("Last 24h")).toBeInTheDocument();
+    expect(screen.getByText("Upload / Download").closest("a")).toHaveAttribute("href", "/manager/metrics");
+    expect(screen.queryByText("Active transfers")).not.toBeInTheDocument();
+  });
+
+  it("keeps real zero upload and download volumes visible", async () => {
+    fetchManagerTrafficMock.mockResolvedValue(managerTrafficResponse(0, 0));
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "day"));
+    expect(await screen.findByText("0 B / 0 B")).toBeInTheDocument();
+    expect(screen.getByText("Last 24h")).toBeInTheDocument();
+  });
+
+  it("keeps upload and download traffic silent when usage loading fails", async () => {
+    fetchManagerTrafficMock.mockRejectedValue(new Error("traffic unavailable"));
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "day"));
+    await waitFor(() => expect(screen.queryByText("...")).not.toBeInTheDocument());
+    expect(screen.getByText("Upload / Download")).toBeInTheDocument();
+    expect(screen.queryByText("traffic unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 B / 0 B")).not.toBeInTheDocument();
+  });
+
+  it("renders recent manager activity from audit logs", async () => {
+    listManagerActivityMock.mockResolvedValue([
+      {
+        id: 101,
+        created_at: new Date().toISOString(),
+        action: "create_bucket",
+        entity_type: "bucket",
+        entity_id: "research-data",
+        account_id: 1,
+        account_name: "Account Alpha",
+        status: "success",
+        user_email: "manager@example.com",
+      },
+    ]);
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: false,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(listManagerActivityMock).toHaveBeenCalledWith("account-1", { limit: 5 }));
+    expect(await screen.findByText("Bucket created")).toBeInTheDocument();
+    expect(screen.getByText("research-data")).toBeInTheDocument();
+  });
+
+  it("shows an empty recent activity state only after an empty successful response", async () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: false,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(listManagerActivityMock).toHaveBeenCalledWith("account-1", { limit: 5 }));
+    expect(await screen.findByText("No recent activity.")).toBeInTheDocument();
+  });
+
+  it("keeps recent activity silent when audit activity loading fails", async () => {
+    listManagerActivityMock.mockRejectedValue(new Error("activity unavailable"));
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: false,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(listManagerActivityMock).toHaveBeenCalledWith("account-1", { limit: 5 }));
+    await waitFor(() => expect(screen.queryByText("No recent activity.")).not.toBeInTheDocument());
+    expect(screen.queryByText("activity unavailable")).not.toBeInTheDocument();
   });
 
   it("renders a bucket metric card and bucket ranking link", async () => {

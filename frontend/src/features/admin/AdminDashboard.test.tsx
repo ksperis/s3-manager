@@ -416,36 +416,45 @@ describe("AdminDashboard feature summary", () => {
     expect(await screen.findByText("No ongoing or recent incidents.")).toBeInTheDocument();
   });
 
-  it("keeps endpoint status visible as a blurred mock card when the feature is disabled", async () => {
+  it("keeps endpoint status visible without fallback values when the feature is disabled", async () => {
     mocks.generalSettings = buildGeneralSettings({
       endpoint_status_enabled: false,
     });
 
     await renderDashboard();
 
-    expect(screen.getAllByText("Endpoint Status feature is disabled.").length).toBeGreaterThan(0);
     expect(screen.getByText("Endpoint Health")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ongoing / Recent Incidents" })).toBeInTheDocument();
+    expect(screen.queryByText("Endpoint Status feature is disabled.")).not.toBeInTheDocument();
+    expect(screen.queryByText("INRAE-eprod-geo-tls")).not.toBeInTheDocument();
+    expect(screen.queryByText("LAB 81")).not.toBeInTheDocument();
+    expect(screen.queryByText("98%")).not.toBeInTheDocument();
     expect(mocks.fetchHealthOverview).not.toHaveBeenCalled();
     expect(mocks.fetchHealthWorkspaceOverview).not.toHaveBeenCalled();
   });
 
-  it("keeps platform cards present with a discrete reason when metrics are unavailable", async () => {
+  it("keeps platform cards present without unavailable text or fallback values when metrics are unavailable", async () => {
     mocks.fetchAdminStorage.mockRejectedValue(new Error("metrics disabled"));
     mocks.fetchAdminTraffic.mockRejectedValue(new Error("usage disabled"));
 
     await renderDashboard();
 
     expect(screen.getByRole("heading", { name: "Platform summary" })).toBeInTheDocument();
-    expect(screen.getAllByText("metrics disabled").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("usage disabled").length).toBeGreaterThan(0);
+    expect(screen.queryByText("metrics disabled")).not.toBeInTheDocument();
+    expect(screen.queryByText("usage disabled")).not.toBeInTheDocument();
+    expect(screen.queryByText("1,850")).not.toBeInTheDocument();
+    expect(screen.queryByText("12.4M")).not.toBeInTheDocument();
   });
 
-  it("keeps recent activity present with a blurred mock list when audit logs are unavailable", async () => {
+  it("keeps recent activity present without fallback logs when audit logs are unavailable", async () => {
     mocks.listAuditLogs.mockRejectedValue(new Error("audit unavailable"));
 
     await renderDashboard();
 
     expect(screen.getByText("Recent activity")).toBeInTheDocument();
-    expect(await screen.findByText("audit unavailable")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Recent activity" })).toBeInTheDocument();
+    expect(screen.queryByText("audit unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("User admin@example.com logged in")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Endpoint INRAE-eprod-idf/)).not.toBeInTheDocument();
   });
 });
