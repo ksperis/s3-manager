@@ -1,3 +1,4 @@
+import AdminDashboardMap from "./components/AdminDashboardMap";
 /*
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
@@ -62,8 +63,6 @@ import {
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import setupIllustration from "./assets/admin-dashboard-setup.png";
-import mapDark from "./assets/admin-dashboard-map-dark.png";
-import mapLight from "./assets/admin-dashboard-map-light.png";
 
 const ENDPOINT_STATUS_MAX_AGE_HOURS = 24;
 const ENDPOINT_STATUS_MAX_AGE_MS = ENDPOINT_STATUS_MAX_AGE_HOURS * 60 * 60 * 1000;
@@ -138,135 +137,6 @@ function formatOptionalBytes(value?: number | null): string {
 function formatOptionalCompactNumber(value?: number | null): string {
   return value == null ? "" : formatCompactNumber(value);
 }
-
-function AdminDashboardMap() {
-  return (
-    <div className="h-[148px] overflow-hidden rounded-md border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface-muted)]">
-      <img src={mapLight} alt="" className="block h-full w-full object-cover dark:hidden" />
-      <img src={mapDark} alt="" className="hidden h-full w-full object-cover dark:block" />
-    </div>
-  );
-}
-
-function OnboardingPanel({
-  onboarding,
-  error,
-  dismissBusy,
-  onDismiss,
-}: {
-  onboarding: OnboardingStatus;
-  error: string | null;
-  dismissBusy: boolean;
-  onDismiss: () => void;
-}) {
-  return (
-    <section className={cx(uiCardClass, "px-5 py-5")}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 w-full flex-1 flex-col gap-5 xl:flex-row xl:items-center">
-          <img
-            src={setupIllustration}
-            alt=""
-            className="hidden h-28 w-28 shrink-0 object-contain md:block"
-          />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-              <div>
-                <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">
-                  Welcome! Let&apos;s finish your initial setup.
-                </h2>
-                <p className={cx("mt-1 ui-body", uiMutedTextClass)}>
-                  Complete the two base steps below to unlock the rest of the console.
-                </p>
-              </div>
-            </div>
-            {error && <p className="mt-3 ui-caption font-semibold text-rose-600 dark:text-rose-300">{error}</p>}
-            <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_240px]">
-              <SetupStep
-                index={1}
-                title="Secure the default admin"
-                description="Change the seeded admin email and password so credentials are no longer active."
-                done={onboarding.seed_user_configured}
-                action={{ label: "Go to UI users", to: "/admin/users" }}
-              />
-              <SetupStep
-                index={2}
-                title="Configure a storage endpoint"
-                description="Add at least one S3 or Ceph endpoint so the platform can manage accounts and users."
-                done={onboarding.endpoint_configured}
-                action={{ label: "Configure endpoints", to: "/admin/storage-endpoints" }}
-              />
-              <div className={cx(uiCardMutedClass, "px-4 py-3")}>
-                <p className="ui-body font-semibold text-[var(--ui-text)]">Next steps</p>
-                <div className="mt-3 space-y-2">
-                  <Link to="/admin/users" className="flex items-center gap-2 ui-caption font-medium text-primary">
-                    <OpenIcon className="h-3.5 w-3.5" /> Add UI user
-                  </Link>
-                  <Link to="/admin/s3-accounts" className="flex items-center gap-2 ui-caption font-medium text-primary">
-                    <OpenIcon className="h-3.5 w-3.5" /> Create account
-                  </Link>
-                  <Link to="/admin/audit" className="flex items-center gap-2 ui-caption font-medium text-primary">
-                    <OpenIcon className="h-3.5 w-3.5" /> View audit trail
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onDismiss}
-          disabled={!onboarding.can_dismiss || dismissBusy}
-          className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "shrink-0 self-start px-2 py-1 sm:self-auto")}
-        >
-          {dismissBusy ? "Dismissing..." : "Dismiss checklist"}
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function SetupStep({
-  index,
-  title,
-  description,
-  done,
-  action,
-}: {
-  index: number;
-  title: string;
-  description: string;
-  done: boolean;
-  action: { label: string; to: string };
-}) {
-  return (
-    <div className={cx(uiCardMutedClass, "flex min-h-[118px] flex-col justify-between gap-3 px-4 py-3")}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-1 gap-3">
-          <span
-            className={cx(
-              "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ui-caption font-semibold",
-              done
-                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950 dark:text-emerald-100"
-                : "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950 dark:text-amber-100"
-            )}
-          >
-            {index}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block ui-body font-semibold text-[var(--ui-text)]">{title}</span>
-            <span className={cx("mt-1 block ui-caption", uiMutedTextClass)}>{description}</span>
-          </span>
-        </div>
-        <UiBadge tone={done ? "success" : "warning"}>{done ? "Done" : "Pending"}</UiBadge>
-      </div>
-      <Link to={action.to} className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "w-fit px-3 py-1.5")}>
-        {action.label}
-        <OpenIcon className="h-3.5 w-3.5" />
-      </Link>
-    </div>
-  );
-}
-
 function EndpointHealthSection({
   data,
   loading,
@@ -893,14 +763,6 @@ export default function AdminDashboard() {
         }
       />
 
-      {onboarding && !onboarding.dismissed && (
-        <OnboardingPanel
-          onboarding={onboarding}
-          error={onboardingError}
-          dismissBusy={dismissBusy}
-          onDismiss={handleDismissOnboarding}
-        />
-      )}
 
       {endpointFreshnessWarning && <PageBanner tone="warning">{endpointFreshnessWarning}</PageBanner>}
       {summaryError && <PageBanner tone="error">{summaryError}</PageBanner>}
@@ -944,3 +806,4 @@ export default function AdminDashboard() {
     </div>
   );
 }
+
