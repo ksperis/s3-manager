@@ -56,6 +56,8 @@ class StorageEndpointBase(BaseModel):
     ceph_admin_access_key: Optional[str] = None
     ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
+    latitude: Optional[float] = Field(default=None)
+    longitude: Optional[float] = Field(default=None)
 
     @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
     @classmethod

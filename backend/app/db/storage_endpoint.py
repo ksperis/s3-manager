@@ -29,6 +29,8 @@ class StorageEndpoint(Base):
     ceph_admin_access_key = Column(String, nullable=True)
     ceph_admin_secret_key = Column(EncryptedString, nullable=True)
     features_config = Column(Text, nullable=True)
+    latitude = Column(String, nullable=True)
+    longitude = Column(String, nullable=True)
     tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
     force_path_style = Column(Boolean, default=False, nullable=False, server_default="0")
     verify_tls = Column(Boolean, default=True, nullable=False, server_default="1")
