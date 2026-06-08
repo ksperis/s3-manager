@@ -18,8 +18,8 @@ depends_on = None
 
 def upgrade() -> None:
     with op.batch_alter_table("storage_endpoints", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("latitude", sa.String(), nullable=True))
-        batch_op.add_column(sa.Column("longitude", sa.String(), nullable=True))
+        batch_op.add_column(sa.Column("latitude", sa.Float(), nullable=True))
+        batch_op.add_column(sa.Column("longitude", sa.Float(), nullable=True))
 
 
 def downgrade() -> None:

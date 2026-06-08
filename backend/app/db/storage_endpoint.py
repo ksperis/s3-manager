@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.core.security import EncryptedString
 from .base import Base
@@ -29,8 +29,8 @@ class StorageEndpoint(Base):
     ceph_admin_access_key = Column(String, nullable=True)
     ceph_admin_secret_key = Column(EncryptedString, nullable=True)
     features_config = Column(Text, nullable=True)
-    latitude = Column(String, nullable=True)
-    longitude = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
     force_path_style = Column(Boolean, default=False, nullable=False, server_default="0")
     verify_tls = Column(Boolean, default=True, nullable=False, server_default="1")

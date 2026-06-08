@@ -25,6 +25,7 @@ from app.db import (
     StorageProvider,
 )
 from app.models.storage_endpoint import (
+    StorageEndpointBase,
     StorageEndpointFeatureDetectionRequest,
     StorageEndpointFeatureDetectionResult,
     StorageEndpointAdminOpsPermissions,
@@ -66,6 +67,8 @@ class EnvStorageEndpoint(BaseModel):
     ceph_admin_access_key: Optional[str] = None
     ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     features: Optional[dict[str, dict[str, object]]] = None
     is_default: bool = False
 
@@ -75,6 +78,16 @@ class EnvStorageEndpoint(BaseModel):
         if isinstance(value, str):
             value = value.strip()
         return value or None
+
+    @field_validator("latitude")
+    @classmethod
+    def validate_latitude(cls, value: Optional[float]) -> Optional[float]:
+        return StorageEndpointBase.validate_latitude(value)
+
+    @field_validator("longitude")
+    @classmethod
+    def validate_longitude(cls, value: Optional[float]) -> Optional[float]:
+        return StorageEndpointBase.validate_longitude(value)
 
 
 class StorageEndpointsService:
@@ -262,6 +275,8 @@ class StorageEndpointsService:
             region=endpoint.region,
             force_path_style=bool(getattr(endpoint, "force_path_style", False)),
             verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+            latitude=endpoint.latitude,
+            longitude=endpoint.longitude,
             provider=provider,
             admin_access_key=endpoint.admin_access_key,
             supervision_access_key=endpoint.supervision_access_key,
@@ -519,6 +534,8 @@ class StorageEndpointsService:
                 endpoint.region = region
                 endpoint.force_path_style = force_path_style
                 endpoint.verify_tls = verify_tls
+                endpoint.latitude = entry.latitude
+                endpoint.longitude = entry.longitude
                 endpoint.provider = provider.value
                 endpoint.admin_access_key = admin_access
                 endpoint.admin_secret_key = admin_secret
@@ -540,6 +557,8 @@ class StorageEndpointsService:
                     region=region,
                     force_path_style=force_path_style,
                     verify_tls=verify_tls,
+                    latitude=entry.latitude,
+                    longitude=entry.longitude,
                     provider=provider.value,
                     admin_access_key=admin_access,
                     admin_secret_key=admin_secret,
@@ -651,6 +670,8 @@ class StorageEndpointsService:
             region=region,
             force_path_style=force_path_style,
             verify_tls=verify_tls,
+            latitude=payload.latitude,
+            longitude=payload.longitude,
             provider=provider.value,
             admin_access_key=admin_access,
             admin_secret_key=admin_secret,
@@ -701,6 +722,8 @@ class StorageEndpointsService:
             if "verify_tls" in fields_set and payload.verify_tls is not None
             else bool(getattr(endpoint, "verify_tls", True))
         )
+        latitude = payload.latitude if "latitude" in fields_set else endpoint.latitude
+        longitude = payload.longitude if "longitude" in fields_set else endpoint.longitude
         provider = self._normalize_provider(payload.provider if "provider" in fields_set else endpoint.provider)
         region = self._normalize_region(provider, region)
         admin_access = (
@@ -776,6 +799,8 @@ class StorageEndpointsService:
         endpoint.region = region
         endpoint.force_path_style = force_path_style
         endpoint.verify_tls = verify_tls
+        endpoint.latitude = latitude
+        endpoint.longitude = longitude
         endpoint.provider = provider.value
         endpoint.admin_access_key = admin_access
         endpoint.admin_secret_key = admin_secret

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   fetchOnboardingStatus: vi.fn(),
   generalSettings: {} as GeneralSettings,
   listAuditLogs: vi.fn(),
+  listStorageEndpoints: vi.fn(),
 }));
 
 vi.mock("../../api/audit", () => ({
@@ -30,6 +31,10 @@ vi.mock("../../api/healthchecks", () => ({
 vi.mock("../../api/onboarding", () => ({
   dismissOnboarding: mocks.dismissOnboarding,
   fetchOnboardingStatus: mocks.fetchOnboardingStatus,
+}));
+
+vi.mock("../../api/storageEndpoints", () => ({
+  listStorageEndpoints: mocks.listStorageEndpoints,
 }));
 
 vi.mock("../../api/stats", () => ({
@@ -238,6 +243,44 @@ describe("AdminDashboard feature summary", () => {
         },
       ],
     });
+    mocks.listStorageEndpoints.mockResolvedValue([
+      {
+        id: 1,
+        name: "INRAE-eprod-debug",
+        endpoint_url: "https://s3.example.test",
+        provider: "ceph",
+        force_path_style: false,
+        verify_tls: true,
+        latitude: 48.8566,
+        longitude: 2.3522,
+        is_default: true,
+        is_editable: true,
+        tags: [],
+        has_admin_secret: false,
+        has_supervision_secret: false,
+        has_ceph_admin_secret: false,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: 2,
+        name: "INRAE-eprod-idf",
+        endpoint_url: "https://s3-idf.example.test",
+        provider: "ceph",
+        force_path_style: false,
+        verify_tls: true,
+        latitude: 48.0707,
+        longitude: -0.7702,
+        is_default: false,
+        is_editable: true,
+        tags: [],
+        has_admin_secret: false,
+        has_supervision_secret: false,
+        has_ceph_admin_secret: false,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]);
     mocks.listAuditLogs.mockResolvedValue({
       logs: [
         {
@@ -374,6 +417,14 @@ describe("AdminDashboard feature summary", () => {
     expect(screen.getByRole("heading", { name: "Recent activity" })).toBeInTheDocument();
     expect(screen.getByText("INRAE-eprod-debug")).toBeInTheDocument();
     expect(screen.getAllByText("INRAE-eprod-idf").length).toBeGreaterThan(0);
+    const infrastructureMap = await screen.findByRole("img", { name: "Infrastructure endpoint map" });
+    expect(infrastructureMap).toBeInTheDocument();
+    expect(infrastructureMap).toHaveAttribute("preserveAspectRatio", "xMidYMid meet");
+    expect(infrastructureMap.closest("div")).toHaveClass("h-[220px]");
+    expect(screen.getByTestId("admin-dashboard-map-geography")).toHaveAttribute("data-basemap", "france");
+    expect(screen.getAllByTestId("admin-dashboard-map-marker")).toHaveLength(2);
+    expect(infrastructureMap.querySelector("polyline")).toBeNull();
+    expect(screen.getByText("Infrastructure map")).toBeInTheDocument();
     expect(screen.getByText("12.4M")).toBeInTheDocument();
     expect(within(platformSummary!).getByText("98%")).toBeInTheDocument();
     expect(screen.getByText("User admin@example.com logged in")).toBeInTheDocument();
@@ -381,6 +432,7 @@ describe("AdminDashboard feature summary", () => {
     expect(mocks.fetchAdminTraffic).toHaveBeenCalledWith("day");
     expect(mocks.fetchHealthOverview).toHaveBeenCalledWith("week");
     expect(mocks.fetchHealthWorkspaceOverview).toHaveBeenCalledWith(undefined, 10080);
+    expect(mocks.listStorageEndpoints).toHaveBeenCalled();
   });
 
   it("keeps the admin incident card visible when no incidents are returned", async () => {
@@ -431,6 +483,43 @@ describe("AdminDashboard feature summary", () => {
     expect(screen.queryByText("98%")).not.toBeInTheDocument();
     expect(mocks.fetchHealthOverview).not.toHaveBeenCalled();
     expect(mocks.fetchHealthWorkspaceOverview).not.toHaveBeenCalled();
+    expect(mocks.listStorageEndpoints).not.toHaveBeenCalled();
+    expect(screen.queryByRole("img", { name: "Infrastructure endpoint map" })).not.toBeInTheDocument();
+  });
+
+  it("shows an empty map state when endpoints have no GPS coordinates", async () => {
+    mocks.generalSettings = buildGeneralSettings({
+      endpoint_status_enabled: true,
+    });
+    mocks.listStorageEndpoints.mockResolvedValue([
+      {
+        id: 1,
+        name: "INRAE-eprod-debug",
+        endpoint_url: "https://s3.example.test",
+        provider: "ceph",
+        force_path_style: false,
+        verify_tls: true,
+        latitude: null,
+        longitude: null,
+        is_default: true,
+        is_editable: true,
+        tags: [],
+        has_admin_secret: false,
+        has_supervision_secret: false,
+        has_ceph_admin_secret: false,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]);
+
+    await renderDashboard();
+
+    expect(await screen.findByRole("img", { name: "Infrastructure endpoint map" })).toBeInTheDocument();
+    expect(screen.getByTestId("admin-dashboard-map-geography")).toHaveAttribute("data-basemap", "world");
+    expect(screen.getByText("No GPS coordinates available for endpoints.")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("admin-dashboard-map-marker")).toHaveLength(0);
+    expect(mocks.fetchHealthWorkspaceOverview).toHaveBeenCalledTimes(1);
+    expect(mocks.listStorageEndpoints).toHaveBeenCalledTimes(1);
   });
 
   it("keeps platform cards present without unavailable text or fallback values when metrics are unavailable", async () => {

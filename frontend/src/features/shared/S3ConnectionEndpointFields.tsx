@@ -21,8 +21,6 @@ export type S3ConnectionEndpointDraft = {
   region: string;
   force_path_style: boolean;
   verify_tls: boolean;
-  latitude?: number | null;
-  longitude?: number | null;
 };
 
 type S3ConnectionEndpointFieldsProps = {
@@ -135,26 +133,6 @@ export default function S3ConnectionEndpointFields({
               onChange={(event) => onFormChange("region", event.target.value)}
               className={inputClasses}
               placeholder="us-east-1"
-            />
-          </label>
-          <label className="block">
-            <span className={labelClasses}>Latitude</span>
-            <input
-              type="text"
-              value={form.latitude ?? ""}
-              onChange={(event) => onFormChange("latitude", event.target.value)}
-              className={inputClasses}
-              placeholder="0.0000"
-            />
-          </label>
-          <label className="block">
-            <span className={labelClasses}>Longitude</span>
-            <input
-              type="text"
-              value={form.longitude ?? ""}
-              onChange={(event) => onFormChange("longitude", event.target.value)}
-              className={inputClasses}
-              placeholder="0.0000"
             />
           </label>
           <label className="block sm:col-span-2">

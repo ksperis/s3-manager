@@ -36,6 +36,8 @@ type FormState = {
   region: string;
   force_path_style: boolean;
   verify_tls: boolean;
+  latitude: string;
+  longitude: string;
   provider: StorageProvider;
   tags: UiTagDefinition[];
   admin_access_key: string;
@@ -88,6 +90,46 @@ const AWS_DEFAULT_REGION = "us-east-1";
 const AWS_IAM_ENDPOINT = "https://iam.amazonaws.com";
 const AWS_GOV_IAM_ENDPOINT = "https://iam.us-gov.amazonaws.com";
 const AWS_CN_IAM_ENDPOINT = "https://iam.cn-north-1.amazonaws.com.cn";
+const AWS_REGION_COORDINATES: Record<string, { latitude: string; longitude: string }> = {
+  "af-south-1": { latitude: "-33.9249", longitude: "18.4241" },
+  "ap-east-1": { latitude: "22.3193", longitude: "114.1694" },
+  "ap-east-2": { latitude: "25.0330", longitude: "121.5654" },
+  "ap-northeast-1": { latitude: "35.6762", longitude: "139.6503" },
+  "ap-northeast-2": { latitude: "37.5665", longitude: "126.9780" },
+  "ap-northeast-3": { latitude: "34.6937", longitude: "135.5023" },
+  "ap-south-1": { latitude: "19.0760", longitude: "72.8777" },
+  "ap-south-2": { latitude: "17.3850", longitude: "78.4867" },
+  "ap-southeast-1": { latitude: "1.3521", longitude: "103.8198" },
+  "ap-southeast-2": { latitude: "-33.8688", longitude: "151.2093" },
+  "ap-southeast-3": { latitude: "-6.2088", longitude: "106.8456" },
+  "ap-southeast-4": { latitude: "-37.8136", longitude: "144.9631" },
+  "ap-southeast-5": { latitude: "3.1390", longitude: "101.6869" },
+  "ap-southeast-6": { latitude: "43.5321", longitude: "172.6362" },
+  "ap-southeast-7": { latitude: "13.7563", longitude: "100.5018" },
+  "ca-central-1": { latitude: "45.5017", longitude: "-73.5673" },
+  "ca-west-1": { latitude: "51.0447", longitude: "-114.0719" },
+  "cn-north-1": { latitude: "39.9042", longitude: "116.4074" },
+  "cn-northwest-1": { latitude: "38.4872", longitude: "106.2309" },
+  "eu-central-1": { latitude: "50.1109", longitude: "8.6821" },
+  "eu-central-2": { latitude: "47.3769", longitude: "8.5417" },
+  "eu-north-1": { latitude: "59.3293", longitude: "18.0686" },
+  "eu-south-1": { latitude: "45.4642", longitude: "9.1900" },
+  "eu-south-2": { latitude: "40.4168", longitude: "-3.7038" },
+  "eu-west-1": { latitude: "53.3498", longitude: "-6.2603" },
+  "eu-west-2": { latitude: "51.5074", longitude: "-0.1278" },
+  "eu-west-3": { latitude: "48.8566", longitude: "2.3522" },
+  "il-central-1": { latitude: "32.0853", longitude: "34.7818" },
+  "me-central-1": { latitude: "25.2048", longitude: "55.2708" },
+  "me-south-1": { latitude: "26.2235", longitude: "50.5876" },
+  "mx-central-1": { latitude: "19.4326", longitude: "-99.1332" },
+  "sa-east-1": { latitude: "-23.5558", longitude: "-46.6396" },
+  "us-east-1": { latitude: "39.0438", longitude: "-77.4874" },
+  "us-east-2": { latitude: "39.9612", longitude: "-82.9988" },
+  "us-gov-east-1": { latitude: "39.0438", longitude: "-77.4874" },
+  "us-gov-west-1": { latitude: "37.3382", longitude: "-121.8863" },
+  "us-west-1": { latitude: "37.3382", longitude: "-121.8863" },
+  "us-west-2": { latitude: "45.5152", longitude: "-122.6784" },
+};
 const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="s3m-admin" \\',
@@ -119,6 +161,24 @@ function awsIamEndpointForRegion(region?: string | null): string {
   if (normalized.startsWith("cn-")) return AWS_CN_IAM_ENDPOINT;
   if (normalized.startsWith("us-gov-")) return AWS_GOV_IAM_ENDPOINT;
   return AWS_IAM_ENDPOINT;
+}
+
+function awsCoordinatesForRegion(region?: string | null): { latitude: string; longitude: string } | null {
+  return AWS_REGION_COORDINATES[normalizeAwsRegion(region)] ?? null;
+}
+
+function formatCoordinateInput(value?: number | null): string {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+}
+
+function parseCoordinateInput(value: string, label: string, min: number, max: number): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    throw new Error(`${label} must be a number between ${min} and ${max}.`);
+  }
+  return parsed;
 }
 
 const SUPERVISION_OPS_COMMAND = [
@@ -253,6 +313,8 @@ function createEmptyForm(): FormState {
     region: "",
     force_path_style: false,
     verify_tls: true,
+    latitude: "",
+    longitude: "",
     provider: "ceph",
     tags: [],
     admin_access_key: "",
@@ -276,6 +338,8 @@ function createFormFromEndpoint(endpoint: StorageEndpoint): FormState {
     region: endpoint.region ?? "",
     force_path_style: Boolean(endpoint.force_path_style),
     verify_tls: endpoint.verify_tls !== false,
+    latitude: formatCoordinateInput(endpoint.latitude),
+    longitude: formatCoordinateInput(endpoint.longitude),
     provider: endpoint.provider,
     tags: normalizeUiTags(endpoint.tags),
     admin_access_key: endpoint.admin_access_key ?? "",
@@ -638,6 +702,7 @@ export default function StorageEndpointsPage() {
   const handleProviderChange = (provider: StorageProvider) => {
     setForm((prev) => {
       const awsRegion = AWS_DEFAULT_REGION;
+      const awsCoordinates = awsCoordinatesForRegion(awsRegion);
       const defaultFeatures = defaultFeaturesForProvider(provider, awsRegion);
       const constrained = applyFeatureConstraints(defaultFeatures, provider);
       return {
@@ -645,6 +710,8 @@ export default function StorageEndpointsPage() {
         provider,
         endpoint_url: provider === "aws" ? awsS3EndpointForRegion(awsRegion) : prev.endpoint_url,
         region: provider === "aws" ? awsRegion : prev.region,
+        latitude: provider === "aws" ? (awsCoordinates?.latitude ?? "") : prev.latitude,
+        longitude: provider === "aws" ? (awsCoordinates?.longitude ?? "") : prev.longitude,
         verify_tls: provider === "aws" ? true : prev.verify_tls,
         admin_access_key: provider === "ceph" ? prev.admin_access_key : "",
         admin_secret_key: provider === "ceph" ? prev.admin_secret_key : "",
@@ -663,6 +730,7 @@ export default function StorageEndpointsPage() {
         return { ...prev, region };
       }
       const nextRegion = normalizeAwsRegion(region);
+      const nextCoordinates = awsCoordinatesForRegion(region);
       const nextFeatures = applyFeatureConstraints(
         {
           ...prev.features,
@@ -675,6 +743,8 @@ export default function StorageEndpointsPage() {
         ...prev,
         region,
         endpoint_url: awsS3EndpointForRegion(nextRegion),
+        latitude: nextCoordinates?.latitude ?? "",
+        longitude: nextCoordinates?.longitude ?? "",
         features: nextFeatures,
       };
     });
@@ -775,6 +845,8 @@ export default function StorageEndpointsPage() {
     const trimmedSupervisionSecret = form.supervision_secret_key.trim();
     const trimmedCephAdminAccess = form.ceph_admin_access_key.trim();
     const trimmedCephAdminSecret = form.ceph_admin_secret_key.trim();
+    let latitude: number | null;
+    let longitude: number | null;
     const featuresSource =
       form.provider === "aws"
         ? {
@@ -796,6 +868,13 @@ export default function StorageEndpointsPage() {
       setFormError("Endpoint URL is required.");
       return null;
     }
+    try {
+      latitude = parseCoordinateInput(form.latitude, "Latitude", -90, 90);
+      longitude = parseCoordinateInput(form.longitude, "Longitude", -180, 180);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Invalid coordinates.");
+      return null;
+    }
 
     const payload: StorageEndpointPayload = {
       name: trimmedName,
@@ -803,6 +882,8 @@ export default function StorageEndpointsPage() {
       region: trimmedRegion || null,
       force_path_style: Boolean(form.force_path_style),
       verify_tls: Boolean(form.verify_tls),
+      latitude,
+      longitude,
       provider: form.provider,
       features_config: featuresConfig,
     };
@@ -936,6 +1017,7 @@ export default function StorageEndpointsPage() {
       Boolean(iamEndpointOverride) &&
       iamEndpointOverride !== endpoint.endpoint_url;
     const readOnly = envManaged || !endpoint.is_editable || !canEditEndpoints;
+    const hasCoordinates = endpoint.latitude != null && endpoint.longitude != null;
 
     return (
       <div
@@ -1067,6 +1149,12 @@ export default function StorageEndpointsPage() {
           <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Path style</p>
             <p className="font-semibold">{forcePathStyle ? "Forced" : "Virtual-host style"}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">GPS coordinates</p>
+            <p className="font-semibold">
+              {hasCoordinates ? `${endpoint.latitude}, ${endpoint.longitude}` : "Not set"}
+            </p>
           </div>
           <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Admin key</p>
@@ -1382,6 +1470,32 @@ export default function StorageEndpointsPage() {
                   onChange={(e) => handleRegionChange(e.target.value)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   placeholder="us-east-1"
+                />
+              </label>
+              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                Latitude (optional)
+                <input
+                  type="number"
+                  value={form.latitude}
+                  onChange={(e) => setForm((prev) => ({ ...prev, latitude: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="48.8566"
+                  min="-90"
+                  max="90"
+                  step="any"
+                />
+              </label>
+              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                Longitude (optional)
+                <input
+                  type="number"
+                  value={form.longitude}
+                  onChange={(e) => setForm((prev) => ({ ...prev, longitude: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="2.3522"
+                  min="-180"
+                  max="180"
+                  step="any"
                 />
               </label>
             </div>

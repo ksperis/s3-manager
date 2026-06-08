@@ -1,4 +1,4 @@
-import AdminDashboardMap from "./components/AdminDashboardMap";
+import AdminDashboardMap, { type AdminDashboardMapMarker } from "./components/AdminDashboardMap";
 /*
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
@@ -16,6 +16,7 @@ import {
   type WorkspaceEndpointHealthOverviewResponse,
 } from "../../api/healthchecks";
 import { dismissOnboarding, fetchOnboardingStatus, type OnboardingStatus } from "../../api/onboarding";
+import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import {
   type AdminStorageStats,
   type AdminSummary,
@@ -137,18 +138,151 @@ function formatOptionalBytes(value?: number | null): string {
 function formatOptionalCompactNumber(value?: number | null): string {
   return value == null ? "" : formatCompactNumber(value);
 }
+
+function OnboardingPanel({
+  onboarding,
+  error,
+  dismissBusy,
+  onDismiss,
+}: {
+  onboarding: OnboardingStatus;
+  error: string | null;
+  dismissBusy: boolean;
+  onDismiss: () => void;
+}) {
+  return (
+    <section className={cx(uiCardClass, "px-5 py-5")}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 w-full flex-1 flex-col gap-5 xl:flex-row xl:items-center">
+          <img
+            src={setupIllustration}
+            alt=""
+            className="hidden h-28 w-28 shrink-0 object-contain md:block"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">
+                  Welcome! Let&apos;s finish your initial setup.
+                </h2>
+                <p className={cx("mt-1 ui-body", uiMutedTextClass)}>
+                  Complete the two base steps below to unlock the rest of the console.
+                </p>
+              </div>
+            </div>
+            {error && <p className="mt-3 ui-caption font-semibold text-rose-600 dark:text-rose-300">{error}</p>}
+            <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_240px]">
+              <SetupStep
+                index={1}
+                title="Secure the default admin"
+                description="Change the seeded admin email and password so credentials are no longer active."
+                done={onboarding.seed_user_configured}
+                action={{ label: "Go to UI users", to: "/admin/users" }}
+              />
+              <SetupStep
+                index={2}
+                title="Configure a storage endpoint"
+                description="Add at least one S3 or Ceph endpoint so the platform can manage accounts and users."
+                done={onboarding.endpoint_configured}
+                action={{ label: "Configure endpoints", to: "/admin/storage-endpoints" }}
+              />
+              <div className={cx(uiCardMutedClass, "px-4 py-3")}>
+                <p className="ui-body font-semibold text-[var(--ui-text)]">Next steps</p>
+                <div className="mt-3 space-y-2">
+                  <Link to="/admin/users" className="flex items-center gap-2 ui-caption font-medium text-primary">
+                    <OpenIcon className="h-3.5 w-3.5" /> Add UI user
+                  </Link>
+                  <Link to="/admin/s3-accounts" className="flex items-center gap-2 ui-caption font-medium text-primary">
+                    <OpenIcon className="h-3.5 w-3.5" /> Create account
+                  </Link>
+                  <Link to="/admin/audit" className="flex items-center gap-2 ui-caption font-medium text-primary">
+                    <OpenIcon className="h-3.5 w-3.5" /> View audit trail
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          disabled={!onboarding.can_dismiss || dismissBusy}
+          className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "shrink-0 self-start px-2 py-1 sm:self-auto")}
+        >
+          {dismissBusy ? "Dismissing..." : "Dismiss checklist"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function SetupStep({
+  index,
+  title,
+  description,
+  done,
+  action,
+}: {
+  index: number;
+  title: string;
+  description: string;
+  done: boolean;
+  action: { label: string; to: string };
+}) {
+  return (
+    <div className={cx(uiCardMutedClass, "flex min-h-[118px] flex-col justify-between gap-3 px-4 py-3")}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 gap-3">
+          <span
+            className={cx(
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ui-caption font-semibold",
+              done
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950 dark:text-emerald-100"
+                : "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950 dark:text-amber-100"
+            )}
+          >
+            {index}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block ui-body font-semibold text-[var(--ui-text)]">{title}</span>
+            <span className={cx("mt-1 block ui-caption", uiMutedTextClass)}>{description}</span>
+          </span>
+        </div>
+        <UiBadge tone={done ? "success" : "warning"}>{done ? "Done" : "Pending"}</UiBadge>
+      </div>
+      <Link to={action.to} className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "w-fit px-3 py-1.5")}>
+        {action.label}
+        <OpenIcon className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  );
+}
+
 function EndpointHealthSection({
   data,
   loading,
   unavailableReason,
+  mapMarkers,
+  mapLoading,
+  mapError,
 }: {
   data: WorkspaceEndpointHealthOverviewResponse | null;
   loading: boolean;
   unavailableReason?: string | null;
+  mapMarkers: AdminDashboardMapMarker[];
+  mapLoading: boolean;
+  mapError?: string | null;
 }) {
   const content = (
     <div className="grid gap-3 xl:grid-cols-[1.08fr_0.92fr]">
-      <EndpointHealthCard data={data} loading={loading} unavailableReason={unavailableReason} />
+      <EndpointHealthCard
+        data={data}
+        loading={loading}
+        unavailableReason={unavailableReason}
+        mapMarkers={mapMarkers}
+        mapLoading={mapLoading}
+        mapError={mapError}
+      />
       {unavailableReason && !data ? (
         <BlankIncidentsCard />
       ) : (
@@ -179,10 +313,16 @@ function EndpointHealthCard({
   data,
   loading,
   unavailableReason,
+  mapMarkers,
+  mapLoading,
+  mapError,
 }: {
   data: WorkspaceEndpointHealthOverviewResponse | null;
   loading: boolean;
   unavailableReason?: string | null;
+  mapMarkers: AdminDashboardMapMarker[];
+  mapLoading: boolean;
+  mapError?: string | null;
 }) {
   const endpoints = data?.endpoints.slice(0, MAX_ENDPOINT_ROWS) ?? [];
   return (
@@ -223,13 +363,9 @@ function EndpointHealthCard({
                 <p className="ui-caption font-medium text-primary">+ {(data?.endpoints.length ?? 0) - MAX_ENDPOINT_ROWS} more endpoint(s)</p>
               )}
             </div>
-            <AdminDashboardMap />
-          </div>
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-3 ui-caption text-[var(--ui-text-muted)]">
-            <LegendItem label={`Up${data && !unavailableReason ? ` (${data.up_count})` : ""}`} status="up" />
-            <LegendItem label={`Degraded${data && !unavailableReason ? ` (${data.degraded_count})` : ""}`} status="degraded" />
-            <LegendItem label={`Down${data && !unavailableReason ? ` (${data.down_count})` : ""}`} status="down" />
-            <LegendItem label={`Unknown${data && !unavailableReason ? ` (${data.unknown_count})` : ""}`} status="unknown" />
+            {!unavailableReason && (
+              <AdminDashboardMap markers={mapMarkers} loading={mapLoading} error={mapError} />
+            )}
           </div>
         </>
       )}
@@ -249,15 +385,6 @@ function EndpointRow({ endpoint }: { endpoint: WorkspaceEndpointHealthEntry }) {
       <span className={cx("truncate", uiMutedTextClass)}>{formatTimestamp(endpoint.checked_at)}</span>
       <WorkspaceStatusPill status={endpoint.status} />
     </div>
-  );
-}
-
-function LegendItem({ label, status }: { label: string; status: HealthCheckStatus }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <WorkspaceStatusDot status={status} />
-      {label}
-    </span>
   );
 }
 
@@ -388,6 +515,9 @@ export default function AdminDashboard() {
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
+  const [mapEndpoints, setMapEndpoints] = useState<StorageEndpoint[]>([]);
+  const [mapEndpointsLoading, setMapEndpointsLoading] = useState(false);
+  const [mapEndpointsError, setMapEndpointsError] = useState<string | null>(null);
   const [healthOverview, setHealthOverview] = useState<EndpointHealthOverviewResponse | null>(null);
   const [healthOverviewLoading, setHealthOverviewLoading] = useState(false);
   const [healthOverviewError, setHealthOverviewError] = useState<string | null>(null);
@@ -594,6 +724,36 @@ export default function AdminDashboard() {
   }, [generalSettings.endpoint_status_enabled, refreshNonce]);
 
   useEffect(() => {
+    if (!generalSettings.endpoint_status_enabled) {
+      setMapEndpoints([]);
+      setMapEndpointsError(null);
+      setMapEndpointsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setMapEndpointsLoading(true);
+    setMapEndpointsError(null);
+    listStorageEndpoints()
+      .then((data) => {
+        if (cancelled) return;
+        setMapEndpoints(data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMapEndpoints([]);
+        setMapEndpointsError(extractApiError(err, "Unable to load endpoint map coordinates."));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setMapEndpointsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [generalSettings.endpoint_status_enabled, refreshNonce]);
+
+  useEffect(() => {
     if (!generalSettings.endpoint_status_enabled) return;
     let cancelled = false;
     setHealthOverviewLoading(true);
@@ -723,6 +883,20 @@ export default function AdminDashboard() {
     ];
   }, [summary]);
 
+  const mapMarkers = useMemo<AdminDashboardMapMarker[]>(() => {
+    const statusByEndpointId = new Map<number, HealthCheckStatus>();
+    workspaceHealth?.endpoints.forEach((endpoint) => {
+      statusByEndpointId.set(endpoint.endpoint_id, endpoint.status);
+    });
+    return mapEndpoints.map((endpoint) => ({
+      id: endpoint.id,
+      name: endpoint.name,
+      latitude: endpoint.latitude,
+      longitude: endpoint.longitude,
+      status: statusByEndpointId.get(endpoint.id) ?? "unknown",
+    }));
+  }, [mapEndpoints, workspaceHealth]);
+
   const endpointUnavailableReason = !generalSettings.endpoint_status_enabled
     ? "Endpoint Status feature is disabled."
     : workspaceHealthError
@@ -736,7 +910,13 @@ export default function AdminDashboard() {
     healthOverviewError ||
     (healthScore == null && !healthOverviewLoading ? "7-day endpoint health history is not available." : null);
   const refreshing =
-    summaryLoading || storageLoading || trafficLoading || auditLoading || workspaceHealthLoading || healthOverviewLoading;
+    summaryLoading ||
+    storageLoading ||
+    trafficLoading ||
+    auditLoading ||
+    workspaceHealthLoading ||
+    healthOverviewLoading ||
+    mapEndpointsLoading;
 
   return (
     <div className="space-y-4" data-testid="admin-dashboard">
@@ -763,6 +943,14 @@ export default function AdminDashboard() {
         }
       />
 
+      {onboarding && !onboarding.dismissed && (
+        <OnboardingPanel
+          onboarding={onboarding}
+          error={onboardingError}
+          dismissBusy={dismissBusy}
+          onDismiss={handleDismissOnboarding}
+        />
+      )}
 
       {endpointFreshnessWarning && <PageBanner tone="warning">{endpointFreshnessWarning}</PageBanner>}
       {summaryError && <PageBanner tone="error">{summaryError}</PageBanner>}
@@ -783,6 +971,9 @@ export default function AdminDashboard() {
         data={workspaceHealth}
         loading={workspaceHealthLoading}
         unavailableReason={endpointUnavailableReason}
+        mapMarkers={mapMarkers}
+        mapLoading={mapEndpointsLoading}
+        mapError={mapEndpointsError}
       />
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,0.9fr)]">
@@ -806,4 +997,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-

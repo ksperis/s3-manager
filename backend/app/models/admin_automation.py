@@ -39,6 +39,8 @@ class StorageEndpointSpec(BaseModel):
     ceph_admin_access_key: Optional[str] = None
     ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     set_default: Optional[bool] = None
 
 
