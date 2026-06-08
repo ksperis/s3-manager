@@ -421,7 +421,9 @@ describe("AdminDashboard feature summary", () => {
     expect(infrastructureMap).toBeInTheDocument();
     expect(infrastructureMap).toHaveAttribute("preserveAspectRatio", "xMidYMid meet");
     expect(infrastructureMap.closest("div")).toHaveClass("h-[220px]");
-    expect(screen.getByTestId("admin-dashboard-map-geography")).toHaveAttribute("data-basemap", "france");
+    const geography = screen.getByTestId("admin-dashboard-map-geography");
+    expect(geography).toHaveAttribute("data-basemap", "france");
+    expect(geography).toHaveAttribute("data-x-scale", "0.69");
     expect(screen.getAllByTestId("admin-dashboard-map-marker")).toHaveLength(2);
     expect(infrastructureMap.querySelector("polyline")).toBeNull();
     expect(screen.getByText("Infrastructure map")).toBeInTheDocument();

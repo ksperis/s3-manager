@@ -43,6 +43,7 @@ type CoordinateBounds = {
 type BasemapDefinition = {
   id: "france" | "europe" | "north-america" | "world";
   viewport: MapViewport;
+  xScale: number;
   bounds?: CoordinateBounds;
   contextPaths: string[];
   primaryPaths: string[];
@@ -491,6 +492,7 @@ const WORLD_PRIMARY_PATHS = [
 const FRANCE_BASEMAP: BasemapDefinition = {
   id: "france",
   viewport: { minX: -6.8, minY: -52.2, width: 18.4, height: 11.8 },
+  xScale: 0.69,
   bounds: { minLatitude: 41, maxLatitude: 52.4, minLongitude: -6.6, maxLongitude: 10.6 },
   contextPaths: FRANCE_CONTEXT_PATHS,
   primaryPaths: FRANCE_PRIMARY_PATHS,
@@ -499,6 +501,7 @@ const FRANCE_BASEMAP: BasemapDefinition = {
 const EUROPE_BASEMAP: BasemapDefinition = {
   id: "europe",
   viewport: { minX: -13, minY: -72, width: 52, height: 39 },
+  xScale: 0.64,
   bounds: { minLatitude: 34, maxLatitude: 72, minLongitude: -13, maxLongitude: 39 },
   contextPaths: EUROPE_CONTEXT_PATHS,
   primaryPaths: EUROPE_PRIMARY_PATHS,
@@ -507,6 +510,7 @@ const EUROPE_BASEMAP: BasemapDefinition = {
 const NORTH_AMERICA_BASEMAP: BasemapDefinition = {
   id: "north-america",
   viewport: { minX: -170, minY: -74, width: 122, height: 61 },
+  xScale: 0.72,
   bounds: { minLatitude: 15, maxLatitude: 74, minLongitude: -170, maxLongitude: -50 },
   contextPaths: NORTH_AMERICA_CONTEXT_PATHS,
   primaryPaths: NORTH_AMERICA_PRIMARY_PATHS,
@@ -515,6 +519,7 @@ const NORTH_AMERICA_BASEMAP: BasemapDefinition = {
 const WORLD_BASEMAP: BasemapDefinition = {
   id: "world",
   viewport: WORLD_VIEWPORT,
+  xScale: 1,
   contextPaths: [],
   primaryPaths: WORLD_PRIMARY_PATHS,
 };
@@ -547,9 +552,22 @@ function selectBasemap(validMarkers: Array<AdminDashboardMapMarker & { latitude:
   return BASEMAPS.find((basemap) => basemap.bounds && validMarkers.every((marker) => isInBounds(marker, basemap.bounds!))) ?? WORLD_BASEMAP;
 }
 
-function toGeoPoint(latitude: number, longitude: number): GeoPoint {
+function scaleLongitude(basemap: BasemapDefinition, longitude: number) {
+  return longitude * basemap.xScale;
+}
+
+function scaledViewport(basemap: BasemapDefinition): MapViewport {
   return {
-    x: longitude,
+    minX: scaleLongitude(basemap, basemap.viewport.minX),
+    minY: basemap.viewport.minY,
+    width: basemap.viewport.width * basemap.xScale,
+    height: basemap.viewport.height,
+  };
+}
+
+function toGeoPoint(latitude: number, longitude: number, basemap: BasemapDefinition): GeoPoint {
+  return {
+    x: scaleLongitude(basemap, longitude),
     y: -latitude,
   };
 }
@@ -559,7 +577,7 @@ function projectMarkers(markers: AdminDashboardMapMarker[]) {
   const basemap = selectBasemap(validMarkers);
   const projectedMarkers: ProjectedMarker[] = validMarkers.map((marker) => ({
     ...marker,
-    ...toGeoPoint(marker.latitude, marker.longitude),
+    ...toGeoPoint(marker.latitude, marker.longitude, basemap),
   }));
   return { basemap, projectedMarkers };
 }
@@ -576,26 +594,32 @@ function buildTicks(min: number, max: number, viewportSpan: number) {
 
 function GeographyBasemap({ basemap, muted }: { basemap: BasemapDefinition; muted?: boolean }) {
   const { viewport } = basemap;
+  const renderViewport = scaledViewport(basemap);
   const longitudeTicks = buildTicks(viewport.minX, viewport.minX + viewport.width, viewport.width);
   const latitudeTicks = buildTicks(-viewport.minY - viewport.height, -viewport.minY, viewport.height);
 
   return (
-    <g data-testid="admin-dashboard-map-geography" data-basemap={basemap.id} opacity={muted ? 0.42 : 1}>
+    <g
+      data-testid="admin-dashboard-map-geography"
+      data-basemap={basemap.id}
+      data-x-scale={basemap.xScale}
+      opacity={muted ? 0.42 : 1}
+    >
       <rect
-        x={viewport.minX}
-        y={viewport.minY}
-        width={viewport.width}
-        height={viewport.height}
+        x={renderViewport.minX}
+        y={renderViewport.minY}
+        width={renderViewport.width}
+        height={renderViewport.height}
         className="fill-sky-50 dark:fill-slate-950"
       />
       <g className="stroke-slate-300/35 dark:stroke-slate-700/45">
         {longitudeTicks.map((longitude) => (
           <line
             key={`longitude-${longitude}`}
-            x1={longitude}
-            x2={longitude}
-            y1={viewport.minY}
-            y2={viewport.minY + viewport.height}
+            x1={scaleLongitude(basemap, longitude)}
+            x2={scaleLongitude(basemap, longitude)}
+            y1={renderViewport.minY}
+            y2={renderViewport.minY + renderViewport.height}
             vectorEffect="non-scaling-stroke"
             strokeWidth="0.4"
           />
@@ -603,8 +627,8 @@ function GeographyBasemap({ basemap, muted }: { basemap: BasemapDefinition; mute
         {latitudeTicks.map((latitude) => (
           <line
             key={`latitude-${latitude}`}
-            x1={viewport.minX}
-            x2={viewport.minX + viewport.width}
+            x1={renderViewport.minX}
+            x2={renderViewport.minX + renderViewport.width}
             y1={-latitude}
             y2={-latitude}
             vectorEffect="non-scaling-stroke"
@@ -612,15 +636,17 @@ function GeographyBasemap({ basemap, muted }: { basemap: BasemapDefinition; mute
           />
         ))}
       </g>
-      <g className="fill-slate-100/85 stroke-slate-300/85 dark:fill-slate-900/70 dark:stroke-slate-700/80">
-        {basemap.contextPaths.map((pathData, index) => (
-          <path key={`context-${index}`} d={pathData} vectorEffect="non-scaling-stroke" strokeWidth="0.75" />
-        ))}
-      </g>
-      <g className="fill-slate-200/95 stroke-slate-500/80 dark:fill-slate-800/90 dark:stroke-slate-500/85">
-        {basemap.primaryPaths.map((pathData, index) => (
-          <path key={`primary-${index}`} d={pathData} vectorEffect="non-scaling-stroke" strokeWidth="0.8" />
-        ))}
+      <g transform={`scale(${basemap.xScale} 1)`}>
+        <g className="fill-slate-100/85 stroke-slate-300/85 dark:fill-slate-900/70 dark:stroke-slate-700/80">
+          {basemap.contextPaths.map((pathData, index) => (
+            <path key={`context-${index}`} d={pathData} vectorEffect="non-scaling-stroke" strokeWidth="0.75" />
+          ))}
+        </g>
+        <g className="fill-slate-200/95 stroke-slate-500/80 dark:fill-slate-800/90 dark:stroke-slate-500/85">
+          {basemap.primaryPaths.map((pathData, index) => (
+            <path key={`primary-${index}`} d={pathData} vectorEffect="non-scaling-stroke" strokeWidth="0.8" />
+          ))}
+        </g>
       </g>
     </g>
   );
@@ -645,7 +671,7 @@ function MapFrame({
 
 export default function AdminDashboardMap({ markers, loading = false, error = null }: AdminDashboardMapProps) {
   const { basemap, projectedMarkers } = projectMarkers(markers);
-  const { viewport } = basemap;
+  const viewport = scaledViewport(basemap);
   const markerRadius = Math.max(viewport.width, viewport.height) * 0.012;
   const markerHaloRadius = markerRadius * 2.15;
 
