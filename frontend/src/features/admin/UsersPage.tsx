@@ -35,6 +35,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import { cx, uiCardMutedClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
@@ -83,20 +84,39 @@ function normalizeManagerToolAccess(access?: ManagerToolAccess | null): ManagerT
 }
 
 const userModalTabsContainerClass =
-  "flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60";
+  "flex flex-wrap gap-2 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-1";
 const userModalTabButtonClass = (active: boolean) =>
   `rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
     active
-      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+      ? "bg-[var(--ui-surface)] text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)]"
+      : "text-[var(--ui-text-muted)] hover:bg-[var(--ui-hover)] hover:text-[var(--ui-text)]"
   }`;
 const userModalLabelClass = "ui-body font-medium text-slate-700 dark:text-slate-200";
 const userModalFieldClass =
-  "rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
+  "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 ui-body text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
 const userModalCancelButtonClass =
-  "rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800";
+  "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-4 py-2 ui-body font-medium text-[var(--ui-text)] hover:bg-[var(--ui-hover)]";
 const userModalSettingsGroupClass =
-  "rounded-xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40";
+  "rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-4";
+const associationTableContainerClass = uiTableContainerClass;
+const associationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
+const associationAddPanelClass = cx(uiCardMutedClass, "space-y-2 px-3 py-2");
+const associationCompactInputClass =
+  "w-44 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2 py-1 ui-caption text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
+const associationCompactSelectClass =
+  "w-44 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2 py-1 ui-caption text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
+const associationSecondaryButtonClass =
+  "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 ui-caption font-semibold text-[var(--ui-text)] hover:bg-[var(--ui-hover)]";
+const associationOptionRowClass = (selected: boolean) =>
+  `flex items-center justify-between rounded-md px-2 py-1 ${
+    selected ? "bg-[var(--ui-selected-bg)]" : "hover:bg-[var(--ui-hover)]"
+  }`;
+const associationAccountOptionRowClass = (selected: boolean) =>
+  `flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
+    selected ? "bg-[var(--ui-selected-bg)]" : "hover:bg-[var(--ui-hover)]"
+  }`;
+const userSettingsItemSurfaceClass = (disabled: boolean) =>
+  disabled ? "bg-[var(--ui-surface-muted)] opacity-75" : "bg-[var(--ui-surface)]";
 const roleAccessHelpItems = [
   { role: "No Access", access: "No workspace access (profile only)" },
   { role: "User", access: "Non-admin workspaces only" },
@@ -297,9 +317,9 @@ const AssociationsTabs = ({
                     {accounts.showPanel ? "Close" : "Add accounts"}
                   </button>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <div className={associationTableContainerClass}>
+                  <table className={associationTableClass}>
+                    <thead>
                       <tr>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Account
@@ -315,7 +335,7 @@ const AssociationsTabs = ({
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    <tbody>
                       {accounts.selected.length === 0 ? (
                         <tr>
                           <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
@@ -358,7 +378,7 @@ const AssociationsTabs = ({
                                       )
                                     )
                                   }
-                                  className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  className={associationCompactSelectClass}
                                 >
                                   {PORTAL_ROLE_OPTIONS.map((option) => (
                                     <option key={option.value} value={option.value}>
@@ -386,7 +406,7 @@ const AssociationsTabs = ({
                   </table>
                 </div>
                 {accounts.showPanel && (
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div className={associationAddPanelClass}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add accounts</span>
@@ -397,7 +417,7 @@ const AssociationsTabs = ({
                         value={accounts.search}
                         onChange={(e) => accounts.setSearch(e.target.value)}
                         placeholder="Search..."
-                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className={associationCompactInputClass}
                       />
                     </div>
                     <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
@@ -413,11 +433,7 @@ const AssociationsTabs = ({
                         return (
                           <div
                             key={opt.id}
-                            className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
-                              isSelected
-                                ? "bg-slate-50 dark:bg-slate-800/60"
-                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                            }`}
+                            className={associationAccountOptionRowClass(isSelected)}
                           >
                             <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                               <input
@@ -465,7 +481,7 @@ const AssociationsTabs = ({
                             accounts.setSelections([]);
                             accounts.setSearch("");
                           }}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                          className={associationSecondaryButtonClass}
                         >
                           Cancel
                         </button>
@@ -512,9 +528,9 @@ const AssociationsTabs = ({
                     {s3Users.showPanel ? "Close" : "Add users"}
                   </button>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <div className={associationTableContainerClass}>
+                  <table className={associationTableClass}>
+                    <thead>
                       <tr>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           User
@@ -524,7 +540,7 @@ const AssociationsTabs = ({
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    <tbody>
                       {s3Users.selected.length === 0 ? (
                         <tr>
                           <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
@@ -553,7 +569,7 @@ const AssociationsTabs = ({
                   </table>
                 </div>
                 {s3Users.showPanel && (
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div className={associationAddPanelClass}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add users</span>
@@ -564,7 +580,7 @@ const AssociationsTabs = ({
                         value={s3Users.search}
                         onChange={(e) => s3Users.setSearch(e.target.value)}
                         placeholder="Search..."
-                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className={associationCompactInputClass}
                       />
                     </div>
                     <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
@@ -578,11 +594,7 @@ const AssociationsTabs = ({
                         return (
                           <div
                             key={opt.id}
-                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
-                              isSelected
-                                ? "bg-slate-50 dark:bg-slate-800/60"
-                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                            }`}
+                            className={associationOptionRowClass(isSelected)}
                           >
                             <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                               <input
@@ -614,7 +626,7 @@ const AssociationsTabs = ({
                             s3Users.setSelections([]);
                             s3Users.setSearch("");
                           }}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                          className={associationSecondaryButtonClass}
                         >
                           Cancel
                         </button>
@@ -658,9 +670,9 @@ const AssociationsTabs = ({
                     {connections.showPanel ? "Close" : "Add connections"}
                   </button>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <div className={associationTableContainerClass}>
+                  <table className={associationTableClass}>
+                    <thead>
                       <tr>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Connection
@@ -670,7 +682,7 @@ const AssociationsTabs = ({
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    <tbody>
                       {connections.selected.length === 0 ? (
                         <tr>
                           <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
@@ -701,7 +713,7 @@ const AssociationsTabs = ({
                   </table>
                 </div>
                 {connections.showPanel && (
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div className={associationAddPanelClass}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add connections</span>
@@ -712,7 +724,7 @@ const AssociationsTabs = ({
                         value={connections.search}
                         onChange={(e) => connections.setSearch(e.target.value)}
                         placeholder="Search..."
-                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className={associationCompactInputClass}
                       />
                     </div>
                     <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
@@ -726,11 +738,7 @@ const AssociationsTabs = ({
                         return (
                           <div
                             key={opt.id}
-                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
-                              isSelected
-                                ? "bg-slate-50 dark:bg-slate-800/60"
-                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                            }`}
+                            className={associationOptionRowClass(isSelected)}
                           >
                             <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                               <input
@@ -762,7 +770,7 @@ const AssociationsTabs = ({
                             connections.setSelections([]);
                             connections.setSearch("");
                           }}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                          className={associationSecondaryButtonClass}
                         >
                           Cancel
                         </button>
@@ -1893,7 +1901,7 @@ export default function UsersPage() {
                   <PortalSettingsItem
                     title="Ceph Admin access"
                     description='Allow access to /ceph-admin. Grantable only by Superadmin for roles "Admin" and "Superadmin".'
-                    className={!createCanGrantCephAdmin ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                    className={userSettingsItemSurfaceClass(!createCanGrantCephAdmin)}
                     action={
                       <PortalSettingsToggleAction
                         checked={createCanGrantCephAdmin && Boolean(form.can_access_ceph_admin)}
@@ -1911,7 +1919,7 @@ export default function UsersPage() {
                   <PortalSettingsItem
                     title="Storage Ops access"
                     description='Allow access to /storage-ops. Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.'
-                    className={!createCanGrantStorageOps ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                    className={userSettingsItemSurfaceClass(!createCanGrantStorageOps)}
                     action={
                       <PortalSettingsToggleAction
                         checked={createCanGrantStorageOps && Boolean(form.can_access_storage_ops)}
@@ -2234,7 +2242,7 @@ export default function UsersPage() {
                   <PortalSettingsItem
                     title="Ceph Admin access"
                     description='Allow access to /ceph-admin. Grantable only by Superadmin for roles "Admin" and "Superadmin".'
-                    className={!editCanGrantCephAdmin ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                    className={userSettingsItemSurfaceClass(!editCanGrantCephAdmin)}
                     action={
                       <PortalSettingsToggleAction
                         checked={editCanGrantCephAdmin && Boolean(editForm.can_access_ceph_admin)}
@@ -2252,7 +2260,7 @@ export default function UsersPage() {
                   <PortalSettingsItem
                     title="Storage Ops access"
                     description='Allow access to /storage-ops. Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.'
-                    className={!editCanGrantStorageOps ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                    className={userSettingsItemSurfaceClass(!editCanGrantStorageOps)}
                     action={
                       <PortalSettingsToggleAction
                         checked={editCanGrantStorageOps && Boolean(editForm.can_access_storage_ops)}
@@ -2294,7 +2302,7 @@ export default function UsersPage() {
                             key={tool.key}
                             title={tool.title}
                             description={tool.description}
-                            className={disabled ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                            className={userSettingsItemSurfaceClass(disabled)}
                             action={
                               <PortalSettingsToggleAction
                                 checked={Boolean(access[tool.key])}
@@ -2333,7 +2341,7 @@ export default function UsersPage() {
                             key={tool.key}
                             title={tool.title}
                             description={tool.description}
-                            className={disabled ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
+                            className={userSettingsItemSurfaceClass(disabled)}
                             action={
                               <PortalSettingsToggleAction
                                 checked={Boolean(access[tool.key])}

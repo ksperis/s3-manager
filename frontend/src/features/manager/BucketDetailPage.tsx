@@ -3471,7 +3471,7 @@ export default function BucketDetailPage({
                                 Quickly add one of the preconfigured rules below (appended to the existing configuration).
                               </p>
                               <div className="space-y-3">
-                                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                <div className={cx(uiCardMutedClass, "px-3 py-2")}>
                                   <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">
                                     Rule 1: noncurrent 90d + multipart 30d + delete markers (explicit)
                                   </p>
@@ -3498,7 +3498,7 @@ export default function BucketDetailPage({
                                   </div>
                                 </div>
 
-                                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                <div className={cx(uiCardMutedClass, "px-3 py-2")}>
                                   <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">Rule 2: current/noncurrent transitions</p>
                                   <div className="mt-2 flex flex-wrap items-end gap-3 ui-caption">
                                     <label className="flex flex-col gap-1">
@@ -3572,7 +3572,7 @@ export default function BucketDetailPage({
                                   </div>
                                 </div>
 
-                                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                <div className={cx(uiCardMutedClass, "px-3 py-2")}>
                                   <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">Rule 3: current/noncurrent expiration</p>
                                   <div className="mt-2 flex flex-wrap items-end gap-3 ui-caption">
                                     <label className="flex flex-col gap-1">
@@ -4148,7 +4148,7 @@ export default function BucketDetailPage({
                           spellCheck={false}
                           disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         />
-                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+                        <div className="ui-caption">
                           <BucketFeatureJsonExample
                             show={showWebsiteRulesExample}
                             onToggle={() => setShowWebsiteRulesExample((prev) => !prev)}
@@ -4273,7 +4273,7 @@ export default function BucketDetailPage({
                           {replicationRules.map((rule, index) => (
                             <div
                               key={`replication-rule-${index}-${rule.id || "new"}`}
-                              className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                              className={cx(uiCardMutedClass, "space-y-3 p-3")}
                             >
                               <div className="flex items-center justify-between">
                                 <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Rule {index + 1}</p>

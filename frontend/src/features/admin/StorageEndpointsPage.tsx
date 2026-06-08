@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { uiCheckboxClass } from "../../components/ui/styles";
+import { cx, uiCardClass, uiCardMutedClass, uiCheckboxClass } from "../../components/ui/styles";
 import {
   detectStorageEndpointFeatures,
   StorageEndpoint,
@@ -130,6 +130,10 @@ const AWS_REGION_COORDINATES: Record<string, { latitude: string; longitude: stri
   "us-west-1": { latitude: "37.3382", longitude: "-121.8863" },
   "us-west-2": { latitude: "45.5152", longitude: "-122.6784" },
 };
+
+const endpointInlineCodeClass =
+  "rounded bg-[var(--ui-surface-muted)] px-2 py-1 ui-caption text-[var(--ui-text)]";
+const endpointSummaryTileClass = cx(uiCardMutedClass, "px-4 py-3 ui-body");
 const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="s3m-admin" \\',
@@ -1022,7 +1026,7 @@ export default function StorageEndpointsPage() {
     return (
       <div
         key={endpoint.id}
-        className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/70 ui-body"
+        className={cx(uiCardClass, "p-5 ui-body transition hover:border-primary/60")}
       >
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
@@ -1046,14 +1050,14 @@ export default function StorageEndpointsPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
               <span className="font-semibold text-slate-700 dark:text-slate-100">Endpoint:</span>
-              <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+              <code className={endpointInlineCodeClass}>
                 {endpoint.endpoint_url}
               </code>
             </div>
             {showAdminEndpoint && (
               <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
                 <span className="font-semibold text-slate-700 dark:text-slate-100">Admin endpoint:</span>
-                <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                <code className={endpointInlineCodeClass}>
                   {adminEndpointOverride}
                 </code>
               </div>
@@ -1061,7 +1065,7 @@ export default function StorageEndpointsPage() {
             {showStsEndpoint && (
               <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
                 <span className="font-semibold text-slate-700 dark:text-slate-100">STS endpoint:</span>
-                <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                <code className={endpointInlineCodeClass}>
                   {stsEndpointOverride}
                 </code>
               </div>
@@ -1069,18 +1073,18 @@ export default function StorageEndpointsPage() {
             {showIamEndpoint && (
               <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
                 <span className="font-semibold text-slate-700 dark:text-slate-100">IAM endpoint:</span>
-                <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                <code className={endpointInlineCodeClass}>
                   {iamEndpointOverride}
                 </code>
               </div>
             )}
             <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
               <span className="font-semibold text-slate-700 dark:text-slate-100">Healthcheck:</span>
-              <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+              <code className={endpointInlineCodeClass}>
                 {healthcheckMode.toUpperCase()}
               </code>
               {healthcheckUrl && (
-                <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                <code className={endpointInlineCodeClass}>
                   {healthcheckUrl}
                 </code>
               )}
@@ -1136,27 +1140,27 @@ export default function StorageEndpointsPage() {
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+          <div className={endpointSummaryTileClass}>
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Region</p>
             <p className="font-semibold">{endpoint.region || "Default"}</p>
           </div>
-          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+          <div className={endpointSummaryTileClass}>
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">TLS verification</p>
             <p className={`font-semibold ${verifyTls ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
               {verifyTls ? "Enabled" : "Disabled (insecure)"}
             </p>
           </div>
-          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+          <div className={endpointSummaryTileClass}>
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Path style</p>
             <p className="font-semibold">{forcePathStyle ? "Forced" : "Virtual-host style"}</p>
           </div>
-          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+          <div className={endpointSummaryTileClass}>
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">GPS coordinates</p>
             <p className="font-semibold">
               {hasCoordinates ? `${endpoint.latitude}, ${endpoint.longitude}` : "Not set"}
             </p>
           </div>
-          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+          <div className={endpointSummaryTileClass}>
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Admin key</p>
             {endpoint.provider === "ceph" ? (
               <p className="font-semibold">
@@ -1167,7 +1171,7 @@ export default function StorageEndpointsPage() {
               <p className="font-semibold text-slate-500">Not required</p>
             )}
           </div>
-          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+          <div className={endpointSummaryTileClass}>
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Supervision</p>
             {showSupervision ? (
               <p className="font-semibold">
@@ -1181,7 +1185,7 @@ export default function StorageEndpointsPage() {
             )}
           </div>
           {endpoint.provider === "ceph" && cephAdminConfigEnabled && (
-            <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+            <div className={endpointSummaryTileClass}>
               <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Ceph Admin dedicated key
               </p>
@@ -1197,7 +1201,7 @@ export default function StorageEndpointsPage() {
               )}
             </div>
           )}
-          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+          <div className={endpointSummaryTileClass}>
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
             <div className="mt-1 flex flex-wrap gap-2 ui-caption font-semibold">
               <span
@@ -1359,11 +1363,11 @@ export default function StorageEndpointsPage() {
       {defaultError && <PageBanner tone="error">{defaultError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       {loading ? (
-        <div className="rounded-2xl border border-slate-200 bg-white/70 px-5 py-6 ui-body text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">
+        <div className={cx(uiCardMutedClass, "px-5 py-6 ui-body text-[var(--ui-text-muted)]")}>
           Loading endpoints...
         </div>
       ) : endpoints.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-6 py-8 text-center ui-body text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
+        <div className={cx(uiCardMutedClass, "border-dashed px-6 py-8 text-center ui-body text-[var(--ui-text-muted)]")}>
           No endpoints configured yet.
         </div>
       ) : (

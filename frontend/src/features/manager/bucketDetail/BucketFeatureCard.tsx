@@ -8,7 +8,7 @@ import { cx, uiFeatureCardStateClasses } from "../../../components/ui/styles";
 import type { BucketFeatureCardMode, BucketFeatureVisualState } from "./bucketFeatureState";
 
 const bucketFeatureCardBaseClass =
-  "border-slate-300/90 bg-slate-50/70 shadow-sm dark:border-slate-500/80 dark:bg-slate-800/80";
+  "border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] shadow-[var(--ui-shadow-soft)]";
 
 type BucketFeatureCardProps = {
   title: string;

@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { ReactNode } from "react";
+import { cx, uiCardClass, uiDividerClass } from "./ui/styles";
 
 type Tab = {
   id: string;
@@ -33,8 +34,8 @@ export default function PageTabs({ tabs, activeTab, onChange, headerActions, var
             className={[
               "rounded-md px-2.5 py-1.5 ui-caption font-semibold transition",
               isActive
-                ? "bg-primary-100/70 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
-                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
+                ? "bg-[var(--ui-selected-bg)] text-primary dark:text-[var(--ui-text)]"
+                : "text-[var(--ui-text-muted)] hover:bg-[var(--ui-hover)] hover:text-[var(--ui-text)]",
               tab.disabled ? "opacity-50" : "",
             ].join(" ")}
           >
@@ -55,8 +56,8 @@ export default function PageTabs({ tabs, activeTab, onChange, headerActions, var
   }
 
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-white/80 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 px-3 py-2 dark:border-slate-800">
+    <div className={cx("overflow-hidden", uiCardClass)}>
+      <div className={cx("flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2", uiDividerClass)}>
         {tabList}
         {headerActions ? <div className="flex items-center gap-2">{headerActions}</div> : null}
       </div>
