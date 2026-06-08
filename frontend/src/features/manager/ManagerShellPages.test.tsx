@@ -67,14 +67,39 @@ vi.mock("../../api/stats", async () => {
   };
 });
 
-function managerTrafficResponse(bytesIn: number, bytesOut: number) {
+function trafficPoint(timestamp: string, bytesIn: number, bytesOut: number) {
   return {
-    window: "day",
+    timestamp,
+    bytes_in: bytesIn,
+    bytes_out: bytesOut,
+    ops: 0,
+    success_ops: 0,
+  };
+}
+
+function daysBefore(value: string, days: number): string {
+  const date = new Date(value);
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString();
+}
+
+function managerTrafficResponse(
+  bytesIn: number,
+  bytesOut: number,
+  options?: {
+    window?: "day" | "week" | "month";
+    end?: string;
+    series?: Array<ReturnType<typeof trafficPoint>>;
+  }
+) {
+  const end = options?.end ?? new Date().toISOString();
+  return {
+    window: options?.window ?? "day",
     start: new Date().toISOString(),
-    end: new Date().toISOString(),
-    resolution: "hour",
-    data_points: 0,
-    series: [],
+    end,
+    resolution: options?.window === "month" || options?.window === "week" ? "daily" : "hour",
+    data_points: options?.series?.length ?? 0,
+    series: options?.series ?? [],
     totals: {
       bytes_in: bytesIn,
       bytes_out: bytesOut,
@@ -304,6 +329,119 @@ describe("manager shell pages", () => {
     expect(screen.getByText("Last 24h")).toBeInTheDocument();
     expect(screen.getByText("Upload / Download").closest("a")).toHaveAttribute("href", "/manager/metrics");
     expect(screen.queryByText("Active transfers")).not.toBeInTheDocument();
+  });
+
+  it("falls back manager dashboard traffic trend from month to last week", async () => {
+    const end = "2026-06-08T12:00:00.000Z";
+    fetchManagerTrafficMock.mockImplementation((_accountId, window) => {
+      if (window === "month") {
+        return Promise.resolve(
+          managerTrafficResponse(8 * 1024, 0, {
+            window,
+            end,
+            series: [trafficPoint(end, 8 * 1024, 0)],
+          })
+        );
+      }
+      if (window === "week") {
+        return Promise.resolve(
+          managerTrafficResponse(1024, 1024, {
+            window,
+            end,
+            series: [trafficPoint(daysBefore(end, 6), 1024, 1024)],
+          })
+        );
+      }
+      return Promise.resolve(managerTrafficResponse(256, 512, { window: "day", end, series: [trafficPoint(end, 256, 512)] }));
+    });
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "month"));
+    expect(await screen.findByText("256 B / 512 B")).toBeInTheDocument();
+    expect(screen.getByText("2.0 KB vs last week")).toBeInTheDocument();
+    expect(screen.queryByText("8.0 KB vs last 30 days")).not.toBeInTheDocument();
+  });
+
+  it("falls back manager dashboard traffic trend to yesterday when month and week are not ready", async () => {
+    const end = "2026-06-08T12:00:00.000Z";
+    fetchManagerTrafficMock.mockImplementation((_accountId, window) => {
+      if (window === "month") {
+        return Promise.resolve(
+          managerTrafficResponse(8 * 1024, 0, {
+            window,
+            end,
+            series: [trafficPoint(end, 8 * 1024, 0)],
+          })
+        );
+      }
+      if (window === "week") {
+        return Promise.resolve(
+          managerTrafficResponse(4 * 1024, 0, {
+            window,
+            end,
+            series: [trafficPoint(end, 4 * 1024, 0)],
+          })
+        );
+      }
+      return Promise.resolve(managerTrafficResponse(512, 512, { window: "day", end, series: [trafficPoint(end, 512, 512)] }));
+    });
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "week"));
+    expect(await screen.findByText("512 B / 512 B")).toBeInTheDocument();
+    expect(screen.getByText("1.0 KB vs yesterday")).toBeInTheDocument();
+    expect(screen.queryByText("8.0 KB vs last 30 days")).not.toBeInTheDocument();
+    expect(screen.queryByText("4.0 KB vs last week")).not.toBeInTheDocument();
   });
 
   it("keeps real zero upload and download volumes visible", async () => {

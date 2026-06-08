@@ -13,7 +13,7 @@ import {
   type WorkspaceEndpointIncidentEntry,
 } from "../../api/healthchecks";
 import { listManagerActivity, type ManagerActivityEntry } from "../../api/managerActivity";
-import { fetchManagerTraffic, type ManagerTrafficStats } from "../../api/stats";
+import { fetchManagerTraffic, type ManagerTrafficStats, type TrafficWindow } from "../../api/stats";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageHeader from "../../components/PageHeader";
 import { WorkspaceStatusDot } from "../../components/WorkspaceDashboardKit";
@@ -84,6 +84,19 @@ type QuickAction = {
   unavailableReason?: string | null;
 };
 
+type TrafficTrendSelection = {
+  totalBytes: number;
+  label: string;
+};
+
+const TRAFFIC_TREND_WINDOWS: Array<{ window: TrafficWindow; label: string; minAgeDays: number }> = [
+  { window: "month", label: "last 30 days", minAgeDays: 28 },
+  { window: "week", label: "last week", minAgeDays: 6 },
+  { window: "day", label: "yesterday", minAgeDays: 0 },
+];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 function percent(used?: number | null, quota?: number | null): number | null {
   if (used == null || quota == null || quota <= 0) return null;
   return Math.max(0, Math.min(100, (used / quota) * 100));
@@ -129,6 +142,39 @@ function formatOptionalDashboardNumber(value?: number | null): string {
 function formatLatency(value?: number | null): string {
   if (value == null) return "-";
   return `${Math.round(value)} ms`;
+}
+
+function trafficTotalBytes(stats?: ManagerTrafficStats | null): number {
+  if (!stats) return 0;
+  return (stats.totals.bytes_in ?? 0) + (stats.totals.bytes_out ?? 0);
+}
+
+function hasTrafficPointAtLeast(stats: ManagerTrafficStats, minAgeDays: number): boolean {
+  if (minAgeDays <= 0) return true;
+  const endMs = new Date(stats.end).getTime();
+  if (!Number.isFinite(endMs)) return false;
+  const threshold = endMs - minAgeDays * DAY_MS;
+  return (stats.series ?? []).some((point) => {
+    const pointMs = new Date(point.timestamp).getTime();
+    return Number.isFinite(pointMs) && pointMs <= threshold;
+  });
+}
+
+function selectTrafficTrend(statsByWindow: Partial<Record<TrafficWindow, ManagerTrafficStats>>): TrafficTrendSelection | null {
+  for (const option of TRAFFIC_TREND_WINDOWS) {
+    const stats = statsByWindow[option.window];
+    if (!stats) continue;
+    const totalBytes = trafficTotalBytes(stats);
+    if (totalBytes <= 0) continue;
+    if (!hasTrafficPointAtLeast(stats, option.minAgeDays)) continue;
+    return { totalBytes, label: option.label };
+  }
+  return null;
+}
+
+function formatTrafficTrend(selection: TrafficTrendSelection | null): string | undefined {
+  if (!selection) return undefined;
+  return `${formatBytes(selection.totalBytes)} vs ${selection.label}`;
 }
 
 function formatStatus(status: HealthCheckStatus): string {
@@ -812,6 +858,7 @@ export default function ManagerDashboard() {
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [trafficStats, setTrafficStats] = useState<ManagerTrafficStats | null>(null);
+  const [trafficTrend, setTrafficTrend] = useState<TrafficTrendSelection | null>(null);
   const [trafficLoading, setTrafficLoading] = useState(false);
   const [trafficError, setTrafficError] = useState<string | null>(null);
 
@@ -934,6 +981,7 @@ export default function ManagerDashboard() {
   useEffect(() => {
     if (!hasContext || !trafficFeatureEnabled) {
       setTrafficStats(null);
+      setTrafficTrend(null);
       setTrafficError(null);
       setTrafficLoading(false);
       return;
@@ -941,14 +989,29 @@ export default function ManagerDashboard() {
     let cancelled = false;
     setTrafficLoading(true);
     setTrafficError(null);
-    fetchManagerTraffic(accountIdForApi, "day")
-      .then((data) => {
+    Promise.allSettled(
+      TRAFFIC_TREND_WINDOWS.map((option) =>
+        fetchManagerTraffic(accountIdForApi, option.window).then((data) => [option.window, data] as const)
+      )
+    )
+      .then((results) => {
         if (cancelled) return;
-        setTrafficStats(data);
+        const entries = results
+          .filter((result): result is PromiseFulfilledResult<readonly [TrafficWindow, ManagerTrafficStats]> => result.status === "fulfilled")
+          .map((result) => result.value);
+        const statsByWindow = Object.fromEntries(entries) as Partial<Record<TrafficWindow, ManagerTrafficStats>>;
+        const dayStats = statsByWindow.day ?? null;
+        setTrafficStats(dayStats);
+        setTrafficTrend(selectTrafficTrend(statsByWindow));
+        const dayFailure = results.find(
+          (result): result is PromiseRejectedResult => result.status === "rejected"
+        );
+        setTrafficError(dayStats ? null : extractApiError(dayFailure?.reason, "Unable to load traffic usage."));
       })
       .catch((err) => {
         if (cancelled) return;
         setTrafficStats(null);
+        setTrafficTrend(null);
         setTrafficError(extractApiError(err, "Unable to load traffic usage."));
       })
       .finally(() => {
@@ -1002,6 +1065,7 @@ export default function ManagerDashboard() {
   const downloadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_out ?? null;
   const trafficValue =
     uploadBytes == null || downloadBytes == null ? "" : `${formatBytes(uploadBytes)} / ${formatBytes(downloadBytes)}`;
+  const trafficTrendLabel = trafficUnavailableReason ? undefined : formatTrafficTrend(trafficTrend);
   const bucketRows = buildBucketRows(stats?.bucket_usage ?? []);
   const activityRows = activityUnavailableReason ? [] : buildActivityRows(activityLogs);
   const topBucketsUnavailableReason =
@@ -1071,6 +1135,7 @@ export default function ManagerDashboard() {
       label: "Upload / Download",
       value: trafficLoading ? "..." : trafficValue,
       detail: trafficValue ? "Last 24h" : "",
+      trend: trafficTrendLabel,
       tone: "amber",
       icon: <UploadIcon className="h-7 w-7" />,
       to: "/manager/metrics",
