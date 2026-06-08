@@ -75,6 +75,12 @@ class BucketLifecycleConfig(BaseModel):
     rules: List[dict] = Field(default_factory=list)
 
 
+class BucketLifecycleInventoryItem(BaseModel):
+    bucket_name: str
+    rules: List[dict] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
 class BucketTagsUpdate(BaseModel):
     tags: List[BucketTag] = Field(default_factory=list)
 

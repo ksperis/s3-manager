@@ -39,6 +39,7 @@ const loadBrowserSettingsPage = () => import("./features/admin/BrowserSettingsPa
 const loadKeyRotationPage = () => import("./features/admin/KeyRotationPage");
 const loadFeatureDisabledPage = () => import("./features/shared/FeatureDisabledPage");
 const loadBucketsPage = () => import("./features/manager/BucketsPage");
+const loadManagerLifecyclesPage = () => import("./features/manager/ManagerLifecyclesPage");
 const loadManagerDashboard = () => import("./features/manager/ManagerDashboard");
 const loadPoliciesPage = () => import("./features/manager/PoliciesPage");
 const loadManagerLayout = () => import("./features/manager/ManagerLayout");
@@ -108,6 +109,7 @@ const BrowserSettingsPage = lazy(loadBrowserSettingsPage);
 const KeyRotationPage = lazy(loadKeyRotationPage);
 const FeatureDisabledPage = lazy(loadFeatureDisabledPage);
 const BucketsPage = lazy(loadBucketsPage);
+const ManagerLifecyclesPage = lazy(loadManagerLifecyclesPage);
 const ManagerDashboard = lazy(loadManagerDashboard);
 const PoliciesPage = lazy(loadPoliciesPage);
 const ManagerLayout = lazy(loadManagerLayout);
@@ -577,6 +579,7 @@ export function createAppRoutes() {
             <Route path="/manager" element={<ManagerLayout />}>
               <Route index element={<ManagerDashboard />} />
               <Route path="buckets" element={<BucketsPage />} />
+              <Route path="lifecycles" element={<ManagerLifecyclesPage />} />
               <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
               <Route element={<RequireBrowserSurface surface="manager" />}>
                 <Route path="browser" element={<ManagerBrowserPage />} />

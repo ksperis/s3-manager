@@ -59,6 +59,7 @@ from app.routers.manager import topics as manager_topics
 from app.routers.manager import stats as manager_stats
 from app.routers.manager import migrations as manager_migrations
 from app.routers.manager import integrity as manager_integrity
+from app.routers.manager import lifecycles as manager_lifecycles
 from app.services.bucket_migration_service import get_bucket_migration_worker
 from app.routers.dependencies import (
     require_browser_enabled,
@@ -184,6 +185,11 @@ app.include_router(
 )
 app.include_router(
     manager_buckets.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_lifecycles.router,
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_manager_enabled)],
 )

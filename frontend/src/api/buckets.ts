@@ -94,6 +94,12 @@ export type BucketLifecycleConfig = {
   rules: Record<string, unknown>[];
 };
 
+export type BucketLifecycleInventoryItem = {
+  bucket_name: string;
+  rules: Record<string, unknown>[];
+  error?: string | null;
+};
+
 export type BucketTag = { key: string; value: string };
 
 export type BucketObjectLockConfiguration = {
@@ -394,6 +400,13 @@ export async function deleteBucketPolicyApi(accountId: S3AccountSelector, bucket
 
 export async function getBucketLifecycle(accountId: S3AccountSelector, bucketName: string): Promise<BucketLifecycleConfig> {
   const { data } = await client.get<BucketLifecycleConfig>(`${bucketPath(bucketName)}/lifecycle`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function listBucketLifecycles(accountId: S3AccountSelector): Promise<BucketLifecycleInventoryItem[]> {
+  const { data } = await client.get<BucketLifecycleInventoryItem[]>("/manager/lifecycles", {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;

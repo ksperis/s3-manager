@@ -22,13 +22,17 @@ Use this guide when creating, updating, or inspecting bucket configuration.
    - Policy and ACL options
    - Public access controls
 4. Validate changes from bucket detail views.
-5. On Ceph Admin and Storage Ops bucket workbenches, use bulk update to preview
+5. In Manager, open **Storage > Lifecycles** (`/manager/lifecycles`) to review
+   lifecycle rules across every bucket in the active context, including buckets
+   with no configured rules.
+6. On Ceph Admin and Storage Ops bucket workbenches, use bulk update to preview
    and apply lifecycle or notification configuration changes across selected
    buckets.
 
 ## Expected result
 
 Bucket configuration is applied as native backend settings and visible in detail pages.
+Lifecycle rules can also be audited from the Manager lifecycle inventory.
 
 ## Limits / feature flags
 
