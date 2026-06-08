@@ -25,14 +25,18 @@ Use this guide when creating, updating, or inspecting bucket configuration.
 5. In Manager, open **Storage > Lifecycles** (`/manager/lifecycles`) to review
    lifecycle rules across every bucket in the active context, including buckets
    with no configured rules.
-6. On Ceph Admin and Storage Ops bucket workbenches, use bulk update to preview
+6. In Manager, open **Storage > Bucket policies** (`/manager/bucket-policies`) to
+   review bucket policy statements across every bucket in the active context,
+   including buckets with no configured policy.
+7. On Ceph Admin and Storage Ops bucket workbenches, use bulk update to preview
    and apply lifecycle or notification configuration changes across selected
    buckets.
 
 ## Expected result
 
 Bucket configuration is applied as native backend settings and visible in detail pages.
-Lifecycle rules can also be audited from the Manager lifecycle inventory.
+Lifecycle rules and bucket policies can also be audited from the Manager
+Storage inventories.
 
 ## Limits / feature flags
 

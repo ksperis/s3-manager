@@ -232,6 +232,7 @@ function ManagerShell() {
       links: [
         { to: "/manager/buckets", label: "Buckets" },
         { to: "/manager/lifecycles", label: "Lifecycles" },
+        { to: "/manager/bucket-policies", label: "Bucket policies" },
         ...(generalSettings.browser_enabled && generalSettings.browser_manager_enabled && managerBrowserAvailable
           ? [{ to: "/manager/browser", label: "Browser" }]
           : []),

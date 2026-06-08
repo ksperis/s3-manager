@@ -100,6 +100,12 @@ export type BucketLifecycleInventoryItem = {
   error?: string | null;
 };
 
+export type BucketPolicyInventoryItem = {
+  bucket_name: string;
+  policy?: Record<string, unknown> | null;
+  error?: string | null;
+};
+
 export type BucketTag = { key: string; value: string };
 
 export type BucketObjectLockConfiguration = {
@@ -380,6 +386,13 @@ export type BucketPolicy = { policy: Record<string, unknown> | null };
 
 export async function getBucketPolicy(accountId: S3AccountSelector, bucketName: string): Promise<BucketPolicy> {
   const { data } = await client.get<BucketPolicy>(`${bucketPath(bucketName)}/policy`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function listBucketPolicies(accountId: S3AccountSelector): Promise<BucketPolicyInventoryItem[]> {
+  const { data } = await client.get<BucketPolicyInventoryItem[]>("/manager/bucket-policies", {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;

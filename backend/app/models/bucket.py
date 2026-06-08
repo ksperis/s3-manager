@@ -65,6 +65,12 @@ class BucketPolicyOut(BaseModel):
     policy: Optional[dict] = None
 
 
+class BucketPolicyInventoryItem(BaseModel):
+    bucket_name: str
+    policy: Optional[dict] = None
+    error: Optional[str] = None
+
+
 class LifecycleRule(BaseModel):
     id: Optional[str] = None
     status: Optional[str] = None

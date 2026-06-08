@@ -197,7 +197,7 @@ describe("ManagerLayout", () => {
     expect(toolsSection?.links.map((link) => link.label)).toEqual(["Integrity"]);
   });
 
-  it("shows Lifecycles in the manager Storage navigation", () => {
+  it("shows bucket inventories in the manager Storage navigation", () => {
     setStoredManagerUser();
     useS3AccountContextMock.mockReturnValue(buildContext());
     useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
@@ -209,8 +209,13 @@ describe("ManagerLayout", () => {
     );
 
     const storageSection = capturedNavSections.find((section) => section.label === "Storage");
-    expect(storageSection?.links.map((link) => link.label)).toEqual(["Buckets", "Lifecycles", "Browser"]);
-    expect(storageSection?.links.map((link) => link.to)).toEqual(["/manager/buckets", "/manager/lifecycles", "/manager/browser"]);
+    expect(storageSection?.links.map((link) => link.label)).toEqual(["Buckets", "Lifecycles", "Bucket policies", "Browser"]);
+    expect(storageSection?.links.map((link) => link.to)).toEqual([
+      "/manager/buckets",
+      "/manager/lifecycles",
+      "/manager/bucket-policies",
+      "/manager/browser",
+    ]);
   });
 
   it("shows a loading hint for disabled Metrics while manager context is loading", () => {
