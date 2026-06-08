@@ -254,6 +254,7 @@ function ManagerShell() {
         { to: "/manager/groups", label: "Groups" },
         { to: "/manager/roles", label: "Roles" },
         { to: "/manager/iam/policies", label: "Policies" },
+        { to: "/manager/iam/inline-policies", label: "Inline policies" },
       ],
     });
   }

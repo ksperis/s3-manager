@@ -58,6 +58,7 @@ const loadManagerRolesPage = () => import("./features/manager/ManagerRolesPage")
 const loadManagerRolePoliciesPage = () => import("./features/manager/ManagerRolePoliciesPage");
 const loadManagerUserPoliciesPage = () => import("./features/manager/ManagerUserPoliciesPage");
 const loadManagerGroupPoliciesPage = () => import("./features/manager/ManagerGroupPoliciesPage");
+const loadManagerInlinePoliciesPage = () => import("./features/manager/ManagerInlinePoliciesPage");
 const loadManagerMetricsPage = () => import("./features/manager/ManagerMetricsPage");
 const loadTopicsPage = () => import("./features/manager/TopicsPage");
 const loadManagerMigrationsPage = () => import("./features/manager/ManagerMigrationsPage");
@@ -129,6 +130,7 @@ const ManagerRolesPage = lazy(loadManagerRolesPage);
 const ManagerRolePoliciesPage = lazy(loadManagerRolePoliciesPage);
 const ManagerUserPoliciesPage = lazy(loadManagerUserPoliciesPage);
 const ManagerGroupPoliciesPage = lazy(loadManagerGroupPoliciesPage);
+const ManagerInlinePoliciesPage = lazy(loadManagerInlinePoliciesPage);
 const ManagerMetricsPage = lazy(loadManagerMetricsPage);
 const TopicsPage = lazy(loadTopicsPage);
 const ManagerMigrationsPage = lazy(loadManagerMigrationsPage);
@@ -598,6 +600,7 @@ export function createAppRoutes() {
                 <Route path="roles" element={<ManagerRolesPage />} />
                 <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
                 <Route path="iam/policies" element={<PoliciesPage />} />
+                <Route path="iam/inline-policies" element={<ManagerInlinePoliciesPage />} />
               </Route>
               <Route path="topics" element={<TopicsPage />} />
               <Route path="ceph/keys" element={<ManagerCephKeysPage />} />

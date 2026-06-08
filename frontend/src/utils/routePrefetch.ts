@@ -19,6 +19,7 @@ export function prefetchWorkspaceBranch(pathname: string): void {
       import("../features/manager/BucketsPage"),
       import("../features/manager/ManagerLifecyclesPage"),
       import("../features/manager/ManagerBucketPoliciesPage"),
+      import("../features/manager/ManagerInlinePoliciesPage"),
       import("../features/manager/ManagerMetricsPage"),
     ]);
     return;

@@ -18,8 +18,22 @@ export type InlinePolicy = {
   document: Record<string, unknown>;
 };
 
+export type InlinePolicyInventoryItem = {
+  entity_type: "user" | "group" | "role";
+  entity_name: string;
+  policies: InlinePolicy[];
+  error?: string | null;
+};
+
 export async function listIamPolicies(accountId?: S3AccountSelector): Promise<IamPolicy[]> {
   const { data } = await client.get<IamPolicy[]>("/manager/iam/policies", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function listIamInlinePolicyInventory(accountId?: S3AccountSelector): Promise<InlinePolicyInventoryItem[]> {
+  const { data } = await client.get<InlinePolicyInventoryItem[]>("/manager/iam/inline-policies", {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;

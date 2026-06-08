@@ -51,7 +51,7 @@ from app.routers.manager import activity as manager_activity
 from app.routers.manager import buckets as manager_buckets
 from app.routers.manager import context as manager_context
 from app.routers.manager import ceph_keys as manager_ceph_keys
-from app.routers.manager import iam_groups, iam_roles, iam_users
+from app.routers.manager import iam_groups, iam_inline_policies, iam_roles, iam_users
 from app.routers.manager import iam_overview
 from app.routers.manager import objects as manager_objects
 from app.routers.manager import iam_policies as manager_iam_policies
@@ -221,6 +221,11 @@ app.include_router(
 )
 app.include_router(
     iam_roles.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    iam_inline_policies.router,
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_manager_enabled)],
 )

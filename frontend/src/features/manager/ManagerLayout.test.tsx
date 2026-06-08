@@ -218,6 +218,40 @@ describe("ManagerLayout", () => {
     ]);
   });
 
+  it("shows Inline policies in the manager IAM navigation", () => {
+    setStoredManagerUser({
+      capabilities: {
+        can_manage_iam: true,
+        can_manage_buckets: true,
+        can_view_traffic: true,
+      },
+    });
+    useS3AccountContextMock.mockReturnValue(
+      buildContext({
+        selectedS3AccountType: "account",
+        accounts: [{ id: "account-1", display_name: "Account", storage_endpoint_capabilities: { iam: true } }],
+        selectedS3AccountId: "account-1",
+      })
+    );
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const iamSection = capturedNavSections.find((section) => section.label === "IAM");
+    expect(iamSection?.links.map((link) => link.label)).toEqual(["Users", "Groups", "Roles", "Policies", "Inline policies"]);
+    expect(iamSection?.links.map((link) => link.to)).toEqual([
+      "/manager/users",
+      "/manager/groups",
+      "/manager/roles",
+      "/manager/iam/policies",
+      "/manager/iam/inline-policies",
+    ]);
+  });
+
   it("shows a loading hint for disabled Metrics while manager context is loading", () => {
     useS3AccountContextMock.mockReturnValue(buildContext({ managerStatsEnabled: null }));
     useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
@@ -327,7 +361,7 @@ describe("ManagerLayout", () => {
     );
 
     const iamSection = capturedNavSections.find((section) => section.label === "IAM");
-    expect(iamSection?.links.map((link) => link.label)).toEqual(["Users", "Groups", "Roles", "Policies"]);
+    expect(iamSection?.links.map((link) => link.label)).toEqual(["Users", "Groups", "Roles", "Policies", "Inline policies"]);
   });
 
   it("keeps the manager account context selector in the topbar controls", () => {
