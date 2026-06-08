@@ -14,6 +14,7 @@ import {
 type ListToolbarProps = {
   title: ReactNode;
   description?: ReactNode;
+  showHeading?: boolean;
   countLabel?: ReactNode;
   search?: ReactNode;
   filters?: ReactNode;
@@ -33,6 +34,7 @@ function ToolbarControlGroup({ children }: { children: ReactNode }) {
 export default function ListToolbar({
   title,
   description,
+  showHeading = true,
   countLabel,
   search,
   filters,
@@ -41,20 +43,40 @@ export default function ListToolbar({
   secondaryContent,
   className,
 }: ListToolbarProps) {
+  const accessibleLabel = typeof title === "string" ? title : undefined;
+
   return (
-    <div className={cx(uiToolbarClass, className)}>
-      <div className="flex flex-col gap-3 px-4 py-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-1">
-            <p className={cx("ui-body", uiTitleTextClass)}>{title}</p>
-            {description ? <p className={cx("ui-caption", uiMutedTextClass)}>{description}</p> : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-            {countLabel ? <span className={cx("ui-caption", uiMutedTextClass)}>{countLabel}</span> : null}
-            <ToolbarControlGroup>{search}</ToolbarControlGroup>
-            <ToolbarControlGroup>{filters}</ToolbarControlGroup>
-            <ToolbarControlGroup>{columns}</ToolbarControlGroup>
-            <ToolbarControlGroup>{actions}</ToolbarControlGroup>
+    <div
+      className={cx(uiToolbarClass, className)}
+      role={!showHeading && accessibleLabel ? "region" : undefined}
+      aria-label={!showHeading ? accessibleLabel : undefined}
+    >
+      <div className={cx("flex flex-col gap-3 px-4", showHeading ? "py-4" : "py-3")}>
+        <div
+          className={cx(
+            "flex flex-col gap-3",
+            showHeading ? "lg:flex-row lg:items-start lg:justify-between" : "lg:flex-row lg:items-center lg:justify-between"
+          )}
+        >
+          {showHeading ? (
+            <div className="space-y-1">
+              <p className={cx("ui-body", uiTitleTextClass)}>{title}</p>
+              {description ? <p className={cx("ui-caption", uiMutedTextClass)}>{description}</p> : null}
+            </div>
+          ) : null}
+          <div
+            className={cx(
+              "flex flex-wrap items-center gap-2",
+              showHeading ? "lg:justify-end" : "min-w-0 flex-1 justify-between"
+            )}
+          >
+            {countLabel ? <span className={cx("shrink-0 ui-caption", uiMutedTextClass)}>{countLabel}</span> : null}
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end">
+              <ToolbarControlGroup>{search}</ToolbarControlGroup>
+              <ToolbarControlGroup>{filters}</ToolbarControlGroup>
+              <ToolbarControlGroup>{columns}</ToolbarControlGroup>
+              <ToolbarControlGroup>{actions}</ToolbarControlGroup>
+            </div>
           </div>
         </div>
       </div>

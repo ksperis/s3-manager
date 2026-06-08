@@ -141,6 +141,7 @@ export default function ManagerBucketIntegrityPage() {
           <ListToolbar
             title="Buckets"
             description={`${sourceContext ? sourceContext.display_name : "Source context"} - Select buckets to check.`}
+            showHeading={false}
             countLabel={`${filteredBuckets.length} result(s)`}
             search={
               <input

@@ -554,6 +554,7 @@ export default function TopicsPage() {
           <ListToolbar
             title="Topics"
             description={`${accountLabel} · Topic inventory, subscriptions, attributes, and policies.`}
+            showHeading={false}
             countLabel={`${filteredTopics.length} result(s)`}
             search={
               <input

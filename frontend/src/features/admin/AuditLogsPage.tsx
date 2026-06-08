@@ -287,6 +287,7 @@ export default function AuditLogsPage() {
         <ListToolbar
           title="Audit trail"
           description="Administrative actions performed through the UI."
+          showHeading={false}
           countLabel={`${filteredLogs.length} entr${filteredLogs.length === 1 ? "y" : "ies"}${isFiltered ? ` of ${logs.length}` : ""}`}
         />
 

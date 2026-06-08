@@ -2026,6 +2026,7 @@ export default function UsersPage() {
         <ListToolbar
           title="Users"
           description="Search matches across the full user record, including role and linked entities."
+          showHeading={false}
           countLabel={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"}`}
           search={
             <div className="flex items-center gap-2">

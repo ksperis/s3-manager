@@ -237,6 +237,7 @@ export default function ManagerBucketPoliciesPage() {
           <ListToolbar
             title="Bucket policies"
             description="All buckets are listed, including buckets with no bucket policy."
+            showHeading={false}
             countLabel={`${items.length} bucket(s) · ${statementCount} statement(s) · ${configuredBucketCount} configured`}
             search={
               <div className="flex items-center gap-2 sm:justify-end">

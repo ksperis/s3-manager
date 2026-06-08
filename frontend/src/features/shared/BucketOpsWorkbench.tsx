@@ -5,12 +5,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import ActiveFiltersBar from "../../components/ActiveFiltersBar";
+import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import {
+  toolbarCompactButtonClasses,
+  toolbarCompactInputClasses,
+  toolbarCompactSelectClasses,
+} from "../../components/toolbarControlClasses";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
@@ -8101,201 +8108,199 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
       {!selectedEndpointId && shell.emptyState ? <PageEmptyState {...shell.emptyState} /> : null}
       <div className="ui-surface-card space-y-4">
-          <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Buckets</p>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">{total} result(s)</p>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <ListToolbar
+          title="Buckets"
+          description={shell.pageDescription}
+          showHeading={false}
+          countLabel={`${total} result(s)`}
+          search={
+            <div className="relative w-full min-w-[16rem] sm:w-72">
+              <textarea
+                aria-label="Quick filter"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                onKeyDown={(event) => event.stopPropagation()}
+                placeholder="Bucket name(s)"
+                rows={1}
+                className={cx(
+                  toolbarCompactInputClasses,
+                  "min-h-[2rem] resize-y pr-9",
+                  quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
+                )}
+              />
+              <button
+                type="button"
+                onClick={toggleQuickFilterMode}
+                disabled={quickFilterDraftForcesExact}
+                className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
+                title={
+                  quickFilterDraftForcesExact
+                    ? "Quick filter mode: exact (locked by list input)"
+                    : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
+                }
+                aria-label="Toggle quick filter match mode"
+              >
+                {quickFilterModeForDisplay === "contains" ? "~" : "="}
+              </button>
+            </div>
+          }
+          filters={
+            <>
+              {showTagFilterBar ? (
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    {tagFilters.map((tag) => {
+                      const colors = getTagColors(tag);
+                      return (
+                        <span
+                          key={`filter:${tag}`}
+                          className="flex max-w-full items-center gap-1 rounded-full border px-2 py-1 ui-caption font-semibold"
+                          style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
+                        >
+                          <span className="min-w-0 truncate">{tag}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeTagFilter(tag)}
+                            className="opacity-70 hover:opacity-100"
+                            title="Remove tag filter"
+                            aria-label={`Remove ${tag}`}
+                          >
+                            x
+                          </button>
+                        </span>
+                      );
+                    })}
+                    {availableTagFilters.map((tag) => (
+                      <button
+                        type="button"
+                        key={`available:${tag}`}
+                        onClick={() => addTagFilter(tag)}
+                        className="rounded-full border border-slate-200 bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                  <select
+                    value={tagFilterMode}
+                    onChange={(e) => {
+                      setTagFilterMode(e.target.value as "any" | "all");
+                      setPage(1);
+                    }}
+                    className={cx(toolbarCompactSelectClasses, "w-auto px-2 py-1")}
+                  >
+                    <option value="any">OR</option>
+                    <option value="all">AND</option>
+                  </select>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFilter(true)}
+                className={cx(
+                  toolbarCompactButtonClasses,
+                  showAdvancedFilter || advancedFiltersApplied
+                    ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
+                    : ""
+                )}
+              >
+                Advanced filter{advancedFiltersApplied ? " · Active" : ""}
+              </button>
+            </>
+          }
+          columns={
+            <>
+              <div className="relative" ref={columnPickerRef}>
                 <button
                   type="button"
-                  onClick={() => void refreshBucketListing()}
-                  disabled={
-                    !selectedEndpointId ||
-                    cacheRefreshLoading ||
-                    loading ||
-                    loadingDetails ||
-                    advancedProgress.active
-                  }
-                  className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 ui-caption")}
-                  title="Flush cached bucket listings and reload"
+                  onClick={() => setShowColumnPicker((prev) => !prev)}
+                  className={toolbarCompactButtonClasses}
                 >
-                  <RefreshIcon className={`h-3.5 w-3.5 ${cacheRefreshLoading ? "animate-spin" : ""}`} />
-                  Refresh
+                  Columns
                 </button>
-                <div className="relative" ref={columnPickerRef}>
-                  <button
-                    type="button"
-                    onClick={() => setShowColumnPicker((prev) => !prev)}
-                    className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "rounded-md px-2.5 py-1.5 ui-caption")}
-                  >
-                    Columns
-                  </button>
-                  {showColumnPicker && (
-                    <div className={cx(uiMenuClass, "absolute right-0 z-30 mt-2 w-96 max-w-[calc(100vw-2rem)] p-3")}>
-                      <ColumnVisibilityPicker
-                        selectedCount={visibleColumns.length}
-                        onReset={resetColumns}
-                        coreGroups={[
-                          {
-                            id: "core",
-                            label: "Core",
-                            options: BUCKET_CORE_COLUMN_OPTIONS.filter((option) =>
-                              isStorageOps
-                                ? true
-                                : option.id !== "context_name" && option.id !== "context_kind" && option.id !== "endpoint_name"
-                            ).map((option) => ({
-                              id: option.id,
-                              label: option.label,
-                              checked: visibleColumns.includes(option.id),
-                              onToggle: () => toggleColumn(option.id),
-                            })),
-                          },
-                        ]}
-                        detailGroups={BUCKET_QUOTA_COLUMN_GROUPS.map((group) => ({
-                          id: group.id,
-                          label: group.label,
-                          details: group.options.map((option) => ({
+                {showColumnPicker && (
+                  <div className={cx(uiMenuClass, "absolute right-0 z-30 mt-2 w-96 max-w-[calc(100vw-2rem)] p-3")}>
+                    <ColumnVisibilityPicker
+                      selectedCount={visibleColumns.length}
+                      onReset={resetColumns}
+                      coreGroups={[
+                        {
+                          id: "core",
+                          label: "Core",
+                          options: BUCKET_CORE_COLUMN_OPTIONS.filter((option) =>
+                            isStorageOps
+                              ? true
+                              : option.id !== "context_name" && option.id !== "context_kind" && option.id !== "endpoint_name"
+                          ).map((option) => ({
                             id: option.id,
                             label: option.label,
                             checked: visibleColumns.includes(option.id),
                             onToggle: () => toggleColumn(option.id),
                           })),
-                        }))}
-                        featureGroups={featureColumnOptions.map((option) => ({
+                        },
+                      ]}
+                      detailGroups={BUCKET_QUOTA_COLUMN_GROUPS.map((group) => ({
+                        id: group.id,
+                        label: group.label,
+                        details: group.options.map((option) => ({
                           id: option.id,
                           label: option.label,
                           checked: visibleColumns.includes(option.id),
                           onToggle: () => toggleColumn(option.id),
-                          details: (featureDetailColumnsByFeature[option.id] ?? []).map((detail) => ({
-                            id: detail.id,
-                            label: detail.label,
-                            checked: visibleColumns.includes(detail.id),
-                            onToggle: () => toggleColumn(detail.id),
-                          })),
-                        }))}
-                        footerNote="Feature checks and detail values are loaded only for enabled columns."
-                      />
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={resetColumns}
-                  disabled={!columnsCustomized}
-                  className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                    columnsCustomized
-                      ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-                      : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
-                  }`}
-                >
-                  Reset Columns
-                </button>
+                        })),
+                      }))}
+                      featureGroups={featureColumnOptions.map((option) => ({
+                        id: option.id,
+                        label: option.label,
+                        checked: visibleColumns.includes(option.id),
+                        onToggle: () => toggleColumn(option.id),
+                        details: (featureDetailColumnsByFeature[option.id] ?? []).map((detail) => ({
+                          id: detail.id,
+                          label: detail.label,
+                          checked: visibleColumns.includes(detail.id),
+                          onToggle: () => toggleColumn(detail.id),
+                        })),
+                      }))}
+                      footerNote="Feature checks and detail values are loaded only for enabled columns."
+                    />
+                  </div>
+                )}
               </div>
-            </div>
-          </div>
-          <div className="border-t border-[color:var(--ui-border-soft)] bg-[var(--ui-surface-muted)] px-4 py-4">
-            <div className="space-y-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filters</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowAdvancedFilter(true)}
-                      className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                        showAdvancedFilter || advancedFiltersApplied
-                          ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
-                          : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                      }`}
-                    >
-                      Advanced filter{advancedFiltersApplied ? " · Active" : ""}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <div>
-                    <div className="relative">
-                      <textarea
-                        aria-label="Quick filter"
-                        value={filter}
-                        onChange={(e) => setFilter(e.target.value)}
-                        onKeyDown={(event) => event.stopPropagation()}
-                        placeholder="Bucket name(s)"
-                        rows={1}
-                        className={`w-full resize-y rounded-md border bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
-                          quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={toggleQuickFilterMode}
-                        disabled={quickFilterDraftForcesExact}
-                        className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
-                        title={
-                          quickFilterDraftForcesExact
-                            ? "Quick filter mode: exact (locked by list input)"
-                            : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
-                        }
-                        aria-label="Toggle quick filter match mode"
-                      >
-                        {quickFilterModeForDisplay === "contains" ? "~" : "="}
-                      </button>
-                    </div>
-                  </div>
-                  {showTagFilterBar && (
-                    <div className="space-y-1 sm:col-span-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {tagFilters.map((tag) => {
-                            const colors = getTagColors(tag);
-                            return (
-                              <span
-                                key={`filter:${tag}`}
-                                className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 ui-caption font-semibold"
-                                style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
-                              >
-                                {tag}
-                                <button
-                                  type="button"
-                                  onClick={() => removeTagFilter(tag)}
-                                  className="opacity-70 hover:opacity-100"
-                                  title="Remove tag filter"
-                                >
-                                  ×
-                                </button>
-                              </span>
-                            );
-                          })}
-                          {availableTagFilters.map((tag) => (
-                            <button
-                              type="button"
-                              key={`available:${tag}`}
-                              onClick={() => addTagFilter(tag)}
-                              className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 ui-caption font-semibold text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-                            >
-                              {tag}
-                            </button>
-                          ))}
-                        </div>
-                        <select
-                          value={tagFilterMode}
-                          onChange={(e) => {
-                            setTagFilterMode(e.target.value as "any" | "all");
-                            setPage(1);
-                          }}
-                          className="rounded-md border border-slate-200 px-1.5 py-0.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        >
-                          <option value="any">OR</option>
-                          <option value="all">AND</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              <button
+                type="button"
+                onClick={resetColumns}
+                disabled={!columnsCustomized}
+                className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
+                  columnsCustomized
+                    ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+                    : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                }`}
+              >
+                Reset Columns
+              </button>
+            </>
+          }
+          actions={
+            <button
+              type="button"
+              onClick={() => void refreshBucketListing()}
+              disabled={
+                !selectedEndpointId ||
+                cacheRefreshLoading ||
+                loading ||
+                loadingDetails ||
+                advancedProgress.active
+              }
+              className={cx(toolbarCompactButtonClasses, "inline-flex items-center gap-2")}
+              title="Flush cached bucket listings and reload"
+            >
+              <RefreshIcon className={`h-3.5 w-3.5 ${cacheRefreshLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          }
+          secondaryContent={
+            showAdvancedFilter || showActiveFiltersCard ? (
+            <>
               {showAdvancedFilter && (
                 <div className="fixed inset-x-0 bottom-0 top-14 z-[46]">
                   <button
@@ -9529,39 +9534,23 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                 </div>
               )}
 
-              {showActiveFiltersCard && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-200">ACTIVE FILTERS</p>
-                    {activeFilterSummaryItems.map((item) => (
-                      <span
-                        key={item.id}
-                        className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
-                      >
-                        {item.label}
-                        <button
-                          type="button"
-                          onClick={() => removeActiveFilterItem(item.remove)}
-                          className="rounded-full px-1 leading-none opacity-75 transition hover:bg-primary/20 hover:opacity-100 dark:hover:bg-primary-400/20"
-                          title={`Remove ${item.label}`}
-                          aria-label={`Remove ${item.label}`}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={resetAllFilters}
-                      className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-                    >
-                      Clear all
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+              <ActiveFiltersBar
+                items={
+                  showActiveFiltersCard
+                    ? activeFilterSummaryItems.map((item) => ({
+                        id: item.id,
+                        label: item.label,
+                        onRemove: () => removeActiveFilterItem(item.remove),
+                        removeLabel: `Remove ${item.label}`,
+                      }))
+                    : []
+                }
+                onClearAll={resetAllFilters}
+              />
+            </>
+            ) : null
+          }
+        />
           <BucketSelectionActionsBar
             selectedCount={selectedCount}
             hiddenSelectedCount={hiddenSelectedCount}

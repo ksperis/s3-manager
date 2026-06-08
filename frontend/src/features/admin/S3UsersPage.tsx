@@ -679,6 +679,7 @@ export default function S3UsersPage() {
         <ListToolbar
           title="Users"
           description="Search matches all records."
+          showHeading={false}
           countLabel={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"}`}
           search={
             <div className="flex items-center gap-2">

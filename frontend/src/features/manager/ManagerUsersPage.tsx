@@ -511,6 +511,7 @@ export default function ManagerUsersPage() {
           <ListToolbar
             title="Users"
             description="User inventory with group, key, and policy shortcuts."
+            showHeading={false}
             countLabel={`${filteredUsers.length} result(s)`}
             search={
               <input

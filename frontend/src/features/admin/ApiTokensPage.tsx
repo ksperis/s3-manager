@@ -332,6 +332,7 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
         <ListToolbar
           title="API tokens"
           description="Manage long-lived admin tokens for automation and integrations."
+          showHeading={showPageHeader === false}
           countLabel={`${sortedTokens.length} token${sortedTokens.length === 1 ? "" : "s"}${includeRevoked ? " (including revoked/expired)" : ""}`}
           filters={
             <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300">

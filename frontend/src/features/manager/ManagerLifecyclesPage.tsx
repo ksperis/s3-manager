@@ -207,6 +207,7 @@ export default function ManagerLifecyclesPage() {
           <ListToolbar
             title="Bucket lifecycles"
             description="All buckets are listed, including buckets with no lifecycle rules."
+            showHeading={false}
             countLabel={`${items.length} bucket(s) · ${ruleCount} rule(s) · ${configuredBucketCount} configured`}
             search={
               <div className="flex items-center gap-2 sm:justify-end">

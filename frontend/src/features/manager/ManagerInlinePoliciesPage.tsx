@@ -222,6 +222,7 @@ export default function ManagerInlinePoliciesPage() {
           <ListToolbar
             title="IAM inline policies"
             description="Users, groups, and roles are listed, including entities with no inline policies."
+            showHeading={false}
             countLabel={`${pluralize(items.length, "entity", "entities")} - ${pluralize(policyCount, "inline policy", "inline policies")} - ${configuredEntityCount} configured`}
             search={
               <div className="flex items-center gap-2 sm:justify-end">

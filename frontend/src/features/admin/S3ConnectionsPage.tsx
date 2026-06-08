@@ -806,6 +806,7 @@ export default function S3ConnectionsPage() {
         <ListToolbar
           title="Shared S3 Connections"
           description="Search matches all records."
+          showHeading={false}
           countLabel={`${total} entr${total === 1 ? "y" : "ies"}`}
           search={
             <div className="flex items-center gap-2">

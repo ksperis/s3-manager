@@ -178,6 +178,7 @@ export default function ManagerBucketComparePage() {
           <ListToolbar
             title="Buckets"
             description={`${sourceContext ? sourceContext.display_name : "Source context"} · Select source buckets to compare across manager contexts.`}
+            showHeading={false}
             countLabel={`${filteredBuckets.length} result(s)`}
             search={
               <input

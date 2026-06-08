@@ -742,6 +742,7 @@ export default function BucketsPage() {
           <ListToolbar
             title="Buckets"
             description="Paginated list of buckets for the active context."
+            showHeading={false}
             countLabel={`${filteredBuckets.length} bucket(s)`}
             search={
               <div className="flex items-center gap-2 sm:justify-end">

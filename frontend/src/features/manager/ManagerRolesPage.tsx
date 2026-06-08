@@ -515,6 +515,7 @@ export default function ManagerRolesPage() {
           <ListToolbar
             title="Roles"
             description="Role inventory, trust policy editing, and attached policy shortcuts."
+            showHeading={false}
             countLabel={`${filteredRoles.length} result(s)`}
             search={
               <input

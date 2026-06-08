@@ -2050,6 +2050,7 @@ export default function S3AccountsPage() {
         <ListToolbar
           title="Accounts"
           description="Search matches all records."
+          showHeading={false}
           countLabel={`${totalAccounts} entr${totalAccounts === 1 ? "y" : "ies"}`}
           search={
             <div className="flex items-center gap-2">

@@ -355,6 +355,7 @@ export default function ManagerGroupsPage() {
           <ListToolbar
             title="Groups"
             description="Group inventory, membership shortcuts, and attached policies."
+            showHeading={false}
             countLabel={`${filteredGroups.length} result(s)`}
             search={
               <input
