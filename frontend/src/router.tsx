@@ -28,6 +28,7 @@ const loadUsersPage = () => import("./features/admin/UsersPage");
 const loadAdminDashboard = () => import("./features/admin/AdminDashboard");
 const loadAdminMetricsPage = () => import("./features/admin/AdminMetricsPage");
 const loadBillingPage = () => import("./features/admin/BillingPage");
+const loadUsageHistoryPage = () => import("./features/admin/UsageHistoryPage");
 const loadS3UsersPage = () => import("./features/admin/S3UsersPage");
 const loadS3UserKeysPage = () => import("./features/admin/S3UserKeysPage");
 const loadS3ConnectionsPage = () => import("./features/admin/S3ConnectionsPage");
@@ -96,6 +97,7 @@ const UsersPage = lazy(loadUsersPage);
 const AdminDashboard = lazy(loadAdminDashboard);
 const AdminMetricsPage = lazy(loadAdminMetricsPage);
 const BillingPage = lazy(loadBillingPage);
+const UsageHistoryPage = lazy(loadUsageHistoryPage);
 const S3UsersPage = lazy(loadS3UsersPage);
 const S3UserKeysPage = lazy(loadS3UserKeysPage);
 const S3ConnectionsPage = lazy(loadS3ConnectionsPage);
@@ -173,6 +175,7 @@ export const buildAdminNav = (
   portalEnabled: boolean,
   browserEnabled: boolean,
   billingEnabled: boolean,
+  usageHistoryEnabled: boolean,
   endpointStatusEnabled: boolean,
   isSuperAdmin: boolean
 ) => {
@@ -201,6 +204,7 @@ export const buildAdminNav = (
         { to: "/admin", label: "Dashboard", end: true },
         { to: "/admin/metrics", label: "Metrics" },
         ...(billingEnabled ? [{ to: "/admin/billing", label: "Billing" }] : []),
+        ...(usageHistoryEnabled ? [{ to: "/admin/usage-history", label: "Usage History" }] : []),
       ],
     },
     {
@@ -260,6 +264,7 @@ function AdminLayoutShell() {
     generalSettings.portal_enabled,
     generalSettings.browser_enabled,
     generalSettings.billing_enabled,
+    generalSettings.usage_history_enabled,
     generalSettings.endpoint_status_enabled,
     canConfigureApp
   );
@@ -276,6 +281,11 @@ function AdminLayoutShell() {
 function AdminBillingRoute() {
   const { generalSettings } = useGeneralSettings();
   return generalSettings.billing_enabled ? <BillingPage /> : <FeatureDisabledPage feature="Billing" />;
+}
+
+function AdminUsageHistoryRoute() {
+  const { generalSettings } = useGeneralSettings();
+  return generalSettings.usage_history_enabled ? <UsageHistoryPage /> : <FeatureDisabledPage feature="Usage history" />;
 }
 
 function AdminPortalSettingsRoute() {
@@ -526,6 +536,7 @@ export function createAppRoutes() {
             <Route path="audit" element={<AuditLogsPage />} />
             <Route path="metrics" element={<AdminMetricsPage />} />
             <Route path="billing" element={<AdminBillingRoute />} />
+            <Route path="usage-history" element={<AdminUsageHistoryRoute />} />
             <Route element={<RequireRole roles={[SUPERADMIN_ROLE]} />}>
               <Route path="general-settings" element={<GeneralSettingsPage />} />
               <Route path="manager-settings" element={<ManagerSettingsPage />} />

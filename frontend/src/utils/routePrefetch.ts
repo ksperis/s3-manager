@@ -8,6 +8,7 @@ export function prefetchWorkspaceBranch(pathname: string): void {
       import("../features/admin/AdminDashboard"),
       import("../features/admin/AccountsPage"),
       import("../features/admin/UsersPage"),
+      import("../features/admin/UsageHistoryPage"),
     ]);
     return;
   }

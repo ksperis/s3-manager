@@ -33,7 +33,7 @@ from app.models.app_settings import QuotaNotificationSettings
 from app.services.app_settings_service import load_app_settings
 from app.services.data_retention_service import DataRetentionService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
-from app.utils.rgw import extract_bucket_list, resolve_admin_uid
+from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
 from app.utils.usage_stats import extract_usage_stats
 
@@ -122,9 +122,10 @@ class QuotaMonitoringService:
         self._mail_error_reason: Optional[str] = None
         self._mailer: Optional[SMTPMailer] = None
 
-    def run_monitor(self) -> dict[str, Any]:
+    def run_monitor(self, *, include_quota_alerts: bool = True) -> dict[str, Any]:
         app_settings = load_app_settings()
         now = utcnow()
+        quota_alerts_enabled = bool(app_settings.general.quota_alerts_enabled and include_quota_alerts)
         summary: dict[str, Any] = {
             "started_at": now.isoformat(),
             "subjects_total": 0,
@@ -136,12 +137,13 @@ class QuotaMonitoringService:
             "email_errors": 0,
             "errors": [],
             "warnings": [],
-            "quota_alerts_enabled": bool(app_settings.general.quota_alerts_enabled),
+            "quota_alerts_enabled": quota_alerts_enabled,
+            "quota_alerts_configured": bool(app_settings.general.quota_alerts_enabled),
             "usage_history_enabled": bool(app_settings.general.usage_history_enabled),
             "threshold_percent": int(app_settings.quota_notifications.threshold_percent),
         }
 
-        if not app_settings.general.quota_alerts_enabled and not app_settings.general.usage_history_enabled:
+        if not quota_alerts_enabled and not app_settings.general.usage_history_enabled:
             summary["status"] = "skipped"
             summary["reason"] = "Both quota_alerts_enabled and usage_history_enabled are disabled."
             summary["retention"] = DataRetentionService(self.db).purge_all()
@@ -164,9 +166,10 @@ class QuotaMonitoringService:
         s3_user_recipients = self._load_s3_user_recipients()
         global_watch_recipients = self._load_global_watch_recipients()
         states = self._load_alert_states()
+        usage_clients: dict[int, Optional[RGWAdminClient]] = {}
         admin_clients: dict[int, Optional[RGWAdminClient]] = {}
 
-        if app_settings.general.quota_alerts_enabled:
+        if quota_alerts_enabled:
             self._mailer, self._mail_error_reason = self._build_mailer(app_settings.quota_notifications)
             if not self._mailer and self._mail_error_reason:
                 summary["warnings"].append(self._mail_error_reason)
@@ -183,19 +186,19 @@ class QuotaMonitoringService:
                 )
                 continue
 
-            admin_client = self._resolve_admin_client(endpoint, admin_clients)
-            if not admin_client:
+            usage_client = self._resolve_usage_client(endpoint, usage_clients, admin_clients)
+            if not usage_client:
                 summary["errors"].append(
                     {
                         "subject_type": subject.subject_type,
                         "subject_id": subject.subject_id,
-                        "error": f"Admin client unavailable for endpoint '{subject.endpoint_name}'.",
+                        "error": f"Usage client unavailable for endpoint '{subject.endpoint_name}'.",
                     }
                 )
                 continue
 
             try:
-                usage_bytes, usage_objects = self._collect_usage(admin_client, subject.usage_uid)
+                usage_bytes, usage_objects = self._collect_usage(usage_client, subject.usage_uid)
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning("Quota monitor usage collection failed for %s:%s: %s", subject.subject_type, subject.subject_id, exc)
                 summary["errors"].append(
@@ -209,17 +212,27 @@ class QuotaMonitoringService:
 
             quota_size_bytes = None
             quota_objects = None
-            try:
-                quota_size_bytes, quota_objects = self._collect_quota(admin_client, subject)
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.warning("Quota monitor quota collection failed for %s:%s: %s", subject.subject_type, subject.subject_id, exc)
-                summary["errors"].append(
+            admin_client = self._resolve_admin_client(endpoint, admin_clients)
+            if not admin_client:
+                summary["warnings"].append(
                     {
                         "subject_type": subject.subject_type,
                         "subject_id": subject.subject_id,
-                        "error": f"Quota collection failed: {exc}",
+                        "warning": f"Quota client unavailable for endpoint '{subject.endpoint_name}'.",
                     }
                 )
+            else:
+                try:
+                    quota_size_bytes, quota_objects = self._collect_quota(admin_client, subject)
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.warning("Quota monitor quota collection failed for %s:%s: %s", subject.subject_type, subject.subject_id, exc)
+                    summary["warnings"].append(
+                        {
+                            "subject_type": subject.subject_type,
+                            "subject_id": subject.subject_id,
+                            "warning": f"Quota collection failed: {exc}",
+                        }
+                    )
 
             ratio_pct = self._compute_usage_ratio(
                 used_bytes=usage_bytes,
@@ -234,7 +247,7 @@ class QuotaMonitoringService:
                 self._upsert_daily(subject, usage_bytes, usage_objects, ratio_pct, now)
                 summary["history_daily_upserts"] += 1
 
-            if app_settings.general.quota_alerts_enabled:
+            if quota_alerts_enabled:
                 should_alert, next_level = self._update_state_and_check_alert(
                     subject=subject,
                     states=states,
@@ -399,6 +412,26 @@ class QuotaMonitoringService:
             )
         except Exception:
             client = None
+        cache[endpoint.id] = client
+        return client
+
+    def _resolve_usage_client(
+        self,
+        endpoint: StorageEndpoint,
+        cache: dict[int, Optional[RGWAdminClient]],
+        admin_cache: dict[int, Optional[RGWAdminClient]],
+    ) -> Optional[RGWAdminClient]:
+        cached = cache.get(endpoint.id)
+        if endpoint.id in cache:
+            return cached
+        provider = str(endpoint.provider or "").strip().lower()
+        if provider != StorageProvider.CEPH.value:
+            cache[endpoint.id] = None
+            return None
+        try:
+            client = get_supervision_rgw_client(endpoint)
+        except Exception:
+            client = self._resolve_admin_client(endpoint, admin_cache)
         cache[endpoint.id] = client
         return client
 

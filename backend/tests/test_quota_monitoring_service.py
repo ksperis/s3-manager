@@ -185,6 +185,48 @@ def test_usage_history_hourly_and_daily_upserts(db_session, monkeypatch):
     assert int(daily.last_used_bytes) == 50
 
 
+def test_usage_history_prefers_supervision_client_and_keeps_quota_optional(db_session, monkeypatch):
+    endpoint = _seed_endpoint(db_session)
+    account = _seed_account(db_session, endpoint)
+
+    fake_supervision = _FakeAdminClient(usage_bytes=75, usage_objects=7, quota_bytes=0, quota_objects=0)
+    fixed_now = datetime(2026, 1, 10, 11, 5, 0)
+    seen: dict[str, int] = {}
+
+    def resolve_supervision(endpoint_arg):
+        seen["endpoint_id"] = endpoint_arg.id
+        return fake_supervision
+
+    monkeypatch.setattr(quota_monitoring_service, "utcnow", lambda: fixed_now)
+    monkeypatch.setattr(quota_monitoring_service, "load_app_settings", lambda: _settings(quota_alerts_enabled=False, usage_history_enabled=True))
+    monkeypatch.setattr(quota_monitoring_service.DataRetentionService, "purge_all", lambda self: {})
+    monkeypatch.setattr(quota_monitoring_service, "get_supervision_rgw_client", resolve_supervision)
+    monkeypatch.setattr(QuotaMonitoringService, "_resolve_admin_client", lambda self, endpoint, cache: None)
+
+    service = QuotaMonitoringService(db_session)
+    result = service.run_monitor()
+
+    assert seen["endpoint_id"] == endpoint.id
+    assert result["subjects_processed"] == 1
+    assert result["history_hourly_upserts"] == 1
+    assert result["history_daily_upserts"] == 1
+    assert result["errors"] == []
+    assert result["warnings"] == [
+        {
+            "subject_type": "account",
+            "subject_id": account.id,
+            "warning": "Quota client unavailable for endpoint 'quota-endpoint'.",
+        }
+    ]
+
+    hourly = db_session.query(QuotaUsageHourly).first()
+    assert hourly is not None
+    assert int(hourly.used_bytes) == 75
+    assert int(hourly.used_objects) == 7
+    assert hourly.quota_size_bytes is None
+    assert hourly.usage_ratio_pct is None
+
+
 def test_alert_crossing_first_run_no_duplicate_and_reset(db_session, monkeypatch):
     endpoint = _seed_endpoint(db_session)
     account = _seed_account(db_session, endpoint)
