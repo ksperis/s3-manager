@@ -195,30 +195,6 @@ describe("Sidebar", () => {
     expect(nav.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("renders custom content instead of navigation at a custom desktop width", () => {
-    const { container } = render(
-      <MemoryRouter>
-        <Sidebar
-          title="BROWSER"
-          widthPx={280}
-          contentLabel="Browser bucket navigation"
-          content={<div>Bucket sidebar content</div>}
-          sections={[
-            {
-              label: "Data",
-              links: [{ to: "/browser", label: "Browser" }],
-            },
-          ]}
-        />
-      </MemoryRouter>
-    );
-
-    const sidebar = container.querySelector('[data-sidebar-variant="desktop"]') as HTMLElement;
-    expect(sidebar).toHaveStyle({ width: "280px" });
-    expect(screen.getByRole("region", { name: "Browser bucket navigation" })).toHaveTextContent("Bucket sidebar content");
-    expect(screen.queryByRole("navigation", { name: "BROWSER navigation" })).not.toBeInTheDocument();
-  });
-
   it("renders footer content in the mobile sidebar variant", () => {
     render(
       <MemoryRouter>

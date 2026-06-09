@@ -134,38 +134,6 @@ describe("Layout", () => {
     expect(within(desktopSidebar).getByText("Quick action")).toBeInTheDocument();
   });
 
-  it("renders custom sidebar content without the collapse control", () => {
-    const { container } = render(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <Routes>
-          <Route
-            path="/browser"
-            element={
-              <Layout
-                headerTitle="Browser"
-                hideHeader
-                sidebarContent={<div>Bucket navigation slot</div>}
-                sidebarContentLabel="Browser bucket navigation"
-                sidebarWidthPx={280}
-                allowSidebarCollapse={false}
-              />
-            }
-          >
-            <Route index element={<div>Browser content</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    );
-
-    const desktopSidebar = getDesktopSidebar(container);
-    expect(desktopSidebar).toHaveStyle({ width: "280px" });
-    expect(within(desktopSidebar).getByRole("region", { name: "Browser bucket navigation" })).toHaveTextContent(
-      "Bucket navigation slot",
-    );
-    expect(within(desktopSidebar).queryByRole("button", { name: "Collapse sidebar" })).not.toBeInTheDocument();
-    expect(screen.getByTestId("layout-topbar")).toHaveAttribute("data-show-workspace-switcher", "true");
-  });
-
   it("keeps the mobile drawer behavior unchanged and without a resize handle", () => {
     const { container } = renderLayout();
     const mobileSidebar = getMobileSidebar(container);

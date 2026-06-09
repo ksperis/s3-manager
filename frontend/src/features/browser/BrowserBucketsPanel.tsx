@@ -53,7 +53,6 @@ type BrowserBucketsPanelProps = {
   bucketTotalCount: number;
   panelViewportRef: RefObject<HTMLDivElement | null>;
   loadMoreSentinelRef: RefObject<HTMLDivElement | null>;
-  variant?: "panel" | "sidebar";
 };
 
 const bucketSectionTitleClasses = "ui-caption font-semibold text-slate-500 dark:text-slate-400";
@@ -198,7 +197,6 @@ export default function BrowserBucketsPanel({
   bucketTotalCount,
   panelViewportRef,
   loadMoreSentinelRef,
-  variant = "panel",
 }: BrowserBucketsPanelProps) {
   const currentBucketUnavailable = currentBucketAccess.status === "unavailable";
   const currentBucketChildren = treeRootNode?.children ?? [];
@@ -213,9 +211,8 @@ export default function BrowserBucketsPanel({
   return (
     <div
       className={cx(
-        variant === "panel" && uiCardClass,
-        "flex h-full min-h-0 min-w-0 flex-col",
-        variant === "panel" ? "p-3" : "px-0 py-1",
+        uiCardClass,
+        "flex h-full min-h-0 min-w-0 flex-col p-3",
       )}
     >
       <div className="shrink-0">
