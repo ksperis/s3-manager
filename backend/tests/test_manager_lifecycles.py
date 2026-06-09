@@ -1,5 +1,7 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import threading
+import time
 
 from app.db import S3Account, User, UserRole
 from app.main import app
@@ -110,3 +112,36 @@ def test_manager_lifecycle_inventory_keeps_bucket_errors_visible(client):
     body = response.json()
     assert body[0] == {"bucket_name": "working", "rules": [{"ID": "keep", "Status": "Enabled"}], "error": None}
     assert body[1] == {"bucket_name": "blocked", "rules": [], "error": "lifecycle unavailable"}
+
+
+def test_manager_lifecycle_inventory_runs_bucket_reads_in_parallel(client):
+    class FakeBucketService:
+        def __init__(self) -> None:
+            self._lock = threading.Lock()
+            self._active = 0
+            self.max_active = 0
+
+        def list_buckets(self, account, with_stats=True):  # noqa: ANN001, ARG002
+            return [Bucket(name="alpha"), Bucket(name="beta"), Bucket(name="gamma")]
+
+        def get_lifecycle(self, bucket_name, account):  # noqa: ANN001, ARG002
+            with self._lock:
+                self._active += 1
+                self.max_active = max(self.max_active, self._active)
+            try:
+                time.sleep(0.05)
+                return BucketLifecycleConfig(rules=[{"ID": f"rule-{bucket_name}", "Status": "Enabled"}])
+            finally:
+                with self._lock:
+                    self._active -= 1
+
+    service = FakeBucketService()
+    _install_overrides(service)
+    try:
+        response = client.get("/api/manager/lifecycles")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200, response.text
+    assert [item["bucket_name"] for item in response.json()] == ["alpha", "beta", "gamma"]
+    assert service.max_active >= 2

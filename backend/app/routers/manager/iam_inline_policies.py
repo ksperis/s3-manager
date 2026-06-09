@@ -8,8 +8,10 @@ from app.db import S3Account
 from app.models.policy import InlinePolicyInventoryItem
 from app.routers.dependencies import get_account_context, require_iam_capable_manager
 from app.routers.manager.iam_common import get_account_and_service, load_inline_policies
+from app.utils.concurrency import bounded_ordered_map
 
 router = APIRouter(prefix="/manager/iam/inline-policies", tags=["manager-iam-inline-policies"])
+MANAGER_INLINE_POLICY_INVENTORY_MAX_WORKERS = 8
 
 EntityType = Literal["user", "group", "role"]
 
@@ -21,30 +23,31 @@ def _collect_inline_policies(
     list_names_fn: Callable[[str], list[str]],
     get_policy_fn: Callable[[str, str], dict | None],
 ) -> list[InlinePolicyInventoryItem]:
-    inventory: list[InlinePolicyInventoryItem] = []
-    for entity_name in entity_names:
+    def load_entity(entity_name: str) -> InlinePolicyInventoryItem:
         try:
-            inventory.append(
-                InlinePolicyInventoryItem(
-                    entity_type=entity_type,
-                    entity_name=entity_name,
-                    policies=load_inline_policies(
-                        entity_name,
-                        list_names_fn=list_names_fn,
-                        get_policy_fn=get_policy_fn,
-                    ),
-                )
+            return InlinePolicyInventoryItem(
+                entity_type=entity_type,
+                entity_name=entity_name,
+                policies=load_inline_policies(
+                    entity_name,
+                    list_names_fn=list_names_fn,
+                    get_policy_fn=get_policy_fn,
+                ),
             )
         except RuntimeError as exc:
-            inventory.append(
-                InlinePolicyInventoryItem(
-                    entity_type=entity_type,
-                    entity_name=entity_name,
-                    policies=[],
-                    error=str(exc),
-                )
+            return InlinePolicyInventoryItem(
+                entity_type=entity_type,
+                entity_name=entity_name,
+                policies=[],
+                error=str(exc),
             )
-    return inventory
+
+    return bounded_ordered_map(
+        entity_names,
+        load_entity,
+        max_workers=MANAGER_INLINE_POLICY_INVENTORY_MAX_WORKERS,
+        thread_name_prefix=f"manager-inline-policy-{entity_type}",
+    )
 
 
 @router.get("", response_model=list[InlinePolicyInventoryItem])

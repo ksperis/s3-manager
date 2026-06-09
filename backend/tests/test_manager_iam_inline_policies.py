@@ -1,5 +1,7 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import threading
+import time
 
 from app.db import S3Account, User, UserRole
 from app.main import app
@@ -148,3 +150,48 @@ def test_manager_iam_inline_policy_inventory_keeps_entity_errors_visible(client,
         "policies": [],
         "error": "group inline policies unavailable",
     }
+
+
+def test_manager_iam_inline_policy_inventory_runs_entity_reads_in_parallel(client, monkeypatch):
+    class ParallelUserService(FakeInlinePolicyService):
+        def __init__(self) -> None:
+            super().__init__()
+            self.user_policy_names = {
+                "alice": ["ReadAlice"],
+                "bob": ["ReadBob"],
+                "charlie": ["ReadCharlie"],
+            }
+            self.documents = {
+                **self.documents,
+                ("user", "bob", "ReadBob"): {"Statement": [{"Sid": "ReadBob", "Effect": "Allow"}]},
+                ("user", "charlie", "ReadCharlie"): {"Statement": [{"Sid": "ReadCharlie", "Effect": "Allow"}]},
+            }
+            self._lock = threading.Lock()
+            self._active = 0
+            self.max_active = 0
+
+        def list_users(self):
+            return [IAMUser(name="alice"), IAMUser(name="bob"), IAMUser(name="charlie")]
+
+        def list_user_inline_policies(self, user_name):
+            with self._lock:
+                self._active += 1
+                self.max_active = max(self.max_active, self._active)
+            try:
+                time.sleep(0.05)
+                return self.user_policy_names[user_name]
+            finally:
+                with self._lock:
+                    self._active -= 1
+
+    service = ParallelUserService()
+    _install_overrides(monkeypatch, service)
+    try:
+        response = client.get("/api/manager/iam/inline-policies")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [item["entity_name"] for item in body[:3]] == ["alice", "bob", "charlie"]
+    assert service.max_active >= 2

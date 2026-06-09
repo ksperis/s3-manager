@@ -7,8 +7,10 @@ from app.models.bucket import BucketPolicyInventoryItem
 from app.routers.dependencies import get_account_context, get_current_account_admin
 from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.services.buckets_service import BucketsService, get_buckets_service
+from app.utils.concurrency import bounded_ordered_map
 
 router = APIRouter(prefix="/manager/bucket-policies", tags=["manager-bucket-policies"])
+MANAGER_BUCKET_POLICY_INVENTORY_MAX_WORKERS = 8
 
 
 @router.get("", response_model=list[BucketPolicyInventoryItem])
@@ -22,21 +24,22 @@ def list_bucket_policies(
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
-    inventory: list[BucketPolicyInventoryItem] = []
-    for bucket in buckets:
+    def load_bucket_policy(bucket) -> BucketPolicyInventoryItem:  # noqa: ANN001
         try:
-            inventory.append(
-                BucketPolicyInventoryItem(
-                    bucket_name=bucket.name,
-                    policy=service.get_policy(bucket.name, account),
-                )
+            return BucketPolicyInventoryItem(
+                bucket_name=bucket.name,
+                policy=service.get_policy(bucket.name, account),
             )
         except RuntimeError as exc:
-            inventory.append(
-                BucketPolicyInventoryItem(
-                    bucket_name=bucket.name,
-                    policy=None,
-                    error=str(exc),
-                )
+            return BucketPolicyInventoryItem(
+                bucket_name=bucket.name,
+                policy=None,
+                error=str(exc),
             )
-    return inventory
+
+    return bounded_ordered_map(
+        buckets,
+        load_bucket_policy,
+        max_workers=MANAGER_BUCKET_POLICY_INVENTORY_MAX_WORKERS,
+        thread_name_prefix="manager-bucket-policy-inventory",
+    )

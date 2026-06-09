@@ -7,8 +7,10 @@ from app.models.bucket import BucketLifecycleInventoryItem
 from app.routers.dependencies import get_account_context, get_current_account_admin
 from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.services.buckets_service import BucketsService, get_buckets_service
+from app.utils.concurrency import bounded_ordered_map
 
 router = APIRouter(prefix="/manager/lifecycles", tags=["manager-lifecycles"])
+MANAGER_LIFECYCLE_INVENTORY_MAX_WORKERS = 8
 
 
 @router.get("", response_model=list[BucketLifecycleInventoryItem])
@@ -22,22 +24,23 @@ def list_bucket_lifecycles(
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
-    inventory: list[BucketLifecycleInventoryItem] = []
-    for bucket in buckets:
+    def load_bucket_lifecycle(bucket) -> BucketLifecycleInventoryItem:  # noqa: ANN001
         try:
             lifecycle = service.get_lifecycle(bucket.name, account)
-            inventory.append(
-                BucketLifecycleInventoryItem(
-                    bucket_name=bucket.name,
-                    rules=lifecycle.rules or [],
-                )
+            return BucketLifecycleInventoryItem(
+                bucket_name=bucket.name,
+                rules=lifecycle.rules or [],
             )
         except RuntimeError as exc:
-            inventory.append(
-                BucketLifecycleInventoryItem(
-                    bucket_name=bucket.name,
-                    rules=[],
-                    error=str(exc),
-                )
+            return BucketLifecycleInventoryItem(
+                bucket_name=bucket.name,
+                rules=[],
+                error=str(exc),
             )
-    return inventory
+
+    return bounded_ordered_map(
+        buckets,
+        load_bucket_lifecycle,
+        max_workers=MANAGER_LIFECYCLE_INVENTORY_MAX_WORKERS,
+        thread_name_prefix="manager-lifecycle-inventory",
+    )
