@@ -196,7 +196,6 @@ export type ManagerBucketCompareRequest = {
   include_content?: boolean;
   include_config?: boolean;
   config_features?: ManagerBucketCompareConfigFeature[];
-  diff_sample_limit?: number;
   ignore_modified_after?: string | null;
 };
 
@@ -266,9 +265,8 @@ export type ManagerBucketCompareActionRequest = {
   source_bucket: string;
   target_bucket: string;
   action: ManagerBucketCompareAction;
+  object_keys: string[];
   parallelism?: number;
-  object_key?: string | null;
-  ignore_modified_after?: string | null;
 };
 
 export type ManagerBucketCompareActionResult = {

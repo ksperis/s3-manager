@@ -3,8 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import axios from "axios";
-import type { ReactNode } from "react";
-import type { UiTone } from "../../components/ui/styles";
+import { useId, useState, type ReactNode } from "react";
+import { cx, type UiTone } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 
 export type ParsedRawMappingResult = {
@@ -155,90 +155,134 @@ export const renderCompareObjectDetails = (
     onExplore?: (href: string, detail: CompareObjectDetailLike, index: number) => void;
     renderAction?: (detail: CompareObjectDetailLike, index: number) => ReactNode;
   }
-) => {
+) => <CompareObjectDetailsList rows={rows} options={options} />;
+
+type CompareObjectDetailsListProps = {
+  rows: CompareObjectDetailLike[];
+  options?: {
+    buildBrowserHref?: (detail: CompareObjectDetailLike) => string | null;
+    browserDisabledReason?: string | null;
+    onExplore?: (href: string, detail: CompareObjectDetailLike, index: number) => void;
+    renderAction?: (detail: CompareObjectDetailLike, index: number) => ReactNode;
+  };
+};
+
+function CompareObjectDetailsList({ rows, options }: CompareObjectDetailsListProps) {
+  const listId = useId();
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+
   if (rows.length === 0) {
     return (
-      <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200">
+      <div className="px-1 py-1 ui-caption text-slate-500 dark:text-slate-400">
         (none)
       </div>
     );
   }
+
   return (
-    <div className="space-y-2">
+    <div className="divide-y divide-[color:var(--ui-border-soft)]">
       {rows.map((detail, index) => {
+        const rowId = `${detail.key}-${index}`;
+        const panelId = `${listId}-compare-object-metadata-${index}-${detail.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
         const href = options?.buildBrowserHref?.(detail) ?? null;
         const action = options?.renderAction?.(detail, index) ?? null;
+        const expanded = expandedRowId === rowId;
+
         return (
-          <div
-            key={`${detail.key}-${index}`}
-            className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 ui-caption text-slate-700 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-100"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="break-all font-mono text-[11px] font-semibold leading-relaxed text-slate-900 dark:text-slate-100">
-                  {detail.key}
-                </p>
-                <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-slate-500 dark:text-slate-400">
-                  <span>{formatBytes(detail.size)}</span>
-                  <span>Modified {formatCompareDateTime(detail.last_modified)}</span>
-                  <span>ETag {formatCompareEtag(detail.etag)}</span>
-                  <span>Storage {detail.storage_class || "-"}</span>
-                </p>
+          <div key={rowId} className="relative">
+            <button
+              type="button"
+              aria-expanded={expanded}
+              aria-controls={panelId}
+              onClick={() => {
+                setExpandedRowId((current) => (current === rowId ? null : rowId));
+              }}
+              className={cx(
+                "flex w-full items-start gap-2 px-1 py-1.5 text-left ui-caption transition",
+                "hover:bg-[var(--ui-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary",
+                expanded && "bg-[var(--ui-hover)]"
+              )}
+            >
+              <span className="min-w-0 flex-1 break-all font-mono text-[11px] font-semibold leading-relaxed text-slate-900 dark:text-slate-100">
+                {detail.key}
+              </span>
+              <span
+                aria-hidden="true"
+                className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-[11px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+              >
+                i
+              </span>
+              <span className="sr-only">Show object metadata</span>
+            </button>
+            {expanded && (
+              <div
+                id={panelId}
+                role="dialog"
+                aria-label={`Object metadata for ${detail.key}`}
+                className="absolute left-1 right-1 top-full z-30 mt-1 rounded-md bg-[var(--ui-surface)] p-2 text-[var(--ui-text)] shadow-lg ring-1 ring-[color:var(--ui-border)]"
+              >
+                <dl className="grid gap-x-3 gap-y-1 ui-caption sm:grid-cols-2">
+                  <div>
+                    <dt className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Size</dt>
+                    <dd className="text-slate-800 dark:text-slate-100">{formatBytes(detail.size)}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Modified</dt>
+                    <dd className="text-slate-800 dark:text-slate-100">{formatCompareDateTime(detail.last_modified)}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">ETag</dt>
+                    <dd className="break-all font-mono text-[11px] text-slate-800 dark:text-slate-100">
+                      {formatCompareEtag(detail.etag)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Storage</dt>
+                    <dd className="text-slate-800 dark:text-slate-100">{detail.storage_class || "-"}</dd>
+                  </div>
+                </dl>
+                {(href || options?.browserDisabledReason || action) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[color:var(--ui-border-soft)] pt-2">
+                    {options?.browserDisabledReason ? (
+                      <button
+                        type="button"
+                        disabled
+                        title={options.browserDisabledReason}
+                        className="cursor-not-allowed rounded-md border border-slate-200 bg-slate-100 px-2 py-1 font-semibold text-slate-400 opacity-80 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500"
+                      >
+                        Explore
+                      </button>
+                    ) : href && options?.onExplore ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          options.onExplore?.(href, detail, index);
+                        }}
+                        className="rounded-md border border-slate-200 bg-white px-2 py-1 font-semibold text-slate-700 hover:border-primary-300 hover:text-primary-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                      >
+                        Explore
+                      </button>
+                    ) : href ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-md border border-slate-200 bg-white px-2 py-1 font-semibold text-slate-700 hover:border-primary-300 hover:text-primary-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                      >
+                        Explore
+                      </a>
+                    ) : null}
+                    {action}
+                  </div>
+                )}
               </div>
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
-                {options?.browserDisabledReason ? (
-                  <button
-                    type="button"
-                    disabled
-                    title={options.browserDisabledReason}
-                    className="cursor-not-allowed rounded-md border border-slate-200 bg-slate-100 px-2 py-1 font-semibold text-slate-400 opacity-80 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500"
-                  >
-                    Explore
-                  </button>
-                ) : href && options?.onExplore ? (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      options.onExplore?.(href, detail, index);
-                    }}
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 font-semibold text-slate-700 hover:border-primary-300 hover:text-primary-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-200"
-                  >
-                    Explore
-                  </button>
-                ) : href ? (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 font-semibold text-slate-700 hover:border-primary-300 hover:text-primary-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-200"
-                  >
-                    Explore
-                  </a>
-                ) : null}
-                {action}
-              </div>
-            </div>
+            )}
           </div>
         );
       })}
     </div>
-  );
-};
-
-export function CompareObjectSampleNotice({
-  visibleCount,
-  totalCount,
-}: {
-  visibleCount: number;
-  totalCount: number;
-}) {
-  if (visibleCount >= totalCount) return null;
-  return (
-    <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 ui-caption font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
-      Only {visibleCount} of {totalCount} objects are visible in this section. Use the section counter for the total.
-    </p>
   );
 }
 

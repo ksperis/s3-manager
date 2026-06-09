@@ -70,7 +70,6 @@ def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
         assert target_bucket == "bucket-b"
         assert source_ctx is source_account
         assert target_ctx is target_account
-        assert kwargs["diff_sample_limit"] == 1000
         assert kwargs["ignore_modified_after"] == payload.ignore_modified_after
         return CephAdminBucketContentDiff(
             source_count=10,
@@ -302,7 +301,7 @@ def test_require_bucket_compare_enabled_blocks_when_feature_disabled(monkeypatch
     monkeypatch.setattr(dependencies_router, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
-        dependencies_router.require_bucket_compare_enabled(_tool_user())
+        dependencies_router.require_bucket_compare_enabled(_tool_user(), db=None)
 
     assert exc.value.status_code == 403
     assert "bucket compare feature is disabled" in str(exc.value.detail).lower()
@@ -314,7 +313,7 @@ def test_require_bucket_compare_enabled_blocks_without_user_tool_access(monkeypa
     monkeypatch.setattr(dependencies_router, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
-        dependencies_router.require_bucket_compare_enabled(_tool_user(bucket_compare=False))
+        dependencies_router.require_bucket_compare_enabled(_tool_user(bucket_compare=False), db=None)
 
     assert exc.value.status_code == 403
     assert str(exc.value.detail) == "Not authorized"
@@ -326,6 +325,7 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         action="sync_source_only",
+        object_keys=["logs/a.txt", "logs/b.txt", "logs/c.txt"],
         parallelism=8,
     )
     source_account = _build_account(1)
@@ -340,9 +340,8 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
         captured["target_bucket"] = target_bucket
         captured["target_ctx"] = target_ctx
         captured["action"] = kwargs.get("action")
+        captured["object_keys"] = kwargs.get("object_keys")
         captured["parallelism"] = kwargs.get("parallelism")
-        captured["object_key"] = kwargs.get("object_key")
-        captured["ignore_modified_after"] = kwargs.get("ignore_modified_after")
         return SimpleNamespace(
             action="sync_source_only",
             planned_count=3,
@@ -377,10 +376,11 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
     assert captured["target_bucket"] == "bucket-b"
     assert captured["target_ctx"] is target_account
     assert captured["action"] == "sync_source_only"
+    assert captured["object_keys"] == ["logs/a.txt", "logs/b.txt", "logs/c.txt"]
     assert captured["parallelism"] == 8
-    assert captured["object_key"] is None
-    assert captured["ignore_modified_after"] is None
     assert audit.calls[0]["action"] == "bucket_compare_remediation"
+    assert audit.calls[0]["metadata"]["object_keys_count"] == 3
+    assert audit.calls[0]["metadata"]["object_keys_sample"] == ["logs/a.txt", "logs/b.txt", "logs/c.txt"]
     assert audit.calls[0]["metadata"]["planned_count"] == 3
 
 
@@ -390,6 +390,7 @@ def test_compare_bucket_action_runs_sync_different(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         action="sync_different",
+        object_keys=["logs/different.txt"],
     )
     source_account = _build_account(1)
     target_account = _build_account(2)
@@ -422,15 +423,13 @@ def test_compare_bucket_action_runs_sync_different(monkeypatch):
     assert captured["action"] == "sync_different"
 
 
-def test_compare_bucket_action_forwards_single_object_and_cutoff(monkeypatch):
-    cutoff = datetime(2026, 3, 2, 10, 0, tzinfo=timezone.utc)
+def test_compare_bucket_action_forwards_object_keys(monkeypatch):
     payload = ManagerBucketCompareActionRequest(
         target_context_id="2",
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         action="sync_source_only",
-        object_key="logs/a.txt",
-        ignore_modified_after=cutoff,
+        object_keys=[" logs/a.txt "],
     )
     source_account = _build_account(1)
     target_account = _build_account(2)
@@ -438,8 +437,7 @@ def test_compare_bucket_action_forwards_single_object_and_cutoff(monkeypatch):
     captured: dict[str, object] = {}
 
     def fake_run_action(self, *_args, **kwargs):
-        captured["object_key"] = kwargs.get("object_key")
-        captured["ignore_modified_after"] = kwargs.get("ignore_modified_after")
+        captured["object_keys"] = kwargs.get("object_keys")
         return SimpleNamespace(
             action="sync_source_only",
             planned_count=1,
@@ -462,10 +460,9 @@ def test_compare_bucket_action_forwards_single_object_and_cutoff(monkeypatch):
     )
 
     assert response.planned_count == 1
-    assert captured["object_key"] == "logs/a.txt"
-    assert captured["ignore_modified_after"] == cutoff
-    assert audit.calls[0]["metadata"]["object_key"] == "logs/a.txt"
-    assert audit.calls[0]["metadata"]["ignore_modified_after"] == cutoff.isoformat()
+    assert captured["object_keys"] == ["logs/a.txt"]
+    assert audit.calls[0]["metadata"]["object_keys_count"] == 1
+    assert audit.calls[0]["metadata"]["object_keys_sample"] == ["logs/a.txt"]
 
 
 def test_compare_bucket_action_delete_returns_partial_failure(monkeypatch):
@@ -474,6 +471,7 @@ def test_compare_bucket_action_delete_returns_partial_failure(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         action="delete_target_only",
+        object_keys=["orphan-1", "orphan-2", "orphan-3", "orphan-4", "orphan-5"],
     )
     source_account = _build_account(1)
     target_account = _build_account(2)
@@ -515,6 +513,7 @@ def test_compare_bucket_action_rejects_source_equals_target_for_same_context(mon
         source_bucket="bucket-a",
         target_bucket="bucket-a",
         action="sync_source_only",
+        object_keys=["logs/a.txt"],
     )
     source_account = _build_account(1)
     target_account = _build_account(1)
@@ -540,6 +539,7 @@ def test_compare_bucket_action_translates_runtime_error(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         action="sync_source_only",
+        object_keys=["logs/a.txt"],
     )
     source_account = _build_account(1)
     target_account = _build_account(2)
@@ -570,6 +570,7 @@ def test_compare_bucket_action_rejects_unauthorized_target_context(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         action="sync_source_only",
+        object_keys=["logs/a.txt"],
     )
     source_account = _build_account(1)
 
@@ -599,6 +600,7 @@ def test_compare_bucket_action_request_validates_action_and_parallelism():
             source_bucket="bucket-a",
             target_bucket="bucket-b",
             action="not-valid",
+            object_keys=["logs/a.txt"],
         )
 
     with pytest.raises(ValidationError):
@@ -607,7 +609,35 @@ def test_compare_bucket_action_request_validates_action_and_parallelism():
             source_bucket="bucket-a",
             target_bucket="bucket-b",
             action="sync_source_only",
+            object_keys=["logs/a.txt"],
             parallelism=0,
+        )
+
+    with pytest.raises(ValidationError):
+        ManagerBucketCompareActionRequest(
+            target_context_id="2",
+            source_bucket="bucket-a",
+            target_bucket="bucket-b",
+            action="sync_source_only",
+            object_keys=[],
+        )
+
+    with pytest.raises(ValidationError):
+        ManagerBucketCompareActionRequest(
+            target_context_id="2",
+            source_bucket="bucket-a",
+            target_bucket="bucket-b",
+            action="sync_source_only",
+            object_keys=["logs/a.txt", " logs/a.txt "],
+        )
+
+    with pytest.raises(ValidationError):
+        ManagerBucketCompareActionRequest(
+            target_context_id="2",
+            source_bucket="bucket-a",
+            target_bucket="bucket-b",
+            action="sync_source_only",
+            object_keys=[" "],
         )
 
 
@@ -621,6 +651,7 @@ def test_compare_bucket_action_feature_off_returns_403(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         action="sync_source_only",
+        object_keys=["logs/a.txt"],
     )
 
     with pytest.raises(HTTPException) as exc:

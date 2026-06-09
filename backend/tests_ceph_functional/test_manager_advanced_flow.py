@@ -149,7 +149,6 @@ def test_manager_bucket_compare_and_remediation_flow(
                     "target_bucket": target_bucket,
                     "include_content": True,
                     "include_config": False,
-                    "diff_sample_limit": 20,
                 },
             )
         except BackendAPIError as exc:
@@ -166,10 +165,10 @@ def test_manager_bucket_compare_and_remediation_flow(
         assert content_diff["only_target_sample"] == [target_only_key]
         assert content_diff["different_sample"][0]["key"] == different_key
 
-        for action, planned_count in (
-            ("sync_source_only", 1),
-            ("sync_different", 1),
-            ("delete_target_only", 1),
+        for action, object_keys in (
+            ("sync_source_only", content_diff["only_source_sample"]),
+            ("sync_different", [entry["key"] for entry in content_diff["different_sample"]]),
+            ("delete_target_only", content_diff["only_target_sample"]),
         ):
             remediation = manager_session.post(
                 "/manager/buckets/compare/action",
@@ -179,12 +178,13 @@ def test_manager_bucket_compare_and_remediation_flow(
                     "source_bucket": source_bucket,
                     "target_bucket": target_bucket,
                     "action": action,
+                    "object_keys": object_keys,
                     "parallelism": 2,
                 },
             )
             assert remediation["action"] == action
-            assert remediation["planned_count"] == planned_count
-            assert remediation["succeeded_count"] == planned_count
+            assert remediation["planned_count"] == len(object_keys)
+            assert remediation["succeeded_count"] == len(object_keys)
             assert remediation["failed_count"] == 0
 
         assert source_only_key in _list_object_keys(manager_session, account_id, target_bucket, prefix="reports/")
@@ -200,7 +200,6 @@ def test_manager_bucket_compare_and_remediation_flow(
                 "target_bucket": target_bucket,
                 "include_content": True,
                 "include_config": False,
-                "diff_sample_limit": 20,
             },
         )
         final_content_diff = final_comparison["content_diff"]

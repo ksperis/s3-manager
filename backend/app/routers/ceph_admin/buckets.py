@@ -2724,7 +2724,6 @@ def compare_bucket_pair(
                 source_account,
                 payload.target_bucket,
                 target_account,
-                diff_sample_limit=payload.diff_sample_limit,
                 ignore_modified_after=payload.ignore_modified_after,
             )
         if payload.include_config:

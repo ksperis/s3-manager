@@ -260,7 +260,6 @@ def test_ceph_admin_bucket_configuration_and_compare(
                     "target_bucket": main_bucket,
                     "include_content": True,
                     "include_config": True,
-                    "diff_sample_limit": 20,
                 },
             ),
         )

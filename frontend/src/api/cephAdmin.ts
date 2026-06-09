@@ -700,7 +700,6 @@ export type CephAdminBucketCompareRequest = {
   include_content?: boolean;
   include_config?: boolean;
   config_features?: CephAdminBucketCompareConfigFeature[];
-  diff_sample_limit?: number;
   ignore_modified_after?: string | null;
 };
 

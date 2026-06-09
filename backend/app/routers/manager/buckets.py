@@ -168,7 +168,6 @@ def compare_bucket_pair(
                 source_account,
                 payload.target_bucket,
                 target_account,
-                diff_sample_limit=payload.diff_sample_limit,
                 ignore_modified_after=payload.ignore_modified_after,
             )
         if payload.include_config:
@@ -238,9 +237,8 @@ def run_compare_bucket_action(
             payload.target_bucket,
             target_account,
             action=payload.action,
+            object_keys=payload.object_keys,
             parallelism=payload.parallelism,
-            object_key=payload.object_key,
-            ignore_modified_after=payload.ignore_modified_after,
         )
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
@@ -260,8 +258,8 @@ def run_compare_bucket_action(
             "target_context_id": target_context_id,
             "source_bucket": payload.source_bucket,
             "target_bucket": payload.target_bucket,
-            "object_key": payload.object_key,
-            "ignore_modified_after": payload.ignore_modified_after.isoformat() if payload.ignore_modified_after else None,
+            "object_keys_count": len(payload.object_keys),
+            "object_keys_sample": payload.object_keys[:50],
             "planned_count": action_result.planned_count,
             "succeeded_count": action_result.succeeded_count,
             "failed_count": action_result.failed_count,

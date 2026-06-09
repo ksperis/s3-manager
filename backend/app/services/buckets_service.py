@@ -65,13 +65,6 @@ BucketCompareRemediationAction = Literal["sync_source_only", "sync_different", "
 
 
 @dataclass(frozen=True)
-class BucketCompareContentKeySets:
-    only_source_keys: list[str]
-    different_keys: list[str]
-    only_target_keys: list[str]
-
-
-@dataclass(frozen=True)
 class BucketCompareRemediationResult:
     action: BucketCompareRemediationAction
     planned_count: int
@@ -806,7 +799,6 @@ class BucketsService:
         target_bucket: str,
         target_account: S3Account,
         *,
-        diff_sample_limit: int = 1000,
         ignore_modified_after: Optional[datetime] = None,
     ) -> CephAdminBucketContentDiff:
         source_objects_raw = self._list_bucket_objects_for_compare(source_bucket, source_account)
@@ -836,8 +828,6 @@ class BucketsService:
                 continue
 
             different_count += 1
-            if len(different_sample) >= diff_sample_limit:
-                continue
             different_sample.append(
                 CephAdminBucketObjectDiffEntry(
                     key=key,
@@ -861,8 +851,6 @@ class BucketsService:
                 )
             )
 
-        only_source_sample = only_source[:diff_sample_limit]
-        only_target_sample = only_target[:diff_sample_limit]
         return CephAdminBucketContentDiff(
             source_count=len(source_keys),
             target_count=len(target_keys),
@@ -871,55 +859,12 @@ class BucketsService:
             only_source_count=len(only_source),
             only_target_count=len(only_target),
             ignored_after_cutoff_count=ignored_after_cutoff_count,
-            only_source_sample=only_source_sample,
-            only_target_sample=only_target_sample,
-            only_source_details=[self._compare_object_detail(key, source_objects[key]) for key in only_source_sample],
-            only_target_details=[self._compare_object_detail(key, target_objects[key]) for key in only_target_sample],
+            only_source_sample=only_source,
+            only_target_sample=only_target,
+            only_source_details=[self._compare_object_detail(key, source_objects[key]) for key in only_source],
+            only_target_details=[self._compare_object_detail(key, target_objects[key]) for key in only_target],
             different_sample=different_sample,
         )
-
-    def _build_compare_content_key_sets(
-        self,
-        source_objects: dict[str, dict[str, Any]],
-        target_objects: dict[str, dict[str, Any]],
-    ) -> BucketCompareContentKeySets:
-        source_keys = set(source_objects.keys())
-        target_keys = set(target_objects.keys())
-        only_source = sorted(source_keys - target_keys)
-        only_target = sorted(target_keys - source_keys)
-        common_keys = sorted(source_keys & target_keys)
-
-        different_keys: list[str] = []
-        for key in common_keys:
-            source_entry = source_objects[key]
-            target_entry = target_objects[key]
-            comparison = compare_object_entries(source_entry, target_entry, md5_resolver=self._etag_md5)
-            if not comparison.equal:
-                different_keys.append(key)
-
-        return BucketCompareContentKeySets(
-            only_source_keys=only_source,
-            different_keys=different_keys,
-            only_target_keys=only_target,
-        )
-
-    def get_compare_content_key_sets(
-        self,
-        source_bucket: str,
-        source_account: S3Account,
-        target_bucket: str,
-        target_account: S3Account,
-        *,
-        ignore_modified_after: Optional[datetime] = None,
-    ) -> BucketCompareContentKeySets:
-        source_objects_raw = self._list_bucket_objects_for_compare(source_bucket, source_account)
-        target_objects_raw = self._list_bucket_objects_for_compare(target_bucket, target_account)
-        source_objects, target_objects, _ignored_after_cutoff_count = self._filter_compare_objects_by_cutoff(
-            source_objects_raw,
-            target_objects_raw,
-            ignore_modified_after=ignore_modified_after,
-        )
-        return self._build_compare_content_key_sets(source_objects, target_objects)
 
     def _account_client(self, account: S3Account):
         access_key, secret_key = self._account_credentials(account)
@@ -1042,26 +987,11 @@ class BucketsService:
         target_account: S3Account,
         *,
         action: BucketCompareRemediationAction,
+        object_keys: list[str],
         parallelism: int = 4,
         failed_keys_sample_limit: int = 50,
-        object_key: Optional[str] = None,
-        ignore_modified_after: Optional[datetime] = None,
     ) -> BucketCompareRemediationResult:
-        key_sets = self.get_compare_content_key_sets(
-            source_bucket,
-            source_account,
-            target_bucket,
-            target_account,
-            ignore_modified_after=ignore_modified_after,
-        )
-        keys_by_action: dict[BucketCompareRemediationAction, list[str]] = {
-            "sync_source_only": key_sets.only_source_keys,
-            "sync_different": key_sets.different_keys,
-            "delete_target_only": key_sets.only_target_keys,
-        }
-        selected_keys = keys_by_action[action]
-        if object_key is not None:
-            selected_keys = [object_key] if object_key in set(selected_keys) else []
+        selected_keys = list(object_keys)
         planned_count = len(selected_keys)
         if planned_count == 0:
             return BucketCompareRemediationResult(
