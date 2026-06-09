@@ -39,10 +39,11 @@ def _build_service(db_session, monkeypatch, fake_admin) -> S3AccountsService:
 
 
 class FakeRGWAdmin:
-    def __init__(self):
+    def __init__(self, account_payload: Optional[dict[str, object]] = None):
         self.created_accounts: list[tuple[str, str]] = []
         self.created_users: list[str] = []
         self.quota_calls: list[dict[str, object]] = []
+        self.account_payload = account_payload
 
     def create_account(self, account_id: str, account_name: str):
         self.created_accounts.append((account_id, account_name))
@@ -94,6 +95,8 @@ class FakeRGWAdmin:
         allow_not_found: bool = False,
         allow_not_implemented: bool = False,
     ):
+        if self.account_payload is not None:
+            return self.account_payload
         return {"id": account_id, "user_list": []}
 
 
@@ -135,6 +138,36 @@ def test_create_account_requires_account_api_feature(db_session, monkeypatch):
 
     with pytest.raises(ValueError, match="does not support RGW account API"):
         svc.create_account_with_manager(payload)
+
+
+def test_get_account_limits_returns_quota_and_entity_limits(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
+    account = S3Account(
+        name="LimitedAccount",
+        rgw_account_id="RGW-LIMITED",
+        storage_endpoint_id=endpoint.id,
+    )
+    db_session.add(account)
+    db_session.commit()
+    fake_admin = FakeRGWAdmin(
+        {
+            "id": "RGW-LIMITED",
+            "quota": {
+                "enabled": True,
+                "max_size": 10 * 1024 ** 3,
+                "max_objects": 2_000,
+            },
+            "limits": {
+                "max_buckets": "8",
+                "max_users": "20",
+                "max_roles": 12,
+                "max_groups": 6,
+            },
+        }
+    )
+    svc = _build_service(db_session, monkeypatch, fake_admin)
+
+    assert svc.get_account_limits(account) == (10, 2_000, 8, 20, 12, 6)
 
 
 class FakeRGWAdminImport:

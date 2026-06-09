@@ -54,6 +54,30 @@ export const BucketIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   </svg>
 );
 
+export const PailIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <path
+      d="M5.2 8.2 6.25 16a1.7 1.7 0 0 0 1.7 1.5h4.1a1.7 1.7 0 0 0 1.7-1.5l1.05-7.8"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M4.2 7.2h11.6"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+    <path
+      d="M6.5 7.2c0-2.4 1.35-4.1 3.5-4.1s3.5 1.7 3.5 4.1"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+    <path d="M8.1 11h3.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
 export const OpenIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
     <path d="M7 5h8v8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

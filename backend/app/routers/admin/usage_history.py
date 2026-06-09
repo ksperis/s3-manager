@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import User
-from app.models.usage_history import UsageHistoryResponse
+from app.models.usage_history import UsageHistoryResponse, UsageHistoryTrendResponse
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
@@ -77,6 +77,19 @@ def list_usage_history(
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
+
+
+@router.get("/trends", response_model=UsageHistoryTrendResponse)
+def usage_history_trends(
+    window: Literal["day", "week", "month"] = Query("month"),
+    endpoint_id: Optional[int] = Query(None),
+    subject_type: Literal["all", "account", "s3_user"] = Query("all"),
+    _: User = Depends(get_current_super_admin),
+    db: Session = Depends(get_db),
+) -> UsageHistoryTrendResponse:
+    _ensure_usage_history_enabled()
+    service = UsageHistoryService(db)
+    return service.aggregate_trends(window=window, endpoint_id=endpoint_id, subject_type=subject_type)
 
 
 @router.post("/collect")

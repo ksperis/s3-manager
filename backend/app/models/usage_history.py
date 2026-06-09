@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 UsageHistoryGranularity = Literal["daily", "hourly"]
 UsageHistorySubjectType = Literal["all", "account", "s3_user"]
+UsageHistoryTrendWindow = Literal["day", "week", "month"]
 
 
 class UsageHistorySummary(BaseModel):
@@ -30,6 +31,7 @@ class UsageHistoryRecord(BaseModel):
     subject_identifier: Optional[str] = None
     used_bytes: int = 0
     used_objects: int = 0
+    bucket_count: Optional[int] = None
     quota_size_bytes: Optional[int] = None
     quota_objects: Optional[int] = None
     usage_ratio_pct: Optional[float] = None
@@ -44,3 +46,34 @@ class UsageHistoryResponse(BaseModel):
     page_size: int = 50
     has_next: bool = False
     summary: UsageHistorySummary = Field(default_factory=UsageHistorySummary)
+
+
+class UsageHistoryTrendPoint(BaseModel):
+    period_start: str
+    used_bytes: int = 0
+    used_objects: int = 0
+    bucket_count: int = 0
+    max_usage_ratio_pct: Optional[float] = None
+    subjects_count: int = 0
+    samples_count: int = 0
+    collected_at: Optional[str] = None
+
+
+class UsageHistoryTrendSummary(BaseModel):
+    total_records: int = 0
+    points_count: int = 0
+    subjects_count: int = 0
+    latest_used_bytes: int = 0
+    latest_used_objects: int = 0
+    latest_bucket_count: int = 0
+    latest_collected_at: Optional[str] = None
+    max_usage_ratio_pct: Optional[float] = None
+
+
+class UsageHistoryTrendResponse(BaseModel):
+    window: UsageHistoryTrendWindow
+    granularity: UsageHistoryGranularity
+    available: bool = True
+    unavailable_reason: Optional[str] = None
+    points: list[UsageHistoryTrendPoint] = Field(default_factory=list)
+    summary: UsageHistoryTrendSummary = Field(default_factory=UsageHistoryTrendSummary)

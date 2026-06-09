@@ -180,9 +180,13 @@ def test_usage_history_hourly_and_daily_upserts(db_session, monkeypatch):
     assert db_session.query(QuotaUsageHourly).count() == 1
     assert db_session.query(QuotaUsageDaily).count() == 1
     daily = db_session.query(QuotaUsageDaily).first()
+    hourly = db_session.query(QuotaUsageHourly).first()
+    assert hourly is not None
+    assert int(hourly.bucket_count) == 1
     assert daily is not None
     assert daily.samples_count == 2
     assert int(daily.last_used_bytes) == 50
+    assert int(daily.bucket_count) == 1
 
 
 def test_usage_history_prefers_supervision_client_and_keeps_quota_optional(db_session, monkeypatch):
@@ -223,6 +227,7 @@ def test_usage_history_prefers_supervision_client_and_keeps_quota_optional(db_se
     assert hourly is not None
     assert int(hourly.used_bytes) == 75
     assert int(hourly.used_objects) == 7
+    assert int(hourly.bucket_count) == 1
     assert hourly.quota_size_bytes is None
     assert hourly.usage_ratio_pct is None
 

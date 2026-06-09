@@ -156,6 +156,76 @@ def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_sessio
     assert any(context.kind == "legacy_user" for context in contexts)
 
 
+def test_manager_workspace_exposes_quota_limits_for_kpi_cards(db_session, monkeypatch):
+    user = _create_user(db_session)
+    account = _create_account(db_session, name="quota-account", rgw_account_id="RGWQUOTA0001")
+    legacy_user = _create_legacy_user(db_session, name="quota-legacy", uid="quota-legacy-uid")
+    manager_connection = _create_connection(
+        db_session,
+        created_by_user_id=user.id,
+        name="quota-connection",
+        can_manage_iam=True,
+        access_manager=True,
+    )
+
+    db_session.add_all(
+        [
+            UserS3Account(
+                user_id=user.id,
+                account_id=account.id,
+                account_admin=True,
+                is_root=False,
+            ),
+            UserS3User(user_id=user.id, s3_user_id=legacy_user.id),
+        ]
+    )
+    db_session.commit()
+
+    class _FakeAccountLimitsService:
+        def get_account_limits(self, target_account):
+            assert target_account.id == account.id
+            return 10, 2_000, 8, 20, 12, 6
+
+    class _FakeS3UsersService:
+        def __init__(self, db):
+            self.db = db
+
+        def get_user_limits(self, target_user):
+            assert target_user.id == legacy_user.id
+            return 2.5, 600, 3
+
+    monkeypatch.setattr(
+        execution_contexts,
+        "get_s3_accounts_service",
+        lambda db, allow_missing_admin=False: _FakeAccountLimitsService(),
+    )
+    monkeypatch.setattr(execution_contexts, "S3UsersService", _FakeS3UsersService)
+
+    contexts = execution_contexts.list_execution_contexts(workspace="manager", user=user, db=db_session)
+    account_context = next(context for context in contexts if context.id == str(account.id))
+    legacy_context = next(context for context in contexts if context.id == f"s3u-{legacy_user.id}")
+    connection_context = next(context for context in contexts if context.id == f"conn-{manager_connection.id}")
+
+    assert account_context.quota_max_size_gb == 10
+    assert account_context.quota_max_objects == 2_000
+    assert account_context.max_buckets == 8
+    assert account_context.max_users == 20
+    assert account_context.max_roles == 12
+    assert account_context.max_groups == 6
+    assert legacy_context.quota_max_size_gb == 2.5
+    assert legacy_context.quota_max_objects == 600
+    assert legacy_context.max_buckets == 3
+    assert legacy_context.max_users is None
+    assert legacy_context.max_roles is None
+    assert legacy_context.max_groups is None
+    assert connection_context.quota_max_size_gb is None
+    assert connection_context.quota_max_objects is None
+    assert connection_context.max_buckets is None
+    assert connection_context.max_users is None
+    assert connection_context.max_roles is None
+    assert connection_context.max_groups is None
+
+
 def test_browser_workspace_returns_connections_and_s3_users(db_session):
     user = _create_user(db_session)
     account = _create_account(db_session, name="browser-account", rgw_account_id="RGWBROWSER0001")

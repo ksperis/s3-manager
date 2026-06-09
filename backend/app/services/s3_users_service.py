@@ -36,11 +36,45 @@ from app.models.s3_user import (
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services import s3_client
 from app.utils.s3_endpoint import resolve_s3_client_options
-from app.utils.quota_stats import bytes_to_gb
+from app.utils.quota_stats import bytes_to_gb, extract_quota_limits
 from app.utils.size_units import size_to_bytes
 from app.utils.s3_user_ordering import s3_user_name_order_by
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_positive_limit(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        parsed = int(value)
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            parsed = int(float(normalized))
+        except ValueError:
+            return None
+    else:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _extract_user_payload(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    user_payload = raw.get("user")
+    if isinstance(user_payload, dict):
+        return user_payload
+    return raw
+
+
+def _extract_max_buckets(payload: Any) -> Optional[int]:
+    user_payload = _extract_user_payload(payload)
+    return _parse_positive_limit(user_payload.get("max_buckets") or (payload.get("max_buckets") if isinstance(payload, dict) else None))
 
 
 class S3UsersService:
@@ -134,6 +168,20 @@ class S3UsersService:
 
     def get_user_quota(self, s3_user: S3UserModel) -> tuple[Optional[float], Optional[int]]:
         return self._user_quota(s3_user)
+
+    def get_user_limits(self, s3_user: S3UserModel) -> tuple[Optional[float], Optional[int], Optional[int]]:
+        try:
+            rgw_admin = self._admin_for_user(s3_user)
+        except ValueError as exc:
+            logger.warning("Unable to resolve RGW admin for %s: %s", s3_user.rgw_user_uid, exc)
+            return None, None, None
+        try:
+            payload = rgw_admin.get_user(s3_user.rgw_user_uid, allow_not_found=True) or {}
+        except RGWAdminError as exc:
+            logger.warning("Unable to fetch S3 user limits for %s: %s", s3_user.rgw_user_uid, exc)
+            return None, None, None
+        max_size_bytes, max_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
+        return bytes_to_gb(max_size_bytes), max_objects, _extract_max_buckets(payload)
 
     def _apply_user_quota(
         self,

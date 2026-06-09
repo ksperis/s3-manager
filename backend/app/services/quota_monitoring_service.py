@@ -198,7 +198,7 @@ class QuotaMonitoringService:
                 continue
 
             try:
-                usage_bytes, usage_objects = self._collect_usage(usage_client, subject.usage_uid)
+                usage_bytes, usage_objects, bucket_count = self._collect_usage(usage_client, subject.usage_uid)
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning("Quota monitor usage collection failed for %s:%s: %s", subject.subject_type, subject.subject_id, exc)
                 summary["errors"].append(
@@ -242,9 +242,9 @@ class QuotaMonitoringService:
             )
 
             if app_settings.general.usage_history_enabled:
-                self._upsert_hourly(subject, usage_bytes, usage_objects, quota_size_bytes, quota_objects, ratio_pct, now)
+                self._upsert_hourly(subject, usage_bytes, usage_objects, bucket_count, quota_size_bytes, quota_objects, ratio_pct, now)
                 summary["history_hourly_upserts"] += 1
-                self._upsert_daily(subject, usage_bytes, usage_objects, ratio_pct, now)
+                self._upsert_daily(subject, usage_bytes, usage_objects, bucket_count, ratio_pct, now)
                 summary["history_daily_upserts"] += 1
 
             if quota_alerts_enabled:
@@ -435,20 +435,21 @@ class QuotaMonitoringService:
         cache[endpoint.id] = client
         return client
 
-    def _collect_usage(self, admin: RGWAdminClient, usage_uid: Optional[str]) -> tuple[int, int]:
+    def _collect_usage(self, admin: RGWAdminClient, usage_uid: Optional[str]) -> tuple[int, int, int]:
         if not usage_uid:
-            return 0, 0
+            return 0, 0, 0
         payload = admin.get_all_buckets(uid=usage_uid, with_stats=True)
         buckets = extract_bucket_list(payload)
         total_bytes = 0
         total_objects = 0
+        bucket_count = len(buckets)
         for bucket in buckets:
             if not isinstance(bucket, dict):
                 continue
             used_bytes, used_objects = extract_usage_stats(bucket.get("usage"))
             total_bytes += int(used_bytes or 0)
             total_objects += int(used_objects or 0)
-        return total_bytes, total_objects
+        return total_bytes, total_objects, bucket_count
 
     def _collect_quota(
         self,
@@ -488,6 +489,7 @@ class QuotaMonitoringService:
         subject: SubjectContext,
         used_bytes: int,
         used_objects: int,
+        bucket_count: int,
         quota_size_bytes: Optional[int],
         quota_objects: Optional[int],
         ratio_pct: Optional[float],
@@ -507,6 +509,7 @@ class QuotaMonitoringService:
         if existing:
             existing.used_bytes = int(used_bytes)
             existing.used_objects = int(used_objects)
+            existing.bucket_count = int(bucket_count)
             existing.quota_size_bytes = quota_size_bytes
             existing.quota_objects = quota_objects
             existing.usage_ratio_pct = ratio_pct
@@ -520,6 +523,7 @@ class QuotaMonitoringService:
                 s3_user_id=subject.subject_id if subject.subject_type == "s3_user" else None,
                 used_bytes=int(used_bytes),
                 used_objects=int(used_objects),
+                bucket_count=int(bucket_count),
                 quota_size_bytes=quota_size_bytes,
                 quota_objects=quota_objects,
                 usage_ratio_pct=ratio_pct,
@@ -532,6 +536,7 @@ class QuotaMonitoringService:
         subject: SubjectContext,
         used_bytes: int,
         used_objects: int,
+        bucket_count: int,
         ratio_pct: Optional[float],
         now: datetime,
     ) -> None:
@@ -549,6 +554,7 @@ class QuotaMonitoringService:
         if existing:
             existing.last_used_bytes = int(used_bytes)
             existing.last_used_objects = int(used_objects)
+            existing.bucket_count = int(bucket_count)
             if ratio_pct is not None:
                 if existing.max_ratio_pct is None:
                     existing.max_ratio_pct = ratio_pct
@@ -565,6 +571,7 @@ class QuotaMonitoringService:
                 s3_user_id=subject.subject_id if subject.subject_type == "s3_user" else None,
                 last_used_bytes=int(used_bytes),
                 last_used_objects=int(used_objects),
+                bucket_count=int(bucket_count),
                 max_ratio_pct=ratio_pct,
                 samples_count=1,
                 updated_at=now,

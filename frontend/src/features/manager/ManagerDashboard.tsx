@@ -13,7 +13,14 @@ import {
   type WorkspaceEndpointIncidentEntry,
 } from "../../api/healthchecks";
 import { listManagerActivity, type ManagerActivityEntry } from "../../api/managerActivity";
-import { fetchManagerTraffic, type ManagerTrafficStats, type TrafficWindow } from "../../api/stats";
+import {
+  fetchManagerTraffic,
+  fetchManagerUsageTrends,
+  type ManagerTrafficStats,
+  type ManagerUsageTrendBaseline,
+  type ManagerUsageTrendsResponse,
+  type TrafficWindow,
+} from "../../api/stats";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageHeader from "../../components/PageHeader";
 import { WorkspaceStatusDot } from "../../components/WorkspaceDashboardKit";
@@ -36,8 +43,8 @@ import {
   HistoryIcon,
   InfoIcon,
   OpenIcon,
+  PailIcon,
   RefreshIcon,
-  SettingsIcon,
   ShieldIcon,
   UploadIcon,
   UserIcon,
@@ -53,12 +60,19 @@ type DashboardMetric = {
   label: string;
   value: string;
   detail: string;
-  trend?: string;
+  trend?: DashboardMetricTrend;
   progress?: number | null;
+  progressLabel?: string;
+  compactValue?: boolean;
   tone: DashboardTone;
   icon: ReactNode;
   to?: string;
   unavailableReason?: string | null;
+};
+
+type DashboardMetricTrend = {
+  label: string;
+  tone: "positive" | "negative" | "neutral";
 };
 
 type BucketRankingRow = {
@@ -172,9 +186,56 @@ function selectTrafficTrend(statsByWindow: Partial<Record<TrafficWindow, Manager
   return null;
 }
 
-function formatTrafficTrend(selection: TrafficTrendSelection | null): string | undefined {
+function formatTrafficTrend(selection: TrafficTrendSelection | null): DashboardMetricTrend | undefined {
   if (!selection) return undefined;
-  return `${formatBytes(selection.totalBytes)} vs ${selection.label}`;
+  return { label: `${formatBytes(selection.totalBytes)} vs ${selection.label}`, tone: "positive" };
+}
+
+function formatQuotaDetail(quota: string, usagePercent?: number | null): string {
+  return usagePercent == null ? `of ${quota}` : `of ${quota} (${formatPercentage(usagePercent)})`;
+}
+
+function formatQuotaStatusValue(
+  used: number | null | undefined,
+  quota: number | null | undefined,
+  formatter: (value: number) => string
+): string {
+  if (used == null) return "";
+  const usableQuota = quota != null && quota > 0 ? quota : null;
+  return usableQuota == null ? formatter(used) : `${formatter(used)} / ${formatter(usableQuota)}`;
+}
+
+function trendToneClasses(tone: DashboardMetricTrend["tone"]): string {
+  if (tone === "negative") return "text-rose-600 dark:text-rose-300";
+  if (tone === "neutral") return "text-[var(--ui-text-muted)]";
+  return "text-emerald-600 dark:text-emerald-300";
+}
+
+function formatSignedTrend(
+  currentValue: number | null | undefined,
+  baselineValue: number | null | undefined,
+  label: string,
+  formatter: (value: number) => string
+): DashboardMetricTrend | undefined {
+  if (currentValue == null || baselineValue == null) return undefined;
+  const delta = currentValue - baselineValue;
+  const tone: DashboardMetricTrend["tone"] = delta > 0 ? "positive" : delta < 0 ? "negative" : "neutral";
+  return { label: `${formatter(Math.abs(delta))} vs ${label}`, tone };
+}
+
+function formatStorageTrend(
+  currentValue: number | null,
+  baseline?: ManagerUsageTrendBaseline | null
+): DashboardMetricTrend | undefined {
+  return formatSignedTrend(currentValue, baseline?.used_bytes, baseline?.label ?? "", formatBytes);
+}
+
+function formatCountTrend(
+  currentValue: number | null,
+  baselineValue: number | null | undefined,
+  baseline?: ManagerUsageTrendBaseline | null
+): DashboardMetricTrend | undefined {
+  return formatSignedTrend(currentValue, baselineValue, baseline?.label ?? "", formatDashboardNumber);
 }
 
 function formatStatus(status: HealthCheckStatus): string {
@@ -305,10 +366,32 @@ function DashboardUnavailable({
   return <div className={className}>{children}</div>;
 }
 
-function ProgressBar({ value, tone = "blue", className }: { value?: number | null; tone?: DashboardTone; className?: string }) {
-  const width = `${Math.max(0, Math.min(100, value ?? 0))}%`;
+function ProgressBar({
+  value,
+  tone = "blue",
+  className,
+  ariaLabel,
+}: {
+  value?: number | null;
+  tone?: DashboardTone;
+  className?: string;
+  ariaLabel?: string;
+}) {
+  const boundedValue = Math.max(0, Math.min(100, value ?? 0));
+  const width = `${boundedValue}%`;
   return (
-    <div className={cx("h-2 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700/60", className)}>
+    <div
+      className={cx("h-2 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700/60", className)}
+      {...(ariaLabel
+        ? {
+            role: "meter",
+            "aria-label": ariaLabel,
+            "aria-valuemin": 0,
+            "aria-valuemax": 100,
+            "aria-valuenow": Math.round(boundedValue),
+          }
+        : {})}
+    >
       <div className={cx("h-full rounded-full", toneClasses(tone).bar)} style={{ width }} />
     </div>
   );
@@ -322,21 +405,74 @@ function IconBubble({ tone, children, className }: { tone: DashboardTone; childr
   );
 }
 
+function TrendArrowIcon({ tone }: { tone: Exclude<DashboardMetricTrend["tone"], "neutral"> }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={cx("h-3.5 w-3.5", tone === "negative" && "rotate-180")}
+      fill="none"
+      aria-hidden="true"
+    >
+      <path d="M8 13V3.75" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M4.75 7 8 3.75 11.25 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function MetricCard({ metric }: { metric: DashboardMetric }) {
   const content = (
-    <div className={cx(uiCardClass, "flex min-h-[120px] items-center gap-4 px-4 py-3.5")}>
-      <IconBubble tone={metric.tone} className="h-12 w-12">
+    <div
+      className={cx(uiCardClass, "flex h-full min-h-[152px] items-start gap-4 px-5 py-4 sm:gap-5")}
+      data-kpi-card={metric.label}
+    >
+      <IconBubble tone={metric.tone} className="mt-6 h-14 w-14 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]">
         {metric.icon}
       </IconBubble>
-      <div className="min-w-0 flex-1">
+      <div className="grid min-h-[120px] min-w-0 flex-1 grid-rows-[1rem_2rem_minmax(2.5rem,auto)_0.375rem_1rem] gap-y-1">
         <div className="flex items-center gap-1.5">
-          <p className="text-[11px] font-semibold uppercase leading-4 text-[var(--ui-text-muted)]">{metric.label}</p>
+          <p className="whitespace-nowrap text-[11px] font-bold uppercase leading-4 text-[var(--ui-text-muted)]">{metric.label}</p>
           {metric.label === "Storage used" && <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />}
         </div>
-        <p className="mt-1 text-[23px] font-semibold leading-7 text-[var(--ui-text)]">{metric.value}</p>
-        <p className={cx("mt-1 ui-body", uiMutedTextClass)}>{metric.detail}</p>
-        {metric.progress != null && <ProgressBar value={metric.progress} tone={metric.tone} className="mt-2 max-w-[210px]" />}
-        {metric.trend && <p className="mt-2 ui-caption font-medium text-emerald-600 dark:text-emerald-300">{metric.trend}</p>}
+        <p
+          className={cx(
+            "font-semibold text-[var(--ui-text)]",
+            metric.compactValue ? "whitespace-nowrap text-[22px] leading-6" : "text-2xl leading-7"
+          )}
+          data-kpi-value={metric.label}
+        >
+          {metric.value}
+        </p>
+        <div className="min-w-0">
+          {metric.detail ? <p className={cx("text-sm leading-5", uiMutedTextClass)}>{metric.detail}</p> : <span className="block h-5" aria-hidden="true" />}
+        </div>
+        <div className="flex items-center">
+          {metric.progress != null ? (
+            <ProgressBar
+              value={metric.progress}
+              tone={metric.tone}
+              className="h-1.5 w-full max-w-[220px]"
+              ariaLabel={metric.progressLabel ?? `${metric.label} quota usage`}
+            />
+          ) : (
+            <span className="h-1.5 w-full max-w-[220px]" aria-hidden="true" />
+          )}
+        </div>
+        <div className="flex items-center">
+          {metric.trend ? (
+            <p className={cx("flex items-center gap-1.5 whitespace-nowrap text-xs font-medium leading-4", trendToneClasses(metric.trend.tone))}>
+              {metric.trend.tone === "neutral" ? (
+                <span className="flex h-3.5 w-3.5 items-center justify-center" aria-hidden="true">
+                  -
+                </span>
+              ) : (
+                <TrendArrowIcon tone={metric.trend.tone} />
+              )}
+              <span>{metric.trend.label}</span>
+            </p>
+          ) : (
+            <span className="h-4" aria-hidden="true" />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -524,58 +660,94 @@ function QuotaStatusCard({
   storageQuota,
   objectCount,
   objectQuota,
+  bucketCount,
+  bucketQuota,
+  userCount,
+  userQuota,
+  roleCount,
+  roleQuota,
+  groupCount,
+  groupQuota,
   unavailableReason,
+  bucketUnavailableReason,
+  iamUnavailableReason,
 }: {
   storageUsed: number | null;
   storageQuota: number | null;
   objectCount: number | null;
   objectQuota: number | null;
+  bucketCount: number | null;
+  bucketQuota: number | null;
+  userCount: number | null;
+  userQuota: number | null;
+  roleCount: number | null;
+  roleQuota: number | null;
+  groupCount: number | null;
+  groupQuota: number | null;
   unavailableReason?: string | null;
+  bucketUnavailableReason?: string | null;
+  iamUnavailableReason?: string | null;
 }) {
   const visibleStorageUsed = unavailableReason ? null : storageUsed;
   const visibleStorageQuota = unavailableReason ? null : storageQuota;
   const visibleObjectCount = unavailableReason ? null : objectCount;
   const visibleObjectQuota = unavailableReason ? null : objectQuota;
+  const visibleBucketCount = bucketUnavailableReason ? null : bucketCount;
+  const visibleBucketQuota = bucketUnavailableReason ? null : bucketQuota;
+  const visibleUserCount = iamUnavailableReason ? null : userCount;
+  const visibleUserQuota = iamUnavailableReason ? null : userQuota;
+  const visibleRoleCount = iamUnavailableReason ? null : roleCount;
+  const visibleRoleQuota = iamUnavailableReason ? null : roleQuota;
+  const visibleGroupCount = iamUnavailableReason ? null : groupCount;
+  const visibleGroupQuota = iamUnavailableReason ? null : groupQuota;
   const storagePercent = percent(visibleStorageUsed, visibleStorageQuota);
   const objectPercent = percent(visibleObjectCount, visibleObjectQuota);
+  const bucketStatusPercent = percent(visibleBucketCount, visibleBucketQuota);
+  const userPercent = percent(visibleUserCount, visibleUserQuota);
+  const rolePercent = percent(visibleRoleCount, visibleRoleQuota);
+  const groupPercent = percent(visibleGroupCount, visibleGroupQuota);
   const rows = [
     {
       label: "Storage",
-      value:
-        visibleStorageUsed == null
-          ? ""
-          : visibleStorageQuota == null
-            ? formatBytes(visibleStorageUsed)
-            : `${formatBytes(visibleStorageUsed)} / ${formatBytes(visibleStorageQuota)}`,
+      value: formatQuotaStatusValue(visibleStorageUsed, visibleStorageQuota, formatBytes),
       percent: storagePercent,
       tone: "blue" as DashboardTone,
       icon: <BucketIcon className="h-3.5 w-3.5" />,
     },
     {
+      label: "Buckets",
+      value: formatQuotaStatusValue(visibleBucketCount, visibleBucketQuota, formatDashboardNumber),
+      percent: bucketStatusPercent,
+      tone: "emerald" as DashboardTone,
+      icon: <PailIcon className="h-3.5 w-3.5" />,
+    },
+    {
       label: "Objects",
-      value:
-        visibleObjectCount == null
-          ? ""
-          : visibleObjectQuota == null
-            ? formatDashboardNumber(visibleObjectCount)
-            : `${formatDashboardNumber(visibleObjectCount)} / ${formatDashboardNumber(visibleObjectQuota)}`,
+      value: formatQuotaStatusValue(visibleObjectCount, visibleObjectQuota, formatDashboardNumber),
       percent: objectPercent,
-      tone: "blue" as DashboardTone,
+      tone: "violet" as DashboardTone,
       icon: <FileIcon className="h-3.5 w-3.5" />,
     },
     {
-      label: "Buckets",
-      value: "",
-      percent: null,
+      label: "Users",
+      value: formatQuotaStatusValue(visibleUserCount, visibleUserQuota, formatDashboardNumber),
+      percent: userPercent,
       tone: "blue" as DashboardTone,
-      icon: <BucketIcon className="h-3.5 w-3.5" />,
+      icon: <UserIcon className="h-3.5 w-3.5" />,
     },
     {
-      label: "Bandwidth (month)",
-      value: "",
-      percent: null,
-      tone: "violet" as DashboardTone,
-      icon: <SettingsIcon className="h-3.5 w-3.5" />,
+      label: "Roles",
+      value: formatQuotaStatusValue(visibleRoleCount, visibleRoleQuota, formatDashboardNumber),
+      percent: rolePercent,
+      tone: "amber" as DashboardTone,
+      icon: <ShieldIcon className="h-3.5 w-3.5" />,
+    },
+    {
+      label: "Groups",
+      value: formatQuotaStatusValue(visibleGroupCount, visibleGroupQuota, formatDashboardNumber),
+      percent: groupPercent,
+      tone: "emerald" as DashboardTone,
+      icon: <GroupIcon className="h-3.5 w-3.5" />,
     },
   ];
   const content = (
@@ -583,7 +755,7 @@ function QuotaStatusCard({
       <h2 className="ui-body font-semibold text-[var(--ui-text)]">Quota status</h2>
       <div className="mt-3 space-y-2">
         {rows.map((row) => (
-          <div key={row.label} className="relative">
+          <div key={row.label} className="relative" data-quota-status-row={row.label}>
             <div className="grid grid-cols-[minmax(96px,1fr)_minmax(112px,1.2fr)_42px] items-center gap-2.5">
               <div className="flex min-w-0 items-center gap-2">
                 <IconBubble tone={row.tone} className="h-6 w-6 rounded-md">
@@ -861,6 +1033,8 @@ export default function ManagerDashboard() {
   const [trafficTrend, setTrafficTrend] = useState<TrafficTrendSelection | null>(null);
   const [trafficLoading, setTrafficLoading] = useState(false);
   const [trafficError, setTrafficError] = useState<string | null>(null);
+  const [usageTrends, setUsageTrends] = useState<ManagerUsageTrendsResponse | null>(null);
+  const [usageTrendsLoading, setUsageTrendsLoading] = useState(false);
 
   const selected = useMemo(
     () => accounts.find((account) => account.id === selectedS3AccountId),
@@ -1022,6 +1196,29 @@ export default function ManagerDashboard() {
     };
   }, [accountIdForApi, hasContext, refreshNonce, trafficFeatureEnabled]);
 
+  useEffect(() => {
+    if (!hasContext || !usageFeatureEnabled) {
+      setUsageTrends(null);
+      setUsageTrendsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setUsageTrendsLoading(true);
+    fetchManagerUsageTrends(accountIdForApi)
+      .then((data) => {
+        if (!cancelled) setUsageTrends(data);
+      })
+      .catch(() => {
+        if (!cancelled) setUsageTrends(null);
+      })
+      .finally(() => {
+        if (!cancelled) setUsageTrendsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, hasContext, refreshNonce, usageFeatureEnabled]);
+
   const accountLabel = selected
     ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
     : sessionS3AccountName ?? "S3 session";
@@ -1060,12 +1257,41 @@ export default function ManagerDashboard() {
       ? selected.quota_max_objects
       : null;
   const visibleBucketCount = bucketUnavailableReason ? null : bucketCount;
+  const bucketQuota =
+    selected?.max_buckets !== undefined && selected?.max_buckets !== null
+      ? selected.max_buckets
+      : null;
+  const iamUserCount = iamUnavailableReason ? null : iamOverview?.iam_users ?? stats?.total_iam_users ?? null;
+  const iamGroupCount = iamUnavailableReason ? null : iamOverview?.iam_groups ?? stats?.total_iam_groups ?? null;
+  const iamRoleCount = iamUnavailableReason ? null : iamOverview?.iam_roles ?? stats?.total_iam_roles ?? null;
+  const iamPolicyCount = iamUnavailableReason ? null : iamOverview?.iam_policies ?? stats?.total_iam_policies ?? null;
+  const userQuota =
+    selected?.max_users !== undefined && selected?.max_users !== null
+      ? selected.max_users
+      : null;
+  const roleQuota =
+    selected?.max_roles !== undefined && selected?.max_roles !== null
+      ? selected.max_roles
+      : null;
+  const groupQuota =
+    selected?.max_groups !== undefined && selected?.max_groups !== null
+      ? selected.max_groups
+      : null;
   const storagePercent = percent(storageUsedBytes, storageQuotaBytes);
+  const bucketPercent = percent(visibleBucketCount, bucketQuota);
+  const objectPercent = percent(objectCount, objectQuota);
   const uploadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_in ?? null;
   const downloadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_out ?? null;
   const trafficValue =
     uploadBytes == null || downloadBytes == null ? "" : `${formatBytes(uploadBytes)} / ${formatBytes(downloadBytes)}`;
   const trafficTrendLabel = trafficUnavailableReason ? undefined : formatTrafficTrend(trafficTrend);
+  const storageTrendLabel = metricsUnavailableReason ? undefined : formatStorageTrend(storageUsedBytes, usageTrends?.storage);
+  const bucketTrendLabel = bucketUnavailableReason
+    ? undefined
+    : formatCountTrend(visibleBucketCount, usageTrends?.buckets?.bucket_count, usageTrends?.buckets);
+  const objectTrendLabel = metricsUnavailableReason
+    ? undefined
+    : formatCountTrend(objectCount, usageTrends?.objects?.used_objects, usageTrends?.objects);
   const bucketRows = buildBucketRows(stats?.bucket_usage ?? []);
   const activityRows = activityUnavailableReason ? [] : buildActivityRows(activityLogs);
   const topBucketsUnavailableReason =
@@ -1075,28 +1301,28 @@ export default function ManagerDashboard() {
   const accessCounts = [
     {
       label: "Users",
-      value: iamUnavailableReason ? null : iamOverview?.iam_users ?? stats?.total_iam_users ?? null,
+      value: iamUserCount,
       to: "/manager/users",
       tone: "blue" as DashboardTone,
       icon: <UserIcon className="h-4 w-4" />,
     },
     {
       label: "Groups",
-      value: iamUnavailableReason ? null : iamOverview?.iam_groups ?? stats?.total_iam_groups ?? null,
+      value: iamGroupCount,
       to: "/manager/groups",
       tone: "emerald" as DashboardTone,
       icon: <GroupIcon className="h-4 w-4" />,
     },
     {
       label: "Roles",
-      value: iamUnavailableReason ? null : iamOverview?.iam_roles ?? stats?.total_iam_roles ?? null,
+      value: iamRoleCount,
       to: "/manager/roles",
       tone: "amber" as DashboardTone,
       icon: <ShieldIcon className="h-4 w-4" />,
     },
     {
       label: "Policies",
-      value: iamUnavailableReason ? null : iamOverview?.iam_policies ?? stats?.total_iam_policies ?? null,
+      value: iamPolicyCount,
       to: "/manager/iam/policies",
       tone: "violet" as DashboardTone,
       icon: <FileIcon className="h-4 w-4" />,
@@ -1106,8 +1332,10 @@ export default function ManagerDashboard() {
     {
       label: "Storage used",
       value: formatOptionalBytes(storageUsedBytes),
-      detail: storageQuotaBytes == null ? "" : `${formatBytes(storageQuotaBytes)} quota${storagePercent != null ? ` (${formatPercentage(storagePercent)})` : ""}`,
+      detail: storageQuotaBytes == null ? "" : formatQuotaDetail(formatBytes(storageQuotaBytes), storagePercent),
       progress: storagePercent,
+      progressLabel: "Storage used quota usage",
+      trend: storageTrendLabel,
       tone: "blue",
       icon: <BucketIcon className="h-7 w-7" />,
       to: "/manager/metrics",
@@ -1116,16 +1344,32 @@ export default function ManagerDashboard() {
     {
       label: "Buckets",
       value: visibleBucketCount == null ? "" : visibleBucketCount.toLocaleString(),
-      detail: visibleBucketCount == null ? "" : "Buckets",
+      detail:
+        bucketQuota == null
+          ? visibleBucketCount == null
+            ? ""
+            : "Buckets"
+          : formatQuotaDetail(`${bucketQuota.toLocaleString()} buckets`, bucketPercent),
+      progress: bucketPercent,
+      progressLabel: "Buckets quota usage",
+      trend: bucketTrendLabel,
       tone: "emerald",
-      icon: <BucketIcon className="h-7 w-7" />,
+      icon: <PailIcon className="h-7 w-7" />,
       to: "/manager/buckets",
       unavailableReason: bucketUnavailableReason,
     },
     {
       label: "Objects",
       value: formatOptionalDashboardNumber(objectCount),
-      detail: objectCount == null ? "" : "Objects",
+      detail:
+        objectQuota == null
+          ? objectCount == null
+            ? ""
+            : "Objects"
+          : formatQuotaDetail(`${formatDashboardNumber(objectQuota)} objects`, objectPercent),
+      progress: objectPercent,
+      progressLabel: "Objects quota usage",
+      trend: objectTrendLabel,
       tone: "violet",
       icon: <FileIcon className="h-7 w-7" />,
       to: "/manager/metrics",
@@ -1136,6 +1380,7 @@ export default function ManagerDashboard() {
       value: trafficLoading ? "..." : trafficValue,
       detail: trafficValue ? "Last 24h" : "",
       trend: trafficTrendLabel,
+      compactValue: true,
       tone: "amber",
       icon: <UploadIcon className="h-7 w-7" />,
       to: "/manager/metrics",
@@ -1190,7 +1435,7 @@ export default function ManagerDashboard() {
       unavailableReason: noContextReason || (!snsFeatureEnabled ? "SNS topics are disabled for this endpoint." : null),
     },
   ];
-  const refreshing = loading || iamLoading || bucketCountLoading || workspaceHealthLoading || activityLoading || trafficLoading;
+  const refreshing = loading || iamLoading || bucketCountLoading || workspaceHealthLoading || activityLoading || trafficLoading || usageTrendsLoading;
 
   const handleRefresh = () => {
     setLastUpdated(new Date());
@@ -1244,7 +1489,17 @@ export default function ManagerDashboard() {
           storageQuota={storageQuotaBytes}
           objectCount={objectCount}
           objectQuota={objectQuota}
+          bucketCount={visibleBucketCount}
+          bucketQuota={bucketQuota}
+          userCount={iamUserCount}
+          userQuota={userQuota}
+          roleCount={iamRoleCount}
+          roleQuota={roleQuota}
+          groupCount={iamGroupCount}
+          groupQuota={groupQuota}
           unavailableReason={metricsUnavailableReason}
+          bucketUnavailableReason={bucketUnavailableReason}
+          iamUnavailableReason={iamUnavailableReason}
         />
         <QuickActionsCard actions={quickActions} />
         <AccessManagementCard counts={accessCounts} unavailableReason={iamUnavailableReason} />

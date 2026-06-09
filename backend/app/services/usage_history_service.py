@@ -2,25 +2,135 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Literal, Optional
+from typing import Any, Callable, Literal, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import QuotaUsageDaily, QuotaUsageHourly, S3Account, S3User, StorageEndpoint
-from app.models.usage_history import UsageHistoryRecord, UsageHistoryResponse, UsageHistorySummary
+from app.models.usage_history import (
+    UsageHistoryRecord,
+    UsageHistoryResponse,
+    UsageHistorySummary,
+    UsageHistoryTrendPoint,
+    UsageHistoryTrendResponse,
+    UsageHistoryTrendSummary,
+)
+from app.utils.time import utcnow
 
 Granularity = Literal["daily", "hourly"]
 SubjectType = Literal["all", "account", "s3_user"]
 SortBy = Literal["period", "subject", "used_bytes", "used_objects", "ratio"]
 SortDir = Literal["asc", "desc"]
+TrendWindow = Literal["day", "week", "month"]
+TrendFilterBuilder = Callable[[Any], list]
 
 
 class UsageHistoryService:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def empty_trends(
+        self,
+        *,
+        window: TrendWindow,
+        unavailable_reason: Optional[str] = None,
+    ) -> UsageHistoryTrendResponse:
+        return UsageHistoryTrendResponse(
+            window=window,
+            granularity=self._trend_granularity(window),
+            available=unavailable_reason is None,
+            unavailable_reason=unavailable_reason,
+        )
+
+    def aggregate_trends(
+        self,
+        *,
+        window: TrendWindow,
+        endpoint_id: Optional[int] = None,
+        subject_type: SubjectType = "all",
+        extra_filter_builder: Optional[TrendFilterBuilder] = None,
+    ) -> UsageHistoryTrendResponse:
+        granularity = self._trend_granularity(window)
+        model = QuotaUsageDaily if granularity == "daily" else QuotaUsageHourly
+        period_col = QuotaUsageDaily.day if granularity == "daily" else QuotaUsageHourly.hour_ts
+        used_bytes_col = QuotaUsageDaily.last_used_bytes if granularity == "daily" else QuotaUsageHourly.used_bytes
+        used_objects_col = QuotaUsageDaily.last_used_objects if granularity == "daily" else QuotaUsageHourly.used_objects
+        ratio_col = QuotaUsageDaily.max_ratio_pct if granularity == "daily" else QuotaUsageHourly.usage_ratio_pct
+        collected_col = QuotaUsageDaily.updated_at if granularity == "daily" else QuotaUsageHourly.collected_at
+        bucket_col = model.bucket_count
+        samples_col = QuotaUsageDaily.samples_count if granularity == "daily" else None
+        start, end = self._trend_boundaries(window)
+
+        filters = []
+        if endpoint_id is not None:
+            filters.append(model.storage_endpoint_id == endpoint_id)
+        if subject_type == "account":
+            filters.append(model.s3_account_id.isnot(None))
+        elif subject_type == "s3_user":
+            filters.append(model.s3_user_id.isnot(None))
+        filters.append(period_col >= start)
+        filters.append(period_col <= end)
+        if extra_filter_builder is not None:
+            filters.extend(extra_filter_builder(model))
+
+        samples_expr = func.sum(samples_col) if samples_col is not None else func.count(model.id)
+        rows = (
+            self.db.query(
+                period_col.label("period_start"),
+                func.sum(used_bytes_col).label("used_bytes"),
+                func.sum(used_objects_col).label("used_objects"),
+                func.sum(func.coalesce(bucket_col, 0)).label("bucket_count"),
+                func.max(ratio_col).label("max_usage_ratio_pct"),
+                func.count(func.distinct(model.s3_account_id)).label("account_subjects"),
+                func.count(func.distinct(model.s3_user_id)).label("user_subjects"),
+                samples_expr.label("samples_count"),
+                func.max(collected_col).label("collected_at"),
+                func.count(model.id).label("records_count"),
+            )
+            .filter(*filters)
+            .group_by(period_col)
+            .order_by(period_col.asc())
+            .all()
+        )
+
+        points = [
+            UsageHistoryTrendPoint(
+                period_start=self._iso(row.period_start) or "",
+                used_bytes=int(row.used_bytes or 0),
+                used_objects=int(row.used_objects or 0),
+                bucket_count=int(row.bucket_count or 0),
+                max_usage_ratio_pct=self._float_or_none(row.max_usage_ratio_pct),
+                subjects_count=int(row.account_subjects or 0) + int(row.user_subjects or 0),
+                samples_count=int(row.samples_count or 0),
+                collected_at=self._iso(row.collected_at),
+            )
+            for row in rows
+        ]
+        latest = points[-1] if points else None
+        max_ratio = max(
+            (point.max_usage_ratio_pct for point in points if point.max_usage_ratio_pct is not None),
+            default=None,
+        )
+        summary = UsageHistoryTrendSummary(
+            total_records=sum(int(row.records_count or 0) for row in rows),
+            points_count=len(points),
+            subjects_count=self._count_subjects(model, filters),
+            latest_used_bytes=latest.used_bytes if latest else 0,
+            latest_used_objects=latest.used_objects if latest else 0,
+            latest_bucket_count=latest.bucket_count if latest else 0,
+            latest_collected_at=latest.collected_at if latest else None,
+            max_usage_ratio_pct=max_ratio,
+        )
+        return UsageHistoryTrendResponse(
+            window=window,
+            granularity=granularity,
+            available=True,
+            points=points,
+            summary=summary,
+        )
 
     def list_records(
         self,
@@ -135,6 +245,19 @@ class UsageHistoryService:
         )
         return accounts + users
 
+    @staticmethod
+    def _trend_granularity(window: TrendWindow) -> Granularity:
+        return "hourly" if window == "day" else "daily"
+
+    @staticmethod
+    def _trend_boundaries(window: TrendWindow) -> tuple[date | datetime, date | datetime]:
+        now = utcnow()
+        if window == "day":
+            return now - timedelta(days=1), now
+        days = 7 if window == "week" else 30
+        today = now.date()
+        return today - timedelta(days=days - 1), today
+
     def _serialize_row(
         self,
         *,
@@ -158,6 +281,7 @@ class UsageHistoryService:
             period_start = row.day.isoformat()
             used_bytes = row.last_used_bytes
             used_objects = row.last_used_objects
+            bucket_count = row.bucket_count
             quota_size_bytes = None
             quota_objects = None
             usage_ratio_pct = row.max_ratio_pct
@@ -167,6 +291,7 @@ class UsageHistoryService:
             period_start = row.hour_ts.isoformat()
             used_bytes = row.used_bytes
             used_objects = row.used_objects
+            bucket_count = row.bucket_count
             quota_size_bytes = row.quota_size_bytes
             quota_objects = row.quota_objects
             usage_ratio_pct = row.usage_ratio_pct
@@ -185,6 +310,7 @@ class UsageHistoryService:
             subject_identifier=subject_identifier,
             used_bytes=int(used_bytes or 0),
             used_objects=int(used_objects or 0),
+            bucket_count=int(bucket_count) if bucket_count is not None else None,
             quota_size_bytes=int(quota_size_bytes) if quota_size_bytes is not None else None,
             quota_objects=int(quota_objects) if quota_objects is not None else None,
             usage_ratio_pct=self._float_or_none(usage_ratio_pct),

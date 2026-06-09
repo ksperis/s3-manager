@@ -40,13 +40,40 @@ import random
 from typing import Optional, Any
 from app.utils.rgw import extract_bucket_list, normalize_rgw_identifier, resolve_admin_uid
 from app.utils.usage_stats import extract_usage_stats
-from app.utils.quota_stats import bytes_to_gb
+from app.utils.quota_stats import bytes_to_gb, extract_quota_limits
 from app.utils.size_units import size_to_bytes
 from app.utils.s3_account_ordering import s3_account_name_order_by
 
 
 logger = logging.getLogger(__name__)
 ACCOUNT_ROLE_VALUES = {entry.value for entry in AccountRole}
+
+
+def _parse_positive_limit(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        parsed = int(value)
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            parsed = int(float(normalized))
+        except ValueError:
+            return None
+    else:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _extract_account_limit(payload: Any, key: str) -> Optional[int]:
+    if not isinstance(payload, dict):
+        return None
+    limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
+    return _parse_positive_limit(payload.get(key) or limits_payload.get(key))
 
 
 class S3AccountsService:
@@ -241,6 +268,34 @@ class S3AccountsService:
 
     def get_account_quota(self, account: S3Account) -> tuple[Optional[float], Optional[int]]:
         return self._account_quota(account)
+
+    def get_account_limits(
+        self,
+        account: S3Account,
+    ) -> tuple[Optional[float], Optional[int], Optional[int], Optional[int], Optional[int], Optional[int]]:
+        if not account.rgw_account_id:
+            return None, None, None, None, None, None
+        rgw_admin = self._admin_for_account(account, allow_missing=True)
+        if not rgw_admin:
+            return None, None, None, None, None, None
+        try:
+            payload = rgw_admin.get_account(
+                account.rgw_account_id,
+                allow_not_found=True,
+                allow_not_implemented=True,
+            ) or {}
+        except RGWAdminError as exc:
+            logger.warning("Unable to fetch account limits for %s: %s", account.rgw_account_id, exc)
+            return None, None, None, None, None, None
+        max_size_bytes, max_objects = extract_quota_limits(payload, keys=("quota", "account_quota"))
+        return (
+            bytes_to_gb(max_size_bytes),
+            max_objects,
+            _extract_account_limit(payload, "max_buckets"),
+            _extract_account_limit(payload, "max_users"),
+            _extract_account_limit(payload, "max_roles"),
+            _extract_account_limit(payload, "max_groups"),
+        )
 
     def _normalize_account_key(self, account_id: Optional[str]) -> Optional[str]:
         if not account_id:

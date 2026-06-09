@@ -59,6 +59,7 @@ def test_list_usage_history_daily_records(client: TestClient, db_session, monkey
                 s3_account_id=account.id,
                 last_used_bytes=2048,
                 last_used_objects=5,
+                bucket_count=3,
                 max_ratio_pct=50.0,
                 samples_count=2,
                 updated_at=datetime(2026, 6, 7, 12, 0, 0),
@@ -69,6 +70,7 @@ def test_list_usage_history_daily_records(client: TestClient, db_session, monkey
                 s3_user_id=s3_user.id,
                 last_used_bytes=1024,
                 last_used_objects=3,
+                bucket_count=1,
                 max_ratio_pct=25.0,
                 samples_count=1,
                 updated_at=datetime(2026, 6, 7, 12, 5, 0),
@@ -90,6 +92,7 @@ def test_list_usage_history_daily_records(client: TestClient, db_session, monkey
     assert payload["items"][0]["subject_name"] == "Tenant A"
     assert payload["items"][0]["subject_identifier"] == "tenant-a"
     assert payload["items"][0]["used_bytes"] == 2048
+    assert payload["items"][0]["bucket_count"] == 3
     assert payload["items"][0]["samples_count"] == 2
 
 
@@ -150,6 +153,7 @@ def test_list_usage_history_hourly_records_include_quota(client: TestClient, db_
             s3_user_id=s3_user.id,
             used_bytes=4096,
             used_objects=7,
+            bucket_count=2,
             quota_size_bytes=8192,
             quota_objects=10,
             usage_ratio_pct=70.0,
@@ -167,5 +171,6 @@ def test_list_usage_history_hourly_records_include_quota(client: TestClient, db_
     item = response.json()["items"][0]
     assert item["subject_name"] == "Legacy User"
     assert item["subject_identifier"] == "legacy-user"
+    assert item["bucket_count"] == 2
     assert item["quota_size_bytes"] == 8192
     assert item["usage_ratio_pct"] == 70.0

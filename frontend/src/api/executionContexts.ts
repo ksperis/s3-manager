@@ -22,6 +22,10 @@ export type ExecutionContext = {
   hidden?: boolean;
   manager_account_is_admin?: boolean | null;
   rgw_account_id?: string | null;
+  max_buckets?: number | null;
+  max_users?: number | null;
+  max_roles?: number | null;
+  max_groups?: number | null;
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
   endpoint_id?: number | null;

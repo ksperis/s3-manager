@@ -12,6 +12,7 @@ const useIamOverviewMock = vi.fn();
 const listBucketsMock = vi.fn();
 const listManagerActivityMock = vi.fn();
 const fetchManagerTrafficMock = vi.fn();
+const fetchManagerUsageTrendsMock = vi.fn();
 
 vi.mock("./S3AccountContext", () => ({
   useS3AccountContext: () => useS3AccountContextMock(),
@@ -64,6 +65,7 @@ vi.mock("../../api/stats", async () => {
   return {
     ...actual,
     fetchManagerTraffic: (...args: unknown[]) => fetchManagerTrafficMock(...args),
+    fetchManagerUsageTrends: (...args: unknown[]) => fetchManagerUsageTrendsMock(...args),
   };
 });
 
@@ -143,6 +145,7 @@ describe("manager shell pages", () => {
     listBucketsMock.mockResolvedValue([]);
     listManagerActivityMock.mockResolvedValue([]);
     fetchManagerTrafficMock.mockResolvedValue(managerTrafficResponse(0, 0));
+    fetchManagerUsageTrendsMock.mockResolvedValue({});
     window.localStorage.clear();
   });
 
@@ -628,14 +631,19 @@ describe("manager shell pages", () => {
 
   it("renders a bucket metric card and bucket ranking link", async () => {
     listBucketsMock.mockResolvedValue([{ name: "bucket-a" }, { name: "bucket-b" }]);
+    fetchManagerUsageTrendsMock.mockResolvedValue({
+      storage: { window: "month", label: "last 30 days", period_start: "2026-05-10", used_bytes: 4 * 1024 ** 3 },
+      buckets: { window: "month", label: "last 30 days", period_start: "2026-05-10", bucket_count: 1 },
+      objects: { window: "month", label: "last 30 days", period_start: "2026-05-10", used_objects: 8 },
+    });
     useManagerStatsMock.mockReturnValue({
       stats: {
         total_buckets: 2,
-        total_iam_users: 0,
-        total_iam_groups: 0,
-        total_iam_roles: 0,
+        total_iam_users: 2,
+        total_iam_groups: 1,
+        total_iam_roles: 3,
         total_iam_policies: 0,
-        total_bytes: 3_000,
+        total_bytes: 5 * 1024 ** 3,
         total_objects: 12,
         bucket_usage: [
           { name: "bucket-a", used_bytes: 2_000, object_count: 8 },
@@ -648,18 +656,25 @@ describe("manager shell pages", () => {
     useS3AccountContextMock.mockReturnValue({
       accounts: [
         {
-          id: "conn-1",
+          id: "account-1",
           name: "User9001",
-          type: "connection",
-          storage_endpoint_capabilities: { iam: false, metrics: true, usage: true },
+          type: "account",
+          max_buckets: 4,
+          max_users: 5,
+          max_roles: 6,
+          max_groups: 4,
+          quota_max_size_gb: 10,
+          quota_max_objects: 24,
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+          capabilities: { can_manage_iam: true },
         },
       ],
-      selectedS3AccountId: "conn-1",
+      selectedS3AccountId: "account-1",
       requiresS3AccountSelection: false,
       sessionS3AccountName: null,
-      selectedS3AccountType: "connection",
+      selectedS3AccountType: "account",
       hasS3AccountContext: true,
-      accountIdForApi: "conn-1",
+      accountIdForApi: "account-1",
       accessMode: "default",
       managerStatsEnabled: true,
       managerStatsMessage: null,
@@ -673,8 +688,78 @@ describe("manager shell pages", () => {
     );
 
     expect(screen.getByText("Top buckets by storage")).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: /Buckets\s+2\s+Buckets/i })).toHaveAttribute("href", "/manager/buckets");
+    expect(await screen.findByRole("link", { name: /Buckets\s+2\s+of 4 buckets \(50%\)/i })).toHaveAttribute("href", "/manager/buckets");
+    expect(screen.getByRole("meter", { name: "Storage used quota usage" })).toHaveAttribute("aria-valuenow", "50");
+    expect(screen.getByRole("meter", { name: "Buckets quota usage" })).toHaveAttribute("aria-valuenow", "50");
+    expect(screen.getByRole("meter", { name: "Objects quota usage" })).toHaveAttribute("aria-valuenow", "50");
+    const quotaStatus = screen.getByRole("heading", { name: "Quota status" }).closest("section");
+    expect(quotaStatus).not.toBeNull();
+    const quotaStatusScope = within(quotaStatus!);
+    expect(quotaStatusScope.getByText("Buckets")).toBeInTheDocument();
+    expect(quotaStatusScope.getByText("2 / 4")).toBeInTheDocument();
+    expect(quotaStatusScope.getByText("Users")).toBeInTheDocument();
+    expect(quotaStatusScope.getByText("2 / 5")).toBeInTheDocument();
+    expect(quotaStatusScope.getByText("Roles")).toBeInTheDocument();
+    expect(quotaStatusScope.getByText("3 / 6")).toBeInTheDocument();
+    expect(quotaStatusScope.getByText("Groups")).toBeInTheDocument();
+    expect(quotaStatusScope.getByText("1 / 4")).toBeInTheDocument();
+    expect(quotaStatusScope.queryByText("Bandwidth (month)")).not.toBeInTheDocument();
+    expect(await screen.findByText("1.0 GB vs last 30 days")).toBeInTheDocument();
+    expect(screen.getByText("1 vs last 30 days")).toBeInTheDocument();
+    expect(screen.getByText("4 vs last 30 days")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View all buckets/ })).toHaveAttribute("href", "/manager/buckets");
+  });
+
+  it("renders fallback usage trend labels with negative and neutral deltas", async () => {
+    fetchManagerUsageTrendsMock.mockResolvedValue({
+      storage: { window: "week", label: "last week", period_start: "2026-06-02", used_bytes: 6 * 1024 ** 3 },
+      buckets: { window: "day", label: "yesterday", period_start: "2026-06-08", bucket_count: 2 },
+      objects: { window: "week", label: "last week", period_start: "2026-06-02", used_objects: 10 },
+    });
+    useManagerStatsMock.mockReturnValue({
+      stats: {
+        total_buckets: 2,
+        total_iam_users: 0,
+        total_iam_groups: 0,
+        total_iam_roles: 0,
+        total_iam_policies: 0,
+        total_bytes: 5 * 1024 ** 3,
+        total_objects: 12,
+        bucket_usage: [{ name: "bucket-a", used_bytes: 2_000, object_count: 8 }],
+      },
+      loading: false,
+      error: null,
+    });
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("1.0 GB vs last week")).toBeInTheDocument();
+    expect(screen.getByText("0 vs yesterday")).toBeInTheDocument();
+    expect(screen.getByText("2 vs last week")).toBeInTheDocument();
   });
 
   it("renders the manager browser page without a page-level context strip", () => {

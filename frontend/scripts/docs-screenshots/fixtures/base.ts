@@ -241,6 +241,10 @@ const EXECUTION_CONTEXTS = [
     display_name: "Helios Retail",
     manager_account_is_admin: true,
     rgw_account_id: "RGW-HELIOS",
+    max_buckets: 4,
+    max_users: 5,
+    max_roles: 6,
+    max_groups: 4,
     quota_max_size_gb: 3,
     quota_max_objects: 4000,
     endpoint_id: 11,
@@ -336,6 +340,51 @@ const MANAGER_BUCKETS = [
     },
   },
 ];
+
+const MANAGER_TOTAL_BYTES = MANAGER_BUCKETS.reduce((acc, item) => acc + (item.used_bytes ?? 0), 0);
+const MANAGER_TOTAL_OBJECTS = MANAGER_BUCKETS.reduce((acc, item) => acc + (item.object_count ?? 0), 0);
+const MANAGER_BUCKET_COUNT = MANAGER_BUCKETS.length;
+
+function managerTrafficPayload(window: string) {
+  const seriesByWindow = {
+    month: [
+      { timestamp: "2026-02-08T00:00:00Z", bytes_in: Math.round(120 * GB), bytes_out: Math.round(100 * GB), ops: 420_000, success_ops: 418_000 },
+      { timestamp: "2026-03-08T00:00:00Z", bytes_in: Math.round(180 * GB), bytes_out: Math.round(130 * GB), ops: 520_000, success_ops: 519_000 },
+    ],
+    week: [
+      { timestamp: "2026-03-02T00:00:00Z", bytes_in: Math.round(42 * GB), bytes_out: Math.round(19 * GB), ops: 98_000, success_ops: 97_500 },
+      { timestamp: "2026-03-08T00:00:00Z", bytes_in: Math.round(58 * GB), bytes_out: Math.round(22 * GB), ops: 120_000, success_ops: 119_000 },
+    ],
+    day: [
+      { timestamp: "2026-03-08T06:00:00Z", bytes_in: Math.round(5 * GB), bytes_out: Math.round(2 * GB), ops: 12_000, success_ops: 11_980 },
+      { timestamp: "2026-03-08T09:00:00Z", bytes_in: Math.round(6 * GB), bytes_out: Math.round(3 * GB), ops: 15_000, success_ops: 14_950 },
+    ],
+  } as const;
+  const selected = seriesByWindow[(window in seriesByWindow ? window : "day") as keyof typeof seriesByWindow];
+  const bytesIn = selected.reduce((acc, item) => acc + item.bytes_in, 0);
+  const bytesOut = selected.reduce((acc, item) => acc + item.bytes_out, 0);
+  const ops = selected.reduce((acc, item) => acc + item.ops, 0);
+  const successOps = selected.reduce((acc, item) => acc + item.success_ops, 0);
+  return {
+    window,
+    start: selected[0].timestamp,
+    end: NOW,
+    resolution: window === "day" ? "hour" : "daily",
+    bucket_filter: null,
+    data_points: selected.length,
+    series: selected,
+    totals: { bytes_in: bytesIn, bytes_out: bytesOut, ops, success_ops: successOps, success_rate: successOps / ops },
+    bucket_rankings: [
+      { bucket: "helios-retail-backups", bytes_total: Math.round(120 * GB), bytes_in: Math.round(72 * GB), bytes_out: Math.round(48 * GB), ops: 280_000, success_ops: 279_000, success_ratio: 0.996 },
+      { bucket: "helios-retail-logs", bytes_total: Math.round(80 * GB), bytes_in: Math.round(46 * GB), bytes_out: Math.round(34 * GB), ops: 210_000, success_ops: 209_000, success_ratio: 0.995 },
+    ],
+    user_rankings: [
+      { user: "helios-admin", bytes_total: bytesIn + bytesOut, bytes_in: bytesIn, bytes_out: bytesOut, ops, success_ops: successOps, success_ratio: successOps / ops },
+    ],
+    request_breakdown: [{ group: "GetObject", bytes_in: 0, bytes_out: bytesOut, ops: Math.round(ops * 0.55) }],
+    category_breakdown: [{ category: "write", bytes_in: bytesIn, bytes_out: 0, ops: Math.round(ops * 0.45) }],
+  };
+}
 
 const IAM_USERS = [
   { name: "analytics-reader", arn: "arn:aws:iam::111111111111:user/analytics-reader", groups: ["analytics"], policies: ["ReadOnlyAccess"] },
@@ -1217,17 +1266,17 @@ export function buildBaseRules(): MockRule[] {
       id: "manager-stats-overview",
       path: /^\/manager\/stats\/overview$/,
       body: {
-        total_buckets: MANAGER_BUCKETS.length,
+        total_buckets: MANAGER_BUCKET_COUNT,
         total_iam_users: IAM_USERS.length,
         total_iam_groups: IAM_GROUPS.length,
         total_iam_roles: 2,
         total_iam_policies: IAM_POLICIES.length,
-        total_bytes: MANAGER_BUCKETS.reduce((acc, item) => acc + (item.used_bytes ?? 0), 0),
-        total_objects: MANAGER_BUCKETS.reduce((acc, item) => acc + (item.object_count ?? 0), 0),
+        total_bytes: MANAGER_TOTAL_BYTES,
+        total_objects: MANAGER_TOTAL_OBJECTS,
         bucket_usage: MANAGER_BUCKETS.map((item) => ({ name: item.name, used_bytes: item.used_bytes, object_count: item.object_count })),
         bucket_overview: {
-          bucket_count: MANAGER_BUCKETS.length,
-          non_empty_buckets: MANAGER_BUCKETS.length,
+          bucket_count: MANAGER_BUCKET_COUNT,
+          non_empty_buckets: MANAGER_BUCKET_COUNT,
           empty_buckets: 0,
           avg_bucket_size_bytes: 123456,
           avg_objects_per_bucket: 312,
@@ -1237,9 +1286,75 @@ export function buildBaseRules(): MockRule[] {
       },
     },
     {
+      id: "manager-usage-trends",
+      path: /^\/manager\/stats\/usage-trends$/,
+      body: {
+        storage: {
+          window: "month",
+          label: "last 30 days",
+          period_start: "2026-02-08",
+          used_bytes: Math.max(MANAGER_TOTAL_BYTES - 220 * MB, 0),
+          used_objects: MANAGER_TOTAL_OBJECTS - 520,
+          bucket_count: null,
+          collected_at: "2026-02-08T09:00:00Z",
+        },
+        objects: {
+          window: "month",
+          label: "last 30 days",
+          period_start: "2026-02-08",
+          used_bytes: Math.max(MANAGER_TOTAL_BYTES - 220 * MB, 0),
+          used_objects: MANAGER_TOTAL_OBJECTS - 520,
+          bucket_count: null,
+          collected_at: "2026-02-08T09:00:00Z",
+        },
+        buckets: {
+          window: "month",
+          label: "last 30 days",
+          period_start: "2026-02-08",
+          used_bytes: null,
+          used_objects: null,
+          bucket_count: Math.max(MANAGER_BUCKET_COUNT - 1, 0),
+          collected_at: "2026-02-08T09:00:00Z",
+        },
+      },
+    },
+    {
+      id: "manager-traffic",
+      path: /^\/manager\/stats\/traffic$/,
+      body: ({ url }) => managerTrafficPayload(url.searchParams.get("window") ?? "day"),
+    },
+    {
       id: "manager-health",
       path: /^\/manager\/stats\/endpoint-health$/,
       body: WORKSPACE_HEALTH,
+    },
+    {
+      id: "manager-activity",
+      path: /^\/manager\/activity$/,
+      body: [
+        {
+          id: 101,
+          created_at: "2026-03-08T08:55:00Z",
+          action: "put_bucket_lifecycle",
+          entity_type: "bucket",
+          entity_id: "helios-retail-logs",
+          account_id: 101,
+          account_name: "Helios Retail",
+          status: "success",
+          user_email: "platform.admin@example.com",
+        },
+        {
+          id: 102,
+          created_at: "2026-03-08T08:35:00Z",
+          action: "create_access_key",
+          entity_type: "iam_user",
+          entity_id: "backup-operator",
+          account_id: 101,
+          account_name: "Helios Retail",
+          status: "success",
+          user_email: "platform.admin@example.com",
+        },
+      ],
     },
     {
       id: "manager-iam-overview",
