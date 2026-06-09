@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
@@ -6,6 +6,8 @@ import ManagerMetricsPage from "./ManagerMetricsPage";
 
 const useS3AccountContextMock = vi.fn();
 const useManagerStatsMock = vi.fn();
+const fetchManagerUsageHistoryTrendsMock = vi.fn();
+let usageHistoryEnabled = false;
 
 vi.mock("./S3AccountContext", () => ({
   useS3AccountContext: () => useS3AccountContextMock(),
@@ -13,6 +15,16 @@ vi.mock("./S3AccountContext", () => ({
 
 vi.mock("./useManagerStats", () => ({
   useManagerStats: (...args: unknown[]) => useManagerStatsMock(...args),
+}));
+
+vi.mock("../../api/usageHistory", () => ({
+  fetchManagerUsageHistoryTrends: (...args: unknown[]) => fetchManagerUsageHistoryTrendsMock(...args),
+}));
+
+vi.mock("../../components/GeneralSettingsContext", () => ({
+  useGeneralSettings: () => ({
+    generalSettings: { usage_history_enabled: usageHistoryEnabled },
+  }),
 }));
 
 vi.mock("./TrafficAnalytics", () => ({
@@ -23,24 +35,28 @@ function buildContext({
   managerStatsEnabled = true,
   managerStatsMessage = null,
   capabilities = { metrics: true, usage: true },
+  contextId = "conn-1",
+  accessMode = "connection",
 }: {
   managerStatsEnabled?: boolean;
   managerStatsMessage?: string | null;
   capabilities?: { metrics?: boolean; usage?: boolean };
+  contextId?: string;
+  accessMode?: string;
 } = {}) {
   return {
     accounts: [
       {
-        id: "conn-1",
+        id: contextId,
         display_name: "Ceph connection",
         storage_endpoint_capabilities: capabilities,
       },
     ],
-    selectedS3AccountId: "conn-1",
+    selectedS3AccountId: contextId,
     requiresS3AccountSelection: true,
     hasS3AccountContext: true,
-    accountIdForApi: "conn-1",
-    accessMode: "connection",
+    accountIdForApi: contextId,
+    accessMode,
     managerStatsEnabled,
     managerStatsMessage,
   };
@@ -63,10 +79,45 @@ function buildStatsResult(overrides?: Record<string, unknown>) {
   };
 }
 
+function buildUsageHistoryTrends(overrides?: Record<string, unknown>) {
+  return {
+    window: "month",
+    granularity: "daily",
+    available: true,
+    unavailable_reason: null,
+    points: [
+      {
+        period_start: "2026-06-08",
+        used_bytes: 4096,
+        used_objects: 8,
+        bucket_count: 2,
+        max_usage_ratio_pct: 42,
+        subjects_count: 1,
+        samples_count: 2,
+        collected_at: "2026-06-08T12:00:00Z",
+      },
+    ],
+    summary: {
+      total_records: 2,
+      points_count: 1,
+      subjects_count: 1,
+      latest_used_bytes: 4096,
+      latest_used_objects: 8,
+      latest_bucket_count: 2,
+      latest_collected_at: "2026-06-08T12:00:00Z",
+      max_usage_ratio_pct: 42,
+    },
+    ...overrides,
+  };
+}
+
 describe("ManagerMetricsPage", () => {
   beforeEach(() => {
     useManagerStatsMock.mockReset();
     useS3AccountContextMock.mockReset();
+    fetchManagerUsageHistoryTrendsMock.mockReset();
+    fetchManagerUsageHistoryTrendsMock.mockResolvedValue(buildUsageHistoryTrends());
+    usageHistoryEnabled = false;
   });
 
   it("renders usage and traffic widgets for eligible connection context", () => {
@@ -187,5 +238,60 @@ describe("ManagerMetricsPage", () => {
     expect(within(storageCard as HTMLElement).getByText("Storage analytics")).toBeInTheDocument();
     expect(screen.queryByText("Bucket breakdown (storage)")).not.toBeInTheDocument();
     expect(screen.getByTestId("traffic-analytics")).toBeInTheDocument();
+  });
+
+  it("renders usage history trends for eligible account contexts", async () => {
+    usageHistoryEnabled = true;
+    useS3AccountContextMock.mockReturnValue(buildContext({ contextId: "1", accessMode: "account" }));
+    useManagerStatsMock.mockReturnValue(buildStatsResult());
+
+    render(
+      <MemoryRouter>
+        <ManagerMetricsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Usage history trends")).toBeInTheDocument();
+    expect(screen.getByText("Latest storage")).toBeInTheDocument();
+    expect(screen.getByText("4.0 KB")).toBeInTheDocument();
+    await waitFor(() => expect(fetchManagerUsageHistoryTrendsMock).toHaveBeenCalledWith("1", "month"));
+  });
+
+  it("shows usage history unavailable copy for private connection contexts", async () => {
+    usageHistoryEnabled = true;
+    fetchManagerUsageHistoryTrendsMock.mockResolvedValueOnce(
+      buildUsageHistoryTrends({
+        available: false,
+        unavailable_reason:
+          "Usage history trends are unavailable for private connection contexts because snapshots are stored for RGW accounts and legacy S3 users.",
+        points: [],
+      })
+    );
+    useS3AccountContextMock.mockReturnValue(buildContext());
+    useManagerStatsMock.mockReturnValue(buildStatsResult());
+
+    render(
+      <MemoryRouter>
+        <ManagerMetricsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/private connection contexts/)).toBeInTheDocument();
+    expect(fetchManagerUsageHistoryTrendsMock).toHaveBeenCalledWith("conn-1", "month");
+  });
+
+  it("hides usage history trends when the feature is disabled", () => {
+    usageHistoryEnabled = false;
+    useS3AccountContextMock.mockReturnValue(buildContext({ contextId: "1", accessMode: "account" }));
+    useManagerStatsMock.mockReturnValue(buildStatsResult());
+
+    render(
+      <MemoryRouter>
+        <ManagerMetricsPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByText("Usage history trends")).not.toBeInTheDocument();
+    expect(fetchManagerUsageHistoryTrendsMock).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,8 @@ import AdminMetricsPage from "./AdminMetricsPage";
 const listStorageEndpointsMock = vi.fn();
 const fetchAdminStorageMock = vi.fn();
 const fetchAdminTrafficMock = vi.fn();
+const fetchAdminUsageHistoryTrendsMock = vi.fn();
+let usageHistoryEnabled = false;
 
 function makeAxiosError(detail: string) {
   return {
@@ -56,6 +58,37 @@ function makeTrafficStats() {
   };
 }
 
+function makeUsageHistoryTrends() {
+  return {
+    window: "month",
+    granularity: "daily",
+    available: true,
+    unavailable_reason: null,
+    points: [
+      {
+        period_start: "2026-05-04",
+        used_bytes: 3072,
+        used_objects: 6,
+        bucket_count: 2,
+        max_usage_ratio_pct: 50,
+        subjects_count: 2,
+        samples_count: 3,
+        collected_at: "2026-05-04T10:00:00Z",
+      },
+    ],
+    summary: {
+      total_records: 3,
+      points_count: 1,
+      subjects_count: 2,
+      latest_used_bytes: 3072,
+      latest_used_objects: 6,
+      latest_bucket_count: 2,
+      latest_collected_at: "2026-05-04T10:00:00Z",
+      max_usage_ratio_pct: 50,
+    },
+  };
+}
+
 vi.mock("../../api/storageEndpoints", async () => {
   const actual = await vi.importActual<typeof import("../../api/storageEndpoints")>("../../api/storageEndpoints");
   return {
@@ -73,12 +106,24 @@ vi.mock("../../api/stats", async () => {
   };
 });
 
+vi.mock("../../api/usageHistory", () => ({
+  fetchAdminUsageHistoryTrends: (...args: unknown[]) => fetchAdminUsageHistoryTrendsMock(...args),
+}));
+
+vi.mock("../../components/GeneralSettingsContext", () => ({
+  useGeneralSettings: () => ({
+    generalSettings: { usage_history_enabled: usageHistoryEnabled },
+  }),
+}));
+
 describe("AdminMetricsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    usageHistoryEnabled = false;
     listStorageEndpointsMock.mockResolvedValue([]);
     fetchAdminStorageMock.mockResolvedValue(makeStorageStats());
     fetchAdminTrafficMock.mockResolvedValue(makeTrafficStats());
+    fetchAdminUsageHistoryTrendsMock.mockResolvedValue(makeUsageHistoryTrends());
   });
 
   it("renders the admin control strip and empty state when no ceph endpoint is available", async () => {
@@ -149,5 +194,42 @@ describe("AdminMetricsPage", () => {
     expect(within(trafficCard as HTMLElement).getByText("Bandwidth & requests")).toBeInTheDocument();
     expect(within(trafficCard as HTMLElement).queryByText("Egress")).not.toBeInTheDocument();
     expect(screen.getByText("Accounts & users")).toBeInTheDocument();
+  });
+
+  it("renders usage history trends when the feature is enabled", async () => {
+    usageHistoryEnabled = true;
+    listStorageEndpointsMock.mockResolvedValue([makeCephEndpoint()]);
+
+    render(
+      <MemoryRouter>
+        <AdminMetricsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Usage history trends")).toBeInTheDocument();
+    expect(screen.getByText("Latest storage")).toBeInTheDocument();
+    expect(screen.getByText("3.0 KB")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(fetchAdminUsageHistoryTrendsMock).toHaveBeenCalledWith({
+        window: "month",
+        endpointId: 7,
+        subjectType: "all",
+      })
+    );
+  });
+
+  it("hides usage history trends and avoids trend calls when the feature is disabled", async () => {
+    usageHistoryEnabled = false;
+    listStorageEndpointsMock.mockResolvedValue([makeCephEndpoint()]);
+
+    render(
+      <MemoryRouter>
+        <AdminMetricsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Storage snapshot")).toBeInTheDocument();
+    expect(screen.queryByText("Usage history trends")).not.toBeInTheDocument();
+    expect(fetchAdminUsageHistoryTrendsMock).not.toHaveBeenCalled();
   });
 });

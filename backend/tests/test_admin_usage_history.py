@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.db import AuditLog, QuotaUsageDaily, QuotaUsageHourly, S3Account, S3User, StorageEndpoint, StorageProvider
 from app.models.app_settings import AppSettings
 from app.routers.admin import usage_history as usage_history_router
+from app.services import usage_history_service
 from app.services.quota_monitoring_service import QuotaMonitoringService
 
 
@@ -100,6 +101,113 @@ def test_list_usage_history_requires_enabled_feature(client: TestClient, monkeyp
     monkeypatch.setattr(usage_history_router, "load_app_settings", lambda: _settings(usage_history_enabled=False))
 
     response = client.get("/api/admin/usage-history")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Usage history is disabled"
+
+
+def test_usage_history_trends_aggregate_endpoint_subjects(client: TestClient, db_session, monkeypatch):
+    monkeypatch.setattr(usage_history_router, "load_app_settings", lambda: _settings(usage_history_enabled=True))
+    monkeypatch.setattr(usage_history_service, "utcnow", lambda: datetime(2026, 6, 9, 12, 0, 0))
+    endpoint = _seed_endpoint(db_session)
+    other_endpoint = StorageEndpoint(
+        name="Ceph other",
+        endpoint_url="https://rgw-other.example.test",
+        provider=StorageProvider.CEPH.value,
+    )
+    account = S3Account(
+        name="Tenant A",
+        rgw_account_id="tenant-a",
+        rgw_access_key="ak",
+        rgw_secret_key="sk",
+        storage_endpoint_id=endpoint.id,
+    )
+    other_account = S3Account(
+        name="Tenant B",
+        rgw_account_id="tenant-b",
+        rgw_access_key="bk",
+        rgw_secret_key="bs",
+        storage_endpoint=other_endpoint,
+    )
+    s3_user = S3User(
+        name="Legacy User",
+        rgw_user_uid="legacy-user",
+        rgw_access_key="uak",
+        rgw_secret_key="usk",
+        storage_endpoint_id=endpoint.id,
+    )
+    db_session.add_all([other_endpoint, account, other_account, s3_user])
+    db_session.commit()
+    db_session.add_all(
+        [
+            QuotaUsageDaily(
+                day=date(2026, 6, 8),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                last_used_bytes=2048,
+                last_used_objects=5,
+                bucket_count=3,
+                max_ratio_pct=50.0,
+                samples_count=2,
+                updated_at=datetime(2026, 6, 8, 12, 0, 0),
+            ),
+            QuotaUsageDaily(
+                day=date(2026, 6, 8),
+                storage_endpoint_id=endpoint.id,
+                s3_user_id=s3_user.id,
+                last_used_bytes=1024,
+                last_used_objects=3,
+                bucket_count=1,
+                max_ratio_pct=25.0,
+                samples_count=1,
+                updated_at=datetime(2026, 6, 8, 12, 5, 0),
+            ),
+            QuotaUsageDaily(
+                day=date(2026, 6, 8),
+                storage_endpoint_id=other_endpoint.id,
+                s3_account_id=other_account.id,
+                last_used_bytes=8192,
+                last_used_objects=9,
+                bucket_count=4,
+                max_ratio_pct=80.0,
+                samples_count=1,
+                updated_at=datetime(2026, 6, 8, 12, 10, 0),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get(
+        "/api/admin/usage-history/trends",
+        params={"window": "month", "endpoint_id": endpoint.id},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["window"] == "month"
+    assert payload["granularity"] == "daily"
+    assert payload["available"] is True
+    assert payload["summary"]["subjects_count"] == 2
+    assert payload["summary"]["latest_used_bytes"] == 3072
+    assert payload["summary"]["max_usage_ratio_pct"] == 50.0
+    assert payload["points"] == [
+        {
+            "period_start": "2026-06-08",
+            "used_bytes": 3072,
+            "used_objects": 8,
+            "bucket_count": 4,
+            "max_usage_ratio_pct": 50.0,
+            "subjects_count": 2,
+            "samples_count": 3,
+            "collected_at": "2026-06-08T12:05:00",
+        }
+    ]
+
+
+def test_usage_history_trends_require_enabled_feature(client: TestClient, monkeypatch):
+    monkeypatch.setattr(usage_history_router, "load_app_settings", lambda: _settings(usage_history_enabled=False))
+
+    response = client.get("/api/admin/usage-history/trends")
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Usage history is disabled"

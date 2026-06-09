@@ -2,16 +2,25 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  fetchManagerUsageHistoryTrends,
+  type UsageHistoryTrendResponse,
+  type UsageHistoryTrendWindow,
+} from "../../api/usageHistory";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageHeader from "../../components/PageHeader";
 import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageEmptyState from "../../components/PageEmptyState";
 import UsageBreakdown from "../../components/UsageBreakdown";
+import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
+import { extractApiError } from "../../utils/apiError";
 import TrafficAnalytics from "./TrafficAnalytics";
 import { useS3AccountContext } from "./S3AccountContext";
 import { useManagerStats } from "./useManagerStats";
 
 export default function ManagerMetricsPage() {
+  const { generalSettings } = useGeneralSettings();
   const {
     accounts,
     selectedS3AccountId,
@@ -45,7 +54,44 @@ export default function ManagerMetricsPage() {
     canShowUsageBreakdowns,
     accessMode ?? "default"
   );
+  const [usageHistoryWindow, setUsageHistoryWindow] = useState<UsageHistoryTrendWindow>("month");
+  const [usageHistoryTrends, setUsageHistoryTrends] = useState<UsageHistoryTrendResponse | null>(null);
+  const [usageHistoryLoading, setUsageHistoryLoading] = useState(false);
+  const [usageHistoryError, setUsageHistoryError] = useState<string | null>(null);
   const showUsageBreakdowns = canShowUsageBreakdowns && !error;
+  const showUsageHistoryTrends =
+    Boolean(generalSettings.usage_history_enabled) &&
+    hasContext &&
+    !managerMetricsMessage &&
+    !showMetricsDisabledBanner;
+
+  useEffect(() => {
+    if (!showUsageHistoryTrends) {
+      setUsageHistoryTrends(null);
+      setUsageHistoryLoading(false);
+      setUsageHistoryError(null);
+      return;
+    }
+    let cancelled = false;
+    setUsageHistoryLoading(true);
+    setUsageHistoryError(null);
+    fetchManagerUsageHistoryTrends(accountIdForApi, usageHistoryWindow)
+      .then((data) => {
+        if (!cancelled) setUsageHistoryTrends(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setUsageHistoryTrends(null);
+          setUsageHistoryError(extractApiError(err, "Unable to load usage history trends."));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setUsageHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, showUsageHistoryTrends, usageHistoryWindow]);
 
   return (
     <div className="space-y-4">
@@ -124,6 +170,17 @@ export default function ManagerMetricsPage() {
                 emptyMessage="No bucket object metrics available."
               />
             </div>
+          )}
+
+          {showUsageHistoryTrends && (
+            <UsageHistoryTrendsSection
+              trends={usageHistoryTrends}
+              window={usageHistoryWindow}
+              onWindowChange={setUsageHistoryWindow}
+              loading={usageHistoryLoading}
+              error={usageHistoryError}
+              description="Stored usage snapshots for the active execution context."
+            />
           )}
 
           {showTrafficDisabledBanner && (

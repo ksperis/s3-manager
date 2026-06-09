@@ -11,12 +11,19 @@ import {
   fetchAdminTraffic,
 } from "../../api/stats";
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
+import {
+  fetchAdminUsageHistoryTrends,
+  type UsageHistoryTrendResponse,
+  type UsageHistoryTrendWindow,
+} from "../../api/usageHistory";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import MetricsTrafficOverview, { MetricsSnapshotCard, MetricsSummaryCard } from "../../components/MetricsTrafficOverview";
 import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import UsageBreakdown from "../../components/UsageBreakdown";
+import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
 import { toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
@@ -26,6 +33,7 @@ function extractError(err: unknown, fallback: string): string {
 }
 
 export default function AdminMetricsPage() {
+  const { generalSettings } = useGeneralSettings();
   const [storage, setStorage] = useState<AdminStats | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [storageLoading, setStorageLoading] = useState<boolean>(true);
@@ -40,6 +48,10 @@ export default function AdminMetricsPage() {
   const [trafficLoading, setTrafficLoading] = useState<boolean>(false);
 
   const [window, setWindow] = useState<TrafficWindow>("week");
+  const [usageHistoryWindow, setUsageHistoryWindow] = useState<UsageHistoryTrendWindow>("month");
+  const [usageHistoryTrends, setUsageHistoryTrends] = useState<UsageHistoryTrendResponse | null>(null);
+  const [usageHistoryLoading, setUsageHistoryLoading] = useState<boolean>(false);
+  const [usageHistoryError, setUsageHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,6 +162,49 @@ export default function AdminMetricsPage() {
     };
   }, [endpointLoading, selectedEndpointId, window]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadUsageHistoryTrends() {
+      if (!generalSettings.usage_history_enabled || endpointLoading) {
+        setUsageHistoryTrends(null);
+        setUsageHistoryLoading(false);
+        setUsageHistoryError(null);
+        return;
+      }
+      if (selectedEndpointId == null) {
+        setUsageHistoryTrends(null);
+        setUsageHistoryLoading(false);
+        return;
+      }
+      setUsageHistoryTrends(null);
+      setUsageHistoryLoading(true);
+      setUsageHistoryError(null);
+      try {
+        const data = await fetchAdminUsageHistoryTrends({
+          window: usageHistoryWindow,
+          endpointId: selectedEndpointId,
+          subjectType: "all",
+        });
+        if (!cancelled) {
+          setUsageHistoryTrends(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setUsageHistoryTrends(null);
+          setUsageHistoryError(extractError(err, "Unable to load usage history trends."));
+        }
+      } finally {
+        if (!cancelled) {
+          setUsageHistoryLoading(false);
+        }
+      }
+    }
+    loadUsageHistoryTrends();
+    return () => {
+      cancelled = true;
+    };
+  }, [endpointLoading, generalSettings.usage_history_enabled, selectedEndpointId, usageHistoryWindow]);
+
   const storageTotals = storage?.storage_totals;
   const selectedEndpoint = useMemo(
     () => endpoints.find((endpoint) => endpoint.id === selectedEndpointId) ?? null,
@@ -180,6 +235,7 @@ export default function AdminMetricsPage() {
 
   const missingTraffic = selectedEndpointId != null && !traffic && !trafficLoading && !trafficError;
   const showStorageMetrics = !storageError;
+  const showUsageHistoryTrends = Boolean(generalSettings.usage_history_enabled) && selectedEndpointId != null;
 
   return (
     <div className="space-y-4 ui-caption leading-relaxed">
@@ -279,15 +335,6 @@ export default function AdminMetricsPage() {
             </MetricsSummaryCard>
           )}
 
-          <MetricsTrafficOverview
-            traffic={traffic}
-            window={window}
-            onWindowChange={setWindow}
-            loading={trafficLoading}
-            error={trafficError}
-            showEmpty={missingTraffic}
-          />
-
           {showStorageMetrics && (
             <section className="space-y-4 ui-surface-card p-5">
               <header className="space-y-1">
@@ -333,6 +380,26 @@ export default function AdminMetricsPage() {
               </div>
             </section>
           )}
+
+          {showUsageHistoryTrends && (
+            <UsageHistoryTrendsSection
+              trends={usageHistoryTrends}
+              window={usageHistoryWindow}
+              onWindowChange={setUsageHistoryWindow}
+              loading={usageHistoryLoading}
+              error={usageHistoryError}
+              description="Stored quota snapshots across accounts and S3 users for the selected endpoint."
+            />
+          )}
+
+          <MetricsTrafficOverview
+            traffic={traffic}
+            window={window}
+            onWindowChange={setWindow}
+            loading={trafficLoading}
+            error={trafficError}
+            showEmpty={missingTraffic}
+          />
         </>
       )}
     </div>
