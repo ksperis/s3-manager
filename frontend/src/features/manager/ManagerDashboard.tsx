@@ -36,6 +36,7 @@ import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import {
   BellIcon,
+  BucketCollectionIcon,
   BucketIcon,
   FileIcon,
   FolderPlusIcon,
@@ -43,9 +44,9 @@ import {
   HistoryIcon,
   InfoIcon,
   OpenIcon,
-  PailIcon,
   RefreshIcon,
   ShieldIcon,
+  TransferIcon,
   UploadIcon,
   UserIcon,
 } from "../browser/browserIcons";
@@ -520,13 +521,13 @@ function MetricTrend({ trend }: { trend: DashboardMetricTrend }) {
 function MetricCard({ metric }: { metric: DashboardMetric }) {
   const content = (
     <div
-      className={cx(uiCardClass, "grid h-full min-h-[152px] grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-4 px-5 py-3.5 sm:gap-5")}
+      className={cx(uiCardClass, "flex h-full min-h-[152px] items-center gap-4 px-5 py-3.5 sm:gap-5")}
       data-kpi-card={metric.label}
     >
       <IconBubble tone={metric.tone} className="h-14 w-14 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]">
         {metric.icon}
       </IconBubble>
-      <div className="grid min-h-[108px] min-w-0 content-center grid-rows-[1rem_2rem_1rem_0.375rem_1rem] gap-y-1">
+      <div className="grid min-h-[108px] min-w-0 flex-1 content-center grid-rows-[1rem_2rem_1rem_0.375rem_1rem] gap-y-1">
         <div className="flex items-center gap-1.5">
           <p className="whitespace-nowrap text-[11px] font-bold uppercase leading-4 text-[var(--ui-text-muted)]">{metric.label}</p>
           {metric.label === "Storage used" && <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />}
@@ -728,7 +729,7 @@ function StorageEvolutionChart({ points }: { points: StorageEvolutionPoint[] }) 
             />
           ))}
           <path d={chart.areaPath} fill="url(#manager-storage-evolution-fill)" />
-          <path d={chart.linePath} fill="none" stroke="rgb(37 99 235)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={chart.linePath} fill="none" stroke="rgb(37 99 235)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <div />
         <div className="mt-1 flex justify-between text-[10px] font-medium leading-3 text-[var(--ui-text-muted)]">
@@ -912,7 +913,7 @@ function QuotaStatusCard({
       value: formatQuotaStatusValue(visibleBucketCount, visibleBucketQuota, formatDashboardNumber),
       percent: bucketStatusPercent,
       tone: "emerald" as DashboardTone,
-      icon: <PailIcon className="h-3.5 w-3.5" />,
+      icon: <BucketCollectionIcon className="h-3.5 w-3.5" />,
     },
     {
       label: "Objects",
@@ -1547,7 +1548,7 @@ export default function ManagerDashboard() {
       progressLabel: "Buckets quota usage",
       trend: bucketTrendLabel,
       tone: "emerald",
-      icon: <PailIcon className="h-7 w-7" />,
+      icon: <BucketCollectionIcon className="h-7 w-7" />,
       to: "/manager/buckets",
       unavailableReason: bucketUnavailableReason,
     },
@@ -1574,7 +1575,7 @@ export default function ManagerDashboard() {
       detail: trafficValue ? "Last 24h" : "",
       trend: trafficTrendLabel,
       tone: "amber",
-      icon: <UploadIcon className="h-7 w-7" />,
+      icon: <TransferIcon className="h-7 w-7" />,
       to: "/manager/metrics",
       unavailableReason: trafficUnavailableReason,
     },

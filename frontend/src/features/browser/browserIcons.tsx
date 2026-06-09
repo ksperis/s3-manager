@@ -54,27 +54,32 @@ export const BucketIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   </svg>
 );
 
-export const PailIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+export const BucketCollectionIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
     <path
-      d="M5.2 8.2 6.25 16a1.7 1.7 0 0 0 1.7 1.5h4.1a1.7 1.7 0 0 0 1.7-1.5l1.05-7.8"
+      d="M4.2 6.1c0-1.3 2.3-2.4 5.1-2.4s5.1 1.1 5.1 2.4-2.3 2.4-5.1 2.4-5.1-1.1-5.1-2.4Z"
       stroke="currentColor"
       strokeWidth="1.4"
       strokeLinejoin="round"
     />
     <path
-      d="M4.2 7.2h11.6"
+      d="M4.2 6.1v3.4c0 1.3 2.3 2.4 5.1 2.4s5.1-1.1 5.1-2.4V6.1"
       stroke="currentColor"
       strokeWidth="1.4"
-      strokeLinecap="round"
+      strokeLinejoin="round"
     />
     <path
-      d="M6.5 7.2c0-2.4 1.35-4.1 3.5-4.1s3.5 1.7 3.5 4.1"
+      d="M6.1 12.2v1.6c0 1.2 2 2.2 4.5 2.2s4.5-1 4.5-2.2v-3.5"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M6.1 12.2c.8.8 2.5 1.3 4.5 1.3 2.5 0 4.5-1 4.5-2.2"
       stroke="currentColor"
       strokeWidth="1.4"
       strokeLinecap="round"
     />
-    <path d="M8.1 11h3.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
   </svg>
 );
 
@@ -109,6 +114,39 @@ export const UploadIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
     <path d="M10 16.5v-8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     <path d="m6.5 10.5 3.5-3.5 3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     <path d="M4 4.5h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+export const TransferIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <path
+      d="M6.2 15.8V5.2"
+      stroke="currentColor"
+      strokeWidth="1.55"
+      strokeLinecap="round"
+    />
+    <path
+      d="m3.9 7.5 2.3-2.3 2.3 2.3"
+      stroke="currentColor"
+      strokeWidth="1.55"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M13.8 4.2v10.6"
+      stroke="currentColor"
+      strokeWidth="1.55"
+      strokeLinecap="round"
+    />
+    <path
+      d="m11.5 12.5 2.3 2.3 2.3-2.3"
+      stroke="currentColor"
+      strokeWidth="1.55"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M9.8 6.3h2" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" />
+    <path d="M8.2 13.7h2" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" />
   </svg>
 );
 
