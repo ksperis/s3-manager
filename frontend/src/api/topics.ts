@@ -11,7 +11,18 @@ export type Topic = {
   owner?: string | null;
   subscriptions_confirmed?: number | null;
   subscriptions_pending?: number | null;
+  subscriptions?: TopicSubscription[] | null;
   configuration?: Record<string, unknown> | null;
+};
+
+export type TopicSubscription = {
+  name: string;
+  bucket?: string | null;
+  endpoint_address?: string | null;
+  endpoint_topic?: string | null;
+  endpoint_args?: Record<string, unknown> | null;
+  persistent?: boolean | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 export type CreateTopicPayload = {

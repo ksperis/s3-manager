@@ -13,13 +13,16 @@ Use this guide to manage SNS topic resources from Manager.
 
 1. Open **Manager > SNS Topics**.
 2. Create a topic.
-3. Inspect topic attributes.
-4. Edit or review topic policy.
-5. Delete unused topics.
+3. Review topic subscriptions and Ceph RGW notification destinations.
+4. Inspect topic attributes.
+5. Edit or review topic policy.
+6. Delete unused topics.
 
 ## Expected result
 
 SNS topics are managed within the selected manager context.
+For Ceph RGW endpoints, notification bindings returned as `notif.*` entries are
+shown as destinations under their parent topic instead of separate topics.
 
 ## Limits / feature flags
 
