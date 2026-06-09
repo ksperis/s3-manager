@@ -16,6 +16,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   unstable_usePrompt,
   useLocation,
@@ -27,6 +28,7 @@ import axios from "axios";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { SIDEBAR_CHROME_SLOT_ID } from "../../components/Sidebar";
 import {
   toolbarCompactInputClasses,
   toolbarCompactSelectClasses,
@@ -455,6 +457,7 @@ const PATH_HISTORY_LIMIT = 20;
 const PATH_HISTORY_STORAGE_KEY = "browser:path-history:v1";
 const PANELS_DISABLE_MAX_WIDTH_PX = 1023;
 const PANELS_DISABLE_MEDIA_QUERY = `(max-width: ${PANELS_DISABLE_MAX_WIDTH_PX}px)`;
+const MOBILE_SIDEBAR_MEDIA_QUERY = "(max-width: 767px)";
 const PANEL_LAYOUT_GAP_PX = 12;
 const PANEL_RESIZER_HITBOX_WIDTH_PX = 12;
 const MIN_BROWSER_CENTER_WIDTH_PX = 320;
@@ -1080,6 +1083,7 @@ export default function BrowserPage({
     normalizedPath.endsWith("/manager/browser") ||
     normalizedPath.endsWith("/ceph-admin/browser");
   const isMainBrowserPath = normalizedPath === "/browser";
+  const usesGlobalBucketsSidebar = isMainBrowserPath;
   const initialStoredRootUiState = useMemo(() => readStoredBrowserRootUiState(), []);
   const initialStoredRootUiLayout = initialStoredRootUiState?.layout ?? null;
   const initialRootUiLayout = isMainBrowserPath ? initialStoredRootUiLayout : null;
@@ -1127,9 +1131,11 @@ export default function BrowserPage({
   const [objectsIsTruncated, setObjectsIsTruncated] = useState(false);
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
   const [showFolders, setShowFolders] = useState(() =>
-    isMainBrowserPath
-      ? (initialRootUiLayout?.showFolders ?? defaultShowFolders)
-      : defaultShowFolders,
+    usesGlobalBucketsSidebar
+      ? false
+      : isMainBrowserPath
+        ? (initialRootUiLayout?.showFolders ?? defaultShowFolders)
+        : defaultShowFolders,
   );
   const [showInspector, setShowInspector] = useState(() =>
     isMainBrowserPath
@@ -1165,6 +1171,12 @@ export default function BrowserPage({
     if (typeof window === "undefined") return false;
     return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
   });
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(MOBILE_SIDEBAR_MEDIA_QUERY).matches;
+  });
+  const [browserSidebarSlot, setBrowserSidebarSlot] =
+    useState<HTMLElement | null>(null);
   const [inspectorTab, setInspectorTab] = useState<
     "context" | "bucket" | "selection" | "details"
   >("context");
@@ -1685,18 +1697,21 @@ export default function BrowserPage({
   const canPaste = Boolean(
     clipboard && bucketName && hasS3AccountContext,
   );
-  const {
-    canUseFoldersPanel,
-    canUseInspectorPanel,
-    isFoldersPanelVisible,
-    isInspectorPanelVisible,
-  } = resolveBrowserPanelVisibility({
+  const panelVisibility = resolveBrowserPanelVisibility({
     allowFoldersPanel,
     allowInspectorPanel,
     isNarrowViewport,
     showFolders,
     showInspector,
   });
+  const canUseFoldersPanel =
+    !usesGlobalBucketsSidebar && panelVisibility.canUseFoldersPanel;
+  const canUseInspectorPanel = panelVisibility.canUseInspectorPanel;
+  const isFoldersPanelVisible =
+    !usesGlobalBucketsSidebar && panelVisibility.isFoldersPanelVisible;
+  const isInspectorPanelVisible = panelVisibility.isInspectorPanelVisible;
+  const shouldShowBucketDropdown =
+    !usesGlobalBucketsSidebar || isMobileViewport;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1716,6 +1731,39 @@ export default function BrowserPage({
       mediaQuery.removeListener(syncViewportWidth);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia(MOBILE_SIDEBAR_MEDIA_QUERY);
+    const syncViewportWidth = () => {
+      setIsMobileViewport(mediaQuery.matches);
+    };
+    syncViewportWidth();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncViewportWidth);
+      return () => {
+        mediaQuery.removeEventListener("change", syncViewportWidth);
+      };
+    }
+    mediaQuery.addListener(syncViewportWidth);
+    return () => {
+      mediaQuery.removeListener(syncViewportWidth);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!shouldShowBucketDropdown) {
+      setShowBucketMenu(false);
+    }
+  }, [shouldShowBucketDropdown]);
+
+  useEffect(() => {
+    if (!usesGlobalBucketsSidebar || typeof document === "undefined") {
+      setBrowserSidebarSlot(null);
+      return;
+    }
+    setBrowserSidebarSlot(document.getElementById(SIDEBAR_CHROME_SLOT_ID));
+  }, [usesGlobalBucketsSidebar]);
 
   useEffect(() => {
     if (!isMainBrowserPath) return;
@@ -3076,7 +3124,7 @@ export default function BrowserPage({
   );
 
   const bucketSearchUiActive =
-    showBucketMenu || (isMainBrowserPath && isFoldersPanelVisible);
+    showBucketMenu || usesGlobalBucketsSidebar || isFoldersPanelVisible;
 
   useEffect(() => {
     if (!bucketSearchUiActive) return;
@@ -3107,6 +3155,7 @@ export default function BrowserPage({
     isFoldersPanelVisible,
     isMainBrowserPath,
     loadBucketSearchPage,
+    usesGlobalBucketsSidebar,
   ]);
 
   useEffect(() => {
@@ -4444,7 +4493,7 @@ export default function BrowserPage({
       ? "border-amber-300 bg-amber-50 text-amber-800 ring-2 ring-amber-200/70 dark:border-amber-400/60 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/30"
       : "border-slate-200 bg-white text-slate-700 hover:border-primary/60 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:bg-slate-800",
   );
-  const useBucketsPanel = isMainBrowserPath && isFoldersPanelVisible;
+  const useBucketsPanel = usesGlobalBucketsSidebar || isFoldersPanelVisible;
   const {
     currentBucket: currentBucketPanelItem,
     otherBuckets: otherBucketPanelItems,
@@ -11701,7 +11750,8 @@ export default function BrowserPage({
     hasUnsavedChanges: showSseCustomerModal && sseCustomerCurrentSignature !== sseCustomerInitialSignature,
     onClose: closeSseCustomerModal,
   });
-  const showFolderToggle = showPanelToggles && canUseFoldersPanel;
+  const showFolderToggle =
+    !usesGlobalBucketsSidebar && showPanelToggles && canUseFoldersPanel;
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
   const isActionBarVisible = isMainBrowserPath && showActionBar;
   const isCompactToolbarMode = !isActionBarVisible;
@@ -12304,8 +12354,42 @@ export default function BrowserPage({
     </AnchoredPortalMenu>
   );
 
+  const browserBucketsSidebar =
+    usesGlobalBucketsSidebar && browserSidebarSlot
+      ? createPortal(
+          <BrowserBucketsPanel
+            hasS3AccountContext={hasS3AccountContext}
+            currentBucket={currentBucketPanelItem}
+            activePrefix={normalizedPrefix}
+            currentBucketAccess={currentBucketAccess}
+            treeRootNode={treeRootNode}
+            bucketFilter={bucketFilter}
+            onBucketFilterChange={setBucketFilter}
+            otherBuckets={otherBucketPanelRows}
+            loadingBuckets={loadingBuckets}
+            bucketError={bucketError}
+            onRetryBuckets={() => void refreshBucketList()}
+            bucketManagementEnabled={bucketManagementEnabled}
+            onCreateBucket={openCreateBucketDialog}
+            onSelectBucket={handleBucketChange}
+            onSelectPrefix={handleSelectPrefix}
+            onToggleTreeNode={handleToggleTreeNode}
+            canLoadMore={canLoadMoreBucketResults}
+            onLoadMore={handleBucketMenuLoadMore}
+            bucketMenuLoadingMore={bucketMenuLoadingMore}
+            bucketMenuTotal={bucketMenuTotal}
+            bucketTotalCount={bucketTotalCount}
+            panelViewportRef={bucketPanelViewportRef}
+            loadMoreSentinelRef={bucketPanelLoadMoreSentinelRef}
+            variant="sidebar"
+          />,
+          browserSidebarSlot,
+        )
+      : null;
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      {browserBucketsSidebar}
       <div className={browserShellClasses}>
         <div className="relative z-20 border-b border-slate-200/80 px-3 py-3 dark:border-slate-800">
           <div className="flex flex-col gap-2.5">
@@ -12315,30 +12399,31 @@ export default function BrowserPage({
               className={browserToolbarShellClasses}
             >
               <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-stretch lg:items-center">
-                <div
-                  ref={bucketMenuRef}
-                  className="relative flex shrink-0 items-stretch"
-                >
-                  <button
-                    type="button"
-                    className={`${bucketButtonClassName} min-h-9`}
-                    onClick={() => setShowBucketMenu((prev) => !prev)}
-                    disabled={!hasS3AccountContext}
-                    aria-haspopup="listbox"
-                    aria-expanded={showBucketMenu}
-                    aria-label="Select bucket"
-                    title="Select bucket"
+                {shouldShowBucketDropdown && (
+                  <div
+                    ref={bucketMenuRef}
+                    className="relative flex shrink-0 items-stretch"
                   >
-                    <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
-                    <span className="max-w-[200px] truncate sm:max-w-[260px]">
-                      {bucketButtonLabel}
-                    </span>
-                    <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
-                  </button>
-                  {showBucketMenu && (
-                    <div
-                      className={`absolute left-0 top-[calc(100%+8px)] z-[60] w-80 max-w-[calc(100vw-1rem)] ui-caption ${browserFloatingMenuClasses}`}
+                    <button
+                      type="button"
+                      className={`${bucketButtonClassName} min-h-9`}
+                      onClick={() => setShowBucketMenu((prev) => !prev)}
+                      disabled={!hasS3AccountContext}
+                      aria-haspopup="listbox"
+                      aria-expanded={showBucketMenu}
+                      aria-label="Select bucket"
+                      title="Select bucket"
                     >
+                      <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
+                      <span className="max-w-[200px] truncate sm:max-w-[260px]">
+                        {bucketButtonLabel}
+                      </span>
+                      <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
+                    </button>
+                    {showBucketMenu && (
+                      <div
+                        className={`absolute left-0 top-[calc(100%+8px)] z-[60] w-80 max-w-[calc(100vw-1rem)] ui-caption ${browserFloatingMenuClasses}`}
+                      >
                       <div className="flex items-center justify-between gap-3 px-2 pb-2 pt-1">
                         <div className="flex min-w-0 flex-1 items-center gap-2">
                           <div className="min-w-0">
@@ -12446,9 +12531,10 @@ export default function BrowserPage({
                           </button>
                         </div>
                       )}
-                    </div>
-                  )}
-                </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div
                   className={`${browserToolbarPathStripClasses} ui-caption font-semibold text-slate-500 dark:text-slate-400`}
                   onClick={isEditingPath ? undefined : startEditingPath}

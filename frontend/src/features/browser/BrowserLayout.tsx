@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import Layout from "../../components/Layout";
+import { SIDEBAR_CHROME_SLOT_ID } from "../../components/Sidebar";
 import TopbarContextAccountSelector, {
   type ContextAccessMode,
 } from "../../components/TopbarContextAccountSelector";
@@ -133,8 +134,11 @@ function BrowserShell() {
     <Layout
       headerTitle="Browser"
       hideHeader
-      hideSidebar
       topbarControlDescriptors={topbarControlDescriptors}
+      sidebarContent={<div id={SIDEBAR_CHROME_SLOT_ID} className="h-full min-h-0" />}
+      sidebarContentLabel="Browser bucket navigation"
+      sidebarWidthPx={280}
+      allowSidebarCollapse={false}
       mainClassName="pb-0"
       disableMainScroll
       fullHeight

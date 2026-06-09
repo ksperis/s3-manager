@@ -9,6 +9,10 @@ const useBrowserContextMock = vi.fn();
 let capturedLayoutProps: {
   headerTitle?: string;
   hideSidebar?: boolean;
+  sidebarContent?: ReactNode;
+  sidebarContentLabel?: string;
+  sidebarWidthPx?: number;
+  allowSidebarCollapse?: boolean;
   topbarControlDescriptors?: Array<{ id: string; renderControl: (mode: "icon" | "icon_label") => ReactNode }>;
 } = {};
 let capturedSelectorProps: {
@@ -31,6 +35,10 @@ vi.mock("../../components/Layout", () => ({
   default: (props: {
     headerTitle?: string;
     hideSidebar?: boolean;
+    sidebarContent?: ReactNode;
+    sidebarContentLabel?: string;
+    sidebarWidthPx?: number;
+    allowSidebarCollapse?: boolean;
     topbarControlDescriptors?: Array<{ id: string; renderControl: (mode: "icon" | "icon_label") => ReactNode }>;
     children?: ReactNode;
   }) => {
@@ -84,7 +92,7 @@ describe("BrowserLayout", () => {
     useBrowserContextMock.mockReset();
   });
 
-  it("keeps Browser on the shared topbar shell without a sidebar", () => {
+  it("keeps Browser on the shared topbar shell with the bucket sidebar slot", () => {
     useBrowserContextMock.mockReturnValue(buildBrowserContext());
 
     render(
@@ -94,7 +102,11 @@ describe("BrowserLayout", () => {
     );
 
     expect(capturedLayoutProps.headerTitle).toBe("Browser");
-    expect(capturedLayoutProps.hideSidebar).toBe(true);
+    expect(capturedLayoutProps.hideSidebar).not.toBe(true);
+    expect(capturedLayoutProps.sidebarContent).toBeTruthy();
+    expect(capturedLayoutProps.sidebarContentLabel).toBe("Browser bucket navigation");
+    expect(capturedLayoutProps.sidebarWidthPx).toBe(280);
+    expect(capturedLayoutProps.allowSidebarCollapse).toBe(false);
     expect(capturedLayoutProps.topbarControlDescriptors?.map((descriptor) => descriptor.id)).toEqual(["account"]);
     expect(screen.getByRole("button", { name: "Browser account selector" })).toBeInTheDocument();
     expect(capturedSelectorProps).toEqual(expect.objectContaining({ selectedContextId: "ctx-1", selectedLabel: "Main account" }));

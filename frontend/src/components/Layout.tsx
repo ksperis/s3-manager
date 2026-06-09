@@ -27,7 +27,11 @@ type LayoutProps = {
   hideTopbar?: boolean;
   topbarAction?: ReactNode;
   sidebarAction?: ReactNode;
+  sidebarContent?: ReactNode;
+  sidebarContentLabel?: string;
   sidebarFooter?: ReactNode;
+  sidebarWidthPx?: number;
+  allowSidebarCollapse?: boolean;
   hideSidebar?: boolean;
   mainClassName?: string;
   disableMainScroll?: boolean;
@@ -63,7 +67,11 @@ export default function Layout({
   hideTopbar = false,
   topbarAction,
   sidebarAction,
+  sidebarContent,
+  sidebarContentLabel,
   sidebarFooter,
+  sidebarWidthPx,
+  allowSidebarCollapse = true,
   hideSidebar = false,
   mainClassName,
   disableMainScroll = false,
@@ -94,6 +102,8 @@ export default function Layout({
   }`;
   const rootHeightClass = fullHeight ? "h-[100dvh]" : "h-screen";
   const drawerTopClass = hideTopbar ? "top-0" : "top-14";
+  const hasSidebarNavigation = Boolean(navSections?.length) || navLinks.length > 0;
+  const shouldShowMobileSidebar = shouldShowSidebar && (!sidebarContent || hasSidebarNavigation);
 
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -104,6 +114,12 @@ export default function Layout({
       setMobileSidebarOpen(false);
     }
   }, [shouldShowSidebar]);
+
+  useEffect(() => {
+    if (!allowSidebarCollapse) {
+      setDesktopSidebarCompact(false);
+    }
+  }, [allowSidebarCollapse]);
 
   useEffect(() => {
     if (!mobileSidebarOpen) return;
@@ -140,9 +156,12 @@ export default function Layout({
           sections={navSections}
           links={navLinks}
           headerAction={sidebarAction}
+          content={sidebarContent}
+          contentLabel={sidebarContentLabel}
           footer={sidebarFooter}
           compact={desktopSidebarCompact}
-          onCollapseToggle={handleDesktopSidebarCollapseToggle}
+          onCollapseToggle={allowSidebarCollapse ? handleDesktopSidebarCollapseToggle : undefined}
+          widthPx={sidebarWidthPx}
         />
       )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -156,7 +175,7 @@ export default function Layout({
             userEmail={userEmail}
             onLogout={logout}
             contextAction={topbarAction}
-            showMobileMenuButton={shouldShowSidebar}
+            showMobileMenuButton={shouldShowMobileSidebar}
             mobileMenuOpen={mobileSidebarOpen}
             onMobileMenuToggle={() => setMobileSidebarOpen((open) => !open)}
             showWorkspaceSwitcher
@@ -164,7 +183,7 @@ export default function Layout({
           />
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {shouldShowSidebar && (
+          {shouldShowMobileSidebar && (
             <div
               className={`fixed inset-x-0 bottom-0 ${drawerTopClass} z-[44] md:hidden ${
                 mobileSidebarOpen ? "pointer-events-auto" : "pointer-events-none"

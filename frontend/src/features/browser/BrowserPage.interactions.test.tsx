@@ -8,10 +8,12 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
+import { SIDEBAR_CHROME_SLOT_ID } from "../../components/Sidebar";
 import { BROWSER_ROOT_UI_STATE_STORAGE_KEY } from "./browserRootUiState";
 import {
   BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY,
@@ -167,8 +169,15 @@ function renderPage({
   allowFoldersPanel?: boolean;
   accountIdForApi?: string;
 } = {}) {
+  const shouldRenderSidebarSlot =
+    new URL(initialEntry, "http://s3-manager.test").pathname.replace(/\/+$/, "") === "/browser";
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
+      {shouldRenderSidebarSlot && (
+        <aside aria-label="Browser bucket navigation">
+          <div id={SIDEBAR_CHROME_SLOT_ID} />
+        </aside>
+      )}
       <BrowserPage
         accountIdForApi={accountIdForApi}
         defaultShowInspector={defaultShowInspector}
@@ -177,6 +186,17 @@ function renderPage({
         allowFoldersPanel={allowFoldersPanel}
       />
     </MemoryRouter>,
+  );
+}
+
+function renderRootBrowserPageElement(props: ComponentProps<typeof BrowserPage> = {}) {
+  return (
+    <MemoryRouter initialEntries={["/browser"]}>
+      <aside aria-label="Browser bucket navigation">
+        <div id={SIDEBAR_CHROME_SLOT_ID} />
+      </aside>
+      <BrowserPage {...props} />
+    </MemoryRouter>
   );
 }
 
@@ -192,7 +212,8 @@ function renderEmbeddedPage({
 }
 
 async function findRowByLabel(label: string): Promise<HTMLTableRowElement> {
-  const row = (await screen.findByText(label)).closest("tr");
+  const table = await screen.findByRole("table");
+  const row = (await within(table).findByText(label)).closest("tr");
   if (!row) {
     throw new Error(`Unable to find row for label: ${label}`);
   }
@@ -1288,8 +1309,9 @@ describe("BrowserPage interactions", () => {
 
     expect(screen.getAllByRole("toolbar")).toHaveLength(1);
     expect(
-      within(contextToolbar).getByRole("button", { name: "Select bucket" }),
-    ).toBeInTheDocument();
+      within(contextToolbar).queryByRole("button", { name: "Select bucket" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
     expect(
       screen.queryByRole("toolbar", { name: "Browser actions bar" }),
     ).not.toBeInTheDocument();
@@ -1349,8 +1371,8 @@ describe("BrowserPage interactions", () => {
       within(menu).getByRole("menuitem", { name: "Configure bucket" }),
     ).toBeInTheDocument();
     expect(
-      within(menu).getByRole("menuitemcheckbox", { name: /Folders panel/i }),
-    ).toBeInTheDocument();
+      within(menu).queryByRole("menuitemcheckbox", { name: /Folders panel/i }),
+    ).not.toBeInTheDocument();
     expect(
       within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i }),
     ).toBeInTheDocument();
@@ -1442,7 +1464,7 @@ describe("BrowserPage interactions", () => {
     });
 
     renderPage();
-    await screen.findByRole("button", { name: "Select bucket" });
+    await screen.findByText("No other buckets available.");
 
     const menu = await openContextMoreMenu(user);
     expect(
@@ -1509,8 +1531,8 @@ describe("BrowserPage interactions", () => {
 
     const contextToolbar = getContextToolbar();
     expect(
-      within(contextToolbar).getByRole("button", { name: "Select bucket" }),
-    ).toBeInTheDocument();
+      within(contextToolbar).queryByRole("button", { name: "Select bucket" }),
+    ).not.toBeInTheDocument();
     expect(
       within(contextToolbar).getByRole("button", { name: "Operations" }),
     ).toBeInTheDocument();
@@ -1525,16 +1547,45 @@ describe("BrowserPage interactions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("restores folders, inspector, and action bar on /browser after remount", async () => {
+  it("keeps the bucket selector in the compact context bar on mobile", async () => {
+    const matchMediaSpy = vi.spyOn(window, "matchMedia").mockImplementation(
+      (query) =>
+        ({
+          matches: query === "(max-width: 767px)",
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }) as MediaQueryList,
+    );
+
+    try {
+      renderPage({ initialEntry: "/browser" });
+      await findRowByLabel("a.txt");
+
+      expect(
+        within(getContextToolbar()).getByRole("button", {
+          name: "Select bucket",
+        }),
+      ).toHaveTextContent("bucket-1");
+    } finally {
+      matchMediaSpy.mockRestore();
+    }
+  });
+
+  it("keeps the bucket sidebar visible and restores inspector and action bar on /browser after remount", async () => {
     const user = userEvent.setup();
     const firstRender = renderPage();
 
     await findRowByLabel("a.txt");
 
     const menu = await openContextMoreMenu(user);
-    await user.click(
-      within(menu).getByRole("menuitemcheckbox", { name: /Folders panel/i }),
-    );
+    expect(
+      within(menu).queryByRole("menuitemcheckbox", { name: /Folders panel/i }),
+    ).not.toBeInTheDocument();
     await user.click(
       within(menu).getByRole("menuitemcheckbox", { name: /Inspector panel/i }),
     );
@@ -1683,42 +1734,32 @@ describe("BrowserPage interactions", () => {
 
     await waitFor(() => {
       expect(layout.style.gridTemplateColumns).toBe(
-        "280px minmax(0, 1fr) 320px",
+        "minmax(0, 1fr) 320px",
       );
     });
     expect(
-      screen.getByRole("separator", { name: "Resize folders panel" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("separator", { name: "Resize folders panel" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("separator", { name: "Resize inspector panel" }),
     ).toBeInTheDocument();
   });
 
-  it("resizes the folders panel and persists the width", async () => {
+  it("keeps the root bucket sidebar outside the resizable browser grid", async () => {
     renderPage({ defaultShowFolders: true, defaultShowInspector: true });
     await findRowByLabel("a.txt");
 
     const layout = setBrowserLayoutRect(1400);
-    const separator = screen.getByRole("separator", {
-      name: "Resize folders panel",
-    });
-
-    fireEvent.pointerDown(separator, { clientX: 286 });
-    fireEvent.pointerMove(document, { clientX: 360 });
-    fireEvent.pointerUp(document);
 
     await waitFor(() => {
       expect(layout.style.gridTemplateColumns).toBe(
-        "354px minmax(0, 1fr) 320px",
+        "minmax(0, 1fr) 320px",
       );
     });
-    await waitFor(() => {
-      expect(
-        JSON.parse(
-          window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY) ?? "{}",
-        ).layout.foldersPanelWidthPx,
-      ).toBe(354);
-    });
+    expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: "Resize folders panel" }),
+    ).not.toBeInTheDocument();
   });
 
   it("resizes the inspector panel and persists the width", async () => {
@@ -1736,7 +1777,7 @@ describe("BrowserPage interactions", () => {
 
     await waitFor(() => {
       expect(layout.style.gridTemplateColumns).toBe(
-        "280px minmax(0, 1fr) 414px",
+        "minmax(0, 1fr) 414px",
       );
     });
     await waitFor(() => {
@@ -1767,7 +1808,7 @@ describe("BrowserPage interactions", () => {
 
     await waitFor(() => {
       expect(layout.style.gridTemplateColumns).toBe(
-        "360px minmax(0, 1fr) 410px",
+        "minmax(0, 1fr) 410px",
       );
     });
   });
@@ -1790,15 +1831,12 @@ describe("BrowserPage interactions", () => {
     const layout = setBrowserLayoutRect(1400);
 
     await user.dblClick(
-      screen.getByRole("separator", { name: "Resize folders panel" }),
-    );
-    await user.dblClick(
       screen.getByRole("separator", { name: "Resize inspector panel" }),
     );
 
     await waitFor(() => {
       expect(layout.style.gridTemplateColumns).toBe(
-        "280px minmax(0, 1fr) 320px",
+        "minmax(0, 1fr) 320px",
       );
     });
   });
@@ -1884,12 +1922,14 @@ describe("BrowserPage interactions", () => {
       accountIdForApi: "acc-1",
       defaultShowInspector: true,
     });
+    const otherBucketsSection = await screen.findByRole("region", {
+      name: "Other buckets",
+    });
     await user.click(
-      within(getContextToolbar()).getByRole("button", {
-        name: "Select bucket",
+      await within(otherBucketsSection).findByRole("button", {
+        name: /bucket-2/i,
       }),
     );
-    await user.click(await screen.findByRole("button", { name: "bucket-2" }));
     await waitFor(() => {
       expect(listBrowserObjectsMock).toHaveBeenCalledWith(
         "acc-1",
@@ -2121,10 +2161,10 @@ describe("BrowserPage interactions", () => {
       getCurrentBucketPanel().queryByRole("button", { name: "docs" }),
     ).not.toBeInTheDocument();
     expect(
-      within(getContextToolbar()).getByRole("button", {
+      within(getContextToolbar()).queryByRole("button", {
         name: "Select bucket",
       }),
-    ).toHaveTextContent("bucket-2");
+    ).not.toBeInTheDocument();
   });
 
   it("hides the current bucket card when the bucket filter no longer matches it", async () => {
@@ -3364,11 +3404,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Copy");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderRootBrowserPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     const menu = await openContextMoreMenu(user);
@@ -3415,11 +3451,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Copy");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderRootBrowserPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     await pasteFromCurrentPath(user);
@@ -3559,11 +3591,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Copy");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderRootBrowserPageElement({ accountIdForApi: "acc-2" }));
 
     await user.dblClick(await findRowByLabel("docs"));
     await findRowByLabel("readme.txt");
@@ -3707,9 +3735,10 @@ describe("BrowserPage interactions", () => {
     await copyOrCutSelection(user, ["a.txt", "b.txt"], "Cut");
 
     view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" defaultShowInspector />
-      </MemoryRouter>,
+      renderRootBrowserPageElement({
+        accountIdForApi: "acc-2",
+        defaultShowInspector: true,
+      }),
     );
 
     await user.dblClick(await findRowByLabel("docs"));
@@ -3784,11 +3813,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Cut");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderRootBrowserPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     await pasteFromCurrentPath(user);
@@ -3821,11 +3846,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Cut");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderRootBrowserPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     await pasteFromCurrentPath(user);
@@ -3856,11 +3877,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "docs", "Copy");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderRootBrowserPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     await pasteFromCurrentPath(user);
@@ -3908,11 +3925,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Copy");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderRootBrowserPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     await pasteFromCurrentPath(user);
