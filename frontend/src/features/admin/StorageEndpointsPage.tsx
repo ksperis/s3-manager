@@ -2,8 +2,8 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { cx, uiCardClass, uiCardMutedClass, uiCheckboxClass } from "../../components/ui/styles";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { cx, uiCheckboxClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import {
   detectStorageEndpointFeatures,
   StorageEndpoint,
@@ -21,6 +21,9 @@ import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
+import ListToolbar from "../../components/ListToolbar";
+import TableEmptyState from "../../components/TableEmptyState";
+import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
@@ -87,6 +90,19 @@ const FEATURE_KEYS: FeatureKey[] = [
   "replication",
   "healthcheck",
 ];
+const ENDPOINT_LIST_FEATURES: Array<{ key: FeatureKey; label: string }> = [
+  { key: "admin", label: "Admin" },
+  { key: "account", label: "Account API" },
+  { key: "usage", label: "Usage Log" },
+  { key: "metrics", label: "Metrics" },
+  { key: "sns", label: "SNS" },
+  { key: "sts", label: "STS" },
+  { key: "static_website", label: "Static website" },
+  { key: "iam", label: "IAM" },
+  { key: "sse", label: "SSE" },
+  { key: "replication", label: "Replication" },
+  { key: "healthcheck", label: "Healthcheck" },
+];
 const AWS_DEFAULT_REGION = "us-east-1";
 const AWS_IAM_ENDPOINT = "https://iam.amazonaws.com";
 const AWS_GOV_IAM_ENDPOINT = "https://iam.us-gov.amazonaws.com";
@@ -134,7 +150,6 @@ const AWS_REGION_COORDINATES: Record<string, { latitude: string; longitude: stri
 
 const endpointInlineCodeClass =
   "rounded bg-[var(--ui-surface-muted)] px-2 py-1 ui-caption text-[var(--ui-text)]";
-const endpointSummaryTileClass = cx(uiCardMutedClass, "px-4 py-3 ui-body");
 const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="s3m-admin" \\',
@@ -399,6 +414,56 @@ function StatusBadge({ label }: { label: string }) {
     <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 shadow-sm dark:bg-slate-800 dark:text-slate-200">
       {label}
     </span>
+  );
+}
+
+function FeatureBadge({ label, enabled }: { label: string; enabled: boolean }) {
+  return (
+    <span
+      className={cx(
+        "rounded-full px-2 py-0.5 ui-caption font-semibold",
+        enabled
+          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+          : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+      )}
+    >
+      {label} {enabled ? "on" : "off"}
+    </span>
+  );
+}
+
+function CredentialSummary({
+  accessKey,
+  hasSecret,
+  emptyLabel = "Not set",
+}: {
+  accessKey?: string | null;
+  hasSecret?: boolean;
+  emptyLabel?: string;
+}) {
+  if (!accessKey && !hasSecret) {
+    return <span className="font-semibold text-slate-500 dark:text-slate-400">{emptyLabel}</span>;
+  }
+  return (
+    <span className="font-semibold text-[var(--ui-text)]">
+      {accessKey || "-"}
+      {hasSecret && <span className="ml-1 text-emerald-600 dark:text-emerald-300">(secret stored)</span>}
+    </span>
+  );
+}
+
+function DetailLine({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+      <span className="font-semibold text-slate-600 dark:text-slate-300">{label}:</span>
+      {children}
+    </p>
   );
 }
 
@@ -986,23 +1051,11 @@ export default function StorageEndpointsPage() {
     }
   };
 
-  const renderEndpointCard = (endpoint: StorageEndpoint) => {
-    const showSupervision = endpoint.supervision_access_key || endpoint.has_supervision_secret;
-    const showCephAdmin = endpoint.ceph_admin_access_key || endpoint.has_ceph_admin_secret;
+  const renderEndpointRow = (endpoint: StorageEndpoint) => {
     const tagItems = buildUiTagItems(endpoint.tags);
     const verifyTls = endpoint.verify_tls !== false;
     const forcePathStyle = Boolean(endpoint.force_path_style);
     const features = resolveFeatureState(endpoint, endpoint.provider);
-    const adminEnabled = features.admin.enabled;
-    const stsEnabled = features.sts.enabled;
-    const usageEnabled = features.usage.enabled;
-    const metricsEnabled = features.metrics.enabled;
-    const accountEnabled = features.account.enabled;
-    const staticWebsiteEnabled = features.static_website.enabled;
-    const iamEnabled = features.iam.enabled;
-    const snsEnabled = features.sns.enabled;
-    const sseEnabled = features.sse.enabled;
-    const replicationEnabled = features.replication.enabled;
     const healthcheckMode = features.healthcheck.mode === "s3" ? "s3" : "http";
     const healthcheckUrl = features.healthcheck.endpoint.trim();
     const settingDefault = defaultBusyId === endpoint.id;
@@ -1010,91 +1063,131 @@ export default function StorageEndpointsPage() {
     const stsEndpointOverride = features.sts.endpoint.trim();
     const iamEndpointOverride = features.iam.endpoint.trim();
     const showAdminEndpoint =
-      adminEnabled &&
+      features.admin.enabled &&
       Boolean(adminEndpointOverride) &&
       adminEndpointOverride !== endpoint.endpoint_url;
     const showStsEndpoint =
-      stsEnabled &&
+      features.sts.enabled &&
       Boolean(stsEndpointOverride) &&
       stsEndpointOverride !== endpoint.endpoint_url;
     const showIamEndpoint =
-      iamEnabled &&
+      features.iam.enabled &&
       Boolean(iamEndpointOverride) &&
       iamEndpointOverride !== endpoint.endpoint_url;
     const readOnly = envManaged || !endpoint.is_editable || !canEditEndpoints;
     const hasCoordinates = endpoint.latitude != null && endpoint.longitude != null;
 
     return (
-      <div
-        key={endpoint.id}
-        className={cx(uiCardClass, "p-5 ui-body transition hover:border-primary/60")}
-      >
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <tr key={endpoint.id}>
+        <td className="min-w-[300px] max-w-[380px] align-top">
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <h3 className="ui-section font-semibold text-slate-900 dark:text-white">{endpoint.name}</h3>
-                <ProviderBadge provider={endpoint.provider} />
-                {endpoint.is_default && <StatusBadge label="Default" />}
-                {envManaged && <LockBadge label="Env managed" />}
-                {!envManaged && !endpoint.is_editable && <LockBadge label="Protected" />}
-              </div>
-              {tagItems.length > 0 && (
-                <UiTagBadgeList
-                  items={tagItems}
-                  variant="listing-compact"
-                  layout="inline-compact"
-                  className="ml-auto max-w-full"
-                  maxVisible={6}
-                />
-              )}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="ui-body font-semibold text-slate-900 dark:text-white">{endpoint.name}</span>
+              {endpoint.is_default && <StatusBadge label="Default" />}
+              {envManaged && <LockBadge label="Env managed" />}
+              {!envManaged && !endpoint.is_editable && <LockBadge label="Protected" />}
             </div>
-            <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
-              <span className="font-semibold text-slate-700 dark:text-slate-100">Endpoint:</span>
-              <code className={endpointInlineCodeClass}>
-                {endpoint.endpoint_url}
-              </code>
-            </div>
+            <code className={cx(endpointInlineCodeClass, "block max-w-[340px] truncate")} title={endpoint.endpoint_url}>
+              {endpoint.endpoint_url}
+            </code>
             {showAdminEndpoint && (
-              <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
-                <span className="font-semibold text-slate-700 dark:text-slate-100">Admin endpoint:</span>
-                <code className={endpointInlineCodeClass}>
+              <DetailLine label="Admin endpoint">
+                <code className={cx(endpointInlineCodeClass, "max-w-[260px] truncate")} title={adminEndpointOverride}>
                   {adminEndpointOverride}
                 </code>
-              </div>
+              </DetailLine>
             )}
             {showStsEndpoint && (
-              <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
-                <span className="font-semibold text-slate-700 dark:text-slate-100">STS endpoint:</span>
-                <code className={endpointInlineCodeClass}>
+              <DetailLine label="STS endpoint">
+                <code className={cx(endpointInlineCodeClass, "max-w-[260px] truncate")} title={stsEndpointOverride}>
                   {stsEndpointOverride}
                 </code>
-              </div>
+              </DetailLine>
             )}
             {showIamEndpoint && (
-              <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
-                <span className="font-semibold text-slate-700 dark:text-slate-100">IAM endpoint:</span>
-                <code className={endpointInlineCodeClass}>
+              <DetailLine label="IAM endpoint">
+                <code className={cx(endpointInlineCodeClass, "max-w-[260px] truncate")} title={iamEndpointOverride}>
                   {iamEndpointOverride}
                 </code>
-              </div>
+              </DetailLine>
             )}
-            <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
-              <span className="font-semibold text-slate-700 dark:text-slate-100">Healthcheck:</span>
-              <code className={endpointInlineCodeClass}>
-                {healthcheckMode.toUpperCase()}
-              </code>
+            <UiTagBadgeList
+              items={tagItems}
+              variant="listing-compact"
+              layout="inline-compact"
+              maxVisible={5}
+              emptyLabel="No tags"
+            />
+          </div>
+        </td>
+        <td className="min-w-[150px] align-top">
+          <div className="space-y-2">
+            <ProviderBadge provider={endpoint.provider} />
+            <DetailLine label="Region">
+              <span className="font-semibold text-[var(--ui-text)]">{endpoint.region || "Default"}</span>
+            </DetailLine>
+          </div>
+        </td>
+        <td className="min-w-[260px] align-top">
+          <div className="space-y-1.5">
+            <DetailLine label="TLS">
+              <span className={`font-semibold ${verifyTls ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+                {verifyTls ? "Enabled" : "Disabled (insecure)"}
+              </span>
+            </DetailLine>
+            <DetailLine label="Path style">
+              <span className="font-semibold text-[var(--ui-text)]">{forcePathStyle ? "Forced" : "Virtual-host style"}</span>
+            </DetailLine>
+            <DetailLine label="GPS">
+              <span className="font-semibold text-[var(--ui-text)]">
+                {hasCoordinates ? `${endpoint.latitude}, ${endpoint.longitude}` : "Not set"}
+              </span>
+            </DetailLine>
+            <DetailLine label="Healthcheck">
+              <code className={endpointInlineCodeClass}>{healthcheckMode.toUpperCase()}</code>
               {healthcheckUrl && (
-                <code className={endpointInlineCodeClass}>
+                <code className={cx(endpointInlineCodeClass, "max-w-[180px] truncate")} title={healthcheckUrl}>
                   {healthcheckUrl}
                 </code>
               )}
-            </div>
+            </DetailLine>
           </div>
-          <div className="flex items-center gap-2">
+        </td>
+        <td className="min-w-[360px] align-top">
+          <div className="flex flex-wrap gap-1.5">
+            {ENDPOINT_LIST_FEATURES.map((feature) => (
+              <FeatureBadge
+                key={feature.key}
+                label={feature.label}
+                enabled={features[feature.key].enabled}
+              />
+            ))}
+          </div>
+        </td>
+        <td className="min-w-[260px] align-top">
+          <div className="space-y-1.5">
+            <DetailLine label="Admin key">
+              {endpoint.provider === "ceph" ? (
+                <CredentialSummary accessKey={endpoint.admin_access_key} hasSecret={endpoint.has_admin_secret} emptyLabel="Not configured" />
+              ) : (
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Not required</span>
+              )}
+            </DetailLine>
+            <DetailLine label="Supervision">
+              <CredentialSummary accessKey={endpoint.supervision_access_key} hasSecret={endpoint.has_supervision_secret} />
+            </DetailLine>
+            {endpoint.provider === "ceph" && cephAdminConfigEnabled && (
+              <DetailLine label="Ceph Admin">
+                <CredentialSummary accessKey={endpoint.ceph_admin_access_key} hasSecret={endpoint.has_ceph_admin_secret} />
+              </DetailLine>
+            )}
+          </div>
+        </td>
+        <td className="min-w-[220px] align-top text-right">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {!endpoint.is_default && (
               <button
-                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                className={tableActionButtonClasses}
                 onClick={() => handleSetDefault(endpoint)}
                 type="button"
                 disabled={Boolean(defaultBusyId) || envManaged || !canEditEndpoints}
@@ -1105,14 +1198,14 @@ export default function StorageEndpointsPage() {
             {!readOnly ? (
               <>
                 <button
-                  className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                  className={tableActionButtonClasses}
                   onClick={() => startEdit(endpoint)}
                   type="button"
                 >
                   Edit
                 </button>
                 <button
-                  className="rounded-md bg-rose-600 px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-rose-700"
+                  className={tableDeleteActionClasses}
                   onClick={() => {
                     setDeleteTarget(endpoint);
                     setDeleteError(null);
@@ -1126,7 +1219,7 @@ export default function StorageEndpointsPage() {
               <>
                 {canEditEndpoints && (
                   <button
-                    className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                    className={tableActionButtonClasses}
                     onClick={() => openTagsOnly(endpoint)}
                     type="button"
                   >
@@ -1139,169 +1232,8 @@ export default function StorageEndpointsPage() {
               </>
             )}
           </div>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          <div className={endpointSummaryTileClass}>
-            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Region</p>
-            <p className="font-semibold">{endpoint.region || "Default"}</p>
-          </div>
-          <div className={endpointSummaryTileClass}>
-            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">TLS verification</p>
-            <p className={`font-semibold ${verifyTls ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
-              {verifyTls ? "Enabled" : "Disabled (insecure)"}
-            </p>
-          </div>
-          <div className={endpointSummaryTileClass}>
-            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Path style</p>
-            <p className="font-semibold">{forcePathStyle ? "Forced" : "Virtual-host style"}</p>
-          </div>
-          <div className={endpointSummaryTileClass}>
-            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">GPS coordinates</p>
-            <p className="font-semibold">
-              {hasCoordinates ? `${endpoint.latitude}, ${endpoint.longitude}` : "Not set"}
-            </p>
-          </div>
-          <div className={endpointSummaryTileClass}>
-            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Admin key</p>
-            {endpoint.provider === "ceph" ? (
-              <p className="font-semibold">
-                {endpoint.admin_access_key ? endpoint.admin_access_key : "Not configured"}
-                {endpoint.has_admin_secret && <span className="ml-2 ui-caption text-emerald-500">(secret stored)</span>}
-              </p>
-            ) : (
-              <p className="font-semibold text-slate-500">Not required</p>
-            )}
-          </div>
-          <div className={endpointSummaryTileClass}>
-            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Supervision</p>
-            {showSupervision ? (
-              <p className="font-semibold">
-                {endpoint.supervision_access_key || "—"}
-                {endpoint.has_supervision_secret && (
-                  <span className="ml-2 ui-caption text-emerald-500">(secret stored)</span>
-                )}
-              </p>
-            ) : (
-              <p className="font-semibold text-slate-500">Not set</p>
-            )}
-          </div>
-          {endpoint.provider === "ceph" && cephAdminConfigEnabled && (
-            <div className={endpointSummaryTileClass}>
-              <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Ceph Admin dedicated key
-              </p>
-              {showCephAdmin ? (
-                <p className="font-semibold">
-                  {endpoint.ceph_admin_access_key || "—"}
-                  {endpoint.has_ceph_admin_secret && (
-                    <span className="ml-2 ui-caption text-emerald-500">(secret stored)</span>
-                  )}
-                </p>
-              ) : (
-                <p className="font-semibold text-slate-500">Not set</p>
-              )}
-            </div>
-          )}
-          <div className={endpointSummaryTileClass}>
-            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
-            <div className="mt-1 flex flex-wrap gap-2 ui-caption font-semibold">
-              <span
-                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                  adminEnabled
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                Admin {adminEnabled ? "on" : "off"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                  accountEnabled
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                Account API {accountEnabled ? "on" : "off"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                  usageEnabled
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                Usage Log {usageEnabled ? "on" : "off"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                  metricsEnabled
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                Metrics {metricsEnabled ? "on" : "off"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                  snsEnabled
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                SNS {snsEnabled ? "on" : "off"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                  stsEnabled
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                STS {stsEnabled ? "on" : "off"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                  staticWebsiteEnabled
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                Static website {staticWebsiteEnabled ? "on" : "off"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                  iamEnabled
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                IAM {iamEnabled ? "on" : "off"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                  sseEnabled
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                SSE {sseEnabled ? "on" : "off"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                  replicationEnabled
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                Replication {replicationEnabled ? "on" : "off"}
-              </span>
-              <span className="rounded-full bg-sky-100 px-2 py-0.5 ui-caption font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-100">
-                Check mode {healthcheckMode.toUpperCase()}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+        </td>
+      </tr>
     );
   };
 
@@ -1363,17 +1295,35 @@ export default function StorageEndpointsPage() {
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {defaultError && <PageBanner tone="error">{defaultError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
-      {loading ? (
-        <div className={cx(uiCardMutedClass, "px-5 py-6 ui-body text-[var(--ui-text-muted)]")}>
-          Loading endpoints...
+      <div className="ui-surface-card">
+        <ListToolbar
+          title="Storage endpoints"
+          description="Configured S3/Ceph endpoints and operational capabilities."
+          showHeading={false}
+          countLabel={`${endpoints.length} endpoint${endpoints.length === 1 ? "" : "s"}`}
+        />
+        <div className={cx(uiTableContainerClass, "rounded-t-none border-x-0 border-b-0")}>
+          <table className={cx(uiDataTableClass, "compact-table min-w-[1420px]")}>
+            <thead>
+              <tr>
+                <th>Endpoint</th>
+                <th>Provider</th>
+                <th>Connectivity</th>
+                <th>Features</th>
+                <th>Credentials</th>
+                <th className="text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && <TableEmptyState colSpan={6} message="Loading endpoints..." />}
+              {!loading && endpoints.length === 0 && (
+                <TableEmptyState colSpan={6} message="No endpoints configured yet." />
+              )}
+              {!loading && endpoints.map((endpoint) => renderEndpointRow(endpoint))}
+            </tbody>
+          </table>
         </div>
-      ) : endpoints.length === 0 ? (
-        <div className={cx(uiCardMutedClass, "border-dashed px-6 py-8 text-center ui-body text-[var(--ui-text-muted)]")}>
-          No endpoints configured yet.
-        </div>
-      ) : (
-        <div className="grid gap-4">{endpoints.map((ep) => renderEndpointCard(ep))}</div>
-      )}
+      </div>
 
       {showForm && (
         <Modal title={editingId ? (tagsOnlyMode ? "Edit endpoint tags" : "Edit endpoint") : "New endpoint"} onClose={formCloseGuard.requestClose}>

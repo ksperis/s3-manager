@@ -94,6 +94,66 @@ describe("StorageEndpointsPage tags", () => {
     localStorage.clear();
   });
 
+  it("renders storage endpoints as a compact table listing", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
+    listStorageEndpointsMock.mockResolvedValue([
+      makeEndpoint({
+        force_path_style: true,
+        latitude: 43.6047,
+        longitude: 1.4442,
+        admin_access_key: "admin-key",
+        has_admin_secret: true,
+        supervision_access_key: "supervision-key",
+        has_supervision_secret: true,
+        ceph_admin_access_key: "ceph-admin-key",
+        has_ceph_admin_secret: true,
+        features: {
+          admin: { enabled: true, endpoint: "https://admin.ceph.example.test" },
+          account: { enabled: true },
+          usage: { enabled: true },
+          metrics: { enabled: true },
+          sns: { enabled: false },
+          sts: { enabled: false },
+          static_website: { enabled: false },
+          iam: { enabled: true },
+          sse: { enabled: false },
+          replication: { enabled: false },
+          healthcheck: { enabled: true, mode: "s3", url: "https://health.ceph.example.test" },
+        },
+      }),
+    ]);
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+
+    const table = screen.getByRole("table");
+    ["Endpoint", "Provider", "Connectivity", "Features", "Credentials", "Actions"].forEach((name) => {
+      expect(within(table).getByRole("columnheader", { name })).toBeInTheDocument();
+    });
+
+    const row = screen.getByText("Ceph Endpoint").closest("tr");
+    expect(row).not.toBeNull();
+    const endpointRow = within(row as HTMLElement);
+
+    expect(endpointRow.getByText("https://ceph.example.test")).toBeInTheDocument();
+    expect(endpointRow.getByText("https://admin.ceph.example.test")).toBeInTheDocument();
+    expect(endpointRow.getAllByText("Default")).toHaveLength(2);
+    expect(endpointRow.getByText("prod")).toBeInTheDocument();
+    expect(endpointRow.getByText("Ceph")).toBeInTheDocument();
+    expect(endpointRow.getByText("Forced")).toBeInTheDocument();
+    expect(endpointRow.getByText("43.6047, 1.4442")).toBeInTheDocument();
+    expect(endpointRow.getByText("S3")).toBeInTheDocument();
+    expect(endpointRow.getByText("https://health.ceph.example.test")).toBeInTheDocument();
+    expect(endpointRow.getByText("Admin on")).toBeInTheDocument();
+    expect(endpointRow.getByText("SNS off")).toBeInTheDocument();
+    expect(endpointRow.getByText("admin-key")).toBeInTheDocument();
+    expect(endpointRow.getByText("supervision-key")).toBeInTheDocument();
+    expect(endpointRow.getByText("ceph-admin-key")).toBeInTheDocument();
+    expect(endpointRow.getAllByText("(secret stored)")).toHaveLength(3);
+    expect(endpointRow.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(endpointRow.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
   it("lets superadmin edit endpoint tags even when endpoints are env-managed", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
     fetchStorageEndpointsMetaMock.mockResolvedValue({ managed_by_env: true });
