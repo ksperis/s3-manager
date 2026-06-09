@@ -112,6 +112,11 @@ const buildAttributesSignature = (
     attributeItems,
   });
 
+const topicNotificationBuckets = (topic: Topic): string[] =>
+  (topic.subscriptions ?? [])
+    .map((subscription) => subscription.bucket)
+    .filter((bucket): bucket is string => Boolean(bucket));
+
 export default function TopicsPage() {
   const {
     accounts,
@@ -579,7 +584,9 @@ export default function TopicsPage() {
                 {filteredTableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading topics..." />}
                 {filteredTableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load topics." tone="error" />}
                 {filteredTableStatus === "empty" && <TableEmptyState colSpan={3} message="No topics." />}
-                {filteredTopics.map((topic) => (
+                {filteredTopics.map((topic) => {
+                  const notificationBuckets = topicNotificationBuckets(topic);
+                  return (
                     <tr key={topic.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="manager-table-cell-wide px-6 py-4">
                         <div className="flex flex-col">
@@ -588,21 +595,27 @@ export default function TopicsPage() {
                         </div>
                       </td>
                       <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">
-                        <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
-                        <div>Pending: {topic.subscriptions_pending ?? 0}</div>
-                        {(topic.subscriptions ?? []).some((subscription) => subscription.bucket) && (
-                          <div className="mt-2 space-y-1">
-                            {(topic.subscriptions ?? [])
-                              .filter((subscription) => subscription.bucket)
-                              .map((subscription, index) => (
-                                <div
-                                  key={`${subscription.name}-${index}`}
-                                  className="max-w-xl rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900/60"
-                                >
-                                  Bucket: {subscription.bucket}
-                                </div>
-                              ))}
-                          </div>
+                        {topic.is_ceph ? (
+                          <>
+                            <div>Notifications: {notificationBuckets.length}</div>
+                            {notificationBuckets.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {notificationBuckets.map((bucket, index) => (
+                                  <div
+                                    key={`${bucket}-${index}`}
+                                    className="max-w-xl rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900/60"
+                                  >
+                                    Bucket: {bucket}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
+                            <div>Pending: {topic.subscriptions_pending ?? 0}</div>
+                          </>
                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
@@ -631,7 +644,8 @@ export default function TopicsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

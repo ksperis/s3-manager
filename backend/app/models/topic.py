@@ -19,6 +19,7 @@ class Topic(BaseModel):
     name: str
     arn: str
     owner: Optional[str] = None
+    is_ceph: bool = Field(default=False, description="Topic was listed through the Ceph RGW-specific path")
     subscriptions_confirmed: Optional[int] = Field(default=None, description="Number of confirmed subscriptions")
     subscriptions_pending: Optional[int] = Field(default=None, description="Number of pending subscriptions")
     subscriptions: list[TopicSubscription] = Field(

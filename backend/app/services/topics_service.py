@@ -178,11 +178,13 @@ class TopicsService:
         *,
         name: Optional[str] = None,
         subscriptions: Optional[list[TopicSubscription]] = None,
+        is_ceph: bool = False,
     ) -> Topic:
         return Topic(
             name=name or self._topic_name_from_arn(arn),
             arn=arn,
             owner=attributes.get("Owner"),
+            is_ceph=is_ceph,
             subscriptions_confirmed=self._to_int(attributes.get("SubscriptionsConfirmed")),
             subscriptions_pending=self._to_int(attributes.get("SubscriptionsPending")),
             subscriptions=subscriptions or [],
@@ -316,6 +318,7 @@ class TopicsService:
                     attrs,
                     name=topic_names.get(arn),
                     subscriptions=subscriptions_by_arn.get(arn, []),
+                    is_ceph=True,
                 )
             )
         return items

@@ -217,6 +217,7 @@ def test_list_topics_reconstructs_ceph_topics_and_subscriptions(monkeypatch):
     topic = topics[0]
     assert topic.name == "topic-generic_test_unistra_preprod2"
     assert topic.arn == arn
+    assert topic.is_ceph is True
     assert topic.subscriptions_confirmed == 2
     assert attributes_calls == [arn]
     assert len(topic.subscriptions) == 1
@@ -255,6 +256,7 @@ def test_list_topics_treats_ceph_notif_entries_as_bindings(monkeypatch):
     topics = service.list_topics(_ceph_account())
 
     assert len(topics) == 1
+    assert topics[0].is_ceph is True
     assert topics[0].name == "topic-from-arn"
     assert topics[0].subscriptions[0].name == "notif.bucket_topic-from-arn"
     assert topics[0].subscriptions[0].endpoint_address == "https://notify.example.test/hooks/current"
@@ -281,6 +283,7 @@ def test_list_topics_keeps_standard_sns_behavior(monkeypatch):
 
     assert len(topics) == 1
     assert topics[0].name == "standard-topic"
+    assert topics[0].is_ceph is False
     assert topics[0].subscriptions == []
     assert topics[0].subscriptions_confirmed == 1
     assert topics[0].subscriptions_pending == 0
