@@ -22,6 +22,7 @@ import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
 import { toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
@@ -242,7 +243,7 @@ export default function AdminMetricsPage() {
       <PageHeader
         title="Metrics"
         description="Centralized view of platform storage and traffic."
-        breadcrumbs={[{ label: "Admin" }, { label: "Overview", to: "/admin" }, { label: "Metrics" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Overview", to: "/admin" }, { label: "Metrics" })}
       />
       <PageControlStrip
         label="Metrics scope"

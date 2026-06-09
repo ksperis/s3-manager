@@ -4,6 +4,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
   PortalSettingsItem,
@@ -273,11 +274,7 @@ export default function PortalSettingsPage() {
       <PageHeader
         title="Portal settings"
         description="Configure portal behavior."
-        breadcrumbs={[
-          { label: "Admin" },
-          { label: "Portal" },
-          { label: "Settings" },
-        ]}
+        breadcrumbs={adminBreadcrumbs({ label: "Portal" }, { label: "Settings" })}
         rightContent={
           <div className="flex flex-wrap gap-2">
             <UiButton

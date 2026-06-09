@@ -19,6 +19,7 @@ import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import StatCards from "../../components/StatCards";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -283,7 +284,7 @@ export default function UsageHistoryPage() {
       <PageHeader
         title="Usage history"
         description="Stored quota usage snapshots collected for RGW accounts and users."
-        breadcrumbs={[{ label: "Admin" }, { label: "Overview", to: "/admin" }, { label: "Usage history" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Overview", to: "/admin" }, { label: "Usage history" })}
         rightContent={
           <button
             type="button"

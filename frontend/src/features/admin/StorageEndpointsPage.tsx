@@ -19,6 +19,7 @@ import {
 } from "../../api/storageEndpoints";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
@@ -1338,7 +1339,7 @@ export default function StorageEndpointsPage() {
       <PageHeader
         title="Storage endpoints"
         description="Manage the S3/Ceph endpoints used by the console."
-        breadcrumbs={[{ label: "Admin" }, { label: "Endpoints" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Endpoints" })}
         actions={envManaged || !canEditEndpoints ? [] : [{ label: "New endpoint", onClick: startCreate }]}
         inlineContent={
           endpoints.length > 0 ? (

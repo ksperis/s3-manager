@@ -5,6 +5,7 @@
 import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
@@ -795,7 +796,7 @@ export default function S3ConnectionsPage() {
       <PageHeader
         title="Shared S3 Connections"
         description="Admin-managed S3 connections shared with linked UI users."
-        breadcrumbs={[{ label: "Admin" }, { label: "Shared S3 Connections" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Shared S3 Connections" })}
         actions={[{ label: "Add connection", onClick: openCreateModal }]}
       />
 

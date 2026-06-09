@@ -22,6 +22,7 @@ import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
@@ -1993,7 +1994,7 @@ export default function UsersPage() {
       <PageHeader
         title="UI Users"
         description={usersDescription}
-        breadcrumbs={[{ label: "Admin" }, { label: "Interface" }, { label: "UI Users" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Interface" }, { label: "UI Users" })}
         actions={[
           {
             label: "Create user",

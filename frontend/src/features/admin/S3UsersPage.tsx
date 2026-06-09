@@ -18,6 +18,7 @@ import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../..
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
@@ -650,7 +651,7 @@ export default function S3UsersPage() {
       <PageHeader
         title="Users"
         description="Persist RGW standalone users for direct manager access (no IAM)."
-        breadcrumbs={[{ label: "Admin" }, { label: "Users" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Users" })}
         actions={[
           {
             label: "Import",

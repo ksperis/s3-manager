@@ -7,6 +7,7 @@ import { AuditLogEntry, listAuditLogs } from "../../api/audit";
 import ListToolbar from "../../components/ListToolbar";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -259,7 +260,7 @@ export default function AuditLogsPage() {
       <PageHeader
         title="Audit trail"
         description="Last administrative actions performed through the UI."
-        breadcrumbs={[{ label: "Admin" }, { label: "Governance" }, { label: "Audit trail" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Governance" }, { label: "Audit trail" })}
         actions={[
           {
             label: loading ? "Refreshing…" : "Refresh",

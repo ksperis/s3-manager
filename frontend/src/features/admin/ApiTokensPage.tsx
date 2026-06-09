@@ -14,6 +14,7 @@ import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -267,10 +268,7 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
         <PageHeader
           title="API tokens"
           description="Manage long-lived admin tokens for automation and integrations."
-          breadcrumbs={[
-            { label: "Admin" },
-            { label: "API tokens" },
-          ]}
+          breadcrumbs={adminBreadcrumbs({ label: "API tokens" })}
           actions={headerActions}
         />
       ) : null}

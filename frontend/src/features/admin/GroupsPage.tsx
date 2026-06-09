@@ -20,6 +20,7 @@ import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
 import {
@@ -693,7 +694,7 @@ export default function GroupsPage() {
       <PageHeader
         title="UI Groups"
         description="Create reusable UI access groups for workspace, Manager tool, and execution context access."
-        breadcrumbs={[{ label: "Admin" }, { label: "Platform" }, { label: "UI Groups" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Platform" }, { label: "UI Groups" })}
         actions={[{ label: "Create group", onClick: openCreateModal }]}
       />
       {actionError && <PageBanner tone="error">{actionError}</PageBanner>}

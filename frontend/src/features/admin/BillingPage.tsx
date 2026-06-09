@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -346,7 +347,11 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Billing" description="Monthly usage and cost overview." />
+      <PageHeader
+        title="Billing"
+        description="Monthly usage and cost overview."
+        breadcrumbs={adminBreadcrumbs({ label: "Overview", to: "/admin" }, { label: "Billing" })}
+      />
       <PageControlStrip
         label="Billing scope"
         title={selectedEndpoint?.name ?? "No Ceph endpoint selected"}

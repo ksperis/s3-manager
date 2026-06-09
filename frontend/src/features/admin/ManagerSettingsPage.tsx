@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
   PortalSettingsItem,
@@ -194,11 +195,7 @@ export default function ManagerSettingsPage() {
       <PageHeader
         title="Manager settings"
         description="Configure manager workspace access and extra operational tools."
-        breadcrumbs={[
-          { label: "Admin" },
-          { label: "Manager" },
-          { label: "Settings" },
-        ]}
+        breadcrumbs={adminBreadcrumbs({ label: "Manager" }, { label: "Settings" })}
         actions={[
           {
             label: resetting ? "Resetting..." : "Reset to defaults",

@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
   PortalSettingsItem,
@@ -153,11 +154,7 @@ export default function BrowserSettingsPage() {
       <PageHeader
         title="Browser settings"
         description="Configure upload concurrency for the browser."
-        breadcrumbs={[
-          { label: "Admin" },
-          { label: "Browser" },
-          { label: "Settings" },
-        ]}
+        breadcrumbs={adminBreadcrumbs({ label: "Browser" }, { label: "Settings" })}
         actions={[
           {
             label: resetting ? "Resetting..." : "Reset to defaults",

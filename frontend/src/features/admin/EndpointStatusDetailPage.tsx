@@ -27,6 +27,7 @@ import {
 } from "../../api/healthchecks";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import TableEmptyState from "../../components/TableEmptyState";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -402,7 +403,11 @@ export default function EndpointStatusDetailPage() {
       <div className="space-y-4">
         <PageHeader
           title="Endpoint Details"
-          breadcrumbs={[{ label: "Admin" }, { label: "Connectivity" }, { label: "Endpoint Status", to: "/admin/endpoint-status" }, { label: "Details" }]}
+          breadcrumbs={adminBreadcrumbs(
+            { label: "Connectivity" },
+            { label: "Endpoint Status", to: "/admin/endpoint-status" },
+            { label: "Details" }
+          )}
           actions={[{ label: "Back", to: "/admin/endpoint-status", variant: "ghost" }]}
         />
         <PageBanner tone="warning">Invalid endpoint identifier.</PageBanner>
@@ -415,12 +420,11 @@ export default function EndpointStatusDetailPage() {
       <PageHeader
         title={selectedEndpoint ? selectedEndpoint.name : "Endpoint Details"}
         description={selectedEndpoint?.endpoint_url || "Detailed health history and incidents for one endpoint."}
-        breadcrumbs={[
-          { label: "Admin" },
+        breadcrumbs={adminBreadcrumbs(
           { label: "Connectivity" },
           { label: "Endpoint Status", to: "/admin/endpoint-status" },
-          { label: "Details" },
-        ]}
+          { label: "Details" }
+        )}
         actions={[
           { label: runLoading ? "Running..." : "Check now", onClick: handleRunNow },
           { label: "Refresh", onClick: loadAll, variant: "ghost" },

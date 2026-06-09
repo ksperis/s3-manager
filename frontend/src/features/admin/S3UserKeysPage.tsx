@@ -16,6 +16,7 @@ import {
   updateS3UserKeyStatus,
 } from "../../api/s3Users";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
 import ListSectionCard from "../../components/list/ListSectionCard";
@@ -169,7 +170,11 @@ export default function S3UserKeysPage() {
   if (!userId || Number.isNaN(numericUserId)) {
     return (
       <div className="space-y-4">
-        <PageHeader title="User access keys" description="Manage RGW keys for the selected user." />
+        <PageHeader
+          title="User access keys"
+          description="Manage RGW keys for the selected user."
+          breadcrumbs={adminBreadcrumbs({ label: "Users", to: "/admin/s3-users" }, { label: "Access keys" })}
+        />
         <PageBanner tone="error">Invalid user id provided.</PageBanner>
       </div>
     );
@@ -184,12 +189,7 @@ export default function S3UserKeysPage() {
             Manage keys for <span className="font-semibold text-slate-700 dark:text-slate-100">{pageTitle}</span>.
           </>
         }
-        breadcrumbs={[
-          { label: "Admin" },
-          { label: "Users", to: "/admin/s3-users" },
-          { label: pageTitle },
-          { label: "Access keys" },
-        ]}
+        breadcrumbs={adminBreadcrumbs({ label: "Users", to: "/admin/s3-users" }, { label: pageTitle }, { label: "Access keys" })}
         actions={[
           { label: "← Back to users", to: "/admin/s3-users", variant: "ghost" },
           {
