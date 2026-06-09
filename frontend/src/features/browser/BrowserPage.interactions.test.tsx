@@ -364,11 +364,17 @@ async function pasteFromCurrentPath(user: ReturnType<typeof userEvent.setup>) {
   await user.click(within(menu).getByRole("menuitem", { name: /^Paste/ }));
 }
 
-async function openOperationsModal(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(
-    within(getContextToolbar()).getByRole("button", { name: "Operations" }),
-  );
-  return await screen.findByRole("dialog", { name: "Operations overview" });
+async function openOperationsPanel(user: ReturnType<typeof userEvent.setup>) {
+  const panel = await screen.findByRole("complementary", {
+    name: "Operations",
+  });
+  const expandButton = within(panel).queryByRole("button", {
+    name: "Expand operations",
+  });
+  if (expandButton) {
+    await user.click(expandButton);
+  }
+  return panel;
 }
 
 function createAbortablePromise(signal?: AbortSignal) {
@@ -1282,9 +1288,6 @@ describe("BrowserPage interactions", () => {
     const moreButton = within(contextToolbar).getByRole("button", {
       name: "More",
     });
-    const operationsButton = within(contextToolbar).getByRole("button", {
-      name: "Operations",
-    });
 
     expect(screen.getAllByRole("toolbar")).toHaveLength(1);
     expect(
@@ -1293,20 +1296,27 @@ describe("BrowserPage interactions", () => {
     expect(
       screen.queryByRole("toolbar", { name: "Browser actions bar" }),
     ).not.toBeInTheDocument();
+    expect(contextToolbar).not.toHaveClass("rounded-lg", "p-2");
+    expect(screen.getByTestId("browser-layout").parentElement).toHaveClass(
+      "pb-3",
+    );
+    expect(screen.getByTestId("browser-layout").parentElement).not.toHaveClass(
+      "px-3",
+    );
+    expect(screen.getByTestId("browser-layout").parentElement).not.toHaveClass(
+      "p-3",
+    );
     expect(
       within(contextToolbar).queryByRole("button", { name: "Download" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(contextToolbar).queryByRole("button", { name: "Operations" }),
     ).not.toBeInTheDocument();
     expect(uploadButton).toHaveClass("h-7", "w-7", "rounded-md");
     expect(uploadButton).not.toHaveClass("h-9", "w-9", "rounded-xl");
     expect(newFolderButton).toHaveClass("h-7", "w-7", "rounded-md");
     expect(refreshButton).toHaveClass("h-7", "w-7", "rounded-md");
     expect(moreButton).toHaveClass("h-7", "w-7", "rounded-md");
-    expect(
-      Boolean(
-        operationsButton.compareDocumentPosition(uploadButton) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      ),
-    ).toBe(true);
     expect(
       Boolean(
         uploadButton.compareDocumentPosition(newFolderButton) &
@@ -1336,6 +1346,9 @@ describe("BrowserPage interactions", () => {
     ).toBeInTheDocument();
 
     const menu = await openContextMoreMenu(user);
+    expect(
+      within(menu).queryByRole("menuitem", { name: "Operations overview" }),
+    ).not.toBeInTheDocument();
     expect(within(menu).getByText("Compact view")).toBeInTheDocument();
     expect(within(menu).getByText("Transfers")).toBeInTheDocument();
     expect(within(menu).getByText("Current path")).toBeInTheDocument();
@@ -1512,8 +1525,11 @@ describe("BrowserPage interactions", () => {
       within(contextToolbar).getByRole("button", { name: "Select bucket" }),
     ).toBeInTheDocument();
     expect(
-      within(contextToolbar).getByRole("button", { name: "Operations" }),
-    ).toBeInTheDocument();
+      within(contextToolbar).queryByRole("button", { name: "Operations" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: "Operations" }),
+    ).not.toBeInTheDocument();
     expect(
       within(contextToolbar).getByRole("button", { name: "Upload" }),
     ).toBeInTheDocument();
@@ -1523,6 +1539,20 @@ describe("BrowserPage interactions", () => {
     expect(
       screen.queryByRole("toolbar", { name: "Browser actions bar" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("aligns the embedded browser chrome with its page header", async () => {
+    renderEmbeddedPage({ initialEntry: "/manager/browser" });
+    await findRowByLabel("a.txt");
+
+    const contextToolbar = getContextToolbar();
+    const browserLayoutParent = screen.getByTestId("browser-layout")
+      .parentElement;
+
+    expect(contextToolbar).not.toHaveClass("rounded-lg", "p-2");
+    expect(browserLayoutParent).toHaveClass("pb-3");
+    expect(browserLayoutParent).not.toHaveClass("px-3");
+    expect(browserLayoutParent).not.toHaveClass("p-3");
   });
 
   it("restores folders, inspector, and action bar on /browser after remount", async () => {
@@ -2626,8 +2656,11 @@ describe("BrowserPage interactions", () => {
 
     expect(screen.getAllByRole("toolbar")).toHaveLength(1);
     expect(
-      within(getContextToolbar()).getByRole("button", { name: "Operations" }),
-    ).toBeInTheDocument();
+      within(getContextToolbar()).queryByRole("button", { name: "Operations" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: "Operations" }),
+    ).not.toBeInTheDocument();
     expect(
       within(getContextToolbar()).getByRole("button", { name: "Upload" }),
     ).toBeInTheDocument();
@@ -3618,9 +3651,38 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("readme.txt");
     await pasteFromCurrentPath(user);
 
-    const dialog = await screen.findByRole("dialog", {
+    const dialog = await screen.findByRole("complementary", {
+      name: "Operations",
+    });
+    expect(dialog).toHaveClass("fixed", "inset-x-3", "bottom-4");
+    expect(
+      within(dialog).getByRole("button", { name: "Expand operations" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Close operations" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Stop all" }),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Active")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Queue")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Show files" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Download details (JSON)" }),
+    ).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Details" }));
+    let detailsDialog = await screen.findByRole("dialog", {
       name: "Operations overview",
     });
+    expect(within(detailsDialog).getByText("Active")).toBeInTheDocument();
+    expect(
+      within(detailsDialog).getByRole("button", { name: "Show files" }),
+    ).toBeInTheDocument();
+    await user.click(within(detailsDialog).getByRole("button", { name: "Close modal" }));
+
+    await user.click(within(dialog).getByRole("button", { name: "Expand operations" }));
     const stopAllButton = await within(dialog).findByRole("button", {
       name: "Stop all",
     });
@@ -3645,10 +3707,53 @@ describe("BrowserPage interactions", () => {
       true,
     );
 
-    await user.click(within(dialog).getByRole("button", { name: "Show files" }));
-    await waitFor(() => {
-      expect(within(dialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    expect(
+      await within(dialog).findByRole("button", { name: "Close operations" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Show files" }),
+    ).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Details" }));
+    detailsDialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
     });
+    await user.click(
+      within(detailsDialog).getByRole("button", { name: "Show files" }),
+    );
+    await waitFor(() => {
+      expect(
+        within(detailsDialog).getAllByText(/Cancelled/).length,
+      ).toBeGreaterThanOrEqual(2);
+    });
+    expect(
+      within(detailsDialog).getByRole("button", {
+        name: "Download details (JSON)",
+      }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(detailsDialog).getByRole("button", { name: "Close modal" }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Close operations" }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("complementary", { name: "Operations" }),
+      ).not.toBeInTheDocument();
+    });
+
+    const menu = await openContextMoreMenu(user);
+    await user.click(
+      within(menu).getByRole("menuitem", { name: "Operations overview" }),
+    );
+    detailsDialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
+    });
+    expect(
+      within(detailsDialog).getByRole("button", {
+        name: "Download details (JSON)",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("cancels cross-context move batches without deleting pending sources and keeps paste available", async () => {
@@ -3716,9 +3821,7 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("readme.txt");
     await pasteFromCurrentPath(user);
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Operations overview",
-    });
+    const dialog = await openOperationsPanel(user);
     await user.click(
       await within(dialog).findByRole("button", { name: "Stop all" }),
     );
@@ -3735,12 +3838,26 @@ describe("BrowserPage interactions", () => {
       );
     });
 
-    await user.click(within(dialog).getByRole("button", { name: "Show files" }));
-    await waitFor(() => {
-      expect(within(dialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    await user.click(within(dialog).getByRole("button", { name: "Details" }));
+    const detailsDialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
     });
+    await user.click(within(detailsDialog).getByRole("button", { name: "Show files" }));
+    await waitFor(() => {
+      expect(within(detailsDialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    });
+    await user.click(within(detailsDialog).getByRole("button", { name: "Close modal" }));
 
-    await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
+    await user.click(within(dialog).getByRole("button", { name: "Collapse operations" }));
+    expect(
+      within(dialog).getByRole("button", { name: "Expand operations" }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Expand operations" }),
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Collapse operations" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Context" }));
     const panel = screen.getByRole("tabpanel", { name: "Context" });
     expect(within(panel).getByRole("button", { name: /^Paste/ })).toBeEnabled();
@@ -3977,9 +4094,7 @@ describe("BrowserPage interactions", () => {
     });
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Operations overview",
-    });
+    const dialog = await openOperationsPanel(user);
     await user.click(
       await within(dialog).findByRole("button", { name: "Stop all" }),
     );
@@ -3995,10 +4110,15 @@ describe("BrowserPage interactions", () => {
       true,
     );
 
-    await user.click(within(dialog).getByRole("button", { name: "Show files" }));
-    await waitFor(() => {
-      expect(within(dialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    await user.click(within(dialog).getByRole("button", { name: "Details" }));
+    const detailsDialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
     });
+    await user.click(within(detailsDialog).getByRole("button", { name: "Show files" }));
+    await waitFor(() => {
+      expect(within(detailsDialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    });
+    await user.click(within(detailsDialog).getByRole("button", { name: "Close modal" }));
   });
 
   it("supports Stop for bulk attributes and leaves queued items cancelled", async () => {
@@ -4041,9 +4161,7 @@ describe("BrowserPage interactions", () => {
     await user.type(within(modal).getByPlaceholderText("Content-Type"), "text/plain");
     await user.click(within(modal).getByRole("button", { name: "Apply changes" }));
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Operations overview",
-    });
+    const dialog = await openOperationsPanel(user);
     await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
 
     await waitFor(() => {
@@ -4142,9 +4260,7 @@ describe("BrowserPage interactions", () => {
     });
     await user.click(within(modal).getByRole("button", { name: "Run restore" }));
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Operations overview",
-    });
+    const dialog = await openOperationsPanel(user);
     await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
 
     await waitFor(() => {
@@ -4185,9 +4301,7 @@ describe("BrowserPage interactions", () => {
     await user.type(within(modal).getByPlaceholderText("e.g. 3"), "1");
     await user.click(within(modal).getByRole("button", { name: "Run cleanup" }));
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Operations overview",
-    });
+    const dialog = await openOperationsPanel(user);
     await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
 
     await waitFor(() => {
@@ -4259,7 +4373,7 @@ describe("BrowserPage interactions", () => {
     await within(detailsDialog).findByRole("button", { name: "Restore" });
 
     await user.click(within(detailsDialog).getByRole("button", { name: "Restore" }));
-    let dialog = await openOperationsModal(user);
+    let dialog = await openOperationsPanel(user);
     await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
 
     await waitFor(() => {
@@ -4270,7 +4384,7 @@ describe("BrowserPage interactions", () => {
       true,
     );
 
-    await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
+    await user.click(within(dialog).getByRole("button", { name: "Collapse operations" }));
 
     await user.click(
       within(detailsDialog).getByRole("button", { name: "Delete version" }),
@@ -4278,7 +4392,7 @@ describe("BrowserPage interactions", () => {
     const confirm = await screen.findByRole("dialog", { name: "Delete version" });
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
 
-    dialog = await openOperationsModal(user);
+    dialog = await openOperationsPanel(user);
     await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
 
     await waitFor(() => {
@@ -4322,7 +4436,7 @@ describe("BrowserPage interactions", () => {
       expect(screen.getByText("Copied 2 of 2 item(s).")).toBeInTheDocument();
     });
 
-    const dialog = await openOperationsModal(user);
+    const dialog = await openOperationsPanel(user);
     const copyCardTitle = within(dialog).getByText("Copying items");
     const deleteCardTitle = within(dialog).getByText("Deleting 2 objects");
 
@@ -4332,6 +4446,15 @@ describe("BrowserPage interactions", () => {
           Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Clear completed/failed" }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("complementary", { name: "Operations" }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("renders CORS warning with inline info action and moves CORS button into popover", async () => {

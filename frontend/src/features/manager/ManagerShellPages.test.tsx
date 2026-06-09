@@ -43,7 +43,15 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
 }));
 
 vi.mock("../browser/BrowserEmbed", () => ({
-  default: () => <div data-testid="browser-embed">browser</div>,
+  default: (props: { onSelectedBucketNameChange?: (bucketName: string) => void }) => (
+    <button
+      type="button"
+      data-testid="browser-embed"
+      onClick={() => props.onSelectedBucketNameChange?.("bucket-a")}
+    >
+      browser
+    </button>
+  ),
 }));
 
 vi.mock("../../api/buckets", async () => {
@@ -781,7 +789,42 @@ describe("manager shell pages", () => {
     );
 
     expect(screen.getByText("Select a manager context first")).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation")).getByText("Manager")).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation")).getByText("Browser")).toBeInTheDocument();
     expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
+  });
+
+  it("adds the selected bucket to the manager browser breadcrumb", () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerBrowserPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId("browser-embed"));
+
+    expect(within(screen.getByRole("navigation")).getByText("bucket-a")).toBeInTheDocument();
   });
 
   it("renders the manager buckets page without a page-level context strip", () => {

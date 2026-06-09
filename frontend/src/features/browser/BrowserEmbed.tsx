@@ -12,6 +12,7 @@ type BrowserEmbedProps = {
   endpointProvider?: "ceph" | "aws" | "other" | null;
   quotaMaxSizeGb?: number | null;
   quotaMaxObjects?: number | null;
+  onSelectedBucketNameChange?: (bucketName: string) => void;
 };
 
 export default function BrowserEmbed({
@@ -21,6 +22,7 @@ export default function BrowserEmbed({
   endpointProvider,
   quotaMaxSizeGb,
   quotaMaxObjects,
+  onSelectedBucketNameChange,
 }: BrowserEmbedProps) {
   return (
     <BrowserPage
@@ -33,6 +35,7 @@ export default function BrowserEmbed({
       allowFoldersPanel={false}
       allowInspectorPanel={false}
       showPanelToggles={false}
+      onSelectedBucketNameChange={onSelectedBucketNameChange}
     />
   );
 }

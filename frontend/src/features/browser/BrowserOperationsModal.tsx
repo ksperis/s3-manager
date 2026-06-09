@@ -107,12 +107,12 @@ type OperationCardProps = {
 
 function OperationCard({ title, subtitle, summary, progress, statusPill, actions, children }: OperationCardProps) {
   return (
-    <div className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
+    <div className="border-b border-[color:var(--ui-border-soft)] py-3 last:border-b-0">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
-          <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">{title}</p>
-          {subtitle && <p className="ui-caption text-slate-400">{subtitle}</p>}
-          {summary && <p className="ui-caption tabular-nums text-slate-400">{summary}</p>}
+          <p className="ui-caption font-semibold text-[var(--ui-text)]">{title}</p>
+          {subtitle && <p className="ui-caption text-[var(--ui-text-muted)]">{subtitle}</p>}
+          {summary && <p className="ui-caption tabular-nums text-[var(--ui-text-muted)]">{summary}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:ml-2 sm:flex-nowrap sm:justify-end sm:shrink-0">
           {statusPill && (
@@ -124,7 +124,7 @@ function OperationCard({ title, subtitle, summary, progress, statusPill, actions
         </div>
       </div>
       {typeof progress === "number" && (
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--ui-surface-muted)]">
           <div className="h-full bg-primary-500" style={{ width: `${progress}%` }} />
         </div>
       )}
@@ -170,8 +170,8 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     onClearFinishedOperations,
     onClose,
   } = props;
-  const operationsPanelHeightClasses = "h-[300px] sm:h-[340px] lg:h-[380px]";
-  const operationsListAreaClasses = "flex-1 overflow-y-auto pr-1";
+  const operationsPanelHeightClasses = "max-h-[min(70vh,520px)]";
+  const operationsListAreaClasses = "min-h-[12rem] flex-1 overflow-y-auto pr-1";
 
   const showAllOperations = filtersAllInactive;
   const showActiveSection = showAllOperations || showActiveOperations;
@@ -229,7 +229,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     <button
       type="button"
       className={operationSecondaryClasses}
-      onClick={() => confirmAndDownloadOperationDetails(kind, operationId)}
+      onClick={() => onDownloadOperationDetails(kind, operationId)}
     >
       Download details (JSON)
     </button>
@@ -315,7 +315,6 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     visibleOtherOperations,
     visibleUploadGroups,
   ]);
-
   const renderDownloadGroup = (group: DownloadGroup) => {
     const queuedItems = group.items.filter((item) => item.status === "queued");
     const activeItems = group.items.filter((item) => item.status === "downloading");
@@ -1017,22 +1016,8 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
   };
 
   return (
-    <Modal
-      title="Operations overview"
-      onClose={onClose}
-      maxWidthClass="max-w-6xl"
-      maxBodyHeightClass="max-h-[90vh]"
-    >
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Operations</p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Uploads, downloads, deletions, copies, and queued files.
-            </p>
-          </div>
-          <span className={countBadgeClasses}>{formatBadgeCount(totalOperationsCount)}</span>
-        </div>
+    <Modal title="Operations overview" onClose={onClose} maxWidthClass="max-w-4xl">
+      <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -1069,39 +1054,37 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
           <button
             type="button"
             onClick={onClearFinishedOperations}
-            className={`${operationSecondaryClasses} ui-caption ml-auto`}
+            className={`${operationSecondaryClasses} ui-caption sm:ml-auto`}
             disabled={!hasFinishedOperations}
           >
             Clear completed/failed
           </button>
         </div>
         <div className={operationsPanelHeightClasses}>
-          <div className="flex h-full flex-col gap-2">
-            <div className={operationsListAreaClasses}>
-              {!hasVisibleOperations ? (
-                <div className="flex h-full items-center justify-center ui-caption text-slate-500 dark:text-slate-400">
-                  No operations to show.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {timelineEntries.map((entry) => {
-                    if (entry.type === "download") {
-                      return <Fragment key={entry.key}>{renderDownloadGroup(entry.group)}</Fragment>;
-                    }
-                    if (entry.type === "delete") {
-                      return <Fragment key={entry.key}>{renderDeleteGroup(entry.group)}</Fragment>;
-                    }
-                    if (entry.type === "copy") {
-                      return <Fragment key={entry.key}>{renderCopyGroup(entry.group)}</Fragment>;
-                    }
-                    if (entry.type === "upload") {
-                      return <Fragment key={entry.key}>{renderUploadGroup(entry.group)}</Fragment>;
-                    }
-                    return <Fragment key={entry.key}>{renderOtherOperation(entry.op)}</Fragment>;
-                  })}
-                </div>
-              )}
-            </div>
+          <div className={operationsListAreaClasses}>
+            {!hasVisibleOperations ? (
+              <div className="flex h-full items-center justify-center ui-caption text-slate-500 dark:text-slate-400">
+                No operations to show.
+              </div>
+            ) : (
+              <div>
+                {timelineEntries.map((entry) => {
+                  if (entry.type === "download") {
+                    return <Fragment key={entry.key}>{renderDownloadGroup(entry.group)}</Fragment>;
+                  }
+                  if (entry.type === "delete") {
+                    return <Fragment key={entry.key}>{renderDeleteGroup(entry.group)}</Fragment>;
+                  }
+                  if (entry.type === "copy") {
+                    return <Fragment key={entry.key}>{renderCopyGroup(entry.group)}</Fragment>;
+                  }
+                  if (entry.type === "upload") {
+                    return <Fragment key={entry.key}>{renderUploadGroup(entry.group)}</Fragment>;
+                  }
+                  return <Fragment key={entry.key}>{renderOtherOperation(entry.op)}</Fragment>;
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>

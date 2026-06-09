@@ -2,6 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import { useState } from "react";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import BrowserEmbed from "../browser/BrowserEmbed";
@@ -15,12 +16,20 @@ export default function ManagerBrowserPage() {
     selectedS3AccountId,
     managerBrowserEnabled,
   } = useS3AccountContext();
+  const [selectedBrowserBucketName, setSelectedBrowserBucketName] = useState("");
   const selected = accounts.find((account) => account.id === selectedS3AccountId) ?? null;
   const browserBlockedForContext = managerBrowserEnabled === false;
+  const breadcrumbs = selectedBrowserBucketName
+    ? [{ label: "Manager" }, { label: "Browser" }, { label: selectedBrowserBucketName }]
+    : [{ label: "Manager" }, { label: "Browser" }];
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
-      <PageHeader title="Browser" description="Object navigation for the active manager execution context." />
+      <PageHeader
+        title="Browser"
+        description="Object navigation for the active manager execution context."
+        breadcrumbs={breadcrumbs}
+      />
       <div className="min-h-0 flex-1">
         {!hasS3AccountContext ? (
           <PageEmptyState
@@ -49,6 +58,7 @@ export default function ManagerBrowserPage() {
             endpointProvider={selected?.endpoint_provider ?? null}
             quotaMaxSizeGb={selected?.quota_max_size_gb ?? null}
             quotaMaxObjects={selected?.quota_max_objects ?? null}
+            onSelectedBucketNameChange={setSelectedBrowserBucketName}
           />
         )}
       </div>

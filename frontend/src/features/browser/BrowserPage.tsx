@@ -40,7 +40,6 @@ import {
   uiCheckboxClass,
   uiMenuClass,
   uiMutedTextClass,
-  uiPanelMutedClass,
 } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
@@ -128,6 +127,7 @@ import BrowserContextMenu from "./BrowserContextMenu";
 import BrowserObjectDetailsModal from "./BrowserObjectDetailsModal";
 import BrowserObjectVersionsList from "./BrowserObjectVersionsList";
 import BrowserOperationsModal from "./BrowserOperationsModal";
+import BrowserOperationsPanel from "./BrowserOperationsPanel";
 import BrowserMultipartUploadsModal from "./BrowserMultipartUploadsModal";
 import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
 import {
@@ -220,7 +220,6 @@ import {
   bulkActionClasses,
   bulkDangerClasses,
   breadcrumbIconButtonClasses,
-  countBadgeClasses,
   contextMenuItemClasses,
   contextMenuItemDisabledClasses,
   contextMenuSeparatorClasses,
@@ -242,7 +241,6 @@ import {
   clampParallelism,
   collectDroppedFiles,
   findTreeNodeByPrefix,
-  formatBadgeCount,
   formatDateTime,
   formatLocalDateTime,
   getSelectionInfo,
@@ -308,6 +306,7 @@ type BrowserPageProps = {
   showPanelToggles?: boolean;
   defaultShowFolders?: boolean;
   defaultShowInspector?: boolean;
+  onSelectedBucketNameChange?: (bucketName: string) => void;
 };
 
 type ObjectDetailsTarget = {
@@ -846,18 +845,15 @@ const BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES: Record<
 const browserSectionEyebrowClasses =
   cx("ui-caption font-semibold", uiMutedTextClass);
 const browserShellClasses =
-  cx(
-    uiCardClass,
-    "flex min-h-0 flex-1 flex-col overflow-hidden",
-  );
+  "flex min-h-0 flex-1 flex-col overflow-hidden";
 const browserSubtleSurfaceClasses =
   cx(uiCardMutedClass, "shadow-none");
 const browserToolbarShellClasses =
-  cx(uiPanelMutedClass, "flex flex-col gap-2 p-2 lg:flex-row lg:items-center lg:justify-between");
+  "flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between";
 const browserToolbarPathStripClasses =
   "flex min-w-0 flex-1 items-center gap-1 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2.5 py-1.5 shadow-[var(--ui-shadow-soft)]";
 const browserToolbarControlsGroupClasses =
-  "flex shrink-0 items-center gap-1.5 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-1.5 py-0.5 shadow-[var(--ui-shadow-soft)]";
+  "flex shrink-0 items-center gap-1.5";
 const browserFloatingMenuClasses =
   cx(uiMenuClass, "overflow-hidden p-1.5");
 const browserInputClasses =
@@ -1070,6 +1066,7 @@ export default function BrowserPage({
   showPanelToggles = true,
   defaultShowFolders = false,
   defaultShowInspector = false,
+  onSelectedBucketNameChange,
 }: BrowserPageProps = {}) {
   const browserContext = useBrowserContext();
   const accountIdForApi = accountIdOverride ?? browserContext.selectorForApi;
@@ -1378,7 +1375,13 @@ export default function BrowserPage({
   const [copyDialog, setCopyDialog] = useState<BrowserCopyDialogState | null>(
     null,
   );
-  const [showOperationsModal, setShowOperationsModal] = useState(false);
+  const [operationsPanelOpen, setOperationsPanelOpen] = useState(false);
+  const [operationsPanelDismissed, setOperationsPanelDismissed] = useState(false);
+  const [showOperationsDetailsModal, setShowOperationsDetailsModal] = useState(false);
+  const showOperationsBar = useCallback(() => {
+    setOperationsPanelOpen(false);
+    setOperationsPanelDismissed(false);
+  }, []);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
   const [pathSuggestions, setPathSuggestions] = useState<PathSuggestion[]>([]);
@@ -2162,6 +2165,14 @@ export default function BrowserPage({
     bucketNameRef.current = bucketName;
     prefixRef.current = prefix;
   }, [bucketName, prefix]);
+  useEffect(() => {
+    onSelectedBucketNameChange?.(bucketName);
+  }, [bucketName, onSelectedBucketNameChange]);
+  useEffect(() => {
+    return () => {
+      onSelectedBucketNameChange?.("");
+    };
+  }, [onSelectedBucketNameChange]);
   useEffect(() => {
     if (!isMainBrowserPath || !browserRootContextId || !hasS3AccountContext)
       return;
@@ -7178,6 +7189,7 @@ export default function BrowserPage({
       },
       progress = status === "uploading" || status === "downloading" ? 0 : 20,
     ) => {
+      showOperationsBar();
       const operationId = makeId();
       setOperations((prev) => [
         {
@@ -7198,7 +7210,7 @@ export default function BrowserPage({
       ]);
       return operationId;
     },
-    [],
+    [showOperationsBar],
   );
 
   const completeOperation = useCallback(
@@ -7430,7 +7442,7 @@ export default function BrowserPage({
     )
       return;
     if (items.length > 1) {
-      setShowOperationsModal(true);
+      showOperationsBar();
     }
     setWarningMessage(null);
     const batchId = makeId();
@@ -8560,7 +8572,7 @@ export default function BrowserPage({
   ): Promise<OperationCompletionStatus | undefined> => {
     if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder")
       return;
-    setShowOperationsModal(true);
+    showOperationsBar();
     const folderPrefix = normalizePrefix(folderItem.key);
     const operationId = startOperation(
       "deleting",
@@ -8706,7 +8718,7 @@ export default function BrowserPage({
   const handleDownloadFolder = async (folderItem: BrowserItem) => {
     if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder")
       return;
-    setShowOperationsModal(true);
+    showOperationsBar();
     setWarningMessage(null);
     const folderPrefix = normalizePrefix(folderItem.key);
     const rawLabel =
@@ -9043,7 +9055,7 @@ export default function BrowserPage({
       await handleDownloadItems(files);
       return;
     }
-    setShowOperationsModal(true);
+    showOperationsBar();
     const operationId = startOperation(
       "downloading",
       `Downloading ${files.length} files`,
@@ -9300,7 +9312,7 @@ export default function BrowserPage({
       return;
     }
     if (fileTargets.length > 1 || folderTargets.length > 0) {
-      setShowOperationsModal(true);
+      showOperationsBar();
     }
     try {
       let deleteCancelled = false;
@@ -9482,7 +9494,7 @@ export default function BrowserPage({
         return;
       }
       if (keys.length > 1) {
-        setShowOperationsModal(true);
+        showOperationsBar();
       }
       operationId = startOperation(
         "copying",
@@ -9839,7 +9851,7 @@ export default function BrowserPage({
       }
 
       if (total > 1) {
-        setShowOperationsModal(true);
+        showOperationsBar();
       }
       operationId = startOperation(
         "copying",
@@ -9976,7 +9988,7 @@ export default function BrowserPage({
     setCleanupLoading(true);
     setCleanupError(null);
     setCleanupSummary(null);
-    setShowOperationsModal(true);
+    showOperationsBar();
     const operationId = startOperation(
       "deleting",
       "Cleaning old versions",
@@ -10187,7 +10199,7 @@ export default function BrowserPage({
     }
 
     if (copyTasks.length > 1) {
-      setShowOperationsModal(true);
+      showOperationsBar();
     }
     const operationId = startOperation(
       "copying",
@@ -10403,6 +10415,7 @@ export default function BrowserPage({
     hasS3AccountContext,
     listAllObjectsForPrefix,
     normalizedPrefix,
+    showOperationsBar,
     refreshObjectsNow,
     resolveClipboardTransferMode,
     normalizeSelectorId,
@@ -10417,9 +10430,9 @@ export default function BrowserPage({
     const shortcutsBlocked =
       Boolean(objectDetailsTarget) ||
       showNewFolderModal ||
-      showOperationsModal ||
       showBulkAttributesModal ||
       showBulkRestoreModal ||
+      showOperationsDetailsModal ||
       showSseCustomerModal ||
       showCleanupModal ||
       showPrefixVersions ||
@@ -10503,12 +10516,12 @@ export default function BrowserPage({
     showNewFolderModal,
     showBulkAttributesModal,
     showBulkRestoreModal,
+    showOperationsDetailsModal,
     showSseCustomerModal,
     showCleanupModal,
     confirmDialog,
     copyDialog,
     showMultipartUploadsModal,
-    showOperationsModal,
     showPrefixVersions,
     syncInspectorTabWithSelection,
   ]);
@@ -10997,26 +11010,6 @@ export default function BrowserPage({
     () => copyGroups.reduce((sum, group) => sum + group.counts.queued, 0),
     [copyGroups],
   );
-  const hasFailedOperations = useMemo(() => {
-    if (operations.some((op) => op.completionStatus === "failed")) {
-      return true;
-    }
-    const hasFailedDownloadDetails = Object.values(downloadDetails).some(
-      (items) => items.some((item) => item.status === "failed"),
-    );
-    if (hasFailedDownloadDetails) {
-      return true;
-    }
-    const hasFailedDeleteDetails = Object.values(deleteDetails).some((items) =>
-      items.some((item) => item.status === "failed"),
-    );
-    if (hasFailedDeleteDetails) {
-      return true;
-    }
-    return Object.values(copyDetails).some((items) =>
-      items.some((item) => item.status === "failed"),
-    );
-  }, [operations, downloadDetails, deleteDetails, copyDetails]);
   const failedUploadCount = useMemo(
     () =>
       operations.filter(
@@ -11179,6 +11172,11 @@ export default function BrowserPage({
     completedDeleteCount +
     completedCopyCount +
     completedOtherOperations.length;
+  const operationsPanelTotalCount =
+    totalOperationsCount + completedOperationsCount + failedOperationsCount;
+  const hasOperationsPanelContent = operationsPanelTotalCount > 0;
+  const showOperationsPanel =
+    hasOperationsPanelContent && (!operationsPanelDismissed || hasPendingOperations);
   const hasFinishedOperations =
     completedOperationsCount > 0 || failedOperationsCount > 0;
   const filtersAllInactive =
@@ -11645,25 +11643,12 @@ export default function BrowserPage({
     }
     setCompletedOperations([]);
   };
-  const openOperationsModal = () => {
-    setShowOperationsModal(true);
-  };
-  const operationsButtonToneClasses = hasFailedOperations
-    ? "border-rose-300 bg-rose-100 text-rose-800 shadow-sm dark:border-rose-500/60 dark:bg-rose-500/20 dark:text-rose-100"
-    : totalOperationsCount > 0
-      ? "border-emerald-300 bg-emerald-100 text-emerald-800 shadow-sm dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-100"
-      : "";
   const chromeChipButtonClasses = filterChipClasses;
   const chromeToolbarButtonClasses = toolbarButtonClasses;
   const chromeToolbarPrimaryClasses = toolbarPrimaryClasses;
   const chromeToolbarIconButtonClasses = toolbarIconButtonClasses;
   const chromeBulkActionClasses = bulkActionClasses;
   const chromeDangerActionClasses = bulkDangerClasses;
-  const operationsCountBadgeClasses = `${countBadgeClasses} ui-caption ${
-    hasFailedOperations
-      ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100"
-      : ""
-  }`;
   const isCreateBucketNameValid =
     !createBucketNameValue || isValidS3BucketName(createBucketNameValue);
   const createBucketCurrentSignature = useMemo(
@@ -11706,6 +11691,11 @@ export default function BrowserPage({
   const isActionBarVisible = isMainBrowserPath && showActionBar;
   const isCompactToolbarMode = !isActionBarVisible;
   const browserViewLabel = compactMode ? "Compact view" : "List view";
+  const browserChromeShellClasses =
+    "relative z-20 shrink-0 pb-2";
+  const browserNoticeShellClasses = "shrink-0 pb-2";
+  const browserContentShellClasses =
+    "relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden pb-3";
   const toolbarStatusTextClassName =
     selectedCount > 0
       ? "ui-caption font-semibold text-primary-700 dark:text-primary-100"
@@ -11745,7 +11735,9 @@ export default function BrowserPage({
     : toolbarMoreSelectionFullActions;
   const hasToolbarSelectionActions =
     canSelectionActions && toolbarSelectionActions.length > 0;
-  const hasToolbarStatusSection = isMainBrowserPath || Boolean(accessBadge);
+  const hasToolbarOperationsAction = hasOperationsPanelContent;
+  const hasToolbarStatusSection =
+    isMainBrowserPath || Boolean(accessBadge) || hasToolbarOperationsAction;
   const hasToolbarLayoutSection =
     showFolderToggle || showInspectorToggle || showActionBarToggle;
   const hasToolbarColumnsSection = true;
@@ -12307,7 +12299,7 @@ export default function BrowserPage({
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
       <div className={browserShellClasses}>
-        <div className="relative z-20 border-b border-slate-200/80 px-3 py-3 dark:border-slate-800">
+        <div className={browserChromeShellClasses}>
           <div className="flex flex-col gap-2.5">
             <div
               role="toolbar"
@@ -12615,18 +12607,6 @@ export default function BrowserPage({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={openOperationsModal}
-                  className={`${chromeChipButtonClasses} min-h-8 ${operationsButtonToneClasses}`}
-                  aria-label="Operations"
-                  title="Operations"
-                >
-                  Operations
-                  <span className={operationsCountBadgeClasses}>
-                    {formatBadgeCount(totalOperationsCount)}
-                  </span>
-                </button>
                 {isCompactToolbarMode && (
                   <div className={browserToolbarControlsGroupClasses}>
                     <button
@@ -12893,6 +12873,32 @@ export default function BrowserPage({
                           </div>
                         </div>
                       )}
+                      {hasToolbarOperationsAction && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          aria-label="Operations overview"
+                          className={contextMenuItemClasses}
+                          onClick={() => {
+                            runToolbarMoreAction(() =>
+                              setShowOperationsDetailsModal(true),
+                            );
+                          }}
+                        >
+                          <ListIcon className="h-3.5 w-3.5" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block">Operations overview</span>
+                            <span
+                              aria-hidden="true"
+                              className="block text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500"
+                            >
+                              {operationsPanelTotalCount === 1
+                                ? "1 operation"
+                                : `${operationsPanelTotalCount} operations`}
+                            </span>
+                          </span>
+                        </button>
+                      )}
                     </>
                   )}
                   {hasToolbarLayoutSection && (
@@ -13104,7 +13110,7 @@ export default function BrowserPage({
         </div>
 
         {(bucketError || statusMessage || warnings.length > 0) && (
-          <div className="shrink-0 px-3 pb-0 pt-3">
+          <div className={browserNoticeShellClasses}>
             <div
               className={`${browserSubtleSurfaceClasses} px-3 py-2.5 ui-caption text-slate-600 dark:text-slate-300`}
             >
@@ -13176,7 +13182,7 @@ export default function BrowserPage({
           </div>
         )}
 
-        <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+        <div className={browserContentShellClasses}>
           <div
             ref={layoutContainerRef}
             data-testid="browser-layout"
@@ -15043,9 +15049,44 @@ export default function BrowserPage({
           onClose={() => setCopyDialog(null)}
         />
       )}
-      {showOperationsModal && (
+      {showOperationsPanel && (
+        <BrowserOperationsPanel
+          open={operationsPanelOpen}
+          totalOperationsCount={operationsPanelTotalCount}
+          activeOperationsCount={activeOperations.length}
+          queuedOperationsCount={
+            uploadQueue.length +
+            queuedDownloadCount +
+            queuedDeleteCount +
+            queuedCopyCount
+          }
+          completedOperationsCount={completedOperationsCount}
+          failedOperationsCount={failedOperationsCount}
+          downloadGroups={downloadGroups}
+          deleteGroups={deleteGroups}
+          copyGroups={copyGroups}
+          uploadGroups={uploadGroups}
+          otherOperations={[
+            ...activeOtherOperations,
+            ...completedOtherOperations,
+            ...failedOtherOperations,
+          ]}
+          operationSortIndexById={operationSortIndexById}
+          uploadGroupSortIndexById={uploadGroupSortIndexById}
+          operationSortFallback={operationSortFallback}
+          cancelOperation={cancelOperation}
+          cancelUploadGroup={cancelUploadGroup}
+          hasFinishedOperations={hasFinishedOperations}
+          canDismiss={!hasPendingOperations}
+          onClearFinishedOperations={clearFinishedOperations}
+          onDismiss={() => setOperationsPanelDismissed(true)}
+          onOpenDetails={() => setShowOperationsDetailsModal(true)}
+          onToggleOpen={() => setOperationsPanelOpen((open) => !open)}
+        />
+      )}
+      {showOperationsDetailsModal && hasOperationsPanelContent && (
         <BrowserOperationsModal
-          totalOperationsCount={totalOperationsCount}
+          totalOperationsCount={operationsPanelTotalCount}
           activeOperationsCount={activeOperations.length}
           queuedOperationsCount={
             uploadQueue.length +
@@ -15083,7 +15124,7 @@ export default function BrowserPage({
           onDownloadOperationDetails={downloadOperationDetails}
           hasFinishedOperations={hasFinishedOperations}
           onClearFinishedOperations={clearFinishedOperations}
-          onClose={() => setShowOperationsModal(false)}
+          onClose={() => setShowOperationsDetailsModal(false)}
         />
       )}
     </div>

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,7 +22,15 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
 }));
 
 vi.mock("../browser/BrowserEmbed", () => ({
-  default: () => <div data-testid="browser-embed">browser</div>,
+  default: (props: { onSelectedBucketNameChange?: (bucketName: string) => void }) => (
+    <button
+      type="button"
+      data-testid="browser-embed"
+      onClick={() => props.onSelectedBucketNameChange?.("bucket-a")}
+    >
+      browser
+    </button>
+  ),
 }));
 
 vi.mock("../shared/BucketOpsWorkbench", () => ({
@@ -66,7 +74,38 @@ describe("ceph-admin shell pages", () => {
     );
 
     expect(screen.getByText("Select a Ceph endpoint")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("navigation")).getByRole("link", {
+        name: "Ceph Admin",
+      })
+    ).toHaveAttribute("href", "/ceph-admin");
+    expect(within(screen.getByRole("navigation")).getByText("Browser")).toBeInTheDocument();
     expect(screen.queryByText("Endpoint context")).not.toBeInTheDocument();
+  });
+
+  it("adds the selected bucket to the ceph-admin browser breadcrumb", () => {
+    useCephAdminEndpointMock.mockReturnValue({
+      loading: false,
+      selectedEndpointId: 1,
+      selectedEndpoint: {
+        id: 1,
+        name: "Lab RGW",
+        capabilities: {},
+      },
+      selectedEndpointAccess: null,
+      selectedEndpointAccessLoading: false,
+      selectedEndpointAccessError: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <CephAdminBrowserPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId("browser-embed"));
+
+    expect(within(screen.getByRole("navigation")).getByText("bucket-a")).toBeInTheDocument();
   });
 
   it("keeps the shared buckets workbench shell without injecting a context strip", () => {
