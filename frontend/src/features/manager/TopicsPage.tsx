@@ -14,7 +14,6 @@ import {
   updateTopicConfiguration,
   updateTopicPolicy,
   Topic,
-  TopicSubscription,
 } from "../../api/topics";
 import ListToolbar from "../../components/ListToolbar";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -112,34 +111,6 @@ const buildAttributesSignature = (
     verifySslValue,
     attributeItems,
   });
-
-const formatSubscriptionValue = (value: unknown) => {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-};
-
-const subscriptionMetadataEntries = (subscription: TopicSubscription): Array<[string, string]> => {
-  const entries: Array<[string, string]> = [];
-  const seen = new Set<string>();
-  const addEntries = (source: Record<string, unknown> | null | undefined) => {
-    for (const [key, value] of Object.entries(source ?? {})) {
-      if (!key || seen.has(key) || key === "persistent") continue;
-      const formatted = formatSubscriptionValue(value);
-      if (!formatted) continue;
-      seen.add(key);
-      entries.push([key, formatted]);
-    }
-  };
-  addEntries(subscription.endpoint_args);
-  addEntries(subscription.metadata);
-  return entries;
-};
 
 export default function TopicsPage() {
   const {
@@ -619,38 +590,18 @@ export default function TopicsPage() {
                       <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">
                         <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
                         <div>Pending: {topic.subscriptions_pending ?? 0}</div>
-                        {(topic.subscriptions ?? []).length > 0 && (
-                          <div className="mt-2 space-y-2">
-                            {(topic.subscriptions ?? []).map((subscription, index) => {
-                              const metadataEntries = subscriptionMetadataEntries(subscription);
-                              return (
+                        {(topic.subscriptions ?? []).some((subscription) => subscription.bucket) && (
+                          <div className="mt-2 space-y-1">
+                            {(topic.subscriptions ?? [])
+                              .filter((subscription) => subscription.bucket)
+                              .map((subscription, index) => (
                                 <div
                                   key={`${subscription.name}-${index}`}
-                                  className="max-w-xl rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900/60"
+                                  className="max-w-xl rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900/60"
                                 >
-                                  <div className="font-semibold text-slate-800 dark:text-slate-100">
-                                    {subscription.name}
-                                  </div>
-                                  <div className="mt-1 space-y-0.5 text-slate-600 dark:text-slate-300">
-                                    {subscription.bucket && <div>Bucket: {subscription.bucket}</div>}
-                                    {subscription.endpoint_address && (
-                                      <div className="break-all">Endpoint: {subscription.endpoint_address}</div>
-                                    )}
-                                    {subscription.endpoint_topic && (
-                                      <div className="break-all">Endpoint topic: {subscription.endpoint_topic}</div>
-                                    )}
-                                    {subscription.persistent !== null && subscription.persistent !== undefined && (
-                                      <div>Persistent: {subscription.persistent ? "true" : "false"}</div>
-                                    )}
-                                    {metadataEntries.length > 0 && (
-                                      <div className="break-all">
-                                        {metadataEntries.map(([key, value]) => `${key}: ${value}`).join(" · ")}
-                                      </div>
-                                    )}
-                                  </div>
+                                  Bucket: {subscription.bucket}
                                 </div>
-                              );
-                            })}
+                              ))}
                           </div>
                         )}
                       </td>

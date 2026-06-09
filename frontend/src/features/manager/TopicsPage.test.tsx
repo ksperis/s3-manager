@@ -172,6 +172,15 @@ describe("TopicsPage", () => {
             persistent: false,
             metadata: { OpaqueData: "trace-b" },
           },
+          {
+            name: "notif.unknown_ceph-topic-main",
+            bucket: null,
+            endpoint_address: "https://notify.example.test/hooks/hidden",
+            endpoint_topic: "endpoint-topic-hidden",
+            endpoint_args: { Version: "2012-10-17" },
+            persistent: true,
+            metadata: { OpaqueData: "hidden-trace" },
+          },
         ],
       },
     ]);
@@ -185,14 +194,17 @@ describe("TopicsPage", () => {
     expect(await screen.findByText("ceph-topic-main")).toBeInTheDocument();
     expect(screen.getAllByText("ceph-topic-main")).toHaveLength(1);
     expect(screen.getByText("Confirmed: 2")).toBeInTheDocument();
-    expect(screen.getByText("notif.bucket-alpha_ceph-topic-main")).toBeInTheDocument();
     expect(screen.getByText("Bucket: bucket-alpha")).toBeInTheDocument();
-    expect(screen.getByText("Endpoint: https://notify.example.test/hooks/a")).toBeInTheDocument();
-    expect(screen.getByText("Endpoint topic: endpoint-topic-a")).toBeInTheDocument();
-    expect(screen.getByText("Persistent: true")).toBeInTheDocument();
-    expect(screen.getByText("verify-ssl: false · time_to_live: 60 · OpaqueData: trace-a")).toBeInTheDocument();
-    expect(screen.getByText("notif.bucket-beta_ceph-topic-main")).toBeInTheDocument();
-    expect(screen.getByText("Endpoint: https://notify.example.test/hooks/b")).toBeInTheDocument();
-    expect(screen.getByText("Persistent: false")).toBeInTheDocument();
+    expect(screen.getByText("Bucket: bucket-beta")).toBeInTheDocument();
+    expect(screen.queryByText("notif.bucket-alpha_ceph-topic-main")).not.toBeInTheDocument();
+    expect(screen.queryByText("notif.bucket-beta_ceph-topic-main")).not.toBeInTheDocument();
+    expect(screen.queryByText("notif.unknown_ceph-topic-main")).not.toBeInTheDocument();
+    expect(screen.queryByText("Endpoint: https://notify.example.test/hooks/a")).not.toBeInTheDocument();
+    expect(screen.queryByText("Endpoint topic: endpoint-topic-a")).not.toBeInTheDocument();
+    expect(screen.queryByText("Persistent: true")).not.toBeInTheDocument();
+    expect(screen.queryByText("verify-ssl: false · time_to_live: 60 · OpaqueData: trace-a")).not.toBeInTheDocument();
+    expect(screen.queryByText("Endpoint: https://notify.example.test/hooks/b")).not.toBeInTheDocument();
+    expect(screen.queryByText("Endpoint: https://notify.example.test/hooks/hidden")).not.toBeInTheDocument();
+    expect(screen.queryByText("Version: 2012-10-17")).not.toBeInTheDocument();
   });
 });
