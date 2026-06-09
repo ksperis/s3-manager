@@ -29,6 +29,11 @@ class LinkedS3Connection(BaseModel):
     access_browser: Optional[bool] = None
 
 
+class LinkedUiGroup(BaseModel):
+    id: int
+    name: str
+
+
 class AccountMembership(BaseModel):
     account_id: int
     account_admin: Optional[bool] = None
@@ -77,6 +82,7 @@ class UserCreate(BaseModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: Optional[ManagerToolAccess] = None
+    group_ids: Optional[list[int]] = None
 
 
 class UserUpdate(BaseModel):
@@ -90,6 +96,7 @@ class UserUpdate(BaseModel):
     manager_tool_access: Optional[ManagerToolAccess] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
+    group_ids: Optional[list[int]] = None
 
 
 class UserSelfUpdate(BaseModel):
@@ -106,6 +113,18 @@ class UserAssignS3Account(BaseModel):
     account_root: Optional[bool] = None
     account_admin: Optional[bool] = None
     account_role: Optional[str] = None
+
+
+class EffectiveUserAccess(BaseModel):
+    can_access_ceph_admin: bool = False
+    can_access_storage_ops: bool = False
+    manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
+    accounts: list[int] = []
+    account_links: list[AccountMembership] = []
+    s3_users: list[int] = []
+    s3_user_details: list[LinkedS3User] = []
+    s3_connections: list[int] = []
+    s3_connection_details: list[LinkedS3Connection] = []
 
 
 class UserOut(BaseModel):
@@ -126,10 +145,13 @@ class UserOut(BaseModel):
     quota_alerts_global_watch: bool = False
     accounts: list[int] = []
     account_links: list[AccountMembership] = []
+    group_ids: list[int] = []
+    group_details: list[LinkedUiGroup] = []
     s3_users: list[int] = []
     s3_user_details: list[LinkedS3User] = []
     s3_connections: list[int] = []
     s3_connection_details: list[LinkedS3Connection] = []
+    effective_access: Optional[EffectiveUserAccess] = None
     auth_provider: Optional[str] = None
     last_login_at: Optional[datetime] = None
 

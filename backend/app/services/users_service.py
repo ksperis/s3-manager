@@ -21,17 +21,20 @@ from app.db import (
     S3Connection,
     S3User,
     TagDefinition,
+    UiGroup,
     User,
     UserRole,
     UserS3Account,
     UserS3Connection,
     UserS3User,
+    UserUiGroup,
     is_admin_ui_role,
 )
 from app.models.user import (
     AccountMembership,
     LinkedS3Connection,
     LinkedS3User,
+    LinkedUiGroup,
     ManagerToolAccess,
     UserCreate,
     UserOut,
@@ -39,6 +42,7 @@ from app.models.user import (
     UserUpdate,
     validate_password_policy,
 )
+from app.services.effective_access_service import EffectiveAccessService
 logger = logging.getLogger(__name__)
 
 
@@ -128,6 +132,9 @@ class UsersService:
             ),
         )
         self.db.add(user)
+        self.db.flush()
+        if payload.group_ids is not None:
+            self._set_group_links(user, payload.group_ids)
         self.db.commit()
         self.db.refresh(user)
         logger.debug("Created user id=%s email=%s role=%s", user.id, user.email, role)
@@ -189,6 +196,8 @@ class UsersService:
             self._set_s3_user_links(user, payload.s3_user_ids)
         if payload.s3_connection_ids is not None:
             self._set_s3_connection_links(user, payload.s3_connection_ids)
+        if payload.group_ids is not None:
+            self._set_group_links(user, payload.group_ids)
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
@@ -279,6 +288,11 @@ class UsersService:
             .filter(UserS3Connection.user_id == user.id)
             .delete(synchronize_session=False)
         )
+        (
+            self.db.query(UserUiGroup)
+            .filter(UserUiGroup.user_id == user.id)
+            .delete(synchronize_session=False)
+        )
         if created_private_ids:
             (
                 self.db.query(UserS3Connection)
@@ -364,6 +378,12 @@ class UsersService:
             for row in rows
         }
 
+    def _load_group_names(self, ids: list[int]) -> dict[int, str]:
+        if not ids:
+            return {}
+        rows = self.db.query(UiGroup.id, UiGroup.name).filter(UiGroup.id.in_(ids)).all()
+        return {row[0]: row[1] for row in rows}
+
     def paginate_users(
         self,
         page: int,
@@ -386,6 +406,8 @@ class UsersService:
                 .outerjoin(UserS3Connection, User.id == UserS3Connection.user_id)
                 .outerjoin(linked_connection, UserS3Connection.s3_connection_id == linked_connection.id)
                 .outerjoin(owned_connection, owned_connection.created_by_user_id == User.id)
+                .outerjoin(UserUiGroup, User.id == UserUiGroup.user_id)
+                .outerjoin(UiGroup, UserUiGroup.group_id == UiGroup.id)
             )
             query = query.filter(
                 or_(
@@ -397,6 +419,7 @@ class UsersService:
                     func.coalesce(S3User.rgw_user_uid, "").ilike(pattern),
                     func.coalesce(linked_connection.name, "").ilike(pattern),
                     func.coalesce(owned_connection.name, "").ilike(pattern),
+                    func.coalesce(UiGroup.name, "").ilike(pattern),
                 )
             )
             query = query.distinct()
@@ -521,6 +544,7 @@ class UsersService:
     ) -> UserOut:
         account_ids: list[int] = []
         account_links: list[AccountMembership] = []
+        group_ids: list[int] = []
         s3_user_ids: list[int] = []
         s3_connection_ids: list[int] = []
         try:
@@ -544,6 +568,14 @@ class UsersService:
                 AccountMembership(account_id=row[0], account_admin=row[1], account_role=row[2]) for row in account_rows
             ]
             account_ids = [row[0] for row in account_rows]
+        try:
+            if hasattr(user, "ui_group_links") and user.ui_group_links is not None:
+                group_ids = [link.group_id for link in user.ui_group_links]
+        except DetachedInstanceError:
+            group_ids = [
+                row[0]
+                for row in self.db.query(UserUiGroup.group_id).filter(UserUiGroup.user_id == user.id).all()
+            ]
         try:
             if hasattr(user, "s3_user_links") and user.s3_user_links is not None:
                 s3_user_ids = [link.s3_user_id for link in user.s3_user_links]
@@ -600,6 +632,12 @@ class UsersService:
                     access_browser=access_browser,
                 )
             )
+        group_names = self._load_group_names(group_ids)
+        group_details = [
+            LinkedUiGroup(id=group_id, name=group_names.get(group_id) or f"Group #{group_id}")
+            for group_id in group_ids
+        ]
+        effective_access = EffectiveAccessService(self.db).to_user_effective_access(user)
         return UserOut(
             id=user.id,
             email=user.email,
@@ -623,10 +661,13 @@ class UsersService:
             quota_alerts_global_watch=bool(user.quota_alerts_global_watch),
             accounts=account_ids,
             account_links=account_links,
+            group_ids=group_ids,
+            group_details=group_details,
             s3_users=s3_user_ids,
             s3_user_details=s3_user_details,
             s3_connections=s3_connection_ids,
             s3_connection_details=s3_connection_details,
+            effective_access=effective_access,
             auth_provider=user.auth_provider,
             last_login_at=user.last_login_at,
         )
@@ -708,6 +749,46 @@ class UsersService:
                     s3_connection_id=connection_id,
                 )
             )
+
+    def _set_group_links(self, user: User, target_ids: list[int]) -> None:
+        cleaned_ids = sorted({int(group_id) for group_id in target_ids if group_id is not None})
+        existing_links = (
+            self.db.query(UserUiGroup)
+            .filter(UserUiGroup.user_id == user.id)
+            .all()
+        )
+        existing_ids = {link.group_id for link in existing_links}
+        desired_ids = set(cleaned_ids)
+        if desired_ids:
+            groups = self.db.query(UiGroup).filter(UiGroup.id.in_(desired_ids)).all()
+            found_ids = {group.id for group in groups}
+            missing = desired_ids - found_ids
+            if missing:
+                missing_str = ", ".join(str(mid) for mid in sorted(missing))
+                raise ValueError(f"UI groups not found: {missing_str}")
+        to_remove = existing_ids - desired_ids
+        to_add = desired_ids - existing_ids
+        if to_remove:
+            (
+                self.db.query(UserUiGroup)
+                .filter(
+                    UserUiGroup.user_id == user.id,
+                    UserUiGroup.group_id.in_(to_remove),
+                )
+                .delete(synchronize_session=False)
+            )
+        for group_id in to_add:
+            self.db.add(UserUiGroup(user_id=user.id, group_id=group_id))
+
+    def groups_grant_ceph_admin(self, group_ids: list[int] | None) -> bool:
+        cleaned_ids = sorted({int(group_id) for group_id in (group_ids or []) if group_id is not None})
+        if not cleaned_ids:
+            return False
+        return bool(
+            self.db.query(UiGroup.id)
+            .filter(UiGroup.id.in_(cleaned_ids), UiGroup.can_access_ceph_admin.is_(True))
+            .first()
+        )
 
     def get_or_create_oidc_user(
         self,

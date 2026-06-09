@@ -41,6 +41,21 @@ def _require_superadmin_for_privileged_change(current_user: DbUser, *, role: Opt
         )
 
 
+def _require_superadmin_for_group_privileges(
+    current_user: DbUser,
+    users_service: UsersService,
+    *,
+    group_ids: Optional[list[int]],
+) -> None:
+    if group_ids is None:
+        return
+    if users_service.groups_grant_ceph_admin(group_ids) and not is_superadmin_ui_role(current_user.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only superadmin users can assign groups that grant ceph_admin access",
+        )
+
+
 @router.get("", response_model=PaginatedUsersResponse)
 def list_users(
     page: int = Query(1, ge=1),
@@ -83,6 +98,7 @@ def create_user(
         role=payload.role,
         can_access_ceph_admin=payload.can_access_ceph_admin,
     )
+    _require_superadmin_for_group_privileges(current_user, users_service, group_ids=payload.group_ids)
     try:
         user = users_service.create_user(payload)
         audit_service.record_action(
@@ -91,7 +107,11 @@ def create_user(
             action="create_ui_user",
             entity_type="ui_user",
             entity_id=str(user.id),
-            metadata={"email": user.email, "role": user.role},
+            metadata={
+                "email": user.email,
+                "role": user.role,
+                "group_ids": payload.group_ids,
+            },
         )
         return users_service.user_to_out(user)
     except ValueError as exc:
@@ -112,6 +132,7 @@ def update_user(
         role=payload.role,
         can_access_ceph_admin=payload.can_access_ceph_admin,
     )
+    _require_superadmin_for_group_privileges(current_user, users_service, group_ids=payload.group_ids)
     try:
         user = users_service.update_user(user_id, payload)
         audit_service.record_action(

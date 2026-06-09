@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CreateUserPayload,
   ManagerToolAccess,
@@ -14,6 +14,7 @@ import {
   listUsers,
   updateUser,
 } from "../../api/users";
+import { UiGroupSummary, listMinimalGroups } from "../../api/groups";
 import { S3AccountSummary, listMinimalS3Accounts, updateS3Account } from "../../api/accounts";
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
@@ -41,7 +42,7 @@ import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
-type UserModalTab = "general" | "associations" | "access" | "manager_tools";
+type UserModalTab = "general" | "associations" | "groups" | "access" | "manager_tools";
 type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 
 type AccountSelection = {
@@ -148,6 +149,13 @@ function UserModalPrimaryTabs({
         className={userModalTabButtonClass(activeTab === "associations")}
       >
         Associations
+      </button>
+      <button
+        type="button"
+        onClick={() => onTabChange("groups")}
+        className={userModalTabButtonClass(activeTab === "groups")}
+      >
+        Groups
       </button>
       <button
         type="button"
@@ -826,6 +834,9 @@ export default function UsersPage() {
   const [s3Connections, setS3Connections] = useState<S3ConnectionSummary[]>([]);
   const [s3ConnectionsLoaded, setS3ConnectionsLoaded] = useState(false);
   const [s3ConnectionsLoading, setS3ConnectionsLoading] = useState(false);
+  const [groups, setGroups] = useState<UiGroupSummary[]>([]);
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [groupsLoading, setGroupsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -844,6 +855,7 @@ export default function UsersPage() {
       selectedAccounts: [],
       selectedS3Users: [],
       selectedS3Connections: [],
+      selectedGroups: [],
       pendingAccountSelections: [],
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
@@ -853,10 +865,12 @@ export default function UsersPage() {
   const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<AccountSelection[]>([]);
   const [createSelectedS3Users, setCreateSelectedS3Users] = useState<number[]>([]);
   const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
+  const [createSelectedGroups, setCreateSelectedGroups] = useState<number[]>([]);
   const [createAccountAdminChoice, setCreateAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [createS3AccountSearch, setCreateS3AccountSearch] = useState("");
   const [createS3Search, setCreateS3Search] = useState("");
   const [createConnectionSearch, setCreateConnectionSearch] = useState("");
+  const [createGroupSearch, setCreateGroupSearch] = useState("");
   const [createModalTab, setCreateModalTab] = useState<UserModalTab>("general");
   const [createAssociationsTab, setCreateAssociationsTab] = useState<"accounts" | "s3_users" | "connections">("accounts");
   const [showCreateAccountPanel, setShowCreateAccountPanel] = useState(false);
@@ -873,6 +887,7 @@ export default function UsersPage() {
       selectedAccounts: [],
       selectedS3Users: [],
       selectedS3Connections: [],
+      selectedGroups: [],
       pendingAccountSelections: [],
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
@@ -882,10 +897,12 @@ export default function UsersPage() {
   const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<AccountSelection[]>([]);
   const [editSelectedS3Users, setEditSelectedS3Users] = useState<number[]>([]);
   const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
+  const [editSelectedGroups, setEditSelectedGroups] = useState<number[]>([]);
   const [editAccountAdminChoice, setEditAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [editS3AccountSearch, setEditS3AccountSearch] = useState("");
   const [editS3Search, setEditS3Search] = useState("");
   const [editConnectionSearch, setEditConnectionSearch] = useState("");
+  const [editGroupSearch, setEditGroupSearch] = useState("");
   const [editModalTab, setEditModalTab] = useState<UserModalTab>("general");
   const [editAssociationsTab, setEditAssociationsTab] = useState<"accounts" | "s3_users" | "connections">("accounts");
   const [showEditAccountPanel, setShowEditAccountPanel] = useState(false);
@@ -911,6 +928,7 @@ export default function UsersPage() {
   const s3AccountsLoadStateRef = useRef<AuxiliaryLoadState>("idle");
   const s3UsersLoadStateRef = useRef<AuxiliaryLoadState>("idle");
   const s3ConnectionsLoadStateRef = useRef<AuxiliaryLoadState>("idle");
+  const groupsLoadStateRef = useRef<AuxiliaryLoadState>("idle");
   const accountDbId = (account: S3AccountSummary) => account.db_id ?? Number(account.id);
   const accountOptions = useMemo(
     () =>
@@ -945,6 +963,11 @@ export default function UsersPage() {
     s3Connections.forEach((conn) => map.set(conn.id, conn.name));
     return map;
   }, [s3Connections]);
+  const groupLabelById = useMemo(() => {
+    const map = new Map<number, string>();
+    groups.forEach((group) => map.set(group.id, group.name));
+    return map;
+  }, [groups]);
   const availableCreateS3Accounts = useMemo(() => {
     const query = createS3AccountSearch.trim().toLowerCase();
     const selectedIds = new Set(createSelectedS3Accounts.map((a) => Number(a.id)));
@@ -986,6 +1009,14 @@ export default function UsersPage() {
         (!query || opt.label.toLowerCase().includes(query))
     );
   }, [s3SharedConnectionOptions, editSelectedS3Connections, editConnectionSearch]);
+  const visibleCreateGroups = useMemo(() => {
+    const query = createGroupSearch.trim().toLowerCase();
+    return groups.filter((group) => !query || group.name.toLowerCase().includes(query));
+  }, [createGroupSearch, groups]);
+  const visibleEditGroups = useMemo(() => {
+    const query = editGroupSearch.trim().toLowerCase();
+    return groups.filter((group) => !query || group.name.toLowerCase().includes(query));
+  }, [editGroupSearch, groups]);
   const limitedOptions = <T,>(options: T[]) => options.slice(0, MAX_VISIBLE_OPTIONS);
   const visibleCreateS3Accounts = limitedOptions(availableCreateS3Accounts);
   const visibleEditS3Accounts = limitedOptions(availableEditS3Accounts);
@@ -1058,6 +1089,28 @@ export default function UsersPage() {
       );
     },
     [s3ConnectionLabelById]
+  );
+  const renderGroupChips = useCallback(
+    (user: User) => {
+      const labels =
+        user.group_details && user.group_details.length > 0
+          ? user.group_details.map((entry) => entry.name || `Group #${entry.id}`)
+          : (user.group_ids ?? []).map((id) => groupLabelById.get(Number(id)) ?? `Group #${id}`);
+      if (labels.length === 0) return null;
+      return (
+        <div className="flex flex-wrap gap-2">
+          {labels.map((label, index) => (
+            <span
+              key={`${label}-${index}`}
+              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      );
+    },
+    [groupLabelById]
   );
   const editRoleValue = normalizeUiRoleValue(editForm.role ?? editingUser?.role ?? "ui_user");
   const createRoleValue = normalizeUiRoleValue(form.role);
@@ -1157,20 +1210,26 @@ export default function UsersPage() {
     const hasAccounts = Boolean(user.accounts && user.accounts.length > 0);
     const hasS3Users = Boolean(user.s3_users && user.s3_users.length > 0);
     const hasConnections = Boolean(user.s3_connections && user.s3_connections.length > 0);
-    if (!hasAccounts && !hasS3Users && !hasConnections) {
+    const hasGroups = Boolean(
+      (user.group_ids && user.group_ids.length > 0) || (user.group_details && user.group_details.length > 0)
+    );
+    if (!hasAccounts && !hasS3Users && !hasConnections && !hasGroups) {
       return <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>;
     }
     const accountChips = hasAccounts ? renderAccountChips(user) : null;
     const s3UserChips = hasS3Users ? renderS3UserChips(user) : null;
     const connectionChips = hasConnections ? renderS3ConnectionChips(user) : null;
+    const groupChips = hasGroups ? renderGroupChips(user) : null;
     const sections = [
       { label: "Accounts", value: accountChips ?? "-" },
       { label: "Users", value: s3UserChips ?? "-" },
       { label: "Connections", value: connectionChips ?? "-" },
+      { label: "Groups", value: groupChips ?? "-" },
     ].filter((section) => {
       if (section.label === "Accounts") return hasAccounts;
       if (section.label === "Users") return hasS3Users;
-      return hasConnections;
+      if (section.label === "Connections") return hasConnections;
+      return hasGroups;
     });
     if (sections.length > 1) {
       return (
@@ -1193,6 +1252,79 @@ export default function UsersPage() {
           {single.label}
         </div>
         <div className="ui-caption text-slate-600 dark:text-slate-300">{single.value}</div>
+      </div>
+    );
+  };
+
+  const renderGroupsSelector = ({
+    selectedIds,
+    onToggle,
+    search,
+    setSearch,
+    visibleGroups,
+  }: {
+    selectedIds: number[];
+    onToggle: (groupId: number) => void;
+    search: string;
+    setSearch: Dispatch<SetStateAction<string>>;
+    visibleGroups: UiGroupSummary[];
+  }) => {
+    const limitedGroups = limitedOptions(visibleGroups);
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <label className={userModalLabelClass}>Groups</label>
+            <span className="ui-caption text-slate-500 dark:text-slate-400">{selectedIds.length} selected</span>
+          </div>
+          <input
+            type="text"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search groups..."
+            className={`${associationCompactInputClass} w-full sm:w-56`}
+          />
+        </div>
+        <div className={associationAddPanelClass}>
+          <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+            {groupsLoading ? (
+              <p className="ui-caption text-slate-500 dark:text-slate-400">Loading groups...</p>
+            ) : groupsLoaded && groups.length === 0 ? (
+              <p className="ui-caption text-slate-500 dark:text-slate-400">No UI groups available.</p>
+            ) : visibleGroups.length === 0 ? (
+              <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+            ) : null}
+            {limitedGroups.map((group) => {
+              const checked = selectedIds.includes(group.id);
+              return (
+                <label
+                  key={group.id}
+                  className={associationOptionRowClass(checked)}
+                >
+                  <span className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => onToggle(group.id)}
+                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    <span>{group.name}</span>
+                  </span>
+                  {group.description && (
+                    <span className="max-w-md truncate ui-caption text-slate-500 dark:text-slate-400">
+                      {group.description}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+            {visibleGroups.length > MAX_VISIBLE_OPTIONS && (
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     );
   };
@@ -1322,6 +1454,30 @@ export default function UsersPage() {
     await fetchS3Connections();
   }, [fetchS3Connections]);
 
+  const fetchGroups = useCallback(async () => {
+    if (groupsLoadStateRef.current === "loading") return;
+    groupsLoadStateRef.current = "loading";
+    setGroupsLoading(true);
+    try {
+      const data = await listMinimalGroups();
+      setGroups(data);
+      setGroupsLoaded(true);
+      groupsLoadStateRef.current = "loaded";
+    } catch (err) {
+      groupsLoadStateRef.current = "error";
+      console.error(err);
+    } finally {
+      setGroupsLoading(false);
+    }
+  }, []);
+
+  const ensureGroups = useCallback(async (options?: { retryOnError?: boolean }) => {
+    const loadState = groupsLoadStateRef.current;
+    if (loadState === "loaded" || loadState === "loading") return;
+    if (loadState === "error" && !options?.retryOnError) return;
+    await fetchGroups();
+  }, [fetchGroups]);
+
   const ensureAssociationOptionsForTab = useCallback(
     async (tab: AssociationTab, options?: { retryOnError?: boolean }) => {
       if (tab === "accounts") {
@@ -1345,6 +1501,12 @@ export default function UsersPage() {
     ensureS3Accounts();
   }, [ensureS3Accounts]);
 
+  useEffect(() => {
+    if ((showCreateModal && createModalTab === "groups") || (showEditModal && editModalTab === "groups")) {
+      void ensureGroups({ retryOnError: true });
+    }
+  }, [createModalTab, editModalTab, ensureGroups, showCreateModal, showEditModal]);
+
   const toggleCreateAccountSelection = (accountId: number) => {
     setCreateAccountSelections((prev) =>
       prev.includes(accountId) ? prev.filter((id) => id !== accountId) : [...prev, accountId]
@@ -1360,6 +1522,12 @@ export default function UsersPage() {
   const toggleCreateConnectionSelection = (connectionId: number) => {
     setCreateConnectionSelections((prev) =>
       prev.includes(connectionId) ? prev.filter((id) => id !== connectionId) : [...prev, connectionId]
+    );
+  };
+
+  const toggleCreateGroupSelection = (groupId: number) => {
+    setCreateSelectedGroups((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
     );
   };
 
@@ -1381,12 +1549,19 @@ export default function UsersPage() {
     );
   };
 
+  const toggleEditGroupSelection = (groupId: number) => {
+    setEditSelectedGroups((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    );
+  };
+
   const emptyCreateSignature = () =>
     stableSignature({
       form: createFormTemplate(),
       selectedAccounts: [],
       selectedS3Users: [],
       selectedS3Connections: [],
+      selectedGroups: [],
       pendingAccountSelections: [],
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
@@ -1400,6 +1575,7 @@ export default function UsersPage() {
         selectedAccounts: createSelectedS3Accounts,
         selectedS3Users: createSelectedS3Users,
         selectedS3Connections: createSelectedS3Connections,
+        selectedGroups: createSelectedGroups,
         pendingAccountSelections: createAccountSelections,
         pendingS3UserSelections: createS3UserSelections,
         pendingConnectionSelections: createConnectionSelections,
@@ -1412,6 +1588,7 @@ export default function UsersPage() {
       createS3UserSelections,
       createSelectedS3Accounts,
       createSelectedS3Connections,
+      createSelectedGroups,
       createSelectedS3Users,
       form,
     ]
@@ -1422,10 +1599,12 @@ export default function UsersPage() {
     setCreateSelectedS3Accounts([]);
     setCreateSelectedS3Users([]);
     setCreateSelectedS3Connections([]);
+    setCreateSelectedGroups([]);
     setCreateAccountAdminChoice({});
     setCreateS3AccountSearch("");
     setCreateS3Search("");
     setCreateConnectionSearch("");
+    setCreateGroupSearch("");
     setCreateModalTab("general");
     setCreateAssociationsTab("accounts");
     setShowCreateAccountPanel(false);
@@ -1450,6 +1629,7 @@ export default function UsersPage() {
         selectedAccounts: editSelectedS3Accounts,
         selectedS3Users: editSelectedS3Users,
         selectedS3Connections: editSelectedS3Connections,
+        selectedGroups: editSelectedGroups,
         pendingAccountSelections: editAccountSelections,
         pendingS3UserSelections: editS3UserSelections,
         pendingConnectionSelections: editConnectionSelections,
@@ -1463,6 +1643,7 @@ export default function UsersPage() {
       editS3UserSelections,
       editSelectedS3Accounts,
       editSelectedS3Connections,
+      editSelectedGroups,
       editSelectedS3Users,
     ]
   );
@@ -1476,6 +1657,8 @@ export default function UsersPage() {
     setEditS3Search("");
     setEditSelectedS3Connections([]);
     setEditConnectionSearch("");
+    setEditSelectedGroups([]);
+    setEditGroupSearch("");
     setEditModalTab("general");
     setEditAssociationsTab("accounts");
     setShowEditAccountPanel(false);
@@ -1493,6 +1676,7 @@ export default function UsersPage() {
         selectedAccounts: [],
         selectedS3Users: [],
         selectedS3Connections: [],
+        selectedGroups: [],
         pendingAccountSelections: [],
         pendingS3UserSelections: [],
         pendingConnectionSelections: [],
@@ -1534,6 +1718,7 @@ export default function UsersPage() {
         currentIsAdminLike && (normalizedRole === "ui_user" || normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin")
           ? Boolean(form.can_access_storage_ops)
           : false,
+      group_ids: createSelectedGroups,
     };
     try {
       const created = await createUser(payload);
@@ -1606,11 +1791,17 @@ export default function UsersPage() {
     setEditSelectedS3Accounts(selectedAccounts);
     const nextSelectedS3Users = user.s3_users ? user.s3_users.map((id) => Number(id)) : [];
     const nextSelectedS3Connections = user.s3_connections ? user.s3_connections.map((id) => Number(id)) : [];
+    const nextSelectedGroups =
+      user.group_ids && user.group_ids.length > 0
+        ? user.group_ids.map((id) => Number(id))
+        : (user.group_details ?? []).map((group) => Number(group.id));
     setEditSelectedS3Users(nextSelectedS3Users);
     setEditSelectedS3Connections(nextSelectedS3Connections);
+    setEditSelectedGroups(nextSelectedGroups);
     setEditS3AccountSearch("");
     setEditS3Search("");
     setEditConnectionSearch("");
+    setEditGroupSearch("");
     const hasAccounts = selectedAccounts.length > 0;
     const hasS3Users = Boolean(user.s3_users && user.s3_users.length > 0);
     const hasConnections = Boolean(user.s3_connections && user.s3_connections.length > 0);
@@ -1635,6 +1826,7 @@ export default function UsersPage() {
         selectedAccounts,
         selectedS3Users: nextSelectedS3Users,
         selectedS3Connections: nextSelectedS3Connections,
+        selectedGroups: nextSelectedGroups,
         pendingAccountSelections: [],
         pendingS3UserSelections: [],
         pendingConnectionSelections: [],
@@ -1679,6 +1871,7 @@ export default function UsersPage() {
         nextRole === "ui_user" || nextRole === "ui_admin" || nextRole === "ui_superadmin"
           ? normalizeManagerToolAccess(editForm.manager_tool_access ?? editingUser.manager_tool_access)
           : { ...DEFAULT_MANAGER_TOOL_ACCESS };
+      payload.group_ids = editSelectedGroups;
       payload.s3_user_ids = editSelectedS3Users;
       payload.s3_connection_ids = editSelectedS3Connections;
       const updatedUser = await updateUser(editingUser.id, payload);
@@ -1786,9 +1979,9 @@ export default function UsersPage() {
     }
   };
 
-  const usersDescription = "Create, edit, delete, and link UI users to RGW accounts, S3 users, and S3 connections.";
-  const associationLabel = "S3 Accounts / Users / Connections";
-  const filterPlaceholder = "Search by email, role, account, user, or connection";
+  const usersDescription = "Create, edit, delete, and link UI users to groups, RGW accounts, S3 users, and S3 connections.";
+  const associationLabel = "Associations / Groups";
+  const filterPlaceholder = "Search by email, role, group, account, user, or connection";
   const tableStatus = resolveListTableStatus({
     loading,
     error,
@@ -2001,6 +2194,15 @@ export default function UsersPage() {
                 }}
               />
             )}
+
+            {createModalTab === "groups" &&
+              renderGroupsSelector({
+                selectedIds: createSelectedGroups,
+                onToggle: toggleCreateGroupSelection,
+                search: createGroupSearch,
+                setSearch: setCreateGroupSearch,
+                visibleGroups: visibleCreateGroups,
+              })}
 
             <div className="flex items-center justify-end gap-3">
               <button
@@ -2431,6 +2633,15 @@ export default function UsersPage() {
                 }}
               />
             )}
+
+            {editModalTab === "groups" &&
+              renderGroupsSelector({
+                selectedIds: editSelectedGroups,
+                onToggle: toggleEditGroupSelection,
+                search: editGroupSearch,
+                setSearch: setEditGroupSearch,
+                visibleGroups: visibleEditGroups,
+              })}
 
             <div className="flex items-center justify-end gap-3">
               <button

@@ -25,6 +25,7 @@ const loadUnauthorizedPage = () => import("./features/auth/UnauthorizedPage");
 const loadS3AccountsPage = () => import("./features/admin/AccountsPage");
 const loadAuditLogsPage = () => import("./features/admin/AuditLogsPage");
 const loadUsersPage = () => import("./features/admin/UsersPage");
+const loadGroupsPage = () => import("./features/admin/GroupsPage");
 const loadAdminDashboard = () => import("./features/admin/AdminDashboard");
 const loadAdminMetricsPage = () => import("./features/admin/AdminMetricsPage");
 const loadBillingPage = () => import("./features/admin/BillingPage");
@@ -97,6 +98,7 @@ const UnauthorizedPage = lazy(loadUnauthorizedPage);
 const S3AccountsPage = lazy(loadS3AccountsPage);
 const AuditLogsPage = lazy(loadAuditLogsPage);
 const UsersPage = lazy(loadUsersPage);
+const GroupsPage = lazy(loadGroupsPage);
 const AdminDashboard = lazy(loadAdminDashboard);
 const AdminMetricsPage = lazy(loadAdminMetricsPage);
 const BillingPage = lazy(loadBillingPage);
@@ -215,7 +217,10 @@ export const buildAdminNav = (
     },
     {
       label: "Platform",
-      links: [{ to: "/admin/users", label: "UI Users" }],
+      links: [
+        { to: "/admin/users", label: "UI Users" },
+        { to: "/admin/groups", label: "UI Groups" },
+      ],
     },
     {
       label: "Managed Tenants",
@@ -539,6 +544,7 @@ export function createAppRoutes() {
             <Route path="endpoint-status" element={<AdminEndpointStatusRoute />} />
             <Route path="endpoint-status/:endpointId" element={<AdminEndpointStatusDetailRoute />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="groups" element={<GroupsPage />} />
             <Route path="audit" element={<AuditLogsPage />} />
             <Route path="metrics" element={<AdminMetricsPage />} />
             <Route path="billing" element={<AdminBillingRoute />} />

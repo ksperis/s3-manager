@@ -60,6 +60,7 @@ from app.services.users_service import UsersService, get_users_service
 from app.utils.s3_account_ordering import s3_account_name_order_by
 from app.services.billing_service import BillingService
 from app.services.app_settings_service import load_app_settings
+from app.services.effective_access_service import EffectiveAccessService
 from app.models.billing import BillingSubjectDetail
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
@@ -90,15 +91,13 @@ def list_portal_accounts(
     db: Session = Depends(get_db),
 ) -> list[S3AccountSchema]:
     quota_service = get_s3_accounts_service(db, allow_missing_admin=True)
-    links = (
-        db.query(UserS3Account)
-        .filter(
-            UserS3Account.user_id == user.id,
-            UserS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]),
-        )
-        .all()
-    )
-    account_ids = {l.account_id for l in links}
+    links = [
+        link
+        for link in EffectiveAccessService(db).resolve_user(user).account_links
+        if link.account_role in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}
+    ]
+    account_ids = {link.account_id for link in links}
+    account_role_by_id = {link.account_id: link.account_role for link in links}
     accounts = (
         db.query(S3Account).filter(S3Account.id.in_(account_ids)).order_by(*s3_account_name_order_by(S3Account)).all()
         if account_ids
@@ -146,6 +145,7 @@ def list_portal_accounts(
                     if endpoint
                     else None
                 ),
+                account_role=account_role_by_id.get(acc.id),
             )
         )
     return results

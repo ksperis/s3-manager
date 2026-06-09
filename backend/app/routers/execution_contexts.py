@@ -7,10 +7,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, S3Connection, S3User, User, UserS3Account, UserS3Connection, UserS3User
+from app.db import S3Account, S3Connection, S3User, User, UserS3Account
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.routers.dependencies import get_current_account_user
 from app.services.s3_users_service import S3UsersService
+from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
 from app.services.tags_service import TagsService
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import resolve_connection_details
@@ -147,7 +148,7 @@ def _build_connection_context(
     )
 
 
-def _manager_account_allowed(link: UserS3Account) -> bool:
+def _manager_account_allowed(link: UserS3Account | EffectiveAccountLink) -> bool:
     return bool(link.account_admin or link.is_root)
 
 
@@ -159,11 +160,8 @@ def list_execution_contexts(
 ) -> list[ExecutionContext]:
     s3_users_service = S3UsersService(db)
     tags_service = TagsService(db)
-    links = (
-        db.query(UserS3Account)
-        .filter(UserS3Account.user_id == user.id)
-        .all()
-    )
+    effective = EffectiveAccessService(db).resolve_user(user)
+    links = effective.account_links
     account_ids = {link.account_id for link in links}
     accounts = (
         db.query(S3Account).filter(S3Account.id.in_(account_ids)).all()
@@ -171,22 +169,14 @@ def list_execution_contexts(
         else []
     )
 
-    s3_links = (
-        db.query(UserS3User)
-        .filter(UserS3User.user_id == user.id)
-        .all()
-    )
-    s3_ids = {link.s3_user_id for link in s3_links}
+    s3_ids = set(effective.s3_user_ids)
     s3_users = (
         db.query(S3User).filter(S3User.id.in_(s3_ids)).all()
         if s3_ids
         else []
     )
 
-    user_connection_ids = (
-        db.query(UserS3Connection.s3_connection_id)
-        .filter(UserS3Connection.user_id == user.id)
-    )
+    user_connection_ids = effective.s3_connection_ids
     now = utcnow()
     connections = (
         db.query(S3Connection)

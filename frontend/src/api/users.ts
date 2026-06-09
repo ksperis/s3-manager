@@ -18,6 +18,23 @@ export type ManagerToolAccess = {
   ceph_s3_user_keys: boolean;
 };
 
+export type EffectiveUserAccess = {
+  can_access_ceph_admin: boolean;
+  can_access_storage_ops: boolean;
+  manager_tool_access: ManagerToolAccess;
+  accounts: number[];
+  account_links: AccountMembership[];
+  s3_users: number[];
+  s3_user_details: { id: number; name: string }[];
+  s3_connections: number[];
+  s3_connection_details: {
+    id: number;
+    name: string;
+    access_manager?: boolean | null;
+    access_browser?: boolean | null;
+  }[];
+};
+
 export type User = {
   id: number;
   email: string;
@@ -33,6 +50,8 @@ export type User = {
   quota_alerts_global_watch?: boolean;
   accounts?: number[];
   account_links?: AccountMembership[];
+  group_ids?: number[];
+  group_details?: { id: number; name: string }[];
   s3_users?: number[];
   s3_user_details?: { id: number; name: string }[];
   s3_connections?: number[];
@@ -42,6 +61,7 @@ export type User = {
     access_manager?: boolean | null;
     access_browser?: boolean | null;
   }[];
+  effective_access?: EffectiveUserAccess | null;
   is_active?: boolean;
   is_root?: boolean;
   auth_provider?: string | null;
@@ -60,6 +80,7 @@ export type CreateUserPayload = {
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
+  group_ids?: number[] | null;
 };
 
 export type UpdateUserPayload = {
@@ -72,6 +93,7 @@ export type UpdateUserPayload = {
   is_active?: boolean;
   s3_user_ids?: number[] | null;
   s3_connection_ids?: number[] | null;
+  group_ids?: number[] | null;
 };
 
 export type UpdateCurrentUserPayload = {

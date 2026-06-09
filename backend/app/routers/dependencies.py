@@ -35,6 +35,7 @@ from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService, get_audit_service as build_audit_service
 from app.services.api_token_service import ApiTokenService
+from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
 from app.services.session_service import SessionService
 from app.models.browser import SseCustomerContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
@@ -90,7 +91,7 @@ class AccountCapabilities:
 class AccountAccess:
     account: S3Account
     actor: ManagerActor
-    membership: Optional[UserS3Account]
+    membership: Optional[UserS3Account | EffectiveAccountLink]
     capabilities: AccountCapabilities
     role: str = AccountRole.PORTAL_NONE.value
 
@@ -151,18 +152,20 @@ def get_current_ui_superadmin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-def get_current_ceph_admin(user: User = Depends(get_current_user)) -> User:
-    if not is_admin_ui_role(user.role) or not bool(user.can_access_ceph_admin):
+def get_current_ceph_admin(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    effective = EffectiveAccessService(db).resolve_user(user)
+    if not is_admin_ui_role(user.role) or not effective.can_access_ceph_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     return user
 
 
-def get_current_storage_ops_admin(user: User = Depends(get_current_user)) -> User:
+def get_current_storage_ops_admin(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    effective = EffectiveAccessService(db).resolve_user(user)
     if user.role not in {
         UserRole.UI_SUPERADMIN.value,
         UserRole.UI_ADMIN.value,
         UserRole.UI_USER.value,
-    } or not bool(user.can_access_storage_ops):
+    } or not effective.can_access_storage_ops:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     return user
 
@@ -310,15 +313,8 @@ def _build_s3_user_account(s3_user: S3User) -> S3Account:
 
 
 def _resolve_s3_user_context(db: Session, user: User, s3_user_id: int) -> S3Account:
-    link = (
-        db.query(UserS3User)
-        .filter(
-            UserS3User.user_id == user.id,
-            UserS3User.s3_user_id == s3_user_id,
-        )
-        .first()
-    )
-    if not link:
+    effective = EffectiveAccessService(db).resolve_user(user)
+    if not effective.has_s3_user(s3_user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this S3 user")
 
     s3_user = db.query(S3User).filter(S3User.id == s3_user_id).first()
@@ -387,15 +383,8 @@ def _resolve_connection_context(
     if not conn.is_shared and conn.created_by_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this connection")
     if conn.is_shared:
-        link = (
-            db.query(UserS3Connection)
-            .filter(
-                UserS3Connection.user_id == user.id,
-                UserS3Connection.s3_connection_id == conn.id,
-            )
-            .first()
-        )
-        if not link:
+        effective = EffectiveAccessService(db).resolve_user(user)
+        if not effective.has_s3_connection(conn.id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this connection")
 
     # Keep a minimal usage signal for UX (recently used sorting / hints).
@@ -427,7 +416,8 @@ def _resolve_ceph_admin_browser_context(db: Session, actor: User, endpoint_id: i
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ceph Admin feature is disabled")
     if not app_settings.general.browser_ceph_admin_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser is disabled for Ceph Admin workspace")
-    if not is_admin_ui_role(actor.role) or not bool(actor.can_access_ceph_admin):
+    effective = EffectiveAccessService(db).resolve_user(actor)
+    if not is_admin_ui_role(actor.role) or not effective.can_access_ceph_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for Ceph Admin browser workspace")
 
     endpoint = db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
@@ -468,7 +458,7 @@ def _resolve_workspace_surface(request: Optional[Request]) -> str:
 
 
 def _resolve_default_account_id(db: Session, user: User) -> int:
-    links = db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
+    links = EffectiveAccessService(db).resolve_user(user).account_links
     if len(links) == 1:
         return links[0].account_id
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
@@ -487,24 +477,20 @@ def _resolve_user_account_link(
     user: User,
     account_id: Optional[int],
     allow_default: bool,
-) -> tuple[S3Account, UserS3Account]:
+) -> tuple[S3Account, UserS3Account | EffectiveAccountLink]:
     if account_id is None or account_id <= 0:
         if not allow_default:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
         account_id = _resolve_default_account_id(db, user)
     account = _resolve_account_by_id(db, account_id)
-    link = (
-        db.query(UserS3Account)
-        .filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id)
-        .first()
-    )
+    link = EffectiveAccessService(db).resolve_user(user).account_link_for(account.id)
     if not link:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
     return account, link
 
 
 def _manager_membership_capabilities(
-    link: UserS3Account,
+    link: UserS3Account | EffectiveAccountLink,
 ) -> AccountCapabilities:
     is_account_admin = bool(link.account_admin or link.is_root)
     if not is_account_admin:
@@ -640,7 +626,7 @@ def get_account_context(
     return account
 
 
-def _membership_capabilities(link: Optional[UserS3Account], actor: ManagerActor) -> AccountCapabilities:
+def _membership_capabilities(link: Optional[UserS3Account | EffectiveAccountLink], actor: ManagerActor) -> AccountCapabilities:
     if link:
         is_account_admin = bool(link.account_admin or link.is_root)
         if not is_account_admin:
@@ -684,7 +670,7 @@ def get_account_access(
     return AccountAccess(account=account, actor=actor, membership=None, capabilities=capabilities)
 
 
-def _portal_membership_capabilities(link: Optional[UserS3Account]) -> tuple[str, AccountCapabilities]:
+def _portal_membership_capabilities(link: Optional[UserS3Account | EffectiveAccountLink]) -> tuple[str, AccountCapabilities]:
     if not link:
         return AccountRole.PORTAL_NONE.value, AccountCapabilities()
     role = link.account_role or AccountRole.PORTAL_NONE.value
@@ -904,27 +890,30 @@ def _manager_tool_global_state(tool: ManagerToolKey) -> tuple[bool, str]:
     return bool(getattr(app_settings.general, global_field)), disabled_detail
 
 
-def user_has_manager_tool_access(user: User, tool: ManagerToolKey) -> bool:
+def user_has_manager_tool_access(user: User, tool: ManagerToolKey, db: Session | None = None) -> bool:
+    if db is not None:
+        access = EffectiveAccessService(db).resolve_user(user).manager_tool_access
+        return bool(getattr(access, tool, False))
     return bool(getattr(user, _MANAGER_TOOL_ACCESS_FIELDS[tool], False))
 
 
-def ensure_manager_tool_allowed(user: User, tool: ManagerToolKey) -> None:
+def ensure_manager_tool_allowed(user: User, tool: ManagerToolKey, db: Session | None = None) -> None:
     enabled, disabled_detail = _manager_tool_global_state(tool)
     if not enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=disabled_detail)
     if user.role not in _MANAGER_TOOL_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-    if user_has_manager_tool_access(user, tool):
+    if user_has_manager_tool_access(user, tool, db=db):
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
 
-def _ensure_bucket_migration_allowed(user: User) -> None:
-    ensure_manager_tool_allowed(user, "bucket_migration")
+def _ensure_bucket_migration_allowed(user: User, db: Session | None = None) -> None:
+    ensure_manager_tool_allowed(user, "bucket_migration", db=db)
 
 
 def _manager_link_allows_bucket_migration(
-    link: UserS3Account,
+    link: UserS3Account | EffectiveAccountLink,
 ) -> bool:
     return bool(link.account_admin or link.is_root)
 
@@ -950,25 +939,21 @@ def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[
         allowed_context_ids.update(f"conn-{row[0]}" for row in connections)
         return allowed_context_ids
 
-    account_links = db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
-    for link in account_links:
+    effective = EffectiveAccessService(db).resolve_user(user)
+    for link in effective.account_links:
         if _manager_link_allows_bucket_migration(link):
             allowed_context_ids.add(str(link.account_id))
 
-    s3_links = db.query(UserS3User).filter(UserS3User.user_id == user.id).all()
-    for link in s3_links:
-        allowed_context_ids.add(f"s3u-{link.s3_user_id}")
+    for s3_user_id in effective.s3_user_ids:
+        allowed_context_ids.add(f"s3u-{s3_user_id}")
 
-    user_connection_ids = (
-        db.query(UserS3Connection.s3_connection_id)
-        .filter(UserS3Connection.user_id == user.id)
-    )
+    effective_connection_ids = effective.s3_connection_ids
     now = utcnow()
     connections = (
         db.query(S3Connection)
         .filter(
             ((S3Connection.is_shared.is_(False)) & (S3Connection.created_by_user_id == user.id))
-            | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(user_connection_ids)))
+            | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(effective_connection_ids)))
         )
         .filter(S3Connection.is_active.is_(True))
         .filter(S3Connection.access_manager.is_(True))
@@ -989,15 +974,15 @@ def _build_bucket_migration_admin_account_context_ids(db: Session, user: User) -
     if is_superadmin_ui_role(user.role):
         return {str(row[0]) for row in db.query(S3Account.id).all()}
     admin_account_context_ids: set[str] = set()
-    account_links = db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
+    account_links = EffectiveAccessService(db).resolve_user(user).account_links
     for link in account_links:
         if bool(link.account_admin or link.is_root):
             admin_account_context_ids.add(str(link.account_id))
     return admin_account_context_ids
 
 
-def get_current_bucket_migration_user(user: User = Depends(get_current_user)) -> User:
-    _ensure_bucket_migration_allowed(user)
+def get_current_bucket_migration_user(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    _ensure_bucket_migration_allowed(user, db=db)
     return user
 
 
@@ -1005,7 +990,7 @@ def get_current_bucket_migration_scope(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> BucketMigrationAccessScope:
-    _ensure_bucket_migration_allowed(user)
+    _ensure_bucket_migration_allowed(user, db=db)
     allowed_context_ids = _build_bucket_migration_allowed_context_ids(db, user)
     admin_account_context_ids = _build_bucket_migration_admin_account_context_ids(db, user)
     return BucketMigrationAccessScope(
@@ -1015,21 +1000,25 @@ def get_current_bucket_migration_scope(
     )
 
 
-def require_bucket_compare_enabled(user: User = Depends(get_current_user)) -> User:
-    ensure_manager_tool_allowed(user, "bucket_compare")
+def require_bucket_compare_enabled(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    ensure_manager_tool_allowed(user, "bucket_compare", db=db)
     return user
 
 
-def require_bucket_integrity_check_enabled(user: User = Depends(get_current_user)) -> User:
-    ensure_manager_tool_allowed(user, "bucket_integrity_check")
+def require_bucket_integrity_check_enabled(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    ensure_manager_tool_allowed(user, "bucket_integrity_check", db=db)
     return user
 
 
-def is_manager_ceph_s3_user_keys_available(account: S3Account, user: Optional[User] = None) -> bool:
+def is_manager_ceph_s3_user_keys_available(
+    account: S3Account,
+    user: Optional[User] = None,
+    db: Session | None = None,
+) -> bool:
     enabled, _ = _manager_tool_global_state("ceph_s3_user_keys")
     if not enabled:
         return False
-    if user is not None and not user_has_manager_tool_access(user, "ceph_s3_user_keys"):
+    if user is not None and not user_has_manager_tool_access(user, "ceph_s3_user_keys", db=db):
         return False
 
     s3_user_id = getattr(account, "s3_user_id", None)
@@ -1059,9 +1048,10 @@ def is_manager_ceph_s3_user_keys_available(account: S3Account, user: Optional[Us
 def require_manager_ceph_s3_user_keys(
     user: User = Depends(get_current_user),
     account: S3Account = Depends(get_account_context),
+    db: Session = Depends(get_db),
 ) -> S3Account:
-    ensure_manager_tool_allowed(user, "ceph_s3_user_keys")
-    if not is_manager_ceph_s3_user_keys_available(account, user):
+    ensure_manager_tool_allowed(user, "ceph_s3_user_keys", db=db)
+    if not is_manager_ceph_s3_user_keys_available(account, user, db=db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Ceph key management is not available for this context",

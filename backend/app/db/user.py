@@ -87,3 +87,8 @@ class User(Base):
         back_populates="user",
         overlaps="shared_s3_connections,s3_connections,users",
     )
+    ui_group_links = relationship(
+        "UserUiGroup",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

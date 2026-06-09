@@ -24,6 +24,7 @@ from app.routers.admin import stats as admin_stats
 from app.routers.admin import billing as admin_billing
 from app.routers.admin import usage_history as admin_usage_history
 from app.routers.admin import users as admin_users
+from app.routers.admin import groups as admin_groups
 from app.routers.admin import s3_users as admin_s3_users
 from app.routers.admin import s3_connections as admin_s3_connections
 from app.routers.admin import tag_definitions as admin_tag_definitions
@@ -145,6 +146,7 @@ app.include_router(admin_stats.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_billing.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_usage_history.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_users.router, prefix=settings.api_v1_prefix)
+app.include_router(admin_groups.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_storage_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_settings.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_key_rotation.router, prefix=settings.api_v1_prefix)

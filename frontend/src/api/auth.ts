@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
-import type { ManagerToolAccess } from "./users";
+import type { EffectiveUserAccess, ManagerToolAccess } from "./users";
 
 export type LoginResponse = {
   access_token: string;
@@ -27,6 +27,8 @@ export type LoginResponse = {
       account_admin?: boolean | null;
       account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
     }[] | null;
+    group_ids?: number[] | null;
+    group_details?: { id: number; name: string }[] | null;
     s3_users?: number[] | null;
     s3_user_details?: { id: number; name: string }[] | null;
     s3_connections?: number[] | null;
@@ -36,6 +38,7 @@ export type LoginResponse = {
       access_manager?: boolean | null;
       access_browser?: boolean | null;
     }[] | null;
+    effective_access?: EffectiveUserAccess | null;
     auth_provider?: string | null;
   };
 };
