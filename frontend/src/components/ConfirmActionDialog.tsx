@@ -5,6 +5,13 @@
 import type { ReactNode } from "react";
 import Modal from "./Modal";
 import UiButton from "./ui/UiButton";
+import {
+  cx,
+  uiMutedTextClass,
+  uiPanelMutedClass,
+  uiTitleTextClass,
+  uiToneBannerClasses,
+} from "./ui/styles";
 
 export type ConfirmActionDialogDetail = {
   label: string;
@@ -54,16 +61,20 @@ export default function ConfirmActionDialog({
       closeOnBackdropClick={!loading}
     >
       <div className="space-y-4">
-        <p className="ui-body text-slate-600 dark:text-slate-300">{description}</p>
+        <p className={cx("ui-body", uiMutedTextClass)}>{description}</p>
 
         {details.length > 0 ? (
-          <dl className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-4 dark:border-slate-800 dark:bg-slate-950/40">
+          <dl className={cx("grid gap-3 px-4 py-4", uiPanelMutedClass)}>
             {details.map((detail) => (
               <div key={detail.label} className="grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-start">
-                <dt className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  {detail.label}
-                </dt>
-                <dd className={detail.mono ? "break-all font-mono text-[13px] text-slate-700 dark:text-slate-100" : "ui-body font-semibold text-slate-800 dark:text-slate-100"}>
+                <dt className={cx("ui-caption font-semibold uppercase", uiMutedTextClass)}>{detail.label}</dt>
+                <dd
+                  className={
+                    detail.mono
+                      ? "break-all font-mono text-[13px] text-[var(--ui-text)]"
+                      : cx("ui-body", uiTitleTextClass)
+                  }
+                >
                   {detail.value}
                 </dd>
               </div>
@@ -72,7 +83,7 @@ export default function ConfirmActionDialog({
         ) : null}
 
         {impacts.length > 0 ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-4 dark:border-amber-900/40 dark:bg-amber-950/30">
+          <div className={cx("rounded-md px-4 py-4", uiToneBannerClasses.warning)}>
             <p className="ui-caption font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-100">
               Impact
             </p>
@@ -85,7 +96,7 @@ export default function ConfirmActionDialog({
         ) : null}
 
         {warning ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
+          <div className={cx("px-4 py-3 ui-caption", uiPanelMutedClass, uiMutedTextClass)}>
             {warning}
           </div>
         ) : null}

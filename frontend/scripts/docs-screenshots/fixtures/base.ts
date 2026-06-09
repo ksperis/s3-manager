@@ -386,6 +386,91 @@ function managerTrafficPayload(window: string) {
   };
 }
 
+const ADMIN_STORAGE_STATS = {
+  total_accounts: ADMIN_ACCOUNTS_MINIMAL.length,
+  total_users: ADMIN_UI_USERS.length,
+  total_admins: 2,
+  total_s3_users: 3,
+  total_buckets: MANAGER_BUCKET_COUNT,
+  generated_at: NOW,
+  storage_totals: {
+    used_bytes: MANAGER_TOTAL_BYTES,
+    object_count: MANAGER_TOTAL_OBJECTS,
+    bucket_count: MANAGER_BUCKET_COUNT,
+    accounts_with_usage: 2,
+  },
+  account_usage: [
+    {
+      account_id: "101",
+      account_name: "Helios Retail",
+      used_bytes: MANAGER_TOTAL_BYTES,
+      object_count: MANAGER_TOTAL_OBJECTS,
+      bucket_count: MANAGER_BUCKET_COUNT,
+    },
+  ],
+  s3_user_usage: [
+    {
+      user_id: 901,
+      user_name: "helios-admin",
+      rgw_user_uid: "helios-admin",
+      used_bytes: Math.round(620 * GB),
+      object_count: 4_200,
+      bucket_count: 2,
+    },
+  ],
+};
+
+const ADMIN_AUDIT_LOGS = {
+  logs: [
+    {
+      id: 1003,
+      created_at: "2026-03-08T08:50:00Z",
+      user_email: "platform.admin@example.com",
+      user_role: "ui_admin",
+      scope: "admin",
+      action: "storage_endpoint.update",
+      entity_type: "endpoint",
+      entity_id: "Default",
+      account_id: null,
+      account_name: null,
+      status: "success",
+      message: "Endpoint health settings updated.",
+      metadata: {},
+    },
+    {
+      id: 1002,
+      created_at: "2026-03-08T08:20:00Z",
+      user_email: "admin.docs@example.com",
+      user_role: "ui_superadmin",
+      scope: "admin",
+      action: "account.link_user",
+      entity_type: "account",
+      entity_id: "Helios Retail",
+      account_id: 101,
+      account_name: "Helios Retail",
+      status: "success",
+      message: "Portal manager linked.",
+      metadata: {},
+    },
+    {
+      id: 1001,
+      created_at: "2026-03-08T07:55:00Z",
+      user_email: "storage.user@example.com",
+      user_role: "ui_user",
+      scope: "browser",
+      action: "bucket.list_objects",
+      entity_type: "bucket",
+      entity_id: "helios-retail-logs",
+      account_id: 101,
+      account_name: "Helios Retail",
+      status: "success",
+      message: "Objects listed.",
+      metadata: {},
+    },
+  ],
+  next_cursor: null,
+};
+
 const IAM_USERS = [
   { name: "analytics-reader", arn: "arn:aws:iam::111111111111:user/analytics-reader", groups: ["analytics"], policies: ["ReadOnlyAccess"] },
   { name: "backup-operator", arn: "arn:aws:iam::111111111111:user/backup-operator", groups: ["ops"], policies: ["AmazonS3FullAccess"] },
@@ -930,6 +1015,47 @@ const HEALTH_SUMMARY = {
   ],
 };
 
+const HEALTH_OVERVIEW = {
+  generated_at: NOW,
+  window: "week",
+  start: "2026-03-01T09:00:00Z",
+  end: NOW,
+  endpoints: [
+    {
+      endpoint_id: 11,
+      name: "Default",
+      endpoint_url: "https://s3-default.docs.example.com",
+      status: "up",
+      checked_at: NOW,
+      latency_ms: 82,
+      check_mode: "http",
+      check_target_url: "https://s3-default.docs.example.com",
+      availability_pct: 99.7,
+      baseline_latency_ms: 80,
+      timeline: [
+        { timestamp: "2026-03-07T09:00:00Z", status: "up", latency_ms: 84 },
+        { timestamp: NOW, status: "up", latency_ms: 82 },
+      ],
+    },
+    {
+      endpoint_id: 12,
+      name: "Archive",
+      endpoint_url: "https://s3-archive.docs.example.com",
+      status: "degraded",
+      checked_at: NOW,
+      latency_ms: 390,
+      check_mode: "http",
+      check_target_url: "https://s3-archive.docs.example.com",
+      availability_pct: 94.4,
+      baseline_latency_ms: 210,
+      timeline: [
+        { timestamp: "2026-03-07T09:00:00Z", status: "up", latency_ms: 205 },
+        { timestamp: NOW, status: "degraded", latency_ms: 390, reason: "High latency" },
+      ],
+    },
+  ],
+};
+
 const BROWSER_SETTINGS = {
   allow_proxy_transfers: true,
   direct_upload_parallelism: 5,
@@ -1215,6 +1341,21 @@ export function buildBaseRules(): MockRule[] {
       },
     },
     {
+      id: "admin-storage-stats",
+      path: /^\/admin\/stats\/storage$/,
+      body: ADMIN_STORAGE_STATS,
+    },
+    {
+      id: "admin-traffic-stats",
+      path: /^\/admin\/stats\/traffic$/,
+      body: ({ url }) => managerTrafficPayload(url.searchParams.get("window") ?? "day"),
+    },
+    {
+      id: "admin-audit-logs",
+      path: /^\/admin\/audit\/logs$/,
+      body: ADMIN_AUDIT_LOGS,
+    },
+    {
       id: "admin-users",
       path: /^\/admin\/users$/,
       body: {
@@ -1244,6 +1385,11 @@ export function buildBaseRules(): MockRule[] {
       id: "health-summary",
       path: /^\/admin\/health\/summary$/,
       body: HEALTH_SUMMARY,
+    },
+    {
+      id: "health-overview",
+      path: /^\/admin\/health\/overview$/,
+      body: HEALTH_OVERVIEW,
     },
     {
       id: "health-workspace-admin",

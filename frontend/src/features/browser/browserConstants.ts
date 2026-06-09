@@ -2,22 +2,30 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import {
+  cx,
+  uiButtonBaseClass,
+  uiButtonVariants,
+  uiIconButtonClass,
+  uiInputClass,
+} from "../../components/ui/styles";
+
 export const iconButtonClasses =
-  "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200";
+  cx(uiIconButtonClass, "h-7 w-7");
 export const iconButtonDangerClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 disabled:opacity-40 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-900/30 dark:hover:text-rose-100";
 export const bulkActionClasses =
-  "inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:bg-slate-50 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:bg-slate-800 dark:hover:text-primary-100";
+  cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-2.5 py-1.5");
 export const bulkDangerClasses =
-  "inline-flex items-center gap-2 rounded-md border border-rose-200 bg-white px-2.5 py-1.5 ui-caption font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 disabled:opacity-50 dark:border-rose-500/50 dark:bg-slate-900 dark:text-rose-200 dark:hover:bg-rose-900/30";
+  cx(uiButtonBaseClass, uiButtonVariants.danger, "px-2.5 py-1.5");
 export const toolbarButtonClasses =
-  "inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100 dark:disabled:hover:border-slate-700 dark:disabled:hover:text-slate-200";
+  cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-2.5 py-1.5");
 export const toolbarPrimaryClasses =
-  "inline-flex items-center gap-2 rounded-md bg-primary px-2.5 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-primary";
+  cx(uiButtonBaseClass, uiButtonVariants.primary, "px-2.5 py-1.5");
 export const toolbarIconButtonClasses =
-  "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100 dark:disabled:hover:border-slate-700 dark:disabled:hover:text-slate-200";
+  cx(uiIconButtonClass, "h-7 w-7");
 export const filterChipClasses =
-  "inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 ui-caption font-semibold text-slate-600 shadow-sm transition hover:border-primary hover:bg-slate-50 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:bg-slate-800 dark:hover:text-primary-100";
+  cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-2.5 py-1.5");
 export const filterChipActiveClasses =
   "border-primary-200 bg-primary-100 text-primary-800 dark:border-primary-600 dark:bg-primary-500/20 dark:text-primary-100";
 export const countBadgeClasses =
@@ -30,7 +38,7 @@ export const viewToggleBaseClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100";
 export const viewToggleActiveClasses = "bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-100";
 export const formInputClasses =
-  "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
+  cx(uiInputClass, "px-2 py-1.5 ui-caption");
 export const breadcrumbIconButtonClasses =
   "inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-200";
 export const contextMenuBaseClasses =
@@ -43,7 +51,7 @@ export const contextMenuItemDisabledClasses = "cursor-not-allowed opacity-50";
 export const contextMenuSeparatorClasses = "my-1 border-t border-slate-200 dark:border-slate-700";
 
 export const bucketButtonClasses =
-  "inline-flex h-9 max-w-[260px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary/60 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:bg-slate-800 dark:disabled:hover:border-slate-700 dark:disabled:hover:bg-slate-900 sm:max-w-[320px]";
+  cx(uiButtonBaseClass, uiButtonVariants.secondary, "h-9 max-w-[260px] justify-start px-3 sm:max-w-[320px]");
 export const treeToggleButtonClasses =
   "inline-flex h-4 w-4 items-center justify-center rounded border border-slate-200 ui-caption font-semibold text-slate-500 transition hover:border-primary hover:text-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary-500 dark:hover:text-primary-200";
 export const treeItemBaseClasses =

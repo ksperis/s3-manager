@@ -7,6 +7,7 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { CephAdminBucket } from "../../api/cephAdmin";
 import { tableActionMenuItemClasses } from "../../components/tableActionClasses";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
+import { cx, uiIconButtonClass, uiMenuClass } from "../../components/ui/styles";
 
 type BucketOpsRowActionsMenuProps = {
   actionMenuKey: string;
@@ -48,7 +49,7 @@ export default function BucketOpsRowActionsMenu({
           actionMenuAnchorRefs.current[actionMenuKey] = node;
         }}
         type="button"
-        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+        className={cx(uiIconButtonClass, "h-6 w-6 px-0 py-0 text-sm font-semibold")}
         aria-label="More actions"
         title="More actions"
         aria-haspopup="menu"
@@ -65,7 +66,7 @@ export default function BucketOpsRowActionsMenu({
         placement="bottom-end"
         offset={4}
         minWidth={176}
-        className="w-44 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        className={cx(uiMenuClass, "w-44 p-1")}
       >
         <div
           ref={(node) => {

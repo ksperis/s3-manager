@@ -5,6 +5,7 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Navigate, Outlet, Route, RouterProvider, createBrowserRouter, createRoutesFromElements } from "react-router-dom";
 import Layout from "./components/Layout";
+import { cx, uiCardClass } from "./components/ui/styles";
 import { useS3AccountContext } from "./features/manager/S3AccountContext";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
 import { fetchCurrentUser } from "./api/users";
@@ -171,8 +172,8 @@ const USER_ROLE = "ui_user";
 
 function RouteFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 ui-body font-semibold text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+    <div className="shell-page flex min-h-screen items-center justify-center px-4">
+      <div className={cx("px-4 py-3 ui-body font-semibold", uiCardClass)}>
         Loading workspace...
       </div>
     </div>
