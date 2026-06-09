@@ -197,8 +197,15 @@ describe("TopicsPage", () => {
     expect(screen.getByText("Notifications: 2")).toBeInTheDocument();
     expect(screen.queryByText("Confirmed: 2")).not.toBeInTheDocument();
     expect(screen.queryByText("Pending: 0")).not.toBeInTheDocument();
-    expect(screen.getByText("Bucket: bucket-alpha")).toBeInTheDocument();
-    expect(screen.getByText("Bucket: bucket-beta")).toBeInTheDocument();
+    const bucketAlpha = screen.getByText("Bucket: bucket-alpha");
+    const bucketBeta = screen.getByText("Bucket: bucket-beta");
+    expect(bucketAlpha).toBeInTheDocument();
+    expect(bucketBeta).toBeInTheDocument();
+    expect(bucketAlpha.tagName).toBe("LI");
+    expect(bucketBeta.tagName).toBe("LI");
+    expect(bucketAlpha).not.toHaveClass("rounded-md");
+    expect(bucketAlpha).not.toHaveClass("border");
+    expect(bucketAlpha).not.toHaveClass("bg-slate-50");
     expect(screen.queryByText("notif.bucket-alpha_ceph-topic-main")).not.toBeInTheDocument();
     expect(screen.queryByText("notif.bucket-beta_ceph-topic-main")).not.toBeInTheDocument();
     expect(screen.queryByText("notif.unknown_ceph-topic-main")).not.toBeInTheDocument();

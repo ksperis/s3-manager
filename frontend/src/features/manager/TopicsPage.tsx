@@ -599,16 +599,13 @@ export default function TopicsPage() {
                           <>
                             <div>Notifications: {notificationBuckets.length}</div>
                             {notificationBuckets.length > 0 && (
-                              <div className="mt-2 space-y-1">
+                              <ul className="mt-1 space-y-0.5">
                                 {notificationBuckets.map((bucket, index) => (
-                                  <div
-                                    key={`${bucket}-${index}`}
-                                    className="max-w-xl rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900/60"
-                                  >
+                                  <li key={`${bucket}-${index}`}>
                                     Bucket: {bucket}
-                                  </div>
+                                  </li>
                                 ))}
-                              </div>
+                              </ul>
                             )}
                           </>
                         ) : (
