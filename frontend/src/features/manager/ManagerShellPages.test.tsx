@@ -116,6 +116,16 @@ function managerTrafficResponse(
   };
 }
 
+function trendText(value: string) {
+  return (_content: string, element: Element | null) => element?.tagName === "SPAN" && element.textContent === value;
+}
+
+function expectMetricValue(label: string, value: string) {
+  const metricValue = document.querySelector(`[data-kpi-value="${label}"]`);
+  expect(metricValue).not.toBeNull();
+  expect(metricValue).toHaveTextContent(value);
+}
+
 describe("manager shell pages", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -159,7 +169,7 @@ describe("manager shell pages", () => {
     expect(screen.getByRole("heading", { name: "Manager dashboard" })).toBeInTheDocument();
     expect(screen.getByText("Top buckets by storage")).toBeInTheDocument();
     expect(screen.getByText("Recent activity")).toBeInTheDocument();
-    expect(screen.getByText("Upload / Download")).toBeInTheDocument();
+    expect(screen.getByText("Transfer")).toBeInTheDocument();
     expect(screen.queryByText("Active transfers")).not.toBeInTheDocument();
     expect(screen.queryByText("Select an account to display live values.")).not.toBeInTheDocument();
     expect(screen.queryByText("5.3 TB")).not.toBeInTheDocument();
@@ -210,7 +220,7 @@ describe("manager shell pages", () => {
     expect(screen.queryByText("220 GB / 1 TB")).not.toBeInTheDocument();
     expect(screen.queryByText("Storage Usage")).not.toBeInTheDocument();
     expect(screen.queryByText(/Storage usage for/)).not.toBeInTheDocument();
-    expect(screen.getByText("Upload / Download")).toBeInTheDocument();
+    expect(screen.getByText("Transfer")).toBeInTheDocument();
     expect(screen.queryByText("Active transfers")).not.toBeInTheDocument();
     expect(fetchManagerTrafficMock).not.toHaveBeenCalled();
     expect(await screen.findByText("Access management")).toBeInTheDocument();
@@ -328,9 +338,9 @@ describe("manager shell pages", () => {
     );
 
     await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "day"));
-    expect(await screen.findByText("2.0 KB / 4.0 KB")).toBeInTheDocument();
+    await waitFor(() => expectMetricValue("Transfer", "6.0 KB"));
     expect(screen.getByText("Last 24h")).toBeInTheDocument();
-    expect(screen.getByText("Upload / Download").closest("a")).toHaveAttribute("href", "/manager/metrics");
+    expect(screen.getByText("Transfer").closest("a")).toHaveAttribute("href", "/manager/metrics");
     expect(screen.queryByText("Active transfers")).not.toBeInTheDocument();
   });
 
@@ -385,9 +395,9 @@ describe("manager shell pages", () => {
     );
 
     await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "month"));
-    expect(await screen.findByText("256 B / 512 B")).toBeInTheDocument();
-    expect(screen.getByText("2.0 KB vs last week")).toBeInTheDocument();
-    expect(screen.queryByText("8.0 KB vs last 30 days")).not.toBeInTheDocument();
+    await waitFor(() => expectMetricValue("Transfer", "768 B"));
+    expect(screen.getByText(trendText("2.0 KB vs last week"))).toBeInTheDocument();
+    expect(screen.queryByText(trendText("8.0 KB vs last 30 days"))).not.toBeInTheDocument();
   });
 
   it("falls back manager dashboard traffic trend to yesterday when month and week are not ready", async () => {
@@ -441,10 +451,10 @@ describe("manager shell pages", () => {
     );
 
     await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "week"));
-    expect(await screen.findByText("512 B / 512 B")).toBeInTheDocument();
-    expect(screen.getByText("1.0 KB vs yesterday")).toBeInTheDocument();
-    expect(screen.queryByText("8.0 KB vs last 30 days")).not.toBeInTheDocument();
-    expect(screen.queryByText("4.0 KB vs last week")).not.toBeInTheDocument();
+    await waitFor(() => expectMetricValue("Transfer", "1.0 KB"));
+    expect(screen.getByText(trendText("1.0 KB vs yesterday"))).toBeInTheDocument();
+    expect(screen.queryByText(trendText("8.0 KB vs last 30 days"))).not.toBeInTheDocument();
+    expect(screen.queryByText(trendText("4.0 KB vs last week"))).not.toBeInTheDocument();
   });
 
   it("keeps real zero upload and download volumes visible", async () => {
@@ -477,7 +487,7 @@ describe("manager shell pages", () => {
     );
 
     await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "day"));
-    expect(await screen.findByText("0 B / 0 B")).toBeInTheDocument();
+    await waitFor(() => expectMetricValue("Transfer", "0 B"));
     expect(screen.getByText("Last 24h")).toBeInTheDocument();
   });
 
@@ -512,9 +522,9 @@ describe("manager shell pages", () => {
 
     await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "day"));
     await waitFor(() => expect(screen.queryByText("...")).not.toBeInTheDocument());
-    expect(screen.getByText("Upload / Download")).toBeInTheDocument();
+    expect(screen.getByText("Transfer")).toBeInTheDocument();
     expect(screen.queryByText("traffic unavailable")).not.toBeInTheDocument();
-    expect(screen.queryByText("0 B / 0 B")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 B")).not.toBeInTheDocument();
   });
 
   it("renders recent manager activity from audit logs", async () => {
@@ -704,9 +714,9 @@ describe("manager shell pages", () => {
     expect(quotaStatusScope.getByText("Groups")).toBeInTheDocument();
     expect(quotaStatusScope.getByText("1 / 4")).toBeInTheDocument();
     expect(quotaStatusScope.queryByText("Bandwidth (month)")).not.toBeInTheDocument();
-    expect(await screen.findByText("1.0 GB vs last 30 days")).toBeInTheDocument();
-    expect(screen.getByText("1 vs last 30 days")).toBeInTheDocument();
-    expect(screen.getByText("4 vs last 30 days")).toBeInTheDocument();
+    expect(await screen.findByText(trendText("1.0 GB vs last 30 days"))).toBeInTheDocument();
+    expect(screen.getByText(trendText("1 vs last 30 days"))).toBeInTheDocument();
+    expect(screen.getByText(trendText("4 vs last 30 days"))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View all buckets/ })).toHaveAttribute("href", "/manager/buckets");
   });
 
@@ -757,9 +767,9 @@ describe("manager shell pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("1.0 GB vs last week")).toBeInTheDocument();
-    expect(screen.getByText("0 vs yesterday")).toBeInTheDocument();
-    expect(screen.getByText("2 vs last week")).toBeInTheDocument();
+    expect(await screen.findByText(trendText("1.0 GB vs last week"))).toBeInTheDocument();
+    expect(screen.getByText(trendText("0 vs yesterday"))).toBeInTheDocument();
+    expect(screen.getByText(trendText("2 vs last week"))).toBeInTheDocument();
   });
 
   it("renders the manager browser page without a page-level context strip", () => {

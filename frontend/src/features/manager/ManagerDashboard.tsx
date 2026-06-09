@@ -485,6 +485,38 @@ function TrendArrowIcon({ tone }: { tone: Exclude<DashboardMetricTrend["tone"], 
   );
 }
 
+function splitTrendLabel(label: string): { value: string; qualifier: string } {
+  const marker = " vs ";
+  const markerIndex = label.indexOf(marker);
+  if (markerIndex === -1) return { value: label, qualifier: "" };
+  return {
+    value: label.slice(0, markerIndex),
+    qualifier: label.slice(markerIndex),
+  };
+}
+
+function MetricTrend({ trend }: { trend: DashboardMetricTrend }) {
+  const toneClass = trendToneClasses(trend.tone);
+  const { value, qualifier } = splitTrendLabel(trend.label);
+  return (
+    <p className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium leading-4 text-[var(--ui-text-muted)]">
+      {trend.tone === "neutral" ? (
+        <span className={cx("flex h-3.5 w-3.5 items-center justify-center", toneClass)} aria-hidden="true">
+          -
+        </span>
+      ) : (
+        <span className={toneClass}>
+          <TrendArrowIcon tone={trend.tone} />
+        </span>
+      )}
+      <span>
+        <span className={toneClass}>{value}</span>
+        {qualifier && <span>{qualifier}</span>}
+      </span>
+    </p>
+  );
+}
+
 function MetricCard({ metric }: { metric: DashboardMetric }) {
   const content = (
     <div
@@ -525,16 +557,7 @@ function MetricCard({ metric }: { metric: DashboardMetric }) {
         </div>
         <div className="flex items-center">
           {metric.trend ? (
-            <p className={cx("flex items-center gap-1.5 whitespace-nowrap text-xs font-medium leading-4", trendToneClasses(metric.trend.tone))}>
-              {metric.trend.tone === "neutral" ? (
-                <span className="flex h-3.5 w-3.5 items-center justify-center" aria-hidden="true">
-                  -
-                </span>
-              ) : (
-                <TrendArrowIcon tone={metric.trend.tone} />
-              )}
-              <span>{metric.trend.label}</span>
-            </p>
+            <MetricTrend trend={metric.trend} />
           ) : (
             <span className="h-4" aria-hidden="true" />
           )}
@@ -677,10 +700,12 @@ function StorageEvolutionChart({ points }: { points: StorageEvolutionPoint[] }) 
 
   return (
     <div className="mt-4" aria-label="Storage evolution chart">
-      <div className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-2">
-        <div className="flex h-[92px] flex-col justify-between py-1 text-[10px] font-medium leading-3 text-[var(--ui-text-muted)]">
+      <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] gap-x-3">
+        <div className="flex h-[92px] flex-col items-end justify-between py-1 pr-1 text-right text-[10px] font-medium leading-3 text-[var(--ui-text-muted)]">
           {chart.yLabels.map((label, index) => (
-            <span key={`${label}-${index}`}>{label}</span>
+            <span key={`${label}-${index}`} className="whitespace-nowrap tabular-nums">
+              {label}
+            </span>
           ))}
         </div>
         <svg className="h-[92px] w-full overflow-visible" viewBox="0 0 320 92" preserveAspectRatio="none" role="img">
@@ -1450,8 +1475,8 @@ export default function ManagerDashboard() {
   const objectPercent = percent(objectCount, objectQuota);
   const uploadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_in ?? null;
   const downloadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_out ?? null;
-  const trafficValue =
-    uploadBytes == null || downloadBytes == null ? "" : `${formatBytes(uploadBytes)} / ${formatBytes(downloadBytes)}`;
+  const transferBytes = uploadBytes == null || downloadBytes == null ? null : uploadBytes + downloadBytes;
+  const trafficValue = transferBytes == null ? "" : formatBytes(transferBytes);
   const trafficTrendLabel = trafficUnavailableReason ? undefined : formatTrafficTrend(trafficTrend);
   const storageTrendLabel = metricsUnavailableReason ? undefined : formatStorageTrend(storageUsedBytes, usageTrends?.storage);
   const bucketTrendLabel = bucketUnavailableReason
@@ -1544,11 +1569,10 @@ export default function ManagerDashboard() {
       unavailableReason: metricsUnavailableReason,
     },
     {
-      label: "Upload / Download",
+      label: "Transfer",
       value: trafficLoading ? "..." : trafficValue,
       detail: trafficValue ? "Last 24h" : "",
       trend: trafficTrendLabel,
-      compactValue: true,
       tone: "amber",
       icon: <UploadIcon className="h-7 w-7" />,
       to: "/manager/metrics",
