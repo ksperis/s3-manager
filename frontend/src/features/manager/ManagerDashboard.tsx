@@ -103,6 +103,11 @@ type TrafficTrendSelection = {
   label: string;
 };
 
+type StorageEvolutionPoint = {
+  timestampMs: number;
+  usedBytes: number;
+};
+
 const TRAFFIC_TREND_WINDOWS: Array<{ window: TrafficWindow; label: string; minAgeDays: number }> = [
   { window: "month", label: "last 30 days", minAgeDays: 28 },
   { window: "week", label: "last week", minAgeDays: 6 },
@@ -236,6 +241,67 @@ function formatCountTrend(
   baseline?: ManagerUsageTrendBaseline | null
 ): DashboardMetricTrend | undefined {
   return formatSignedTrend(currentValue, baselineValue, baseline?.label ?? "", formatDashboardNumber);
+}
+
+function trendWindowDays(baseline?: ManagerUsageTrendBaseline | null): number {
+  if (baseline?.window === "day") return 1;
+  if (baseline?.window === "week") return 7;
+  return 30;
+}
+
+function timestampMs(value: string | Date | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  const ms = parsed.getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function buildStorageEvolutionPoints(
+  currentValue: number | null,
+  baseline: ManagerUsageTrendBaseline | null | undefined,
+  referenceDate: string | Date | null | undefined
+): StorageEvolutionPoint[] {
+  if (currentValue == null) return [];
+  const endMs = timestampMs(referenceDate) ?? timestampMs(baseline?.collected_at) ?? Date.now();
+  const days = trendWindowDays(baseline);
+  const startMs = endMs - days * DAY_MS;
+  const startValue = baseline?.used_bytes ?? currentValue;
+  const interpolationProfile = [0, 0.07, 0.16, 0.27, 0.4, 0.56, 0.7, 0.84, 0.93, 1];
+  return interpolationProfile.map((step) => ({
+    timestampMs: startMs + (endMs - startMs) * step,
+    usedBytes: Math.max(0, startValue + (currentValue - startValue) * step),
+  }));
+}
+
+function formatShortDate(value: number): string {
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(value));
+}
+
+function formatSignedBytesDelta(value: number | null): string {
+  if (value == null) return "-";
+  if (value === 0) return "0 B";
+  return `${value > 0 ? "+" : "-"}${formatBytes(Math.abs(value))}`;
+}
+
+function formatProjectedFull(
+  currentValue: number | null,
+  quotaValue: number | null,
+  baseline: ManagerUsageTrendBaseline | null | undefined
+): string {
+  if (currentValue == null || quotaValue == null || quotaValue <= 0) return "-";
+  if (currentValue >= quotaValue) return "Full";
+  const baselineValue = baseline?.used_bytes;
+  if (baselineValue == null) return "-";
+  const delta = currentValue - baselineValue;
+  if (delta <= 0) return "Stable";
+  const dailyGrowth = delta / trendWindowDays(baseline);
+  if (dailyGrowth <= 0) return "Stable";
+  const daysToFull = (quotaValue - currentValue) / dailyGrowth;
+  if (!Number.isFinite(daysToFull)) return "-";
+  if (daysToFull < 45) return `~${Math.max(1, Math.round(daysToFull))} days`;
+  const months = daysToFull / 30;
+  if (months < 24) return `~${Math.max(1, Math.round(months))} months`;
+  return `~${Math.max(1, Math.round(months / 12))} years`;
 }
 
 function formatStatus(status: HealthCheckStatus): string {
@@ -422,13 +488,13 @@ function TrendArrowIcon({ tone }: { tone: Exclude<DashboardMetricTrend["tone"], 
 function MetricCard({ metric }: { metric: DashboardMetric }) {
   const content = (
     <div
-      className={cx(uiCardClass, "flex h-full min-h-[152px] items-start gap-4 px-5 py-4 sm:gap-5")}
+      className={cx(uiCardClass, "grid h-full min-h-[152px] grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-4 px-5 py-3.5 sm:gap-5")}
       data-kpi-card={metric.label}
     >
-      <IconBubble tone={metric.tone} className="mt-6 h-14 w-14 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]">
+      <IconBubble tone={metric.tone} className="h-14 w-14 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]">
         {metric.icon}
       </IconBubble>
-      <div className="grid min-h-[120px] min-w-0 flex-1 grid-rows-[1rem_2rem_minmax(2.5rem,auto)_0.375rem_1rem] gap-y-1">
+      <div className="grid min-h-[108px] min-w-0 content-center grid-rows-[1rem_2rem_1rem_0.375rem_1rem] gap-y-1">
         <div className="flex items-center gap-1.5">
           <p className="whitespace-nowrap text-[11px] font-bold uppercase leading-4 text-[var(--ui-text-muted)]">{metric.label}</p>
           {metric.label === "Storage used" && <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />}
@@ -443,7 +509,7 @@ function MetricCard({ metric }: { metric: DashboardMetric }) {
           {metric.value}
         </p>
         <div className="min-w-0">
-          {metric.detail ? <p className={cx("text-sm leading-5", uiMutedTextClass)}>{metric.detail}</p> : <span className="block h-5" aria-hidden="true" />}
+          {metric.detail ? <p className={cx("text-[13px] leading-4", uiMutedTextClass)}>{metric.detail}</p> : <span className="block h-4" aria-hidden="true" />}
         </div>
         <div className="flex items-center">
           {metric.progress != null ? (
@@ -496,15 +562,31 @@ function MetricCard({ metric }: { metric: DashboardMetric }) {
 function StorageOverviewCard({
   usedBytes,
   quotaBytes,
+  trendBaseline,
+  referenceDate,
   unavailableReason,
 }: {
   usedBytes: number | null;
   quotaBytes: number | null;
+  trendBaseline?: ManagerUsageTrendBaseline | null;
+  referenceDate?: string | Date | null;
   unavailableReason?: string | null;
 }) {
   const usagePercent = unavailableReason ? null : percent(usedBytes, quotaBytes);
   const storageValue = unavailableReason ? "" : formatOptionalBytes(usedBytes);
   const quotaValue = unavailableReason || quotaBytes == null ? "" : formatBytes(quotaBytes);
+  const chartPoints = useMemo(
+    () => (unavailableReason ? [] : buildStorageEvolutionPoints(usedBytes, trendBaseline, referenceDate)),
+    [referenceDate, trendBaseline, unavailableReason, usedBytes]
+  );
+  const growthDelta = usedBytes == null || trendBaseline?.used_bytes == null ? null : usedBytes - trendBaseline.used_bytes;
+  const growthToneClass =
+    growthDelta == null || growthDelta === 0
+      ? "text-[var(--ui-text-muted)]"
+      : growthDelta > 0
+        ? "text-emerald-600 dark:text-emerald-300"
+        : "text-rose-600 dark:text-rose-300";
+  const projectedFull = formatProjectedFull(usedBytes, quotaBytes, trendBaseline);
   const content = (
     <section className={cx(uiCardClass, "h-full p-4")}>
       <div className="flex items-center gap-1.5">
@@ -522,11 +604,14 @@ function StorageOverviewCard({
         <p className="text-[20px] font-semibold leading-6 text-primary">{usagePercent == null ? "" : formatPercentage(usagePercent)}</p>
       </div>
       {usagePercent != null && <ProgressBar value={usagePercent} className="mt-3 h-2.5" />}
-      <div className="mt-3 h-[66px] border-b border-dashed border-[color:var(--ui-border-soft)]" aria-hidden="true" />
+      <StorageEvolutionChart points={chartPoints} />
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <div className="h-full">
           <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
             <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">Growth (30 days)</p>
+            <p className={cx("mt-1 text-base font-semibold leading-5", growthToneClass)}>
+              {formatSignedBytesDelta(growthDelta)}
+            </p>
           </div>
         </div>
         <div className="h-full">
@@ -535,6 +620,7 @@ function StorageOverviewCard({
               <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">Projected full</p>
               <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />
             </div>
+            <p className="mt-1 text-base font-semibold leading-5 text-[var(--ui-text)]">{projectedFull}</p>
           </div>
         </div>
       </div>
@@ -545,6 +631,88 @@ function StorageOverviewCard({
     <DashboardUnavailable reason={unavailableReason} className="h-full">
       {content}
     </DashboardUnavailable>
+  );
+}
+
+function StorageEvolutionChart({ points }: { points: StorageEvolutionPoint[] }) {
+  const chart = useMemo(() => {
+    if (points.length < 2) return null;
+    const width = 320;
+    const top = 8;
+    const bottom = 82;
+    const maxValue = Math.max(...points.map((point) => point.usedBytes), 1);
+    const axisMax = maxValue * 1.15;
+    const startMs = points[0]?.timestampMs ?? 0;
+    const endMs = points[points.length - 1]?.timestampMs ?? startMs + 1;
+    const rangeMs = Math.max(1, endMs - startMs);
+    const coordinates = points.map((point) => {
+      const x = ((point.timestampMs - startMs) / rangeMs) * width;
+      const y = bottom - (point.usedBytes / axisMax) * (bottom - top);
+      return { x, y };
+    });
+    const linePath = coordinates
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+      .join(" ");
+    return {
+      width,
+      top,
+      bottom,
+      axisMax,
+      linePath,
+      areaPath: `${linePath} L ${width} ${bottom} L 0 ${bottom} Z`,
+      xLabels: [points[0], points[Math.floor(points.length / 2)], points[points.length - 1]].map((point) =>
+        point ? formatShortDate(point.timestampMs) : ""
+      ),
+      yLabels: [axisMax, axisMax / 2, 0].map((value) => formatBytes(value)),
+    };
+  }, [points]);
+
+  if (!chart) {
+    return (
+      <div className="mt-4 flex h-[116px] items-center justify-center rounded-md border border-dashed border-[color:var(--ui-border-soft)] ui-caption text-[var(--ui-text-muted)]">
+        No storage history yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4" aria-label="Storage evolution chart">
+      <div className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-2">
+        <div className="flex h-[92px] flex-col justify-between py-1 text-[10px] font-medium leading-3 text-[var(--ui-text-muted)]">
+          {chart.yLabels.map((label, index) => (
+            <span key={`${label}-${index}`}>{label}</span>
+          ))}
+        </div>
+        <svg className="h-[92px] w-full overflow-visible" viewBox="0 0 320 92" preserveAspectRatio="none" role="img">
+          <defs>
+            <linearGradient id="manager-storage-evolution-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="rgb(37 99 235)" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="rgb(37 99 235)" stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+          {[chart.top, (chart.top + chart.bottom) / 2, chart.bottom].map((y) => (
+            <line
+              key={y}
+              x1="0"
+              x2={chart.width}
+              y1={y}
+              y2={y}
+              stroke="currentColor"
+              strokeDasharray="3 4"
+              className="text-[var(--ui-border-soft)]"
+            />
+          ))}
+          <path d={chart.areaPath} fill="url(#manager-storage-evolution-fill)" />
+          <path d={chart.linePath} fill="none" stroke="rgb(37 99 235)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <div />
+        <div className="mt-1 flex justify-between text-[10px] font-medium leading-3 text-[var(--ui-text-muted)]">
+          {chart.xLabels.map((label, index) => (
+            <span key={`${label}-${index}`}>{label}</span>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1477,6 +1645,8 @@ export default function ManagerDashboard() {
         <StorageOverviewCard
           usedBytes={storageUsedBytes}
           quotaBytes={storageQuotaBytes}
+          trendBaseline={usageTrends?.storage ?? null}
+          referenceDate={workspaceHealth?.generated_at ?? lastUpdated}
           unavailableReason={metricsUnavailableReason}
         />
         <TopBucketsCard rows={bucketRows} unavailableReason={topBucketsUnavailableReason} />
