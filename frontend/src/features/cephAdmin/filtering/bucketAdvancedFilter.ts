@@ -11,6 +11,7 @@ export type LifecycleRuleTypeValue =
   | "abort_multipart"
   | "transition"
   | "noncurrent_transition";
+export type NotificationRuleTypeValue = "" | "topic" | "queue" | "lambda";
 
 export type FeatureDetailFilters = {
   lifecycleRuleNameMode: LifecycleRuleNameMode;
@@ -29,6 +30,8 @@ export type FeatureDetailFilters = {
   objectLockMode: "" | "GOVERNANCE" | "COMPLIANCE";
   objectLockRetentionOp: NumericComparisonOpUi;
   objectLockRetentionDays: string;
+  objectLockRetentionYearsOp: NumericComparisonOpUi;
+  objectLockRetentionYears: string;
   bpaBlockPublicAcls: FeatureTriState;
   bpaIgnorePublicAcls: FeatureTriState;
   bpaBlockPublicPolicy: FeatureTriState;
@@ -39,11 +42,30 @@ export type FeatureDetailFilters = {
   corsOriginValue: string;
   loggingEnabled: FeatureTriState;
   loggingTargetBucket: string;
+  loggingTargetPrefix: string;
   websiteIndexPresent: FeatureTriState;
+  websiteIndexDocument: string;
+  websiteErrorDocument: string;
   websiteRedirectHostPresent: FeatureTriState;
+  websiteRedirectHost: string;
+  websiteRoutingRuleCountOp: NumericComparisonOpUi;
+  websiteRoutingRuleCount: string;
   policyStatementOp: NumericComparisonOpUi;
   policyStatementCount: string;
   policyHasConditions: FeatureTriState;
+  notificationRuleId: string;
+  notificationRuleTypeMode: PresenceMode;
+  notificationRuleTypeValue: NotificationRuleTypeValue;
+  notificationTopicName: string;
+  notificationEventMode: PresenceMode;
+  notificationEventValue: string;
+  notificationFilterPrefixMode: PresenceMode;
+  notificationFilterPrefixValue: string;
+  notificationFilterSuffixMode: PresenceMode;
+  notificationFilterSuffixValue: string;
+  notificationEventBridgePresent: FeatureTriState;
+  sseAlgorithm: string;
+  sseKmsKeyId: string;
 };
 export type FeatureDetailFilterKey = keyof FeatureDetailFilters;
 
@@ -64,6 +86,8 @@ export const defaultFeatureDetailFilters: FeatureDetailFilters = {
   objectLockMode: "",
   objectLockRetentionOp: ">=",
   objectLockRetentionDays: "",
+  objectLockRetentionYearsOp: ">=",
+  objectLockRetentionYears: "",
   bpaBlockPublicAcls: "any",
   bpaIgnorePublicAcls: "any",
   bpaBlockPublicPolicy: "any",
@@ -74,11 +98,30 @@ export const defaultFeatureDetailFilters: FeatureDetailFilters = {
   corsOriginValue: "",
   loggingEnabled: "any",
   loggingTargetBucket: "",
+  loggingTargetPrefix: "",
   websiteIndexPresent: "any",
+  websiteIndexDocument: "",
+  websiteErrorDocument: "",
   websiteRedirectHostPresent: "any",
+  websiteRedirectHost: "",
+  websiteRoutingRuleCountOp: ">=",
+  websiteRoutingRuleCount: "",
   policyStatementOp: ">=",
   policyStatementCount: "",
   policyHasConditions: "any",
+  notificationRuleId: "",
+  notificationRuleTypeMode: "any",
+  notificationRuleTypeValue: "",
+  notificationTopicName: "",
+  notificationEventMode: "any",
+  notificationEventValue: "",
+  notificationFilterPrefixMode: "any",
+  notificationFilterPrefixValue: "",
+  notificationFilterSuffixMode: "any",
+  notificationFilterSuffixValue: "",
+  notificationEventBridgePresent: "any",
+  sseAlgorithm: "",
+  sseKmsKeyId: "",
 };
 
 const NUMERIC_UI_TO_RULE_OP: Record<NumericComparisonOpUi, "eq" | "neq" | "gt" | "gte" | "lt" | "lte"> = {
@@ -111,6 +154,21 @@ const LIFECYCLE_RULE_TYPE_LABELS: Record<Exclude<LifecycleRuleTypeValue, "">, st
   transition: "Transitions",
   noncurrent_transition: "Noncurrent transitions",
 };
+const NOTIFICATION_RULE_TYPES: Exclude<NotificationRuleTypeValue, "">[] = ["topic", "queue", "lambda"];
+export const notificationFeatureDetailFilterKeys: FeatureDetailFilterKey[] = [
+  "notificationRuleId",
+  "notificationRuleTypeMode",
+  "notificationRuleTypeValue",
+  "notificationTopicName",
+  "notificationEventMode",
+  "notificationEventValue",
+  "notificationFilterPrefixMode",
+  "notificationFilterPrefixValue",
+  "notificationFilterSuffixMode",
+  "notificationFilterSuffixValue",
+  "notificationEventBridgePresent",
+];
+export const sseFeatureDetailFilterKeys: FeatureDetailFilterKey[] = ["sseAlgorithm", "sseKmsKeyId"];
 
 const asString = (value: unknown) => (typeof value === "string" ? value : "");
 
@@ -149,6 +207,9 @@ export const sanitizeFeatureDetailFilters = (value: unknown): FeatureDetailFilte
   const objectLockRetentionOp = NUMERIC_UI_OPS.includes(raw.objectLockRetentionOp as NumericComparisonOpUi)
     ? (raw.objectLockRetentionOp as NumericComparisonOpUi)
     : defaultFeatureDetailFilters.objectLockRetentionOp;
+  const objectLockRetentionYearsOp = NUMERIC_UI_OPS.includes(raw.objectLockRetentionYearsOp as NumericComparisonOpUi)
+    ? (raw.objectLockRetentionYearsOp as NumericComparisonOpUi)
+    : defaultFeatureDetailFilters.objectLockRetentionYearsOp;
   const corsMethodMode = PRESENCE_MODES.includes(raw.corsMethodMode as PresenceMode)
     ? (raw.corsMethodMode as PresenceMode)
     : defaultFeatureDetailFilters.corsMethodMode;
@@ -164,12 +225,32 @@ export const sanitizeFeatureDetailFilters = (value: unknown): FeatureDetailFilte
   const websiteRedirectHostPresent = TRI_STATES.includes(raw.websiteRedirectHostPresent as FeatureTriState)
     ? (raw.websiteRedirectHostPresent as FeatureTriState)
     : defaultFeatureDetailFilters.websiteRedirectHostPresent;
+  const websiteRoutingRuleCountOp = NUMERIC_UI_OPS.includes(raw.websiteRoutingRuleCountOp as NumericComparisonOpUi)
+    ? (raw.websiteRoutingRuleCountOp as NumericComparisonOpUi)
+    : defaultFeatureDetailFilters.websiteRoutingRuleCountOp;
   const policyStatementOp = NUMERIC_UI_OPS.includes(raw.policyStatementOp as NumericComparisonOpUi)
     ? (raw.policyStatementOp as NumericComparisonOpUi)
     : defaultFeatureDetailFilters.policyStatementOp;
   const policyHasConditions = TRI_STATES.includes(raw.policyHasConditions as FeatureTriState)
     ? (raw.policyHasConditions as FeatureTriState)
     : defaultFeatureDetailFilters.policyHasConditions;
+  const notificationRuleTypeMode = PRESENCE_MODES.includes(raw.notificationRuleTypeMode as PresenceMode)
+    ? (raw.notificationRuleTypeMode as PresenceMode)
+    : defaultFeatureDetailFilters.notificationRuleTypeMode;
+  const notificationRuleTypeValue = NOTIFICATION_RULE_TYPES.includes(
+    raw.notificationRuleTypeValue as Exclude<NotificationRuleTypeValue, "">
+  )
+    ? (raw.notificationRuleTypeValue as Exclude<NotificationRuleTypeValue, "">)
+    : defaultFeatureDetailFilters.notificationRuleTypeValue;
+  const notificationEventMode = PRESENCE_MODES.includes(raw.notificationEventMode as PresenceMode)
+    ? (raw.notificationEventMode as PresenceMode)
+    : defaultFeatureDetailFilters.notificationEventMode;
+  const notificationFilterPrefixMode = PRESENCE_MODES.includes(raw.notificationFilterPrefixMode as PresenceMode)
+    ? (raw.notificationFilterPrefixMode as PresenceMode)
+    : defaultFeatureDetailFilters.notificationFilterPrefixMode;
+  const notificationFilterSuffixMode = PRESENCE_MODES.includes(raw.notificationFilterSuffixMode as PresenceMode)
+    ? (raw.notificationFilterSuffixMode as PresenceMode)
+    : defaultFeatureDetailFilters.notificationFilterSuffixMode;
 
   const sanitizeTriState = (candidate: unknown): FeatureTriState =>
     TRI_STATES.includes(candidate as FeatureTriState) ? (candidate as FeatureTriState) : "any";
@@ -191,6 +272,8 @@ export const sanitizeFeatureDetailFilters = (value: unknown): FeatureDetailFilte
     objectLockMode,
     objectLockRetentionOp,
     objectLockRetentionDays: asString(raw.objectLockRetentionDays),
+    objectLockRetentionYearsOp,
+    objectLockRetentionYears: asString(raw.objectLockRetentionYears),
     bpaBlockPublicAcls: sanitizeTriState(raw.bpaBlockPublicAcls),
     bpaIgnorePublicAcls: sanitizeTriState(raw.bpaIgnorePublicAcls),
     bpaBlockPublicPolicy: sanitizeTriState(raw.bpaBlockPublicPolicy),
@@ -201,11 +284,30 @@ export const sanitizeFeatureDetailFilters = (value: unknown): FeatureDetailFilte
     corsOriginValue: asString(raw.corsOriginValue),
     loggingEnabled,
     loggingTargetBucket: asString(raw.loggingTargetBucket),
+    loggingTargetPrefix: asString(raw.loggingTargetPrefix),
     websiteIndexPresent,
+    websiteIndexDocument: asString(raw.websiteIndexDocument),
+    websiteErrorDocument: asString(raw.websiteErrorDocument),
     websiteRedirectHostPresent,
+    websiteRedirectHost: asString(raw.websiteRedirectHost),
+    websiteRoutingRuleCountOp,
+    websiteRoutingRuleCount: asString(raw.websiteRoutingRuleCount),
     policyStatementOp,
     policyStatementCount: asString(raw.policyStatementCount),
     policyHasConditions,
+    notificationRuleId: asString(raw.notificationRuleId),
+    notificationRuleTypeMode,
+    notificationRuleTypeValue,
+    notificationTopicName: asString(raw.notificationTopicName),
+    notificationEventMode,
+    notificationEventValue: asString(raw.notificationEventValue),
+    notificationFilterPrefixMode,
+    notificationFilterPrefixValue: asString(raw.notificationFilterPrefixValue),
+    notificationFilterSuffixMode,
+    notificationFilterSuffixValue: asString(raw.notificationFilterSuffixValue),
+    notificationEventBridgePresent: sanitizeTriState(raw.notificationEventBridgePresent),
+    sseAlgorithm: asString(raw.sseAlgorithm),
+    sseKmsKeyId: asString(raw.sseKmsKeyId),
   };
 };
 
@@ -219,7 +321,10 @@ const pushTriStateRule = (
   rules.push({ feature, param, op: "eq", value: triState === "true" });
 };
 
-export const buildFeatureDetailRules = (filters: FeatureDetailFilters): Array<Record<string, unknown>> => {
+export const buildFeatureDetailRules = (
+  filters: FeatureDetailFilters,
+  featureSupport: Partial<Record<string, boolean>> = {}
+): Array<Record<string, unknown>> => {
   const rules: Array<Record<string, unknown>> = [];
   const lifecycleRuleName = filters.lifecycleRuleName.trim();
   if (filters.lifecycleRuleNameMode !== "any" && lifecycleRuleName) {
@@ -315,6 +420,16 @@ export const buildFeatureDetailRules = (filters: FeatureDetailFilters): Array<Re
       value: objectLockRetentionDays,
     });
   }
+  const objectLockRetentionYearsRaw = filters.objectLockRetentionYears.trim();
+  const objectLockRetentionYears = Number(objectLockRetentionYearsRaw);
+  if (objectLockRetentionYearsRaw && Number.isFinite(objectLockRetentionYears)) {
+    rules.push({
+      feature: "object_lock",
+      param: "object_lock_retention_years",
+      op: NUMERIC_UI_TO_RULE_OP[filters.objectLockRetentionYearsOp],
+      value: objectLockRetentionYears,
+    });
+  }
 
   pushTriStateRule(rules, filters.bpaBlockPublicAcls, "block_public_access", "bpa_block_public_acls");
   pushTriStateRule(rules, filters.bpaIgnorePublicAcls, "block_public_access", "bpa_ignore_public_acls");
@@ -358,9 +473,55 @@ export const buildFeatureDetailRules = (filters: FeatureDetailFilters): Array<Re
       value: loggingTargetBucket,
     });
   }
+  const loggingTargetPrefix = filters.loggingTargetPrefix.trim();
+  if (loggingTargetPrefix) {
+    rules.push({
+      feature: "access_logging",
+      param: "logging_target_prefix",
+      op: "contains",
+      value: loggingTargetPrefix,
+    });
+  }
 
   pushTriStateRule(rules, filters.websiteIndexPresent, "static_website", "website_index_present");
+  const websiteIndexDocument = filters.websiteIndexDocument.trim();
+  if (websiteIndexDocument) {
+    rules.push({
+      feature: "static_website",
+      param: "website_index_document",
+      op: "contains",
+      value: websiteIndexDocument,
+    });
+  }
+  const websiteErrorDocument = filters.websiteErrorDocument.trim();
+  if (websiteErrorDocument) {
+    rules.push({
+      feature: "static_website",
+      param: "website_error_document",
+      op: "contains",
+      value: websiteErrorDocument,
+    });
+  }
   pushTriStateRule(rules, filters.websiteRedirectHostPresent, "static_website", "website_redirect_host_present");
+  const websiteRedirectHost = filters.websiteRedirectHost.trim();
+  if (websiteRedirectHost) {
+    rules.push({
+      feature: "static_website",
+      param: "website_redirect_host",
+      op: "contains",
+      value: websiteRedirectHost,
+    });
+  }
+  const websiteRoutingRuleCountRaw = filters.websiteRoutingRuleCount.trim();
+  const websiteRoutingRuleCount = Number(websiteRoutingRuleCountRaw);
+  if (websiteRoutingRuleCountRaw && Number.isFinite(websiteRoutingRuleCount)) {
+    rules.push({
+      feature: "static_website",
+      param: "website_routing_rule_count",
+      op: NUMERIC_UI_TO_RULE_OP[filters.websiteRoutingRuleCountOp],
+      value: websiteRoutingRuleCount,
+    });
+  }
 
   const policyStatementCountRaw = filters.policyStatementCount.trim();
   const policyStatementCount = Number(policyStatementCountRaw);
@@ -382,11 +543,106 @@ export const buildFeatureDetailRules = (filters: FeatureDetailFilters): Array<Re
     });
   }
 
+  if (featureSupport.notifications !== false) {
+    const notificationRuleId = filters.notificationRuleId.trim();
+    if (notificationRuleId) {
+      rules.push({
+        feature: "notifications",
+        param: "notification_rule_id",
+        op: "contains",
+        value: notificationRuleId,
+      });
+    }
+
+    if (filters.notificationRuleTypeMode !== "any" && filters.notificationRuleTypeValue) {
+      rules.push({
+        feature: "notifications",
+        param: "notification_rule_type",
+        op: filters.notificationRuleTypeMode === "has" ? "has" : "has_not",
+        value: filters.notificationRuleTypeValue,
+      });
+    }
+
+    const notificationTopicName = filters.notificationTopicName.trim();
+    if (notificationTopicName) {
+      rules.push({
+        feature: "notifications",
+        param: "notification_topic_name",
+        op: "contains",
+        value: notificationTopicName,
+      });
+    }
+
+    const notificationEventValue = filters.notificationEventValue.trim();
+    if (filters.notificationEventMode !== "any" && notificationEventValue) {
+      rules.push({
+        feature: "notifications",
+        param: "notification_event",
+        op: filters.notificationEventMode === "has" ? "has" : "has_not",
+        value: notificationEventValue,
+      });
+    }
+
+    const notificationFilterPrefixValue = filters.notificationFilterPrefixValue.trim();
+    if (filters.notificationFilterPrefixMode !== "any" && notificationFilterPrefixValue) {
+      rules.push({
+        feature: "notifications",
+        param: "notification_filter_prefix",
+        op: filters.notificationFilterPrefixMode === "has" ? "has" : "has_not",
+        value: notificationFilterPrefixValue,
+      });
+    }
+
+    const notificationFilterSuffixValue = filters.notificationFilterSuffixValue.trim();
+    if (filters.notificationFilterSuffixMode !== "any" && notificationFilterSuffixValue) {
+      rules.push({
+        feature: "notifications",
+        param: "notification_filter_suffix",
+        op: filters.notificationFilterSuffixMode === "has" ? "has" : "has_not",
+        value: notificationFilterSuffixValue,
+      });
+    }
+
+    if (filters.notificationEventBridgePresent !== "any") {
+      rules.push({
+        feature: "notifications",
+        param: "notification_eventbridge_present",
+        op: "eq",
+        value: filters.notificationEventBridgePresent === "true",
+      });
+    }
+  }
+
+  if (featureSupport.server_side_encryption !== false) {
+    const sseAlgorithm = filters.sseAlgorithm.trim();
+    if (sseAlgorithm) {
+      rules.push({
+        feature: "server_side_encryption",
+        param: "sse_algorithm",
+        op: "contains",
+        value: sseAlgorithm,
+      });
+    }
+
+    const sseKmsKeyId = filters.sseKmsKeyId.trim();
+    if (sseKmsKeyId) {
+      rules.push({
+        feature: "server_side_encryption",
+        param: "sse_kms_key_id",
+        op: "contains",
+        value: sseKmsKeyId,
+      });
+    }
+  }
+
   return rules;
 };
 
-export const hasFeatureDetailFilters = (filters: FeatureDetailFilters): boolean => {
-  if (buildFeatureDetailRules(filters).length > 0) return true;
+export const hasFeatureDetailFilters = (
+  filters: FeatureDetailFilters,
+  featureSupport: Partial<Record<string, boolean>> = {}
+): boolean => {
+  if (buildFeatureDetailRules(filters, featureSupport).length > 0) return true;
   return false;
 };
 
@@ -442,6 +698,12 @@ export const featureDetailSummaryItems = (
       label: `Object Lock retention days ${filters.objectLockRetentionOp} ${filters.objectLockRetentionDays.trim()}`,
     });
   }
+  if (filters.objectLockRetentionYears.trim()) {
+    summary.push({
+      field: "objectLockRetentionYears",
+      label: `Object Lock retention years ${filters.objectLockRetentionYearsOp} ${filters.objectLockRetentionYears.trim()}`,
+    });
+  }
   if (filters.bpaBlockPublicAcls !== "any") {
     summary.push({ field: "bpaBlockPublicAcls", label: `BPA block public ACLs: ${filters.bpaBlockPublicAcls}` });
   }
@@ -464,13 +726,31 @@ export const featureDetailSummaryItems = (
   if (filters.loggingTargetBucket.trim()) {
     summary.push({ field: "loggingTargetBucket", label: `Logging target bucket: ${filters.loggingTargetBucket.trim()}` });
   }
+  if (filters.loggingTargetPrefix.trim()) {
+    summary.push({ field: "loggingTargetPrefix", label: `Logging target prefix contains: ${filters.loggingTargetPrefix.trim()}` });
+  }
   if (filters.websiteIndexPresent !== "any") {
     summary.push({ field: "websiteIndexPresent", label: `Website index present: ${filters.websiteIndexPresent}` });
+  }
+  if (filters.websiteIndexDocument.trim()) {
+    summary.push({ field: "websiteIndexDocument", label: `Website index document contains: ${filters.websiteIndexDocument.trim()}` });
+  }
+  if (filters.websiteErrorDocument.trim()) {
+    summary.push({ field: "websiteErrorDocument", label: `Website error document contains: ${filters.websiteErrorDocument.trim()}` });
   }
   if (filters.websiteRedirectHostPresent !== "any") {
     summary.push({
       field: "websiteRedirectHostPresent",
       label: `Website redirect host present: ${filters.websiteRedirectHostPresent}`,
+    });
+  }
+  if (filters.websiteRedirectHost.trim()) {
+    summary.push({ field: "websiteRedirectHost", label: `Website redirect host contains: ${filters.websiteRedirectHost.trim()}` });
+  }
+  if (filters.websiteRoutingRuleCount.trim()) {
+    summary.push({
+      field: "websiteRoutingRuleCount",
+      label: `Website routing rules ${filters.websiteRoutingRuleCountOp} ${filters.websiteRoutingRuleCount.trim()}`,
     });
   }
   if (filters.policyStatementCount.trim()) {
@@ -481,6 +761,48 @@ export const featureDetailSummaryItems = (
   }
   if (filters.policyHasConditions !== "any") {
     summary.push({ field: "policyHasConditions", label: `Policy has conditions: ${filters.policyHasConditions}` });
+  }
+  if (filters.notificationRuleId.trim()) {
+    summary.push({ field: "notificationRuleId", label: `Notification rule ID contains: ${filters.notificationRuleId.trim()}` });
+  }
+  if (filters.notificationRuleTypeMode !== "any" && filters.notificationRuleTypeValue) {
+    summary.push({
+      field: "notificationRuleTypeValue",
+      label: `Notification rule type ${filters.notificationRuleTypeMode}: ${filters.notificationRuleTypeValue}`,
+    });
+  }
+  if (filters.notificationTopicName.trim()) {
+    summary.push({ field: "notificationTopicName", label: `Notification topic contains: ${filters.notificationTopicName.trim()}` });
+  }
+  if (filters.notificationEventMode !== "any" && filters.notificationEventValue.trim()) {
+    summary.push({
+      field: "notificationEventValue",
+      label: `Notification event ${filters.notificationEventMode}: ${filters.notificationEventValue.trim()}`,
+    });
+  }
+  if (filters.notificationFilterPrefixMode !== "any" && filters.notificationFilterPrefixValue.trim()) {
+    summary.push({
+      field: "notificationFilterPrefixValue",
+      label: `Notification prefix ${filters.notificationFilterPrefixMode}: ${filters.notificationFilterPrefixValue.trim()}`,
+    });
+  }
+  if (filters.notificationFilterSuffixMode !== "any" && filters.notificationFilterSuffixValue.trim()) {
+    summary.push({
+      field: "notificationFilterSuffixValue",
+      label: `Notification suffix ${filters.notificationFilterSuffixMode}: ${filters.notificationFilterSuffixValue.trim()}`,
+    });
+  }
+  if (filters.notificationEventBridgePresent !== "any") {
+    summary.push({
+      field: "notificationEventBridgePresent",
+      label: `Notification EventBridge present: ${filters.notificationEventBridgePresent}`,
+    });
+  }
+  if (filters.sseAlgorithm.trim()) {
+    summary.push({ field: "sseAlgorithm", label: `SSE algorithm contains: ${filters.sseAlgorithm.trim()}` });
+  }
+  if (filters.sseKmsKeyId.trim()) {
+    summary.push({ field: "sseKmsKeyId", label: `SSE KMS key contains: ${filters.sseKmsKeyId.trim()}` });
   }
   return summary;
 };

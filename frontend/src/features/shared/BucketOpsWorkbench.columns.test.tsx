@@ -515,6 +515,16 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     fireEvent.click(screen.getByRole("button", { name: "Columns" }));
     const notificationsColumn = await screen.findByLabelText("Notifications");
     expect(notificationsColumn).toBeInTheDocument();
+    const notificationsGroup = notificationsColumn.closest("div");
+    expect(notificationsGroup).not.toBeNull();
+    fireEvent.click(within(notificationsGroup as HTMLElement).getByRole("button", { name: "Details ▸" }));
+    expect(screen.getByLabelText("Notification topic names")).toBeInTheDocument();
+    const sseColumn = screen.getByLabelText("Server-side encryption");
+    const sseGroup = sseColumn.closest("div");
+    expect(sseGroup).not.toBeNull();
+    fireEvent.click(within(sseGroup as HTMLElement).getByRole("button", { name: "Details ▸" }));
+    expect(screen.getByLabelText("SSE algorithms")).toBeInTheDocument();
+    expect(screen.getByLabelText("SSE KMS key IDs")).toBeInTheDocument();
 
     fireEvent.click(notificationsColumn);
 
@@ -526,6 +536,89 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
       )
     );
     expect(await screen.findByText("Configured")).toBeInTheDocument();
+  });
+
+  it("renders feature detail columns and exports flat CSV values", async () => {
+    const blobs: Array<{ text: () => Promise<string> }> = [];
+    class MockBlob {
+      private readonly content: string;
+
+      constructor(parts: unknown[]) {
+        this.content = parts.map((part) => String(part)).join("");
+      }
+
+      async text() {
+        return this.content;
+      }
+    }
+    Object.defineProperty(globalThis, "Blob", {
+      configurable: true,
+      writable: true,
+      value: MockBlob,
+    });
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: vi.fn((blob: { text: () => Promise<string> }) => {
+        blobs.push(blob);
+        return "blob:mock";
+      }),
+    });
+    window.localStorage.setItem(
+      STORAGE_OPS_COLUMNS_STORAGE_KEY,
+      JSON.stringify(["object_lock_retention_years", "policy_has_conditions", "notification_topic_names", "sse_algorithms"])
+    );
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [
+        {
+          ...baseBucket,
+          column_details: {
+            object_lock_retention_years: 1,
+            policy_has_conditions: true,
+            notification_topic_names: ["archive-topic", "images-topic"],
+            sse_algorithms: ["aws:kms"],
+          },
+        },
+      ],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    expect(screen.getByText("Object Lock retention years")).toBeInTheDocument();
+    expect(screen.getByText("Policy has conditions")).toBeInTheDocument();
+    expect(screen.getByText("Notification topic names")).toBeInTheDocument();
+    expect(screen.getByText("SSE algorithms")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("Yes")).toBeInTheDocument();
+    expect(screen.getByText("archive-topic, images-topic")).toBeInTheDocument();
+    expect(screen.getByText("aws:kms")).toBeInTheDocument();
+
+    const bucketRow = screen.getByText("bucket-a").closest("tr");
+    expect(bucketRow).not.toBeNull();
+    fireEvent.click(within(bucketRow as HTMLElement).getByRole("checkbox"));
+
+    fireEvent.click(screen.getByText("Export list"));
+    fireEvent.click(await screen.findByRole("button", { name: "CSV (selected columns)" }));
+
+    await waitFor(() => expect(mocks.listStorageOpsBuckets.mock.calls.length).toBeGreaterThanOrEqual(3));
+    expect(mocks.listStorageOpsBuckets.mock.calls.at(-1)?.[1]).toEqual(
+      expect.objectContaining({
+        include: expect.arrayContaining([
+          "object_lock_retention_years",
+          "policy_has_conditions",
+          "notification_topic_names",
+          "sse_algorithms",
+        ]),
+        with_stats: false,
+      })
+    );
+
+    expect(blobs).toHaveLength(1);
+    const csv = await blobs[0].text();
+    expect(csv).toContain('"Name","Object Lock retention years","Policy has conditions","Notification topic names","SSE algorithms"');
+    expect(csv).toContain('"bucket-a","1","Yes","archive-topic, images-topic","aws:kms"');
   });
 
   it("groups bucket and owner quota picker options behind detail toggles", async () => {

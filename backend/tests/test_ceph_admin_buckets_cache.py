@@ -10,6 +10,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.models.bucket import (
+    BucketEncryptionConfiguration,
     BucketLifecycleConfig,
     BucketLoggingConfiguration,
     BucketNotificationConfiguration,
@@ -784,6 +785,136 @@ def test_ceph_admin_bucket_listing_notifications_include_and_filter(monkeypatch:
     )
 
     assert [item.name for item in filtered.items] == ["bucket-configured"]
+
+
+def test_ceph_admin_bucket_listing_notification_detail_filters_and_topic_column(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-alpha", "owner": "owner-a"},
+        {"name": "bucket-beta", "owner": "owner-b"},
+        {"name": "bucket-gamma", "owner": "owner-c"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=167, payload=payload)
+
+    notification_configs = {
+        "bucket-alpha": {
+            "TopicConfigurations": [
+                {
+                    "Id": "images-created",
+                    "TopicArn": "arn:aws:sns:us-east-1:123456789012:images-topic",
+                    "Events": ["s3:ObjectCreated:*"],
+                    "Filter": {
+                        "Key": {
+                            "FilterRules": [
+                                {"Name": "prefix", "Value": "images/"},
+                                {"Name": "suffix", "Value": ".jpg"},
+                            ]
+                        }
+                    },
+                }
+            ],
+            "QueueConfigurations": [
+                {
+                    "Id": "queue-logs",
+                    "QueueArn": "arn:aws:sqs:us-east-1:123456789012:audit-queue",
+                    "Events": ["s3:ObjectRemoved:*"],
+                }
+            ],
+            "EventBridgeConfiguration": {},
+        },
+        "bucket-beta": {
+            "TopicConfigurations": [
+                {
+                    "Id": "images-removed",
+                    "TopicArn": "arn:aws:sns:us-east-1:123456789012:images-topic",
+                    "Events": ["s3:ObjectRemoved:*"],
+                    "Filter": {
+                        "Key": {
+                            "FilterRules": [
+                                {"Name": "prefix", "Value": "images/"},
+                                {"Name": "suffix", "Value": ".jpg"},
+                            ]
+                        }
+                    },
+                }
+            ]
+        },
+        "bucket-gamma": {
+            "TopicConfigurations": [
+                {
+                    "Id": "logs-created",
+                    "TopicName": "audit-topic",
+                    "TopicArn": "arn:aws:sns:us-east-1:123456789012:topic-fallback",
+                    "Events": ["s3:ObjectCreated:*"],
+                    "Filter": {"Key": {"FilterRules": [{"Name": "prefix", "Value": "logs/"}]}},
+                }
+            ]
+        },
+    }
+
+    def fake_get_notifications(self, bucket_name, *_args, **_kwargs):  # noqa: ANN001, ARG001
+        return BucketNotificationConfiguration(configuration=notification_configs.get(bucket_name, {}))
+
+    monkeypatch.setattr(BucketsService, "get_bucket_notifications", fake_get_notifications)
+
+    included = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=["notification_topic_names"],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert included.items[0].column_details == {"notification_topic_names": ["images-topic"]}
+    assert included.items[1].column_details == {"notification_topic_names": ["images-topic"]}
+    assert included.items[2].column_details == {"notification_topic_names": ["audit-topic"]}
+
+    def filter_names(rules: list[dict]) -> list[str]:
+        response = buckets_router.list_buckets(
+            page=1,
+            page_size=25,
+            filter=None,
+            advanced_filter=json.dumps({"match": "all", "rules": rules}),
+            sort_by="name",
+            sort_dir="asc",
+            include=[],
+            with_stats=False,
+            ctx=ctx,
+        )
+        return [item.name for item in response.items]
+
+    assert filter_names([{"feature": "notifications", "param": "notification_topic_name", "op": "contains", "value": "images-topic"}]) == [
+        "bucket-alpha",
+        "bucket-beta",
+    ]
+    assert filter_names([{"feature": "notifications", "param": "notification_event", "op": "has", "value": "s3:ObjectCreated:*"}]) == [
+        "bucket-alpha",
+        "bucket-gamma",
+    ]
+    assert filter_names([{"feature": "notifications", "param": "notification_filter_prefix", "op": "has", "value": "logs/"}]) == [
+        "bucket-gamma"
+    ]
+    assert filter_names([{"feature": "notifications", "param": "notification_filter_suffix", "op": "has", "value": ".jpg"}]) == [
+        "bucket-alpha",
+        "bucket-beta",
+    ]
+    assert filter_names([{"feature": "notifications", "param": "notification_rule_type", "op": "has", "value": "queue"}]) == [
+        "bucket-alpha"
+    ]
+    assert filter_names([{"feature": "notifications", "param": "notification_eventbridge_present", "op": "eq", "value": True}]) == [
+        "bucket-alpha"
+    ]
+    assert filter_names(
+        [
+            {"feature": "notifications", "param": "notification_topic_name", "op": "contains", "value": "images-topic"},
+            {"feature": "notifications", "param": "notification_event", "op": "has", "value": "s3:ObjectCreated:*"},
+            {"feature": "notifications", "param": "notification_filter_prefix", "op": "has", "value": "images/"},
+            {"feature": "notifications", "param": "notification_filter_suffix", "op": "has", "value": ".jpg"},
+        ]
+    ) == ["bucket-alpha"]
 
 
 def test_ceph_admin_bucket_listing_tag_filter_matches_s3_tags(monkeypatch: pytest.MonkeyPatch):
@@ -1974,7 +2105,7 @@ def test_ceph_admin_bucket_listing_feature_param_filters_cover_non_lifecycle_fea
         if name == "bucket-a":
             return BucketProperties(
                 object_lock_enabled=True,
-                object_lock=BucketObjectLock(enabled=True, mode="GOVERNANCE", days=30),
+                object_lock=BucketObjectLock(enabled=True, mode="GOVERNANCE", days=30, years=1),
                 public_access_block=BucketPublicAccessBlock(
                     block_public_acls=True,
                     ignore_public_acls=True,
@@ -1986,7 +2117,7 @@ def test_ceph_admin_bucket_listing_feature_param_filters_cover_non_lifecycle_fea
             )
         return BucketProperties(
             object_lock_enabled=False,
-            object_lock=BucketObjectLock(enabled=False, mode="COMPLIANCE", days=5),
+            object_lock=BucketObjectLock(enabled=False, mode="COMPLIANCE", days=5, years=3),
             public_access_block=BucketPublicAccessBlock(
                 block_public_acls=False,
                 ignore_public_acls=False,
@@ -2006,9 +2137,11 @@ def test_ceph_admin_bucket_listing_feature_param_filters_cover_non_lifecycle_fea
         if name == "bucket-a":
             return BucketWebsiteConfiguration(
                 index_document="index.html",
+                error_document="error.html",
                 redirect_all_requests_to=BucketWebsiteRedirectAllRequestsTo(host_name="www.example.test"),
+                routing_rules=[{"Condition": {"KeyPrefixEquals": "docs/"}}],
             )
-        return BucketWebsiteConfiguration(index_document=None, redirect_all_requests_to=None)
+        return BucketWebsiteConfiguration(index_document=None, redirect_all_requests_to=None, routing_rules=[])
 
     def fake_get_policy(self, name: str, account):
         if name == "bucket-a":
@@ -2020,10 +2153,25 @@ def test_ceph_admin_bucket_listing_feature_param_filters_cover_non_lifecycle_fea
             }
         return {"Statement": [{"Effect": "Allow", "Action": "s3:GetObject", "Resource": "*"}]}
 
+    def fake_get_bucket_encryption(self, name: str, account):
+        if name == "bucket-a":
+            return BucketEncryptionConfiguration(
+                rules=[
+                    {
+                        "ApplyServerSideEncryptionByDefault": {
+                            "SSEAlgorithm": "aws:kms",
+                            "KMSMasterKeyID": "arn:aws:kms:region:111:key/audit-key",
+                        }
+                    }
+                ]
+            )
+        return BucketEncryptionConfiguration(rules=[{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}])
+
     monkeypatch.setattr(BucketsService, "get_bucket_properties", fake_get_bucket_properties)
     monkeypatch.setattr(BucketsService, "get_bucket_logging", fake_get_bucket_logging)
     monkeypatch.setattr(BucketsService, "get_bucket_website", fake_get_bucket_website)
     monkeypatch.setattr(BucketsService, "get_policy", fake_get_policy)
+    monkeypatch.setattr(BucketsService, "get_bucket_encryption", fake_get_bucket_encryption)
 
     advanced_filter = json.dumps(
         {
@@ -2031,15 +2179,23 @@ def test_ceph_admin_bucket_listing_feature_param_filters_cover_non_lifecycle_fea
             "rules": [
                 {"feature": "object_lock", "param": "object_lock_mode", "op": "eq", "value": "GOVERNANCE"},
                 {"feature": "object_lock", "param": "object_lock_retention_days", "op": "gte", "value": 30},
+                {"feature": "object_lock", "param": "object_lock_retention_years", "op": "eq", "value": 1},
                 {"feature": "block_public_access", "param": "bpa_block_public_acls", "op": "eq", "value": True},
                 {"feature": "cors", "param": "cors_allowed_method", "op": "has", "value": "GET"},
                 {"feature": "cors", "param": "cors_allowed_origin", "op": "has", "value": "https://example.test"},
                 {"feature": "access_logging", "param": "logging_enabled", "op": "eq", "value": True},
                 {"feature": "access_logging", "param": "logging_target_bucket", "op": "eq", "value": "audit-bucket"},
+                {"feature": "access_logging", "param": "logging_target_prefix", "op": "contains", "value": "logs/"},
                 {"feature": "static_website", "param": "website_index_present", "op": "eq", "value": True},
+                {"feature": "static_website", "param": "website_index_document", "op": "eq", "value": "index.html"},
+                {"feature": "static_website", "param": "website_error_document", "op": "eq", "value": "error.html"},
                 {"feature": "static_website", "param": "website_redirect_host_present", "op": "eq", "value": True},
+                {"feature": "static_website", "param": "website_redirect_host", "op": "contains", "value": "example.test"},
+                {"feature": "static_website", "param": "website_routing_rule_count", "op": "gte", "value": 1},
                 {"feature": "bucket_policy", "param": "policy_statement_count", "op": "gte", "value": 2},
                 {"feature": "bucket_policy", "param": "policy_has_conditions", "op": "eq", "value": True},
+                {"feature": "server_side_encryption", "param": "sse_algorithm", "op": "eq", "value": "aws:kms"},
+                {"feature": "server_side_encryption", "param": "sse_kms_key_id", "op": "contains", "value": "audit-key"},
             ],
         }
     )
@@ -2057,6 +2213,212 @@ def test_ceph_admin_bucket_listing_feature_param_filters_cover_non_lifecycle_fea
     )
 
     assert [item.name for item in response.items] == ["bucket-a"]
+
+
+def test_ceph_admin_bucket_listing_cors_combined_filters_match_same_rule(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=206, payload=payload)
+
+    def fake_get_bucket_properties(self, name: str, account):
+        cors_rules = (
+            [
+                {"AllowedMethods": ["GET"], "AllowedOrigins": ["https://wrong.test"]},
+                {"AllowedMethods": ["PUT"], "AllowedOrigins": ["https://example.test"]},
+            ]
+            if name == "bucket-a"
+            else [{"AllowedMethods": ["GET", "HEAD"], "AllowedOrigins": ["https://example.test"]}]
+        )
+        return BucketProperties(lifecycle_rules=[], cors_rules=cors_rules)
+
+    monkeypatch.setattr(BucketsService, "get_bucket_properties", fake_get_bucket_properties)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "cors", "param": "cors_allowed_method", "op": "has", "value": "GET"},
+                {"feature": "cors", "param": "cors_allowed_origin", "op": "has", "value": "https://example.test"},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-b"]
+
+
+def test_ceph_admin_bucket_listing_sse_combined_filters_match_same_rule(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=207, payload=payload)
+
+    def fake_get_bucket_encryption(self, name: str, account):
+        rules = (
+            [
+                {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "aws:kms", "KMSMasterKeyID": "other-key"}},
+                {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}},
+            ]
+            if name == "bucket-a"
+            else [
+                {
+                    "ApplyServerSideEncryptionByDefault": {
+                        "SSEAlgorithm": "aws:kms",
+                        "KMSMasterKeyID": "target-key",
+                    }
+                }
+            ]
+        )
+        return BucketEncryptionConfiguration(rules=rules)
+
+    monkeypatch.setattr(BucketsService, "get_bucket_encryption", fake_get_bucket_encryption)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "server_side_encryption", "param": "sse_algorithm", "op": "eq", "value": "aws:kms"},
+                {"feature": "server_side_encryption", "param": "sse_kms_key_id", "op": "contains", "value": "target-key"},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-b"]
+
+
+def test_ceph_admin_bucket_listing_includes_audit_feature_column_details(monkeypatch: pytest.MonkeyPatch):
+    payload = [{"name": "bucket-a", "owner": "owner-a"}]
+    ctx, _ = _build_ctx(endpoint_id=208, payload=payload)
+
+    def fake_get_bucket_properties(self, name: str, account):  # noqa: ARG001
+        return BucketProperties(
+            object_lock_enabled=True,
+            object_lock=BucketObjectLock(enabled=True, mode="GOVERNANCE", days=30, years=1),
+            public_access_block=BucketPublicAccessBlock(
+                block_public_acls=True,
+                ignore_public_acls=False,
+                block_public_policy=True,
+                restrict_public_buckets=False,
+            ),
+            lifecycle_rules=[],
+            cors_rules=[
+                {"AllowedMethods": ["GET", "HEAD"], "AllowedOrigins": ["https://example.test"]},
+                {"AllowedMethods": ["PUT"], "AllowedOrigins": ["https://upload.test"]},
+            ],
+        )
+
+    def fake_get_bucket_logging(self, name: str, account):  # noqa: ARG001
+        return BucketLoggingConfiguration(enabled=True, target_bucket="audit-bucket", target_prefix="logs/")
+
+    def fake_get_bucket_website(self, name: str, account):  # noqa: ARG001
+        return BucketWebsiteConfiguration(
+            index_document="index.html",
+            error_document="error.html",
+            redirect_all_requests_to=BucketWebsiteRedirectAllRequestsTo(host_name="www.example.test"),
+            routing_rules=[{"Condition": {"KeyPrefixEquals": "docs/"}}],
+        )
+
+    def fake_get_policy(self, name: str, account):  # noqa: ARG001
+        return {"Statement": [{"Effect": "Allow"}, {"Effect": "Deny", "Condition": {"Bool": {"aws:SecureTransport": "false"}}}]}
+
+    def fake_get_bucket_encryption(self, name: str, account):  # noqa: ARG001
+        return BucketEncryptionConfiguration(
+            rules=[
+                {
+                    "ApplyServerSideEncryptionByDefault": {
+                        "SSEAlgorithm": "aws:kms",
+                        "KMSMasterKeyID": "arn:aws:kms:region:111:key/audit-key",
+                    }
+                },
+                {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}},
+            ]
+        )
+
+    monkeypatch.setattr(BucketsService, "get_bucket_properties", fake_get_bucket_properties)
+    monkeypatch.setattr(BucketsService, "get_bucket_logging", fake_get_bucket_logging)
+    monkeypatch.setattr(BucketsService, "get_bucket_website", fake_get_bucket_website)
+    monkeypatch.setattr(BucketsService, "get_policy", fake_get_policy)
+    monkeypatch.setattr(BucketsService, "get_bucket_encryption", fake_get_bucket_encryption)
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=[
+            "object_lock_mode",
+            "object_lock_retention_days",
+            "object_lock_retention_years",
+            "bpa_block_public_acls",
+            "bpa_ignore_public_acls",
+            "bpa_block_public_policy",
+            "bpa_restrict_public_buckets",
+            "cors_allowed_methods",
+            "cors_allowed_origins",
+            "logging_target_bucket",
+            "logging_target_prefix",
+            "website_index_document",
+            "website_error_document",
+            "website_redirect_host",
+            "website_routing_rule_count",
+            "policy_statement_count",
+            "policy_has_conditions",
+            "sse_algorithms",
+            "sse_kms_key_ids",
+        ],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert response.items[0].column_details == {
+        "object_lock_mode": "GOVERNANCE",
+        "object_lock_retention_days": 30,
+        "object_lock_retention_years": 1,
+        "bpa_block_public_acls": True,
+        "bpa_ignore_public_acls": False,
+        "bpa_block_public_policy": True,
+        "bpa_restrict_public_buckets": False,
+        "cors_allowed_methods": ["GET", "HEAD", "PUT"],
+        "cors_allowed_origins": ["https://example.test", "https://upload.test"],
+        "logging_target_bucket": "audit-bucket",
+        "logging_target_prefix": "logs/",
+        "website_index_document": "index.html",
+        "website_error_document": "error.html",
+        "website_redirect_host": "www.example.test",
+        "website_routing_rule_count": 1,
+        "policy_statement_count": 2,
+        "policy_has_conditions": True,
+        "sse_algorithms": ["AES256", "aws:kms"],
+        "sse_kms_key_ids": ["arn:aws:kms:region:111:key/audit-key"],
+    }
 
 
 def test_ceph_admin_bucket_listing_advanced_progress_is_monotonic():

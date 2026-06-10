@@ -232,6 +232,7 @@ _FEATURE_PARAM_SOURCE_BY_PARAM: dict[str, str] = {
     "lifecycle_abort_multipart_days": "lifecycle",
     "object_lock_mode": "props",
     "object_lock_retention_days": "props",
+    "object_lock_retention_years": "props",
     "bpa_block_public_acls": "props",
     "bpa_ignore_public_acls": "props",
     "bpa_block_public_policy": "props",
@@ -240,10 +241,24 @@ _FEATURE_PARAM_SOURCE_BY_PARAM: dict[str, str] = {
     "cors_allowed_origin": "props",
     "logging_enabled": "logging",
     "logging_target_bucket": "logging",
+    "logging_target_prefix": "logging",
     "website_index_present": "website",
+    "website_index_document": "website",
+    "website_error_document": "website",
     "website_redirect_host_present": "website",
+    "website_redirect_host": "website",
+    "website_routing_rule_count": "website",
     "policy_statement_count": "policy",
     "policy_has_conditions": "policy",
+    "notification_rule_id": "notifications",
+    "notification_rule_type": "notifications",
+    "notification_topic_name": "notifications",
+    "notification_event": "notifications",
+    "notification_filter_prefix": "notifications",
+    "notification_filter_suffix": "notifications",
+    "notification_eventbridge_present": "notifications",
+    "sse_algorithm": "encryption",
+    "sse_kms_key_id": "encryption",
 }
 _COLUMN_DETAIL_LIFECYCLE_KEYS = {
     "lifecycle_expiration_days",
@@ -251,6 +266,45 @@ _COLUMN_DETAIL_LIFECYCLE_KEYS = {
     "lifecycle_transition_days",
     "lifecycle_abort_multipart_days",
 }
+_COLUMN_DETAIL_OBJECT_LOCK_KEYS = {
+    "object_lock_mode",
+    "object_lock_retention_days",
+    "object_lock_retention_years",
+}
+_COLUMN_DETAIL_BPA_KEYS = {
+    "bpa_block_public_acls",
+    "bpa_ignore_public_acls",
+    "bpa_block_public_policy",
+    "bpa_restrict_public_buckets",
+}
+_COLUMN_DETAIL_CORS_KEYS = {"cors_allowed_methods", "cors_allowed_origins"}
+_COLUMN_DETAIL_LOGGING_KEYS = {"logging_target_bucket", "logging_target_prefix"}
+_COLUMN_DETAIL_WEBSITE_KEYS = {
+    "website_index_document",
+    "website_error_document",
+    "website_redirect_host",
+    "website_routing_rule_count",
+}
+_COLUMN_DETAIL_POLICY_KEYS = {"policy_statement_count", "policy_has_conditions"}
+_COLUMN_DETAIL_NOTIFICATION_KEYS = {"notification_topic_names"}
+_COLUMN_DETAIL_SSE_KEYS = {"sse_algorithms", "sse_kms_key_ids"}
+_COLUMN_DETAIL_PROPS_KEYS = _COLUMN_DETAIL_OBJECT_LOCK_KEYS | _COLUMN_DETAIL_BPA_KEYS | _COLUMN_DETAIL_CORS_KEYS
+_COLUMN_DETAIL_KEYS = (
+    _COLUMN_DETAIL_LIFECYCLE_KEYS
+    | _COLUMN_DETAIL_OBJECT_LOCK_KEYS
+    | _COLUMN_DETAIL_BPA_KEYS
+    | _COLUMN_DETAIL_CORS_KEYS
+    | _COLUMN_DETAIL_LOGGING_KEYS
+    | _COLUMN_DETAIL_WEBSITE_KEYS
+    | _COLUMN_DETAIL_POLICY_KEYS
+    | _COLUMN_DETAIL_NOTIFICATION_KEYS
+    | _COLUMN_DETAIL_SSE_KEYS
+)
+_NOTIFICATION_CONFIGURATION_SPECS = (
+    ("topic", "TopicConfigurations", "TopicArn"),
+    ("queue", "QueueConfigurations", "QueueArn"),
+    ("lambda", "LambdaFunctionConfigurations", "LambdaFunctionArn"),
+)
 _OWNER_QUOTA_FIELDS = {"owner_quota_max_size_bytes", "owner_quota_max_objects"}
 _OWNER_STATUS_FIELDS = {"owner_suspended"}
 _OWNER_USAGE_FIELDS = {"owner_used_bytes", "owner_object_count"}
@@ -1077,6 +1131,376 @@ def _match_lifecycle_param_rules_all(
     return positive_ok and forbidden_ok
 
 
+def _string_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _notification_rule_entries(configuration: object) -> list[tuple[str, dict]]:
+    if not isinstance(configuration, dict):
+        return []
+    entries: list[tuple[str, dict]] = []
+    for entry_type, config_key, _destination_key in _NOTIFICATION_CONFIGURATION_SPECS:
+        raw_entries = configuration.get(config_key)
+        if not isinstance(raw_entries, list):
+            continue
+        entries.extend((entry_type, entry) for entry in raw_entries if isinstance(entry, dict))
+    return entries
+
+
+def _extract_notification_rule_id(entry: dict) -> str | None:
+    for key in ("Id", "ID", "id"):
+        if (value := _string_or_none(entry.get(key))) is not None:
+            return value
+    return None
+
+
+def _last_notification_identifier(value: str) -> str:
+    tail = value.rsplit(":", 1)[-1]
+    return tail.rsplit("/", 1)[-1] or tail
+
+
+def _extract_notification_topic_display_name(entry: dict) -> str | None:
+    for key in ("Topic", "TopicName", "topic", "topic_name", "EndpointTopic"):
+        if (value := _string_or_none(entry.get(key))) is not None:
+            return value
+    topic_arn = _string_or_none(entry.get("TopicArn"))
+    if not topic_arn:
+        return None
+    return _last_notification_identifier(topic_arn)
+
+
+def _extract_notification_topic_match_values(entry: dict) -> list[str]:
+    values: list[str] = []
+    for key in ("Topic", "TopicName", "topic", "topic_name", "EndpointTopic"):
+        if (value := _string_or_none(entry.get(key))) is not None:
+            values.append(value)
+    topic_arn = _string_or_none(entry.get("TopicArn"))
+    if topic_arn:
+        values.append(topic_arn)
+        values.append(_last_notification_identifier(topic_arn))
+    return _dedupe_sorted_text_values(values)
+
+
+def _extract_notification_events(entry: dict) -> list[str]:
+    raw_events = entry.get("Events")
+    if not isinstance(raw_events, list):
+        raw_events = entry.get("events")
+    if isinstance(raw_events, list):
+        return [value for item in raw_events if (value := _string_or_none(item)) is not None]
+    value = _string_or_none(raw_events)
+    return [value] if value else []
+
+
+def _extract_notification_filter_values(entry: dict, filter_name: str) -> list[str]:
+    filters: list[dict] = []
+    raw_filter = entry.get("Filter")
+    if not isinstance(raw_filter, dict):
+        raw_filter = entry.get("filter")
+    key_filter = raw_filter.get("Key") if isinstance(raw_filter, dict) else None
+    if not isinstance(key_filter, dict) and isinstance(raw_filter, dict):
+        key_filter = raw_filter.get("key")
+    if isinstance(key_filter, dict):
+        raw_rules = key_filter.get("FilterRules")
+        if not isinstance(raw_rules, list):
+            raw_rules = key_filter.get("filterRules")
+        if isinstance(raw_rules, list):
+            filters.extend(item for item in raw_rules if isinstance(item, dict))
+    raw_rules = entry.get("FilterRules")
+    if not isinstance(raw_rules, list):
+        raw_rules = entry.get("filterRules")
+    if isinstance(raw_rules, list):
+        filters.extend(item for item in raw_rules if isinstance(item, dict))
+
+    values: list[str] = []
+    for item in filters:
+        name = _string_or_none(item.get("Name") or item.get("name"))
+        if name is None or name.lower() != filter_name:
+            continue
+        if (value := _string_or_none(item.get("Value") or item.get("value"))) is not None:
+            values.append(value)
+    return _dedupe_sorted_text_values(values)
+
+
+def _dedupe_sorted_text_values(values: list[str]) -> list[str]:
+    unique: dict[str, str] = {}
+    for value in values:
+        text = value.strip()
+        if not text:
+            continue
+        unique.setdefault(text.lower(), text)
+    return sorted(unique.values(), key=lambda item: item.lower())
+
+
+def _match_text_candidates(values: list[str], op: str, right_raw: object) -> bool:
+    if op == "neq":
+        return not any(_match_text_value(value, "eq", right_raw) for value in values)
+    return any(_match_text_value(value, op, right_raw) for value in values)
+
+
+def _match_presence_values(values: list[str], op: str, right_raw: object) -> bool:
+    if op == "has":
+        return any(_match_text_value(value, "eq", right_raw) for value in values)
+    if op == "has_not":
+        return not any(_match_text_value(value, "eq", right_raw) for value in values)
+    return False
+
+
+def _text_list_from_keys(entry: dict, keys: tuple[str, ...]) -> list[str]:
+    for key in keys:
+        raw = entry.get(key)
+        if raw is None:
+            continue
+        if isinstance(raw, list):
+            return [value for item in raw if (value := _string_or_none(item)) is not None]
+        if (value := _string_or_none(raw)) is not None:
+            return [value]
+    return []
+
+
+def _extract_cors_rule_values(entry: dict, param: str) -> list[str]:
+    if param == "cors_allowed_method":
+        return _text_list_from_keys(entry, ("AllowedMethods", "allowedMethods", "allowed_methods", "AllowedMethod"))
+    if param == "cors_allowed_origin":
+        return _text_list_from_keys(entry, ("AllowedOrigins", "allowedOrigins", "allowed_origins", "AllowedOrigin"))
+    return []
+
+
+def _extract_cors_allowed_values(rules: object, param: str) -> list[str]:
+    if not isinstance(rules, list):
+        return []
+    values: list[str] = []
+    for entry in rules:
+        if isinstance(entry, dict):
+            values.extend(_extract_cors_rule_values(entry, param))
+    return _dedupe_sorted_text_values(values)
+
+
+def _cors_rule_matches_param(
+    entry: dict,
+    rule: CephAdminBucketFilterRule,
+    *,
+    force_presence_positive: bool = False,
+) -> bool:
+    op = (rule.op or "").strip().lower()
+    if force_presence_positive and op == "has_not":
+        op = "has"
+    values = _extract_cors_rule_values(entry, rule.param or "")
+    if op in {"has", "has_not"}:
+        return _match_presence_values(values, op, rule.value)
+    return _match_text_candidates(values, op, rule.value)
+
+
+def _match_cors_param_rule_individual(rule: CephAdminBucketFilterRule, cors_rules: list[dict]) -> bool:
+    op = (rule.op or "").strip().lower()
+    if op == "has_not":
+        return not any(_cors_rule_matches_param(item, rule, force_presence_positive=True) for item in cors_rules)
+    matched_any = any(_cors_rule_matches_param(item, rule) for item in cors_rules)
+    return matched_any if _feature_param_quantifier(rule) == "any" else (not matched_any)
+
+
+def _match_cors_param_rules_all(
+    rules: list[CephAdminBucketFilterRule],
+    cors_rules: list[dict],
+) -> bool:
+    positive_rules: list[CephAdminBucketFilterRule] = []
+    forbidden_rules: list[CephAdminBucketFilterRule] = []
+    for rule in rules:
+        op = (rule.op or "").strip().lower()
+        if op == "has_not" or _feature_param_quantifier(rule) == "none":
+            forbidden_rules.append(rule)
+        else:
+            positive_rules.append(rule)
+
+    positive_ok = True
+    if positive_rules:
+        positive_ok = any(all(_cors_rule_matches_param(item, rule) for rule in positive_rules) for item in cors_rules)
+
+    forbidden_ok = True
+    for rule in forbidden_rules:
+        op = (rule.op or "").strip().lower()
+        if op == "has_not":
+            forbidden_match = any(_cors_rule_matches_param(item, rule, force_presence_positive=True) for item in cors_rules)
+        else:
+            forbidden_match = any(_cors_rule_matches_param(item, rule) for item in cors_rules)
+        if forbidden_match:
+            forbidden_ok = False
+            break
+    return positive_ok and forbidden_ok
+
+
+def _encryption_rule_entries(configuration: object) -> list[dict]:
+    if isinstance(configuration, BucketEncryptionConfiguration):
+        raw_rules = configuration.rules
+    elif isinstance(configuration, list):
+        raw_rules = configuration
+    else:
+        raw_rules = []
+    return [item for item in raw_rules if isinstance(item, dict)]
+
+
+def _extract_sse_default(entry: dict) -> dict:
+    raw = entry.get("ApplyServerSideEncryptionByDefault")
+    if not isinstance(raw, dict):
+        raw = entry.get("applyServerSideEncryptionByDefault")
+    if not isinstance(raw, dict):
+        raw = entry.get("apply_server_side_encryption_by_default")
+    return raw if isinstance(raw, dict) else {}
+
+
+def _extract_sse_rule_values(entry: dict, param: str) -> list[str]:
+    default = _extract_sse_default(entry)
+    if param == "sse_algorithm":
+        return _text_list_from_keys(default, ("SSEAlgorithm", "sseAlgorithm", "sse_algorithm"))
+    if param == "sse_kms_key_id":
+        return _text_list_from_keys(default, ("KMSMasterKeyID", "kmsMasterKeyID", "kms_master_key_id", "KMSKeyId"))
+    return []
+
+
+def _extract_sse_values(configuration: object, param: str) -> list[str]:
+    values: list[str] = []
+    for entry in _encryption_rule_entries(configuration):
+        values.extend(_extract_sse_rule_values(entry, param))
+    return _dedupe_sorted_text_values(values)
+
+
+def _sse_rule_matches_param(entry: dict, rule: CephAdminBucketFilterRule) -> bool:
+    values = _extract_sse_rule_values(entry, rule.param or "")
+    return _match_text_candidates(values, (rule.op or "").strip().lower(), rule.value)
+
+
+def _match_sse_param_rule_individual(rule: CephAdminBucketFilterRule, configuration: object) -> bool:
+    entries = _encryption_rule_entries(configuration)
+    matched_any = any(_sse_rule_matches_param(item, rule) for item in entries)
+    return matched_any if _feature_param_quantifier(rule) == "any" else (not matched_any)
+
+
+def _match_sse_param_rules_all(
+    rules: list[CephAdminBucketFilterRule],
+    configuration: object,
+) -> bool:
+    entries = _encryption_rule_entries(configuration)
+    positive_rules: list[CephAdminBucketFilterRule] = []
+    forbidden_rules: list[CephAdminBucketFilterRule] = []
+    for rule in rules:
+        if _feature_param_quantifier(rule) == "none":
+            forbidden_rules.append(rule)
+        else:
+            positive_rules.append(rule)
+
+    positive_ok = True
+    if positive_rules:
+        positive_ok = any(all(_sse_rule_matches_param(item, rule) for rule in positive_rules) for item in entries)
+
+    forbidden_ok = True
+    for rule in forbidden_rules:
+        if any(_sse_rule_matches_param(item, rule) for item in entries):
+            forbidden_ok = False
+            break
+    return positive_ok and forbidden_ok
+
+
+def _notification_rule_matches_param(
+    entry_type: str,
+    entry: dict,
+    rule: CephAdminBucketFilterRule,
+    *,
+    force_presence_positive: bool = False,
+) -> bool:
+    param = rule.param
+    op = (rule.op or "").strip().lower()
+    if force_presence_positive and op == "has_not":
+        op = "has"
+    if param == "notification_rule_id":
+        return _match_text_value(_extract_notification_rule_id(entry), op, rule.value)
+    if param == "notification_rule_type":
+        return _match_presence_values([entry_type], op, rule.value)
+    if param == "notification_topic_name":
+        if entry_type != "topic":
+            return False
+        return _match_text_candidates(_extract_notification_topic_match_values(entry), op, rule.value)
+    if param == "notification_event":
+        return _match_presence_values(_extract_notification_events(entry), op, rule.value)
+    if param == "notification_filter_prefix":
+        return _match_presence_values(_extract_notification_filter_values(entry, "prefix"), op, rule.value)
+    if param == "notification_filter_suffix":
+        return _match_presence_values(_extract_notification_filter_values(entry, "suffix"), op, rule.value)
+    return False
+
+
+def _match_notification_param_rule_individual(rule: CephAdminBucketFilterRule, configuration: object) -> bool:
+    entries = _notification_rule_entries(configuration)
+    op = (rule.op or "").strip().lower()
+    if op == "has_not":
+        return not any(
+            _notification_rule_matches_param(entry_type, entry, rule, force_presence_positive=True)
+            for entry_type, entry in entries
+        )
+    matched_any = any(_notification_rule_matches_param(entry_type, entry, rule) for entry_type, entry in entries)
+    return matched_any if _feature_param_quantifier(rule) == "any" else (not matched_any)
+
+
+def _match_notification_param_rules_all(
+    rules: list[CephAdminBucketFilterRule],
+    configuration: object,
+) -> bool:
+    entries = _notification_rule_entries(configuration)
+    positive_rules: list[CephAdminBucketFilterRule] = []
+    forbidden_rules: list[CephAdminBucketFilterRule] = []
+    for rule in rules:
+        op = (rule.op or "").strip().lower()
+        if op == "has_not" or _feature_param_quantifier(rule) == "none":
+            forbidden_rules.append(rule)
+        else:
+            positive_rules.append(rule)
+
+    positive_ok = True
+    if positive_rules:
+        positive_ok = any(
+            all(_notification_rule_matches_param(entry_type, entry, rule) for rule in positive_rules)
+            for entry_type, entry in entries
+        )
+
+    forbidden_ok = True
+    for rule in forbidden_rules:
+        op = (rule.op or "").strip().lower()
+        if op == "has_not":
+            forbidden_match = any(
+                _notification_rule_matches_param(entry_type, entry, rule, force_presence_positive=True)
+                for entry_type, entry in entries
+            )
+        else:
+            forbidden_match = any(
+                _notification_rule_matches_param(entry_type, entry, rule)
+                for entry_type, entry in entries
+            )
+        if forbidden_match:
+            forbidden_ok = False
+            break
+    return positive_ok and forbidden_ok
+
+
+def _extract_notification_eventbridge_present(configuration: object) -> bool | None:
+    if not isinstance(configuration, dict):
+        return None
+    eventbridge = configuration.get("EventBridgeConfiguration")
+    if eventbridge is None:
+        eventbridge = configuration.get("eventBridgeConfiguration")
+    return isinstance(eventbridge, dict)
+
+
+def _extract_notification_topic_names(configuration: object) -> list[str]:
+    names: list[str] = []
+    for entry_type, entry in _notification_rule_entries(configuration):
+        if entry_type != "topic":
+            continue
+        if (name := _extract_notification_topic_display_name(entry)) is not None:
+            names.append(name)
+    return _dedupe_sorted_text_values(names)
+
+
 def _extract_policy_statement_summary(policy: dict | None) -> tuple[int, bool]:
     if not isinstance(policy, dict):
         return 0, False
@@ -1119,19 +1543,22 @@ def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[st
     }:
         lifecycle_rules = source_data if isinstance(source_data, list) else []
         return _match_lifecycle_param_rule_individual(rule, [item for item in lifecycle_rules if isinstance(item, dict)])
+    if param in {
+        "notification_rule_id",
+        "notification_rule_type",
+        "notification_topic_name",
+        "notification_event",
+        "notification_filter_prefix",
+        "notification_filter_suffix",
+    }:
+        return _match_notification_param_rule_individual(rule, source_data)
+    if param in {"sse_algorithm", "sse_kms_key_id"}:
+        return _match_sse_param_rule_individual(rule, source_data)
 
     quantifier = _feature_param_quantifier(rule)
 
     def apply_scalar(result: bool) -> bool:
         return result if quantifier == "any" else (not result)
-
-    def apply_sequence(values: list[str], text_op: str) -> bool:
-        if text_op == "has":
-            return any(_match_text_value(value, "eq", rule.value) for value in values)
-        if text_op == "has_not":
-            return not any(_match_text_value(value, "eq", rule.value) for value in values)
-        matched_any = any(_match_text_value(value, text_op, rule.value) for value in values)
-        return matched_any if quantifier == "any" else (not matched_any)
 
     if not isinstance(source_data, BucketProperties) and source == "props":
         return False
@@ -1145,6 +1572,9 @@ def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[st
         if param == "object_lock_retention_days":
             days = props.object_lock.days if props.object_lock else None
             return apply_scalar(_match_numeric_value(_coerce_number(days), op, rule.value))
+        if param == "object_lock_retention_years":
+            years = props.object_lock.years if props.object_lock else None
+            return apply_scalar(_match_numeric_value(_coerce_number(years), op, rule.value))
         if param == "bpa_block_public_acls":
             value = props.public_access_block.block_public_acls if props.public_access_block else None
             return apply_scalar(_match_bool_value(value, op, rule.value))
@@ -1158,45 +1588,47 @@ def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[st
             value = props.public_access_block.restrict_public_buckets if props.public_access_block else None
             return apply_scalar(_match_bool_value(value, op, rule.value))
         if param in {"cors_allowed_method", "cors_allowed_origin"}:
-            field_name = "AllowedMethods" if param == "cors_allowed_method" else "AllowedOrigins"
-            collected: list[str] = []
             rules = props.cors_rules if isinstance(props.cors_rules, list) else []
-            for cors_rule in rules:
-                if not isinstance(cors_rule, dict):
-                    continue
-                values = cors_rule.get(field_name)
-                if not isinstance(values, list):
-                    continue
-                for item in values:
-                    text = str(item or "").strip()
-                    if text:
-                        collected.append(text)
-            return apply_sequence(collected, op)
+            return _match_cors_param_rule_individual(rule, [item for item in rules if isinstance(item, dict)])
         return False
 
     if source == "logging":
         if not isinstance(source_data, BucketLoggingConfiguration):
             return False
         target_bucket = (source_data.target_bucket or "").strip() if source_data.target_bucket else ""
+        target_prefix = (source_data.target_prefix or "").strip() if source_data.target_prefix else ""
         if param == "logging_enabled":
             enabled = bool(source_data.enabled and target_bucket)
             return apply_scalar(_match_bool_value(enabled, op, rule.value))
         if param == "logging_target_bucket":
             return apply_scalar(_match_text_value(target_bucket or None, op, rule.value))
+        if param == "logging_target_prefix":
+            return apply_scalar(_match_text_value(target_prefix or None, op, rule.value))
         return False
 
     if source == "website":
         if not isinstance(source_data, BucketWebsiteConfiguration):
             return False
+        index_document = (source_data.index_document or "").strip() if source_data.index_document else ""
+        error_document = (source_data.error_document or "").strip() if source_data.error_document else ""
         redirect_host = ""
         if source_data.redirect_all_requests_to and source_data.redirect_all_requests_to.host_name:
             redirect_host = source_data.redirect_all_requests_to.host_name.strip()
+        routing_rules = source_data.routing_rules if isinstance(source_data.routing_rules, list) else []
         if param == "website_index_present":
-            index_present = bool((source_data.index_document or "").strip())
+            index_present = bool(index_document)
             return apply_scalar(_match_bool_value(index_present, op, rule.value))
+        if param == "website_index_document":
+            return apply_scalar(_match_text_value(index_document or None, op, rule.value))
+        if param == "website_error_document":
+            return apply_scalar(_match_text_value(error_document or None, op, rule.value))
         if param == "website_redirect_host_present":
             redirect_present = bool(redirect_host)
             return apply_scalar(_match_bool_value(redirect_present, op, rule.value))
+        if param == "website_redirect_host":
+            return apply_scalar(_match_text_value(redirect_host or None, op, rule.value))
+        if param == "website_routing_rule_count":
+            return apply_scalar(_match_numeric_value(float(len(routing_rules)), op, rule.value))
         return False
 
     if source == "policy":
@@ -1206,6 +1638,11 @@ def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[st
             return apply_scalar(_match_numeric_value(float(statement_count), op, rule.value))
         if param == "policy_has_conditions":
             return apply_scalar(_match_bool_value(has_conditions, op, rule.value))
+        return False
+
+    if source == "notifications":
+        if param == "notification_eventbridge_present":
+            return apply_scalar(_match_bool_value(_extract_notification_eventbridge_present(source_data), op, rule.value))
         return False
 
     return False
@@ -1219,7 +1656,21 @@ def _match_feature_param_rules(
     if not rules:
         return True
     lifecycle_rules = [rule for rule in rules if rule.feature == "lifecycle_rules"]
-    non_lifecycle_rules = [rule for rule in rules if rule.feature != "lifecycle_rules"]
+    cors_rules = [rule for rule in rules if rule.feature == "cors" and rule.param in {"cors_allowed_method", "cors_allowed_origin"}]
+    notification_entry_rules = [
+        rule
+        for rule in rules
+        if rule.feature == "notifications" and rule.param != "notification_eventbridge_present"
+    ]
+    sse_rules = [rule for rule in rules if rule.feature == "server_side_encryption"]
+    non_grouped_rules = [
+        rule
+        for rule in rules
+        if rule.feature != "lifecycle_rules"
+        and not (rule.feature == "cors" and rule.param in {"cors_allowed_method", "cors_allowed_origin"})
+        and not (rule.feature == "notifications" and rule.param != "notification_eventbridge_present")
+        and rule.feature != "server_side_encryption"
+    ]
     results: list[bool] = []
 
     if lifecycle_rules:
@@ -1236,7 +1687,46 @@ def _match_feature_param_rules(
             else:
                 results.extend(_match_lifecycle_param_rule_individual(rule, normalized) for rule in lifecycle_rules)
 
-    results.extend(_match_feature_param_rule(rule, snapshot) for rule in non_lifecycle_rules)
+    if cors_rules:
+        props_source = snapshot.get("props", _FEATURE_PARAM_UNAVAILABLE)
+        if props_source is _FEATURE_PARAM_UNAVAILABLE or not isinstance(props_source, BucketProperties):
+            cors_result = False if match_mode == "all" else False
+            if match_mode == "all":
+                return False
+            results.append(cors_result)
+        else:
+            raw_rules = props_source.cors_rules if isinstance(props_source.cors_rules, list) else []
+            normalized = [item for item in raw_rules if isinstance(item, dict)]
+            if match_mode == "all":
+                results.append(_match_cors_param_rules_all(cors_rules, normalized))
+            else:
+                results.extend(_match_cors_param_rule_individual(rule, normalized) for rule in cors_rules)
+
+    if notification_entry_rules:
+        notification_source = snapshot.get("notifications", _FEATURE_PARAM_UNAVAILABLE)
+        if notification_source is _FEATURE_PARAM_UNAVAILABLE or not isinstance(notification_source, dict):
+            notification_result = False if match_mode == "all" else False
+            if match_mode == "all":
+                return False
+            results.append(notification_result)
+        elif match_mode == "all":
+            results.append(_match_notification_param_rules_all(notification_entry_rules, notification_source))
+        else:
+            results.extend(_match_notification_param_rule_individual(rule, notification_source) for rule in notification_entry_rules)
+
+    if sse_rules:
+        encryption_source = snapshot.get("encryption", _FEATURE_PARAM_UNAVAILABLE)
+        if encryption_source is _FEATURE_PARAM_UNAVAILABLE:
+            sse_result = False if match_mode == "all" else False
+            if match_mode == "all":
+                return False
+            results.append(sse_result)
+        elif match_mode == "all":
+            results.append(_match_sse_param_rules_all(sse_rules, encryption_source))
+        else:
+            results.extend(_match_sse_param_rule_individual(rule, encryption_source) for rule in sse_rules)
+
+    results.extend(_match_feature_param_rule(rule, snapshot) for rule in non_grouped_rules)
     return all(results) if match_mode == "all" else any(results)
 
 
@@ -1283,6 +1773,19 @@ def _load_feature_param_snapshot_for_bucket(
             snapshot["policy"] = service.get_policy(bucket.name, account)
         except RuntimeError:
             snapshot["policy"] = _FEATURE_PARAM_UNAVAILABLE
+    if "notifications" in required_sources:
+        if not account_sns_feature_enabled(account):
+            snapshot["notifications"] = _FEATURE_PARAM_UNAVAILABLE
+        else:
+            try:
+                snapshot["notifications"] = service.get_bucket_notifications(bucket.name, account).configuration or {}
+            except RuntimeError:
+                snapshot["notifications"] = _FEATURE_PARAM_UNAVAILABLE
+    if "encryption" in required_sources:
+        try:
+            snapshot["encryption"] = service.get_bucket_encryption(bucket.name, account)
+        except RuntimeError:
+            snapshot["encryption"] = _FEATURE_PARAM_UNAVAILABLE
     return snapshot
 
 
@@ -1485,9 +1988,21 @@ def _enrich_buckets(
     sns_feature_enabled = account_sns_feature_enabled(account)
     lifecycle_detail_keys = requested & _COLUMN_DETAIL_LIFECYCLE_KEYS
     wants_lifecycle_details = bool(lifecycle_detail_keys)
+    props_detail_keys = requested & _COLUMN_DETAIL_PROPS_KEYS
+    wants_props_details = bool(props_detail_keys)
+    logging_detail_keys = requested & _COLUMN_DETAIL_LOGGING_KEYS
+    wants_logging_details = bool(logging_detail_keys)
+    website_detail_keys = requested & _COLUMN_DETAIL_WEBSITE_KEYS
+    wants_website_details = bool(website_detail_keys)
+    policy_detail_keys = requested & _COLUMN_DETAIL_POLICY_KEYS
+    wants_policy_details = bool(policy_detail_keys)
+    notification_detail_keys = requested & _COLUMN_DETAIL_NOTIFICATION_KEYS
+    wants_notification_details = bool(notification_detail_keys)
+    sse_detail_keys = requested & _COLUMN_DETAIL_SSE_KEYS
+    wants_sse_details = bool(sse_detail_keys)
     props_feature_keys = {"versioning", "object_lock", "block_public_access", "lifecycle_rules", "cors"}
     requested_props_features = requested & props_feature_keys
-    use_props_bundle = len(requested_props_features) > 1
+    use_props_bundle = len(requested_props_features) > 1 or wants_props_details
 
     def enrich_one(bucket: CephAdminBucketSummary) -> CephAdminBucketSummary:
         tags: list[BucketTag] | None = None
@@ -1651,7 +2166,36 @@ def _enrich_buckets(
                 has_rules = bool(rules and len(rules) > 0)
                 feature_map["cors"] = _feature_status_active("Configured") if has_rules else _feature_status_inactive("Not set")
 
-        if wants_website and "static_website" in requested:
+        if wants_props_details:
+            if props_error or props is None:
+                for key in props_detail_keys:
+                    column_details[key] = None
+            else:
+                object_lock = props.object_lock
+                if "object_lock_mode" in props_detail_keys:
+                    column_details["object_lock_mode"] = object_lock.mode if object_lock else None
+                if "object_lock_retention_days" in props_detail_keys:
+                    column_details["object_lock_retention_days"] = object_lock.days if object_lock else None
+                if "object_lock_retention_years" in props_detail_keys:
+                    column_details["object_lock_retention_years"] = object_lock.years if object_lock else None
+
+                public_access_block = props.public_access_block
+                if "bpa_block_public_acls" in props_detail_keys:
+                    column_details["bpa_block_public_acls"] = public_access_block.block_public_acls if public_access_block else None
+                if "bpa_ignore_public_acls" in props_detail_keys:
+                    column_details["bpa_ignore_public_acls"] = public_access_block.ignore_public_acls if public_access_block else None
+                if "bpa_block_public_policy" in props_detail_keys:
+                    column_details["bpa_block_public_policy"] = public_access_block.block_public_policy if public_access_block else None
+                if "bpa_restrict_public_buckets" in props_detail_keys:
+                    column_details["bpa_restrict_public_buckets"] = public_access_block.restrict_public_buckets if public_access_block else None
+
+                cors_rules = props.cors_rules if isinstance(props.cors_rules, list) else []
+                if "cors_allowed_methods" in props_detail_keys:
+                    column_details["cors_allowed_methods"] = _extract_cors_allowed_values(cors_rules, "cors_allowed_method")
+                if "cors_allowed_origins" in props_detail_keys:
+                    column_details["cors_allowed_origins"] = _extract_cors_allowed_values(cors_rules, "cors_allowed_origin")
+
+        if wants_website or wants_website_details:
             try:
                 website = service.get_bucket_website(bucket.name, account)
                 routing_rules = website.routing_rules or []
@@ -1660,48 +2204,100 @@ def _enrich_buckets(
                     or (website.index_document or "").strip()
                     or (isinstance(routing_rules, list) and len(routing_rules) > 0)
                 )
-                feature_map["static_website"] = _feature_status_active("Enabled") if configured else _feature_status_inactive("Disabled")
+                if wants_website:
+                    feature_map["static_website"] = _feature_status_active("Enabled") if configured else _feature_status_inactive("Disabled")
+                if "website_index_document" in website_detail_keys:
+                    column_details["website_index_document"] = (website.index_document or "").strip() or None
+                if "website_error_document" in website_detail_keys:
+                    column_details["website_error_document"] = (website.error_document or "").strip() or None
+                if "website_redirect_host" in website_detail_keys:
+                    redirect_host = (
+                        (website.redirect_all_requests_to.host_name or "").strip()
+                        if website.redirect_all_requests_to
+                        else ""
+                    )
+                    column_details["website_redirect_host"] = redirect_host or None
+                if "website_routing_rule_count" in website_detail_keys:
+                    column_details["website_routing_rule_count"] = len(routing_rules) if isinstance(routing_rules, list) else 0
             except RuntimeError:
-                feature_map["static_website"] = _feature_status_unavailable()
+                if wants_website:
+                    feature_map["static_website"] = _feature_status_unavailable()
+                for key in website_detail_keys:
+                    column_details[key] = None
 
-        if wants_policy and "bucket_policy" in requested:
+        if wants_policy or wants_policy_details:
             try:
                 policy = service.get_policy(bucket.name, account)
                 configured = bool(policy and isinstance(policy, dict) and len(policy.keys()) > 0)
-                feature_map["bucket_policy"] = _feature_status_active("Configured") if configured else _feature_status_inactive("Not set")
+                if wants_policy:
+                    feature_map["bucket_policy"] = _feature_status_active("Configured") if configured else _feature_status_inactive("Not set")
+                statement_count, has_conditions = _extract_policy_statement_summary(policy if isinstance(policy, dict) else None)
+                if "policy_statement_count" in policy_detail_keys:
+                    column_details["policy_statement_count"] = statement_count
+                if "policy_has_conditions" in policy_detail_keys:
+                    column_details["policy_has_conditions"] = has_conditions
             except RuntimeError:
-                feature_map["bucket_policy"] = _feature_status_unavailable()
+                if wants_policy:
+                    feature_map["bucket_policy"] = _feature_status_unavailable()
+                for key in policy_detail_keys:
+                    column_details[key] = None
 
-        if wants_logging and "access_logging" in requested:
+        if wants_logging or wants_logging_details:
             try:
                 logging_config = service.get_bucket_logging(bucket.name, account)
                 enabled = bool(logging_config.enabled and (logging_config.target_bucket or "").strip())
-                feature_map["access_logging"] = _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
+                if wants_logging:
+                    feature_map["access_logging"] = _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
+                if "logging_target_bucket" in logging_detail_keys:
+                    column_details["logging_target_bucket"] = (logging_config.target_bucket or "").strip() or None
+                if "logging_target_prefix" in logging_detail_keys:
+                    column_details["logging_target_prefix"] = (logging_config.target_prefix or "").strip() or None
             except RuntimeError:
-                feature_map["access_logging"] = _feature_status_unavailable()
+                if wants_logging:
+                    feature_map["access_logging"] = _feature_status_unavailable()
+                for key in logging_detail_keys:
+                    column_details[key] = None
 
-        if wants_notifications and "notifications" in requested:
+        if wants_notifications or wants_notification_details:
             if not sns_feature_enabled:
-                feature_map["notifications"] = _feature_status_unavailable()
+                if wants_notifications:
+                    feature_map["notifications"] = _feature_status_unavailable()
+                for key in notification_detail_keys:
+                    column_details[key] = None
             else:
                 try:
                     notifications = service.get_bucket_notifications(bucket.name, account)
-                    configured = is_bucket_notification_configuration_configured(notifications.configuration)
-                    feature_map["notifications"] = (
-                        _feature_status_active("Configured") if configured else _feature_status_inactive("Not set")
-                    )
+                    configuration = notifications.configuration or {}
+                    if wants_notifications:
+                        configured = is_bucket_notification_configuration_configured(configuration)
+                        feature_map["notifications"] = (
+                            _feature_status_active("Configured") if configured else _feature_status_inactive("Not set")
+                        )
+                    if "notification_topic_names" in notification_detail_keys:
+                        column_details["notification_topic_names"] = _extract_notification_topic_names(configuration)
                 except RuntimeError:
-                    feature_map["notifications"] = _feature_status_unavailable()
+                    if wants_notifications:
+                        feature_map["notifications"] = _feature_status_unavailable()
+                    for key in notification_detail_keys:
+                        column_details[key] = None
 
-        if wants_encryption and "server_side_encryption" in requested:
+        if wants_encryption or wants_sse_details:
             try:
                 encryption = service.get_bucket_encryption(bucket.name, account)
                 enabled = bool(encryption.rules and len(encryption.rules) > 0)
-                feature_map["server_side_encryption"] = (
-                    _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
-                )
+                if wants_encryption:
+                    feature_map["server_side_encryption"] = (
+                        _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
+                    )
+                if "sse_algorithms" in sse_detail_keys:
+                    column_details["sse_algorithms"] = _extract_sse_values(encryption, "sse_algorithm")
+                if "sse_kms_key_ids" in sse_detail_keys:
+                    column_details["sse_kms_key_ids"] = _extract_sse_values(encryption, "sse_kms_key_id")
             except RuntimeError:
-                feature_map["server_side_encryption"] = _feature_status_unavailable()
+                if wants_encryption:
+                    feature_map["server_side_encryption"] = _feature_status_unavailable()
+                for key in sse_detail_keys:
+                    column_details[key] = None
 
         update = {}
         if tags is not None:
@@ -1999,7 +2595,7 @@ def _compute_bucket_listing(
         "notifications",
         "server_side_encryption",
     }
-    requested_detail_fields = include_set & _COLUMN_DETAIL_LIFECYCLE_KEYS
+    requested_detail_fields = include_set & _COLUMN_DETAIL_KEYS
 
     cache_key = _BucketListCacheKey(
         endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),

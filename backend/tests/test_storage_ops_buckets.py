@@ -11,7 +11,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.db import S3Account, S3Connection, User, UserRole
-from app.models.bucket import Bucket, BucketLifecycleConfig
+from app.models.bucket import Bucket, BucketEncryptionConfiguration, BucketLifecycleConfig, BucketNotificationConfiguration
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketSummary
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
@@ -721,6 +721,59 @@ def test_storage_ops_lifecycle_rule_status_filter_uses_context_lifecycle_lookup(
     assert [bucket.bucket_name for bucket in result] == ["alpha"]
 
 
+def test_storage_ops_sse_detail_filter_uses_context_encryption_lookup():
+    buckets = [
+        StorageOpsBucketSummary(
+            name="alpha",
+            bucket_name="alpha",
+            context_id="1",
+            context_name="Account A",
+            context_kind="account",
+            endpoint_name="Primary Endpoint",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+        StorageOpsBucketSummary(
+            name="beta",
+            bucket_name="beta",
+            context_id="1",
+            context_name="Account A",
+            context_kind="account",
+            endpoint_name="Primary Endpoint",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+    ]
+    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "server_side_encryption", "param": "sse_algorithm", "op": "eq", "value": "aws:kms"},
+                {"feature": "server_side_encryption", "param": "sse_kms_key_id", "op": "contains", "value": "target-key"},
+            ],
+        }
+    )
+
+    class FakeBucketsService:
+        def get_bucket_encryption(self, name: str, account):  # noqa: ARG002
+            rules = (
+                [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
+                if name == "alpha"
+                else [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "aws:kms", "KMSMasterKeyID": "target-key"}}]
+            )
+            return BucketEncryptionConfiguration(rules=rules)
+
+    result = storage_ops_router._apply_advanced_filter_for_context(
+        buckets,
+        parsed_filter,
+        service=FakeBucketsService(),
+        account=SimpleNamespace(),
+    )
+    assert [bucket.bucket_name for bucket in result] == ["beta"]
+
+
 def test_storage_ops_context_filters_match_s3_user_kind():
     buckets = [
         StorageOpsBucketSummary(
@@ -1159,6 +1212,69 @@ def test_storage_ops_notifications_feature_filter_uses_enrichment(monkeypatch):
 
     assert captured["requested_features"] == {"notifications"}
     assert captured["include_tags"] is False
+    assert [bucket.bucket_name for bucket in result] == ["alpha"]
+
+
+def test_storage_ops_notification_param_filter_uses_shared_snapshot_matching(monkeypatch):
+    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "notifications", "param": "notification_topic_name", "op": "contains", "value": "images-topic"},
+                {"feature": "notifications", "param": "notification_event", "op": "has", "value": "s3:ObjectCreated:*"},
+            ],
+        }
+    )
+    account = S3Account(
+        name="storage-ops-notification-params",
+        rgw_account_id="RGW00000000000000002",
+        rgw_access_key="AKIA_TEST",
+        rgw_secret_key="SECRET_TEST",
+    )
+    context = storage_ops_router._StorageOpsResolvedContext(
+        ref=storage_ops_router._StorageOpsContextRef(
+            context_id="1",
+            context_name="Account A",
+            context_kind="account",
+            endpoint_name="Primary",
+        ),
+        account=account,
+    )
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            return [Bucket(name="alpha"), Bucket(name="beta")]
+
+        def get_bucket_notifications(self, bucket_name, account):  # noqa: ARG002
+            event = "s3:ObjectCreated:*" if bucket_name == "alpha" else "s3:ObjectRemoved:*"
+            return BucketNotificationConfiguration(
+                configuration={
+                    "TopicConfigurations": [
+                        {
+                            "Id": f"{bucket_name}-topic",
+                            "TopicArn": "arn:aws:sns:us-east-1:123456789012:images-topic",
+                            "Events": [event],
+                        }
+                    ]
+                }
+            )
+
+    monkeypatch.setattr(storage_ops_router, "get_cached_bucket_listing_for_account", lambda **kwargs: kwargs["builder"]())
+
+    result = storage_ops_router._list_context_buckets(
+        context=context,
+        service=FakeBucketsService(),
+        needs_stats=False,
+        requested_features=set(),
+        include_tags=False,
+        parsed_filter=parsed_filter,
+        normalized_search="",
+        filter_requires_owner_name=False,
+        filter_requires_owner_suspended=False,
+        filter_requires_owner_quota=False,
+        owner_usage_required=False,
+    )
+
     assert [bucket.bucket_name for bucket in result] == ["alpha"]
 
 

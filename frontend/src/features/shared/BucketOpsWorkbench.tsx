@@ -154,7 +154,9 @@ import {
   featureDetailSummary,
   featureDetailSummaryItems,
   hasFeatureDetailFilters,
+  notificationFeatureDetailFilterKeys,
   sanitizeFeatureDetailFilters,
+  sseFeatureDetailFilterKeys,
   type FeatureDetailFilterKey,
   type FeatureDetailFilters,
   type NumericComparisonOpUi,
@@ -1020,10 +1022,30 @@ type ColumnId =
   | "access_logging"
   | "notifications"
   | "server_side_encryption"
+  | "object_lock_mode"
+  | "object_lock_retention_days"
+  | "object_lock_retention_years"
+  | "bpa_block_public_acls"
+  | "bpa_ignore_public_acls"
+  | "bpa_block_public_policy"
+  | "bpa_restrict_public_buckets"
+  | "cors_allowed_methods"
+  | "cors_allowed_origins"
+  | "logging_target_bucket"
+  | "logging_target_prefix"
+  | "website_index_document"
+  | "website_error_document"
+  | "website_redirect_host"
+  | "website_routing_rule_count"
+  | "policy_statement_count"
+  | "policy_has_conditions"
   | "lifecycle_expiration_days"
   | "lifecycle_noncurrent_expiration_days"
   | "lifecycle_transition_days"
   | "lifecycle_abort_multipart_days"
+  | "notification_topic_names"
+  | "sse_algorithms"
+  | "sse_kms_key_ids"
   | "quota_status";
 
 type SortField = "name" | "tenant" | "owner" | "used_bytes" | "object_count";
@@ -1229,6 +1251,48 @@ type FeatureDetailColumnOption = {
 };
 const FEATURE_DETAIL_COLUMN_OPTIONS: FeatureDetailColumnOption[] = [
   {
+    id: "object_lock_mode",
+    label: "Object Lock mode",
+    feature: "object_lock",
+    include: "object_lock_mode",
+  },
+  {
+    id: "object_lock_retention_days",
+    label: "Object Lock retention days",
+    feature: "object_lock",
+    include: "object_lock_retention_days",
+  },
+  {
+    id: "object_lock_retention_years",
+    label: "Object Lock retention years",
+    feature: "object_lock",
+    include: "object_lock_retention_years",
+  },
+  {
+    id: "bpa_block_public_acls",
+    label: "BPA block public ACLs",
+    feature: "block_public_access",
+    include: "bpa_block_public_acls",
+  },
+  {
+    id: "bpa_ignore_public_acls",
+    label: "BPA ignore public ACLs",
+    feature: "block_public_access",
+    include: "bpa_ignore_public_acls",
+  },
+  {
+    id: "bpa_block_public_policy",
+    label: "BPA block public policy",
+    feature: "block_public_access",
+    include: "bpa_block_public_policy",
+  },
+  {
+    id: "bpa_restrict_public_buckets",
+    label: "BPA restrict public buckets",
+    feature: "block_public_access",
+    include: "bpa_restrict_public_buckets",
+  },
+  {
     id: "lifecycle_expiration_days",
     label: "Lifecycle expiration days",
     feature: "lifecycle_rules",
@@ -1251,6 +1315,84 @@ const FEATURE_DETAIL_COLUMN_OPTIONS: FeatureDetailColumnOption[] = [
     label: "Lifecycle abort multipart days",
     feature: "lifecycle_rules",
     include: "lifecycle_abort_multipart_days",
+  },
+  {
+    id: "cors_allowed_methods",
+    label: "CORS allowed methods",
+    feature: "cors",
+    include: "cors_allowed_methods",
+  },
+  {
+    id: "cors_allowed_origins",
+    label: "CORS allowed origins",
+    feature: "cors",
+    include: "cors_allowed_origins",
+  },
+  {
+    id: "website_index_document",
+    label: "Website index document",
+    feature: "static_website",
+    include: "website_index_document",
+  },
+  {
+    id: "website_error_document",
+    label: "Website error document",
+    feature: "static_website",
+    include: "website_error_document",
+  },
+  {
+    id: "website_redirect_host",
+    label: "Website redirect host",
+    feature: "static_website",
+    include: "website_redirect_host",
+  },
+  {
+    id: "website_routing_rule_count",
+    label: "Website routing rules",
+    feature: "static_website",
+    include: "website_routing_rule_count",
+  },
+  {
+    id: "policy_statement_count",
+    label: "Policy statements",
+    feature: "bucket_policy",
+    include: "policy_statement_count",
+  },
+  {
+    id: "policy_has_conditions",
+    label: "Policy has conditions",
+    feature: "bucket_policy",
+    include: "policy_has_conditions",
+  },
+  {
+    id: "logging_target_bucket",
+    label: "Logging target bucket",
+    feature: "access_logging",
+    include: "logging_target_bucket",
+  },
+  {
+    id: "logging_target_prefix",
+    label: "Logging target prefix",
+    feature: "access_logging",
+    include: "logging_target_prefix",
+  },
+  {
+    id: "notification_topic_names",
+    label: "Notification topic names",
+    feature: "notifications",
+    include: "notification_topic_names",
+  },
+  {
+    id: "sse_algorithms",
+    label: "SSE algorithms",
+    feature: "server_side_encryption",
+    include: "sse_algorithms",
+  },
+  {
+    id: "sse_kms_key_ids",
+    label: "SSE KMS key IDs",
+    feature: "server_side_encryption",
+    include: "sse_kms_key_ids",
   },
 ];
 const BOOLEAN_FILTER_OPTIONS: Array<{ value: BooleanFilterState; label: string }> = [
@@ -1536,7 +1678,7 @@ export const buildAdvancedFilterPayload = (
       if (state === "any") return;
       rules.push({ feature: key, state });
     });
-    rules.push(...buildFeatureDetailRules(advanced.featureDetails));
+    rules.push(...buildFeatureDetailRules(advanced.featureDetails, featureSupport));
   }
 
   if (taggedBuckets) {
@@ -1615,7 +1757,7 @@ export const hasAdvancedFilters = (
   ) {
     return true;
   }
-  return hasFeatureDetailFilters(advanced.featureDetails);
+  return hasFeatureDetailFilters(advanced.featureDetails, featureSupport);
 };
 
 const CEPH_COLUMNS_STORAGE_KEY = "ceph-admin.bucket_list.columns.v2";
@@ -1713,10 +1855,30 @@ const loadVisibleColumns = (
       "access_logging",
       "notifications",
       "server_side_encryption",
+      "object_lock_mode",
+      "object_lock_retention_days",
+      "object_lock_retention_years",
+      "bpa_block_public_acls",
+      "bpa_ignore_public_acls",
+      "bpa_block_public_policy",
+      "bpa_restrict_public_buckets",
+      "cors_allowed_methods",
+      "cors_allowed_origins",
+      "logging_target_bucket",
+      "logging_target_prefix",
+      "website_index_document",
+      "website_error_document",
+      "website_redirect_host",
+      "website_routing_rule_count",
+      "policy_statement_count",
+      "policy_has_conditions",
       "lifecycle_expiration_days",
       "lifecycle_noncurrent_expiration_days",
       "lifecycle_transition_days",
       "lifecycle_abort_multipart_days",
+      "notification_topic_names",
+      "sse_algorithms",
+      "sse_kms_key_ids",
       "quota_status",
     ]);
     const cleaned = parsed.filter((v) => typeof v === "string" && allowed.has(v as ColumnId)) as ColumnId[];
@@ -2047,8 +2209,23 @@ const stripUnsupportedAdvancedFeatureFilters = (
     nextFeatures[feature] = "any";
     changed = true;
   });
+  let nextFeatureDetails = value.featureDetails;
+  if (featureSupport.notifications === false) {
+    notificationFeatureDetailFilterKeys.forEach((key) => {
+      if (nextFeatureDetails[key] === defaultFeatureDetailFilters[key]) return;
+      nextFeatureDetails = clearFeatureDetailField(nextFeatureDetails, key);
+      changed = true;
+    });
+  }
+  if (featureSupport.server_side_encryption === false) {
+    sseFeatureDetailFilterKeys.forEach((key) => {
+      if (nextFeatureDetails[key] === defaultFeatureDetailFilters[key]) return;
+      nextFeatureDetails = clearFeatureDetailField(nextFeatureDetails, key);
+      changed = true;
+    });
+  }
   if (!changed) return value;
-  return { ...value, features: nextFeatures };
+  return { ...value, features: nextFeatures, featureDetails: nextFeatureDetails };
 };
 
 const sanitizeSort = (value: unknown): { field: SortField; direction: "asc" | "desc" } => {
@@ -2692,6 +2869,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         if (column === "static_website") return staticWebsiteFeatureEnabled;
         if (column === "notifications") return snsFeatureEnabled;
         if (column === "server_side_encryption") return sseFeatureEnabled;
+        const detail = FEATURE_DETAIL_COLUMN_OPTIONS.find((option) => option.id === column);
+        if (detail?.feature === "static_website") return staticWebsiteFeatureEnabled;
+        if (detail?.feature === "notifications") return snsFeatureEnabled;
+        if (detail?.feature === "server_side_encryption") return sseFeatureEnabled;
         return true;
       });
       return next.length === prev.length ? prev : next;
@@ -4111,35 +4292,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         });
         return;
       }
-      if (col === "lifecycle_expiration_days") {
+      const detailColumn = FEATURE_DETAIL_COLUMN_OPTIONS.find((option) => option.id === col);
+      if (detailColumn) {
         exportColumns.push({
           id: col,
-          label: "Lifecycle expiration days",
-          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_expiration_days"),
-        });
-        return;
-      }
-      if (col === "lifecycle_noncurrent_expiration_days") {
-        exportColumns.push({
-          id: col,
-          label: "Lifecycle noncurrent expiration days",
-          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_noncurrent_expiration_days"),
-        });
-        return;
-      }
-      if (col === "lifecycle_transition_days") {
-        exportColumns.push({
-          id: col,
-          label: "Lifecycle transition days",
-          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_transition_days"),
-        });
-        return;
-      }
-      if (col === "lifecycle_abort_multipart_days") {
-        exportColumns.push({
-          id: col,
-          label: "Lifecycle abort multipart days",
-          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_abort_multipart_days"),
+          label: detailColumn.label,
+          getValue: (bucket) => formatColumnDetail(bucket, detailColumn.id),
         });
         return;
       }
@@ -7500,25 +7658,28 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     );
   };
 
-  const formatLifecycleDayDetail = (
-    bucket: CephAdminBucket,
-    detailKey:
-      | "lifecycle_expiration_days"
-      | "lifecycle_noncurrent_expiration_days"
-      | "lifecycle_transition_days"
-      | "lifecycle_abort_multipart_days"
-  ): string => {
+  const formatColumnDetail = (bucket: CephAdminBucket, detailKey: ColumnId): string => {
     const details = bucket.column_details as Record<string, unknown> | null | undefined;
     const raw = details?.[detailKey];
     if (raw === null || raw === undefined) return "-";
-    if (!Array.isArray(raw)) return "-";
-    const values = raw
-      .map((item) => Number(item))
-      .filter((item) => Number.isFinite(item))
-      .map((item) => Math.trunc(item))
-      .sort((a, b) => a - b);
-    if (values.length === 0) return "None";
-    return Array.from(new Set(values)).join(", ");
+    if (Array.isArray(raw)) {
+      if (raw.length === 0) return "None";
+      const numericValues = raw
+        .map((item) => Number(item))
+        .filter((item) => Number.isFinite(item))
+        .map((item) => Math.trunc(item))
+        .sort((a, b) => a - b);
+      if (numericValues.length === raw.length) {
+        return Array.from(new Set(numericValues)).join(", ");
+      }
+      const textValues = raw.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean);
+      if (textValues.length === 0) return "None";
+      return Array.from(new Set(textValues)).join(", ");
+    }
+    if (typeof raw === "boolean") return raw ? "Yes" : "No";
+    if (typeof raw === "number") return formatNumber(raw);
+    if (typeof raw === "string") return raw.trim() || "-";
+    return "-";
   };
 
   const bucketTableColumns: ColumnDef[] = (() => {
@@ -7804,46 +7965,25 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       });
     });
 
-    if (visible.has("lifecycle_expiration_days")) {
+    FEATURE_DETAIL_COLUMN_OPTIONS.forEach((detail) => {
+      if (!visible.has(detail.id)) return;
       cols.push({
-        id: "lifecycle_expiration_days",
-        label: "LC Expiration d",
+        id: detail.id,
+        label: detail.label,
         field: null,
         expensive: true,
-        headerClassName: "w-36",
-        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_expiration_days"),
+        headerClassName: "min-w-[10rem] max-w-[18rem]",
+        cellClassName: "min-w-[10rem] max-w-[20rem]",
+        render: (bucket) => {
+          const value = formatColumnDetail(bucket, detail.id);
+          return (
+            <span className="block truncate" title={value}>
+              {value}
+            </span>
+          );
+        },
       });
-    }
-    if (visible.has("lifecycle_noncurrent_expiration_days")) {
-      cols.push({
-        id: "lifecycle_noncurrent_expiration_days",
-        label: "LC Noncurrent exp d",
-        field: null,
-        expensive: true,
-        headerClassName: "w-44",
-        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_noncurrent_expiration_days"),
-      });
-    }
-    if (visible.has("lifecycle_transition_days")) {
-      cols.push({
-        id: "lifecycle_transition_days",
-        label: "LC Transition d",
-        field: null,
-        expensive: true,
-        headerClassName: "w-36",
-        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_transition_days"),
-      });
-    }
-    if (visible.has("lifecycle_abort_multipart_days")) {
-      cols.push({
-        id: "lifecycle_abort_multipart_days",
-        label: "LC Abort mp d",
-        field: null,
-        expensive: true,
-        headerClassName: "w-36",
-        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_abort_multipart_days"),
-      });
-    }
+    });
 
     if (visible.has("quota_status")) {
       cols.push({
@@ -9103,6 +9243,140 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
                             <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Notifications
+                              </p>
+                              <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                Rule ID, type, topic, events and key filters are evaluated on the same notification rule.
+                              </p>
+                              <div className="mt-2 space-y-2">
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule ID</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.notificationRuleId}
+                                    onChange={(e) => updateFeatureDetailFilter("notificationRuleId", e.target.value)}
+                                    placeholder="rule-id"
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule type</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.notificationRuleTypeMode}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "notificationRuleTypeMode",
+                                          e.target.value as FeatureDetailFilters["notificationRuleTypeMode"]
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      <option value="any">Any</option>
+                                      <option value="has">Has</option>
+                                      <option value="has_not">Has not</option>
+                                    </select>
+                                    <select
+                                      value={advancedDraft.featureDetails.notificationRuleTypeValue}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "notificationRuleTypeValue",
+                                          e.target.value as FeatureDetailFilters["notificationRuleTypeValue"]
+                                        )
+                                      }
+                                      disabled={advancedDraft.featureDetails.notificationRuleTypeMode === "any"}
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      <option value="">Select type</option>
+                                      {NOTIFICATION_TYPE_OPTIONS.filter((option) => option.key !== "eventbridge").map((option) => (
+                                        <option key={option.key} value={option.key}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Topic name or ARN</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.notificationTopicName}
+                                    onChange={(e) => updateFeatureDetailFilter("notificationTopicName", e.target.value)}
+                                    placeholder="bucket-events"
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  />
+                                </div>
+                                {[
+                                  {
+                                    modeKey: "notificationEventMode" as const,
+                                    valueKey: "notificationEventValue" as const,
+                                    label: "Event",
+                                    placeholder: "s3:ObjectCreated:*",
+                                  },
+                                  {
+                                    modeKey: "notificationFilterPrefixMode" as const,
+                                    valueKey: "notificationFilterPrefixValue" as const,
+                                    label: "Filter prefix",
+                                    placeholder: "incoming/",
+                                  },
+                                  {
+                                    modeKey: "notificationFilterSuffixMode" as const,
+                                    valueKey: "notificationFilterSuffixValue" as const,
+                                    label: "Filter suffix",
+                                    placeholder: ".csv",
+                                  },
+                                ].map((entry) => (
+                                  <div key={entry.valueKey}>
+                                    <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">{entry.label}</label>
+                                    <div className="mt-1 grid grid-cols-5 gap-2">
+                                      <select
+                                        value={advancedDraft.featureDetails[entry.modeKey]}
+                                        onChange={(e) =>
+                                          updateFeatureDetailFilter(
+                                            entry.modeKey,
+                                            e.target.value as FeatureDetailFilters[typeof entry.modeKey]
+                                          )
+                                        }
+                                        className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                      >
+                                        <option value="any">Any</option>
+                                        <option value="has">Has</option>
+                                        <option value="has_not">Has not</option>
+                                      </select>
+                                      <input
+                                        type="text"
+                                        value={advancedDraft.featureDetails[entry.valueKey]}
+                                        onChange={(e) => updateFeatureDetailFilter(entry.valueKey, e.target.value)}
+                                        placeholder={entry.placeholder}
+                                        className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">EventBridge present</label>
+                                  <select
+                                    value={advancedDraft.featureDetails.notificationEventBridgePresent}
+                                    onChange={(e) =>
+                                      updateFeatureDetailFilter(
+                                        "notificationEventBridgePresent",
+                                        e.target.value as FeatureDetailFilters["notificationEventBridgePresent"]
+                                      )
+                                    }
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  >
+                                    {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 Object Lock and BPA
                               </p>
                               <div className="mt-2 space-y-2">
@@ -9148,6 +9422,35 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                       value={advancedDraft.featureDetails.objectLockRetentionDays}
                                       onChange={(e) => updateFeatureDetailFilter("objectLockRetentionDays", e.target.value)}
                                       placeholder="days"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Object Lock retention years</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.objectLockRetentionYearsOp}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "objectLockRetentionYearsOp",
+                                          e.target.value as NumericComparisonOpUi
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {NUMERIC_FILTER_OPTIONS.map((op) => (
+                                        <option key={op} value={op}>
+                                          {op}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={advancedDraft.featureDetails.objectLockRetentionYears}
+                                      onChange={(e) => updateFeatureDetailFilter("objectLockRetentionYears", e.target.value)}
+                                      placeholder="years"
                                       className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                     />
                                   </div>
@@ -9269,6 +9572,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                   />
                                 </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Logging target prefix</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.loggingTargetPrefix}
+                                    onChange={(e) => updateFeatureDetailFilter("loggingTargetPrefix", e.target.value)}
+                                    placeholder="logs/"
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  />
+                                </div>
                               </div>
                             </div>
 
@@ -9315,6 +9628,67 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                         </option>
                                       ))}
                                     </select>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website index document</label>
+                                    <input
+                                      type="text"
+                                      value={advancedDraft.featureDetails.websiteIndexDocument}
+                                      onChange={(e) => updateFeatureDetailFilter("websiteIndexDocument", e.target.value)}
+                                      placeholder="index.html"
+                                      className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website error document</label>
+                                    <input
+                                      type="text"
+                                      value={advancedDraft.featureDetails.websiteErrorDocument}
+                                      onChange={(e) => updateFeatureDetailFilter("websiteErrorDocument", e.target.value)}
+                                      placeholder="error.html"
+                                      className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website redirect host</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.websiteRedirectHost}
+                                    onChange={(e) => updateFeatureDetailFilter("websiteRedirectHost", e.target.value)}
+                                    placeholder="www.example.test"
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website routing rules</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.websiteRoutingRuleCountOp}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "websiteRoutingRuleCountOp",
+                                          e.target.value as NumericComparisonOpUi
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {NUMERIC_FILTER_OPTIONS.map((op) => (
+                                        <option key={op} value={op}>
+                                          {op}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={advancedDraft.featureDetails.websiteRoutingRuleCount}
+                                      onChange={(e) => updateFeatureDetailFilter("websiteRoutingRuleCount", e.target.value)}
+                                      placeholder="count"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
                                   </div>
                                 </div>
                                 <div>
@@ -9364,6 +9738,41 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                       </option>
                                     ))}
                                   </select>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className={`rounded-lg border border-slate-200 p-3 dark:border-slate-700 ${sseFeatureEnabled ? "" : "opacity-60"}`}>
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Server-side encryption
+                              </p>
+                              {!sseFeatureEnabled && (
+                                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                  Server-side encryption is disabled on this endpoint.
+                                </p>
+                              )}
+                              <div className="mt-2 space-y-2">
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">SSE algorithm</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.sseAlgorithm}
+                                    onChange={(e) => updateFeatureDetailFilter("sseAlgorithm", e.target.value)}
+                                    placeholder="AES256"
+                                    disabled={!sseFeatureEnabled}
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">SSE KMS key ID</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.sseKmsKeyId}
+                                    onChange={(e) => updateFeatureDetailFilter("sseKmsKeyId", e.target.value)}
+                                    placeholder="key-id or ARN"
+                                    disabled={!sseFeatureEnabled}
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                                  />
                                 </div>
                               </div>
                             </div>
