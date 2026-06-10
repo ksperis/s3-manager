@@ -102,7 +102,7 @@ import {
   updateStorageOpsBucketQuota,
 } from "../../api/storageOps";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
-import { RefreshIcon } from "../browser/browserIcons";
+import { ChevronDownIcon, RefreshIcon } from "../browser/browserIcons";
 import {
   deleteNotificationConfigurations,
   isNotificationConfigurationEmpty,
@@ -1109,6 +1109,8 @@ type ActiveFilterSummaryItem = {
   remove: ActiveFilterRemoveAction;
 };
 type FilterCostLevel = "none" | "low" | "medium" | "high";
+type AdvancedFilterSecondarySectionId = "metrics" | "featureStates" | "featureDetails";
+type AdvancedFilterSecondarySectionState = Record<AdvancedFilterSecondarySectionId, boolean>;
 
 type OwnerTooltipState =
   | { status: "loading" }
@@ -1427,6 +1429,14 @@ const FILTER_COST_DOT_CLASS: Record<Exclude<FilterCostLevel, "none">, string> = 
   medium: "bg-amber-500 dark:bg-amber-300",
   high: "bg-rose-500 dark:bg-rose-300",
 };
+
+const buildAdvancedFilterSecondarySectionState = (
+  activeCounts: Partial<Record<AdvancedFilterSecondarySectionId, number>> = {}
+): AdvancedFilterSecondarySectionState => ({
+  metrics: Boolean(activeCounts.metrics),
+  featureStates: Boolean(activeCounts.featureStates),
+  featureDetails: Boolean(activeCounts.featureDetails),
+});
 
 const renderFilterCostIndicator = (level: FilterCostLevel, tooltip: string) => {
   const enabledDots = FILTER_COST_ENABLED_DOTS[level];
@@ -2497,6 +2507,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
+  const [advancedFilterSecondarySections, setAdvancedFilterSecondarySections] =
+    useState<AdvancedFilterSecondarySectionState>(() => buildAdvancedFilterSecondarySectionState());
+  const advancedFilterWasOpenRef = useRef(false);
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(defaultAdvancedFilter);
   const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(null);
   const [storageOpsContexts, setStorageOpsContexts] = useState<ExecutionContext[]>([]);
@@ -6339,6 +6352,64 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
     return "rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
   };
+  const toggleAdvancedFilterSecondarySection = (sectionId: AdvancedFilterSecondarySectionId) => {
+    setAdvancedFilterSecondarySections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  };
+  const renderAdvancedFilterSecondarySection = ({
+    id,
+    title,
+    costLevel,
+    costTooltip,
+    activeCount,
+    badge,
+    children,
+  }: {
+    id: AdvancedFilterSecondarySectionId;
+    title: string;
+    costLevel: FilterCostLevel;
+    costTooltip: string;
+    activeCount: number;
+    badge?: ReactNode;
+    children: ReactNode;
+  }) => {
+    const open = advancedFilterSecondarySections[id];
+    const contentId = `advanced-filter-${id}-content`;
+    return (
+      <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)]">
+        <button
+          type="button"
+          onClick={() => toggleAdvancedFilterSecondarySection(id)}
+          aria-expanded={open}
+          aria-controls={contentId}
+          className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/30 dark:hover:bg-slate-800/60"
+        >
+          <span className="inline-flex min-w-0 items-center gap-2">
+            <ChevronDownIcon
+              className={cx(
+                "h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform dark:text-slate-400",
+                open ? "" : "-rotate-90"
+              )}
+            />
+            <span className="inline-flex min-w-0 items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <span className="truncate">{title}</span>
+              {renderFilterCostIndicator(costLevel, costTooltip)}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            {badge}
+            <span className="ui-caption text-slate-500 dark:text-slate-400">
+              {activeCount} active
+            </span>
+          </span>
+        </button>
+        {open && (
+          <div id={contentId} className="px-3 pb-3">
+            {children}
+          </div>
+        )}
+      </section>
+    );
+  };
   const fieldTone = (isApplied: boolean, isPending: boolean): UiFeatureStateTone => {
     if (isPending) return "unsaved";
     if (isApplied) return "configured";
@@ -6506,6 +6577,18 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const advancedDraftFeatureDetailCount = featureDetailDraftLabels.length;
   const advancedDraftActiveCount =
     advancedDraftIdentityCount + advancedDraftRangeCount + advancedDraftFeatureCount + advancedDraftTagCount + advancedDraftFeatureDetailCount;
+  useEffect(() => {
+    if (showAdvancedFilter && !advancedFilterWasOpenRef.current) {
+      setAdvancedFilterSecondarySections(
+        buildAdvancedFilterSecondarySectionState({
+          metrics: advancedDraftRangeCount,
+          featureStates: advancedDraftFeatureCount,
+          featureDetails: advancedDraftFeatureDetailCount,
+        })
+      );
+    }
+    advancedFilterWasOpenRef.current = showAdvancedFilter;
+  }, [showAdvancedFilter, advancedDraftRangeCount, advancedDraftFeatureCount, advancedDraftFeatureDetailCount]);
   const multipleFeatureFiltersActive = advancedDraftFeatureCount > 1;
   const featureCostReducedByPrefilter =
     advancedDraftFeatureCount === 1 && ownerPrefilterActive && !ownerNameLookupActive && !s3TagsLookupActive;
@@ -8808,23 +8891,20 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           </div>
                         </section>
 
-                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              <span>Storage Metrics and Quota</span>
-                              {renderFilterCostIndicator(
-                                "medium",
-                                "Medium cost: owner quota filters require owner metadata lookups; usage and percentage filters also require bucket stats."
-                              )}
-                            </p>
-                            {!usageFeatureEnabled && (
-                              <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200">
-                                {usageUnavailableBadge}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="space-y-3">
+                        {renderAdvancedFilterSecondarySection({
+                          id: "metrics",
+                          title: "Storage Metrics and Quota",
+                          costLevel: "medium",
+                          costTooltip:
+                            "Medium cost: owner quota filters require owner metadata lookups; usage and percentage filters also require bucket stats.",
+                          activeCount: advancedDraftRangeCount,
+                          badge: !usageFeatureEnabled ? (
+                            <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200">
+                              {usageUnavailableBadge}
+                            </span>
+                          ) : null,
+                          children: (
+                            <div className="space-y-3">
                             {!usageFeatureEnabled && (
                               <p className="ui-caption text-slate-500 dark:text-slate-400">
                                 {usageUnavailableDescription}
@@ -8954,84 +9034,79 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               ))}
                             </div>
                           </div>
-                        </section>
+                          ),
+                        })}
 
-                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              <span>Feature states</span>
-                              {renderFilterCostIndicator("high", "High cost: feature-state filters may trigger extra checks.")}
-                            </p>
-                            <span className="ui-caption text-slate-500 dark:text-slate-400">
-                              {advancedDraftFeatureCount} active
-                            </span>
-                          </div>
-                          {featureStateOptions.some((feature) => !feature.supported) && (
-                            <p className="mb-3 ui-caption text-slate-500 dark:text-slate-400">
-                              Some features are disabled on this endpoint and cannot be filtered.
-                            </p>
-                          )}
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            {featureStateOptions.map((feature) => {
-                              const disabled = !feature.supported;
-                              const appliedValue = advancedApplied?.features[feature.id] ?? "any";
-                              const draftValue = advancedDraft.features[feature.id];
-                              const state = disabled
-                                ? { labelClass: "", fieldClass: "" }
-                                : fieldHighlight(appliedValue !== "any", draftValue !== appliedValue);
-                              return (
-                                <div
-                                  key={feature.id}
-                                  className={`rounded-lg border border-slate-200 p-2.5 dark:border-slate-700 ${disabled ? "opacity-60" : ""}`}
-                                >
-                                  <label className={`ui-caption font-medium text-slate-700 dark:text-slate-200 ${state.labelClass}`}>{feature.label}</label>
-                                  <select
-                                    value={advancedDraft.features[feature.id]}
-                                    onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
-                                    className={`mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${state.fieldClass}`}
-                                    disabled={disabled}
-                                  >
-                                    {feature.id === "versioning" ? (
-                                      <>
-                                        <option value="any">Any</option>
-                                        <option value="enabled">Enabled</option>
-                                        <option value="disabled">Disabled</option>
-                                        <option value="suspended">Suspended</option>
-                                        <option value="disabled_or_suspended">Disabled or Suspended</option>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <option value="any">Any</option>
-                                        <option value="enabled">Enabled</option>
-                                        <option value="disabled">Disabled</option>
-                                      </>
-                                    )}
-                                  </select>
-                                  {disabled && (
-                                    <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                                      {feature.label} is disabled on this endpoint.
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </section>
-
-                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              <span>Feature details</span>
-                              {renderFilterCostIndicator(
-                                "high",
-                                "High cost: feature-detail filters may trigger additional per-bucket data retrieval."
+                        {renderAdvancedFilterSecondarySection({
+                          id: "featureStates",
+                          title: "Feature states",
+                          costLevel: "high",
+                          costTooltip: "High cost: feature-state filters may trigger extra checks.",
+                          activeCount: advancedDraftFeatureCount,
+                          children: (
+                            <>
+                              {featureStateOptions.some((feature) => !feature.supported) && (
+                                <p className="mb-3 ui-caption text-slate-500 dark:text-slate-400">
+                                  Some features are disabled on this endpoint and cannot be filtered.
+                                </p>
                               )}
-                            </p>
-                            <span className="ui-caption text-slate-500 dark:text-slate-400">
-                              {featureDetailDraftLabels.length} active
-                            </span>
-                          </div>
-                          <div className="grid gap-3 lg:grid-cols-2">
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                {featureStateOptions.map((feature) => {
+                                  const disabled = !feature.supported;
+                                  const appliedValue = advancedApplied?.features[feature.id] ?? "any";
+                                  const draftValue = advancedDraft.features[feature.id];
+                                  const state = disabled
+                                    ? { labelClass: "", fieldClass: "" }
+                                    : fieldHighlight(appliedValue !== "any", draftValue !== appliedValue);
+                                  return (
+                                    <div
+                                      key={feature.id}
+                                      className={`rounded-lg border border-slate-200 p-2.5 dark:border-slate-700 ${disabled ? "opacity-60" : ""}`}
+                                    >
+                                      <label className={`ui-caption font-medium text-slate-700 dark:text-slate-200 ${state.labelClass}`}>{feature.label}</label>
+                                      <select
+                                        value={advancedDraft.features[feature.id]}
+                                        onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
+                                        className={`mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${state.fieldClass}`}
+                                        disabled={disabled}
+                                      >
+                                        {feature.id === "versioning" ? (
+                                          <>
+                                            <option value="any">Any</option>
+                                            <option value="enabled">Enabled</option>
+                                            <option value="disabled">Disabled</option>
+                                            <option value="suspended">Suspended</option>
+                                            <option value="disabled_or_suspended">Disabled or Suspended</option>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <option value="any">Any</option>
+                                            <option value="enabled">Enabled</option>
+                                            <option value="disabled">Disabled</option>
+                                          </>
+                                        )}
+                                      </select>
+                                      {disabled && (
+                                        <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                          {feature.label} is disabled on this endpoint.
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          ),
+                        })}
+
+                        {renderAdvancedFilterSecondarySection({
+                          id: "featureDetails",
+                          title: "Feature details",
+                          costLevel: "high",
+                          costTooltip: "High cost: feature-detail filters may trigger additional per-bucket data retrieval.",
+                          activeCount: advancedDraftFeatureDetailCount,
+                          children: (
+                            <div className="grid gap-3 lg:grid-cols-2">
                             <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 Lifecycle
@@ -9776,8 +9851,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        </section>
+                            </div>
+                          ),
+                        })}
                       </div>
                     </div>
 

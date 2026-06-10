@@ -351,6 +351,41 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     expect(payload.rules).toEqual(expect.arrayContaining([{ field: "endpoint_name", op: "eq", value: "Archive" }]));
   });
 
+  it("collapses secondary advanced filter sections by default", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
+
+    const metricsSection = await screen.findByRole("button", { name: /Storage Metrics and Quota/i });
+    const featureStatesSection = screen.getByRole("button", { name: /Feature states/i });
+    const featureDetailsSection = screen.getByRole("button", { name: /Feature details/i });
+
+    expect(metricsSection).toHaveAttribute("aria-expanded", "false");
+    expect(featureStatesSection).toHaveAttribute("aria-expanded", "false");
+    expect(featureDetailsSection).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Quota usage %")).not.toBeInTheDocument();
+    expect(screen.queryByText("Disabled or Suspended")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rule name")).not.toBeInTheDocument();
+
+    fireEvent.click(metricsSection);
+    expect(metricsSection).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Quota usage %")).toBeInTheDocument();
+
+    fireEvent.click(featureStatesSection);
+    expect(featureStatesSection).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Disabled or Suspended")).toBeInTheDocument();
+
+    fireEvent.click(featureDetailsSection);
+    expect(featureDetailsSection).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByText("Rule name").length).toBeGreaterThan(0);
+  });
+
   it("shows detailed advanced search progress while streaming bucket filters", async () => {
     mocks.listStorageOpsBuckets.mockResolvedValue({
       items: [baseBucket],
