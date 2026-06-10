@@ -338,6 +338,7 @@ export default function GeneralSettingsPage() {
                       disabled={isFeatureLocked("portal_enabled")}
                       onChange={(value) => handleToggle("portal_enabled", value)}
                       ariaLabel="Portal feature"
+                      badge={{ visible: true, label: "Experimental", tone: "warning" }}
                     />
                   }
                 >

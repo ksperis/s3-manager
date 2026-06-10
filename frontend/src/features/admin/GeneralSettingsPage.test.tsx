@@ -107,6 +107,7 @@ function unlockedFeatureLocks(): GeneralFeatureLocks {
     ceph_admin_enabled: { forced: false, value: null, source: null },
     storage_ops_enabled: { forced: false, value: null, source: null },
     browser_enabled: { forced: false, value: null, source: null },
+    portal_enabled: { forced: false, value: null, source: null },
     billing_enabled: { forced: false, value: null, source: null },
     endpoint_status_enabled: { forced: false, value: null, source: null },
   };
@@ -166,6 +167,13 @@ describe("GeneralSettingsPage branding", () => {
     await screen.findByLabelText("Primary color picker");
     expect(screen.queryByLabelText("Bucket migration tool")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Bucket compare tool")).not.toBeInTheDocument();
+  });
+
+  it("shows Experimental badge on portal feature toggle", async () => {
+    render(<GeneralSettingsPage />);
+
+    await screen.findByLabelText("Portal feature");
+    expect(screen.getByText("Experimental")).toBeInTheDocument();
   });
 
   it("sends a quota SMTP test email with current quota notification settings", async () => {
