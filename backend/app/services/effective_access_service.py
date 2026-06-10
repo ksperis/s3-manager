@@ -183,6 +183,11 @@ class EffectiveAccessService:
                 bool(user.can_access_manager_bucket_migration)
                 or any(bool(group.can_access_manager_bucket_migration) for group in groups)
             ),
+            feature_rules=role_supports_manager_tools
+            and (
+                bool(user.can_access_manager_feature_rules)
+                or any(bool(group.can_access_manager_feature_rules) for group in groups)
+            ),
             ceph_s3_user_keys=role_supports_manager_tools
             and (
                 bool(user.can_access_manager_ceph_s3_user_keys)

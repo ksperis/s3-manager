@@ -14,6 +14,7 @@ export const DEFAULT_MANAGER_TOOL_ACCESS: ManagerToolAccess = {
   bucket_compare: false,
   bucket_integrity_check: false,
   bucket_migration: false,
+  feature_rules: false,
   ceph_s3_user_keys: false,
 };
 
@@ -33,6 +34,7 @@ export function normalizeManagerToolAccess(access?: ManagerToolAccess | null): M
     bucket_compare: Boolean(access?.bucket_compare),
     bucket_integrity_check: Boolean(access?.bucket_integrity_check),
     bucket_migration: Boolean(access?.bucket_migration),
+    feature_rules: Boolean(access?.feature_rules),
     ceph_s3_user_keys: Boolean(access?.ceph_s3_user_keys),
   };
 }
@@ -61,6 +63,12 @@ export function buildManagerToolDefinitions(settings: {
       title: "Bucket migration",
       description: "Allow access to Manager > Tools > Migration.",
       enabled: Boolean(settings.bucket_migration_enabled),
+    },
+    {
+      key: "feature_rules",
+      title: "Feature rule inventory",
+      description: "Allow access to Manager > Tools > Feature rules.",
+      enabled: true,
     },
     {
       key: "ceph_s3_user_keys",

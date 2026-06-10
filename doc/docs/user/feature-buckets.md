@@ -7,6 +7,7 @@ Use this guide when creating, updating, or inspecting bucket configuration.
 ## Prerequisites
 
 - Access to **Manager** or **Ceph Admin** bucket pages.
+- **Manager tools > Feature rule inventory** access when using `/manager/feature-rules`.
 - Effective storage permissions on target buckets.
 
 ## Steps

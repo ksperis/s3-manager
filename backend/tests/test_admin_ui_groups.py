@@ -120,6 +120,7 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
         "bucket_compare": False,
         "bucket_integrity_check": False,
         "bucket_migration": False,
+        "feature_rules": False,
         "ceph_s3_user_keys": False,
     }
     assert payload["user_ids"] == [user.id]
@@ -173,6 +174,7 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
                 "bucket_compare": True,
                 "bucket_integrity_check": False,
                 "bucket_migration": True,
+                "feature_rules": True,
                 "ceph_s3_user_keys": False,
             },
             "user_ids": [user.id],
@@ -198,6 +200,7 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
     assert out.effective_access.browser_advanced_features_enabled is True
     assert out.effective_access.manager_tool_access.bucket_compare is True
     assert out.effective_access.manager_tool_access.bucket_migration is True
+    assert out.effective_access.manager_tool_access.feature_rules is True
     assert out.effective_access.accounts == [account.id]
     assert out.effective_access.account_links[0].account_admin is True
     assert out.effective_access.account_links[0].account_role == AccountRole.PORTAL_MANAGER.value

@@ -127,6 +127,9 @@ class UsersService:
             can_access_manager_bucket_migration=(
                 bool(manager_tool_access.bucket_migration) if manager_tools_supported else False
             ),
+            can_access_manager_feature_rules=(
+                bool(manager_tool_access.feature_rules) if manager_tools_supported else False
+            ),
             can_access_manager_ceph_s3_user_keys=(
                 bool(manager_tool_access.ceph_s3_user_keys) if manager_tools_supported else False
             ),
@@ -180,16 +183,19 @@ class UsersService:
                 user.can_access_manager_bucket_compare = bool(manager_tool_access.bucket_compare)
                 user.can_access_manager_bucket_integrity_check = bool(manager_tool_access.bucket_integrity_check)
                 user.can_access_manager_bucket_migration = bool(manager_tool_access.bucket_migration)
+                user.can_access_manager_feature_rules = bool(manager_tool_access.feature_rules)
                 user.can_access_manager_ceph_s3_user_keys = bool(manager_tool_access.ceph_s3_user_keys)
             else:
                 user.can_access_manager_bucket_compare = False
                 user.can_access_manager_bucket_integrity_check = False
                 user.can_access_manager_bucket_migration = False
+                user.can_access_manager_feature_rules = False
                 user.can_access_manager_ceph_s3_user_keys = False
         elif next_role not in MANAGER_TOOL_ROLES:
             user.can_access_manager_bucket_compare = False
             user.can_access_manager_bucket_integrity_check = False
             user.can_access_manager_bucket_migration = False
+            user.can_access_manager_feature_rules = False
             user.can_access_manager_ceph_s3_user_keys = False
         if payload.browser_advanced_features_enabled is not None:
             user.browser_advanced_features_enabled = bool(payload.browser_advanced_features_enabled)
@@ -657,6 +663,7 @@ class UsersService:
                 bucket_compare=bool(user.can_access_manager_bucket_compare),
                 bucket_integrity_check=bool(user.can_access_manager_bucket_integrity_check),
                 bucket_migration=bool(user.can_access_manager_bucket_migration),
+                feature_rules=bool(user.can_access_manager_feature_rules),
                 ceph_s3_user_keys=bool(user.can_access_manager_ceph_s3_user_keys),
             ),
             browser_advanced_features_enabled=bool(user.browser_advanced_features_enabled),

@@ -19,14 +19,20 @@ type SessionCapabilities = {
   can_view_traffic?: boolean;
 };
 
+type SessionManagerToolAccess = {
+  bucket_compare?: boolean;
+  bucket_integrity_check?: boolean;
+  bucket_migration?: boolean;
+  feature_rules?: boolean;
+  ceph_s3_user_keys?: boolean;
+} | null;
+
 type SessionUserPayload = {
   role?: string;
   capabilities?: SessionCapabilities;
-  manager_tool_access?: {
-    bucket_compare?: boolean;
-    bucket_integrity_check?: boolean;
-    bucket_migration?: boolean;
-    ceph_s3_user_keys?: boolean;
+  manager_tool_access?: SessionManagerToolAccess;
+  effective_access?: {
+    manager_tool_access?: SessionManagerToolAccess;
   } | null;
 };
 
@@ -101,13 +107,15 @@ function ManagerShell() {
   const canAccessBucketIntegrity =
     canManageBuckets && Boolean(generalSettings.bucket_integrity_check_enabled) && Boolean(requiresS3AccountSelection);
   const userRole = storedUser?.role ?? getUserRole();
-  const managerToolAccess = storedUser?.manager_tool_access ?? null;
+  const managerToolAccess =
+    storedUser?.effective_access?.manager_tool_access ?? storedUser?.manager_tool_access ?? null;
   const canAccessMigration =
     Boolean(generalSettings.bucket_migration_enabled) &&
     Boolean(managerToolAccess?.bucket_migration) &&
     (userRole === "ui_admin" || userRole === "ui_superadmin" || userRole === "ui_user");
   const canAccessBucketCompareForUser = Boolean(managerToolAccess?.bucket_compare);
   const canAccessBucketIntegrityForUser = Boolean(managerToolAccess?.bucket_integrity_check);
+  const canAccessFeatureRulesForUser = Boolean(managerToolAccess?.feature_rules);
   const canShowBucketCompare = canAccessBucketCompare && canAccessBucketCompareForUser;
   const canShowBucketIntegrity = canAccessBucketIntegrity && canAccessBucketIntegrityForUser;
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
@@ -264,9 +272,10 @@ function ManagerShell() {
   }
 
   if (canManageBuckets) {
-    const toolsLinks: SidebarSection[number]["links"] = [
-      { to: "/manager/feature-rules", label: "Feature rules" },
-    ];
+    const toolsLinks: SidebarSection[number]["links"] = [];
+    if (canAccessFeatureRulesForUser) {
+      toolsLinks.push({ to: "/manager/feature-rules", label: "Feature rules" });
+    }
     if (canShowBucketCompare) {
       toolsLinks.push({ to: "/manager/bucket-compare", label: "Compare" });
     }
@@ -276,10 +285,12 @@ function ManagerShell() {
     if (canAccessMigration) {
       toolsLinks.push({ to: "/manager/migrations", label: "Migration" });
     }
-    navSections.push({
-      label: "Tools",
-      links: toolsLinks,
-    });
+    if (toolsLinks.length > 0) {
+      navSections.push({
+        label: "Tools",
+        links: toolsLinks,
+      });
+    }
   }
 
   return (

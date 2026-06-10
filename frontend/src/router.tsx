@@ -453,7 +453,11 @@ function canAccessManagerMigration(
 ): boolean {
   if (!generalSettings.bucket_migration_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
-  return Boolean(user.manager_tool_access?.bucket_migration);
+  return Boolean(getManagerToolAccess(user)?.bucket_migration);
+}
+
+function getManagerToolAccess(user: SessionUser | null) {
+  return user?.effective_access?.manager_tool_access ?? user?.manager_tool_access ?? null;
 }
 
 function canAccessManagerBucketCompare(
@@ -462,7 +466,7 @@ function canAccessManagerBucketCompare(
 ): boolean {
   if (!generalSettings.bucket_compare_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
-  if (!user.manager_tool_access?.bucket_compare) return false;
+  if (!getManagerToolAccess(user)?.bucket_compare) return false;
   return user.capabilities?.can_manage_buckets !== false;
 }
 
@@ -472,7 +476,14 @@ function canAccessManagerBucketIntegrity(
 ): boolean {
   if (!generalSettings.bucket_integrity_check_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
-  if (!user.manager_tool_access?.bucket_integrity_check) return false;
+  if (!getManagerToolAccess(user)?.bucket_integrity_check) return false;
+  return user.capabilities?.can_manage_buckets !== false;
+}
+
+function canAccessManagerFeatureRules(user: SessionUser | null): boolean {
+  if (!user?.role) return false;
+  if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
+  if (!getManagerToolAccess(user)?.feature_rules) return false;
   return user.capabilities?.can_manage_buckets !== false;
 }
 
@@ -515,6 +526,14 @@ function RequireManagerBucketIntegrityFeature() {
     return <Navigate to="/unauthorized" replace />;
   }
   if (canAccessManagerBucketIntegrity(generalSettings, user)) {
+    return <Outlet />;
+  }
+  return <Navigate to="/unauthorized" replace />;
+}
+
+export function RequireManagerFeatureRulesTool() {
+  const user = getStoredUser();
+  if (canAccessManagerFeatureRules(user)) {
     return <Outlet />;
   }
   return <Navigate to="/unauthorized" replace />;
@@ -610,7 +629,9 @@ export function createAppRoutes() {
               <Route element={<RequireManagerBucketIntegrityFeature />}>
                 <Route path="bucket-integrity" element={<ManagerBucketIntegrityPage />} />
               </Route>
-              <Route path="feature-rules" element={<ManagerFeatureRulesPage />} />
+              <Route element={<RequireManagerFeatureRulesTool />}>
+                <Route path="feature-rules" element={<ManagerFeatureRulesPage />} />
+              </Route>
               <Route element={<RequireManagerMigrationFeature />}>
                 <Route path="migrations" element={<ManagerMigrationsPage />} />
                 <Route path="migrations/new" element={<ManagerMigrationWizardPage />} />

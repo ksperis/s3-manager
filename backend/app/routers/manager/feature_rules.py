@@ -13,7 +13,11 @@ from app.models.bucket import (
     FeatureRuleInventoryFeature,
     FeatureRuleInventoryRule,
 )
-from app.routers.dependencies import get_account_context, get_current_account_admin
+from app.routers.dependencies import (
+    get_account_context,
+    get_current_account_admin,
+    require_manager_feature_rules_enabled,
+)
 from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
@@ -397,6 +401,7 @@ def list_feature_rule_inventory(
     feature: FeatureRuleInventoryFeature = Query(..., description="Bucket feature to inventory."),
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    _tool_user: object = Depends(require_manager_feature_rules_enabled),
     _: dict = Depends(get_current_account_admin),
 ) -> list[FeatureRuleInventoryBucket]:
     try:

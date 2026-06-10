@@ -109,6 +109,7 @@ def test_superadmin_can_create_superadmin_and_grant_ceph_admin(client: TestClien
         "bucket_compare": False,
         "bucket_integrity_check": False,
         "bucket_migration": False,
+        "feature_rules": False,
         "ceph_s3_user_keys": False,
     }
 
@@ -141,6 +142,7 @@ def test_admin_can_configure_manager_tool_access_on_update(client: TestClient, d
                 "bucket_compare": True,
                 "bucket_integrity_check": True,
                 "bucket_migration": False,
+                "feature_rules": True,
                 "ceph_s3_user_keys": True,
             },
         },
@@ -151,6 +153,7 @@ def test_admin_can_configure_manager_tool_access_on_update(client: TestClient, d
         "bucket_compare": True,
         "bucket_integrity_check": True,
         "bucket_migration": False,
+        "feature_rules": True,
         "ceph_s3_user_keys": True,
     }
 

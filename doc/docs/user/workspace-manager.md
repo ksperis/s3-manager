@@ -17,7 +17,7 @@ Use **Manager** for account-scoped administration aligned with S3/IAM semantics.
 3. Use **IAM** for users, groups, roles, and policies (if IAM capability is available).
 4. Use **Events** for SNS topics (if endpoint supports SNS).
 5. Use **Tools** for:
-   - Feature rules inventory
+   - Feature rules inventory (if authorized)
    - Bucket Compare (if enabled)
    - Bucket Integrity (if enabled)
    - Bucket Migration (if enabled and authorized)
@@ -29,7 +29,7 @@ Tenant resources are managed in the right scope with explicit context control.
 ## Limits / feature flags
 
 !!! note
-    IAM pages depend on endpoint IAM capability. Tools depend on `bucket_compare_enabled`, `bucket_integrity_check_enabled`, `bucket_migration_enabled`, `manager_ceph_s3_user_keys_enabled`, and the per-user Manager tools access configured on the UI user.
+    IAM pages depend on endpoint IAM capability. Tools depend on the Manager tools access configured directly on the UI user or inherited from UI groups. Bucket Compare, Bucket Integrity, Bucket Migration, and Ceph S3 User keys also depend on their matching global Manager settings.
 
 ## Related pages
 

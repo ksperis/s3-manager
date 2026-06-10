@@ -21,6 +21,7 @@ class UiGroup(Base):
     can_access_manager_bucket_compare = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_manager_bucket_integrity_check = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_manager_bucket_migration = Column(Boolean, default=False, nullable=False, server_default="0")
+    can_access_manager_feature_rules = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_manager_ceph_s3_user_keys = Column(Boolean, default=False, nullable=False, server_default="0")
     browser_advanced_features_enabled = Column(Boolean, default=False, nullable=False, server_default="0")
     created_at = Column(DateTime, default=utcnow, nullable=False)

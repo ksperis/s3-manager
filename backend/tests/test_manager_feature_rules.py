@@ -4,8 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.db import UiGroup, User, UserRole, UserUiGroup
 from app.main import app
 from app.models.bucket import BucketLifecycleConfig, BucketNotificationConfiguration, BucketTag
+from app.routers import dependencies
 from app.routers.manager import feature_rules as feature_rules_router
 
 
@@ -48,11 +50,22 @@ class FakeBucketsService:
 
 
 @pytest.fixture
-def feature_rule_client(client, monkeypatch):
+def feature_rule_client(client, db_session, monkeypatch):
     service = FakeBucketsService()
     account = SimpleNamespace(storage_endpoint=None)
+    user = User(
+        id=8101,
+        email="feature-rules@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+        can_access_manager_feature_rules=True,
+    )
+    db_session.add(user)
+    db_session.commit()
     app.dependency_overrides[feature_rules_router.get_account_context] = lambda: account
     app.dependency_overrides[feature_rules_router.get_buckets_service] = lambda: service
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
     monkeypatch.setattr(feature_rules_router, "account_sns_feature_enabled", lambda _account: True)
     return client, service
 
@@ -205,3 +218,58 @@ def test_feature_rules_marks_notifications_unavailable_when_sns_is_disabled(feat
     assert [row["status"] for row in body] == ["unavailable", "unavailable"]
     assert all(row["error"] == "SNS notifications are disabled for this endpoint." for row in body)
     assert service.notifications == {}
+
+
+def test_feature_rules_requires_manager_tool_access(client, db_session, monkeypatch):
+    service = FakeBucketsService()
+    account = SimpleNamespace(storage_endpoint=None)
+    user = User(
+        id=8102,
+        email="feature-rules-denied@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+        can_access_manager_feature_rules=False,
+    )
+    db_session.add(user)
+    db_session.commit()
+    app.dependency_overrides[feature_rules_router.get_account_context] = lambda: account
+    app.dependency_overrides[feature_rules_router.get_buckets_service] = lambda: service
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
+    monkeypatch.setattr(feature_rules_router, "account_sns_feature_enabled", lambda _account: True)
+
+    response = client.get("/api/manager/feature-rules", params={"feature": "lifecycle"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not authorized"
+
+
+def test_feature_rules_allows_group_inherited_manager_tool_access(client, db_session, monkeypatch):
+    service = FakeBucketsService()
+    account = SimpleNamespace(storage_endpoint=None)
+    user = User(
+        id=8103,
+        email="feature-rules-inherited@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+        can_access_manager_feature_rules=False,
+    )
+    group = UiGroup(
+        id=8104,
+        name="feature-rules-group",
+        can_access_manager_feature_rules=True,
+    )
+    db_session.add_all([user, group])
+    db_session.flush()
+    db_session.add(UserUiGroup(user_id=user.id, group_id=group.id))
+    db_session.commit()
+    app.dependency_overrides[feature_rules_router.get_account_context] = lambda: account
+    app.dependency_overrides[feature_rules_router.get_buckets_service] = lambda: service
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
+    monkeypatch.setattr(feature_rules_router, "account_sns_feature_enabled", lambda _account: True)
+
+    response = client.get("/api/manager/feature-rules", params={"feature": "lifecycle"})
+
+    assert response.status_code == 200
+    assert [row["bucket_name"] for row in response.json()] == ["alpha", "beta"]

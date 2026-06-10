@@ -87,6 +87,7 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
     assert admin.can_access_manager_bucket_compare is False
     assert admin.can_access_manager_bucket_integrity_check is False
     assert admin.can_access_manager_bucket_migration is False
+    assert admin.can_access_manager_feature_rules is False
     assert admin.can_access_manager_ceph_s3_user_keys is False
 
     with pytest.raises(ValueError, match="User already exists"):
@@ -114,6 +115,7 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
                 "bucket_compare": True,
                 "bucket_integrity_check": True,
                 "bucket_migration": True,
+                "feature_rules": True,
                 "ceph_s3_user_keys": True,
             },
         )
@@ -124,6 +126,7 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
     assert created.can_access_manager_bucket_compare is True
     assert created.can_access_manager_bucket_integrity_check is True
     assert created.can_access_manager_bucket_migration is True
+    assert created.can_access_manager_feature_rules is True
     assert created.can_access_manager_ceph_s3_user_keys is True
 
     assert service.authenticate("ui-admin@example.com", "wrong-password") is None
@@ -166,6 +169,7 @@ def test_update_user_and_link_validations(db_session):
                 "bucket_compare": True,
                 "bucket_integrity_check": False,
                 "bucket_migration": True,
+                "feature_rules": True,
                 "ceph_s3_user_keys": False,
             },
             s3_user_ids=[s3_user.id],
@@ -180,6 +184,7 @@ def test_update_user_and_link_validations(db_session):
     assert updated.can_access_manager_bucket_compare is True
     assert updated.can_access_manager_bucket_integrity_check is False
     assert updated.can_access_manager_bucket_migration is True
+    assert updated.can_access_manager_feature_rules is True
     assert updated.can_access_manager_ceph_s3_user_keys is False
     assert updated.quota_alerts_global_watch is False
     assert updated.is_active is False
@@ -198,6 +203,7 @@ def test_update_user_clears_manager_tools_for_no_access_role(db_session):
                 "bucket_compare": True,
                 "bucket_integrity_check": True,
                 "bucket_migration": True,
+                "feature_rules": True,
                 "ceph_s3_user_keys": True,
             },
         ),
@@ -207,6 +213,7 @@ def test_update_user_clears_manager_tools_for_no_access_role(db_session):
     assert updated.can_access_manager_bucket_compare is False
     assert updated.can_access_manager_bucket_integrity_check is False
     assert updated.can_access_manager_bucket_migration is False
+    assert updated.can_access_manager_feature_rules is False
     assert updated.can_access_manager_ceph_s3_user_keys is False
 
 

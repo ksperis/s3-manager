@@ -44,6 +44,7 @@ class ManagerToolAccess(BaseModel):
     bucket_compare: bool = False
     bucket_integrity_check: bool = False
     bucket_migration: bool = False
+    feature_rules: bool = False
     ceph_s3_user_keys: bool = False
 
 

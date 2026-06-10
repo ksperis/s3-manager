@@ -118,6 +118,7 @@ function setStoredManagerUser(overrides?: Record<string, unknown>) {
         bucket_compare: true,
         bucket_integrity_check: false,
         bucket_migration: false,
+        feature_rules: true,
         ceph_s3_user_keys: true,
       },
       ...overrides,
@@ -176,6 +177,7 @@ describe("ManagerLayout", () => {
         bucket_compare: false,
         bucket_integrity_check: true,
         bucket_migration: false,
+        feature_rules: true,
         ceph_s3_user_keys: true,
       },
     });
@@ -196,6 +198,60 @@ describe("ManagerLayout", () => {
     const toolsSection = capturedNavSections.find((section) => section.label === "Tools");
     expect(toolsSection?.links.map((link) => link.label)).toEqual(["Feature rules", "Integrity"]);
     expect(toolsSection?.links.map((link) => link.to)).toEqual(["/manager/feature-rules", "/manager/bucket-integrity"]);
+  });
+
+  it("hides Feature rules when the manager tool access is not enabled", () => {
+    setStoredManagerUser({
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        feature_rules: false,
+        ceph_s3_user_keys: true,
+      },
+    });
+    useS3AccountContextMock.mockReturnValue(buildContext());
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    expect(capturedNavSections.find((section) => section.label === "Tools")).toBeUndefined();
+  });
+
+  it("shows Feature rules when manager tool access is inherited from effective access", () => {
+    setStoredManagerUser({
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        feature_rules: false,
+        ceph_s3_user_keys: true,
+      },
+      effective_access: {
+        manager_tool_access: {
+          bucket_compare: false,
+          bucket_integrity_check: false,
+          bucket_migration: false,
+          feature_rules: true,
+          ceph_s3_user_keys: true,
+        },
+      },
+    });
+    useS3AccountContextMock.mockReturnValue(buildContext());
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const toolsSection = capturedNavSections.find((section) => section.label === "Tools");
+    expect(toolsSection?.links.map((link) => link.label)).toEqual(["Feature rules"]);
   });
 
   it("shows a loading hint for disabled Metrics while manager context is loading", () => {

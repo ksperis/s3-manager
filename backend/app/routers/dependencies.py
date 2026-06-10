@@ -54,6 +54,7 @@ ManagerToolKey = Literal[
     "bucket_compare",
     "bucket_integrity_check",
     "bucket_migration",
+    "feature_rules",
     "ceph_s3_user_keys",
 ]
 
@@ -61,6 +62,7 @@ _MANAGER_TOOL_ACCESS_FIELDS: dict[ManagerToolKey, str] = {
     "bucket_compare": "can_access_manager_bucket_compare",
     "bucket_integrity_check": "can_access_manager_bucket_integrity_check",
     "bucket_migration": "can_access_manager_bucket_migration",
+    "feature_rules": "can_access_manager_feature_rules",
     "ceph_s3_user_keys": "can_access_manager_ceph_s3_user_keys",
 }
 
@@ -940,7 +942,10 @@ def require_metrics_capable_manager(
 
 def _manager_tool_global_state(tool: ManagerToolKey) -> tuple[bool, str]:
     app_settings = load_app_settings()
-    global_field, disabled_detail = _MANAGER_TOOL_GLOBAL_FIELDS[tool]
+    global_state = _MANAGER_TOOL_GLOBAL_FIELDS.get(tool)
+    if global_state is None:
+        return True, ""
+    global_field, disabled_detail = global_state
     return bool(getattr(app_settings.general, global_field)), disabled_detail
 
 
@@ -1061,6 +1066,11 @@ def require_bucket_compare_enabled(user: User = Depends(get_current_user), db: S
 
 def require_bucket_integrity_check_enabled(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
     ensure_manager_tool_allowed(user, "bucket_integrity_check", db=db)
+    return user
+
+
+def require_manager_feature_rules_enabled(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    ensure_manager_tool_allowed(user, "feature_rules", db=db)
     return user
 
 

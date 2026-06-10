@@ -405,6 +405,7 @@ describe("UsersPage modal tabs", () => {
             bucket_compare: false,
             bucket_integrity_check: true,
             bucket_migration: true,
+            feature_rules: false,
             ceph_s3_user_keys: false,
           },
           accounts: [],
@@ -454,6 +455,7 @@ describe("UsersPage modal tabs", () => {
           bucket_compare: true,
           bucket_integrity_check: true,
           bucket_migration: true,
+          feature_rules: false,
           ceph_s3_user_keys: false,
         },
       })

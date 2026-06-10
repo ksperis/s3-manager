@@ -46,6 +46,7 @@ def test_seed_super_admin_if_empty_creates_user_when_db_is_empty(db_session, mon
     assert created.can_access_manager_bucket_compare is True
     assert created.can_access_manager_bucket_integrity_check is True
     assert created.can_access_manager_bucket_migration is True
+    assert created.can_access_manager_feature_rules is True
     assert created.can_access_manager_ceph_s3_user_keys is True
     assert verify_password("superstrongpass456", created.hashed_password)
 
