@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { normalizePortalRole } from "./adminAccessConfig";
 
 export type AssociationChipItem = {
   id: number | string;
@@ -20,11 +21,6 @@ const chipClass =
   "inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100";
 const sectionLabelClass = "ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500";
 const sectionValueClass = "ui-caption text-slate-600 dark:text-slate-300";
-
-function normalizePortalRole(value?: string | null): "portal_none" | "portal_user" | "portal_manager" {
-  if (value === "portal_user" || value === "portal_manager") return value;
-  return "portal_none";
-}
 
 export function AssociationChips({ items }: { items: AssociationChipItem[] }) {
   if (items.length === 0) return null;

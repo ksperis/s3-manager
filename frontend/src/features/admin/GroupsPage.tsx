@@ -11,7 +11,7 @@ import {
   listGroups,
   updateGroup,
 } from "../../api/groups";
-import { AccountMembership, ManagerToolAccess, UserSummary, listMinimalUsers } from "../../api/users";
+import { AccountMembership, UserSummary, listMinimalUsers } from "../../api/users";
 import { S3AccountSummary, listMinimalS3Accounts } from "../../api/accounts";
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
@@ -27,13 +27,22 @@ import AssociationSummary, {
   type AssociationAccountItem,
   type AssociationChipItem,
 } from "./AssociationSummary";
+import {
+  ManagerToolAccessSection,
+  WorkspaceAccessSection,
+} from "./AdminAccessSections";
+import AdminModalTabs from "./AdminModalTabs";
+import {
+  DEFAULT_MANAGER_TOOL_ACCESS,
+  PORTAL_ROLE_OPTIONS,
+  buildManagerToolDefinitions,
+  normalizeManagerToolAccess,
+  normalizePortalRole,
+  type ManagerToolKey,
+  type PortalAccountRole,
+} from "./adminAccessConfig";
 import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
-import {
-  PortalSettingsItem,
-  PortalSettingsSection,
-  PortalSettingsToggleAction,
-} from "../../components/PortalSettingsLayout";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -44,34 +53,11 @@ import { extractApiError } from "../../utils/apiError";
 
 type GroupModalTab = "general" | "members" | "associations" | "workspaces" | "manager_tools";
 type AssociationTab = "accounts" | "s3_users" | "connections";
-type PortalAccountRole = "portal_none" | "portal_user" | "portal_manager";
 type AccountSelection = {
   account_id: number;
   account_admin?: boolean | null;
   account_role?: PortalAccountRole | string | null;
 };
-
-const DEFAULT_MANAGER_TOOL_ACCESS: ManagerToolAccess = {
-  bucket_compare: false,
-  bucket_integrity_check: false,
-  bucket_migration: false,
-  ceph_s3_user_keys: false,
-};
-
-const PORTAL_ROLE_OPTIONS: { value: PortalAccountRole; label: string }[] = [
-  { value: "portal_none", label: "No portal access" },
-  { value: "portal_user", label: "Portal user" },
-  { value: "portal_manager", label: "Portal manager" },
-];
-
-const modalTabsContainerClass =
-  "flex flex-wrap gap-2 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-1";
-const modalTabButtonClass = (active: boolean) =>
-  `rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-    active
-      ? "bg-[var(--ui-surface)] text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)]"
-      : "text-[var(--ui-text-muted)] hover:bg-[var(--ui-hover)] hover:text-[var(--ui-text)]"
-  }`;
 const labelClass = "ui-body font-medium text-slate-700 dark:text-slate-200";
 const fieldClass =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 ui-body text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
@@ -79,26 +65,9 @@ const compactInputClass =
   "w-full rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2 py-1 ui-caption text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
 const secondaryButtonClass =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 ui-caption font-semibold text-[var(--ui-text)] hover:bg-[var(--ui-hover)]";
-const settingsGroupClass = "rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-4";
 const tableContainerClass = uiTableContainerClass;
 const tableClass = cx(uiDataTableClass, "compact-table min-w-full");
 const addPanelClass = cx(uiCardMutedClass, "space-y-2 px-3 py-2");
-const settingsItemSurfaceClass = (disabled: boolean) =>
-  disabled ? "bg-[var(--ui-surface-muted)] opacity-75" : "bg-[var(--ui-surface)]";
-
-function normalizePortalRole(value?: string | null): PortalAccountRole {
-  if (value === "portal_user" || value === "portal_manager") return value;
-  return "portal_none";
-}
-
-function normalizeManagerToolAccess(access?: ManagerToolAccess | null): ManagerToolAccess {
-  return {
-    bucket_compare: Boolean(access?.bucket_compare),
-    bucket_integrity_check: Boolean(access?.bucket_integrity_check),
-    bucket_migration: Boolean(access?.bucket_migration),
-    ceph_s3_user_keys: Boolean(access?.ceph_s3_user_keys),
-  };
-}
 
 function accountDbId(account: S3AccountSummary): number {
   return Number(account.db_id ?? account.id);
@@ -106,35 +75,6 @@ function accountDbId(account: S3AccountSummary): number {
 
 function includesQuery(label: string, query: string): boolean {
   return !query || label.toLowerCase().includes(query.trim().toLowerCase());
-}
-
-function GroupModalPrimaryTabs({
-  activeTab,
-  onTabChange,
-}: {
-  activeTab: GroupModalTab;
-  onTabChange: (tab: GroupModalTab) => void;
-}) {
-  return (
-    <div className={modalTabsContainerClass}>
-      {[
-        ["general", "General"],
-        ["members", "Members"],
-        ["associations", "Associations"],
-        ["workspaces", "Workspaces"],
-        ["manager_tools", "Manager tools"],
-      ].map(([id, label]) => (
-        <button
-          key={id}
-          type="button"
-          onClick={() => onTabChange(id as GroupModalTab)}
-          className={modalTabButtonClass(activeTab === id)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
 }
 
 function SelectionPanel({
@@ -236,32 +176,7 @@ export default function GroupsPage() {
   }, [connections]);
 
   const managerToolDefinitions = useMemo(
-    () => [
-      {
-        key: "bucket_compare" as const,
-        title: "Bucket compare",
-        description: "Allow access to Manager > Tools > Compare.",
-        enabled: Boolean(generalSettings.bucket_compare_enabled),
-      },
-      {
-        key: "bucket_integrity_check" as const,
-        title: "Bucket integrity check",
-        description: "Allow access to Manager > Tools > Integrity.",
-        enabled: Boolean(generalSettings.bucket_integrity_check_enabled),
-      },
-      {
-        key: "bucket_migration" as const,
-        title: "Bucket migration",
-        description: "Allow access to Manager > Tools > Migration.",
-        enabled: Boolean(generalSettings.bucket_migration_enabled),
-      },
-      {
-        key: "ceph_s3_user_keys" as const,
-        title: "Ceph S3 User keys",
-        description: "Allow access to Manager > Ceph > Access keys.",
-        enabled: Boolean(generalSettings.manager_ceph_s3_user_keys_enabled),
-      },
-    ],
+    () => buildManagerToolDefinitions(generalSettings),
     [
       generalSettings.bucket_compare_enabled,
       generalSettings.bucket_integrity_check_enabled,
@@ -856,7 +771,17 @@ export default function GroupsPage() {
             </PageBanner>
           )}
           <form onSubmit={submitGroup} className="space-y-4">
-            <GroupModalPrimaryTabs activeTab={modalTab} onTabChange={setModalTab} />
+            <AdminModalTabs<GroupModalTab>
+              activeTab={modalTab}
+              onTabChange={setModalTab}
+              tabs={[
+                { id: "general", label: "General" },
+                { id: "members", label: "Members" },
+                { id: "associations", label: "Associations" },
+                { id: "workspaces", label: "Workspaces" },
+                { id: "manager_tools", label: "Manager tools" },
+              ]}
+            />
 
             {modalTab === "general" && (
               <div className="grid grid-cols-1 gap-3">
@@ -892,79 +817,42 @@ export default function GroupsPage() {
             )}
 
             {modalTab === "workspaces" && (
-              <div className={settingsGroupClass}>
-                <PortalSettingsSection
-                  title="Mass management workspaces"
-                  description="Additional operational workspaces inherited by group members."
-                  layout="stack"
-                >
-                  <PortalSettingsItem
-                    title="Ceph Admin access"
-                    description="Grant effective /ceph-admin access to members whose UI role is Admin or Superadmin."
-                    className={settingsItemSurfaceClass(false)}
-                    action={
-                      <PortalSettingsToggleAction
-                        checked={Boolean(form.can_access_ceph_admin)}
-                        onChange={(value) => setForm((current) => ({ ...current, can_access_ceph_admin: value }))}
-                        ariaLabel="Allow group access to /ceph-admin"
-                      />
-                    }
-                  />
-                  <PortalSettingsItem
-                    title="Storage Ops access"
-                    description="Grant effective /storage-ops access to members with User, Admin, or Superadmin roles."
-                    className={settingsItemSurfaceClass(false)}
-                    action={
-                      <PortalSettingsToggleAction
-                        checked={Boolean(form.can_access_storage_ops)}
-                        onChange={(value) => setForm((current) => ({ ...current, can_access_storage_ops: value }))}
-                        ariaLabel="Allow group access to /storage-ops"
-                      />
-                    }
-                  />
-                </PortalSettingsSection>
-              </div>
+              <WorkspaceAccessSection
+                description="Additional operational workspaces inherited by group members."
+                cephAdmin={{
+                  title: "Ceph Admin access",
+                  description: "Grant effective /ceph-admin access to members whose UI role is Admin or Superadmin.",
+                  checked: Boolean(form.can_access_ceph_admin),
+                  onChange: (value) => setForm((current) => ({ ...current, can_access_ceph_admin: value })),
+                  ariaLabel: "Allow group access to /ceph-admin",
+                }}
+                storageOps={{
+                  title: "Storage Ops access",
+                  description: "Grant effective /storage-ops access to members with User, Admin, or Superadmin roles.",
+                  checked: Boolean(form.can_access_storage_ops),
+                  onChange: (value) => setForm((current) => ({ ...current, can_access_storage_ops: value })),
+                  ariaLabel: "Allow group access to /storage-ops",
+                }}
+              />
             )}
 
             {modalTab === "manager_tools" && (
               <div className="space-y-4">
-                <div className={settingsGroupClass}>
-                  <PortalSettingsSection
-                    title="Bucket tools"
-                    description="Manager tools inherited by group members."
-                    layout="stack"
-                  >
-                    {managerToolDefinitions.map((tool) => {
-                      const access = normalizeManagerToolAccess(form.manager_tool_access);
-                      const disabled = !tool.enabled;
-                      return (
-                        <PortalSettingsItem
-                          key={tool.key}
-                          title={tool.title}
-                          description={tool.description}
-                          className={settingsItemSurfaceClass(disabled)}
-                          action={
-                            <PortalSettingsToggleAction
-                              checked={Boolean(access[tool.key])}
-                              disabled={disabled}
-                              onChange={(value) =>
-                                setForm((current) => ({
-                                  ...current,
-                                  manager_tool_access: {
-                                    ...normalizeManagerToolAccess(current.manager_tool_access),
-                                    [tool.key]: value,
-                                  },
-                                }))
-                              }
-                              ariaLabel={tool.title}
-                              badge={{ visible: disabled, label: "Disabled globally", tone: "neutral" }}
-                            />
-                          }
-                        />
-                      );
-                    })}
-                  </PortalSettingsSection>
-                </div>
+                <ManagerToolAccessSection
+                  title="Bucket tools"
+                  description="Manager tools inherited by group members."
+                  tools={managerToolDefinitions}
+                  access={form.manager_tool_access}
+                  onChange={(key: ManagerToolKey, value) =>
+                    setForm((current) => ({
+                      ...current,
+                      manager_tool_access: {
+                        ...normalizeManagerToolAccess(current.manager_tool_access),
+                        [key]: value,
+                      },
+                    }))
+                  }
+                />
               </div>
             )}
 
