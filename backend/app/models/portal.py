@@ -137,34 +137,6 @@ class PortalStorageSpaceUpdate(BaseModel):
         return cleaned
 
 
-class PortalStorageObject(BaseModel):
-    key: str
-    name: str
-    size: Optional[int] = None
-    last_modified: Optional[datetime] = None
-    content_type: Optional[str] = None
-    storage_class: Optional[str] = None
-    encryption: Optional[str] = None
-
-
-class PortalStorageObjectListing(BaseModel):
-    prefix: str = ""
-    objects: list[PortalStorageObject]
-    prefixes: list[str]
-    is_truncated: bool = False
-    next_continuation_token: Optional[str] = None
-
-
-class PortalStorageObjectUploadResponse(BaseModel):
-    key: str
-    message: str
-
-
-class PortalStorageObjectFolderCreate(BaseModel):
-    prefix: str = ""
-    name: str = Field(min_length=1, max_length=255)
-
-
 class PortalStorageObjectDeleteResponse(BaseModel):
     key: str
     message: str

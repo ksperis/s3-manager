@@ -5,6 +5,12 @@
 import client from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 
+export type BrowserWorkspaceSurface = "browser" | "manager" | "ceph-admin" | "portal";
+
+export type BrowserRequestOptions = {
+  workspaceSurface?: BrowserWorkspaceSurface;
+};
+
 export type BrowserBucket = {
   name: string;
   creation_date?: string | null;
@@ -272,6 +278,17 @@ export function buildSseCustomerBackendHeaders(sseCustomerKeyBase64?: string | n
   };
 }
 
+function buildBrowserWorkspaceHeaders(options?: BrowserRequestOptions): Record<string, string> {
+  return options?.workspaceSurface === "portal" ? { "X-S3-Workspace": "portal" } : {};
+}
+
+function mergeBrowserHeaders(
+  ...headers: Array<Record<string, string> | undefined>
+): Record<string, string> | undefined {
+  const merged = Object.assign({}, ...headers.filter(Boolean));
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
 export type MultipartUploadInitRequest = {
   key: string;
   content_type?: string | null;
@@ -400,7 +417,7 @@ export async function searchBrowserBuckets(
     exact?: boolean;
     page?: number;
     pageSize?: number;
-  }
+  } & BrowserRequestOptions
 ): Promise<PaginatedBrowserBucketsResponse> {
   const params = withS3AccountParam(
     {
@@ -411,7 +428,10 @@ export async function searchBrowserBuckets(
     },
     accountId
   );
-  const { data } = await client.get<PaginatedBrowserBucketsResponse>("/browser/buckets/search", { params });
+  const { data } = await client.get<PaginatedBrowserBucketsResponse>("/browser/buckets/search", {
+    params,
+    headers: buildBrowserWorkspaceHeaders(options),
+  });
   return data;
 }
 
@@ -443,9 +463,13 @@ export async function getBucketVersioning(
   return data;
 }
 
-export async function fetchBrowserSettings(accountId: S3AccountSelector): Promise<BrowserSettings> {
+export async function fetchBrowserSettings(
+  accountId: S3AccountSelector,
+  options?: BrowserRequestOptions
+): Promise<BrowserSettings> {
   const { data } = await client.get<BrowserSettings>("/browser/settings", {
     params: withS3AccountParam(undefined, accountId),
+    headers: buildBrowserWorkspaceHeaders(options),
   });
   return data;
 }
@@ -453,7 +477,7 @@ export async function fetchBrowserSettings(accountId: S3AccountSelector): Promis
 export async function listBrowserObjects(
   accountId: S3AccountSelector,
   bucketName: string,
-  options?: { prefix?: string; continuationToken?: string | null; maxKeys?: number; signal?: AbortSignal } & BrowserObjectsQuery
+  options?: { prefix?: string; continuationToken?: string | null; maxKeys?: number; signal?: AbortSignal } & BrowserObjectsQuery & BrowserRequestOptions
 ): Promise<ListBrowserObjectsResponse> {
   const params = withS3AccountParam(
     {
@@ -479,7 +503,7 @@ export async function listBrowserObjects(
   );
   const { data } = await client.get<ListBrowserObjectsResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/objects`,
-    { params, signal: options?.signal }
+    { params, headers: buildBrowserWorkspaceHeaders(options), signal: options?.signal }
   );
   return data;
 }
@@ -511,12 +535,13 @@ export async function fetchBrowserObjectColumns(
 export async function getBucketCorsStatus(
   accountId: S3AccountSelector,
   bucketName: string,
-  origin?: string
+  origin?: string,
+  options?: BrowserRequestOptions
 ): Promise<BucketCorsStatus> {
   const params = withS3AccountParam(origin ? { origin } : undefined, accountId);
   const { data } = await client.get<BucketCorsStatus>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/cors`,
-    { params }
+    { params, headers: buildBrowserWorkspaceHeaders(options) }
   );
   return data;
 }
@@ -727,14 +752,18 @@ export async function presignObject(
   accountId: S3AccountSelector,
   bucketName: string,
   payload: PresignRequest,
-  sseCustomerKeyBase64?: string | null
+  sseCustomerKeyBase64?: string | null,
+  options?: BrowserRequestOptions
 ): Promise<PresignedUrl> {
   const { data } = await client.post<PresignedUrl>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/presign`,
     payload,
     {
       params: withS3AccountParam(undefined, accountId),
-      headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+      headers: mergeBrowserHeaders(
+        buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+        buildBrowserWorkspaceHeaders(options),
+      ),
     }
   );
   return data;
@@ -756,12 +785,13 @@ export async function deleteObjects(
   accountId: S3AccountSelector,
   bucketName: string,
   objects: DeleteObjectEntry[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: BrowserRequestOptions
 ): Promise<number> {
   const { data } = await client.post<{ deleted: number }>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/delete`,
     { objects },
-    { params: withS3AccountParam(undefined, accountId), signal }
+    { params: withS3AccountParam(undefined, accountId), headers: buildBrowserWorkspaceHeaders(options), signal }
   );
   return data.deleted;
 }
@@ -780,11 +810,16 @@ export async function cleanupObjectVersions(
   return data;
 }
 
-export async function createFolder(accountId: S3AccountSelector, bucketName: string, prefix: string): Promise<void> {
+export async function createFolder(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  prefix: string,
+  options?: BrowserRequestOptions
+): Promise<void> {
   await client.post(
     `/browser/buckets/${encodeURIComponent(bucketName)}/folders`,
     { prefix },
-    { params: withS3AccountParam(undefined, accountId) }
+    { params: withS3AccountParam(undefined, accountId), headers: buildBrowserWorkspaceHeaders(options) }
   );
 }
 
@@ -796,7 +831,8 @@ export async function proxyUpload(
   onUploadProgress?: (event: ProgressEvent) => void,
   signal?: AbortSignal,
   sseCustomerKeyBase64?: string | null,
-  fileName?: string
+  fileName?: string,
+  options?: BrowserRequestOptions
 ): Promise<void> {
   const form = new FormData();
   form.append("key", key);
@@ -808,7 +844,10 @@ export async function proxyUpload(
   form.append("file", file, inferredName);
   await client.post(`/browser/buckets/${encodeURIComponent(bucketName)}/proxy-upload`, form, {
     params: withS3AccountParam(undefined, accountId),
-    headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+    headers: mergeBrowserHeaders(
+      buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+      buildBrowserWorkspaceHeaders(options),
+    ),
     onUploadProgress,
     signal,
   });
@@ -819,11 +858,15 @@ export async function proxyDownload(
   bucketName: string,
   key: string,
   signal?: AbortSignal,
-  sseCustomerKeyBase64?: string | null
+  sseCustomerKeyBase64?: string | null,
+  options?: BrowserRequestOptions
 ): Promise<Blob> {
   const { data } = await client.get(`/browser/buckets/${encodeURIComponent(bucketName)}/download`, {
     params: withS3AccountParam({ key }, accountId),
-    headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+    headers: mergeBrowserHeaders(
+      buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+      buildBrowserWorkspaceHeaders(options),
+    ),
     responseType: "blob",
     signal,
   });
@@ -834,14 +877,18 @@ export async function initiateMultipartUpload(
   accountId: S3AccountSelector,
   bucketName: string,
   payload: MultipartUploadInitRequest,
-  sseCustomerKeyBase64?: string | null
+  sseCustomerKeyBase64?: string | null,
+  options?: BrowserRequestOptions
 ): Promise<MultipartUploadInitResponse> {
   const { data } = await client.post<MultipartUploadInitResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/initiate`,
     payload,
     {
       params: withS3AccountParam(undefined, accountId),
-      headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+      headers: mergeBrowserHeaders(
+        buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+        buildBrowserWorkspaceHeaders(options),
+      ),
     }
   );
   return data;
@@ -873,14 +920,18 @@ export async function presignPart(
   bucketName: string,
   uploadId: string,
   payload: PresignPartRequest,
-  sseCustomerKeyBase64?: string | null
+  sseCustomerKeyBase64?: string | null,
+  options?: BrowserRequestOptions
 ): Promise<PresignPartResponse> {
   const { data } = await client.post<PresignPartResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/presign`,
     payload,
     {
       params: withS3AccountParam(undefined, accountId),
-      headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+      headers: mergeBrowserHeaders(
+        buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+        buildBrowserWorkspaceHeaders(options),
+      ),
     }
   );
   return data;
@@ -891,13 +942,15 @@ export async function completeMultipartUpload(
   bucketName: string,
   uploadId: string,
   key: string,
-  payload: CompleteMultipartUploadRequest
+  payload: CompleteMultipartUploadRequest,
+  options?: BrowserRequestOptions
 ): Promise<void> {
   await client.post(
     `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/complete`,
     payload,
     {
       params: withS3AccountParam({ key }, accountId),
+      headers: buildBrowserWorkspaceHeaders(options),
     }
   );
 }
@@ -906,9 +959,11 @@ export async function abortMultipartUpload(
   accountId: S3AccountSelector,
   bucketName: string,
   uploadId: string,
-  key: string
+  key: string,
+  options?: BrowserRequestOptions
 ): Promise<void> {
   await client.delete(`/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}`, {
     params: withS3AccountParam({ key }, accountId),
+    headers: buildBrowserWorkspaceHeaders(options),
   });
 }

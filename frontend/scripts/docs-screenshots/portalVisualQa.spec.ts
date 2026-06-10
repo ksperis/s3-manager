@@ -83,8 +83,11 @@ test.describe("Portal visual QA", () => {
 
           const main = page.locator("main");
           await expect(main.getByText(route.expected, { exact: false }).first()).toBeVisible();
-          await expect(main.getByText("Open in Browser", { exact: false })).toHaveCount(0);
           await expect(main.getByText("/portal/browser", { exact: false })).toHaveCount(0);
+          if (route.path.startsWith("/portal/storage-spaces/") && !route.path.includes("/objects/")) {
+            await expect(main.getByRole("button", { name: "Selected storage space" })).toBeVisible();
+            await expect(main.getByRole("button", { name: "Search options" })).toHaveCount(0);
+          }
 
           const horizontalOverflow = await page.evaluate(() => (
             Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth

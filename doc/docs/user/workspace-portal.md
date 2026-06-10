@@ -8,6 +8,8 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 ## Prerequisites
 
 - The global `portal_enabled` setting is enabled.
+- The global `browser_enabled` and `browser_portal_enabled` settings are
+  enabled to browse files inside a Storage Space.
 - Your UI user is explicitly linked to the account with Portal access.
 - The account is backed by a storage endpoint configured by the platform team.
 
@@ -48,6 +50,10 @@ From a Storage Space, users can:
 - create simple folders when their role allows it;
 - delete files only when their role allows it;
 - open a file detail view with safe metadata and a safe preview when available.
+
+The file browser shown inside a Storage Space is the main Browser in a locked,
+minimal Portal profile. It opens only the selected Storage Space, keeps the
+Storage Space label in the UI, and uses the Portal execution identity.
 
 Advanced object features such as versions, tags, raw metadata headers, object
 lock, diagnostics, and batch operations belong in Browser or Manager, not in
@@ -116,8 +122,10 @@ backend.
     administration rights.
 
 !!! note
-    Portal requires `portal_enabled` and an explicit account link. Advanced
-    object inspection belongs in `/browser`, not inside Portal.
+    Portal requires `portal_enabled` and an explicit account link. File browsing
+    inside Storage Spaces also requires `browser_enabled` and
+    `browser_portal_enabled`. Advanced object inspection belongs in `/browser`,
+    not inside Portal.
 
 ## Related pages
 

@@ -41,6 +41,7 @@ export type BrowserActionState = {
 };
 
 export type BrowserActionMap = Record<BrowserActionId, BrowserActionState>;
+export type BrowserActionProfile = "full" | "portal-basic";
 
 export type ResolveBrowserActionsInput = {
   scope: BrowserActionScope;
@@ -213,6 +214,42 @@ const createHiddenState = (id: BrowserActionId): BrowserActionState => ({
 
 export const getVisibleBrowserActions = (actions: BrowserActionMap, ids: readonly BrowserActionId[]) =>
   ids.map((id) => actions[id]).filter((action) => action.visible);
+
+const PORTAL_BASIC_PATH_ACTION_IDS = new Set<BrowserActionId>([
+  "uploadFiles",
+  "uploadFolder",
+  "newFolder",
+  "copyPath",
+]);
+
+const PORTAL_BASIC_SELECTION_ACTION_IDS = new Set<BrowserActionId>([
+  "download",
+  "delete",
+]);
+
+export function applyBrowserActionProfile(
+  actions: BrowserActionMap,
+  profile: BrowserActionProfile,
+  items: BrowserItem[] = [],
+): BrowserActionMap {
+  if (profile !== "portal-basic") {
+    return actions;
+  }
+  const canOpenSingleFolder = items.length === 1 && items[0]?.type === "folder";
+  return Object.fromEntries(
+    Object.entries(actions).map(([id, action]) => {
+      const actionId = id as BrowserActionId;
+      const allowed =
+        PORTAL_BASIC_PATH_ACTION_IDS.has(actionId) ||
+        PORTAL_BASIC_SELECTION_ACTION_IDS.has(actionId) ||
+        (actionId === "open" && canOpenSingleFolder);
+      return [
+        actionId,
+        allowed ? action : { ...action, visible: false, enabled: false },
+      ];
+    }),
+  ) as BrowserActionMap;
+}
 
 export const resolveBrowserActions = ({
   scope,

@@ -99,7 +99,7 @@ export type PortalStorageSpaceUpdate = Partial<PortalStorageSpaceCreate> & {
   archived?: boolean;
 };
 
-export type PortalStorageObject = {
+export type PortalStorageObjectDetail = {
   key: string;
   name: string;
   size?: number | null;
@@ -107,27 +107,6 @@ export type PortalStorageObject = {
   content_type?: string | null;
   storage_class?: string | null;
   encryption?: string | null;
-};
-
-export type PortalStorageObjectListing = {
-  prefix: string;
-  objects: PortalStorageObject[];
-  prefixes: string[];
-  is_truncated?: boolean;
-  next_continuation_token?: string | null;
-};
-
-export type PortalStorageObjectUploadResponse = {
-  key: string;
-  message: string;
-};
-
-export type PortalStorageObjectDeleteResponse = {
-  key: string;
-  message: string;
-};
-
-export type PortalStorageObjectDetail = PortalStorageObject & {
   preview_type: "text" | "image" | "unavailable";
   preview_text?: string | null;
   preview_unavailable_reason?: string | null;
@@ -318,28 +297,6 @@ export async function updatePortalStorageSpace(
   return data;
 }
 
-export async function listPortalStorageSpaceObjects(
-  accountId: S3AccountSelector,
-  spaceId: string,
-  options?: { prefix?: string; continuationToken?: string; maxKeys?: number }
-): Promise<PortalStorageObjectListing> {
-  const baseParams: Record<string, string | number> = {};
-  if (options?.prefix) {
-    baseParams.prefix = options.prefix;
-  }
-  if (options?.continuationToken) {
-    baseParams.continuation_token = options.continuationToken;
-  }
-  if (options?.maxKeys) {
-    baseParams.max_keys = options.maxKeys;
-  }
-  const { data } = await client.get<PortalStorageObjectListing>(
-    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects`,
-    { params: withS3AccountParam(baseParams, accountId) }
-  );
-  return data;
-}
-
 export async function fetchPortalStorageSpaceObjectDetail(
   accountId: S3AccountSelector,
   spaceId: string,
@@ -352,51 +309,15 @@ export async function fetchPortalStorageSpaceObjectDetail(
   return data;
 }
 
-export async function uploadPortalStorageSpaceObject(
-  accountId: S3AccountSelector,
-  spaceId: string,
-  file: File,
-  options?: { prefix?: string; key?: string }
-): Promise<PortalStorageObjectUploadResponse> {
-  const payload = new FormData();
-  payload.append("file", file);
-  if (options?.prefix) {
-    payload.append("prefix", options.prefix);
-  }
-  if (options?.key) {
-    payload.append("key", options.key);
-  }
-  const { data } = await client.post<PortalStorageObjectUploadResponse>(
-    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects/upload`,
-    payload,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function createPortalStorageSpaceFolder(
-  accountId: S3AccountSelector,
-  spaceId: string,
-  payload: { prefix?: string; name: string }
-): Promise<PortalStorageObjectUploadResponse> {
-  const { data } = await client.post<PortalStorageObjectUploadResponse>(
-    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects/folders`,
-    payload,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
 export async function deletePortalStorageSpaceObject(
   accountId: S3AccountSelector,
   spaceId: string,
   key: string
-): Promise<PortalStorageObjectDeleteResponse> {
-  const { data } = await client.delete<PortalStorageObjectDeleteResponse>(
+): Promise<void> {
+  await client.delete(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects`,
     { params: withS3AccountParam({ key }, accountId) }
   );
-  return data;
 }
 
 function filenameFromContentDisposition(value: unknown, fallback: string): string {

@@ -1,15 +1,26 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import type { ComponentProps } from "react";
 import PortalStorageSpaceDetailPage from "./PortalStorageSpaceDetailPage";
+import BrowserEmbed from "../browser/BrowserEmbed";
 
 const mocks = vi.hoisted(() => ({
-  createFolderMock: vi.fn(),
-  listObjectsMock: vi.fn(),
   updateStorageSpaceMock: vi.fn(),
-  uploadObjectMock: vi.fn(),
+  generalSettings: {
+    browser_enabled: true,
+    browser_portal_enabled: true,
+  },
   hookResult: {
     accountIdForApi: "101",
+    selectedAccount: {
+      id: "101",
+      name: "Account 1",
+      tags: [],
+      quota_max_size_gb: 10,
+      quota_max_objects: 1000,
+      storage_endpoint_capabilities: { sse: true, sts: true },
+    },
     workspace: {
       accountName: "Account 1",
       userEmail: "manager@example.com",
@@ -21,7 +32,7 @@ const mocks = vi.hoisted(() => ({
         {
           id: "research-data",
           name: "Research Data",
-          internalName: "research-data",
+          internalName: "research-data-internal",
           description: "Research Data shared storage",
           role: "Owner",
           status: "Active",
@@ -62,57 +73,63 @@ vi.mock("./usePortalWorkspaceData", () => ({
   usePortalWorkspaceData: () => mocks.hookResult,
 }));
 
-vi.mock("../../api/portal", () => ({
-  createPortalStorageSpaceFolder: (...args: unknown[]) => mocks.createFolderMock(...args),
-  listPortalStorageSpaceObjects: (...args: unknown[]) => mocks.listObjectsMock(...args),
-  updatePortalStorageSpace: (...args: unknown[]) => mocks.updateStorageSpaceMock(...args),
-  uploadPortalStorageSpaceObject: (...args: unknown[]) => mocks.uploadObjectMock(...args),
+vi.mock("../../components/GeneralSettingsContext", () => ({
+  useGeneralSettings: () => ({
+    generalSettings: mocks.generalSettings,
+  }),
 }));
+
+vi.mock("../../api/portal", () => ({
+  updatePortalStorageSpace: (...args: unknown[]) => mocks.updateStorageSpaceMock(...args),
+}));
+
+vi.mock("../browser/BrowserEmbed", () => ({
+  default: vi.fn(() => <div data-testid="portal-browser-embed" />),
+}));
+
+function renderPage() {
+  return render(
+    <MemoryRouter initialEntries={["/portal/storage-spaces/research-data"]}>
+      <Routes>
+        <Route path="/portal/storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
 
 describe("PortalStorageSpaceDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.listObjectsMock.mockResolvedValue({
-      prefix: "raw-data/2024/03/",
-      prefixes: ["raw-data/2024/03/01-fastq/"],
-      objects: [
-        {
-          key: "raw-data/2024/03/sample_001.fastq.gz",
-          name: "sample_001.fastq.gz",
-          size: 512,
-          last_modified: "2026-05-27T08:15:00Z",
-        },
-      ],
-      is_truncated: false,
-      next_continuation_token: null,
-    });
+    mocks.generalSettings.browser_enabled = true;
+    mocks.generalSettings.browser_portal_enabled = true;
   });
 
-  it("renders a portal object list view and links files to object detail", async () => {
-    render(
-      <MemoryRouter initialEntries={["/portal/storage-spaces/research-data?prefix=raw-data/2024/03/"]}>
-        <Routes>
-          <Route path="/portal/storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
-        </Routes>
-      </MemoryRouter>
-    );
+  it("embeds the main Browser in locked portal-basic mode for the storage space", () => {
+    renderPage();
 
     expect(screen.getByRole("heading", { name: "Research Data" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Téléverser" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nouveau dossier" })).toBeInTheDocument();
-    expect(screen.getByText("Racine")).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: "01-fastq" })).toHaveAttribute(
-      "href",
-      "/portal/storage-spaces/research-data?prefix=raw-data%2F2024%2F03%2F01-fastq%2F"
-    );
-    expect(screen.getByRole("link", { name: "sample_001.fastq.gz" })).toHaveAttribute(
-      "href",
-      "/portal/storage-spaces/research-data/objects/raw-data/2024/03/sample_001.fastq.gz"
-    );
-    await waitFor(() => {
-      expect(mocks.listObjectsMock).toHaveBeenCalledWith("101", "research-data", { prefix: "raw-data/2024/03/" });
+    expect(screen.getByTestId("portal-browser-embed")).toBeInTheDocument();
+
+    const embedProps = vi.mocked(BrowserEmbed).mock.calls[0][0] as ComponentProps<typeof BrowserEmbed>;
+    expect(embedProps).toMatchObject({
+      accountIdForApi: "101",
+      hasContext: true,
+      workspaceSurface: "portal",
+      actionProfile: "portal-basic",
+      lockedBucketName: "research-data-internal",
+      lockedBucketLabel: "Research Data",
+      quotaMaxSizeGb: 10,
+      quotaMaxObjects: 1000,
     });
-    expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Open in Browser/i)).not.toBeInTheDocument();
+    expect(embedProps.storageEndpointCapabilities).toEqual({ sse: true, sts: true });
+  });
+
+  it("shows a disabled state when the Portal Browser kill switch is off", () => {
+    mocks.generalSettings.browser_portal_enabled = false;
+
+    renderPage();
+
+    expect(screen.getByText(/Le Browser Portal est désactivé/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
   });
 });

@@ -116,7 +116,6 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.getAllByText("report.pdf").length).toBeGreaterThan(0);
     expect(screen.getByText("Storage quota is getting close")).toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Open in Browser/i)).not.toBeInTheDocument();
   });
 
   it("opens storage space detail routes from dashboard rows", () => {

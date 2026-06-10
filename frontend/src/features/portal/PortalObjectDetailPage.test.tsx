@@ -81,7 +81,7 @@ describe("PortalObjectDetailPage", () => {
     mocks.listPublicLinksMock.mockResolvedValue([]);
   });
 
-  it("renders object detail tabs, actions, and unavailable states without browser handoff", async () => {
+  it("renders object detail tabs, simple actions, and unavailable advanced states", async () => {
     render(
       <MemoryRouter initialEntries={["/portal/storage-spaces/research-data/objects/raw-data/2024/03/sample_001.fastq.gz"]}>
         <Routes>
@@ -106,6 +106,5 @@ describe("PortalObjectDetailPage", () => {
     expect(screen.queryByRole("button", { name: "Métadonnées" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Open in Browser/i)).not.toBeInTheDocument();
   });
 });

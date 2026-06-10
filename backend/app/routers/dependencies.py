@@ -706,6 +706,60 @@ def _is_portal_browser_request(request: Optional[Request], surface: str) -> bool
     return workspace == "portal"
 
 
+def _portal_browser_relative_segments(request: Request) -> list[str]:
+    browser_prefix = f"{settings.api_v1_prefix}/browser"
+    path = str(request.url.path)
+    if path.startswith(browser_prefix):
+        relative = path[len(browser_prefix) :]
+    elif path.startswith("/browser"):
+        relative = path[len("/browser") :]
+    else:
+        relative = path
+    return [segment for segment in relative.strip("/").split("/") if segment]
+
+
+def _is_portal_browser_basic_route_allowed(request: Request) -> bool:
+    method = request.method.upper()
+    if method in {"HEAD", "OPTIONS"}:
+        return True
+    segments = _portal_browser_relative_segments(request)
+    if method == "GET" and segments == ["settings"]:
+        return True
+    if method == "GET" and segments == ["buckets", "search"]:
+        return True
+    if len(segments) < 3 or segments[0] != "buckets":
+        return False
+
+    operation = segments[2]
+    if len(segments) == 3:
+        if method == "GET" and operation in {"objects", "cors", "download"}:
+            return True
+        if method == "POST" and operation in {"presign", "delete", "folders", "proxy-upload"}:
+            return True
+        return False
+
+    if operation != "multipart":
+        return False
+    if method == "POST" and len(segments) == 4 and segments[3] == "initiate":
+        return True
+    if method == "POST" and len(segments) == 5 and segments[4] in {"presign", "complete"}:
+        return True
+    if method == "DELETE" and len(segments) == 4:
+        return True
+    return False
+
+
+def require_portal_browser_basic_route(request: Request) -> None:
+    if not _is_portal_browser_request(request, _resolve_workspace_surface(request)):
+        return
+    if _is_portal_browser_basic_route_allowed(request):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Endpoint is not available in Portal browser profile",
+    )
+
+
 def _resolve_portal_browser_context(
     db: Session,
     user: User,

@@ -2,11 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 import logging
-import os
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -23,9 +22,6 @@ from app.models.portal import (
     PortalTransfer,
     PortalStorageObjectDeleteResponse,
     PortalStorageObjectDetail,
-    PortalStorageObjectFolderCreate,
-    PortalStorageObjectListing,
-    PortalStorageObjectUploadResponse,
     PortalStorageSpace,
     PortalStorageSpaceCreate,
     PortalStorageSpaceShare,
@@ -421,31 +417,6 @@ def update_portal_storage_space(
         _raise_portal_storage_runtime(exc)
 
 
-@router.get("/storage-spaces/{space_id}/objects", response_model=PortalStorageObjectListing)
-def portal_storage_space_objects(
-    space_id: str,
-    prefix: str = Query("", description="Object prefix to browse"),
-    continuation_token: Optional[str] = Query(None),
-    max_keys: int = Query(1000, ge=1, le=1000),
-    access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> PortalStorageObjectListing:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        return service.list_storage_space_objects(
-            actor,
-            access,
-            space_id,
-            prefix=prefix,
-            continuation_token=continuation_token,
-            max_keys=max_keys,
-        )
-    except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
-
-
 @router.get("/storage-spaces/{space_id}/objects/detail", response_model=PortalStorageObjectDetail)
 def portal_storage_space_object_detail(
     space_id: str,
@@ -459,117 +430,6 @@ def portal_storage_space_object_detail(
     try:
         return service.get_storage_space_object_detail(actor, access, space_id, key)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
-
-
-@router.post(
-    "/storage-spaces/{space_id}/objects/upload",
-    response_model=PortalStorageObjectUploadResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def portal_upload_storage_space_object(
-    space_id: str,
-    file: UploadFile = File(...),
-    prefix: str = Form(""),
-    key: Optional[str] = Form(None),
-    access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> PortalStorageObjectUploadResponse:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    if not file.filename:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing filename")
-    target_key = key.strip().lstrip("/") if key else ""
-    if not target_key:
-        normalized_prefix = (prefix or "").lstrip("/")
-        if normalized_prefix and not normalized_prefix.endswith("/"):
-            normalized_prefix = f"{normalized_prefix}/"
-        target_key = f"{normalized_prefix}{os.path.basename(file.filename)}"
-    if not target_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing object key")
-    try:
-        contents = await file.read()
-        uploaded_key = service.upload_storage_space_object(
-            actor,
-            access,
-            space_id,
-            target_key,
-            file_obj=contents,
-            content_type=file.content_type,
-        )
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="upload_object",
-            entity_type="object",
-            entity_id=uploaded_key,
-            account=access.account,
-            metadata={
-                "storage_space_id": space_id,
-                "content_type": file.content_type,
-                "size_bytes": len(contents),
-            },
-        )
-        return PortalStorageObjectUploadResponse(key=uploaded_key, message="Uploaded")
-    except RuntimeError as exc:
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="upload_object",
-            entity_type="object",
-            entity_id=target_key,
-            account=access.account,
-            metadata={
-                "storage_space_id": space_id,
-                "content_type": file.content_type,
-            },
-            status="failed",
-            message=str(exc),
-        )
-        _raise_portal_storage_runtime(exc)
-
-
-@router.post(
-    "/storage-spaces/{space_id}/objects/folders",
-    response_model=PortalStorageObjectUploadResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def portal_create_storage_space_folder(
-    space_id: str,
-    payload: PortalStorageObjectFolderCreate,
-    access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> PortalStorageObjectUploadResponse:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        key = service.create_storage_space_folder(actor, access, space_id, payload.prefix, payload.name)
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="create_folder",
-            entity_type="object",
-            entity_id=key,
-            account=access.account,
-            metadata={"storage_space_id": space_id},
-        )
-        return PortalStorageObjectUploadResponse(key=key, message="Folder created")
-    except RuntimeError as exc:
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="create_folder",
-            entity_type="object",
-            entity_id=f"{payload.prefix.rstrip('/')}/{payload.name.strip('/')}/",
-            account=access.account,
-            metadata={"storage_space_id": space_id},
-            status="failed",
-            message=str(exc),
-        )
         _raise_portal_storage_runtime(exc)
 
 

@@ -7,7 +7,6 @@ import os
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
-from io import BytesIO
 from typing import Any, Optional, Tuple, TYPE_CHECKING
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -53,8 +52,6 @@ from app.models.portal import (
     PortalTransfer,
     PortalStorageObjectDetail,
     PortalStorageSpace,
-    PortalStorageObject,
-    PortalStorageObjectListing,
     PortalStorageSpaceRole,
     PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
@@ -1925,84 +1922,6 @@ class PortalService:
         normalized = key.rstrip("/")
         return os.path.basename(normalized) or normalized or key
 
-    def list_storage_space_objects(
-        self,
-        user: User,
-        access: "AccountAccess",
-        space_id: str,
-        prefix: str = "",
-        continuation_token: Optional[str] = None,
-        max_keys: int = 1000,
-    ) -> PortalStorageObjectListing:
-        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
-        if not bucket_name:
-            raise RuntimeError("Storage space not found or not allowed.")
-        client = self._portal_object_client(user, access.account)
-        safe_max_keys = max(1, min(int(max_keys or 1000), 1000))
-        normalized_prefix = (prefix or "").lstrip("/")
-        kwargs: dict[str, Any] = {
-            "Bucket": bucket_name,
-            "Prefix": normalized_prefix,
-            "Delimiter": "/",
-            "MaxKeys": safe_max_keys,
-        }
-        if continuation_token:
-            kwargs["ContinuationToken"] = continuation_token
-        try:
-            resp = client.list_objects_v2(**kwargs)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to list objects for storage space '{space_id}': {exc}") from exc
-
-        objects: list[PortalStorageObject] = []
-        for obj in resp.get("Contents", []):
-            key = obj.get("Key")
-            if not key:
-                continue
-            if normalized_prefix and key.rstrip("/") == normalized_prefix.rstrip("/") and int(obj.get("Size") or 0) == 0:
-                continue
-            objects.append(
-                PortalStorageObject(
-                    key=key,
-                    name=self._object_name(key),
-                    size=int(obj.get("Size") or 0),
-                    last_modified=obj.get("LastModified"),
-                )
-            )
-        prefixes = [item.get("Prefix") for item in resp.get("CommonPrefixes", []) if item.get("Prefix")]
-        return PortalStorageObjectListing(
-            prefix=normalized_prefix,
-            objects=objects,
-            prefixes=prefixes,
-            is_truncated=bool(resp.get("IsTruncated")),
-            next_continuation_token=resp.get("NextContinuationToken"),
-        )
-
-    def upload_storage_space_object(
-        self,
-        user: User,
-        access: "AccountAccess",
-        space_id: str,
-        key: str,
-        file_obj,
-        content_type: Optional[str] = None,
-    ) -> str:
-        target_key = (key or "").lstrip("/")
-        if not target_key:
-            raise RuntimeError("Object key is required.")
-        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
-        if not bucket_name:
-            raise RuntimeError("Storage space not found or not allowed.")
-        if self._user_storage_space_role(user, access, bucket_name) == "Viewer":
-            raise RuntimeError("Upload not allowed for this storage space role.")
-        client = self._portal_object_client(user, access.account)
-        extra_args = {"ContentType": content_type} if content_type else None
-        stream = file_obj if hasattr(file_obj, "read") else BytesIO(file_obj)
-        try:
-            client.upload_fileobj(stream, bucket_name, target_key, ExtraArgs=extra_args)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to upload object '{target_key}' in storage space '{space_id}': {exc}") from exc
-        return target_key
-
     def download_storage_space_object(
         self,
         user: User,
@@ -2089,33 +2008,6 @@ class PortalService:
             preview_text=preview_text,
             preview_unavailable_reason=preview_reason,
         )
-
-    def create_storage_space_folder(
-        self,
-        user: User,
-        access: "AccountAccess",
-        space_id: str,
-        prefix: str,
-        name: str,
-    ) -> str:
-        folder_name = (name or "").strip().strip("/")
-        if not folder_name:
-            raise RuntimeError("Folder name is required.")
-        base_prefix = (prefix or "").lstrip("/")
-        if base_prefix and not base_prefix.endswith("/"):
-            base_prefix = f"{base_prefix}/"
-        target_key = f"{base_prefix}{folder_name}/"
-        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
-        if not bucket_name:
-            raise RuntimeError("Storage space not found or not allowed.")
-        if self._user_storage_space_role(user, access, bucket_name) == "Viewer":
-            raise RuntimeError("Folder creation not allowed for this storage space role.")
-        client = self._portal_object_client(user, access.account)
-        try:
-            client.put_object(Bucket=bucket_name, Key=target_key, Body=b"", ContentType="application/x-directory")
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to create folder '{target_key}' in storage space '{space_id}': {exc}") from exc
-        return target_key
 
     def delete_storage_space_object(
         self,

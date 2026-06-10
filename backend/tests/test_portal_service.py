@@ -1,6 +1,5 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -831,143 +830,6 @@ def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_s
     }
 
 
-def test_list_storage_space_objects_maps_common_prefixes_and_objects(monkeypatch, db_session):
-    account = S3Account(name="portal-object-list", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-object-list@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
-    service = PortalService(db_session)
-    monkeypatch.setattr(
-        service,
-        "list_storage_spaces",
-        lambda *_args, **_kwargs: [
-            PortalStorageSpaceSummary(
-                id="research-data",
-                name="Research Data",
-                role="Editor",
-                internal_bucket_name="bucket-research-data",
-            )
-        ],
-    )
-
-    class FakeClient:
-        def __init__(self):
-            self.calls = []
-
-        def list_objects_v2(self, **kwargs):
-            self.calls.append(kwargs)
-            return {
-                "Contents": [
-                    {"Key": "raw-data/2024/03/", "Size": 0},
-                    {
-                        "Key": "raw-data/2024/03/sample_001.fastq.gz",
-                        "Size": 2048,
-                        "LastModified": datetime(2026, 5, 27, 8, 15, tzinfo=timezone.utc),
-                    },
-                ],
-                "CommonPrefixes": [{"Prefix": "raw-data/2024/03/01-fastq/"}],
-                "IsTruncated": True,
-                "NextContinuationToken": "next-token",
-            }
-
-    fake_client = FakeClient()
-    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: fake_client)
-
-    listing = service.list_storage_space_objects(
-        user,
-        access,
-        "research-data",
-        prefix="/raw-data/2024/03/",
-        continuation_token="token",
-        max_keys=2000,
-    )
-
-    assert fake_client.calls == [
-        {
-            "Bucket": "bucket-research-data",
-            "Prefix": "raw-data/2024/03/",
-            "Delimiter": "/",
-            "MaxKeys": 1000,
-            "ContinuationToken": "token",
-        }
-    ]
-    assert listing.prefix == "raw-data/2024/03/"
-    assert listing.prefixes == ["raw-data/2024/03/01-fastq/"]
-    assert listing.is_truncated is True
-    assert listing.next_continuation_token == "next-token"
-    assert len(listing.objects) == 1
-    assert listing.objects[0].key == "raw-data/2024/03/sample_001.fastq.gz"
-    assert listing.objects[0].name == "sample_001.fastq.gz"
-    assert listing.objects[0].size == 2048
-
-
-def test_upload_storage_space_object_allows_editor_and_rejects_viewer(monkeypatch, db_session):
-    account = S3Account(name="portal-object-upload", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-object-upload@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    service = PortalService(db_session)
-    monkeypatch.setattr(
-        service,
-        "list_storage_spaces",
-        lambda *_args, **_kwargs: [
-            PortalStorageSpaceSummary(
-                id="research-data",
-                name="Research Data",
-                role="Editor",
-                internal_bucket_name="bucket-research-data",
-            )
-        ],
-    )
-
-    class FakeClient:
-        def __init__(self):
-            self.uploads = []
-
-        def upload_fileobj(self, stream, bucket_name, key, ExtraArgs=None):
-            self.uploads.append(
-                {
-                    "body": stream.read(),
-                    "bucket": bucket_name,
-                    "key": key,
-                    "extra_args": ExtraArgs,
-                }
-    )
-
-    fake_client = FakeClient()
-    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: fake_client)
-    role_map = {"bucket-research-data": "Editor"}
-    monkeypatch.setattr(service, "list_existing_user_storage_space_access", lambda *_args, **_kwargs: role_map)
-
-    editor_access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
-    uploaded_key = service.upload_storage_space_object(
-        user,
-        editor_access,
-        "research-data",
-        "/raw-data/report.csv",
-        b"sample",
-        content_type="text/csv",
-    )
-
-    assert uploaded_key == "raw-data/report.csv"
-    assert fake_client.uploads == [
-        {
-            "body": b"sample",
-            "bucket": "bucket-research-data",
-            "key": "raw-data/report.csv",
-            "extra_args": {"ContentType": "text/csv"},
-        }
-    ]
-
-    role_map["bucket-research-data"] = "Viewer"
-    viewer_access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
-    with pytest.raises(RuntimeError, match="Upload not allowed"):
-        service.upload_storage_space_object(user, viewer_access, "research-data", "raw-data/denied.csv", b"sample")
-
-
 def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypatch, db_session):
     account = S3Account(name="portal-role-matrix", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     actor = User(email="matrix-actor@example.com", hashed_password="x", role="ui_user")
@@ -1062,23 +924,15 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     def assert_file_capabilities(role, *, can_write: bool, can_share: bool):
         role_map["bucket-research-data"] = role
 
-        listing = service.list_storage_space_objects(actor, access, "research-data")
         stream, content_type, filename = service.download_storage_space_object(actor, access, "research-data", "raw-data/file.txt")
 
-        assert listing.objects == []
         assert list(stream) == [b"content"]
         assert content_type == "text/plain"
         assert filename == "file.txt"
 
         if can_write:
-            service.upload_storage_space_object(actor, access, "research-data", "raw-data/file.txt", b"content")
-            service.create_storage_space_folder(actor, access, "research-data", "raw-data", "reports")
             service.delete_storage_space_object(actor, access, "research-data", "raw-data/file.txt")
         else:
-            with pytest.raises(RuntimeError, match="Upload not allowed"):
-                service.upload_storage_space_object(actor, access, "research-data", "raw-data/file.txt", b"content")
-            with pytest.raises(RuntimeError, match="Folder creation not allowed"):
-                service.create_storage_space_folder(actor, access, "research-data", "raw-data", "reports")
             with pytest.raises(RuntimeError, match="Delete not allowed"):
                 service.delete_storage_space_object(actor, access, "research-data", "raw-data/file.txt")
 
@@ -1100,7 +954,7 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     }
 
 
-def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(monkeypatch, db_session):
+def test_object_detail_and_delete_use_safe_portal_operations(monkeypatch, db_session):
     account = S3Account(name="portal-object-detail", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-object-detail@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -1127,7 +981,6 @@ def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(mon
 
     class FakeClient:
         def __init__(self):
-            self.puts = []
             self.deletes = []
 
         def head_object(self, **kwargs):
@@ -1148,9 +1001,6 @@ def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(mon
             }
             return {"Body": FakeBody()}
 
-        def put_object(self, **kwargs):
-            self.puts.append(kwargs)
-
         def delete_object(self, **kwargs):
             self.deletes.append(kwargs)
 
@@ -1159,7 +1009,6 @@ def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(mon
     monkeypatch.setattr(service, "list_existing_user_storage_space_access", lambda *_args, **_kwargs: {"bucket-research-data": "Editor"})
 
     detail = service.get_storage_space_object_detail(user, access, "research-data", "/raw-data/readme.txt")
-    folder_key = service.create_storage_space_folder(user, access, "research-data", "raw-data", "reports")
     deleted_key = service.delete_storage_space_object(user, access, "research-data", "/raw-data/old.txt")
 
     assert detail.content_type == "text/plain"
@@ -1167,15 +1016,6 @@ def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(mon
     assert detail.encryption == "AES256"
     assert detail.preview_type == "text"
     assert detail.preview_text == "hello preview"
-    assert folder_key == "raw-data/reports/"
-    assert fake_client.puts == [
-        {
-            "Bucket": "bucket-research-data",
-            "Key": "raw-data/reports/",
-            "Body": b"",
-            "ContentType": "application/x-directory",
-        }
-    ]
     assert deleted_key == "raw-data/old.txt"
     assert fake_client.deletes == [{"Bucket": "bucket-research-data", "Key": "raw-data/old.txt"}]
 
@@ -1635,62 +1475,7 @@ def test_portal_object_access_rejects_hidden_storage_space(monkeypatch, db_sessi
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
 
     with pytest.raises(RuntimeError, match="Storage space not found"):
-        service.list_storage_space_objects(user, access, "hidden-space")
-
-
-def test_portal_object_upload_route_audits_scope_portal(db_session):
-    account = S3Account(name="portal-object-upload-route", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-object-upload-route@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
-
-    class FakeUpload:
-        filename = "report.csv"
-        content_type = "text/csv"
-
-        async def read(self):
-            return b"sample"
-
-    class FakeService:
-        def upload_storage_space_object(self, user_obj, access_obj, space_id, key, file_obj, content_type=None):
-            assert user_obj == user
-            assert access_obj == access
-            assert space_id == "research-data"
-            assert key == "raw-data/report.csv"
-            assert file_obj == b"sample"
-            assert content_type == "text/csv"
-            return key
-
-    class FakeAuditService:
-        def __init__(self):
-            self.actions = []
-
-        def record_action(self, **kwargs):
-            self.actions.append(kwargs)
-
-    audit_service = FakeAuditService()
-
-    response = asyncio.run(
-        portal_router.portal_upload_storage_space_object(
-            "research-data",
-            file=FakeUpload(),
-            prefix="raw-data",
-            key=None,
-            access=access,
-            audit_service=audit_service,
-            service=FakeService(),
-        )
-    )
-
-    assert response.key == "raw-data/report.csv"
-    assert audit_service.actions[0]["scope"] == "portal"
-    assert audit_service.actions[0]["action"] == "upload_object"
-    assert audit_service.actions[0]["metadata"] == {
-        "storage_space_id": "research-data",
-        "content_type": "text/csv",
-        "size_bytes": 6,
-    }
+        service.get_storage_space_object_detail(user, access, "hidden-space", "raw-data/file.txt")
 
 
 def test_portal_object_download_route_audits_scope_portal(db_session):

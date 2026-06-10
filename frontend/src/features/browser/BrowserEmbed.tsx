@@ -3,11 +3,16 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { S3AccountSelector } from "../../api/accountParams";
+import type { BrowserWorkspaceSurface } from "../../api/browser";
 import BrowserPage from "./BrowserPage";
 
 type BrowserEmbedProps = {
   accountIdForApi: S3AccountSelector;
   hasContext: boolean;
+  workspaceSurface?: BrowserWorkspaceSurface;
+  actionProfile?: "full" | "portal-basic";
+  lockedBucketName?: string;
+  lockedBucketLabel?: string;
   storageEndpointCapabilities?: Record<string, boolean> | null;
   endpointProvider?: "ceph" | "aws" | "other" | null;
   quotaMaxSizeGb?: number | null;
@@ -18,6 +23,10 @@ type BrowserEmbedProps = {
 export default function BrowserEmbed({
   accountIdForApi,
   hasContext,
+  workspaceSurface,
+  actionProfile,
+  lockedBucketName,
+  lockedBucketLabel,
   storageEndpointCapabilities,
   endpointProvider,
   quotaMaxSizeGb,
@@ -28,6 +37,10 @@ export default function BrowserEmbed({
     <BrowserPage
       accountIdForApi={accountIdForApi}
       hasContext={hasContext}
+      workspaceSurface={workspaceSurface}
+      actionProfile={actionProfile}
+      lockedBucketName={lockedBucketName}
+      lockedBucketLabel={lockedBucketLabel}
       storageEndpointCapabilities={storageEndpointCapabilities}
       contextEndpointProvider={endpointProvider}
       contextQuotaMaxSizeGb={quotaMaxSizeGb}

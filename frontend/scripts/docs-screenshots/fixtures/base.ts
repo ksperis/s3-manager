@@ -1067,12 +1067,80 @@ const BROWSER_SETTINGS = {
 };
 
 const BROWSER_BUCKETS = [
+  { name: "genomics-2026", creation_date: "2024-03-12T10:00:00Z" },
+  { name: "photos", creation_date: "2023-05-10T10:00:00Z" },
+  { name: "datasets", creation_date: "2023-03-16T10:00:00Z" },
   { name: "helios-retail-logs", creation_date: "2026-02-28T08:00:00Z" },
   { name: "helios-retail-backups", creation_date: "2026-02-27T12:00:00Z" },
   { name: "blueharbor-curated", creation_date: "2026-02-20T09:30:00Z" },
 ];
 
 const BROWSER_OBJECTS_BY_BUCKET: Record<string, { prefixes: string[]; objects: Array<Record<string, unknown>> }> = {
+  "genomics-2026": {
+    prefixes: [
+      "raw-data/",
+      "raw-data/2024/",
+      "raw-data/2024/03/",
+      "raw-data/2024/03/01-fastq/",
+      "raw-data/2024/03/02-aligned/",
+      "raw-data/2024/03/03-variants/",
+      "reports/",
+    ],
+    objects: [
+      {
+        key: "raw-data/2024/03/sample_001.fastq.gz",
+        size: Math.round(2.4 * GB),
+        last_modified: "2024-03-12T10:15:43Z",
+        etag: "\"portal-sample-001\"",
+        storage_class: "STANDARD",
+      },
+      {
+        key: "raw-data/2024/03/sample_002.fastq.gz",
+        size: Math.round(2.5 * GB),
+        last_modified: "2024-03-12T10:17:00Z",
+        etag: "\"portal-sample-002\"",
+        storage_class: "STANDARD",
+      },
+      {
+        key: "raw-data/2024/03/README.txt",
+        size: Math.round(2.1 * 1024),
+        last_modified: "2024-03-12T10:20:00Z",
+        etag: "\"portal-readme\"",
+        storage_class: "STANDARD",
+      },
+      {
+        key: "reports/q1-analysis.pdf",
+        size: Math.round(28 * MB),
+        last_modified: "2024-04-02T14:30:00Z",
+        etag: "\"portal-report\"",
+        storage_class: "STANDARD",
+      },
+    ],
+  },
+  photos: {
+    prefixes: ["events/"],
+    objects: [
+      {
+        key: "events/team-offsite.jpg",
+        size: Math.round(8 * MB),
+        last_modified: "2024-02-11T12:30:00Z",
+        etag: "\"portal-photo\"",
+        storage_class: "STANDARD",
+      },
+    ],
+  },
+  datasets: {
+    prefixes: ["exports/"],
+    objects: [
+      {
+        key: "exports/dataset.csv",
+        size: Math.round(18 * MB),
+        last_modified: "2024-01-18T09:00:00Z",
+        etag: "\"portal-dataset\"",
+        storage_class: "STANDARD",
+      },
+    ],
+  },
   "helios-retail-logs": {
     prefixes: ["daily/", "monthly/"],
     objects: [

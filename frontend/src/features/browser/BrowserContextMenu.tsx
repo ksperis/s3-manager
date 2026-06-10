@@ -29,12 +29,14 @@ import {
   UploadIcon,
 } from "./browserIcons";
 import {
+  applyBrowserActionProfile,
   CONTEXT_MENU_ITEM_ACTION_IDS,
   CONTEXT_MENU_PATH_ACTION_IDS,
   CONTEXT_MENU_PATH_LAYOUT_ACTION_IDS,
   CONTEXT_MENU_SELECTION_ACTION_IDS,
   getVisibleBrowserActions,
   resolveBrowserActions,
+  type BrowserActionProfile,
 } from "./browserActions";
 import type { BrowserItem, ClipboardState, ContextMenuState } from "./browserTypes";
 
@@ -56,6 +58,7 @@ type BrowserContextMenuProps = {
   canPaste: boolean;
   copyUrlDisabled?: boolean;
   copyUrlDisabledReason?: string;
+  actionProfile?: BrowserActionProfile;
   clipboard: ClipboardState | null;
   fileInputRef: RefObject<HTMLInputElement>;
   folderInputRef: RefObject<HTMLInputElement>;
@@ -104,6 +107,7 @@ export default function BrowserContextMenu({
   canPaste,
   copyUrlDisabled = false,
   copyUrlDisabledReason,
+  actionProfile = "full",
   clipboard,
   fileInputRef,
   folderInputRef,
@@ -141,43 +145,55 @@ export default function BrowserContextMenu({
   if (!contextMenu) return null;
 
   const contextItem = contextMenu.kind === "item" ? contextMenu.item ?? null : null;
-  const pathActionStates = resolveBrowserActions({
-    scope: "path",
-    bucketName,
-    hasS3AccountContext,
-    versioningEnabled,
-    canPaste,
-    clipboardMode: clipboard?.mode ?? null,
-    currentPath,
-    showFolderItems,
-    showDeletedObjects,
-  });
+  const pathActionStates = applyBrowserActionProfile(
+    resolveBrowserActions({
+      scope: "path",
+      bucketName,
+      hasS3AccountContext,
+      versioningEnabled,
+      canPaste,
+      clipboardMode: clipboard?.mode ?? null,
+      currentPath,
+      showFolderItems,
+      showDeletedObjects,
+    }),
+    actionProfile,
+  );
   const itemActionStates = contextItem
-    ? resolveBrowserActions({
-      scope: "item",
-      items: [contextItem],
-      bucketName,
-      hasS3AccountContext,
-      versioningEnabled,
-      canPaste,
-      clipboardMode: clipboard?.mode ?? null,
-      copyUrlDisabled,
-      copyUrlDisabledReason,
-      inspectorAvailable: allowInspectorPanel,
-    })
+    ? applyBrowserActionProfile(
+      resolveBrowserActions({
+        scope: "item",
+        items: [contextItem],
+        bucketName,
+        hasS3AccountContext,
+        versioningEnabled,
+        canPaste,
+        clipboardMode: clipboard?.mode ?? null,
+        copyUrlDisabled,
+        copyUrlDisabledReason,
+        inspectorAvailable: allowInspectorPanel,
+      }),
+      actionProfile,
+      [contextItem],
+    )
     : null;
+  const selectionItems = contextMenu.kind === "selection" ? contextMenu.items ?? [] : [];
   const selectionActionStates = contextMenu.kind === "selection"
-    ? resolveBrowserActions({
-      scope: "selection",
-      items: contextMenu.items ?? [],
-      bucketName,
-      hasS3AccountContext,
-      versioningEnabled,
-      canPaste,
-      clipboardMode: clipboard?.mode ?? null,
-      copyUrlDisabled,
-      copyUrlDisabledReason,
-    })
+    ? applyBrowserActionProfile(
+      resolveBrowserActions({
+        scope: "selection",
+        items: selectionItems,
+        bucketName,
+        hasS3AccountContext,
+        versioningEnabled,
+        canPaste,
+        clipboardMode: clipboard?.mode ?? null,
+        copyUrlDisabled,
+        copyUrlDisabledReason,
+      }),
+      actionProfile,
+      selectionItems,
+    )
     : null;
   const visiblePathActions = getVisibleBrowserActions(pathActionStates, CONTEXT_MENU_PATH_ACTION_IDS);
   const visiblePathLayoutActions = getVisibleBrowserActions(pathActionStates, CONTEXT_MENU_PATH_LAYOUT_ACTION_IDS);
@@ -273,7 +289,6 @@ export default function BrowserContextMenu({
   };
 
   const runSelectionAction = (actionId: string) => {
-    const selectionItems = contextMenu.items ?? [];
     if (!selectionActionStates) return;
     onClose();
     switch (actionId) {

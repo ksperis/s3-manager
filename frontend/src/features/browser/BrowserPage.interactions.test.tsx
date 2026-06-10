@@ -10,6 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
 import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
 import { BROWSER_ROOT_UI_STATE_STORAGE_KEY } from "./browserRootUiState";
@@ -159,6 +160,10 @@ function renderPage({
   allowInspectorPanel = true,
   allowFoldersPanel = true,
   accountIdForApi,
+  workspaceSurface,
+  actionProfile,
+  lockedBucketName,
+  lockedBucketLabel,
 }: {
   defaultShowInspector?: boolean;
   defaultShowFolders?: boolean;
@@ -166,6 +171,10 @@ function renderPage({
   allowInspectorPanel?: boolean;
   allowFoldersPanel?: boolean;
   accountIdForApi?: string;
+  workspaceSurface?: ComponentProps<typeof BrowserPage>["workspaceSurface"];
+  actionProfile?: ComponentProps<typeof BrowserPage>["actionProfile"];
+  lockedBucketName?: string;
+  lockedBucketLabel?: string;
 } = {}) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
@@ -175,6 +184,10 @@ function renderPage({
         defaultShowFolders={defaultShowFolders}
         allowInspectorPanel={allowInspectorPanel}
         allowFoldersPanel={allowFoldersPanel}
+        workspaceSurface={workspaceSurface}
+        actionProfile={actionProfile}
+        lockedBucketName={lockedBucketName}
+        lockedBucketLabel={lockedBucketLabel}
       />
     </MemoryRouter>,
   );
@@ -670,6 +683,66 @@ describe("BrowserPage interactions", () => {
     renderPage({ initialEntry: "/manager/browser" });
     const rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-9");
+  });
+
+  it("runs portal-basic as a locked minimal browser profile", async () => {
+    const user = userEvent.setup();
+    renderPage({
+      initialEntry: "/portal/storage-spaces/research-data",
+      accountIdForApi: "acc-portal",
+      workspaceSurface: "portal",
+      actionProfile: "portal-basic",
+      lockedBucketName: "portal-bucket",
+      lockedBucketLabel: "Research Data",
+    });
+
+    const rowA = await findRowByLabel("a.txt");
+    expect(rowA).toHaveClass("h-9");
+    expect(screen.getByRole("button", { name: "Selected storage space" })).toHaveTextContent("Research Data");
+    expect(searchBrowserBucketsMock).not.toHaveBeenCalled();
+    expect(fetchBrowserSettingsMock).toHaveBeenCalledWith("acc-portal", { workspaceSurface: "portal" });
+    expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+      "acc-portal",
+      "portal-bucket",
+      expect.objectContaining({ workspaceSurface: "portal" }),
+    );
+    expect(getBucketVersioningMock).not.toHaveBeenCalled();
+
+    expect(screen.queryByRole("button", { name: "Search options" })).not.toBeInTheDocument();
+    expect(within(rowA).queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
+    expect(within(rowA).getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(within(rowA).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+
+    fireEvent.contextMenu(rowA, { clientX: 40, clientY: 40 });
+    const nativeContextMenu = await screen.findByRole("menu");
+    expect(
+      within(nativeContextMenu).getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).getByRole("button", { name: "Delete" }),
+    ).toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).queryByRole("button", { name: "Preview" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).queryByRole("button", { name: "Properties" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).queryByRole("button", { name: "Copy" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).queryByRole("button", { name: "Cut" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).queryByRole("button", { name: "Bulk attributes" }),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+
+    const moreMenu = await openContextMoreMenu(user);
+    expect(within(moreMenu).queryByRole("menuitem", { name: /^Columns/i })).not.toBeInTheDocument();
+    expect(within(moreMenu).queryByRole("menuitem", { name: /Versions/i })).not.toBeInTheDocument();
+    expect(within(moreMenu).queryByRole("menuitem", { name: /Restore/i })).not.toBeInTheDocument();
   });
 
   it("uses minimal visible columns by default", async () => {
@@ -3179,6 +3252,7 @@ describe("BrowserPage interactions", () => {
           response_content_disposition: expect.stringContaining("inline;"),
         }),
         null,
+        undefined,
       );
     });
     await waitFor(() => {
@@ -3475,6 +3549,7 @@ describe("BrowserPage interactions", () => {
           operation: "get_object",
         }),
         null,
+        undefined,
       );
       expect(presignObjectMock).toHaveBeenCalledWith(
         "acc-2",
@@ -3484,6 +3559,7 @@ describe("BrowserPage interactions", () => {
           operation: "put_object",
         }),
         null,
+        undefined,
       );
     });
   });
@@ -3911,9 +3987,13 @@ describe("BrowserPage interactions", () => {
     await pasteFromCurrentPath(user);
 
     await waitFor(() => {
-      expect(deleteObjectsMock).toHaveBeenCalledWith("acc-1", "bucket-1", [
-        { key: "a.txt" },
-      ]);
+      expect(deleteObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        [{ key: "a.txt" }],
+        undefined,
+        undefined,
+      );
     });
     expect(callOrder.indexOf("dest-meta")).toBeGreaterThan(
       callOrder.indexOf("acc-2:put_object"),
@@ -4005,6 +4085,7 @@ describe("BrowserPage interactions", () => {
           operation: "get_object",
         }),
         null,
+        undefined,
       );
     });
   });
@@ -4041,6 +4122,7 @@ describe("BrowserPage interactions", () => {
         "a.txt",
         expect.any(AbortSignal),
         null,
+        undefined,
       );
       expect(proxyUploadMock).toHaveBeenCalledWith(
         "acc-2",
@@ -4051,6 +4133,7 @@ describe("BrowserPage interactions", () => {
         expect.any(AbortSignal),
         null,
         "a.txt",
+        undefined,
       );
     });
     expect(copyObjectMock).not.toHaveBeenCalled();

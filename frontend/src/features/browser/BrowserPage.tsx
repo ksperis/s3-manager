@@ -50,6 +50,7 @@ import {
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
 import { stableSignature } from "../../utils/stableSignature";
+import { readStoredUser } from "../../utils/workspaces";
 import {
   withS3AccountParam,
   type S3AccountSelector,
@@ -63,9 +64,11 @@ import {
 } from "../../api/buckets";
 import {
   BrowserBucket,
+  type BrowserRequestOptions,
   BrowserObject,
   BrowserObjectVersion,
   BrowserSettings,
+  type BrowserWorkspaceSurface,
   BucketCorsStatus,
   MultipartUploadItem,
   PresignPartRequest,
@@ -109,6 +112,8 @@ import BrowserBucketsPanel from "./BrowserBucketsPanel";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import {
+  applyBrowserActionProfile,
+  type BrowserActionProfile,
   type BrowserActionState,
   getVisibleBrowserActions,
   INSPECTOR_CONTEXT_ACTION_IDS,
@@ -297,6 +302,10 @@ import type {
 type BrowserPageProps = {
   accountIdForApi?: S3AccountSelector;
   hasContext?: boolean;
+  workspaceSurface?: BrowserWorkspaceSurface;
+  actionProfile?: BrowserActionProfile;
+  lockedBucketName?: string;
+  lockedBucketLabel?: string;
   storageEndpointCapabilities?: Record<string, boolean> | null;
   contextEndpointProvider?: "ceph" | "aws" | "other" | null;
   contextQuotaMaxSizeGb?: number | null;
@@ -1057,6 +1066,10 @@ const pushBucketPathHistory = (
 export default function BrowserPage({
   accountIdForApi: accountIdOverride,
   hasContext: hasContextOverride,
+  workspaceSurface = "browser",
+  actionProfile = "full",
+  lockedBucketName,
+  lockedBucketLabel,
   storageEndpointCapabilities,
   contextEndpointProvider,
   contextQuotaMaxSizeGb,
@@ -1073,9 +1086,20 @@ export default function BrowserPage({
   const hasS3AccountContext = hasContextOverride ?? browserContext.hasContext;
   const location = useLocation();
   const normalizedPath = location.pathname.replace(/\/+$/, "");
+  const isPortalBrowserSurface = workspaceSurface === "portal";
+  const isPortalBasicProfile = actionProfile === "portal-basic";
+  const resolvedLockedBucketName = lockedBucketName?.trim() ?? "";
+  const browserRequestOptions = useMemo<BrowserRequestOptions | undefined>(
+    () =>
+      workspaceSurface === "portal"
+        ? { workspaceSurface }
+        : undefined,
+    [workspaceSurface],
+  );
   const isEmbeddedBrowserPath =
     normalizedPath.endsWith("/manager/browser") ||
-    normalizedPath.endsWith("/ceph-admin/browser");
+    normalizedPath.endsWith("/ceph-admin/browser") ||
+    isPortalBrowserSurface;
   const isMainBrowserPath = normalizedPath === "/browser";
   const initialStoredRootUiState = useMemo(() => readStoredBrowserRootUiState(), []);
   const initialStoredRootUiLayout = initialStoredRootUiState?.layout ?? null;
@@ -1084,6 +1108,16 @@ export default function BrowserPage({
     accountIdForApi == null ? null : String(accountIdForApi);
   const bucketAccessContextKey =
     accountIdForApi == null ? null : String(accountIdForApi);
+  const storedUser = useMemo(() => readStoredUser(), []);
+  const userBrowserAdvancedFeaturesEnabled = storedUser
+    ? storedUser.authType === "s3_session" ||
+      Boolean(
+        storedUser.effective_access?.browser_advanced_features_enabled ??
+          storedUser.browser_advanced_features_enabled,
+      )
+    : true;
+  const rootBrowserAdvancedFeaturesEnabled =
+    !isMainBrowserPath || userBrowserAdvancedFeaturesEnabled;
   // /browser is credential-first.
   const accessMode = null;
   const [bucketName, setBucketName] = useState("");
@@ -1166,7 +1200,7 @@ export default function BrowserPage({
     "context" | "bucket" | "selection" | "details"
   >("context");
   const [compactMode, setCompactMode] = useState(() =>
-    normalizedPath.endsWith("/browser"),
+    normalizedPath.endsWith("/browser") || isPortalBrowserSurface,
   );
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>(
     [],
@@ -1612,9 +1646,13 @@ export default function BrowserPage({
       ? effectiveContextQuotaObjects
       : null;
   const isCephContext = effectiveContextEndpointProvider === "ceph";
-  const showActionBarToggle = showPanelToggles && isMainBrowserPath;
+  const showActionBarToggle =
+    showPanelToggles && isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled;
   const bucketManagementEnabled =
-    normalizedPath.endsWith("/browser") && !isEmbeddedBrowserPath;
+    normalizedPath.endsWith("/browser") &&
+    !isEmbeddedBrowserPath &&
+    !isPortalBasicProfile &&
+    rootBrowserAdvancedFeaturesEnabled;
   const bucketConfigurationEnabled = bucketManagementEnabled;
   const bucketConfigContextScope = "browser";
 
@@ -1622,11 +1660,12 @@ export default function BrowserPage({
     if (
       normalizedPath === "/browser" ||
       normalizedPath.endsWith("/manager/browser") ||
-      normalizedPath.endsWith("/ceph-admin/browser")
+      normalizedPath.endsWith("/ceph-admin/browser") ||
+      isPortalBrowserSurface
     ) {
       setCompactMode(true);
     }
-  }, [normalizedPath]);
+  }, [isPortalBrowserSurface, normalizedPath]);
   const contextId =
     typeof accountIdForApi === "string" ? accountIdForApi : null;
   const isCephAdminContext = Boolean(
@@ -1639,8 +1678,8 @@ export default function BrowserPage({
     contextId && contextId.startsWith("conn-"),
   );
   const isLegacyContext = isLegacyS3UserContext || isLegacyConnectionContext;
-  const stsEnabled = Boolean(effectiveCaps?.sts) && !isLegacyContext;
-  const sseFeatureEnabled = Boolean(effectiveCaps?.sse);
+  const stsEnabled = Boolean(effectiveCaps?.sts) && !isLegacyContext && !isPortalBasicProfile;
+  const sseFeatureEnabled = Boolean(effectiveCaps?.sse) && !isPortalBasicProfile;
   const bucketInspectorUsageEnabled = effectiveCaps
     ? effectiveCaps.metrics !== false
     : true;
@@ -1694,8 +1733,14 @@ export default function BrowserPage({
     isFoldersPanelVisible,
     isInspectorPanelVisible,
   } = resolveBrowserPanelVisibility({
-    allowFoldersPanel,
-    allowInspectorPanel,
+    allowFoldersPanel:
+      allowFoldersPanel &&
+      rootBrowserAdvancedFeaturesEnabled &&
+      !isPortalBasicProfile,
+    allowInspectorPanel:
+      allowInspectorPanel &&
+      rootBrowserAdvancedFeaturesEnabled &&
+      !isPortalBasicProfile,
     isNarrowViewport,
     showFolders,
     showInspector,
@@ -1957,6 +2002,7 @@ export default function BrowserPage({
       void listBrowserObjects(accountIdForApi, targetBucketName, {
         maxKeys: 1,
         signal: controller.signal,
+        ...browserRequestOptions,
       })
         .then(() => {
           if (requestSession !== bucketAccessSessionRef.current) {
@@ -1999,7 +2045,12 @@ export default function BrowserPage({
           }
         });
     }
-  }, [accountIdForApi, hasS3AccountContext, updateBucketAccessEntry]);
+  }, [
+    accountIdForApi,
+    browserRequestOptions,
+    hasS3AccountContext,
+    updateBucketAccessEntry,
+  ]);
 
   const scheduleBucketAccessProbe = useCallback(
     (targetBucketName: string) => {
@@ -2160,7 +2211,7 @@ export default function BrowserPage({
   }, [showSseCustomerModal, sseFeatureEnabled]);
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
-  const isVersioningEnabled = bucketVersioningEnabled;
+  const isVersioningEnabled = bucketVersioningEnabled && !isPortalBasicProfile;
   useEffect(() => {
     bucketNameRef.current = bucketName;
     prefixRef.current = prefix;
@@ -2315,10 +2366,12 @@ export default function BrowserPage({
         targetBucket,
         payload,
         sseCustomerKeyBase64,
+        browserRequestOptions,
       );
     },
     [
       accountIdForApi,
+      browserRequestOptions,
       ensureStsCredentials,
       sseCustomerKeyBase64,
       useStsPresigner,
@@ -2363,10 +2416,12 @@ export default function BrowserPage({
         uploadId,
         payload,
         sseCustomerKeyBase64,
+        browserRequestOptions,
       );
     },
     [
       accountIdForApi,
+      browserRequestOptions,
       ensureStsCredentials,
       sseCustomerKeyBase64,
       useStsPresigner,
@@ -2398,7 +2453,9 @@ export default function BrowserPage({
     stsCredentialsError,
     warningMessage,
   ]);
-  const hasCorsAction = Boolean(corsStatus && !corsStatus.enabled && uiOrigin);
+  const hasCorsAction = Boolean(
+    !isPortalBasicProfile && corsStatus && !corsStatus.enabled && uiOrigin,
+  );
   const stsExpirationLabel = useMemo(() => {
     if (!stsCredentials?.expiration) return "";
     const formatted = formatDateTime(stsCredentials.expiration);
@@ -2884,6 +2941,29 @@ export default function BrowserPage({
         setDeletedObjectsIsTruncated(false);
         return;
       }
+      if (resolvedLockedBucketName) {
+        const previousBucket = bucketNameRef.current;
+        const previousPrefix = prefixRef.current;
+        setLoadingBuckets(false);
+        setBucketMenuLoadingMore(false);
+        setBucketError(null);
+        setBucketMenuItems([{ name: resolvedLockedBucketName }]);
+        setBucketMenuPage(1);
+        setBucketMenuHasNext(false);
+        setBucketMenuTotal(1);
+        setBucketTotalCount(1);
+        bucketSearchValueRef.current = "";
+        setBucketAccessByName({});
+        setBucketName(resolvedLockedBucketName);
+        setPrefix(
+          requestedPrefix || (previousBucket === resolvedLockedBucketName ? previousPrefix : ""),
+        );
+        if (isMainBrowserPath) {
+          browserRootSelectionContextIdRef.current = browserRootContextId;
+          browserRootSelectionPersistenceReadyRef.current = true;
+        }
+        return;
+      }
       setLoadingBuckets(true);
       setBucketMenuLoadingMore(false);
       setBucketError(null);
@@ -2891,6 +2971,7 @@ export default function BrowserPage({
         const firstPage = await searchBrowserBuckets(accountIdForApi, {
           page: 1,
           pageSize: BUCKET_MENU_LIMIT,
+          ...browserRequestOptions,
         });
         bucketSearchValueRef.current = "";
         setBucketMenuItems(firstPage.items);
@@ -2923,6 +3004,7 @@ export default function BrowserPage({
             exact: true,
             page: 1,
             pageSize: 1,
+            ...browserRequestOptions,
           });
           const exists = exactResult.total > 0;
           exactMatchCache.set(value, exists);
@@ -3004,11 +3086,13 @@ export default function BrowserPage({
     [
       accountIdForApi,
       browserRootContextId,
+      browserRequestOptions,
       hasS3AccountContext,
       isCephAdminContext,
       isMainBrowserPath,
       requestedBucket,
       requestedPrefix,
+      resolvedLockedBucketName,
       resetBucketAccessQueue,
     ],
   );
@@ -3024,6 +3108,16 @@ export default function BrowserPage({
         setBucketMenuPage(1);
         setBucketMenuHasNext(false);
         setBucketMenuTotal(0);
+        return;
+      }
+      if (resolvedLockedBucketName) {
+        setBucketMenuItems([{ name: resolvedLockedBucketName }]);
+        setBucketMenuPage(1);
+        setBucketMenuHasNext(false);
+        setBucketMenuTotal(1);
+        setBucketTotalCount(1);
+        setLoadingBuckets(false);
+        setBucketMenuLoadingMore(false);
         return;
       }
       const searchValue = (options?.search ?? "").trim();
@@ -3045,6 +3139,7 @@ export default function BrowserPage({
           search: searchValue || undefined,
           page: targetPage,
           pageSize: BUCKET_MENU_LIMIT,
+          ...browserRequestOptions,
         });
         if (requestId !== bucketSearchRequestIdRef.current) {
           return;
@@ -3083,7 +3178,13 @@ export default function BrowserPage({
         }
       }
     },
-    [accountIdForApi, hasS3AccountContext, resetBucketAccessQueue],
+    [
+      accountIdForApi,
+      browserRequestOptions,
+      hasS3AccountContext,
+      resolvedLockedBucketName,
+      resetBucketAccessQueue,
+    ],
   );
 
   const bucketSearchUiActive =
@@ -3126,7 +3227,7 @@ export default function BrowserPage({
       return;
     }
     let isMounted = true;
-    fetchBrowserSettings(accountIdForApi)
+    fetchBrowserSettings(accountIdForApi, browserRequestOptions)
       .then((data) => {
         if (isMounted) {
           setBrowserSettings(data);
@@ -3140,7 +3241,7 @@ export default function BrowserPage({
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, accessMode, hasS3AccountContext]);
+  }, [accountIdForApi, accessMode, browserRequestOptions, hasS3AccountContext]);
 
   const listDeletedObjectsForPrefix = useCallback(
     async (
@@ -3345,6 +3446,7 @@ export default function BrowserPage({
             sortBy: backendSortBy,
             sortDir: sortDirection,
             signal: controller.signal,
+            ...browserRequestOptions,
           });
           if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
             return;
@@ -3554,6 +3656,7 @@ export default function BrowserPage({
     [
       accountIdForApi,
       backendSortBy,
+      browserRequestOptions,
       bucketName,
       filter,
       hasS3AccountContext,
@@ -3795,6 +3898,7 @@ export default function BrowserPage({
     accountIdForApi,
     accessMode,
     accountSwitchInFlight,
+    browserRequestOptions,
     bucketName,
     filter,
     hasS3AccountContext,
@@ -3812,6 +3916,28 @@ export default function BrowserPage({
   ]);
 
   useEffect(() => {
+    if (isPortalBasicProfile) {
+      setShowSearchOptionsMenu(false);
+      if (searchScope !== "prefix") {
+        setSearchScope("prefix");
+      }
+      if (searchRecursive) {
+        setSearchRecursive(false);
+      }
+      if (searchExactMatch) {
+        setSearchExactMatch(false);
+      }
+      if (searchCaseSensitive) {
+        setSearchCaseSensitive(false);
+      }
+      if (typeFilter !== "all") {
+        setTypeFilter("all");
+      }
+      if (storageFilter !== "all") {
+        setStorageFilter("all");
+      }
+      return;
+    }
     if (filter.trim()) return;
     if (searchScope !== "prefix") {
       setSearchScope("prefix");
@@ -3827,10 +3953,13 @@ export default function BrowserPage({
     }
   }, [
     filter,
+    isPortalBasicProfile,
     searchCaseSensitive,
     searchExactMatch,
     searchRecursive,
     searchScope,
+    storageFilter,
+    typeFilter,
   ]);
 
   useEffect(() => {
@@ -3866,7 +3995,12 @@ export default function BrowserPage({
   ]);
 
   useEffect(() => {
-    if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
+    if (
+      accountSwitchInFlight ||
+      !bucketName ||
+      !hasS3AccountContext ||
+      isPortalBasicProfile
+    ) {
       setBucketVersioningEnabled(false);
       return;
     }
@@ -3883,7 +4017,13 @@ export default function BrowserPage({
     return () => {
       active = false;
     };
-  }, [accountIdForApi, accountSwitchInFlight, bucketName, hasS3AccountContext]);
+  }, [
+    accountIdForApi,
+    accountSwitchInFlight,
+    bucketName,
+    hasS3AccountContext,
+    isPortalBasicProfile,
+  ]);
 
   useEffect(() => {
     if (isVersioningEnabled) return;
@@ -3972,6 +4112,7 @@ export default function BrowserPage({
           prefix: targetPrefix,
           continuationToken: continuationToken ?? undefined,
           maxKeys: TREE_PREFIXES_PAGE_SIZE,
+          ...browserRequestOptions,
         });
         if (data.prefixes.length > 0) {
           prefixesCollected.push(...data.prefixes);
@@ -3989,7 +4130,7 @@ export default function BrowserPage({
         truncated,
       };
     },
-    [accountIdForApi, bucketName, hasS3AccountContext],
+    [accountIdForApi, browserRequestOptions, bucketName, hasS3AccountContext],
   );
 
   const loadTreeChildren = useCallback(
@@ -4164,7 +4305,7 @@ export default function BrowserPage({
       return;
     }
     let isMounted = true;
-    getBucketCorsStatus(accountIdForApi, bucketName, uiOrigin)
+    getBucketCorsStatus(accountIdForApi, bucketName, uiOrigin, browserRequestOptions)
       .then((status) => {
         if (!isMounted) return;
         setCorsStatus(status);
@@ -4186,6 +4327,7 @@ export default function BrowserPage({
     accessMode,
     accountSwitchInFlight,
     bucketName,
+    browserRequestOptions,
     hasS3AccountContext,
     uiOrigin,
   ]);
@@ -4336,7 +4478,9 @@ export default function BrowserPage({
     () => new Map(listItems.map((item) => [item.id, item])),
     [listItems],
   );
-  const effectiveVisibleColumns = visibleColumns;
+  const effectiveVisibleColumns = isPortalBasicProfile
+    ? DEFAULT_VISIBLE_COLUMN_IDS
+    : visibleColumns;
   const visibleColumnSet = useMemo(
     () => new Set(effectiveVisibleColumns),
     [effectiveVisibleColumns],
@@ -4390,28 +4534,31 @@ export default function BrowserPage({
   const hasSearchQuery = normalizedSearchQuery.length > 0;
   const isSearchingInWholeBucket = hasSearchQuery && searchScope === "bucket";
   const hasAdvancedSearchOptionsActive =
-    searchScope !== "prefix" ||
-    searchRecursive ||
-    searchExactMatch ||
-    searchCaseSensitive ||
-    typeFilter !== "all" ||
-    storageFilter !== "all";
+    !isPortalBasicProfile &&
+    (searchScope !== "prefix" ||
+      searchRecursive ||
+      searchExactMatch ||
+      searchCaseSensitive ||
+      typeFilter !== "all" ||
+      storageFilter !== "all");
   const hasActiveSearchFilters =
     hasSearchQuery ||
-    searchScope === "bucket" ||
-    searchRecursive ||
-    searchExactMatch ||
-    searchCaseSensitive ||
-    typeFilter !== "all" ||
-    storageFilter !== "all";
+    (!isPortalBasicProfile &&
+      (searchScope === "bucket" ||
+        searchRecursive ||
+        searchExactMatch ||
+        searchCaseSensitive ||
+        typeFilter !== "all" ||
+        storageFilter !== "all"));
   const canResetSearchFilters =
     hasSearchQuery ||
-    searchScope !== "prefix" ||
-    searchRecursive ||
-    searchExactMatch ||
-    searchCaseSensitive ||
-    typeFilter !== "all" ||
-    storageFilter !== "all";
+    (!isPortalBasicProfile &&
+      (searchScope !== "prefix" ||
+        searchRecursive ||
+        searchExactMatch ||
+        searchCaseSensitive ||
+        typeFilter !== "all" ||
+        storageFilter !== "all"));
   const searchResultScopeLabel = hasSearchQuery
     ? isSearchingInWholeBucket
       ? "Whole bucket"
@@ -4442,11 +4589,14 @@ export default function BrowserPage({
     [bucketMenuItems],
   );
   const bucketButtonLabel = useMemo(() => {
+    if (resolvedLockedBucketName) {
+      return lockedBucketLabel?.trim() || resolvedLockedBucketName;
+    }
     if (bucketName) return bucketName;
     if (loadingBuckets) return "Loading buckets...";
     if (bucketTotalCount === 0) return "No buckets";
     return "Select bucket";
-  }, [bucketName, bucketTotalCount, loadingBuckets]);
+  }, [bucketName, bucketTotalCount, loadingBuckets, lockedBucketLabel, resolvedLockedBucketName]);
   const bucketSelectorNeedsAttention =
     hasS3AccountContext && !bucketName && bucketTotalCount > 0;
   const bucketButtonClassName = cx(
@@ -4502,12 +4652,13 @@ export default function BrowserPage({
     (value: string) => {
       setShowBucketMenu(false);
       setBucketFilter("");
+      if (resolvedLockedBucketName) return;
       if (!value || value === bucketName) return;
       setBucketName(value);
       setPrefix("");
       setActiveItem(null);
     },
-    [bucketName],
+    [bucketName, resolvedLockedBucketName],
   );
 
   useEffect(() => {
@@ -4904,18 +5055,22 @@ export default function BrowserPage({
   const copyUrlDisabledReason = "Copy URL is disabled in SSE-C mode.";
   const pathActionStates = useMemo(
     () =>
-      resolveBrowserActions({
-        scope: "path",
-        bucketName,
-        hasS3AccountContext,
-        versioningEnabled: isVersioningEnabled,
-        canPaste,
-        clipboardMode: clipboard?.mode ?? null,
-        currentPath,
-        showFolderItems,
-        showDeletedObjects,
-      }),
+      applyBrowserActionProfile(
+        resolveBrowserActions({
+          scope: "path",
+          bucketName,
+          hasS3AccountContext,
+          versioningEnabled: isVersioningEnabled,
+          canPaste,
+          clipboardMode: clipboard?.mode ?? null,
+          currentPath,
+          showFolderItems,
+          showDeletedObjects,
+        }),
+        actionProfile,
+      ),
     [
+      actionProfile,
       bucketName,
       canPaste,
       clipboard?.mode,
@@ -4928,18 +5083,23 @@ export default function BrowserPage({
   );
   const selectionActionStates = useMemo(
     () =>
-      resolveBrowserActions({
-        scope: "selection",
-        items: selectionItems,
-        bucketName,
-        hasS3AccountContext,
-        versioningEnabled: isVersioningEnabled,
-        canPaste,
-        clipboardMode: clipboard?.mode ?? null,
-        copyUrlDisabled: sseActive,
-        copyUrlDisabledReason,
-      }),
+      applyBrowserActionProfile(
+        resolveBrowserActions({
+          scope: "selection",
+          items: selectionItems,
+          bucketName,
+          hasS3AccountContext,
+          versioningEnabled: isVersioningEnabled,
+          canPaste,
+          clipboardMode: clipboard?.mode ?? null,
+          copyUrlDisabled: sseActive,
+          copyUrlDisabledReason,
+        }),
+        actionProfile,
+        selectionItems,
+      ),
     [
+      actionProfile,
       bucketName,
       canPaste,
       clipboard?.mode,
@@ -4954,19 +5114,24 @@ export default function BrowserPage({
     if (!selectionIsSingle || !selectionPrimary) {
       return null;
     }
-    return resolveBrowserActions({
-      scope: "item",
-      items: [selectionPrimary],
-      bucketName,
-      hasS3AccountContext,
-      versioningEnabled: isVersioningEnabled,
-      canPaste,
-      clipboardMode: clipboard?.mode ?? null,
-      copyUrlDisabled: sseActive,
-      copyUrlDisabledReason,
-      inspectorAvailable: canUseInspectorPanel,
-    }).preview;
+    return applyBrowserActionProfile(
+      resolveBrowserActions({
+        scope: "item",
+        items: [selectionPrimary],
+        bucketName,
+        hasS3AccountContext,
+        versioningEnabled: isVersioningEnabled,
+        canPaste,
+        clipboardMode: clipboard?.mode ?? null,
+        copyUrlDisabled: sseActive,
+        copyUrlDisabledReason,
+        inspectorAvailable: canUseInspectorPanel,
+      }),
+      actionProfile,
+      [selectionPrimary],
+    ).preview;
   }, [
+    actionProfile,
     bucketName,
     canPaste,
     canUseInspectorPanel,
@@ -5418,6 +5583,7 @@ export default function BrowserPage({
         query: fragment || undefined,
         type: "folder",
         maxKeys: PATH_SUGGESTIONS_API_LIMIT,
+        ...browserRequestOptions,
       })
         .then((data) => {
           if (pathSuggestionsRequestIdRef.current !== requestId) return;
@@ -5455,6 +5621,7 @@ export default function BrowserPage({
     };
   }, [
     accountIdForApi,
+    browserRequestOptions,
     bucketName,
     hasS3AccountContext,
     isEditingPath,
@@ -6150,6 +6317,7 @@ export default function BrowserPage({
         bucketName,
         upload.upload_id,
         upload.key,
+        browserRequestOptions,
       );
       setMultipartUploads((prev) =>
         prev.filter(
@@ -7290,7 +7458,7 @@ export default function BrowserPage({
     setNewFolderLoading(true);
     setNewFolderError(null);
     try {
-      await createFolder(accountIdForApi, bucketName, folderPrefix);
+      await createFolder(accountIdForApi, bucketName, folderPrefix, browserRequestOptions);
       addActivity("Created", `${bucketName}/${folderPrefix}`);
       setStatusMessage(`Folder ${clean} created`);
       setShowNewFolderModal(false);
@@ -7498,6 +7666,8 @@ export default function BrowserPage({
         onProgress,
         controller?.signal,
         sseCustomerKeyBase64,
+        undefined,
+        browserRequestOptions,
       );
       return;
     }
@@ -7632,6 +7802,7 @@ export default function BrowserPage({
           content_type: file.type || undefined,
         },
         sseCustomerKeyBase64,
+        browserRequestOptions,
       );
       uploadId = init.upload_id;
       let hasError = false;
@@ -7656,9 +7827,14 @@ export default function BrowserPage({
         ),
       );
       uploadedParts.sort((a, b) => a.part_number - b.part_number);
-      await completeMultipartUpload(accountId, bucket, uploadId, key, {
-        parts: uploadedParts,
-      });
+      await completeMultipartUpload(
+        accountId,
+        bucket,
+        uploadId,
+        key,
+        { parts: uploadedParts },
+        browserRequestOptions,
+      );
       setOperations((prev) =>
         prev.map((op) =>
           op.id === operationId ? { ...op, progress: 100 } : op,
@@ -7667,7 +7843,7 @@ export default function BrowserPage({
     } catch (err) {
       if (uploadId) {
         try {
-          await abortMultipartUpload(accountId, bucket, uploadId, key);
+          await abortMultipartUpload(accountId, bucket, uploadId, key, browserRequestOptions);
         } catch {
           // ignore abort failures
         }
@@ -7831,6 +8007,7 @@ export default function BrowserPage({
         key,
         signal,
         sseCustomerKeyBase64,
+        browserRequestOptions,
       );
     }
     const presign = await presignObjectRequest(bucketName, {
@@ -7884,9 +8061,12 @@ export default function BrowserPage({
         console.warn("Unable to parse stored user payload", err);
       }
     }
+    if (workspaceSurface === "portal") {
+      headers["X-S3-Workspace"] = "portal";
+    }
     Object.assign(headers, buildSseCustomerBackendHeaders(sseKeyBase64));
     return headers;
-  }, []);
+  }, [workspaceSurface]);
 
   const buildApiUrl = useCallback(
     (path: string, params?: Record<string, unknown>) => {
@@ -8046,7 +8226,7 @@ export default function BrowserPage({
       signal?: AbortSignal;
     }) => {
       if (mode === "proxy") {
-        return proxyDownload(selector, bucket, key, signal, sseKeyBase64);
+        return proxyDownload(selector, bucket, key, signal, sseKeyBase64, browserRequestOptions);
       }
       const presign = await presignObject(
         selector,
@@ -8057,6 +8237,7 @@ export default function BrowserPage({
           expires_in: 900,
         },
         sseKeyBase64,
+        browserRequestOptions,
       );
       const response = await fetch(presign.url, {
         headers: presign.headers || undefined,
@@ -8069,7 +8250,7 @@ export default function BrowserPage({
       }
       return response.blob();
     },
-    [formatFetchTransferError],
+    [browserRequestOptions, formatFetchTransferError],
   );
 
   const downloadObjectStreamForTransfer = useCallback(
@@ -8123,6 +8304,7 @@ export default function BrowserPage({
           expires_in: 900,
         },
         sseKeyBase64,
+        browserRequestOptions,
       );
       const response = await fetch(presign.url, {
         headers: presign.headers || undefined,
@@ -8138,7 +8320,7 @@ export default function BrowserPage({
       }
       return response.body;
     },
-    [buildApiUrl, buildAuthHeaders, formatFetchTransferError],
+    [browserRequestOptions, buildApiUrl, buildAuthHeaders, formatFetchTransferError],
   );
 
   const uploadBlobForTransfer = useCallback(
@@ -8171,6 +8353,7 @@ export default function BrowserPage({
           signal,
           sseKeyBase64,
           key.split("/").pop() || "upload.bin",
+          browserRequestOptions,
         );
         return;
       }
@@ -8185,6 +8368,7 @@ export default function BrowserPage({
           expires_in: 1800,
         },
         sseKeyBase64,
+        browserRequestOptions,
       );
       const response = await fetch(presign.url, {
         method: (presign.method || "PUT").toUpperCase(),
@@ -8201,7 +8385,7 @@ export default function BrowserPage({
         );
       }
     },
-    [formatFetchTransferError],
+    [browserRequestOptions, formatFetchTransferError],
   );
 
   const uploadMultipartStreamForTransfer = useCallback(
@@ -8244,6 +8428,7 @@ export default function BrowserPage({
             expires_in: 1800,
           },
           sseKeyBase64,
+          browserRequestOptions,
         );
         const response = await axios.put(presignedPart.url, blob, {
           headers: presignedPart.headers || {},
@@ -8279,6 +8464,7 @@ export default function BrowserPage({
             content_type: contentType ?? undefined,
           },
           sseKeyBase64,
+          browserRequestOptions,
         );
         uploadId = init.upload_id;
 
@@ -8304,13 +8490,18 @@ export default function BrowserPage({
         }
 
         completedParts.sort((a, b) => a.part_number - b.part_number);
-        await completeMultipartUpload(selector, bucket, uploadId, key, {
-          parts: completedParts,
-        });
+        await completeMultipartUpload(
+          selector,
+          bucket,
+          uploadId,
+          key,
+          { parts: completedParts },
+          browserRequestOptions,
+        );
       } catch (err) {
         if (uploadId) {
           try {
-            await abortMultipartUpload(selector, bucket, uploadId, key);
+            await abortMultipartUpload(selector, bucket, uploadId, key, browserRequestOptions);
           } catch {
             // ignore cleanup failures
           }
@@ -8320,7 +8511,7 @@ export default function BrowserPage({
         reader.releaseLock();
       }
     },
-    [],
+    [browserRequestOptions],
   );
 
   const deleteObjectForTransfer = useCallback(
@@ -8333,9 +8524,9 @@ export default function BrowserPage({
       bucket: string;
       key: string;
     }) => {
-      await deleteObjects(selector, bucket, [{ key }]);
+      await deleteObjects(selector, bucket, [{ key }], undefined, browserRequestOptions);
     },
-    [],
+    [browserRequestOptions],
   );
 
   const listAllObjectsForPrefix = useCallback(
@@ -8361,6 +8552,7 @@ export default function BrowserPage({
             type: "file",
             recursive: true,
             signal,
+            ...browserRequestOptions,
           },
         );
         collected.push(...data.objects);
@@ -8369,7 +8561,7 @@ export default function BrowserPage({
       }
       return collected;
     },
-    [accountIdForApi, bucketName, hasS3AccountContext],
+    [accountIdForApi, browserRequestOptions, bucketName, hasS3AccountContext],
   );
 
   const listAllVersionsForPrefix = async (targetPrefix: string) => {
@@ -8527,6 +8719,7 @@ export default function BrowserPage({
             bucketName,
             chunk.map((key) => ({ key })),
             signal,
+            browserRequestOptions,
           );
           if (signal?.aborted) {
             if (detailOperationId) {
@@ -9221,6 +9414,7 @@ export default function BrowserPage({
             item.key,
             undefined,
             sseCustomerKeyBase64,
+            browserRequestOptions,
           );
           const url = window.URL.createObjectURL(blob);
           const link = document.createElement("a");
@@ -10821,18 +11015,22 @@ export default function BrowserPage({
   };
 
   const resolveItemActionStates = (item: BrowserItem) =>
-    resolveBrowserActions({
-      scope: "item",
-      items: [item],
-      bucketName,
-      hasS3AccountContext,
-      versioningEnabled: isVersioningEnabled,
-      canPaste,
-      clipboardMode: clipboard?.mode ?? null,
-      copyUrlDisabled: sseActive,
-      copyUrlDisabledReason,
-      inspectorAvailable: canUseInspectorPanel,
-    });
+    applyBrowserActionProfile(
+      resolveBrowserActions({
+        scope: "item",
+        items: [item],
+        bucketName,
+        hasS3AccountContext,
+        versioningEnabled: isVersioningEnabled,
+        canPaste,
+        clipboardMode: clipboard?.mode ?? null,
+        copyUrlDisabled: sseActive,
+        copyUrlDisabledReason,
+        inspectorAvailable: canUseInspectorPanel,
+      }),
+      actionProfile,
+      [item],
+    );
 
   const activeOperations = useMemo(
     () => operations.filter((op) => !op.completedAt),
@@ -11688,7 +11886,8 @@ export default function BrowserPage({
   });
   const showFolderToggle = showPanelToggles && canUseFoldersPanel;
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
-  const isActionBarVisible = isMainBrowserPath && showActionBar;
+  const isActionBarVisible =
+    isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled && showActionBar;
   const isCompactToolbarMode = !isActionBarVisible;
   const browserViewLabel = compactMode ? "Compact view" : "List view";
   const browserChromeShellClasses =
@@ -11737,10 +11936,12 @@ export default function BrowserPage({
     canSelectionActions && toolbarSelectionActions.length > 0;
   const hasToolbarOperationsAction = hasOperationsPanelContent;
   const hasToolbarStatusSection =
-    isMainBrowserPath || Boolean(accessBadge) || hasToolbarOperationsAction;
+    (isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled) ||
+    Boolean(accessBadge) ||
+    hasToolbarOperationsAction;
   const hasToolbarLayoutSection =
     showFolderToggle || showInspectorToggle || showActionBarToggle;
-  const hasToolbarColumnsSection = true;
+  const hasToolbarColumnsSection = !isPortalBasicProfile;
   const hasToolbarBucketConfigurationAction = bucketConfigurationEnabled;
   const hasToolbarSecondaryActionsSection =
     hasToolbarPathActions ||
@@ -11775,7 +11976,7 @@ export default function BrowserPage({
   const toggleToolbarColumnsMenu = () => {
     setShowToolbarColumnsMenu((prev) => !prev);
   };
-  const toolbarColumnsSummary = `${visibleColumns.length}/${COLUMN_DEFINITIONS.length} visible`;
+  const toolbarColumnsSummary = `${effectiveVisibleColumns.length}/${COLUMN_DEFINITIONS.length} visible`;
   const handleToolbarDownload = () => {
     if (canSelectionDownloadFolder && selectionPrimary) {
       handleDownloadFolder(selectionPrimary);
@@ -12095,26 +12296,30 @@ export default function BrowserPage({
           onChange={(event) => setFilter(event.target.value)}
           placeholder="Search objects"
           aria-label="Search objects"
-          className={`${browserSearchInputClasses} pl-9 pr-9 normal-case`}
+          className={`${browserSearchInputClasses} pl-9 ${
+            isPortalBasicProfile ? "pr-3" : "pr-9"
+          } normal-case`}
         />
-        <button
-          ref={searchOptionsButtonRef}
-          type="button"
-          onClick={() => setShowSearchOptionsMenu((prev) => !prev)}
-          className={`absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
-            hasAdvancedSearchOptionsActive
-              ? "text-primary-700 hover:bg-primary-100 dark:text-primary-200 dark:hover:bg-primary-500/20"
-              : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-          }`}
-          aria-haspopup="menu"
-          aria-expanded={showSearchOptionsMenu}
-          aria-label="Search options"
-          title="Search options"
-        >
-          <SlidersIcon className="h-3 w-3" />
-        </button>
+        {!isPortalBasicProfile && (
+          <button
+            ref={searchOptionsButtonRef}
+            type="button"
+            onClick={() => setShowSearchOptionsMenu((prev) => !prev)}
+            className={`absolute right-1.5 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
+              hasAdvancedSearchOptionsActive
+                ? "text-primary-700 hover:bg-primary-100 dark:text-primary-200 dark:hover:bg-primary-500/20"
+                : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+            }`}
+            aria-haspopup="menu"
+            aria-expanded={showSearchOptionsMenu}
+            aria-label="Search options"
+            title="Search options"
+          >
+            <SlidersIcon className="h-3 w-3" />
+          </button>
+        )}
         <AnchoredPortalMenu
-          open={showSearchOptionsMenu}
+          open={!isPortalBasicProfile && showSearchOptionsMenu}
           anchorRef={searchOptionsButtonRef}
           placement="bottom-end"
           offset={8}
@@ -12314,20 +12519,30 @@ export default function BrowserPage({
                   <button
                     type="button"
                     className={`${bucketButtonClassName} min-h-9`}
-                    onClick={() => setShowBucketMenu((prev) => !prev)}
+                    onClick={
+                      resolvedLockedBucketName
+                        ? undefined
+                        : () => setShowBucketMenu((prev) => !prev)
+                    }
                     disabled={!hasS3AccountContext}
-                    aria-haspopup="listbox"
-                    aria-expanded={showBucketMenu}
-                    aria-label="Select bucket"
-                    title="Select bucket"
+                    aria-haspopup={resolvedLockedBucketName ? undefined : "listbox"}
+                    aria-expanded={resolvedLockedBucketName ? undefined : showBucketMenu}
+                    aria-label={
+                      resolvedLockedBucketName ? "Selected storage space" : "Select bucket"
+                    }
+                    title={
+                      resolvedLockedBucketName ? "Selected storage space" : "Select bucket"
+                    }
                   >
                     <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
                     <span className="max-w-[200px] truncate sm:max-w-[260px]">
                       {bucketButtonLabel}
                     </span>
-                    <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
+                    {!resolvedLockedBucketName && (
+                      <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
+                    )}
                   </button>
-                  {showBucketMenu && (
+                  {showBucketMenu && !resolvedLockedBucketName && (
                     <div
                       className={`absolute left-0 top-[calc(100%+8px)] z-[60] w-80 max-w-[calc(100vw-1rem)] ui-caption ${browserFloatingMenuClasses}`}
                     >
@@ -13604,7 +13819,9 @@ export default function BrowserPage({
                                     <OpenIcon />
                                   </button>
                                 )}
-                                {item.type === "file" && !isDeleted && (
+                                {item.type === "file" &&
+                                  !isDeleted &&
+                                  itemActionStates.preview.visible && (
                                   <button
                                     type="button"
                                     className={rowActionButtonClasses}
@@ -14575,6 +14792,7 @@ export default function BrowserPage({
         canPaste={canPaste}
         copyUrlDisabled={sseActive}
         copyUrlDisabledReason={copyUrlDisabledReason}
+        actionProfile={actionProfile}
         clipboard={clipboard}
         fileInputRef={fileInputRef}
         folderInputRef={folderInputRef}
@@ -14603,10 +14821,10 @@ export default function BrowserPage({
         onOpenDetails={openItemDetails}
         onToggleShowFolders={() => setShowFolderItems((prev) => !prev)}
         onToggleShowDeleted={() => setShowDeletedObjects((prev) => !prev)}
-        isMainBrowserPath={isMainBrowserPath}
+        isMainBrowserPath={isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled}
         compactMode={compactMode}
         onSetCompactMode={(value) => {
-          if (!isMainBrowserPath) return;
+          if (!isMainBrowserPath || !rootBrowserAdvancedFeaturesEnabled) return;
           setCompactMode(value);
         }}
         columnOptions={COLUMN_DEFINITIONS.map((column) => ({
