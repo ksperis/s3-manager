@@ -2578,6 +2578,39 @@ def test_ceph_admin_bucket_stream_emits_progress_result_and_done(monkeypatch: py
     assert "\"percent\":65" in body
 
 
+def test_ceph_admin_bucket_stream_hides_unexpected_error_details(monkeypatch: pytest.MonkeyPatch):
+    ctx, _ = _build_ctx(endpoint_id=304, payload=[])
+
+    def fake_compute(**kwargs):  # noqa: ARG001
+        raise RuntimeError("secret backend failure token=leaked")
+
+    monkeypatch.setattr(buckets_router, "_compute_bucket_listing", fake_compute)
+
+    async def _run() -> str:
+        request = SimpleNamespace(is_disconnected=lambda: asyncio.sleep(0, result=False))
+        response = await buckets_router.stream_buckets(
+            request=request,
+            page=1,
+            page_size=25,
+            filter=None,
+            advanced_filter=json.dumps({"match": "all", "rules": [{"field": "name", "op": "contains", "value": "bucket"}]}),
+            sort_by="name",
+            sort_dir="asc",
+            include=[],
+            with_stats=False,
+            ctx=ctx,
+        )
+        chunks: list[str] = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk.decode() if isinstance(chunk, bytes) else chunk)
+        return "".join(chunks)
+
+    body = asyncio.run(_run())
+    assert "event: error" in body
+    assert "Bucket streaming search failed" in body
+    assert "token=leaked" not in body
+
+
 def test_ceph_admin_bucket_stream_cancels_work_when_client_disconnects(monkeypatch: pytest.MonkeyPatch):
     payload = [{"name": "bucket-a", "owner": "owner-a"}]
     ctx, _ = _build_ctx(endpoint_id=303, payload=payload)

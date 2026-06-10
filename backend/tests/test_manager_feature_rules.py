@@ -181,6 +181,41 @@ def test_feature_rules_lists_notifications_and_bucket_errors(feature_rule_client
     assert body[1]["error"] == "AccessDenied"
 
 
+def test_feature_rules_redacts_sensitive_raw_payload_values(feature_rule_client):
+    client, service = feature_rule_client
+    service.notifications["alpha"] = {
+        "TopicConfigurations": [
+            {
+                "Id": "ObjectCreateAll",
+                "TopicArn": "arn:aws:sns:default:ACCOUNT:topic-a",
+                "Events": ["s3:ObjectCreated:*"],
+                "SecretAccessKey": "super-secret",
+                "Nested": {"sessionToken": "session-token"},
+            }
+        ],
+    }
+
+    response = client.get("/api/manager/feature-rules", params={"feature": "notifications"})
+
+    assert response.status_code == 200
+    raw = response.json()[0]["rules"][0]["raw"]
+    assert raw["Id"] == "ObjectCreateAll"
+    assert raw["SecretAccessKey"] == "[redacted]"
+    assert raw["Nested"]["sessionToken"] == "[redacted]"
+
+
+def test_feature_rules_redacts_unexpected_bucket_error_details(feature_rule_client):
+    client, service = feature_rule_client
+    service.failures[("policy", "alpha")] = "upstream secret leaked from transport"
+
+    response = client.get("/api/manager/feature-rules", params={"feature": "policy"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["status"] == "unavailable"
+    assert body[0]["error"] == "Unable to read rules"
+
+
 def test_feature_rules_lists_bucket_tags(feature_rule_client):
     client, service = feature_rule_client
     service.tags["alpha"] = [

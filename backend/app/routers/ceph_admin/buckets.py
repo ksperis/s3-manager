@@ -3202,7 +3202,7 @@ async def stream_buckets(
                         "error",
                         {
                             "request_id": request_id,
-                            "detail": str(exc),
+                            "detail": "Bucket streaming search failed",
                         },
                     )
                 )

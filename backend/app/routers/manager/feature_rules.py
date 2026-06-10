@@ -28,6 +28,27 @@ from app.utils.concurrency import bounded_ordered_map
 
 router = APIRouter(prefix="/manager/feature-rules", tags=["manager-feature-rules"])
 MANAGER_FEATURE_RULE_INVENTORY_MAX_WORKERS = 8
+SENSITIVE_RAW_KEY_PARTS = (
+    "accesskey",
+    "access_key",
+    "authorization",
+    "password",
+    "secret",
+    "sessiontoken",
+    "session_token",
+    "token",
+)
+SAFE_RUNTIME_ERROR_CODES = (
+    "AccessDenied",
+    "Forbidden",
+    "NoSuchBucket",
+    "NoSuchCORSConfiguration",
+    "NoSuchLifecycleConfiguration",
+    "NoSuchTagSet",
+    "NoSuchWebsiteConfiguration",
+    "NoSuchBucketPolicy",
+    "NoSuchBucketNotification",
+)
 
 
 def _is_record(value: Any) -> bool:
@@ -67,6 +88,31 @@ def _display_value(value: Any, *, max_items: int = 3) -> str:
         suffix = f"; +{remaining}" if remaining > 0 else ""
         return "; ".join(item for item in rendered if item) + suffix
     return ""
+
+
+def _is_sensitive_raw_key(key: object) -> bool:
+    normalized = "".join(character for character in str(key).lower() if character.isalnum() or character == "_")
+    return any(part in normalized for part in SENSITIVE_RAW_KEY_PARTS)
+
+
+def _sanitize_raw_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: "[redacted]" if _is_sensitive_raw_key(key) else _sanitize_raw_payload(entry)
+            for key, entry in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_raw_payload(item) for item in value]
+    return value
+
+
+def _safe_bucket_feature_error(feature: FeatureRuleInventoryFeature, exc: RuntimeError) -> str:
+    message = str(exc)
+    message_lower = message.lower()
+    for code in SAFE_RUNTIME_ERROR_CODES:
+        if code.lower() in message_lower:
+            return code
+    return "Unable to read tags" if feature == "tags" else "Unable to read rules"
 
 
 def _join_parts(parts: list[str | None], *, fallback: str) -> str:
@@ -170,7 +216,7 @@ def _normalize_lifecycle_rules(rules: list[dict[str, Any]]) -> list[FeatureRuleI
                 title=rule_id,
                 summary=_join_parts([filter_summary, action_summary], fallback="Lifecycle rule"),
                 chips=chips,
-                raw=rule,
+                raw=_sanitize_raw_payload(rule),
             )
         )
     return normalized
@@ -230,7 +276,7 @@ def _normalize_policy_rules(policy: dict[str, Any] | None) -> list[FeatureRuleIn
                     fallback="Bucket policy statement",
                 ),
                 chips=chips,
-                raw=statement,
+                raw=_sanitize_raw_payload(statement),
             )
         )
     return normalized
@@ -264,7 +310,7 @@ def _normalize_cors_rules(rules: list[dict[str, Any]]) -> list[FeatureRuleInvent
                     fallback="No header or max-age details",
                 ),
                 chips=chips,
-                raw=rule,
+                raw=_sanitize_raw_payload(rule),
             )
         )
     return normalized
@@ -319,7 +365,7 @@ def _normalize_notification_entry(config_type: str, raw_rule: dict[str, Any], in
             fallback=f"{config_type.title()} notification",
         ),
         chips=chips,
-        raw=raw_rule,
+        raw=_sanitize_raw_payload(raw_rule),
     )
 
 
@@ -347,7 +393,7 @@ def _normalize_notification_rules(configuration: dict[str, Any]) -> list[Feature
                 title="EventBridge",
                 summary="Send bucket events to EventBridge",
                 chips=["EventBridge"],
-                raw=event_bridge_raw,
+                raw=_sanitize_raw_payload(event_bridge_raw),
             )
         )
     return rules
@@ -366,7 +412,7 @@ def _normalize_tag_rules(tags: list[BucketTag]) -> list[FeatureRuleInventoryRule
                 title=key,
                 summary=value if value else "Empty value",
                 chips=[],
-                raw=raw,
+                raw=_sanitize_raw_payload(raw),
             )
         )
     return normalized
@@ -453,7 +499,7 @@ def list_feature_rule_inventory(
                 rules=_normalize_notification_rules(notifications.configuration or {}),
             )
         except RuntimeError as exc:
-            return _unavailable_bucket(bucket.name, feature, str(exc))
+            return _unavailable_bucket(bucket.name, feature, _safe_bucket_feature_error(feature, exc))
 
     return bounded_ordered_map(
         buckets,

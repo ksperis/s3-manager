@@ -328,6 +328,28 @@ def test_storage_ops_stream_emits_progress_and_result(client, monkeypatch):
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
 
 
+def test_storage_ops_stream_hides_unexpected_error_details(client, monkeypatch):
+    def fake_compute_listing(**kwargs):  # noqa: ARG001
+        raise RuntimeError("secret backend failure token=leaked")
+
+    monkeypatch.setattr(storage_ops_router, "_compute_storage_ops_listing", fake_compute_listing)
+
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
+    try:
+        response = client.get(
+            "/api/storage-ops/buckets/stream",
+            params={"advanced_filter": '{"match":"all","rules":[]}'},
+        )
+        assert response.status_code == 200
+        assert "event: error" in response.text
+        assert "Storage Ops bucket streaming failed" in response.text
+        assert "token=leaked" not in response.text
+    finally:
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
+        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+
+
 def test_storage_ops_listing_reports_context_progress(monkeypatch):
     contexts = [
         ExecutionContext(
