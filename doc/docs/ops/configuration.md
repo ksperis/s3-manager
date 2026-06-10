@@ -51,6 +51,10 @@ On a fresh deployment with no persisted `app_settings.json`, `Endpoint Status`
 and `Usage history` are enabled by default. `Quota alerts` remains disabled
 until explicitly enabled and configured.
 
+The Browser workspace is enabled on root `/browser` and in Portal storage spaces
+(`/portal/storage-spaces/:spaceId`) by default. Manager and Ceph Admin Browser
+integrations remain disabled until explicitly enabled.
+
 `FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. When Portal is enabled, account access remains explicit: admins assign `portal_user` or `portal_manager` on each UI user/account link, while existing links stay `portal_none` until changed.
 
 ## Frontend runtime settings

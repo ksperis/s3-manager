@@ -12,7 +12,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   browser_enabled: true,
   browser_root_enabled: true,
   browser_manager_enabled: false,
-  browser_portal_enabled: false,
+  browser_portal_enabled: true,
   browser_ceph_admin_enabled: false,
   portal_enabled: false,
   billing_enabled: false,
