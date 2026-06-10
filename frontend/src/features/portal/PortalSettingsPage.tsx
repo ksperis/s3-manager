@@ -8,6 +8,7 @@ import PageTabs from "../../components/PageTabs";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
+import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 
 function readUser() {
   if (typeof window === "undefined") return { email: "laurent@example.com", name: "Laurent" };
@@ -27,6 +28,8 @@ function readUser() {
 export default function PortalSettingsPage() {
   const user = readUser();
   const [activeTab, setActiveTab] = useState("General");
+  const labelClass = cx("font-bold", uiMutedTextClass);
+  const valueClass = cx("mt-1 font-semibold", uiTitleTextClass);
   return (
     <div className="space-y-4">
       <PageHeader
@@ -44,20 +47,20 @@ export default function PortalSettingsPage() {
         <UiCard title="Account">
           <dl className="space-y-4 text-xs">
             <div>
-              <dt className="font-bold text-slate-400">Account name</dt>
-              <dd className="mt-1 font-semibold text-slate-800">{user.name}</dd>
+              <dt className={labelClass}>Account name</dt>
+              <dd className={valueClass}>{user.name}</dd>
             </div>
             <div>
-              <dt className="font-bold text-slate-400">Account ID</dt>
-              <dd className="mt-1 font-semibold text-slate-800">acc-123456</dd>
+              <dt className={labelClass}>Account ID</dt>
+              <dd className={valueClass}>acc-123456</dd>
             </div>
             <div>
-              <dt className="font-bold text-slate-400">Email</dt>
-              <dd className="mt-1 font-semibold text-slate-800">{user.email}</dd>
+              <dt className={labelClass}>Email</dt>
+              <dd className={valueClass}>{user.email}</dd>
             </div>
             <div>
-              <dt className="font-bold text-slate-400">Timezone</dt>
-              <dd className="mt-1 font-semibold text-slate-800">Europe/Paris</dd>
+              <dt className={labelClass}>Timezone</dt>
+              <dd className={valueClass}>Europe/Paris</dd>
             </div>
           </dl>
           <UiButton variant="secondary" className="mt-6 h-8 px-3 py-1.5">Edit</UiButton>
@@ -66,19 +69,19 @@ export default function PortalSettingsPage() {
         <UiCard title="Security">
           <dl className="space-y-4 text-xs">
             <div>
-              <dt className="font-bold text-slate-400">Password</dt>
-              <dd className="mt-1 flex items-center justify-between gap-3 font-semibold text-slate-800">
+              <dt className={labelClass}>Password</dt>
+              <dd className={cx("mt-1 flex items-center justify-between gap-3 font-semibold", uiTitleTextClass)}>
                 <span>********</span>
                 <UiButton variant="secondary" className="h-7 px-3 py-1">Change</UiButton>
               </dd>
             </div>
             <div>
-              <dt className="font-bold text-slate-400">MFA</dt>
+              <dt className={labelClass}>MFA</dt>
               <dd className="mt-1"><UiBadge tone="success">Enabled</UiBadge></dd>
             </div>
             <div>
-              <dt className="font-bold text-slate-400">Session timeout</dt>
-              <dd className="mt-1 font-semibold text-slate-800">1 hour</dd>
+              <dt className={labelClass}>Session timeout</dt>
+              <dd className={valueClass}>1 hour</dd>
             </div>
           </dl>
           <UiButton variant="secondary" className="mt-6 h-8 px-3 py-1.5">Edit</UiButton>
@@ -87,7 +90,7 @@ export default function PortalSettingsPage() {
         <UiCard title="Preferences">
           <dl className="space-y-4 text-xs">
             <div>
-              <dt className="font-bold text-slate-400">Theme</dt>
+              <dt className={labelClass}>Theme</dt>
               <dd className="mt-1">
                 <select className="ui-control h-8 w-32 py-1.5 text-xs" value="Light" readOnly>
                   <option>Light</option>
@@ -95,7 +98,7 @@ export default function PortalSettingsPage() {
               </dd>
             </div>
             <div>
-              <dt className="font-bold text-slate-400">Items per page</dt>
+              <dt className={labelClass}>Items per page</dt>
               <dd className="mt-1">
                 <select className="ui-control h-8 w-24 py-1.5 text-xs" value="20" readOnly>
                   <option>20</option>
@@ -103,7 +106,7 @@ export default function PortalSettingsPage() {
               </dd>
             </div>
             <div>
-              <dt className="font-bold text-slate-400">Date format</dt>
+              <dt className={labelClass}>Date format</dt>
               <dd className="mt-1">
                 <input className="ui-control h-8 w-36 text-xs" value="MM/DD/YYYY" readOnly />
               </dd>

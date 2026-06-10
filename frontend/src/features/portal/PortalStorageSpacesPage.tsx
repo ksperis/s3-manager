@@ -10,6 +10,7 @@ import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
+import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { storageSpacePath, type PortalWorkspaceAccess, type PortalWorkspaceSpace } from "./portalWorkspaceModel";
@@ -119,7 +120,7 @@ export default function PortalStorageSpacesPage() {
               {createBusy ? "Creating..." : "Create"}
             </UiButton>
           </div>
-          {createError ? <div className="mt-3 text-xs font-semibold text-rose-600">{createError}</div> : null}
+          {createError ? <div className="mt-3 text-xs font-semibold text-rose-600 dark:text-rose-300">{createError}</div> : null}
         </UiCard>
       ) : null}
 
@@ -171,8 +172,8 @@ export default function PortalStorageSpacesPage() {
               {filteredSpaces.map((space) => (
                 <tr key={space.id}>
                   <td>
-                    <div className="font-bold text-slate-950">{space.name}</div>
-                    <div className="text-[11px] font-medium text-slate-500">{space.description}</div>
+                    <div className={cx("font-bold", uiTitleTextClass)}>{space.name}</div>
+                    <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>{space.description}</div>
                   </td>
                   <td>{space.spaceType ?? "-"}</td>
                   <td>{formatCompactNumber(space.objectCount)}</td>
@@ -186,7 +187,7 @@ export default function PortalStorageSpacesPage() {
               ))}
               {filteredSpaces.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-6 text-center text-xs font-semibold text-slate-500">
+                  <td colSpan={9} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
                     No Storage Spaces to display.
                   </td>
                 </tr>
@@ -194,7 +195,7 @@ export default function PortalStorageSpacesPage() {
             </tbody>
           </table>
         </div>
-        <div className="mt-4 flex items-center justify-between text-[11px] font-semibold text-slate-500">
+        <div className={cx("mt-4 flex items-center justify-between text-[11px] font-semibold", uiMutedTextClass)}>
           <span>{filteredSpaces.length} of {workspace.spaces.length}</span>
         </div>
       </UiCard>

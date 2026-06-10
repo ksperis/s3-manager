@@ -21,7 +21,7 @@ import { tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
-import { cx, uiCardMutedClass, uiMutedTextClass } from "../../components/ui/styles";
+import { cx, uiCardMutedClass, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
 import {
@@ -76,9 +76,9 @@ function formatObjectDate(raw?: string | null): string {
 
 function FileIcon() {
   return (
-    <span className="inline-flex h-14 w-12 items-center justify-center rounded-md border border-slate-300 bg-slate-50 text-slate-600 shadow-sm">
+    <span className="inline-flex h-14 w-12 items-center justify-center rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] text-[var(--ui-text-muted)] shadow-[var(--ui-shadow-soft)]">
       <svg viewBox="0 0 24 28" aria-hidden="true" className="h-9 w-8">
-        <path d="M5 2.5h9l5 5V25.5H5V2.5Z" fill="white" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M5 2.5h9l5 5V25.5H5V2.5Z" fill="var(--ui-surface)" stroke="currentColor" strokeWidth="1.6" />
         <path d="M14 2.5v5h5" fill="none" stroke="currentColor" strokeWidth="1.6" />
         <path d="M8 18h8" stroke="currentColor" strokeWidth="1.4" />
       </svg>
@@ -89,8 +89,8 @@ function FileIcon() {
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid grid-cols-[140px_1fr] gap-4 text-xs">
-      <dt className="font-semibold text-slate-500">{label}</dt>
-      <dd className="min-w-0 truncate font-bold text-slate-800">{value}</dd>
+      <dt className={cx("font-semibold", uiMutedTextClass)}>{label}</dt>
+      <dd className={cx("min-w-0 truncate font-bold", uiTitleTextClass)}>{value}</dd>
     </div>
   );
 }
@@ -113,10 +113,10 @@ function QuickAction({
       disabled={disabled}
       className={
         disabled
-          ? "cursor-not-allowed text-left text-xs font-bold text-slate-400"
+          ? cx("cursor-not-allowed text-left text-xs font-bold", uiMutedTextClass)
           : tone === "rose"
-            ? "text-left text-xs font-bold text-rose-600 hover:text-rose-700"
-            : "text-left text-xs font-bold text-blue-700 hover:text-blue-800"
+            ? "text-left text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-200"
+            : "text-left text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
       }
     >
       {label}
@@ -330,10 +330,10 @@ export default function PortalObjectDetailPage() {
         <div className="flex min-w-0 gap-4">
           <FileIcon />
           <div className="min-w-0">
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{object.name || objectName(object.path)}</p>
+            <p className={cx("ui-body font-semibold", uiTitleTextClass)}>{object.name || objectName(object.path)}</p>
             <div className={cx(uiCardMutedClass, "mt-3 flex max-w-2xl items-center gap-2 px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>
               <span className="min-w-0 flex-1 truncate">{displayPath}</span>
-              <button type="button" onClick={copyPath} className="shrink-0 text-blue-700">Copier</button>
+              <button type="button" onClick={copyPath} className="shrink-0 text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100">Copier</button>
             </div>
           </div>
         </div>
@@ -342,7 +342,7 @@ export default function PortalObjectDetailPage() {
       {downloadMessage ? <PageBanner tone="info">{downloadMessage}</PageBanner> : null}
       {objectError ? <PageBanner tone="warning">{objectError}</PageBanner> : null}
 
-      <div className="border-b border-slate-200 pb-3 dark:border-slate-800">
+      <div className={cx("border-b pb-3", uiDividerClass)}>
         <PageTabs tabs={tabs.map((tab) => ({ id: tab, label: tab }))} activeTab={activeTab} onChange={setActiveTab} variant="bar" />
       </div>
 
@@ -356,7 +356,7 @@ export default function PortalObjectDetailPage() {
             <DetailRow label="Chiffrement" value={object.encryption} />
             <DetailRow label="Chemin" value={object.path} />
           </dl>
-          {objectLoading ? <div className="mt-4 text-[11px] font-semibold text-slate-400">Chargement des métadonnées...</div> : null}
+          {objectLoading ? <div className={cx("mt-4 text-[11px] font-semibold", uiMutedTextClass)}>Chargement des métadonnées...</div> : null}
         </UiCard>
 
         <UiCard title="Actions rapides">
@@ -398,10 +398,10 @@ export default function PortalObjectDetailPage() {
               <tbody>
                 {publicLinks.map((link) => (
                   <tr key={link.id}>
-                    <td className="font-bold text-slate-950">{link.object_name}</td>
+                    <td className={cx("font-bold", uiTitleTextClass)}>{link.object_name}</td>
                     <td><UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{link.status}</UiBadge></td>
                     <td>{link.expires_at ? formatObjectDate(link.expires_at) : "-"}</td>
-                    <td className="max-w-[260px] truncate text-blue-700">{link.url}</td>
+                    <td className="max-w-[260px] truncate text-primary dark:text-primary-200">{link.url}</td>
                     <td className="text-right">
                       {link.status === "Active" ? (
                         <button type="button" onClick={() => handleRevokePublicLink(link)} className={tableDeleteActionClasses}>
@@ -413,7 +413,7 @@ export default function PortalObjectDetailPage() {
                 ))}
                 {publicLinks.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-5 text-center text-xs font-semibold text-slate-500">
+                    <td colSpan={5} className={cx("py-5 text-center text-xs font-semibold", uiMutedTextClass)}>
                       Aucun lien public pour cet objet.
                     </td>
                   </tr>
@@ -427,13 +427,13 @@ export default function PortalObjectDetailPage() {
       <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
         <UiCard title="Aperçu rapide">
           {object.previewType === "text" && object.previewText ? (
-            <pre className="max-h-72 overflow-auto rounded-md border border-slate-200 bg-slate-950 p-3 text-xs leading-5 text-slate-50">{object.previewText}</pre>
+            <pre className="max-h-72 overflow-auto rounded-md border border-[color:var(--ui-border)] bg-slate-950 p-3 text-xs leading-5 text-slate-50">{object.previewText}</pre>
           ) : (
-            <div className="min-h-28 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-500">
+            <div className={cx(uiCardMutedClass, "min-h-28 p-3 text-xs font-semibold leading-5", uiMutedTextClass)}>
               {object.previewUnavailableReason}
             </div>
           )}
-          <div className="mt-3 text-right text-xs font-bold text-blue-700">
+          <div className="mt-3 text-right text-xs font-bold">
             <Link to={`${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPath ? `${parentPath}/` : "")}`}>
               Ouvrir dans la liste
             </Link>
@@ -443,13 +443,13 @@ export default function PortalObjectDetailPage() {
         <UiCard title="Événements récents">
           <div className="grid gap-2">
             {workspace.activity.filter((item) => item.target === object.name || item.target === object.path).slice(0, 4).map((item) => (
-              <div key={item.id} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
-                <div className="font-bold text-slate-800">{item.action}</div>
-                <div className="mt-1 text-slate-500">{item.actor} · {item.timeLabel}</div>
+              <div key={item.id} className={cx(uiCardMutedClass, "px-3 py-2 text-xs")}>
+                <div className={cx("font-bold", uiTitleTextClass)}>{item.action}</div>
+                <div className={cx("mt-1", uiMutedTextClass)}>{item.actor} · {item.timeLabel}</div>
               </div>
             ))}
             {workspace.activity.filter((item) => item.target === object.name || item.target === object.path).length === 0 ? (
-              <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-6 text-center text-xs font-semibold text-slate-500">
+              <div className={cx(uiCardMutedClass, "px-3 py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
                 Aucun événement objet disponible.
               </div>
             ) : null}

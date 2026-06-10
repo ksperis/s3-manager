@@ -138,7 +138,7 @@ export default function PortalDashboard() {
           {trendValues.length > 0 ? (
             <>
               <MiniLineChart values={trendValues} />
-              <div className="mt-2 flex justify-between text-[11px] font-semibold text-slate-400">
+              <div className={cx("mt-2 flex justify-between text-[11px] font-semibold", uiMutedTextClass)}>
                 {(trendLabels.length > 0 ? trendLabels : workspace.usageTrend.map((point) => point.label)).map((label) => (
                   <span key={label}>{label}</span>
                 ))}
@@ -147,7 +147,7 @@ export default function PortalDashboard() {
           ) : (
             <EmptyState>No usage trend available.</EmptyState>
           )}
-          {trafficLoading ? <div className="mt-2 text-[11px] text-slate-400">Loading live trend...</div> : null}
+          {trafficLoading ? <div className={cx("mt-2 text-[11px]", uiMutedTextClass)}>Loading live trend...</div> : null}
         </UiCard>
       </section>
 
@@ -173,8 +173,8 @@ export default function PortalDashboard() {
               <div key={item.id} className="flex items-center gap-2 text-xs">
                 <span className="h-2 w-2 rounded-full bg-blue-600" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold text-slate-700">{item.actor} {item.action.toLowerCase()} {item.target}</div>
-                  <div className="text-[11px] text-slate-400">{item.timeLabel}</div>
+                  <div className={cx("truncate font-semibold", uiTitleTextClass)}>{item.actor} {item.action.toLowerCase()} {item.target}</div>
+                  <div className={cx("text-[11px]", uiMutedTextClass)}>{item.timeLabel}</div>
                 </div>
               </div>
             ))}

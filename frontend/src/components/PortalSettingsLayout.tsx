@@ -4,6 +4,7 @@
  */
 import { ReactNode } from "react";
 import UiBadge from "./ui/UiBadge";
+import { cx, uiMutedTextClass, uiTitleTextClass } from "./ui/styles";
 import type { UiTone } from "./ui/styles";
 
 type PortalSettingsSectionProps = {
@@ -53,19 +54,19 @@ export const PortalSettingsSection = ({
 
   return (
     <div>
-      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{title}</p>
-      {description && <p className="ui-caption text-slate-500 dark:text-slate-400">{description}</p>}
+      <p className={cx("ui-caption font-semibold uppercase", uiMutedTextClass)}>{title}</p>
+      {description && <p className={cx("ui-caption", uiMutedTextClass)}>{description}</p>}
       <div className={layoutClass}>{children}</div>
     </div>
   );
 };
 
 export const PortalSettingsItem = ({ title, description, action, children, className }: PortalSettingsItemProps) => (
-  <div className={`rounded-lg border border-slate-200/80 p-3 dark:border-slate-700 ${className ?? ""}`.trim()}>
+  <div className={cx("rounded-lg border border-[color:var(--ui-border)] p-3 text-[var(--ui-text)]", className)}>
     <div className="flex items-start justify-between gap-3">
       <div>
-        <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{title}</p>
-        {description && <p className="ui-caption text-slate-500 dark:text-slate-400">{description}</p>}
+        <p className={cx("ui-body font-semibold", uiTitleTextClass)}>{title}</p>
+        {description && <p className={cx("ui-caption", uiMutedTextClass)}>{description}</p>}
       </div>
       {action}
     </div>
@@ -83,7 +84,7 @@ export const PortalSettingsSwitch = ({ checked, disabled, ariaLabel, onChange }:
       disabled={disabled}
       aria-label={ariaLabel}
     />
-    <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
+    <span className="h-5 w-9 rounded-full bg-[var(--ui-border)] transition peer-checked:bg-emerald-500" />
     <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
   </label>
 );

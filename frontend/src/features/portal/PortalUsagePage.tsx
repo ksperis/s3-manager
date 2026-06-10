@@ -13,7 +13,7 @@ import StatCards from "../../components/StatCards";
 import UiBadge from "../../components/ui/UiBadge";
 import UiCard from "../../components/ui/UiCard";
 import UiProgressBar from "../../components/ui/UiProgressBar";
-import { cx, uiCardMutedClass, uiInputClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { cx, uiCardMutedClass, uiDividerClass, uiInputClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
@@ -239,7 +239,7 @@ export default function PortalUsagePage() {
         }
       />
 
-      <div className="border-b border-slate-200 pb-3 dark:border-slate-800">
+      <div className={cx("border-b pb-3", uiDividerClass)}>
         <PageTabs
           tabs={["Overview", "Storage", "Bandwidth", "Requests", "Billing source"].map((tab) => ({ id: tab, label: tab }))}
           activeTab={activeTab}
@@ -276,7 +276,7 @@ export default function PortalUsagePage() {
           {storageTrendValues.length > 0 ? (
             <>
               <MiniLineChart values={storageTrendValues} />
-              <div className="mt-2 flex justify-between text-[11px] font-semibold text-slate-400">
+              <div className={cx("mt-2 flex justify-between text-[11px] font-semibold", uiMutedTextClass)}>
                 {labels.map((label) => (
                   <span key={label}>{label}</span>
                 ))}
@@ -320,7 +320,7 @@ export default function PortalUsagePage() {
           {trafficTrendValues.length > 0 ? (
             <>
               <MiniLineChart values={trafficTrendValues} />
-              <div className="mt-2 flex justify-between text-[11px] font-semibold text-slate-400">
+              <div className={cx("mt-2 flex justify-between text-[11px] font-semibold", uiMutedTextClass)}>
                 {labels.map((label) => (
                   <span key={label}>{label}</span>
                 ))}
@@ -335,7 +335,7 @@ export default function PortalUsagePage() {
           {requestTrendValues.length > 0 ? (
             <>
               <MiniLineChart values={requestTrendValues} />
-              <div className="mt-2 flex justify-between text-[11px] font-semibold text-slate-400">
+              <div className={cx("mt-2 flex justify-between text-[11px] font-semibold", uiMutedTextClass)}>
                 {labels.map((label) => (
                   <span key={label}>{label}</span>
                 ))}

@@ -51,7 +51,7 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
         placeholder={selectedLabel}
         widthClassName={mode === "icon" ? "w-9" : "w-48 lg:w-[20rem] xl:w-[26rem] min-w-[12rem] max-w-[40vw]"}
         menuMinWidthClassName="min-w-[18rem]"
-        icon={<AccountControlIcon className="h-4 w-4 text-slate-500 dark:text-slate-300" />}
+        icon={<AccountControlIcon className="h-4 w-4" />}
         disabled={loading}
         triggerMode={mode}
       />

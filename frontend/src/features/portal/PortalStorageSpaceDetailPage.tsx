@@ -18,6 +18,7 @@ import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiProgressBar from "../../components/ui/UiProgressBar";
+import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import {
@@ -100,9 +101,9 @@ function ObjectMetricCard({
 }) {
   return (
     <UiCard bodyClassName="px-4 py-3">
-      <div className="text-[11px] font-semibold text-slate-500">{label}</div>
-      <div className="mt-2 text-[20px] font-bold leading-6 text-slate-950">{value}</div>
-      <div className="mt-1 text-[11px] font-medium text-slate-500">{detail}</div>
+      <div className={cx("text-[11px] font-semibold", uiMutedTextClass)}>{label}</div>
+      <div className={cx("mt-2 text-[20px] font-bold leading-6", uiTitleTextClass)}>{value}</div>
+      <div className={cx("mt-1 text-[11px] font-medium", uiMutedTextClass)}>{detail}</div>
       {progress != null ? <div className="mt-3"><UiProgressBar value={progress} /></div> : null}
     </UiCard>
   );

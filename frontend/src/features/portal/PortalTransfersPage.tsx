@@ -9,6 +9,7 @@ import PageTabs from "../../components/PageTabs";
 import UiBadge from "../../components/ui/UiBadge";
 import UiCard from "../../components/ui/UiCard";
 import UiProgressBar from "../../components/ui/UiProgressBar";
+import { cx, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
@@ -46,7 +47,7 @@ export default function PortalTransfersPage() {
         breadcrumbs={[{ label: "Portal" }, { label: "Transfers" }]}
       />
       <UiCard>
-        <div className="mb-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+        <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
           <PageTabs
             tabs={tabs.map((tab) => ({ id: tab, label: tab }))}
             activeTab={activeTab}
@@ -71,7 +72,7 @@ export default function PortalTransfersPage() {
             <tbody>
               {transfers.map((transfer) => (
                 <tr key={transfer.id}>
-                  <td className="font-bold text-slate-950">{transfer.name}</td>
+                  <td className={cx("font-bold", uiTitleTextClass)}>{transfer.name}</td>
                   <td>{transfer.direction}</td>
                   <td><UiBadge tone={statusTone(transfer.status)}>{transfer.status}</UiBadge></td>
                   <td>
@@ -83,14 +84,14 @@ export default function PortalTransfersPage() {
                   <td>{transfer.speedLabel}</td>
                   <td>{transfer.startedLabel}</td>
                   <td>{transfer.etaLabel}</td>
-                  <td className="max-w-[240px] truncate text-xs text-slate-500">
+                  <td className={cx("max-w-[240px] truncate text-xs", uiMutedTextClass)}>
                     {transfer.errorMessage ?? (transfer.status === "Failed" ? "Failure details unavailable." : "-")}
                   </td>
                 </tr>
               ))}
               {transfers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-6 text-center text-xs font-semibold text-slate-500">
+                  <td colSpan={8} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
                     No transfers to display.
                   </td>
                 </tr>
@@ -98,7 +99,7 @@ export default function PortalTransfersPage() {
             </tbody>
           </table>
         </div>
-        <div className="mt-3 text-[11px] text-slate-400">Total visible size: {formatBytes(transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0))}</div>
+        <div className={cx("mt-3 text-[11px]", uiMutedTextClass)}>Total visible size: {formatBytes(transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0))}</div>
       </UiCard>
     </div>
   );
