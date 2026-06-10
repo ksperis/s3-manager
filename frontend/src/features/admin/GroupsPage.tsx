@@ -656,10 +656,22 @@ export default function GroupsPage() {
   );
 
   const renderGroupAssociations = (group: UiGroup) => {
-    const labels = [
-      ...(group.user_details ?? []).map((user) => user.email),
+    const accountDetailsById = new Map((group.account_details ?? []).map((account) => [Number(account.id), account]));
+    const s3UserDetailsById = new Map((group.s3_user_details ?? []).map((user) => [Number(user.id), user]));
+    const connectionDetailsById = new Map(
+      (group.s3_connection_details ?? []).map((connection) => [Number(connection.id), connection])
+    );
+    const items = [
+      ...(group.user_details ?? []).map((user) => ({
+        key: `user-${user.id}`,
+        label: user.email,
+      })),
       ...(group.account_links ?? []).map((link) => {
-        const label = accountOptionsById.get(Number(link.account_id))?.name ?? `Account #${link.account_id}`;
+        const accountId = Number(link.account_id);
+        const label =
+          accountDetailsById.get(accountId)?.name ??
+          accountOptionsById.get(accountId)?.name ??
+          `Account #${link.account_id}`;
         const badges = [
           link.account_admin ? "Admin" : null,
           normalizePortalRole(link.account_role) !== "portal_none"
@@ -668,23 +680,41 @@ export default function GroupsPage() {
               : "Portal user"
             : null,
         ].filter(Boolean);
-        return badges.length ? `${label} (${badges.join(", ")})` : label;
+        return {
+          key: `account-${accountId}`,
+          label: badges.length ? `${label} (${badges.join(", ")})` : label,
+        };
       }),
-      ...(group.s3_users ?? []).map((id) => s3UserLabelById.get(Number(id)) ?? `S3 User #${id}`),
-      ...(group.s3_connections ?? []).map((id) => connectionLabelById.get(Number(id)) ?? `Connection #${id}`),
+      ...(group.s3_users ?? []).map((id) => {
+        const s3UserId = Number(id);
+        return {
+          key: `s3-user-${s3UserId}`,
+          label: s3UserDetailsById.get(s3UserId)?.name ?? s3UserLabelById.get(s3UserId) ?? `S3 User #${id}`,
+        };
+      }),
+      ...(group.s3_connections ?? []).map((id) => {
+        const connectionId = Number(id);
+        return {
+          key: `connection-${connectionId}`,
+          label:
+            connectionDetailsById.get(connectionId)?.name ??
+            connectionLabelById.get(connectionId) ??
+            `Connection #${id}`,
+        };
+      }),
     ];
-    if (labels.length === 0) return <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>;
+    if (items.length === 0) return <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>;
     return (
       <div className="flex flex-wrap gap-2">
-        {labels.slice(0, 8).map((label) => (
+        {items.slice(0, 8).map((item) => (
           <span
-            key={label}
+            key={item.key}
             className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
           >
-            {label}
+            {item.label}
           </span>
         ))}
-        {labels.length > 8 && <span className="ui-caption text-slate-500">+{labels.length - 8} more</span>}
+        {items.length > 8 && <span className="ui-caption text-slate-500">+{items.length - 8} more</span>}
       </div>
     );
   };

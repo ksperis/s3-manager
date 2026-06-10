@@ -93,6 +93,53 @@ describe("GroupsPage", () => {
     deleteGroupMock.mockResolvedValue(undefined);
   });
 
+  it("renders association names from group details without waiting for modal resources", async () => {
+    listGroupsMock.mockResolvedValue({
+      items: [
+        {
+          id: 50,
+          name: "ops-group",
+          description: null,
+          can_access_ceph_admin: false,
+          can_access_storage_ops: false,
+          manager_tool_access: {
+            bucket_compare: false,
+            bucket_integrity_check: false,
+            bucket_migration: false,
+            ceph_s3_user_keys: false,
+          },
+          user_ids: [2],
+          user_details: [{ id: 2, email: "alice@example.com" }],
+          accounts: [99],
+          account_links: [{ account_id: 99, account_admin: true, account_role: "portal_manager" }],
+          account_details: [{ id: 99, name: "production-account", rgw_account_id: "RGW-PROD" }],
+          s3_users: [88],
+          s3_user_details: [{ id: 88, name: "archive-rgw-user" }],
+          s3_connections: [77],
+          s3_connection_details: [
+            { id: 77, name: "archive-shared-connection", access_manager: true, access_browser: true },
+          ],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<GroupsPage />);
+
+    expect(await screen.findByText("production-account (Admin, Portal manager)")).toBeInTheDocument();
+    expect(screen.getByText("archive-rgw-user")).toBeInTheDocument();
+    expect(screen.getByText("archive-shared-connection")).toBeInTheDocument();
+    expect(screen.queryByText("Account #99")).not.toBeInTheDocument();
+    expect(screen.queryByText("S3 User #88")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connection #77")).not.toBeInTheDocument();
+    expect(listMinimalS3AccountsMock).not.toHaveBeenCalled();
+    expect(listMinimalS3UsersMock).not.toHaveBeenCalled();
+    expect(listMinimalS3ConnectionsMock).not.toHaveBeenCalled();
+  });
+
   it("creates a group with default rights off, members, associations, and Manager tool access", async () => {
     render(<GroupsPage />);
 

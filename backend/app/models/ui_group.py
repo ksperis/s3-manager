@@ -15,6 +15,12 @@ from app.models.user import (
 )
 
 
+class LinkedS3Account(BaseModel):
+    id: int
+    name: str
+    rgw_account_id: Optional[str] = None
+
+
 class UiGroupCreate(BaseModel):
     name: str
     description: Optional[str] = None
@@ -54,6 +60,7 @@ class UiGroupOut(BaseModel):
     user_ids: list[int] = Field(default_factory=list)
     user_details: list[UserSummary] = Field(default_factory=list)
     accounts: list[int] = Field(default_factory=list)
+    account_details: list[LinkedS3Account] = Field(default_factory=list)
     account_links: list[AccountMembership] = Field(default_factory=list)
     s3_users: list[int] = Field(default_factory=list)
     s3_user_details: list[LinkedS3User] = Field(default_factory=list)

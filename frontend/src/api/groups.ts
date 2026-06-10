@@ -27,6 +27,7 @@ export type UiGroup = {
   user_ids?: number[];
   user_details?: UiGroupUserDetail[];
   accounts?: number[];
+  account_details?: { id: number; name: string; rgw_account_id?: string | null }[];
   account_links?: AccountMembership[];
   s3_users?: number[];
   s3_user_details?: { id: number; name: string }[];

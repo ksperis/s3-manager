@@ -19,7 +19,7 @@ from app.db import (
     User,
     UserUiGroup,
 )
-from app.models.ui_group import UiGroupCreate, UiGroupOut, UiGroupSummary, UiGroupUpdate
+from app.models.ui_group import LinkedS3Account, UiGroupCreate, UiGroupOut, UiGroupSummary, UiGroupUpdate
 from app.models.user import (
     AccountMembership,
     LinkedS3Connection,
@@ -193,6 +193,8 @@ class UiGroupsService:
         )
         s3_user_ids = sorted(row[0] for row in s3_user_rows)
         s3_connection_ids = sorted(row[0] for row in s3_connection_rows)
+        account_ids = sorted(link.account_id for link in account_rows)
+        account_names = self._load_account_names(account_ids)
         s3_user_names = self._load_s3_user_names(s3_user_ids)
         s3_connection_names = self._load_s3_connection_names(s3_connection_ids)
         return UiGroupOut(
@@ -209,7 +211,16 @@ class UiGroupsService:
             ),
             user_ids=[row[0] for row in user_rows],
             user_details=[UserSummary(id=row[0], email=row[1], role=row[2]) for row in user_rows],
-            accounts=[link.account_id for link in account_rows],
+            accounts=account_ids,
+            account_details=[
+                LinkedS3Account(
+                    id=account_id,
+                    name=(details[0] if details else f"Account #{account_id}"),
+                    rgw_account_id=(details[1] if details else None),
+                )
+                for account_id in account_ids
+                for details in [account_names.get(account_id)]
+            ],
             account_links=[
                 AccountMembership(
                     account_id=link.account_id,
@@ -371,6 +382,16 @@ class UiGroupsService:
             UserUiGroup.group_id == group_id,
             UserUiGroup.user_id.in_(user_ids),
         ).delete(synchronize_session=False)
+
+    def _load_account_names(self, ids: list[int]) -> dict[int, tuple[str, Optional[str]]]:
+        if not ids:
+            return {}
+        rows = (
+            self.db.query(S3Account.id, S3Account.name, S3Account.rgw_account_id)
+            .filter(S3Account.id.in_(ids))
+            .all()
+        )
+        return {row[0]: (row[1], row[2]) for row in rows}
 
     def _load_s3_user_names(self, ids: list[int]) -> dict[int, str]:
         if not ids:
