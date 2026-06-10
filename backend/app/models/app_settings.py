@@ -131,9 +131,9 @@ class GeneralSettings(BaseModel):
     browser_ceph_admin_enabled: bool = False
     portal_enabled: bool = False
     billing_enabled: bool = False
-    endpoint_status_enabled: bool = False
+    endpoint_status_enabled: bool = True
     quota_alerts_enabled: bool = False
-    usage_history_enabled: bool = False
+    usage_history_enabled: bool = True
     bucket_migration_enabled: bool = False
     bucket_compare_enabled: bool = True
     bucket_integrity_check_enabled: bool = True

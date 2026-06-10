@@ -18,6 +18,8 @@ function Probe() {
     <div>
       <span data-testid="migration">{String(generalSettings.bucket_migration_enabled)}</span>
       <span data-testid="compare">{String(generalSettings.bucket_compare_enabled)}</span>
+      <span data-testid="endpoint-status">{String(generalSettings.endpoint_status_enabled)}</span>
+      <span data-testid="usage-history">{String(generalSettings.usage_history_enabled)}</span>
       <span data-testid="loading">{String(loading)}</span>
     </div>
   );
@@ -71,6 +73,8 @@ describe("GeneralSettingsProvider fallbacks", () => {
 
     expect(screen.getByTestId("migration").textContent).toBe("false");
     expect(screen.getByTestId("compare").textContent).toBe("true");
+    expect(screen.getByTestId("endpoint-status").textContent).toBe("true");
+    expect(screen.getByTestId("usage-history").textContent).toBe("true");
     expect(fetchGeneralSettings).not.toHaveBeenCalled();
   });
 
@@ -92,5 +96,7 @@ describe("GeneralSettingsProvider fallbacks", () => {
 
     expect(screen.getByTestId("migration").textContent).toBe("false");
     expect(screen.getByTestId("compare").textContent).toBe("true");
+    expect(screen.getByTestId("endpoint-status").textContent).toBe("true");
+    expect(screen.getByTestId("usage-history").textContent).toBe("true");
   });
 });

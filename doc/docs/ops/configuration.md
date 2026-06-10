@@ -47,6 +47,10 @@ Managed from Admin UI:
 - Migration/compare flags and manager behavior.
 - Quota notification policy (`quota_notifications`: threshold, SMTP non-secret fields, contact-email option).
 
+On a fresh deployment with no persisted `app_settings.json`, `Endpoint Status`
+and `Usage history` are enabled by default. `Quota alerts` remains disabled
+until explicitly enabled and configured.
+
 `FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. When Portal is enabled, account access remains explicit: admins assign `portal_user` or `portal_manager` on each UI user/account link, while existing links stay `portal_none` until changed.
 
 ## Frontend runtime settings
