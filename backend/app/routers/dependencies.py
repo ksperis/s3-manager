@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.core.security import decode_token
+from app.core.security import constant_time_equal, decode_token
 from app.db import (
     AccountRole,
     S3Account,
@@ -115,7 +115,7 @@ def _resolve_actor(db: Session, token: str) -> ManagerActor:
         if not principal:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
         return principal
-    api_token_user = ApiTokenService(db).resolve_user_from_claims(payload)
+    api_token_user = ApiTokenService(db).resolve_user_from_claims(payload, token=token)
     if api_token_user:
         return api_token_user
     if payload.get("typ") == "api_admin" or payload.get("auth_type") == "api_token":
@@ -194,7 +194,7 @@ def require_internal_cron_token(x_internal_token: Optional[str] = Header(None, a
     expected = settings.internal_cron_token
     if not expected:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Internal token is not configured")
-    if not x_internal_token or x_internal_token != expected:
+    if not constant_time_equal(x_internal_token, expected):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid internal token")
 
 

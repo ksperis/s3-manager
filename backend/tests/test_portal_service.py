@@ -19,6 +19,7 @@ from app.db import (
 )
 from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
+from app.models.iam import AccessKey as IAMAccessKey, IAMUser
 from app.models.portal import (
     PortalAccessKey,
     PortalAlert,
@@ -32,7 +33,7 @@ from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import s3_client
 from app.services.portal_service import PortalAccessKeyLimitExceeded, PortalService
-from app.models.iam import AccessKey as IAMAccessKey, IAMUser
+from app.utils.time import utcnow
 
 
 def _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False):
@@ -1151,7 +1152,7 @@ def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session
         "research-data",
         object_key="/raw-data/report.csv",
         label="Report",
-        expires_at=datetime(2026, 6, 10, 10, 0, tzinfo=timezone.utc),
+        expires_at=utcnow() + timedelta(days=1),
     )
     links = service.list_storage_space_public_links(owner, access, "research-data")
     revoked = service.revoke_storage_space_public_link(owner, access, "research-data", link.id)
