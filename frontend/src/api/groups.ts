@@ -24,6 +24,7 @@ export type UiGroup = {
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
+  browser_advanced_features_enabled?: boolean;
   user_ids?: number[];
   user_details?: UiGroupUserDetail[];
   accounts?: number[];
@@ -48,6 +49,7 @@ export type UiGroupPayload = {
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
+  browser_advanced_features_enabled?: boolean;
   user_ids?: number[];
   account_links?: AccountMembership[];
   s3_user_ids?: number[];

@@ -157,6 +157,12 @@ describe("GroupsPage", () => {
     expect(screen.getByRole("checkbox", { name: "Allow group access to /ceph-admin" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Allow group access to /storage-ops" })).not.toBeChecked();
 
+    fireEvent.click(screen.getByRole("button", { name: "Browser" }));
+    expect(screen.getByText("Browser options inherited by group members.")).toBeInTheDocument();
+    const browserAdvancedToggle = screen.getByRole("checkbox", { name: "Enable advanced Browser features" });
+    expect(browserAdvancedToggle).not.toBeChecked();
+    fireEvent.click(browserAdvancedToggle);
+
     fireEvent.click(screen.getByRole("button", { name: "Members" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "alice@example.com" }));
 
@@ -186,6 +192,7 @@ describe("GroupsPage", () => {
       description: null,
       can_access_ceph_admin: false,
       can_access_storage_ops: false,
+      browser_advanced_features_enabled: true,
       manager_tool_access: {
         bucket_compare: true,
         bucket_integrity_check: false,

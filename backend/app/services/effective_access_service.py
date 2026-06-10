@@ -67,6 +67,7 @@ class ResolvedUserAccess:
     can_access_ceph_admin: bool
     can_access_storage_ops: bool
     manager_tool_access: ManagerToolAccess
+    browser_advanced_features_enabled: bool
 
     @property
     def account_ids(self) -> list[int]:
@@ -188,6 +189,9 @@ class EffectiveAccessService:
                 or any(bool(group.can_access_manager_ceph_s3_user_keys) for group in groups)
             ),
         )
+        browser_advanced_features_enabled = bool(user.browser_advanced_features_enabled) or any(
+            bool(group.browser_advanced_features_enabled) for group in groups
+        )
 
         return ResolvedUserAccess(
             group_ids=group_ids,
@@ -198,6 +202,7 @@ class EffectiveAccessService:
             can_access_ceph_admin=can_access_ceph_admin,
             can_access_storage_ops=can_access_storage_ops,
             manager_tool_access=manager_tool_access,
+            browser_advanced_features_enabled=browser_advanced_features_enabled,
         )
 
     def to_user_effective_access(self, user: User) -> EffectiveUserAccess:
@@ -208,6 +213,7 @@ class EffectiveAccessService:
             can_access_ceph_admin=resolved.can_access_ceph_admin,
             can_access_storage_ops=resolved.can_access_storage_ops,
             manager_tool_access=resolved.manager_tool_access,
+            browser_advanced_features_enabled=resolved.browser_advanced_features_enabled,
             accounts=resolved.account_ids,
             account_links=[
                 AccountMembership(

@@ -27,6 +27,7 @@ export type SessionUser = {
   can_access_ceph_admin?: boolean | null;
   can_access_storage_ops?: boolean | null;
   manager_tool_access?: ManagerToolAccess | null;
+  browser_advanced_features_enabled?: boolean | null;
   effective_access?: EffectiveUserAccess | null;
   authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
   account_links?: {

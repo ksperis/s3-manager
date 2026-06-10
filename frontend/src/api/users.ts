@@ -22,6 +22,7 @@ export type EffectiveUserAccess = {
   can_access_ceph_admin: boolean;
   can_access_storage_ops: boolean;
   manager_tool_access: ManagerToolAccess;
+  browser_advanced_features_enabled: boolean;
   accounts: number[];
   account_links: AccountMembership[];
   s3_users: number[];
@@ -45,6 +46,7 @@ export type User = {
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
+  browser_advanced_features_enabled?: boolean;
   ui_language?: "en" | "fr" | "de" | null;
   quota_alerts_enabled?: boolean;
   quota_alerts_global_watch?: boolean;
@@ -80,6 +82,7 @@ export type CreateUserPayload = {
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
+  browser_advanced_features_enabled?: boolean;
   group_ids?: number[] | null;
 };
 
@@ -90,6 +93,7 @@ export type UpdateUserPayload = {
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
+  browser_advanced_features_enabled?: boolean;
   is_active?: boolean;
   s3_user_ids?: number[] | null;
   s3_connection_ids?: number[] | null;

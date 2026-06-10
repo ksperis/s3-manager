@@ -28,6 +28,7 @@ import AssociationSummary, {
   type AssociationChipItem,
 } from "./AssociationSummary";
 import {
+  BrowserAccessSection,
   ManagerToolAccessSection,
   WorkspaceAccessSection,
 } from "./AdminAccessSections";
@@ -51,7 +52,7 @@ import { cx, uiCardMutedClass, uiDataTableClass, uiTableContainerClass } from ".
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { extractApiError } from "../../utils/apiError";
 
-type GroupModalTab = "general" | "members" | "associations" | "workspaces" | "manager_tools";
+type GroupModalTab = "general" | "members" | "associations" | "workspaces" | "browser" | "manager_tools";
 type AssociationTab = "accounts" | "s3_users" | "connections";
 type AccountSelection = {
   account_id: number;
@@ -143,6 +144,7 @@ export default function GroupsPage() {
     description: "",
     can_access_ceph_admin: false,
     can_access_storage_ops: false,
+    browser_advanced_features_enabled: false,
     manager_tool_access: DEFAULT_MANAGER_TOOL_ACCESS,
     user_ids: [],
     account_links: [],
@@ -255,6 +257,7 @@ export default function GroupsPage() {
       description: "",
       can_access_ceph_admin: false,
       can_access_storage_ops: false,
+      browser_advanced_features_enabled: false,
       manager_tool_access: { ...DEFAULT_MANAGER_TOOL_ACCESS },
       user_ids: [],
       account_links: [],
@@ -285,6 +288,7 @@ export default function GroupsPage() {
       description: group.description ?? "",
       can_access_ceph_admin: Boolean(group.can_access_ceph_admin),
       can_access_storage_ops: Boolean(group.can_access_storage_ops),
+      browser_advanced_features_enabled: Boolean(group.browser_advanced_features_enabled),
       manager_tool_access: normalizeManagerToolAccess(group.manager_tool_access),
       user_ids: group.user_ids ?? [],
       account_links:
@@ -373,6 +377,7 @@ export default function GroupsPage() {
       description: form.description || null,
       can_access_ceph_admin: Boolean(form.can_access_ceph_admin),
       can_access_storage_ops: Boolean(form.can_access_storage_ops),
+      browser_advanced_features_enabled: Boolean(form.browser_advanced_features_enabled),
       manager_tool_access: normalizeManagerToolAccess(form.manager_tool_access),
       user_ids: form.user_ids ?? [],
       account_links:
@@ -779,6 +784,7 @@ export default function GroupsPage() {
                 { id: "members", label: "Members" },
                 { id: "associations", label: "Associations" },
                 { id: "workspaces", label: "Workspaces" },
+                { id: "browser", label: "Browser" },
                 { id: "manager_tools", label: "Manager tools" },
               ]}
             />
@@ -833,6 +839,19 @@ export default function GroupsPage() {
                   onChange: (value) => setForm((current) => ({ ...current, can_access_storage_ops: value })),
                   ariaLabel: "Allow group access to /storage-ops",
                 }}
+              />
+            )}
+
+            {modalTab === "browser" && (
+              <BrowserAccessSection
+                description="Browser options inherited by group members."
+                checked={Boolean(form.browser_advanced_features_enabled)}
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    browser_advanced_features_enabled: value,
+                  }))
+                }
               />
             )}
 

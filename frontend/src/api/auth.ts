@@ -20,6 +20,7 @@ export type LoginResponse = {
     can_access_ceph_admin?: boolean;
     can_access_storage_ops?: boolean;
     manager_tool_access?: ManagerToolAccess | null;
+    browser_advanced_features_enabled?: boolean;
     ui_language?: "en" | "fr" | "de" | null;
     accounts?: number[];
     account_links?: {

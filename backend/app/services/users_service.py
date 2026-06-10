@@ -130,6 +130,7 @@ class UsersService:
             can_access_manager_ceph_s3_user_keys=(
                 bool(manager_tool_access.ceph_s3_user_keys) if manager_tools_supported else False
             ),
+            browser_advanced_features_enabled=bool(payload.browser_advanced_features_enabled),
         )
         self.db.add(user)
         self.db.flush()
@@ -190,6 +191,8 @@ class UsersService:
             user.can_access_manager_bucket_integrity_check = False
             user.can_access_manager_bucket_migration = False
             user.can_access_manager_ceph_s3_user_keys = False
+        if payload.browser_advanced_features_enabled is not None:
+            user.browser_advanced_features_enabled = bool(payload.browser_advanced_features_enabled)
         if not is_admin_ui_role(next_role):
             user.quota_alerts_global_watch = False
         if payload.s3_user_ids is not None:
@@ -656,6 +659,7 @@ class UsersService:
                 bucket_migration=bool(user.can_access_manager_bucket_migration),
                 ceph_s3_user_keys=bool(user.can_access_manager_ceph_s3_user_keys),
             ),
+            browser_advanced_features_enabled=bool(user.browser_advanced_features_enabled),
             ui_language=user.ui_language,
             quota_alerts_enabled=bool(user.quota_alerts_enabled),
             quota_alerts_global_watch=bool(user.quota_alerts_global_watch),

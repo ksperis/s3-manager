@@ -284,6 +284,7 @@ describe("UsersPage modal tabs", () => {
     expect(screen.getByRole("button", { name: "General" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Associations" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Workspaces" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Browser" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Access" })).not.toBeInTheDocument();
     expect(screen.queryByText("Ceph Admin access")).not.toBeInTheDocument();
     expect(screen.queryByText("Storage Ops access")).not.toBeInTheDocument();
@@ -528,6 +529,30 @@ describe("UsersPage modal tabs", () => {
     expect(createUserMock).toHaveBeenCalledWith(
       expect.objectContaining({
         can_access_storage_ops: true,
+      })
+    );
+  });
+
+  it("shows Browser options in create modal and sends advanced Browser access", async () => {
+    render(<UsersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+    fireEvent.change(screen.getByPlaceholderText("jane.doe@example.com"), { target: { value: "browser@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("•••••••"), { target: { value: "secret-123" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Browser" }));
+    expect(screen.getByText("Browser options for this UI user. Groups can also grant these options.")).toBeInTheDocument();
+    const advancedToggle = screen.getByRole("checkbox", { name: "Enable advanced Browser features" });
+    expect(advancedToggle).not.toBeChecked();
+    fireEvent.click(advancedToggle);
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createUserMock).toHaveBeenCalled();
+    });
+    expect(createUserMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        browser_advanced_features_enabled: true,
       })
     );
   });

@@ -27,6 +27,7 @@ class UiGroupCreate(BaseModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: Optional[ManagerToolAccess] = None
+    browser_advanced_features_enabled: bool = False
     user_ids: list[int] = Field(default_factory=list)
     account_links: list[AccountMembership] = Field(default_factory=list)
     s3_user_ids: list[int] = Field(default_factory=list)
@@ -39,6 +40,7 @@ class UiGroupUpdate(BaseModel):
     can_access_ceph_admin: Optional[bool] = None
     can_access_storage_ops: Optional[bool] = None
     manager_tool_access: Optional[ManagerToolAccess] = None
+    browser_advanced_features_enabled: Optional[bool] = None
     user_ids: Optional[list[int]] = None
     account_links: Optional[list[AccountMembership]] = None
     s3_user_ids: Optional[list[int]] = None
@@ -57,6 +59,7 @@ class UiGroupOut(BaseModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
+    browser_advanced_features_enabled: bool = False
     user_ids: list[int] = Field(default_factory=list)
     user_details: list[UserSummary] = Field(default_factory=list)
     accounts: list[int] = Field(default_factory=list)

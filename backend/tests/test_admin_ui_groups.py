@@ -115,6 +115,7 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
     assert payload["name"] == "Storage operators"
     assert payload["can_access_ceph_admin"] is False
     assert payload["can_access_storage_ops"] is False
+    assert payload["browser_advanced_features_enabled"] is False
     assert payload["manager_tool_access"] == {
         "bucket_compare": False,
         "bucket_integrity_check": False,
@@ -167,6 +168,7 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
         json={
             "name": "Inherited operators",
             "can_access_storage_ops": True,
+            "browser_advanced_features_enabled": True,
             "manager_tool_access": {
                 "bucket_compare": True,
                 "bucket_integrity_check": False,
@@ -189,9 +191,11 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
 
     out = UsersService(db_session).user_to_out(user)
     assert out.can_access_storage_ops is False
+    assert out.browser_advanced_features_enabled is False
     assert out.manager_tool_access.bucket_compare is False
     assert out.effective_access is not None
     assert out.effective_access.can_access_storage_ops is True
+    assert out.effective_access.browser_advanced_features_enabled is True
     assert out.effective_access.manager_tool_access.bucket_compare is True
     assert out.effective_access.manager_tool_access.bucket_migration is True
     assert out.effective_access.accounts == [account.id]

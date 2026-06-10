@@ -61,6 +61,35 @@ export function WorkspaceAccessSection({
   );
 }
 
+export function BrowserAccessSection({
+  checked,
+  onChange,
+  description = "Configure Browser features for this admin subject.",
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  description?: string;
+}) {
+  return (
+    <div className={adminModalSettingsGroupClass}>
+      <PortalSettingsSection title="Browser" description={description} layout="stack">
+        <PortalSettingsItem
+          title="Advanced Browser features"
+          description="When disabled, the Browser keeps the same compact feature set as the Manager browser."
+          className={adminSettingsItemSurfaceClass(false)}
+          action={
+            <PortalSettingsToggleAction
+              checked={checked}
+              onChange={onChange}
+              ariaLabel="Enable advanced Browser features"
+            />
+          }
+        />
+      </PortalSettingsSection>
+    </div>
+  );
+}
+
 export function ManagerToolAccessSection({
   title,
   description,

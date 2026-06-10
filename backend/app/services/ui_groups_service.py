@@ -52,6 +52,7 @@ class UiGroupsService:
             can_access_manager_bucket_integrity_check=bool(manager_tool_access.bucket_integrity_check),
             can_access_manager_bucket_migration=bool(manager_tool_access.bucket_migration),
             can_access_manager_ceph_s3_user_keys=bool(manager_tool_access.ceph_s3_user_keys),
+            browser_advanced_features_enabled=bool(payload.browser_advanced_features_enabled),
             created_at=now,
             updated_at=now,
         )
@@ -86,6 +87,8 @@ class UiGroupsService:
             group.can_access_manager_bucket_integrity_check = bool(payload.manager_tool_access.bucket_integrity_check)
             group.can_access_manager_bucket_migration = bool(payload.manager_tool_access.bucket_migration)
             group.can_access_manager_ceph_s3_user_keys = bool(payload.manager_tool_access.ceph_s3_user_keys)
+        if payload.browser_advanced_features_enabled is not None:
+            group.browser_advanced_features_enabled = bool(payload.browser_advanced_features_enabled)
         if payload.user_ids is not None:
             self._set_user_links(group, payload.user_ids)
         if payload.account_links is not None:
@@ -209,6 +212,7 @@ class UiGroupsService:
                 bucket_migration=bool(group.can_access_manager_bucket_migration),
                 ceph_s3_user_keys=bool(group.can_access_manager_ceph_s3_user_keys),
             ),
+            browser_advanced_features_enabled=bool(group.browser_advanced_features_enabled),
             user_ids=[row[0] for row in user_rows],
             user_details=[UserSummary(id=row[0], email=row[1], role=row[2]) for row in user_rows],
             accounts=account_ids,

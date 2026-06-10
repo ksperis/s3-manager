@@ -66,6 +66,7 @@ class User(BaseModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
+    browser_advanced_features_enabled: bool = False
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False
@@ -82,6 +83,7 @@ class UserCreate(BaseModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: Optional[ManagerToolAccess] = None
+    browser_advanced_features_enabled: bool = False
     group_ids: Optional[list[int]] = None
 
 
@@ -94,6 +96,7 @@ class UserUpdate(BaseModel):
     can_access_ceph_admin: Optional[bool] = None
     can_access_storage_ops: Optional[bool] = None
     manager_tool_access: Optional[ManagerToolAccess] = None
+    browser_advanced_features_enabled: Optional[bool] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
     group_ids: Optional[list[int]] = None
@@ -119,6 +122,7 @@ class EffectiveUserAccess(BaseModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
+    browser_advanced_features_enabled: bool = False
     accounts: list[int] = []
     account_links: list[AccountMembership] = []
     s3_users: list[int] = []
@@ -140,6 +144,7 @@ class UserOut(BaseModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
+    browser_advanced_features_enabled: bool = False
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False

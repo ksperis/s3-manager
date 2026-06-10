@@ -29,6 +29,7 @@ import AssociationSummary, {
   type AssociationChipItem,
 } from "./AssociationSummary";
 import {
+  BrowserAccessSection,
   ManagerToolAccessSection,
   WorkspaceAccessSection,
 } from "./AdminAccessSections";
@@ -57,7 +58,7 @@ import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
-type UserModalTab = "general" | "associations" | "groups" | "access" | "manager_tools";
+type UserModalTab = "general" | "associations" | "groups" | "access" | "browser" | "manager_tools";
 type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 
 type AccountSelection = {
@@ -770,6 +771,7 @@ export default function UsersPage() {
     role: "ui_user",
     can_access_ceph_admin: false,
     can_access_storage_ops: false,
+    browser_advanced_features_enabled: false,
   });
   const [form, setForm] = useState<CreateUserPayload>(() => createFormTemplate());
   const [createInitialSignature, setCreateInitialSignature] = useState(() =>
@@ -1517,6 +1519,7 @@ export default function UsersPage() {
         currentIsAdminLike && (normalizedRole === "ui_user" || normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin")
           ? Boolean(form.can_access_storage_ops)
           : false,
+      browser_advanced_features_enabled: Boolean(form.browser_advanced_features_enabled),
       group_ids: createSelectedGroups,
     };
     try {
@@ -1572,6 +1575,7 @@ export default function UsersPage() {
           ? Boolean(user.can_access_storage_ops)
           : false,
       manager_tool_access: normalizeManagerToolAccess(user.manager_tool_access),
+      browser_advanced_features_enabled: Boolean(user.browser_advanced_features_enabled),
     };
     setEditingUser(user);
     setEditForm(nextEditForm);
@@ -1670,6 +1674,9 @@ export default function UsersPage() {
         nextRole === "ui_user" || nextRole === "ui_admin" || nextRole === "ui_superadmin"
           ? normalizeManagerToolAccess(editForm.manager_tool_access ?? editingUser.manager_tool_access)
           : { ...DEFAULT_MANAGER_TOOL_ACCESS };
+      payload.browser_advanced_features_enabled = Boolean(
+        editForm.browser_advanced_features_enabled ?? editingUser.browser_advanced_features_enabled
+      );
       payload.group_ids = editSelectedGroups;
       payload.s3_user_ids = editSelectedS3Users;
       payload.s3_connection_ids = editSelectedS3Connections;
@@ -1831,6 +1838,7 @@ export default function UsersPage() {
                 { id: "associations", label: "Associations" },
                 { id: "groups", label: "Groups" },
                 { id: "access", label: "Workspaces" },
+                { id: "browser", label: "Browser" },
               ]}
             />
 
@@ -1921,6 +1929,19 @@ export default function UsersPage() {
                     })),
                   ariaLabel: "Allow access to /storage-ops",
                 }}
+              />
+            )}
+
+            {createModalTab === "browser" && (
+              <BrowserAccessSection
+                description="Browser options for this UI user. Groups can also grant these options."
+                checked={Boolean(form.browser_advanced_features_enabled)}
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    browser_advanced_features_enabled: value,
+                  }))
+                }
               />
             )}
 
@@ -2179,6 +2200,7 @@ export default function UsersPage() {
                 { id: "associations", label: "Associations" },
                 { id: "groups", label: "Groups" },
                 { id: "access", label: "Workspaces" },
+                { id: "browser", label: "Browser" },
                 { id: "manager_tools", label: "Manager tools" },
               ]}
             />
@@ -2267,6 +2289,19 @@ export default function UsersPage() {
                     })),
                   ariaLabel: "Allow access to /storage-ops",
                 }}
+              />
+            )}
+
+            {editModalTab === "browser" && (
+              <BrowserAccessSection
+                description="Browser options for this UI user. Groups can also grant these options."
+                checked={Boolean(editForm.browser_advanced_features_enabled ?? editingUser.browser_advanced_features_enabled)}
+                onChange={(value) =>
+                  setEditForm((current) => ({
+                    ...current,
+                    browser_advanced_features_enabled: value,
+                  }))
+                }
               />
             )}
 

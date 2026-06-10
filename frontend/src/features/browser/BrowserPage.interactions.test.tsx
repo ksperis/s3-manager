@@ -679,6 +679,31 @@ describe("BrowserPage interactions", () => {
     expect(screen.queryByText("Compact view")).not.toBeInTheDocument();
   });
 
+  it("uses manager-equivalent chrome on /browser when advanced Browser access is disabled", async () => {
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        id: 42,
+        role: "ui_user",
+        effective_access: { browser_advanced_features_enabled: false },
+      }),
+    );
+    seedBrowserRootUiState({
+      layout: { showFolders: true, showInspector: true, showActionBar: true },
+    });
+
+    renderPage({ initialEntry: "/browser" });
+    await findRowByLabel("a.txt");
+
+    const mainMenu = openHeaderConfigMenu();
+    expect(within(mainMenu).queryByText("Reset columns")).not.toBeInTheDocument();
+    expect(within(mainMenu).queryByText("Compact view")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create bucket" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("uses compact mode by default on /manager/browser", async () => {
     renderPage({ initialEntry: "/manager/browser" });
     const rowA = await findRowByLabel("a.txt");

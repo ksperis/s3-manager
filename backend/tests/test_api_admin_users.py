@@ -104,6 +104,7 @@ def test_superadmin_can_create_superadmin_and_grant_ceph_admin(client: TestClien
     payload = create_admin_with_ceph.json()
     assert payload["role"] == UserRole.UI_ADMIN.value
     assert payload["can_access_ceph_admin"] is True
+    assert payload["browser_advanced_features_enabled"] is False
     assert payload["manager_tool_access"] == {
         "bucket_compare": False,
         "bucket_integrity_check": False,
@@ -152,6 +153,37 @@ def test_admin_can_configure_manager_tool_access_on_update(client: TestClient, d
         "bucket_migration": False,
         "ceph_s3_user_keys": True,
     }
+
+
+def test_admin_can_configure_browser_advanced_features_on_update(client: TestClient, db_session):
+    target = User(
+        email="target-browser-advanced@example.com",
+        full_name="Target Browser Advanced",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    db_session.add(target)
+    db_session.commit()
+
+    admin_user = User(
+        id=1010,
+        email="admin-browser-advanced@example.com",
+        full_name="Admin Browser Advanced",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    app.dependency_overrides[dependencies.get_current_super_admin] = lambda: admin_user
+
+    response = client.put(
+        f"/api/admin/users/{target.id}",
+        json={"browser_advanced_features_enabled": True},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["browser_advanced_features_enabled"] is True
+    assert response.json()["effective_access"]["browser_advanced_features_enabled"] is True
 
 
 def test_admin_cannot_promote_or_grant_ceph_admin_on_update(client: TestClient, db_session):
