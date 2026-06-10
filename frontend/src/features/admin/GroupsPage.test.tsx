@@ -129,7 +129,14 @@ describe("GroupsPage", () => {
 
     render(<GroupsPage />);
 
-    expect(await screen.findByText("production-account (Admin, Portal manager)")).toBeInTheDocument();
+    expect(await screen.findByText("production-account")).toBeInTheDocument();
+    expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Portal manager")).toBeInTheDocument();
+    expect(screen.getByText("Accounts")).toBeInTheDocument();
+    expect(screen.getByText("Users")).toBeInTheDocument();
+    expect(screen.getByText("S3 Users")).toBeInTheDocument();
+    expect(screen.getByText("Connections")).toBeInTheDocument();
+    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
     expect(screen.getByText("archive-rgw-user")).toBeInTheDocument();
     expect(screen.getByText("archive-shared-connection")).toBeInTheDocument();
     expect(screen.queryByText("Account #99")).not.toBeInTheDocument();

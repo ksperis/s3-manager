@@ -131,6 +131,43 @@ describe("UsersPage modal tabs", () => {
     updateS3AccountMock.mockResolvedValue(undefined);
   });
 
+  it("renders associations with the shared sectioned summary", async () => {
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 12,
+          email: "assoc.summary@example.com",
+          role: "ui_user",
+          accounts: [1],
+          account_links: [{ account_id: 1, account_admin: true, account_role: "portal_user" }],
+          s3_users: [11],
+          s3_user_details: [{ id: 11, name: "s3-user-1" }],
+          s3_connections: [21],
+          s3_connection_details: [{ id: 21, name: "conn-1" }],
+          group_ids: [31],
+          group_details: [{ id: 31, name: "storage-operators" }],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+
+    expect(await screen.findByText("acc-1")).toBeInTheDocument();
+    expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Portal user")).toBeInTheDocument();
+    expect(screen.getByText("Accounts")).toBeInTheDocument();
+    expect(screen.getByText("Users")).toBeInTheDocument();
+    expect(screen.getByText("Connections")).toBeInTheDocument();
+    expect(screen.getByText("Groups")).toBeInTheDocument();
+    expect(screen.getByText("s3-user-1")).toBeInTheDocument();
+    expect(screen.getByText("conn-1")).toBeInTheDocument();
+    expect(screen.getByText("storage-operators")).toBeInTheDocument();
+  });
+
   it("keeps associations when switching General/Associations and submits linked payload", async () => {
     render(<UsersPage />);
 

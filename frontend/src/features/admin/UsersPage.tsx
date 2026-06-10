@@ -23,6 +23,12 @@ import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import AssociationSummary, {
+  AccountAssociationChips,
+  AssociationChips,
+  type AssociationAccountItem,
+  type AssociationChipItem,
+} from "./AssociationSummary";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
@@ -1040,79 +1046,6 @@ export default function UsersPage() {
     if (value === "ui_none" || value === "none") return "No access";
     return role || "-";
   };
-  const renderS3UserChips = useCallback(
-    (user: User) => {
-      const labels =
-        user.s3_user_details && user.s3_user_details.length > 0
-          ? user.s3_user_details.map((entry) => entry.name || `User #${entry.id}`)
-          : (user.s3_users ?? []).map((id) => s3UserLabelById.get(Number(id)) ?? `User #${id}`);
-      if (labels.length === 0) return null;
-      return (
-        <div className="flex flex-wrap gap-2">
-          {labels.map((label, index) => (
-            <span
-              key={`${label}-${index}`}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-      );
-    },
-    [s3UserLabelById]
-  );
-  const renderS3ConnectionChips = useCallback(
-    (user: User) => {
-      const linkedIds = (user.s3_connections ?? []).map((id) => Number(id));
-      const linkedLabels =
-        user.s3_connection_details && user.s3_connection_details.length > 0
-          ? user.s3_connection_details.map((entry) => ({
-              id: entry.id,
-              label: entry.name || `Connection #${entry.id}`,
-            }))
-          : linkedIds.map((id) => ({
-              id,
-              label: s3ConnectionLabelById.get(Number(id)) ?? `Connection #${id}`,
-            }));
-      if (linkedLabels.length === 0) return null;
-      return (
-        <div className="flex flex-wrap gap-2">
-          {linkedLabels.map((entry) => (
-            <span
-              key={`linked-${entry.id}`}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-            >
-              {entry.label}
-            </span>
-          ))}
-        </div>
-      );
-    },
-    [s3ConnectionLabelById]
-  );
-  const renderGroupChips = useCallback(
-    (user: User) => {
-      const labels =
-        user.group_details && user.group_details.length > 0
-          ? user.group_details.map((entry) => entry.name || `Group #${entry.id}`)
-          : (user.group_ids ?? []).map((id) => groupLabelById.get(Number(id)) ?? `Group #${id}`);
-      if (labels.length === 0) return null;
-      return (
-        <div className="flex flex-wrap gap-2">
-          {labels.map((label, index) => (
-            <span
-              key={`${label}-${index}`}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-      );
-    },
-    [groupLabelById]
-  );
   const editRoleValue = normalizeUiRoleValue(editForm.role ?? editingUser?.role ?? "ui_user");
   const createRoleValue = normalizeUiRoleValue(form.role);
   const createTargetSupportsCephAdmin = createRoleValue === "ui_admin" || createRoleValue === "ui_superadmin";
@@ -1170,90 +1103,64 @@ export default function UsersPage() {
     return parsed.toLocaleString();
   };
 
-  const renderAccountChips = (user: User) => {
-    if (!user.accounts || user.accounts.length === 0) return null;
+  const renderAssociationSummary = (user: User) => {
+    const accountIds =
+      user.accounts && user.accounts.length > 0
+        ? user.accounts.map((id) => Number(id))
+        : (user.account_links ?? []).map((link) => Number(link.account_id));
     const adminByAccountId = new Map<number, boolean>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
     );
     const portalRoleByAccountId = new Map<number, PortalAccountRole>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
     );
+    const accountItems: AssociationAccountItem[] = accountIds.map((id) => ({
+      id,
+      label: accountOptionsById.get(id)?.name ?? `Account #${id}`,
+      account_admin: adminByAccountId.get(id) === true,
+      account_role: portalRoleByAccountId.get(id) ?? "portal_none",
+    }));
+    const s3UserItems: AssociationChipItem[] =
+      user.s3_user_details && user.s3_user_details.length > 0
+        ? user.s3_user_details.map((entry) => ({ id: entry.id, label: entry.name || `User #${entry.id}` }))
+        : (user.s3_users ?? []).map((id) => ({
+            id: Number(id),
+            label: s3UserLabelById.get(Number(id)) ?? `User #${id}`,
+          }));
+    const connectionItems: AssociationChipItem[] =
+      user.s3_connection_details && user.s3_connection_details.length > 0
+        ? user.s3_connection_details.map((entry) => ({
+            id: entry.id,
+            label: entry.name || `Connection #${entry.id}`,
+          }))
+        : (user.s3_connections ?? []).map((id) => ({
+            id: Number(id),
+            label: s3ConnectionLabelById.get(Number(id)) ?? `Connection #${id}`,
+          }));
+    const groupItems: AssociationChipItem[] =
+      user.group_details && user.group_details.length > 0
+        ? user.group_details.map((entry) => ({ id: entry.id, label: entry.name || `Group #${entry.id}` }))
+        : (user.group_ids ?? []).map((id) => ({
+            id: Number(id),
+            label: groupLabelById.get(Number(id)) ?? `Group #${id}`,
+          }));
     return (
-      <div className="flex flex-wrap gap-2">
-        {user.accounts.map((id) => {
-          const label = accountOptionsById.get(Number(id))?.name ?? `Account #${id}`;
-          const isAccountAdmin = adminByAccountId.get(Number(id)) === true;
-          const portalRole = portalRoleByAccountId.get(Number(id)) ?? "portal_none";
-          return (
-            <span
-              key={`${id}-${isAccountAdmin ? "admin" : "user"}-${portalRole}`}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-            >
-              <span>{label}</span>
-              {isAccountAdmin && (
-                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                  Admin
-                </span>
-              )}
-              {portalRole !== "portal_none" && (
-                <span className="rounded-full bg-sky-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
-                  {portalRole === "portal_manager" ? "Portal manager" : "Portal user"}
-                </span>
-              )}
-            </span>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const renderAssociationSummary = (user: User) => {
-    const hasAccounts = Boolean(user.accounts && user.accounts.length > 0);
-    const hasS3Users = Boolean(user.s3_users && user.s3_users.length > 0);
-    const hasConnections = Boolean(user.s3_connections && user.s3_connections.length > 0);
-    const hasGroups = Boolean(
-      (user.group_ids && user.group_ids.length > 0) || (user.group_details && user.group_details.length > 0)
-    );
-    if (!hasAccounts && !hasS3Users && !hasConnections && !hasGroups) {
-      return <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>;
-    }
-    const accountChips = hasAccounts ? renderAccountChips(user) : null;
-    const s3UserChips = hasS3Users ? renderS3UserChips(user) : null;
-    const connectionChips = hasConnections ? renderS3ConnectionChips(user) : null;
-    const groupChips = hasGroups ? renderGroupChips(user) : null;
-    const sections = [
-      { label: "Accounts", value: accountChips ?? "-" },
-      { label: "Users", value: s3UserChips ?? "-" },
-      { label: "Connections", value: connectionChips ?? "-" },
-      { label: "Groups", value: groupChips ?? "-" },
-    ].filter((section) => {
-      if (section.label === "Accounts") return hasAccounts;
-      if (section.label === "Users") return hasS3Users;
-      if (section.label === "Connections") return hasConnections;
-      return hasGroups;
-    });
-    if (sections.length > 1) {
-      return (
-        <div className="space-y-1">
-          {sections.map((section) => (
-            <div key={section.label}>
-              <div className="ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                {section.label}
-              </div>
-              <div className="ui-caption text-slate-600 dark:text-slate-300">{section.value}</div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-    const single = sections[0];
-    return (
-      <div>
-        <div className="ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-          {single.label}
-        </div>
-        <div className="ui-caption text-slate-600 dark:text-slate-300">{single.value}</div>
-      </div>
+      <AssociationSummary
+        sections={[
+          {
+            label: "Accounts",
+            value: <AccountAssociationChips accounts={accountItems} />,
+            visible: accountItems.length > 0,
+          },
+          { label: "Users", value: <AssociationChips items={s3UserItems} />, visible: s3UserItems.length > 0 },
+          {
+            label: "Connections",
+            value: <AssociationChips items={connectionItems} />,
+            visible: connectionItems.length > 0,
+          },
+          { label: "Groups", value: <AssociationChips items={groupItems} />, visible: groupItems.length > 0 },
+        ]}
+      />
     );
   };
 

@@ -21,6 +21,12 @@ import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import AssociationSummary, {
+  AccountAssociationChips,
+  AssociationChips,
+  type AssociationAccountItem,
+  type AssociationChipItem,
+} from "./AssociationSummary";
 import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
 import {
@@ -661,61 +667,56 @@ export default function GroupsPage() {
     const connectionDetailsById = new Map(
       (group.s3_connection_details ?? []).map((connection) => [Number(connection.id), connection])
     );
-    const items = [
-      ...(group.user_details ?? []).map((user) => ({
-        key: `user-${user.id}`,
-        label: user.email,
-      })),
-      ...(group.account_links ?? []).map((link) => {
-        const accountId = Number(link.account_id);
-        const label =
+    const accountItems: AssociationAccountItem[] = (group.account_links ?? []).map((link) => {
+      const accountId = Number(link.account_id);
+      return {
+        id: accountId,
+        label:
           accountDetailsById.get(accountId)?.name ??
           accountOptionsById.get(accountId)?.name ??
-          `Account #${link.account_id}`;
-        const badges = [
-          link.account_admin ? "Admin" : null,
-          normalizePortalRole(link.account_role) !== "portal_none"
-            ? normalizePortalRole(link.account_role) === "portal_manager"
-              ? "Portal manager"
-              : "Portal user"
-            : null,
-        ].filter(Boolean);
-        return {
-          key: `account-${accountId}`,
-          label: badges.length ? `${label} (${badges.join(", ")})` : label,
-        };
-      }),
-      ...(group.s3_users ?? []).map((id) => {
-        const s3UserId = Number(id);
-        return {
-          key: `s3-user-${s3UserId}`,
-          label: s3UserDetailsById.get(s3UserId)?.name ?? s3UserLabelById.get(s3UserId) ?? `S3 User #${id}`,
-        };
-      }),
-      ...(group.s3_connections ?? []).map((id) => {
-        const connectionId = Number(id);
-        return {
-          key: `connection-${connectionId}`,
-          label:
-            connectionDetailsById.get(connectionId)?.name ??
-            connectionLabelById.get(connectionId) ??
-            `Connection #${id}`,
-        };
-      }),
-    ];
-    if (items.length === 0) return <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>;
+          `Account #${link.account_id}`,
+        account_admin: Boolean(link.account_admin),
+        account_role: link.account_role,
+      };
+    });
+    const userItems: AssociationChipItem[] = (group.user_details ?? []).map((user) => ({
+      id: user.id,
+      label: user.email,
+    }));
+    const s3UserItems: AssociationChipItem[] = (group.s3_users ?? []).map((id) => {
+      const s3UserId = Number(id);
+      return {
+        id: s3UserId,
+        label: s3UserDetailsById.get(s3UserId)?.name ?? s3UserLabelById.get(s3UserId) ?? `S3 User #${id}`,
+      };
+    });
+    const connectionItems: AssociationChipItem[] = (group.s3_connections ?? []).map((id) => {
+      const connectionId = Number(id);
+      return {
+        id: connectionId,
+        label:
+          connectionDetailsById.get(connectionId)?.name ??
+          connectionLabelById.get(connectionId) ??
+          `Connection #${id}`,
+      };
+    });
     return (
-      <div className="flex flex-wrap gap-2">
-        {items.slice(0, 8).map((item) => (
-          <span
-            key={item.key}
-            className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-          >
-            {item.label}
-          </span>
-        ))}
-        {items.length > 8 && <span className="ui-caption text-slate-500">+{items.length - 8} more</span>}
-      </div>
+      <AssociationSummary
+        sections={[
+          {
+            label: "Accounts",
+            value: <AccountAssociationChips accounts={accountItems} />,
+            visible: accountItems.length > 0,
+          },
+          { label: "Users", value: <AssociationChips items={userItems} />, visible: userItems.length > 0 },
+          { label: "S3 Users", value: <AssociationChips items={s3UserItems} />, visible: s3UserItems.length > 0 },
+          {
+            label: "Connections",
+            value: <AssociationChips items={connectionItems} />,
+            visible: connectionItems.length > 0,
+          },
+        ]}
+      />
     );
   };
 
