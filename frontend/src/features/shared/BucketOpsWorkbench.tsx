@@ -8010,7 +8010,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                 rows={1}
                 className={cx(
                   toolbarCompactInputClasses,
-                  "min-h-[2rem] resize-y pr-9",
+                  "min-h-[2rem] w-full resize-y pr-9",
                   quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
                 )}
               />
