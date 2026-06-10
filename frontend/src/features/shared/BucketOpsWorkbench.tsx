@@ -121,12 +121,13 @@ import {
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
-import { normalizeNotificationConfiguration } from "../manager/bucketDetail";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
 import type { BucketIntegrityUiTarget } from "./BucketIntegrityCheckModal";
 import BucketConfigBackupModal from "./BucketConfigBackupModal";
 import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal";
+import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureSummaryTooltip";
+import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdateModal from "./BucketOpsBulkUpdateModal";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
@@ -134,6 +135,18 @@ import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
 import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
 import { buildUiTagItems, extractUiTagLabels, filterSelectorVisibleUiTags } from "../../utils/uiTags";
+import {
+  buildBucketPolicySummaryLines,
+  buildBucketTagSummaryLines,
+  buildCorsRuleSummaryLines,
+  buildEncryptionSummaryLines,
+  buildLifecycleRuleSummaryLines,
+  buildLoggingSummaryLines,
+  buildNotificationSummaryLines,
+  buildObjectLockSummaryLines,
+  buildVersioningSummaryLines,
+  buildWebsiteSummaryLines,
+} from "./bucketFeatureSummaries";
 import {
   buildFeatureDetailRules,
   clearFeatureDetailField,
@@ -1075,10 +1088,6 @@ type ActiveFilterSummaryItem = {
 };
 type FilterCostLevel = "none" | "low" | "medium" | "high";
 
-type FeatureTooltipState =
-  | { status: "loading" }
-  | { status: "ready"; lines: string[] }
-  | { status: "error"; message: string };
 type OwnerTooltipState =
   | { status: "loading" }
   | { status: "ready"; ownerName: string | null }
@@ -2417,9 +2426,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const ownerTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
   const ownerNameCacheRef = useRef<Record<string, string | null>>({});
   const [activeFeatureTooltipKey, setActiveFeatureTooltipKey] = useState<string | null>(null);
-  const featureTooltipAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, FeatureTooltipState>>({});
+  const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, BucketFeatureTooltipState>>({});
   const featureTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
+  const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
   const [activeActionMenuKey, setActiveActionMenuKey] = useState<string | null>(null);
   const actionMenuAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const actionMenuSurfaceRef = useRef<HTMLDivElement | null>(null);
@@ -2724,6 +2733,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setActiveFeatureTooltipKey(null);
     setFeatureTooltipState({});
     featureTooltipInflightRef.current = {};
+    setActiveTagsTooltipKey(null);
     bucketPropertiesCacheRef.current = {};
     bucketPropertiesInflightRef.current = {};
     const stored = loadBucketListState(bucketsStateStorageKey, selectedEndpointId);
@@ -3128,6 +3138,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     featureTooltipInflightRef.current = {};
     setFeatureTooltipState({});
     setActiveFeatureTooltipKey(null);
+    setActiveTagsTooltipKey(null);
     bucketPropertiesCacheRef.current = {};
     bucketPropertiesInflightRef.current = {};
     setAllFilteredBucketNames(null);
@@ -7104,34 +7115,45 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const quotaConfigured = (bucket: CephAdminBucket) =>
     Boolean((bucket.quota_max_size_bytes ?? 0) > 0 || (bucket.quota_max_objects ?? 0) > 0);
 
-  const renderTagList = (tags?: CephAdminBucket["tags"]) => {
+  const renderTagList = (tags: CephAdminBucket["tags"] | undefined, bucket: CephAdminBucket) => {
     const safeTags = Array.isArray(tags) ? tags.filter((t) => (t.key ?? "").trim()) : [];
     if (safeTags.length === 0) return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
     const maxShown = 3;
     const shown = safeTags.slice(0, maxShown);
     const remaining = safeTags.length - shown.length;
-    const title = safeTags.map((t) => `${t.key}=${t.value}`).join("\n");
+    const tooltipKey = `${bucket.tenant ?? ""}:${bucket.name}:tags`;
+    const tooltip: BucketFeatureTooltipState = { status: "ready", lines: buildBucketTagSummaryLines(safeTags) };
     return (
-      <div className="flex flex-wrap gap-1.5" title={title}>
-        {shown.map((t) => {
-          const label = `${t.key}=${t.value}`;
-          const colors = getTagColors(label);
-          return (
-            <span
-              key={`${t.key}:${t.value}`}
-              className="rounded-full border px-2 py-0.5 ui-caption font-semibold"
-              style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
-            >
-              {label}
+      <BucketSummaryTooltip
+        label="S3 tags"
+        tooltip={tooltip}
+        open={activeTagsTooltipKey === tooltipKey}
+        onOpen={() => setActiveTagsTooltipKey(tooltipKey)}
+        onClose={() => setActiveTagsTooltipKey((prev) => (prev === tooltipKey ? null : prev))}
+        cacheKey={tooltipKey}
+        buttonClassName="inline-flex max-w-full cursor-default text-left"
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {shown.map((t) => {
+            const label = `${t.key}=${t.value}`;
+            const colors = getTagColors(label);
+            return (
+              <span
+                key={`${t.key}:${t.value}`}
+                className="rounded-full border px-2 py-0.5 ui-caption font-semibold"
+                style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
+              >
+                {label}
+              </span>
+            );
+          })}
+          {remaining > 0 && (
+            <span className="rounded-full border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
+              +{remaining}
             </span>
-          );
-        })}
-        {remaining > 0 && (
-          <span className="rounded-full border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
-            +{remaining}
-          </span>
-        )}
-      </div>
+          )}
+        </div>
+      </BucketSummaryTooltip>
     );
   };
 
@@ -7309,19 +7331,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
     if (featureKey === "versioning") {
       const props = await getBucketPropertiesCached(bucket);
-      const status = (props.versioning_status || "Disabled").trim() || "Disabled";
-      return [`Versioning: ${status}`];
+      return buildVersioningSummaryLines(props.versioning_status);
     }
 
     if (featureKey === "object_lock") {
       const props = await getBucketPropertiesCached(bucket);
-      const objectLock = props.object_lock;
-      const enabled = Boolean(props.object_lock_enabled ?? objectLock?.enabled);
-      const lines = [`Enabled: ${enabled ? "Yes" : "No"}`];
-      if (objectLock?.mode) lines.push(`Mode: ${objectLock.mode}`);
-      if (objectLock?.days != null) lines.push(`Default retention: ${objectLock.days} day(s)`);
-      if (objectLock?.years != null) lines.push(`Default retention: ${objectLock.years} year(s)`);
-      return lines;
+      return buildObjectLockSummaryLines(props.object_lock_enabled, props.object_lock);
     }
 
     if (featureKey === "block_public_access") {
@@ -7336,122 +7351,38 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
     if (featureKey === "lifecycle_rules") {
       const props = await getBucketPropertiesCached(bucket);
-      const rules = Array.isArray(props.lifecycle_rules) ? props.lifecycle_rules : [];
-      if (rules.length === 0) {
-        return ["Rules: 0 (disabled)"];
-      }
-      const lines = [`Rules: ${rules.length}`];
-      rules.slice(0, 3).forEach((rule, idx) => {
-        const id = (rule.id || "").trim() || `Rule ${idx + 1}`;
-        const status = (rule.status || "Unknown").trim() || "Unknown";
-        const prefix = (rule.prefix || "/").trim() || "/";
-        lines.push(`${id}: ${status} · prefix ${prefix}`);
-      });
-      if (rules.length > 3) {
-        lines.push(`+${rules.length - 3} more rule(s)`);
-      }
-      return lines;
+      return buildLifecycleRuleSummaryLines(props.lifecycle_rules as unknown[]);
     }
 
     if (featureKey === "cors") {
       const props = await getBucketPropertiesCached(bucket);
       const rules = Array.isArray(props.cors_rules) ? props.cors_rules : [];
-      if (rules.length === 0) {
-        return ["Rules: 0 (not configured)"];
-      }
-      const lines = [`Rules: ${rules.length}`];
-      const firstRule = rules[0] as Record<string, unknown>;
-      const methods = Array.isArray(firstRule?.AllowedMethods)
-        ? firstRule.AllowedMethods.map((item) => String(item)).filter(Boolean)
-        : [];
-      const origins = Array.isArray(firstRule?.AllowedOrigins)
-        ? firstRule.AllowedOrigins.map((item) => String(item)).filter(Boolean)
-        : [];
-      if (methods.length > 0) lines.push(`Methods: ${methods.slice(0, 4).join(", ")}`);
-      if (origins.length > 0) lines.push(`Origins: ${origins.slice(0, 3).join(", ")}`);
-      if (rules.length > 1) lines.push(`+${rules.length - 1} additional rule(s)`);
-      return lines;
+      return buildCorsRuleSummaryLines(rules);
     }
 
     if (featureKey === "static_website") {
       const website = await getBucketWebsite(selectedEndpointId, bucket.name);
-      const routingRules = Array.isArray(website.routing_rules) ? website.routing_rules : [];
-      const redirectHost = (website.redirect_all_requests_to?.host_name || "").trim();
-      const indexDocument = (website.index_document || "").trim();
-      const errorDocument = (website.error_document || "").trim();
-      const enabled = Boolean(redirectHost || indexDocument || routingRules.length > 0);
-      const lines = [`Enabled: ${enabled ? "Yes" : "No"}`];
-      if (indexDocument) lines.push(`Index document: ${indexDocument}`);
-      if (errorDocument) lines.push(`Error document: ${errorDocument}`);
-      if (redirectHost) lines.push(`Redirect host: ${redirectHost}`);
-      if (routingRules.length > 0) lines.push(`Routing rules: ${routingRules.length}`);
-      return lines;
+      return buildWebsiteSummaryLines(website as Record<string, unknown>);
     }
 
     if (featureKey === "bucket_policy") {
       const payload = await getBucketPolicy(selectedEndpointId, bucket.name);
-      const policy = payload.policy;
-      if (!policy || typeof policy !== "object") {
-        return ["Policy: Not set"];
-      }
-      const doc = policy as Record<string, unknown>;
-      const rawStatements = doc.Statement;
-      const statements = Array.isArray(rawStatements) ? rawStatements : rawStatements ? [rawStatements] : [];
-      const lines = ["Policy: Configured", `Statements: ${statements.length}`];
-      if (typeof doc.Version === "string" && doc.Version.trim()) {
-        lines.push(`Version: ${doc.Version}`);
-      }
-      const hasConditions = statements.some(
-        (statement) =>
-          statement &&
-          typeof statement === "object" &&
-          Object.keys((statement as Record<string, unknown>).Condition || {}).length > 0
-      );
-      lines.push(`Has conditions: ${hasConditions ? "Yes" : "No"}`);
-      return lines;
+      return buildBucketPolicySummaryLines(payload.policy);
     }
 
     if (featureKey === "access_logging") {
       const logging = await getBucketLogging(selectedEndpointId, bucket.name);
-      const targetBucket = (logging.target_bucket || "").trim();
-      const targetPrefix = (logging.target_prefix || "").trim();
-      const enabled = Boolean(logging.enabled && targetBucket);
-      const lines = [`Enabled: ${enabled ? "Yes" : "No"}`];
-      if (targetBucket) lines.push(`Target bucket: ${targetBucket}`);
-      if (targetPrefix) lines.push(`Target prefix: ${targetPrefix}`);
-      return lines;
+      return buildLoggingSummaryLines(logging as Record<string, unknown>);
     }
 
     if (featureKey === "notifications") {
       const notifications = await getBucketNotifications(selectedEndpointId, bucket.name);
-      const config = normalizeNotificationConfiguration(notifications.configuration ?? {});
-      const configured = Object.keys(config).length > 0;
-      const topicConfigs = config["TopicConfigurations"];
-      const queueConfigs = config["QueueConfigurations"];
-      const lambdaConfigs = config["LambdaFunctionConfigurations"];
-      const eventBridgeConfig = config["EventBridgeConfiguration"];
-      const lines = [`Configured: ${configured ? "Yes" : "No"}`];
-      if (Array.isArray(topicConfigs)) lines.push(`Topic configurations: ${topicConfigs.length}`);
-      if (Array.isArray(queueConfigs)) lines.push(`Queue configurations: ${queueConfigs.length}`);
-      if (Array.isArray(lambdaConfigs)) lines.push(`Lambda configurations: ${lambdaConfigs.length}`);
-      if (eventBridgeConfig && typeof eventBridgeConfig === "object") lines.push("EventBridge: Configured");
-      return lines;
+      return buildNotificationSummaryLines(notifications.configuration);
     }
 
     if (featureKey === "server_side_encryption") {
       const encryption = await getBucketEncryption(selectedEndpointId, bucket.name);
-      const rules = Array.isArray(encryption.rules) ? encryption.rules : [];
-      if (rules.length === 0) {
-        return ["Enabled: No"];
-      }
-      const lines = [`Enabled: Yes`, `Rules: ${rules.length}`];
-      const firstRule = rules[0] as Record<string, unknown>;
-      const defaultSse = firstRule.ApplyServerSideEncryptionByDefault as Record<string, unknown> | undefined;
-      const algorithm = typeof defaultSse?.SSEAlgorithm === "string" ? defaultSse.SSEAlgorithm.trim() : "";
-      const kmsKeyId = typeof defaultSse?.KMSMasterKeyID === "string" ? defaultSse.KMSMasterKeyID.trim() : "";
-      if (algorithm) lines.push(`Algorithm: ${algorithm}`);
-      if (kmsKeyId) lines.push(`KMS key: ${kmsKeyId}`);
-      return lines;
+      return buildEncryptionSummaryLines(encryption.rules);
     }
 
     return ["No additional details available."];
@@ -7553,64 +7484,19 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     const tooltip = featureTooltipState[tooltipKey];
     const isTooltipVisible = activeFeatureTooltipKey === tooltipKey;
     return (
-      <div
-        className="relative inline-flex"
-        onMouseEnter={() => {
+      <BucketFeatureSummaryChip
+        label={FEATURE_LABELS[featureKey]}
+        state={status.state}
+        tone={status.tone}
+        tooltip={tooltip}
+        open={isTooltipVisible}
+        onOpen={() => {
           setActiveFeatureTooltipKey(tooltipKey);
           loadFeatureTooltip(bucket, featureKey);
         }}
-        onMouseLeave={() => {
-          setActiveFeatureTooltipKey((prev) => (prev === tooltipKey ? null : prev));
-        }}
-      >
-        <button
-          ref={(node) => {
-            featureTooltipAnchorRefs.current[tooltipKey] = node;
-          }}
-          type="button"
-          className="inline-flex cursor-default"
-          onFocus={() => {
-            setActiveFeatureTooltipKey(tooltipKey);
-            loadFeatureTooltip(bucket, featureKey);
-          }}
-          onBlur={() => {
-            setActiveFeatureTooltipKey((prev) => (prev === tooltipKey ? null : prev));
-          }}
-          aria-label={`${FEATURE_LABELS[featureKey]} details`}
-        >
-          <PropertySummaryChip compact state={status.state} tone={status.tone} />
-        </button>
-        <AnchoredPortalMenu
-          open={isTooltipVisible}
-          anchorRef={toAnchorRef(featureTooltipAnchorRefs.current[tooltipKey])}
-          placement="bottom-start"
-          offset={4}
-          minWidth={288}
-          className="pointer-events-none w-72 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div>
-            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">{FEATURE_LABELS[featureKey]}</p>
-            {(!tooltip || tooltip.status === "loading") && (
-              <div className="mt-1.5 inline-flex items-center gap-1.5 ui-caption text-slate-500 dark:text-slate-300">
-                <SpinnerIcon />
-                Loading configuration...
-              </div>
-            )}
-            {tooltip?.status === "error" && (
-              <p className="mt-1.5 ui-caption text-rose-600 dark:text-rose-300">{tooltip.message}</p>
-            )}
-            {tooltip?.status === "ready" && (
-              <div className="mt-1.5 space-y-1">
-                {tooltip.lines.map((line, idx) => (
-                  <p key={`${tooltipKey}:${idx}`} className="ui-caption text-slate-600 dark:text-slate-300">
-                    {line}
-                  </p>
-                ))}
-              </div>
-            )}
-          </div>
-        </AnchoredPortalMenu>
-      </div>
+        onClose={() => setActiveFeatureTooltipKey((prev) => (prev === tooltipKey ? null : prev))}
+        cacheKey={tooltipKey}
+      />
     );
   };
 
@@ -7902,7 +7788,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         expensive: true,
         headerClassName: "min-w-[12rem] max-w-[24rem]",
         cellClassName: "min-w-[12rem] max-w-[24rem]",
-        render: (bucket) => renderTagList(bucket.tags),
+        render: (bucket) => renderTagList(bucket.tags, bucket),
       });
     }
 

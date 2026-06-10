@@ -10,6 +10,7 @@ const useS3AccountContextMock = vi.fn();
 const useManagerStatsMock = vi.fn();
 const useIamOverviewMock = vi.fn();
 const listBucketsMock = vi.fn();
+const getBucketPropertiesMock = vi.fn();
 const listManagerActivityMock = vi.fn();
 const fetchManagerTrafficMock = vi.fn();
 const fetchManagerUsageTrendsMock = vi.fn();
@@ -59,6 +60,7 @@ vi.mock("../../api/buckets", async () => {
   return {
     ...actual,
     listBuckets: (...args: unknown[]) => listBucketsMock(...args),
+    getBucketProperties: (...args: unknown[]) => getBucketPropertiesMock(...args),
     createBucket: vi.fn(),
     deleteBucket: vi.fn(),
   };
@@ -161,6 +163,10 @@ describe("manager shell pages", () => {
       error: null,
     });
     listBucketsMock.mockResolvedValue([]);
+    getBucketPropertiesMock.mockResolvedValue({
+      lifecycle_rules: [],
+      cors_rules: [],
+    });
     listManagerActivityMock.mockResolvedValue([]);
     fetchManagerTrafficMock.mockResolvedValue(managerTrafficResponse(0, 0));
     fetchManagerUsageTrendsMock.mockResolvedValue({});
@@ -890,5 +896,67 @@ describe("manager shell pages", () => {
         })
       )
     );
+  });
+
+  it("loads manager bucket feature summaries only when a feature chip is focused", async () => {
+    window.localStorage.setItem(
+      "manager.bucket_list.columns.v1",
+      JSON.stringify(["used_bytes", "object_count", "tags", "lifecycle_rules"])
+    );
+    listBucketsMock.mockResolvedValue([
+      {
+        name: "bucket-a",
+        used_bytes: 1024,
+        object_count: 1,
+        tags: [{ key: "env", value: "prod" }],
+        features: {
+          lifecycle_rules: { state: "Enabled", tone: "active" },
+        },
+      },
+    ]);
+    getBucketPropertiesMock.mockResolvedValue({
+      versioning_status: "Disabled",
+      lifecycle_rules: [{ id: "archive-rule", status: "Enabled", prefix: "logs/" }],
+      cors_rules: [],
+    });
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          endpoint_provider: "ceph",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true, sns: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    expect(getBucketPropertiesMock).not.toHaveBeenCalled();
+
+    fireEvent.focus(screen.getByRole("button", { name: "S3 tags details" }));
+    expect(await screen.findByText("env: prod")).toBeInTheDocument();
+    expect(getBucketPropertiesMock).not.toHaveBeenCalled();
+
+    fireEvent.focus(screen.getByRole("button", { name: "Lifecycle rules details" }));
+
+    await waitFor(() => expect(getBucketPropertiesMock).toHaveBeenCalledWith("account-1", "bucket-a"));
+    expect(await screen.findByText("archive-rule: Enabled - Prefix: logs/")).toBeInTheDocument();
   });
 });

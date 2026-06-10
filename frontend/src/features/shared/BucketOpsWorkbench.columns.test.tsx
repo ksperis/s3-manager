@@ -254,6 +254,30 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     expect(screen.queryByText("Owner quota")).not.toBeInTheDocument();
   });
 
+  it("shows S3 tag summaries from the shared bucket workbench tag column", async () => {
+    window.localStorage.setItem(STORAGE_OPS_COLUMNS_STORAGE_KEY, JSON.stringify(["context_name", "tags"]));
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [
+        {
+          ...baseBucket,
+          tags: [
+            { key: "project", value: "archive" },
+            { key: "env", value: "prod" },
+          ],
+        },
+      ],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.focus(screen.getByRole("button", { name: "S3 tags details" }));
+
+    expect(await screen.findByText("project: archive")).toBeInTheDocument();
+    expect(screen.getByText("env: prod")).toBeInTheDocument();
+  });
+
   it("selects and deselects filtered storage ops contexts in the compact advanced filter", async () => {
     mocks.listStorageOpsBuckets.mockResolvedValue({
       items: [baseBucket],
