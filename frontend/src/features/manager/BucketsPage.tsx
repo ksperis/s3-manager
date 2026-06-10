@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import axios from "axios";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
@@ -43,7 +43,9 @@ import {
   normalizeS3BucketName,
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
+import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
+import { compareByNullableField, type SortableField } from "../../utils/sortValues";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "../shared/BucketFeatureSummaryTooltip";
 import type { BucketFeatureTooltipState } from "../shared/BucketFeatureSummaryTooltip";
@@ -75,6 +77,7 @@ const defaultForm: BucketForm = {
 const buildDefaultForm = (): BucketForm => ({
   ...defaultForm,
 });
+const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
 function QuotaBar({ usedBytes, quotaBytes }: { usedBytes?: number | null; quotaBytes?: number | null }) {
   if (!quotaBytes || quotaBytes <= 0) {
@@ -138,6 +141,7 @@ type BucketListRow = Bucket & {
   tags?: BucketTag[] | null;
   features?: Record<string, BucketFeatureStatus> | null;
 };
+type SortField = SortableField<BucketListRow>;
 
 type ColumnId =
   | "used_bytes"
@@ -271,7 +275,7 @@ export default function BucketsPage() {
   const bucketPropertiesCacheRef = useRef<Record<string, BucketProperties>>({});
   const bucketPropertiesInflightRef = useRef<Record<string, Promise<BucketProperties>>>({});
   const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
-  const [sort, setSort] = useState<{ field: keyof Bucket; direction: "asc" | "desc" }>({
+  const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>({
     field: "used_bytes",
     direction: "desc",
   });
@@ -353,7 +357,7 @@ export default function BucketsPage() {
   type ColumnDef = {
     id: string;
     label: string;
-    field?: keyof Bucket | null;
+    field?: SortField | null;
     align?: "left" | "right";
     render: (bucket: BucketListRow) => ReactNode;
   };
@@ -521,18 +525,7 @@ export default function BucketsPage() {
     );
   };
 
-  const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
-  };
-
-  const fetchBuckets = async (accountId: S3AccountSelector) => {
+  const fetchBuckets = useCallback(async (accountId: S3AccountSelector) => {
     const requestId = fetchRequestRef.current + 1;
     fetchRequestRef.current = requestId;
     setError(null);
@@ -576,7 +569,7 @@ export default function BucketsPage() {
         setLoading(false);
       }
     }
-  };
+  }, [includeParams, requiresStats]);
 
   useEffect(() => {
     if (needsS3AccountSelection) {
@@ -587,7 +580,7 @@ export default function BucketsPage() {
       return;
     }
     fetchBuckets(accountIdForApi ?? null);
-  }, [accountIdForApi, needsS3AccountSelection, includeParams.join(","), requiresStats]);
+  }, [accountIdForApi, fetchBuckets, needsS3AccountSelection]);
 
   useEffect(() => {
     setActiveFeatureTooltipKey(null);
@@ -637,21 +630,12 @@ export default function BucketsPage() {
     const q = filter.trim().toLowerCase();
     const items = q ? buckets.filter((b) => b.name.toLowerCase().includes(q)) : buckets;
     const sorted = [...items].sort((a, b) => {
-      const aVal = (a as any)[sort.field];
-      const bVal = (b as any)[sort.field];
-      if (aVal == null && bVal == null) return 0;
-      if (aVal == null) return sort.direction === "asc" ? 1 : -1;
-      if (bVal == null) return sort.direction === "asc" ? -1 : 1;
-      if (typeof aVal === "string" && typeof bVal === "string") {
-        return sort.direction === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      }
-      const diff = Number(aVal) - Number(bVal);
-      return sort.direction === "asc" ? diff : -diff;
+      return compareByNullableField(a, b, sort.field, sort.direction);
     });
     return sorted;
   }, [buckets, filter, sort]);
 
-  const toggleSort = (field: keyof Bucket) => {
+  const toggleSort = (field: SortField) => {
     setSort((prev) => {
       if (prev.field === field) {
         return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
@@ -1039,7 +1023,7 @@ export default function BucketsPage() {
                       activeField={sort.field}
                       direction={sort.direction}
                       align={col.align ?? (col.label === "Actions" ? "right" : "left")}
-                      onSort={col.field ? (field) => toggleSort(field as keyof Bucket) : undefined}
+                      onSort={col.field ? (field) => toggleSort(field) : undefined}
                     />
                   ))}
                 </tr>
