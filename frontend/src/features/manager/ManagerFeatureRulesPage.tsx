@@ -45,6 +45,7 @@ const FEATURE_OPTIONS: Array<{ id: FeatureRuleFeature; label: string }> = [
   { id: "policy", label: "Bucket policy" },
   { id: "cors", label: "CORS" },
   { id: "notifications", label: "Notifications" },
+  { id: "tags", label: "Bucket tags" },
 ];
 
 const STATUS_OPTIONS: Array<{ id: StatusFilter; label: string }> = [
@@ -153,12 +154,15 @@ export default function ManagerFeatureRulesPage() {
   const configuredCount = items.filter((item) => item.status === "configured").length;
   const ruleCount = items.reduce((sum, item) => sum + item.rules.length, 0);
   const selectedFeatureLabel = FEATURE_OPTIONS.find((option) => option.id === feature)?.label ?? "Feature";
+  const selectedItemLabel = feature === "tags" ? "tag(s)" : "rule(s)";
+  const emptyRulesLabel = feature === "tags" ? "No tags" : "No rules";
+  const readErrorFallback = feature === "tags" ? "Unable to read tags" : "Unable to read rules";
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Feature rule inventory"
-        description="Read-only inventory of bucket feature rules in the active manager context."
+        description="Read-only inventory of bucket feature rules and tags in the active manager context."
         breadcrumbs={[{ label: "Manager" }, { label: "Tools" }, { label: "Feature rules" }]}
       />
 
@@ -176,7 +180,7 @@ export default function ManagerFeatureRulesPage() {
         <div className="ui-surface-card">
           <ListToolbar
             title="Feature rules"
-            countLabel={`${filteredItems.length} bucket(s) · ${ruleCount} rule(s) · ${configuredCount} configured`}
+            countLabel={`${filteredItems.length} bucket(s) · ${ruleCount} ${selectedItemLabel} · ${configuredCount} configured`}
             search={
               <div className="flex items-center gap-2">
                 <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -186,7 +190,7 @@ export default function ManagerFeatureRulesPage() {
                   type="text"
                   value={filter}
                   onChange={(event) => setFilter(event.target.value)}
-                  placeholder="Bucket, rule, action"
+                  placeholder="Bucket, rule, tag"
                   className={`${toolbarCompactInputClasses} w-full sm:w-64`}
                 />
               </div>
@@ -232,13 +236,13 @@ export default function ManagerFeatureRulesPage() {
             columns={[
               { key: "bucket", label: "Bucket" },
               { key: "status", label: "Status" },
-              { key: "rule", label: "Rule" },
-              { key: "summary", label: "Summary" },
+              { key: "rule", label: feature === "tags" ? "Tag" : "Rule" },
+              { key: "summary", label: feature === "tags" ? "Value" : "Summary" },
               { key: "json", label: "JSON", align: "right" },
             ]}
           >
             {loading ? (
-              <TableEmptyState colSpan={5} message={`Loading ${selectedFeatureLabel.toLowerCase()} rules...`} />
+              <TableEmptyState colSpan={5} message={`Loading ${selectedFeatureLabel.toLowerCase()}...`} />
             ) : filteredItems.length === 0 ? (
               <TableEmptyState colSpan={5} message="No buckets match the current filters." />
             ) : (
@@ -257,10 +261,10 @@ export default function ManagerFeatureRulesPage() {
                       <PropertySummaryChip compact state={statusLabel[item.status]} tone={statusTone[item.status]} />
                     </td>
                     <td className={managerTableMutedCellClass}>
-                      {item.rules.length > 0 ? `${item.rules.length} rule(s)` : "-"}
+                      {item.rules.length > 0 ? `${item.rules.length} ${selectedItemLabel}` : "-"}
                     </td>
                     <td className={managerTableMutedCellClass}>
-                      {item.status === "unavailable" ? item.error || "Unable to read rules" : selectedFeatureLabel}
+                      {item.status === "unavailable" ? item.error || readErrorFallback : selectedFeatureLabel}
                     </td>
                     <td className={managerTableActionCellClass} />
                   </tr>
@@ -273,7 +277,7 @@ export default function ManagerFeatureRulesPage() {
                       <td className={managerTableMutedCellClass} />
                       <td className={managerTableMutedCellClass} />
                       <td colSpan={3} className={managerTableMutedCellClass}>
-                        No rules
+                        {emptyRulesLabel}
                       </td>
                     </tr>,
                   ];
@@ -286,7 +290,7 @@ export default function ManagerFeatureRulesPage() {
                       <td className={managerTableMutedCellClass} />
                       <td className={managerTableMutedCellClass} />
                       <td colSpan={3} className={managerTableErrorCellClass}>
-                        {item.error || "Unable to read rules"}
+                        {item.error || readErrorFallback}
                       </td>
                     </tr>,
                   ];

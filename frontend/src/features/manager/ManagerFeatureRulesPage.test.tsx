@@ -93,6 +93,51 @@ describe("ManagerFeatureRulesPage", () => {
     await waitFor(() => expect(listFeatureRuleInventoryMock).toHaveBeenCalledWith("account-1", "policy"));
   });
 
+  it("renders bucket tags with tag-specific labels", async () => {
+    listFeatureRuleInventoryMock.mockImplementation((_accountId: unknown, feature: unknown) =>
+      Promise.resolve(
+        feature === "tags"
+          ? [
+              {
+                bucket_name: "logs-prod",
+                feature: "tags",
+                status: "configured",
+                rules: [
+                  {
+                    id: "environment",
+                    type: "tag",
+                    title: "environment",
+                    summary: "prod",
+                    chips: [],
+                    raw: { key: "environment", value: "prod" },
+                  },
+                ],
+              },
+              {
+                bucket_name: "archive",
+                feature: "tags",
+                status: "empty",
+                rules: [],
+              },
+            ]
+          : []
+      )
+    );
+
+    renderPage();
+
+    await waitFor(() => expect(listFeatureRuleInventoryMock).toHaveBeenCalledWith("account-1", "lifecycle"));
+    fireEvent.change(screen.getByLabelText("Feature"), { target: { value: "tags" } });
+
+    await waitFor(() => expect(listFeatureRuleInventoryMock).toHaveBeenCalledWith("account-1", "tags"));
+    expect(screen.getByRole("columnheader", { name: "Tag" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Value" })).toBeInTheDocument();
+    expect(screen.getByText("1 tag(s)")).toBeInTheDocument();
+    expect(screen.getByText("environment")).toBeInTheDocument();
+    expect(screen.getByText("prod")).toBeInTheDocument();
+    expect(screen.getByText("No tags")).toBeInTheDocument();
+  });
+
   it("opens the raw rule JSON in a modal", async () => {
     listFeatureRuleInventoryMock.mockResolvedValue([
       {

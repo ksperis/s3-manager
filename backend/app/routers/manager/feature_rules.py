@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.db import S3Account
 from app.models.bucket import (
+    BucketTag,
     FeatureRuleInventoryBucket,
     FeatureRuleInventoryFeature,
     FeatureRuleInventoryRule,
@@ -348,6 +349,25 @@ def _normalize_notification_rules(configuration: dict[str, Any]) -> list[Feature
     return rules
 
 
+def _normalize_tag_rules(tags: list[BucketTag]) -> list[FeatureRuleInventoryRule]:
+    normalized: list[FeatureRuleInventoryRule] = []
+    for index, tag in enumerate(tags):
+        raw = tag.model_dump()
+        key = tag.key.strip() or f"Tag {index + 1}"
+        value = tag.value
+        normalized.append(
+            FeatureRuleInventoryRule(
+                id=key,
+                type="tag",
+                title=key,
+                summary=value if value else "Empty value",
+                chips=[],
+                raw=raw,
+            )
+        )
+    return normalized
+
+
 def _bucket_result(
     *,
     bucket_name: str,
@@ -414,6 +434,12 @@ def list_feature_rule_inventory(
                     bucket_name=bucket.name,
                     feature=feature,
                     rules=_normalize_cors_rules(service.get_bucket_cors(bucket.name, account) or []),
+                )
+            if feature == "tags":
+                return _bucket_result(
+                    bucket_name=bucket.name,
+                    feature=feature,
+                    rules=_normalize_tag_rules(service.get_bucket_tags(bucket.name, account) or []),
                 )
             notifications = service.get_bucket_notifications(bucket.name, account)
             return _bucket_result(

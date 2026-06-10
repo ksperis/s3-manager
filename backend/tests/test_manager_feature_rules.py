@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.main import app
-from app.models.bucket import BucketLifecycleConfig, BucketNotificationConfiguration
+from app.models.bucket import BucketLifecycleConfig, BucketNotificationConfiguration, BucketTag
 from app.routers.manager import feature_rules as feature_rules_router
 
 
@@ -16,6 +16,7 @@ class FakeBucketsService:
         self.policies = {}
         self.cors = {}
         self.notifications = {}
+        self.tags = {}
         self.failures = {}
 
     def list_buckets(self, _account, with_stats=True):  # noqa: ANN001, ARG002
@@ -40,6 +41,10 @@ class FakeBucketsService:
     def get_bucket_notifications(self, bucket_name, _account):  # noqa: ANN001
         self._maybe_fail("notifications", bucket_name)
         return BucketNotificationConfiguration(configuration=self.notifications.get(bucket_name, {}))
+
+    def get_bucket_tags(self, bucket_name, _account):  # noqa: ANN001
+        self._maybe_fail("tags", bucket_name)
+        return self.tags.get(bucket_name, [])
 
 
 @pytest.fixture
@@ -159,6 +164,32 @@ def test_feature_rules_lists_notifications_and_bucket_errors(feature_rule_client
     assert [rule["type"] for rule in body[0]["rules"]] == ["topic", "eventbridge"]
     assert "ObjectCreated" in body[0]["rules"][0]["summary"]
     assert "prefix: uploads/" in body[0]["rules"][0]["summary"]
+    assert body[1]["status"] == "unavailable"
+    assert body[1]["error"] == "AccessDenied"
+
+
+def test_feature_rules_lists_bucket_tags(feature_rule_client):
+    client, service = feature_rule_client
+    service.tags["alpha"] = [
+        BucketTag(key="environment", value="prod"),
+        BucketTag(key="owner", value="data-platform"),
+    ]
+    service.failures[("tags", "beta")] = "AccessDenied"
+
+    response = client.get("/api/manager/feature-rules", params={"feature": "tags"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["status"] == "configured"
+    assert [rule["id"] for rule in body[0]["rules"]] == ["environment", "owner"]
+    assert body[0]["rules"][0] == {
+        "id": "environment",
+        "type": "tag",
+        "title": "environment",
+        "summary": "prod",
+        "chips": [],
+        "raw": {"key": "environment", "value": "prod"},
+    }
     assert body[1]["status"] == "unavailable"
     assert body[1]["error"] == "AccessDenied"
 

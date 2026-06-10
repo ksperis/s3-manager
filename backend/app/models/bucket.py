@@ -159,7 +159,7 @@ class BucketNotificationConfiguration(BaseModel):
     configuration: dict = Field(default_factory=dict)
 
 
-FeatureRuleInventoryFeature = Literal["lifecycle", "policy", "cors", "notifications"]
+FeatureRuleInventoryFeature = Literal["lifecycle", "policy", "cors", "notifications", "tags"]
 FeatureRuleInventoryStatus = Literal["configured", "empty", "unavailable"]
 
 

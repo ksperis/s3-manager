@@ -23,8 +23,8 @@ Use this guide when creating, updating, or inspecting bucket configuration.
    - Public access controls
 4. Validate changes from bucket detail views.
 5. In Manager, open **Tools > Feature rules** (`/manager/feature-rules`) to
-   audit lifecycle, bucket policy, CORS, or notification rules across every
-   bucket in the active context.
+   audit lifecycle, bucket policy, CORS, notifications, or bucket tags across
+   every bucket in the active context.
 6. On Ceph Admin and Storage Ops bucket workbenches, use bulk update to preview
    and apply lifecycle or notification configuration changes across selected
    buckets.

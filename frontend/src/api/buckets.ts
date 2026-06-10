@@ -21,7 +21,7 @@ function bucketPath(bucketName: string): string {
 
 export type BucketFeatureTone = "active" | "inactive" | "unknown";
 export type BucketFeatureStatus = { state: string; tone: BucketFeatureTone };
-export type FeatureRuleFeature = "lifecycle" | "policy" | "cors" | "notifications";
+export type FeatureRuleFeature = "lifecycle" | "policy" | "cors" | "notifications" | "tags";
 export type FeatureRuleInventoryStatus = "configured" | "empty" | "unavailable";
 
 export type FeatureRuleInventoryRule = {
