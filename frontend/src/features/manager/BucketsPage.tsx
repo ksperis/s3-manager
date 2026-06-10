@@ -180,12 +180,24 @@ const MANAGER_FEATURE_LABELS: Record<ManagerFeatureKey, string> = {
   notifications: "Notifications",
 };
 
-const COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.v1";
+const LEGACY_COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.v1";
+const COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.session.v1";
 const defaultVisibleColumns: ColumnId[] = ["used_bytes", "object_count"];
 
 const loadVisibleColumns = (): ColumnId[] => {
   if (typeof window === "undefined") return defaultVisibleColumns;
-  const raw = localStorage.getItem(COLUMNS_STORAGE_KEY);
+  try {
+    window.localStorage.removeItem(LEGACY_COLUMNS_STORAGE_KEY);
+  } catch {
+    // Ignore storage access failures; the default column set remains safe.
+  }
+
+  let raw: string | null = null;
+  try {
+    raw = window.sessionStorage.getItem(COLUMNS_STORAGE_KEY);
+  } catch {
+    return defaultVisibleColumns;
+  }
   if (!raw) return defaultVisibleColumns;
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -217,7 +229,11 @@ const loadVisibleColumns = (): ColumnId[] => {
 
 const persistVisibleColumns = (value: ColumnId[]) => {
   if (typeof window === "undefined") return;
-  localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(value));
+  try {
+    window.sessionStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(value));
+  } catch {
+    // Ignore storage write failures; the in-memory selection still applies for this render.
+  }
 };
 
 export default function BucketsPage() {
