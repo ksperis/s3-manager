@@ -64,7 +64,7 @@ def test_require_bucket_integrity_enabled_blocks_when_feature_disabled(monkeypat
     monkeypatch.setattr(dependencies_router, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
-        dependencies_router.require_bucket_integrity_check_enabled(_manager_tool_user())
+        dependencies_router.require_bucket_integrity_check_enabled(_manager_tool_user(), db=None)
 
     assert exc.value.status_code == 403
     assert "bucket integrity check feature is disabled" in str(exc.value.detail).lower()
@@ -76,7 +76,7 @@ def test_require_bucket_integrity_enabled_blocks_without_user_tool_access(monkey
     monkeypatch.setattr(dependencies_router, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
-        dependencies_router.require_bucket_integrity_check_enabled(_manager_tool_user(bucket_integrity_check=False))
+        dependencies_router.require_bucket_integrity_check_enabled(_manager_tool_user(bucket_integrity_check=False), db=None)
 
     assert exc.value.status_code == 403
     assert str(exc.value.detail) == "Not authorized"

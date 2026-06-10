@@ -35,7 +35,19 @@ def _admin_user() -> User:
     )
 
 
-def test_get_current_storage_ops_admin_rejects_standard_user_without_storage_ops_right():
+def _patch_effective_storage_ops_access(monkeypatch):
+    class FakeEffectiveAccessService:
+        def __init__(self, db):
+            self.db = db
+
+        def resolve_user(self, user):
+            return SimpleNamespace(can_access_storage_ops=bool(user.can_access_storage_ops))
+
+    monkeypatch.setattr(dependencies, "EffectiveAccessService", FakeEffectiveAccessService)
+
+
+def test_get_current_storage_ops_admin_rejects_standard_user_without_storage_ops_right(monkeypatch):
+    _patch_effective_storage_ops_access(monkeypatch)
     user = User(
         id=7,
         email="user@example.com",
@@ -50,7 +62,8 @@ def test_get_current_storage_ops_admin_rejects_standard_user_without_storage_ops
     assert exc.value.status_code == 403
 
 
-def test_get_current_storage_ops_admin_rejects_admin_without_storage_ops_right():
+def test_get_current_storage_ops_admin_rejects_admin_without_storage_ops_right(monkeypatch):
+    _patch_effective_storage_ops_access(monkeypatch)
     user = User(
         id=8,
         email="admin-no-storage-ops@example.com",
@@ -65,12 +78,14 @@ def test_get_current_storage_ops_admin_rejects_admin_without_storage_ops_right()
     assert exc.value.status_code == 403
 
 
-def test_get_current_storage_ops_admin_accepts_admin_with_storage_ops_right():
+def test_get_current_storage_ops_admin_accepts_admin_with_storage_ops_right(monkeypatch):
+    _patch_effective_storage_ops_access(monkeypatch)
     user = _admin_user()
     assert dependencies.get_current_storage_ops_admin(user=user).id == user.id
 
 
-def test_get_current_storage_ops_admin_accepts_standard_user_with_storage_ops_right():
+def test_get_current_storage_ops_admin_accepts_standard_user_with_storage_ops_right(monkeypatch):
+    _patch_effective_storage_ops_access(monkeypatch)
     user = User(
         id=9,
         email="ops-user@example.com",

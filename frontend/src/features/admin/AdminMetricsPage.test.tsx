@@ -208,7 +208,7 @@ describe("AdminMetricsPage", () => {
 
     expect(await screen.findByText("Usage history trends")).toBeInTheDocument();
     expect(screen.getByText("Latest storage")).toBeInTheDocument();
-    expect(screen.getByText("3.0 KB")).toBeInTheDocument();
+    expect(await screen.findByText("3.0 KB")).toBeInTheDocument();
     await waitFor(() =>
       expect(fetchAdminUsageHistoryTrendsMock).toHaveBeenCalledWith({
         window: "month",
