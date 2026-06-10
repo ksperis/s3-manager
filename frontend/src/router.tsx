@@ -41,8 +41,6 @@ const loadBrowserSettingsPage = () => import("./features/admin/BrowserSettingsPa
 const loadKeyRotationPage = () => import("./features/admin/KeyRotationPage");
 const loadFeatureDisabledPage = () => import("./features/shared/FeatureDisabledPage");
 const loadBucketsPage = () => import("./features/manager/BucketsPage");
-const loadManagerLifecyclesPage = () => import("./features/manager/ManagerLifecyclesPage");
-const loadManagerBucketPoliciesPage = () => import("./features/manager/ManagerBucketPoliciesPage");
 const loadManagerDashboard = () => import("./features/manager/ManagerDashboard");
 const loadPoliciesPage = () => import("./features/manager/PoliciesPage");
 const loadManagerLayout = () => import("./features/manager/ManagerLayout");
@@ -60,7 +58,6 @@ const loadManagerRolesPage = () => import("./features/manager/ManagerRolesPage")
 const loadManagerRolePoliciesPage = () => import("./features/manager/ManagerRolePoliciesPage");
 const loadManagerUserPoliciesPage = () => import("./features/manager/ManagerUserPoliciesPage");
 const loadManagerGroupPoliciesPage = () => import("./features/manager/ManagerGroupPoliciesPage");
-const loadManagerInlinePoliciesPage = () => import("./features/manager/ManagerInlinePoliciesPage");
 const loadManagerMetricsPage = () => import("./features/manager/ManagerMetricsPage");
 const loadTopicsPage = () => import("./features/manager/TopicsPage");
 const loadManagerMigrationsPage = () => import("./features/manager/ManagerMigrationsPage");
@@ -68,6 +65,7 @@ const loadManagerMigrationDetailPage = () => import("./features/manager/ManagerM
 const loadManagerMigrationWizardPage = () => import("./features/manager/ManagerMigrationWizardPage");
 const loadManagerBucketComparePage = () => import("./features/manager/ManagerBucketComparePage");
 const loadManagerBucketIntegrityPage = () => import("./features/manager/ManagerBucketIntegrityPage");
+const loadManagerFeatureRulesPage = () => import("./features/manager/ManagerFeatureRulesPage");
 const loadManagerCephKeysPage = () => import("./features/manager/ManagerCephKeysPage");
 const loadPortalLayout = () => import("./features/portal/PortalLayout");
 const loadPortalDashboard = () => import("./features/portal/PortalDashboard");
@@ -114,8 +112,6 @@ const BrowserSettingsPage = lazy(loadBrowserSettingsPage);
 const KeyRotationPage = lazy(loadKeyRotationPage);
 const FeatureDisabledPage = lazy(loadFeatureDisabledPage);
 const BucketsPage = lazy(loadBucketsPage);
-const ManagerLifecyclesPage = lazy(loadManagerLifecyclesPage);
-const ManagerBucketPoliciesPage = lazy(loadManagerBucketPoliciesPage);
 const ManagerDashboard = lazy(loadManagerDashboard);
 const PoliciesPage = lazy(loadPoliciesPage);
 const ManagerLayout = lazy(loadManagerLayout);
@@ -133,7 +129,6 @@ const ManagerRolesPage = lazy(loadManagerRolesPage);
 const ManagerRolePoliciesPage = lazy(loadManagerRolePoliciesPage);
 const ManagerUserPoliciesPage = lazy(loadManagerUserPoliciesPage);
 const ManagerGroupPoliciesPage = lazy(loadManagerGroupPoliciesPage);
-const ManagerInlinePoliciesPage = lazy(loadManagerInlinePoliciesPage);
 const ManagerMetricsPage = lazy(loadManagerMetricsPage);
 const TopicsPage = lazy(loadTopicsPage);
 const ManagerMigrationsPage = lazy(loadManagerMigrationsPage);
@@ -141,6 +136,7 @@ const ManagerMigrationDetailPage = lazy(loadManagerMigrationDetailPage);
 const ManagerMigrationWizardPage = lazy(loadManagerMigrationWizardPage);
 const ManagerBucketComparePage = lazy(loadManagerBucketComparePage);
 const ManagerBucketIntegrityPage = lazy(loadManagerBucketIntegrityPage);
+const ManagerFeatureRulesPage = lazy(loadManagerFeatureRulesPage);
 const ManagerCephKeysPage = lazy(loadManagerCephKeysPage);
 const PortalLayout = lazy(loadPortalLayout);
 const PortalDashboard = lazy(loadPortalDashboard);
@@ -590,8 +586,6 @@ export function createAppRoutes() {
             <Route path="/manager" element={<ManagerLayout />}>
               <Route index element={<ManagerDashboard />} />
               <Route path="buckets" element={<BucketsPage />} />
-              <Route path="lifecycles" element={<ManagerLifecyclesPage />} />
-              <Route path="bucket-policies" element={<ManagerBucketPoliciesPage />} />
               <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
               <Route element={<RequireBrowserSurface surface="manager" />}>
                 <Route path="browser" element={<ManagerBrowserPage />} />
@@ -607,7 +601,6 @@ export function createAppRoutes() {
                 <Route path="roles" element={<ManagerRolesPage />} />
                 <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
                 <Route path="iam/policies" element={<PoliciesPage />} />
-                <Route path="iam/inline-policies" element={<ManagerInlinePoliciesPage />} />
               </Route>
               <Route path="topics" element={<TopicsPage />} />
               <Route path="ceph/keys" element={<ManagerCephKeysPage />} />
@@ -617,6 +610,7 @@ export function createAppRoutes() {
               <Route element={<RequireManagerBucketIntegrityFeature />}>
                 <Route path="bucket-integrity" element={<ManagerBucketIntegrityPage />} />
               </Route>
+              <Route path="feature-rules" element={<ManagerFeatureRulesPage />} />
               <Route element={<RequireManagerMigrationFeature />}>
                 <Route path="migrations" element={<ManagerMigrationsPage />} />
                 <Route path="migrations/new" element={<ManagerMigrationWizardPage />} />

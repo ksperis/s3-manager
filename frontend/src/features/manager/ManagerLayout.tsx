@@ -231,8 +231,6 @@ function ManagerShell() {
       label: "Storage",
       links: [
         { to: "/manager/buckets", label: "Buckets" },
-        { to: "/manager/lifecycles", label: "Lifecycles" },
-        { to: "/manager/bucket-policies", label: "Bucket policies" },
         ...(generalSettings.browser_enabled && generalSettings.browser_manager_enabled && managerBrowserAvailable
           ? [{ to: "/manager/browser", label: "Browser" }]
           : []),
@@ -254,7 +252,6 @@ function ManagerShell() {
         { to: "/manager/groups", label: "Groups" },
         { to: "/manager/roles", label: "Roles" },
         { to: "/manager/iam/policies", label: "Policies" },
-        { to: "/manager/iam/inline-policies", label: "Inline policies" },
       ],
     });
   }
@@ -266,8 +263,10 @@ function ManagerShell() {
     });
   }
 
-  if (canManageBuckets && (canShowBucketCompare || canShowBucketIntegrity || canAccessMigration)) {
-    const toolsLinks: SidebarSection[number]["links"] = [];
+  if (canManageBuckets) {
+    const toolsLinks: SidebarSection[number]["links"] = [
+      { to: "/manager/feature-rules", label: "Feature rules" },
+    ];
     if (canShowBucketCompare) {
       toolsLinks.push({ to: "/manager/bucket-compare", label: "Compare" });
     }

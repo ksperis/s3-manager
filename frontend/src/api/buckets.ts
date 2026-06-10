@@ -21,6 +21,25 @@ function bucketPath(bucketName: string): string {
 
 export type BucketFeatureTone = "active" | "inactive" | "unknown";
 export type BucketFeatureStatus = { state: string; tone: BucketFeatureTone };
+export type FeatureRuleFeature = "lifecycle" | "policy" | "cors" | "notifications";
+export type FeatureRuleInventoryStatus = "configured" | "empty" | "unavailable";
+
+export type FeatureRuleInventoryRule = {
+  id: string;
+  type: string;
+  title: string;
+  summary: string;
+  chips: string[];
+  raw: Record<string, unknown>;
+};
+
+export type FeatureRuleInventoryBucket = {
+  bucket_name: string;
+  feature: FeatureRuleFeature;
+  status: FeatureRuleInventoryStatus;
+  rules: FeatureRuleInventoryRule[];
+  error?: string | null;
+};
 
 export type Bucket = {
   name: string;
@@ -47,6 +66,16 @@ export async function listBuckets(
       },
       accountId
     ),
+  });
+  return data;
+}
+
+export async function listFeatureRuleInventory(
+  accountId: S3AccountSelector,
+  feature: FeatureRuleFeature
+): Promise<FeatureRuleInventoryBucket[]> {
+  const { data } = await client.get<FeatureRuleInventoryBucket[]>("/manager/feature-rules", {
+    params: withS3AccountParam({ feature }, accountId),
   });
   return data;
 }
@@ -92,18 +121,6 @@ export type BucketLifecycleRule = {
 
 export type BucketLifecycleConfig = {
   rules: Record<string, unknown>[];
-};
-
-export type BucketLifecycleInventoryItem = {
-  bucket_name: string;
-  rules: Record<string, unknown>[];
-  error?: string | null;
-};
-
-export type BucketPolicyInventoryItem = {
-  bucket_name: string;
-  policy?: Record<string, unknown> | null;
-  error?: string | null;
 };
 
 export type BucketTag = { key: string; value: string };
@@ -389,13 +406,6 @@ export async function getBucketPolicy(accountId: S3AccountSelector, bucketName: 
   return data;
 }
 
-export async function listBucketPolicies(accountId: S3AccountSelector): Promise<BucketPolicyInventoryItem[]> {
-  const { data } = await client.get<BucketPolicyInventoryItem[]>("/manager/bucket-policies", {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
 export async function putBucketPolicy(accountId: S3AccountSelector, bucketName: string, policy: Record<string, unknown>): Promise<BucketPolicy> {
   const { data } = await client.put<BucketPolicy>(
     `${bucketPath(bucketName)}/policy`,
@@ -411,13 +421,6 @@ export async function deleteBucketPolicyApi(accountId: S3AccountSelector, bucket
 
 export async function getBucketLifecycle(accountId: S3AccountSelector, bucketName: string): Promise<BucketLifecycleConfig> {
   const { data } = await client.get<BucketLifecycleConfig>(`${bucketPath(bucketName)}/lifecycle`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
-export async function listBucketLifecycles(accountId: S3AccountSelector): Promise<BucketLifecycleInventoryItem[]> {
-  const { data } = await client.get<BucketLifecycleInventoryItem[]>("/manager/lifecycles", {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;

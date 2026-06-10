@@ -170,7 +170,7 @@ describe("ManagerLayout", () => {
     expect(labels).not.toContain("Ceph");
   });
 
-  it("shows Integrity tool when bucket integrity flag is enabled", () => {
+  it("shows Feature rules and Integrity tools when bucket integrity flag is enabled", () => {
     setStoredManagerUser({
       manager_tool_access: {
         bucket_compare: false,
@@ -194,62 +194,8 @@ describe("ManagerLayout", () => {
     );
 
     const toolsSection = capturedNavSections.find((section) => section.label === "Tools");
-    expect(toolsSection?.links.map((link) => link.label)).toEqual(["Integrity"]);
-  });
-
-  it("shows bucket inventories in the manager Storage navigation", () => {
-    setStoredManagerUser();
-    useS3AccountContextMock.mockReturnValue(buildContext());
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
-
-    render(
-      <MemoryRouter initialEntries={["/manager"]}>
-        <ManagerLayout />
-      </MemoryRouter>
-    );
-
-    const storageSection = capturedNavSections.find((section) => section.label === "Storage");
-    expect(storageSection?.links.map((link) => link.label)).toEqual(["Buckets", "Lifecycles", "Bucket policies", "Browser"]);
-    expect(storageSection?.links.map((link) => link.to)).toEqual([
-      "/manager/buckets",
-      "/manager/lifecycles",
-      "/manager/bucket-policies",
-      "/manager/browser",
-    ]);
-  });
-
-  it("shows Inline policies in the manager IAM navigation", () => {
-    setStoredManagerUser({
-      capabilities: {
-        can_manage_iam: true,
-        can_manage_buckets: true,
-        can_view_traffic: true,
-      },
-    });
-    useS3AccountContextMock.mockReturnValue(
-      buildContext({
-        selectedS3AccountType: "account",
-        accounts: [{ id: "account-1", display_name: "Account", storage_endpoint_capabilities: { iam: true } }],
-        selectedS3AccountId: "account-1",
-      })
-    );
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
-
-    render(
-      <MemoryRouter initialEntries={["/manager"]}>
-        <ManagerLayout />
-      </MemoryRouter>
-    );
-
-    const iamSection = capturedNavSections.find((section) => section.label === "IAM");
-    expect(iamSection?.links.map((link) => link.label)).toEqual(["Users", "Groups", "Roles", "Policies", "Inline policies"]);
-    expect(iamSection?.links.map((link) => link.to)).toEqual([
-      "/manager/users",
-      "/manager/groups",
-      "/manager/roles",
-      "/manager/iam/policies",
-      "/manager/iam/inline-policies",
-    ]);
+    expect(toolsSection?.links.map((link) => link.label)).toEqual(["Feature rules", "Integrity"]);
+    expect(toolsSection?.links.map((link) => link.to)).toEqual(["/manager/feature-rules", "/manager/bucket-integrity"]);
   });
 
   it("shows a loading hint for disabled Metrics while manager context is loading", () => {
@@ -361,7 +307,7 @@ describe("ManagerLayout", () => {
     );
 
     const iamSection = capturedNavSections.find((section) => section.label === "IAM");
-    expect(iamSection?.links.map((link) => link.label)).toEqual(["Users", "Groups", "Roles", "Policies", "Inline policies"]);
+    expect(iamSection?.links.map((link) => link.label)).toEqual(["Users", "Groups", "Roles", "Policies"]);
   });
 
   it("keeps the manager account context selector in the topbar controls", () => {

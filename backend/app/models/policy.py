@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from typing import Optional
+from pydantic import BaseModel
 
 
 class Policy(BaseModel):
@@ -20,10 +20,3 @@ class PolicyCreate(BaseModel):
 class InlinePolicy(BaseModel):
     name: str
     document: dict
-
-
-class InlinePolicyInventoryItem(BaseModel):
-    entity_type: Literal["user", "group", "role"]
-    entity_name: str
-    policies: list[InlinePolicy] = Field(default_factory=list)
-    error: Optional[str] = None

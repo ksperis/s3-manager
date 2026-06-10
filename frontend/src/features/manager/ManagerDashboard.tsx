@@ -1608,7 +1608,7 @@ export default function ManagerDashboard() {
     },
     {
       label: "Manage lifecycle",
-      to: "/manager/lifecycles",
+      to: "/manager/buckets",
       tone: "amber",
       icon: <HistoryIcon className="h-4 w-4" />,
       unavailableReason: noContextReason,

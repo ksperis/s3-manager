@@ -308,7 +308,7 @@ describe("manager shell pages", () => {
     expect(screen.getByTestId("manager-dashboard")).toBeInTheDocument();
     expect(screen.getByText("Top buckets by storage")).toBeInTheDocument();
     expect(screen.getByText("Quick actions")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Manage lifecycle" })).toHaveAttribute("href", "/manager/lifecycles");
+    expect(screen.getByRole("link", { name: "Manage lifecycle" })).toHaveAttribute("href", "/manager/buckets");
     expect(screen.getByText("Storage backend health")).toBeInTheDocument();
     expect(screen.queryByText("Storage Usage")).not.toBeInTheDocument();
     expect(screen.queryByText("Metrics are unavailable for this context.")).not.toBeInTheDocument();

@@ -140,12 +140,6 @@ import {
   resolveFeatureVisualState,
   stableBucketJsonSignature,
 } from "./bucketDetail";
-import {
-  describeLifecycleActions,
-  formatLifecycleFilter,
-  getLifecycleRuleId,
-  getLifecycleRuleStatus,
-} from "./lifecycleDisplay";
 import { extractApiError, isApiFeatureNotImplemented } from "../../utils/apiError";
 
 function getUserRole(): string | null {
@@ -1336,6 +1330,35 @@ export default function BucketDetailPage({
     setSimpleLifecycleRules((prev) => prev.map((rule, idx) => (idx === index ? { ...rule, ...patch } : rule)));
   };
 
+  const describeLifecycleActions = (rule: Record<string, unknown>): string => {
+    const actions: string[] = [];
+    const expiration = rule.Expiration as Record<string, unknown> | undefined;
+    if (expiration?.Days != null) {
+      actions.push(`Expire current objects after ${expiration.Days}d`);
+    }
+    if (expiration?.ExpiredObjectDeleteMarker) {
+      actions.push("Delete expired delete markers");
+    }
+    const noncurrentExp = rule.NoncurrentVersionExpiration as Record<string, unknown> | undefined;
+    if (noncurrentExp?.NoncurrentDays != null) {
+      actions.push(`Expire noncurrent versions after ${noncurrentExp.NoncurrentDays}d`);
+    }
+    const multipart = rule.AbortIncompleteMultipartUpload as Record<string, unknown> | undefined;
+    if (multipart?.DaysAfterInitiation != null) {
+      actions.push(`Abort incomplete multipart uploads after ${multipart.DaysAfterInitiation}d`);
+    }
+    const transitions = Array.isArray(rule.Transitions) ? rule.Transitions : [];
+    if (transitions.length > 0) {
+      actions.push(`Transitions (${transitions.length})`);
+    }
+    const noncurrentTransitions = Array.isArray(rule.NoncurrentVersionTransitions) ? rule.NoncurrentVersionTransitions : [];
+    if (noncurrentTransitions.length > 0) {
+      actions.push(`Noncurrent transitions (${noncurrentTransitions.length})`);
+    }
+    if (actions.length === 0) return "No actions detected";
+    return actions.join(" · ");
+  };
+
   const persistLifecycleRules = useCallback(
     async (rules: Record<string, unknown>[]) => {
       if (!bucketName || !hasContext) return;
@@ -1408,7 +1431,7 @@ export default function BucketDetailPage({
     await updateLifecycleRules((rules) =>
       rules.map((rule, idx) => {
         if (idx !== index) return rule;
-        const currentStatus = getLifecycleRuleStatus(rule) === "Disabled" ? "Disabled" : "Enabled";
+        const currentStatus = (rule as any).Status === "Disabled" ? "Disabled" : "Enabled"; // eslint-disable-line @typescript-eslint/no-explicit-any
         return { ...rule, Status: currentStatus === "Enabled" ? "Disabled" : "Enabled" };
       })
     );
@@ -3369,33 +3392,42 @@ export default function BucketDetailPage({
                               </thead>
                               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                                 {lifecycle.rules?.map((rule, idx) => {
-                                  const ruleId = getLifecycleRuleId(rule, idx);
-                                  const ruleStatus = getLifecycleRuleStatus(rule);
-                                  const filterLabel = formatLifecycleFilter(rule);
+                                  const filter = (rule as any).Filter as Record<string, any> | undefined; // eslint-disable-line @typescript-eslint/no-explicit-any
+                                  let filterLabel = "-";
+                                  if (filter?.Prefix) filterLabel = `Prefix: ${filter.Prefix}`;
+                                  if (filter?.Tag) filterLabel = `Tag: ${filter.Tag.Key}=${filter.Tag.Value}`;
+                                  if (filter?.And) {
+                                    const andPrefix = filter.And.Prefix ? `Prefix: ${filter.And.Prefix}` : "";
+                                    const andTags =
+                                      Array.isArray(filter.And.Tags) && filter.And.Tags.length > 0
+                                        ? `Tags: ${filter.And.Tags.map((t: any) => `${t.Key}=${t.Value}`).join(", ")}`
+                                        : "";
+                                    filterLabel = [andPrefix, andTags].filter(Boolean).join(" · ") || "Combined filter";
+                                  }
                                   return (
                                     <tr
-                                      key={`${ruleId}-${idx}`}
+                                      key={`${(rule as any).ID ?? (rule as any).Prefix ?? "rule"}-${idx}`}
                                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50"
                                     >
                                       <td className="px-3 py-1.5 font-semibold text-slate-900 dark:text-slate-100">
-                                        {ruleId}
+                                        {(rule as any).ID ?? "(no ID)"}
                                       </td>
                                       <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">
                                         <button
                                           type="button"
                                           onClick={() => toggleRuleStatusAt(idx)}
                                           className={`flex items-center gap-2 rounded-full px-3 py-1 ui-caption font-semibold ${
-                                            ruleStatus === "Disabled"
+                                            (rule as any).Status === "Disabled"
                                               ? "border border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-200"
                                               : "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
                                           }`}
                                           disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                         >
-                                          {ruleStatus === "Disabled" ? "Disabled" : "Enabled"}
+                                          {(rule as any).Status === "Disabled" ? "Disabled" : "Enabled"}
                                         </button>
                                       </td>
                                       <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{filterLabel}</td>
-                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{describeLifecycleActions(rule)}</td>
+                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{describeLifecycleActions(rule as any)}</td>
                                       <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">
                                         <div className="flex flex-wrap gap-2">
                                           <button

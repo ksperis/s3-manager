@@ -14,16 +14,12 @@ Use this guide for tenant IAM administration (users, groups, roles, policies).
 1. Open `/manager/users`, `/manager/groups`, `/manager/roles`, or `/manager/iam/policies`.
 2. Create or edit IAM resources.
 3. Attach/detach policies to users, groups, or roles.
-4. Open `/manager/iam/inline-policies` to review inline policies across every
-   user, group, and role in the active context, including IAM entities with no
-   inline policies.
-5. Manage IAM access keys from user key pages.
-6. Verify resulting access with your standard IAM validation process.
+4. Manage IAM access keys from user key pages.
+5. Verify resulting access with your standard IAM validation process.
 
 ## Expected result
 
-IAM resources are managed with native IAM semantics. Inline policies can also
-be audited from the Manager IAM inventory.
+IAM resources are managed with native IAM semantics.
 
 ## Limits / feature flags
 
