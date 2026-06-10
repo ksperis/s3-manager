@@ -311,6 +311,13 @@ export const MoreIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   </svg>
 );
 
+export const XIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <path d="m6 6 8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="m14 6-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
 export const SearchIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
     <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" />

@@ -10,7 +10,7 @@ import {
   operationSecondaryClasses,
   operationStopClasses,
 } from "./browserConstants";
-import { ChevronDownIcon, DownloadIcon } from "./browserIcons";
+import { ChevronDownIcon, DownloadIcon, InfoIcon, XIcon } from "./browserIcons";
 import { formatBadgeCount } from "./browserUtils";
 import type {
   CopyDetailItem,
@@ -359,6 +359,8 @@ export default function BrowserOperationsPanel({
             className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left transition hover:bg-[var(--ui-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
             onClick={onToggleOpen}
             aria-expanded={open}
+            aria-label={open ? "Collapse operations" : "Expand operations"}
+            title={open ? "Collapse operations" : "Expand operations"}
           >
             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--ui-surface-muted)] text-[var(--ui-text-muted)]">
               <DownloadIcon className="h-4 w-4" />
@@ -381,35 +383,30 @@ export default function BrowserOperationsPanel({
                 </span>
               </span>
             </span>
+            <ChevronDownIcon className={cx("h-4 w-4 shrink-0 text-[var(--ui-text-muted)] transition", open ? "rotate-180" : "")} />
           </button>
           <div className="flex shrink-0 items-stretch">
             <button
               type="button"
-              className="px-2 ui-caption font-semibold text-[var(--ui-text-muted)] transition hover:bg-[var(--ui-hover)] hover:text-[var(--ui-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
+              className="flex items-center gap-1.5 px-2.5 ui-caption font-semibold text-[var(--ui-text-muted)] transition hover:bg-[var(--ui-hover)] hover:text-[var(--ui-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
               onClick={onOpenDetails}
+              aria-label="Operations overview"
+              title="Operations overview"
             >
-              Details
+              <InfoIcon className="h-3.5 w-3.5" />
+              <span>Overview</span>
             </button>
             {canDismiss ? (
               <button
                 type="button"
-                className="w-9 ui-caption font-semibold text-[var(--ui-text-muted)] transition hover:bg-[var(--ui-hover)] hover:text-[var(--ui-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
+                className="flex w-9 items-center justify-center text-[var(--ui-text-muted)] transition hover:bg-[var(--ui-hover)] hover:text-[var(--ui-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
                 onClick={onDismiss}
-                aria-label="Close operations"
-                title="Close operations"
+                aria-label="Dismiss operations panel"
+                title="Dismiss operations panel"
               >
-                x
+                <XIcon className="h-4 w-4" />
               </button>
             ) : null}
-            <button
-              type="button"
-              className="flex w-10 items-center justify-center text-[var(--ui-text-muted)] transition hover:bg-[var(--ui-hover)] hover:text-[var(--ui-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
-              onClick={onToggleOpen}
-              aria-label={open ? "Collapse operations" : "Expand operations"}
-              title={open ? "Collapse operations" : "Expand operations"}
-            >
-              <ChevronDownIcon className={cx("h-4 w-4 transition", open ? "" : "rotate-180")} />
-            </button>
           </div>
         </div>
         <div className="h-1 bg-[var(--ui-surface-muted)]">

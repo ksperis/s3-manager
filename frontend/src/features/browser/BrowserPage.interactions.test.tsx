@@ -3760,7 +3760,7 @@ describe("BrowserPage interactions", () => {
       within(dialog).getByRole("button", { name: "Expand operations" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).queryByRole("button", { name: "Close operations" }),
+      within(dialog).queryByRole("button", { name: "Dismiss operations panel" }),
     ).not.toBeInTheDocument();
     expect(
       within(dialog).queryByRole("button", { name: "Stop all" }),
@@ -3773,7 +3773,7 @@ describe("BrowserPage interactions", () => {
     expect(
       within(dialog).queryByRole("button", { name: "Download details (JSON)" }),
     ).not.toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Details" }));
+    await user.click(within(dialog).getByRole("button", { name: "Operations overview" }));
     let detailsDialog = await screen.findByRole("dialog", {
       name: "Operations overview",
     });
@@ -3809,12 +3809,12 @@ describe("BrowserPage interactions", () => {
     );
 
     expect(
-      await within(dialog).findByRole("button", { name: "Close operations" }),
+      await within(dialog).findByRole("button", { name: "Dismiss operations panel" }),
     ).toBeInTheDocument();
     expect(
       within(dialog).queryByRole("button", { name: "Show files" }),
     ).not.toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Details" }));
+    await user.click(within(dialog).getByRole("button", { name: "Operations overview" }));
     detailsDialog = await screen.findByRole("dialog", {
       name: "Operations overview",
     });
@@ -3835,7 +3835,7 @@ describe("BrowserPage interactions", () => {
       within(detailsDialog).getByRole("button", { name: "Close modal" }),
     );
     await user.click(
-      within(dialog).getByRole("button", { name: "Close operations" }),
+      within(dialog).getByRole("button", { name: "Dismiss operations panel" }),
     );
     await waitFor(() => {
       expect(
@@ -3939,7 +3939,7 @@ describe("BrowserPage interactions", () => {
       );
     });
 
-    await user.click(within(dialog).getByRole("button", { name: "Details" }));
+    await user.click(within(dialog).getByRole("button", { name: "Operations overview" }));
     const detailsDialog = await screen.findByRole("dialog", {
       name: "Operations overview",
     });
@@ -4218,7 +4218,7 @@ describe("BrowserPage interactions", () => {
       true,
     );
 
-    await user.click(within(dialog).getByRole("button", { name: "Details" }));
+    await user.click(within(dialog).getByRole("button", { name: "Operations overview" }));
     const detailsDialog = await screen.findByRole("dialog", {
       name: "Operations overview",
     });
