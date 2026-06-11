@@ -130,7 +130,7 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
     assert refresh is not None and refresh.revoked_by_user_id is None
 
 
-def test_unlink_account_cleans_links_and_nulls_references(db_session):
+def test_unlink_account_cleans_links_and_purges_derived_rows(db_session):
     endpoint = _seed_endpoint(db_session)
     account = S3Account(name="to-unlink", storage_endpoint_id=endpoint.id)
     user = User(email="acc-user@example.com", hashed_password="x", role=UserRole.UI_USER.value)
@@ -188,13 +188,12 @@ def test_unlink_account_cleans_links_and_nulls_references(db_session):
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
     assert db_session.query(UserS3Account).filter(UserS3Account.account_id == account.id).first() is None
     audit = db_session.query(AuditLog).first()
-    usage = db_session.query(BillingUsageDaily).first()
-    storage = db_session.query(BillingStorageDaily).first()
-    assignment = db_session.query(BillingAssignment).first()
     assert audit is not None and audit.account_id is None
-    assert usage is not None and usage.s3_account_id is None
-    assert storage is not None and storage.s3_account_id is None
-    assert assignment is not None and assignment.s3_account_id is None
+    assert db_session.query(BillingUsageDaily).filter(BillingUsageDaily.s3_account_id == account.id).count() == 0
+    assert (
+        db_session.query(BillingStorageDaily).filter(BillingStorageDaily.s3_account_id == account.id).count() == 0
+    )
+    assert db_session.query(BillingAssignment).filter(BillingAssignment.s3_account_id == account.id).count() == 0
 
 
 def test_delete_user_nulls_nullable_foreign_keys(db_session):

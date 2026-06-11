@@ -8,12 +8,10 @@ from app.db import (
     AccountIAMUser,
     AccountRole,
     AuditLog,
-    BillingAssignment,
-    BillingStorageDaily,
-    BillingUsageDaily,
     S3Account,
     StorageEndpoint,
     StorageProvider,
+    UiGroupS3Account,
     User,
     UserS3Account,
     is_admin_ui_role,
@@ -26,6 +24,7 @@ from app.models.s3_account import (
     S3AccountSummary,
     S3AccountUpdate,
 )
+from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.tags_service import TagsService
@@ -1089,21 +1088,10 @@ class S3AccountsService:
     def _remove_account_entry(self, account: S3Account) -> None:
         self.db.query(AccountIAMUser).filter(AccountIAMUser.account_id == account.id).delete()
         self.db.query(UserS3Account).filter(UserS3Account.account_id == account.id).delete()
-        (
-            self.db.query(BillingAssignment)
-            .filter(BillingAssignment.s3_account_id == account.id)
-            .update({BillingAssignment.s3_account_id: None}, synchronize_session=False)
+        self.db.query(UiGroupS3Account).filter(UiGroupS3Account.account_id == account.id).delete(
+            synchronize_session=False
         )
-        (
-            self.db.query(BillingUsageDaily)
-            .filter(BillingUsageDaily.s3_account_id == account.id)
-            .update({BillingUsageDaily.s3_account_id: None}, synchronize_session=False)
-        )
-        (
-            self.db.query(BillingStorageDaily)
-            .filter(BillingStorageDaily.s3_account_id == account.id)
-            .update({BillingStorageDaily.s3_account_id: None}, synchronize_session=False)
-        )
+        ResourceDeletionPurgeService(self.db).purge_account_derived_data(account.id)
         (
             self.db.query(AuditLog)
             .filter(AuditLog.account_id == account.id)

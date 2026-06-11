@@ -278,8 +278,7 @@ def delete_account(
             action="delete_account",
             entity_type="account",
             entity_id=str(account_id),
-            account_id=account_id,
-            metadata={"delete_rgw": delete_rgw},
+            metadata={"delete_rgw": delete_rgw, "account_id": account_id},
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -301,7 +300,7 @@ def unlink_account(
             action="unlink_account",
             entity_type="account",
             entity_id=str(account_id),
-            account_id=account_id,
+            metadata={"account_id": account_id},
         )
     except ValueError as exc:
         detail = str(exc)

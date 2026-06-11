@@ -9,18 +9,17 @@ from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session
 
 from app.db import (
-    BillingAssignment,
-    BillingStorageDaily,
-    BillingUsageDaily,
     S3UserTag,
     S3User as S3UserModel,
     StorageEndpoint,
     StorageProvider,
     TagDefinition,
+    UiGroupS3User,
     User,
     UserS3User as UserS3UserModel,
     UserRole,
 )
+from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.tags_service import TagsService
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -950,21 +949,10 @@ class S3UsersService:
             .filter(UserS3UserModel.s3_user_id == s3_user.id)
             .delete(synchronize_session=False)
         )
-        (
-            self.db.query(BillingAssignment)
-            .filter(BillingAssignment.s3_user_id == s3_user.id)
-            .update({BillingAssignment.s3_user_id: None}, synchronize_session=False)
+        self.db.query(UiGroupS3User).filter(UiGroupS3User.s3_user_id == s3_user.id).delete(
+            synchronize_session=False
         )
-        (
-            self.db.query(BillingUsageDaily)
-            .filter(BillingUsageDaily.s3_user_id == s3_user.id)
-            .update({BillingUsageDaily.s3_user_id: None}, synchronize_session=False)
-        )
-        (
-            self.db.query(BillingStorageDaily)
-            .filter(BillingStorageDaily.s3_user_id == s3_user.id)
-            .update({BillingStorageDaily.s3_user_id: None}, synchronize_session=False)
-        )
+        ResourceDeletionPurgeService(self.db).purge_s3_user_derived_data(s3_user.id)
         self.db.delete(s3_user)
         self.db.flush()
         self.tags.cleanup_orphan_definitions()

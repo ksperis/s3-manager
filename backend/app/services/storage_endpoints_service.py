@@ -10,14 +10,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db import (
-    BillingAssignment,
-    BillingRateCard,
-    BillingStorageDaily,
-    BillingUsageDaily,
-    EndpointHealthCheck,
-    EndpointHealthLatest,
-    EndpointHealthRollup,
-    EndpointHealthStatusSegment,
     S3Account,
     S3Connection,
     S3User,
@@ -34,6 +26,7 @@ from app.models.storage_endpoint import (
     StorageEndpointTagsUpdate,
     StorageEndpointUpdate,
 )
+from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.services.tags_service import TagsService
 from app.utils.s3_endpoint import configured_s3_endpoint
@@ -824,41 +817,20 @@ class StorageEndpointsService:
         linked_accounts = self.db.query(S3Account).filter(S3Account.storage_endpoint_id == endpoint.id).count()
         linked_users = self.db.query(S3User).filter(S3User.storage_endpoint_id == endpoint.id).count()
         linked_connections = self.db.query(S3Connection).filter(S3Connection.storage_endpoint_id == endpoint.id).count()
-        billing_usage = self.db.query(BillingUsageDaily).filter(BillingUsageDaily.storage_endpoint_id == endpoint.id).count()
-        billing_storage = self.db.query(BillingStorageDaily).filter(BillingStorageDaily.storage_endpoint_id == endpoint.id).count()
-        billing_rate_cards = self.db.query(BillingRateCard).filter(BillingRateCard.storage_endpoint_id == endpoint.id).count()
-        billing_assignments = self.db.query(BillingAssignment).filter(BillingAssignment.storage_endpoint_id == endpoint.id).count()
         has_refs = any(
             count > 0
             for count in [
                 linked_accounts,
                 linked_users,
                 linked_connections,
-                billing_usage,
-                billing_storage,
-                billing_rate_cards,
-                billing_assignments,
             ]
         )
         if has_refs:
             raise ValueError(
                 "Unable to delete this endpoint: "
-                f"accounts={linked_accounts}, users={linked_users}, connections={linked_connections}, "
-                f"billing={billing_usage + billing_storage + billing_rate_cards + billing_assignments}."
+                f"accounts={linked_accounts}, users={linked_users}, connections={linked_connections}."
             )
-        # Endpoint health telemetry is endpoint-scoped and must be removed with the endpoint.
-        self.db.query(EndpointHealthCheck).filter(EndpointHealthCheck.storage_endpoint_id == endpoint.id).delete(
-            synchronize_session=False
-        )
-        self.db.query(EndpointHealthLatest).filter(EndpointHealthLatest.storage_endpoint_id == endpoint.id).delete(
-            synchronize_session=False
-        )
-        self.db.query(EndpointHealthStatusSegment).filter(
-            EndpointHealthStatusSegment.storage_endpoint_id == endpoint.id
-        ).delete(synchronize_session=False)
-        self.db.query(EndpointHealthRollup).filter(EndpointHealthRollup.storage_endpoint_id == endpoint.id).delete(
-            synchronize_session=False
-        )
+        ResourceDeletionPurgeService(self.db).purge_endpoint_derived_data(endpoint.id)
         self.db.delete(endpoint)
         self.db.flush()
         self.tags.cleanup_orphan_definitions()

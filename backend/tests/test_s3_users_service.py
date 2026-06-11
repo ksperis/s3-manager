@@ -2,12 +2,27 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 import pytest
 
-from app.db import S3User, StorageEndpoint, StorageProvider, User, UserRole, UserS3User
+from app.db import (
+    BillingAssignment,
+    BillingRateCard,
+    BillingStorageDaily,
+    BillingUsageDaily,
+    BucketUsageStatsSnapshot,
+    QuotaAlertState,
+    QuotaUsageDaily,
+    QuotaUsageHourly,
+    S3User,
+    StorageEndpoint,
+    StorageProvider,
+    User,
+    UserRole,
+    UserS3User,
+)
 from app.models.s3_user import S3UserCreate, S3UserImport, S3UserUpdate
 from app.services import s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
@@ -128,6 +143,68 @@ def _seed_ceph_endpoint(db_session) -> StorageEndpoint:
 def _build_service(db_session, monkeypatch, fake_admin: FakeRGWAdmin) -> S3UsersService:
     monkeypatch.setattr("app.services.s3_users_service.get_rgw_admin_client", lambda **_: fake_admin)
     return S3UsersService(db_session)
+
+
+def _seed_s3_user_derived_rows(db_session, *, endpoint: StorageEndpoint, s3_user: S3User) -> None:
+    rate_card = BillingRateCard(
+        name=f"s3-user-delete-rate-{s3_user.id}",
+        currency="EUR",
+        effective_from=date(2026, 1, 1),
+        storage_endpoint_id=endpoint.id,
+    )
+    db_session.add(rate_card)
+    db_session.flush()
+    db_session.add_all(
+        [
+            BillingAssignment(
+                storage_endpoint_id=endpoint.id,
+                s3_user_id=s3_user.id,
+                rate_card_id=rate_card.id,
+            ),
+            BillingUsageDaily(
+                day=date(2026, 1, 1),
+                storage_endpoint_id=endpoint.id,
+                s3_user_id=s3_user.id,
+                source="rgw_admin_usage",
+            ),
+            BillingStorageDaily(
+                day=date(2026, 1, 1),
+                storage_endpoint_id=endpoint.id,
+                s3_user_id=s3_user.id,
+                source="rgw_admin_bucket_stats",
+            ),
+            QuotaUsageHourly(
+                hour_ts=datetime(2026, 1, 1, 8, 0, 0),
+                storage_endpoint_id=endpoint.id,
+                s3_user_id=s3_user.id,
+                used_bytes=1,
+                used_objects=1,
+            ),
+            QuotaUsageDaily(
+                day=date(2026, 1, 1),
+                storage_endpoint_id=endpoint.id,
+                s3_user_id=s3_user.id,
+                last_used_bytes=1,
+                last_used_objects=1,
+            ),
+            QuotaAlertState(
+                storage_endpoint_id=endpoint.id,
+                s3_user_id=s3_user.id,
+            ),
+            BucketUsageStatsSnapshot(
+                scope_kind="manager",
+                scope_id=f"s3u-{s3_user.id}",
+                scope_name=s3_user.name,
+                bucket_name="s3-user-bucket",
+                data_type_distribution_json="[]",
+                storage_class_distribution_json="[]",
+                size_distribution_json="[]",
+                age_distribution_json="[]",
+                current_noncurrent_distribution_json="[]",
+            ),
+        ]
+    )
+    db_session.commit()
 
 
 def _seed_local_user(
@@ -385,6 +462,34 @@ def test_delete_user_with_delete_rgw_checks_buckets_then_deletes(db_session, mon
 
     assert "remote-user" in fake.deleted_users
     assert db_session.query(S3User).filter_by(id=created.id).first() is None
+
+
+def test_delete_user_purges_derived_database_rows(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    fake = FakeRGWAdmin()
+    service = _build_service(db_session, monkeypatch, fake)
+    created = service.create_user(S3UserCreate(name="Derived", uid="derived-user", storage_endpoint_id=endpoint.id))
+    s3_user = db_session.query(S3User).filter_by(id=created.id).one()
+    _seed_s3_user_derived_rows(db_session, endpoint=endpoint, s3_user=s3_user)
+
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: [])
+    service.delete_user(created.id, delete_rgw=True)
+
+    assert db_session.query(BillingAssignment).filter(BillingAssignment.s3_user_id == created.id).count() == 0
+    assert db_session.query(BillingUsageDaily).filter(BillingUsageDaily.s3_user_id == created.id).count() == 0
+    assert db_session.query(BillingStorageDaily).filter(BillingStorageDaily.s3_user_id == created.id).count() == 0
+    assert db_session.query(QuotaUsageHourly).filter(QuotaUsageHourly.s3_user_id == created.id).count() == 0
+    assert db_session.query(QuotaUsageDaily).filter(QuotaUsageDaily.s3_user_id == created.id).count() == 0
+    assert db_session.query(QuotaAlertState).filter(QuotaAlertState.s3_user_id == created.id).count() == 0
+    assert (
+        db_session.query(BucketUsageStatsSnapshot)
+        .filter(
+            BucketUsageStatsSnapshot.scope_kind == "manager",
+            BucketUsageStatsSnapshot.scope_id == f"s3u-{created.id}",
+        )
+        .count()
+        == 0
+    )
 
 
 def test_list_users_and_minimal_are_sorted_case_insensitive_and_stable(db_session):

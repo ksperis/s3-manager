@@ -13,6 +13,7 @@ from app.db import (
     S3User,
     StorageEndpoint,
     StorageProvider,
+    UiGroupS3User,
     User,
     UserRole,
     UserS3Account,
@@ -37,6 +38,7 @@ from app.models.s3_user import S3UserCreate, S3UserUpdate
 from app.models.storage_endpoint import StorageEndpointCreate, StorageEndpointUpdate
 from app.models.user import UserCreate, UserUpdate
 from app.services.audit_service import AuditService
+from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.s3_accounts_service import S3AccountsService
 from app.services.s3_users_service import S3UsersService
 from app.services.storage_endpoints_service import StorageEndpointsService
@@ -1455,6 +1457,10 @@ class AdminAutomationService:
             .filter(UserS3User.s3_user_id == s3_user.id)
             .delete(synchronize_session=False)
         )
+        self.db.query(UiGroupS3User).filter(UiGroupS3User.s3_user_id == s3_user.id).delete(
+            synchronize_session=False
+        )
+        ResourceDeletionPurgeService(self.db).purge_s3_user_derived_data(s3_user.id)
         self.db.delete(s3_user)
         self.db.commit()
 
