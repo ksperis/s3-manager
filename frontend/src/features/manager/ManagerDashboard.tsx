@@ -1741,9 +1741,6 @@ export default function ManagerDashboard() {
             />
           </div>
         )}
-        <div className="min-w-0 lg:col-span-2 xl:col-span-12" data-testid="manager-dashboard-recent-activity-card">
-          <RecentActivityCard rows={activityRows} loading={activityLoading} unavailableReason={activityUnavailableReason} />
-        </div>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,0.88fr)_minmax(0,1.28fr)_minmax(0,0.9fr)_minmax(280px,1fr)]">
@@ -1769,10 +1766,15 @@ export default function ManagerDashboard() {
         <BackendHealthCard endpoint={healthEndpoint} unavailableReason={endpointUnavailableReason} />
       </div>
 
-      <IncidentStrip
-        incidents={workspaceHealth?.incidents ?? []}
-        unavailableReason={endpointUnavailableReason}
-      />
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" data-testid="manager-dashboard-activity-incidents-row">
+        <div className="min-w-0" data-testid="manager-dashboard-recent-activity-card">
+          <RecentActivityCard rows={activityRows} loading={activityLoading} unavailableReason={activityUnavailableReason} />
+        </div>
+        <IncidentStrip
+          incidents={workspaceHealth?.incidents ?? []}
+          unavailableReason={endpointUnavailableReason}
+        />
+      </div>
     </div>
   );
 }

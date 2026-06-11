@@ -430,6 +430,7 @@ describe("manager shell pages", () => {
 
     const dataTypesCard = await screen.findByTestId("manager-dashboard-data-types");
     const overviewGrid = screen.getByTestId("manager-dashboard-overview-grid");
+    const activityIncidentsRow = screen.getByTestId("manager-dashboard-activity-incidents-row");
     const topBucketsCard = screen.getByTestId("manager-dashboard-top-buckets-card");
     const recentActivityCard = screen.getByTestId("manager-dashboard-recent-activity-card");
 
@@ -441,9 +442,11 @@ describe("manager shell pages", () => {
     });
     expect(within(overviewGrid).getByText("Storage overview")).toBeInTheDocument();
     expect(within(overviewGrid).getByText("Top buckets by storage")).toBeInTheDocument();
-    expect(within(overviewGrid).getByText("Recent activity")).toBeInTheDocument();
+    expect(within(overviewGrid).queryByText("Recent activity")).not.toBeInTheDocument();
+    expect(within(activityIncidentsRow).getByText("Recent activity")).toBeInTheDocument();
+    expect(within(activityIncidentsRow).getByText("Ongoing / Recent incidents")).toBeInTheDocument();
     expect(topBucketsCard).toHaveClass("xl:col-span-5");
-    expect(recentActivityCard).toHaveClass("xl:col-span-12");
+    expect(recentActivityCard.parentElement).toBe(activityIncidentsRow);
     expect(getManagerUsageStatsAggregateMock).toHaveBeenCalledWith("account-1");
   });
 
@@ -479,7 +482,9 @@ describe("manager shell pages", () => {
 
     expect(screen.queryByTestId("manager-dashboard-data-types")).not.toBeInTheDocument();
     expect(screen.getByTestId("manager-dashboard-top-buckets-card")).toHaveClass("xl:col-span-8");
-    expect(screen.getByTestId("manager-dashboard-recent-activity-card")).toHaveClass("xl:col-span-12");
+    expect(screen.getByTestId("manager-dashboard-recent-activity-card").parentElement).toBe(
+      screen.getByTestId("manager-dashboard-activity-incidents-row")
+    );
     expect(getManagerUsageStatsAggregateMock).not.toHaveBeenCalled();
     await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "day"));
   });
