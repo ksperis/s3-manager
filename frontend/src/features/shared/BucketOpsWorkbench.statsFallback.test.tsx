@@ -264,6 +264,9 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
 
+    const backdrop = screen.getByLabelText("Close advanced filter drawer");
+    expect(backdrop).toHaveClass("bg-black/50");
+    expect(backdrop).not.toHaveClass("bg-slate-950/45");
     expect(screen.getByText("Buckets listing").closest(".fixed")).toHaveClass("z-[46]");
     expect(getTableOverflowContainer()).toHaveClass("overflow-x-hidden");
     expect(getTableOverflowContainer()).not.toHaveClass("overflow-x-auto");

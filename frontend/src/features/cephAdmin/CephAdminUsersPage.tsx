@@ -24,6 +24,14 @@ import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import {
   FILTER_COST_LABEL,
   INACTIVE_ADVANCED_PROGRESS,
+  advancedFilterBackdropClass,
+  advancedFilterBodyClass,
+  advancedFilterDrawerClass,
+  advancedFilterFooterClass,
+  advancedFilterHeaderClass,
+  advancedFilterRootClass,
+  advancedFilterSectionClass,
+  advancedFilterSummaryClass,
   buildTextFieldRules,
   formatTextFilterSummary,
   isCancelledError,
@@ -1243,15 +1251,15 @@ export default function CephAdminUsersPage() {
                 />
 
                 {showAdvancedFilter && (
-                  <div className="fixed inset-x-0 bottom-0 top-14 z-[46]">
+                  <div className={advancedFilterRootClass}>
                     <button
                       type="button"
                       onClick={advancedFilterCloseGuard.requestClose}
-                      className="absolute inset-0 bg-slate-950/45"
+                      className={advancedFilterBackdropClass}
                       aria-label="Close advanced filter drawer"
                     />
-                    <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-[color:var(--ui-border)] bg-[var(--ui-surface)] shadow-[var(--shell-menu-shadow)]">
-                      <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                    <div className={advancedFilterDrawerClass}>
+                      <div className={advancedFilterHeaderClass}>
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Advanced filter</p>
@@ -1288,9 +1296,9 @@ export default function CephAdminUsersPage() {
                         </div>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto px-4 py-4">
+                      <div className={advancedFilterBodyClass}>
                         <div className="space-y-4">
-                          <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+                          <section className={advancedFilterSummaryClass}>
                             <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               Draft summary
                             </p>
@@ -1310,7 +1318,7 @@ export default function CephAdminUsersPage() {
                             )}
                           </section>
 
-                          <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                          <section className={advancedFilterSectionClass}>
                             <p className="mb-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               Identity
                             </p>
@@ -1439,7 +1447,7 @@ export default function CephAdminUsersPage() {
                             </div>
                           </section>
 
-                          <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                          <section className={advancedFilterSectionClass}>
                             <p className="mb-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               Limits and Quotas
                             </p>
@@ -1493,7 +1501,7 @@ export default function CephAdminUsersPage() {
                         </div>
                       </div>
 
-                      <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
+                      <div className={advancedFilterFooterClass}>
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           <button
                             type="button"

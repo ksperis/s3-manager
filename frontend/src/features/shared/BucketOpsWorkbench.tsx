@@ -31,7 +31,6 @@ import {
   cx,
   uiButtonBaseClass,
   uiButtonVariants,
-  uiCardMutedClass,
   uiCheckboxClass,
   uiFeatureStateHighlightFieldClasses,
   uiFeatureStateHighlightLabelClasses,
@@ -161,6 +160,17 @@ import {
   type FeatureDetailFilters,
   type NumericComparisonOpUi,
 } from "../cephAdmin/filtering/bucketAdvancedFilter";
+import {
+  advancedFilterAccordionClass,
+  advancedFilterBackdropClass,
+  advancedFilterBodyClass,
+  advancedFilterDrawerClass,
+  advancedFilterFooterClass,
+  advancedFilterHeaderClass,
+  advancedFilterRootClass,
+  advancedFilterSectionClass,
+  advancedFilterSummaryClass,
+} from "../cephAdmin/filtering/advancedFilterShared";
 import { extractApiError } from "../../utils/apiError";
 
 const extractError = (err: unknown): string => {
@@ -6375,13 +6385,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     const open = advancedFilterSecondarySections[id];
     const contentId = `advanced-filter-${id}-content`;
     return (
-      <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)]">
+      <section className={advancedFilterAccordionClass}>
         <button
           type="button"
           onClick={() => toggleAdvancedFilterSecondarySection(id)}
           aria-expanded={open}
           aria-controls={contentId}
-          className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/30 dark:hover:bg-slate-800/60"
+          className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-primary/30 dark:hover:bg-neutral-800/70"
         >
           <span className="inline-flex min-w-0 items-center gap-2">
             <ChevronDownIcon
@@ -8411,15 +8421,15 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             showAdvancedFilter || showActiveFiltersCard ? (
             <>
               {showAdvancedFilter && (
-                <div className="fixed inset-x-0 bottom-0 top-14 z-[46]">
+                <div className={advancedFilterRootClass}>
                   <button
                     type="button"
                     onClick={advancedFilterCloseGuard.requestClose}
-                    className="absolute inset-0 bg-slate-950/45"
+                    className={advancedFilterBackdropClass}
                     aria-label="Close advanced filter drawer"
                   />
-                  <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-[color:var(--ui-border)] bg-[var(--ui-surface)] shadow-[var(--shell-menu-shadow)]">
-                    <div className="border-b border-[color:var(--ui-border-soft)] px-4 py-3">
+                  <div className={advancedFilterDrawerClass}>
+                    <div className={advancedFilterHeaderClass}>
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Advanced filter</p>
@@ -8456,9 +8466,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                       </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto px-4 py-4">
+                    <div className={advancedFilterBodyClass}>
                       <div className="space-y-4">
-                        <section className={cx(uiCardMutedClass, "p-3")}>
+                        <section className={advancedFilterSummaryClass}>
                           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Draft summary
                           </p>
@@ -8480,7 +8490,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           )}
                         </section>
 
-                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
+                        <section className={advancedFilterSectionClass}>
                           <div className="mb-3 flex items-center justify-between">
                             <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               <span>Identity and tags</span>
@@ -9857,7 +9867,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                       </div>
                     </div>
 
-                    <div className="border-t border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)] px-4 py-3">
+                    <div className={advancedFilterFooterClass}>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <p className="ui-caption text-slate-500 dark:text-slate-400">
                           {hasPendingAdvancedChanges
