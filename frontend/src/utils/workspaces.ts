@@ -70,6 +70,14 @@ export function isAdminLikeRole(role?: string | null): boolean {
   return normalized === ADMIN_ROLE || isSuperAdminRole(normalized);
 }
 
+export function isManagerToolRole(role?: string | null): boolean {
+  return isAdminLikeRole(role) || role === USER_ROLE;
+}
+
+export function getManagerToolAccess(user: SessionUser | null): ManagerToolAccess | null {
+  return user?.effective_access?.manager_tool_access ?? user?.manager_tool_access ?? null;
+}
+
 export function readStoredUser(): SessionUser | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem("user");

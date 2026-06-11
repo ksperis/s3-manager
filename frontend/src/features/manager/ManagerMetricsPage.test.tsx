@@ -1,4 +1,5 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
@@ -7,7 +8,10 @@ import ManagerMetricsPage from "./ManagerMetricsPage";
 const useS3AccountContextMock = vi.fn();
 const useManagerStatsMock = vi.fn();
 const fetchManagerUsageHistoryTrendsMock = vi.fn();
+const getManagerUsageStatsAggregateMock = vi.fn();
+const streamManagerUsageStatsAggregateMock = vi.fn();
 let usageHistoryEnabled = false;
+let bucketUsageStatsEnabled = false;
 
 vi.mock("./S3AccountContext", () => ({
   useS3AccountContext: () => useS3AccountContextMock(),
@@ -21,15 +25,44 @@ vi.mock("../../api/usageHistory", () => ({
   fetchManagerUsageHistoryTrends: (...args: unknown[]) => fetchManagerUsageHistoryTrendsMock(...args),
 }));
 
+vi.mock("../../api/bucketUsageStats", () => ({
+  getManagerUsageStatsAggregate: (...args: unknown[]) => getManagerUsageStatsAggregateMock(...args),
+  streamManagerUsageStatsAggregate: (...args: unknown[]) => streamManagerUsageStatsAggregateMock(...args),
+}));
+
 vi.mock("../../components/GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({
-    generalSettings: { usage_history_enabled: usageHistoryEnabled },
+    generalSettings: {
+      usage_history_enabled: usageHistoryEnabled,
+      bucket_usage_stats_enabled: bucketUsageStatsEnabled,
+    },
   }),
 }));
 
 vi.mock("./TrafficAnalytics", () => ({
   default: () => <div data-testid="traffic-analytics">traffic</div>,
 }));
+
+vi.mock("recharts", () => {
+  const Passthrough = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
+  return {
+    Area: Passthrough,
+    AreaChart: Passthrough,
+    Bar: Passthrough,
+    BarChart: Passthrough,
+    CartesianGrid: Passthrough,
+    Cell: () => null,
+    Legend: () => null,
+    Line: Passthrough,
+    LineChart: Passthrough,
+    Pie: Passthrough,
+    PieChart: Passthrough,
+    ResponsiveContainer: Passthrough,
+    Tooltip: () => null,
+    XAxis: () => null,
+    YAxis: () => null,
+  };
+});
 
 function buildContext({
   managerStatsEnabled = true,
@@ -111,13 +144,72 @@ function buildUsageHistoryTrends(overrides?: Record<string, unknown>) {
   };
 }
 
+function buildUsageStatsAggregate(overrides?: Record<string, unknown>) {
+  return {
+    scope_kind: "manager",
+    scope_id: "conn-1",
+    scope_name: "Ceph connection",
+    bucket_count: 2,
+    buckets_with_snapshot: 1,
+    missing_bucket_count: 1,
+    partial_scan_count: 0,
+    object_version_count: 3,
+    current_version_count: 2,
+    noncurrent_version_count: 1,
+    delete_marker_count: 1,
+    total_bytes: 2048,
+    current_bytes: 1536,
+    noncurrent_bytes: 512,
+    oldest_snapshot_at: "2026-06-10T12:00:00Z",
+    newest_snapshot_at: "2026-06-10T12:30:00Z",
+    warnings: ["1 / 2 buckets covered."],
+    data_type_distribution: [
+      { key: "documents", label: "Documents", count: 2, bytes: 1536, ratio_count: 2 / 3, ratio_bytes: 0.75 },
+      { key: "images", label: "Images", count: 1, bytes: 512, ratio_count: 1 / 3, ratio_bytes: 0.25 },
+    ],
+    storage_class_distribution: [
+      { key: "STANDARD", label: "STANDARD", count: 3, bytes: 2048, ratio_count: 1, ratio_bytes: 1 },
+    ],
+    size_distribution: [],
+    age_distribution: [],
+    current_vs_noncurrent: [
+      { key: "current", label: "Current versions", count: 2, bytes: 1536, ratio_count: 2 / 3, ratio_bytes: 0.75 },
+      { key: "noncurrent", label: "Non-current versions", count: 1, bytes: 512, ratio_count: 1 / 3, ratio_bytes: 0.25 },
+    ],
+    ...overrides,
+  };
+}
+
+function setManagerUser() {
+  localStorage.setItem(
+    "user",
+    JSON.stringify({
+      role: "ui_user",
+      capabilities: { can_manage_buckets: true },
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        feature_rules: false,
+        ceph_s3_user_keys: true,
+      },
+    })
+  );
+}
+
 describe("ManagerMetricsPage", () => {
   beforeEach(() => {
     useManagerStatsMock.mockReset();
     useS3AccountContextMock.mockReset();
     fetchManagerUsageHistoryTrendsMock.mockReset();
+    getManagerUsageStatsAggregateMock.mockReset();
+    streamManagerUsageStatsAggregateMock.mockReset();
     fetchManagerUsageHistoryTrendsMock.mockResolvedValue(buildUsageHistoryTrends());
+    getManagerUsageStatsAggregateMock.mockResolvedValue({ aggregate: buildUsageStatsAggregate() });
+    streamManagerUsageStatsAggregateMock.mockResolvedValue({ status: "completed" });
     usageHistoryEnabled = false;
+    bucketUsageStatsEnabled = false;
+    localStorage.clear();
   });
 
   it("renders usage and traffic widgets for eligible connection context", () => {
@@ -176,7 +268,7 @@ describe("ManagerMetricsPage", () => {
 
     expect(storageCard).not.toBeNull();
     expect(within(storageCard as HTMLElement).getByText("Storage analytics")).toBeInTheDocument();
-    expect(within(storageCard as HTMLElement).getByText("Bucket breakdown")).toBeInTheDocument();
+    expect(within(storageCard as HTMLElement).queryByText("Bucket breakdown")).not.toBeInTheDocument();
     expect(screen.queryByText("Bucket breakdown (storage)")).not.toBeInTheDocument();
     expect(screen.getByTestId("traffic-analytics")).toBeInTheDocument();
   });
@@ -196,7 +288,7 @@ describe("ManagerMetricsPage", () => {
 
     expect(trafficCard).not.toBeNull();
     expect(within(trafficCard as HTMLElement).getByText("Traffic")).toBeInTheDocument();
-    expect(within(trafficCard as HTMLElement).getByText("Traffic visualization")).toBeInTheDocument();
+    expect(within(trafficCard as HTMLElement).queryByText("Traffic visualization")).not.toBeInTheDocument();
     expect(screen.getByText("Bucket breakdown (storage)")).toBeInTheDocument();
     expect(screen.queryByTestId("traffic-analytics")).not.toBeInTheDocument();
   });
@@ -251,8 +343,11 @@ describe("ManagerMetricsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Usage history trends")).toBeInTheDocument();
+    expect(await screen.findByText("Usage history")).toBeInTheDocument();
+    expect(screen.queryByText("Usage history trends")).not.toBeInTheDocument();
     expect(screen.getByText("Latest storage")).toBeInTheDocument();
+    expect(screen.getByText("Storage evolution").parentElement).not.toHaveClass("ui-surface-muted");
+    expect(screen.getByText("Objects & buckets").parentElement).not.toHaveClass("ui-surface-muted");
     expect(screen.getByText("4.0 KB")).toBeInTheDocument();
     await waitFor(() => expect(fetchManagerUsageHistoryTrendsMock).toHaveBeenCalledWith("1", "month"));
   });
@@ -291,7 +386,34 @@ describe("ManagerMetricsPage", () => {
       </MemoryRouter>
     );
 
-    expect(screen.queryByText("Usage history trends")).not.toBeInTheDocument();
+    expect(screen.queryByText("Usage history")).not.toBeInTheDocument();
     expect(fetchManagerUsageHistoryTrendsMock).not.toHaveBeenCalled();
+  });
+
+  it("renders account usage composition and recalculates all account buckets when usage stats are enabled", async () => {
+    bucketUsageStatsEnabled = true;
+    setManagerUser();
+    useS3AccountContextMock.mockReturnValue(buildContext());
+    useManagerStatsMock.mockReturnValue(buildStatsResult());
+
+    render(
+      <MemoryRouter>
+        <ManagerMetricsPage />
+      </MemoryRouter>
+    );
+
+    const usageComposition = await screen.findByText("Account usage composition");
+    const storageBreakdown = screen.getByText("Bucket breakdown (storage)");
+    expect(storageBreakdown.compareDocumentPosition(usageComposition) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("1 / 2 buckets covered")).toBeInTheDocument();
+    expect(screen.getByText("2.0 KB")).toBeInTheDocument();
+    expect(getManagerUsageStatsAggregateMock).toHaveBeenCalledWith("conn-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Recalculate account" }));
+
+    await waitFor(() =>
+      expect(streamManagerUsageStatsAggregateMock).toHaveBeenCalledWith("conn-1", { parallelism: 8 })
+    );
+    await waitFor(() => expect(getManagerUsageStatsAggregateMock).toHaveBeenCalledTimes(2));
   });
 });

@@ -101,7 +101,7 @@ def collect_usage_history(
     _ensure_usage_history_enabled()
     service = QuotaMonitoringService(db)
     try:
-        result = service.run_monitor(include_quota_alerts=False)
+        result = service.run_monitor(include_quota_alerts=False, include_usage_history=True)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

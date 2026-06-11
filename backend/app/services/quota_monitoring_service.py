@@ -122,10 +122,16 @@ class QuotaMonitoringService:
         self._mail_error_reason: Optional[str] = None
         self._mailer: Optional[SMTPMailer] = None
 
-    def run_monitor(self, *, include_quota_alerts: bool = True) -> dict[str, Any]:
+    def run_monitor(
+        self,
+        *,
+        include_quota_alerts: bool = True,
+        include_usage_history: bool = True,
+    ) -> dict[str, Any]:
         app_settings = load_app_settings()
         now = utcnow()
         quota_alerts_enabled = bool(app_settings.general.quota_alerts_enabled and include_quota_alerts)
+        usage_history_collection_enabled = bool(app_settings.general.usage_history_enabled and include_usage_history)
         summary: dict[str, Any] = {
             "started_at": now.isoformat(),
             "subjects_total": 0,
@@ -140,12 +146,13 @@ class QuotaMonitoringService:
             "quota_alerts_enabled": quota_alerts_enabled,
             "quota_alerts_configured": bool(app_settings.general.quota_alerts_enabled),
             "usage_history_enabled": bool(app_settings.general.usage_history_enabled),
+            "usage_history_collection_enabled": usage_history_collection_enabled,
             "threshold_percent": int(app_settings.quota_notifications.threshold_percent),
         }
 
-        if not quota_alerts_enabled and not app_settings.general.usage_history_enabled:
+        if not quota_alerts_enabled and not usage_history_collection_enabled:
             summary["status"] = "skipped"
-            summary["reason"] = "Both quota_alerts_enabled and usage_history_enabled are disabled."
+            summary["reason"] = "Both quota alerts and usage history collection are disabled for this run."
             summary["retention"] = DataRetentionService(self.db).purge_all()
             summary["finished_at"] = utcnow().isoformat()
             return summary
@@ -241,7 +248,7 @@ class QuotaMonitoringService:
                 quota_objects=quota_objects,
             )
 
-            if app_settings.general.usage_history_enabled:
+            if usage_history_collection_enabled:
                 self._upsert_hourly(subject, usage_bytes, usage_objects, bucket_count, quota_size_bytes, quota_objects, ratio_pct, now)
                 summary["history_hourly_upserts"] += 1
                 self._upsert_daily(subject, usage_bytes, usage_objects, bucket_count, ratio_pct, now)

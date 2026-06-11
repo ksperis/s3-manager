@@ -247,6 +247,7 @@ def _build_app_settings_payload() -> str:
             "bucket_migration_enabled": True,
             "bucket_compare_enabled": True,
             "bucket_integrity_check_enabled": True,
+            "bucket_usage_stats_enabled": True,
             "manager_ceph_s3_user_keys_enabled": True,
             "allow_login_access_keys": False,
             "allow_login_endpoint_list": False,

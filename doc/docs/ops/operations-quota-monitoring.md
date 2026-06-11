@@ -1,11 +1,12 @@
 # Operations: Quota Monitoring and History
 
-Quota monitoring supervises `S3Account` and `S3User` usage with hourly polling.
+Quota monitoring supervises `S3Account` and `S3User` usage for quota alerts.
+Usage history stores the same managed-account scope once per day.
 
 Current scope:
 
 - quota alerts by email
-- usage history storage (hourly + daily rollup)
+- usage history storage for managed `S3Account` and `S3User` subjects
 
 Out of scope:
 
@@ -45,6 +46,14 @@ curl -X POST "http://localhost:8000/api/internal/quota-monitor/run" \
   -H "X-Internal-Token: <INTERNAL_CRON_TOKEN>"
 ```
 
+Quota monitor runs do not persist usage history snapshots. To run the daily
+managed usage collection manually:
+
+```bash
+curl -X POST "http://localhost:8000/api/internal/usage-history/collect" \
+  -H "X-Internal-Token: <INTERNAL_CRON_TOKEN>"
+```
+
 ## SMTP test from UI
 
 Admin General Settings includes a `Send test email` action in the quota SMTP section.
@@ -57,15 +66,15 @@ The test email is sent to the currently authenticated superadmin account email.
 
 ## Scheduler integration
 
-- Docker Compose scheduler includes a quota monitor job (`QUOTA_MONITOR_CRON_SCHEDULE`, default `0 * * * *`).
-- Helm chart supports `quotaMonitorCronJob` values (`enabled`, `schedule`, token, extra env).
+- Docker Compose scheduler includes a quota monitor job (`QUOTA_MONITOR_CRON_SCHEDULE`, default `0 * * * *`) and a usage history job (`USAGE_HISTORY_CRON_SCHEDULE`, default `0 3 * * *`).
+- Helm chart supports `quotaMonitorCronJob` and `usageHistoryCronJob` values (`enabled`, `schedule`, token, extra env).
 
 ## History and retention
 
-Hybrid history model:
+History model:
 
-- `quota_usage_hourly` for short-term detail
-- `quota_usage_daily` for long-term rollups
+- `quota_usage_hourly` stores the timestamped detail for each usage collection run and subject
+- `quota_usage_daily` stores the daily rollup for long-term trends
 
 Shared retention service (`DataRetentionService`) is used by quota and billing jobs.
 

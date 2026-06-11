@@ -20,11 +20,13 @@ Use **Ceph Admin** for Ceph RGW cluster-level operations.
    - **Users**: RGW user operations.
    - **Buckets**: cluster-level bucket inventory and configuration.
      Bucket quota and usage columns can be enabled as single-line atomic columns for easier reading and cleaner CSV exports.
-   - **Metrics**: endpoint metrics.
+   - **Usage & Metrics**: cluster-level usage composition, endpoint storage metrics, and traffic metrics.
    - **Browser**: object navigation when enabled.
 4. In **Buckets**, long-running bulk actions show progress bars with completion and failure counters.
    Bulk configuration actions include lifecycle rules and bucket notification
-   configurations, with preview before apply.
+   configurations, with preview before apply. Selected buckets can also run
+   usage-stat calculations, and each bucket detail page exposes the latest
+   snapshot from the **Usage stats** tab.
 5. Bucket listings are cached for up to 30 minutes to reduce RGW load. Use **Refresh** in the bucket workbench to flush the cache and reload the current listing.
 
 ## Expected result
@@ -42,6 +44,7 @@ You can run Ceph cluster-wide tasks without switching to account-scoped Manager 
 - [User profile](profile.md)
 - [How-to: Use Advanced Filter in Ceph Admin](howto-ceph-advanced-filter.md)
 - [How-to: Use UI tags in Ceph Admin](howto-ceph-ui-tags.md)
+- [Feature: Bucket usage stats](feature-bucket-usage-stats.md)
 - [Ops / Ceph RGW backend notes](../ops/backends-ceph-rgw.md)
 
 ## Visual example

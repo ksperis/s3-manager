@@ -215,10 +215,15 @@ def test_usage_history_trends_require_enabled_feature(client: TestClient, monkey
 
 def test_collect_usage_history_runs_without_quota_alerts_and_audits(client: TestClient, db_session, monkeypatch):
     monkeypatch.setattr(usage_history_router, "load_app_settings", lambda: _settings(usage_history_enabled=True))
-    calls: list[bool] = []
+    calls: list[dict[str, bool]] = []
 
-    def fake_run_monitor(self, *, include_quota_alerts: bool = True):
-        calls.append(include_quota_alerts)
+    def fake_run_monitor(self, *, include_quota_alerts: bool = True, include_usage_history: bool = True):
+        calls.append(
+            {
+                "include_quota_alerts": include_quota_alerts,
+                "include_usage_history": include_usage_history,
+            }
+        )
         return {
             "subjects_total": 1,
             "subjects_processed": 1,
@@ -232,7 +237,7 @@ def test_collect_usage_history_runs_without_quota_alerts_and_audits(client: Test
     response = client.post("/api/admin/usage-history/collect")
 
     assert response.status_code == 200, response.text
-    assert calls == [False]
+    assert calls == [{"include_quota_alerts": False, "include_usage_history": True}]
     payload = response.json()
     assert payload["subjects_processed"] == 1
     audit = db_session.query(AuditLog).filter(AuditLog.action == "collect_usage_history").one()

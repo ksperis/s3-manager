@@ -29,12 +29,17 @@ Use this guide when creating, updating, or inspecting bucket configuration.
 6. On Ceph Admin and Storage Ops bucket workbenches, use bulk update to preview
    and apply lifecycle or notification configuration changes across selected
    buckets.
+7. Use the **Usage stats** tab in bucket detail pages to review the latest
+   calculated snapshot, including logical bytes by current and noncurrent object
+   versions when version listing is supported.
 
 ## Expected result
 
 Bucket configuration is applied as native backend settings and visible in detail pages.
 Read-only rule inventories can be reviewed from Manager tools without editing
 bucket configuration.
+Usage snapshots are loaded from the database so bucket detail pages can display
+the latest successful calculation quickly.
 
 ## Limits / feature flags
 
@@ -50,6 +55,7 @@ bucket configuration.
 - [Workspace: Manager](workspace-manager.md)
 - [Workspace: Ceph Admin](workspace-ceph-admin.md)
 - [How-to: Configure a bucket from Manager](howto-manager-bucket-configuration.md)
+- [Feature: Bucket usage stats](feature-bucket-usage-stats.md)
 - [Feature: Object operations in Browser](feature-objects-browser.md)
 
 ## Visual example

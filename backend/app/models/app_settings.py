@@ -137,6 +137,7 @@ class GeneralSettings(BaseModel):
     bucket_migration_enabled: bool = False
     bucket_compare_enabled: bool = True
     bucket_integrity_check_enabled: bool = True
+    bucket_usage_stats_enabled: bool = True
     manager_ceph_s3_user_keys_enabled: bool = True
     allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False

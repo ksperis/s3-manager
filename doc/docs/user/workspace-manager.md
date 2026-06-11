@@ -13,10 +13,11 @@ Use **Manager** for account-scoped administration aligned with S3/IAM semantics.
 
 1. Open `/manager` and select the correct account/context.
    - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded `Standard` account and endpoint tags are shown directly in the selector. `Administrative` tags remain limited to management surfaces.
-2. Use **Storage** for buckets and manager browser (if enabled).
-3. Use **IAM** for users, groups, roles, and policies (if IAM capability is available).
-4. Use **Events** for SNS topics (if endpoint supports SNS).
-5. Use **Tools** for:
+2. Use **Usage & Metrics** for account-level usage composition, storage analytics, and traffic analytics.
+3. Use **Storage** for buckets and manager browser (if enabled).
+4. Use **IAM** for users, groups, roles, and policies (if IAM capability is available).
+5. Use **Events** for SNS topics (if endpoint supports SNS).
+6. Use **Tools** for:
    - Feature rules inventory (if authorized)
    - Bucket Compare (if enabled)
    - Bucket Integrity (if enabled)
@@ -29,7 +30,7 @@ Tenant resources are managed in the right scope with explicit context control.
 ## Limits / feature flags
 
 !!! note
-    IAM pages depend on endpoint IAM capability. Tools depend on the Manager tools access configured directly on the UI user or inherited from UI groups. Bucket Compare, Bucket Integrity, Bucket Migration, and Ceph S3 User keys also depend on their matching global Manager settings.
+    IAM pages depend on endpoint IAM capability. Tools depend on the Manager tools access configured directly on the UI user or inherited from UI groups. Bucket Compare, Bucket Integrity, Bucket Migration, and Ceph S3 User keys also depend on their matching global Manager settings. Bucket usage stats are available from Usage & Metrics and bucket details when the global bucket usage stats setting is enabled.
 
 ## Related pages
 
@@ -40,6 +41,7 @@ Tenant resources are managed in the right scope with explicit context control.
 - [Feature: SNS topics](feature-topics.md)
 - [Feature: Bucket compare](feature-bucket-compare.md)
 - [Feature: Bucket integrity check](feature-bucket-integrity-check.md)
+- [Feature: Bucket usage stats](feature-bucket-usage-stats.md)
 - [Feature: Bucket migration](feature-bucket-migration.md)
 
 ## Visual example

@@ -78,6 +78,20 @@ export default function ManagerSettingsPage() {
     );
   };
 
+  const handleToggleBucketUsageStats = (value: boolean) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            general: {
+              ...prev.general,
+              bucket_usage_stats_enabled: value,
+            },
+          }
+        : prev
+    );
+  };
+
   const handleToggleManagerCephS3UserKeysTool = (value: boolean) => {
     setSettings((prev) =>
       prev
@@ -177,6 +191,7 @@ export default function ManagerSettingsPage() {
                     bucket_migration_enabled: defaults.general.bucket_migration_enabled,
                     bucket_compare_enabled: defaults.general.bucket_compare_enabled,
                     bucket_integrity_check_enabled: defaults.general.bucket_integrity_check_enabled,
+                    bucket_usage_stats_enabled: defaults.general.bucket_usage_stats_enabled,
                     manager_ceph_s3_user_keys_enabled: defaults.general.manager_ceph_s3_user_keys_enabled,
                   },
                 }
@@ -272,6 +287,17 @@ export default function ManagerSettingsPage() {
                       checked={Boolean(settings.general.bucket_integrity_check_enabled)}
                       onChange={(value) => handleToggleBucketIntegrityCheckTool(value)}
                       ariaLabel="Bucket integrity check tool"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Bucket usage stats"
+                  description="Enables bucket usage statistics on Manager pages and bucket details."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={Boolean(settings.general.bucket_usage_stats_enabled)}
+                      onChange={(value) => handleToggleBucketUsageStats(value)}
+                      ariaLabel="Bucket usage stats"
                     />
                   }
                 />

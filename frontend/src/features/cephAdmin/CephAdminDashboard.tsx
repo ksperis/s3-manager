@@ -19,7 +19,7 @@ type CardLink = {
 };
 
 const cards: CardLink[] = [
-  { title: "Metrics", description: "Cluster-wide view of RGW storage and traffic.", to: "/ceph-admin/metrics" },
+  { title: "Usage & Metrics", description: "Cluster-wide usage composition, RGW storage, and traffic.", to: "/ceph-admin/metrics" },
   { title: "RGW Accounts", description: "Create/import RGW tenants and manage their quotas.", to: "/ceph-admin/accounts" },
   { title: "RGW Users", description: "Manage cluster-wide RGW users.", to: "/ceph-admin/users" },
   { title: "Buckets", description: "List and configure cluster-wide buckets (Admin Ops + S3).", to: "/ceph-admin/buckets" },

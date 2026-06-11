@@ -12,6 +12,7 @@ import { fetchCurrentUser } from "./api/users";
 import RouteErrorPage from "./features/shared/RouteErrorPage";
 import {
   hasPortalWorkspaceAccess,
+  getManagerToolAccess,
   isAdminLikeRole,
   isSuperAdminRole,
   readStoredUser,
@@ -207,7 +208,7 @@ export const buildAdminNav = (
       label: "Overview",
       links: [
         { to: "/admin", label: "Dashboard", end: true },
-        { to: "/admin/metrics", label: "Metrics" },
+        { to: "/admin/metrics", label: "Usage & Metrics" },
         ...(billingEnabled ? [{ to: "/admin/billing", label: "Billing" }] : []),
         ...(usageHistoryEnabled ? [{ to: "/admin/usage-history", label: "Usage History" }] : []),
       ],
@@ -454,10 +455,6 @@ function canAccessManagerMigration(
   if (!generalSettings.bucket_migration_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
   return Boolean(getManagerToolAccess(user)?.bucket_migration);
-}
-
-function getManagerToolAccess(user: SessionUser | null) {
-  return user?.effective_access?.manager_tool_access ?? user?.manager_tool_access ?? null;
 }
 
 function canAccessManagerBucketCompare(

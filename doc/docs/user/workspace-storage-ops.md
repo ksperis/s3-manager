@@ -33,6 +33,8 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
      encryption audits.
    - bucket notification configurations can be added, updated, previewed, or
      deleted in bulk from the same action flow as lifecycle rules.
+   - selected buckets can run usage-stat calculations, with the latest snapshot
+     available from each bucket detail page on the **Usage stats** tab.
 5. In **Advanced filter**, use the compact **Context** and **Endpoint**
    selectors to pick authorized scopes directly. Their quick filters match
    names, types, and standard tags, and **Select filtered** / **Deselect
@@ -64,6 +66,7 @@ You can search and operate on large bucket sets across authorized accounts, S3 u
 
 - [Use cases for storage administrators](use-cases-storage-admin.md)
 - [Workspace: Ceph Admin](workspace-ceph-admin.md)
+- [Feature: Bucket usage stats](feature-bucket-usage-stats.md)
 - [How-to: Use UI tags in Storage Ops](howto-storage-ops-ui-tags.md)
 - [How-to: Use Advanced Filter in Ceph Admin](howto-ceph-advanced-filter.md)
 

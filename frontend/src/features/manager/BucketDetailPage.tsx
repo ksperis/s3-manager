@@ -101,15 +101,24 @@ import {
   listObjects,
   S3Object,
 } from "../../api/objects";
+import {
+  getCephAdminBucketUsageStats,
+  getManagerBucketUsageStats,
+  streamCephAdminBucketUsageStatsForBucket,
+  streamManagerBucketUsageStatsForBucket,
+  type BucketUsageStatsSnapshot,
+} from "../../api/bucketUsageStats";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
 import SplitView from "../../components/SplitView";
+import { MetricsCard } from "../../components/MetricsCard";
 import UsageTile from "../../components/UsageTile";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { formatCompactNumber } from "../../utils/format";
 import { isAdminLikeRole } from "../../utils/workspaces";
 import { useS3AccountContext } from "./S3AccountContext";
 import TrafficAnalytics from "./TrafficAnalytics";
+import BucketUsageStatsPanel from "../shared/BucketUsageStatsPanel";
 import PropertySummaryChip, { PropertySummaryTone } from "../../components/PropertySummaryChip";
 import { PortalSettingsSwitch } from "../../components/PortalSettingsLayout";
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
@@ -449,6 +458,10 @@ export default function BucketDetailPage({
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [objectsError, setObjectsError] = useState<string | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
+  const [usageStatsSnapshot, setUsageStatsSnapshot] = useState<BucketUsageStatsSnapshot | null>(null);
+  const [usageStatsLoading, setUsageStatsLoading] = useState(false);
+  const [usageStatsError, setUsageStatsError] = useState<string | null>(null);
+  const [usageStatsRecalculating, setUsageStatsRecalculating] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
   const [showPolicyExample, setShowPolicyExample] = useState(false);
@@ -490,12 +503,12 @@ export default function BucketDetailPage({
   const showObjectsTab = !isCephAdmin && !hideObjectsTab;
   const availableTabs = useMemo(() => {
     if (isCephAdmin) {
-      return ["overview", "ceph", "properties", "permissions", "advanced", "metrics"];
+      return ["overview", "ceph", "usage-stats", "properties", "permissions", "advanced", "metrics"];
     }
     if (showObjectsTab) {
-      return ["overview", "objects", "properties", "permissions", "advanced", "metrics"];
+      return ["overview", "objects", "usage-stats", "properties", "permissions", "advanced", "metrics"];
     }
-    return ["overview", "properties", "permissions", "advanced", "metrics"];
+    return ["overview", "usage-stats", "properties", "permissions", "advanced", "metrics"];
   }, [isCephAdmin, showObjectsTab]);
 
   useEffect(() => {
@@ -1146,6 +1159,48 @@ export default function BucketDetailPage({
     [accountId, bucketName, hasAccountContext, isCephAdmin]
   );
 
+  const loadUsageStats = useCallback(async () => {
+    if (!bucketName || !hasContext) {
+      setUsageStatsSnapshot(null);
+      setUsageStatsError(null);
+      return;
+    }
+    setUsageStatsLoading(true);
+    setUsageStatsError(null);
+    try {
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketUsageStats(endpointId, bucketName)
+          : { snapshot: null }
+        : await getManagerBucketUsageStats(accountId, bucketName);
+      setUsageStatsSnapshot(data.snapshot ?? null);
+    } catch (err) {
+      setUsageStatsSnapshot(null);
+      setUsageStatsError(extractApiError(err, "Unable to load bucket usage stats."));
+    } finally {
+      setUsageStatsLoading(false);
+    }
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
+
+  const recalculateUsageStats = useCallback(async () => {
+    if (!bucketName || !hasContext || usageStatsRecalculating) return;
+    setUsageStatsRecalculating(true);
+    setUsageStatsError(null);
+    try {
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await streamCephAdminBucketUsageStatsForBucket(endpointId, bucketName);
+      } else {
+        await streamManagerBucketUsageStatsForBucket(accountId, bucketName);
+      }
+      await loadUsageStats();
+    } catch (err) {
+      setUsageStatsError(extractApiError(err, "Unable to calculate bucket usage stats."));
+    } finally {
+      setUsageStatsRecalculating(false);
+    }
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, loadUsageStats, usageStatsRecalculating]);
+
   useEffect(() => {
     if (isCephAdmin) return;
     loadObjects(currentPrefix);
@@ -1169,6 +1224,12 @@ export default function BucketDetailPage({
       loadBucketTags();
     }
   }, [activeTab, loadBucketTags, loadLifecycle]);
+
+  useEffect(() => {
+    if (activeTab === "usage-stats") {
+      loadUsageStats();
+    }
+  }, [activeTab, loadUsageStats]);
 
   useEffect(() => {
     loadLifecycle();
@@ -1221,6 +1282,10 @@ export default function BucketDetailPage({
       }
       return;
     }
+    if (activeTab === "usage-stats") {
+      await loadUsageStats();
+      return;
+    }
     if (activeTab === "properties") {
       await Promise.all([loadVersioning(), loadObjectLock(), loadLifecycle(), loadBucketTags(), loadEncryption()]);
       return;
@@ -1247,6 +1312,7 @@ export default function BucketDetailPage({
     loadCors,
     loadEncryption,
     loadLifecycle,
+    loadUsageStats,
     loadNotifications,
     loadObjectLock,
     loadObjects,
@@ -1284,6 +1350,9 @@ export default function BucketDetailPage({
     if (activeTab === "objects") {
       return objectsLoading;
     }
+    if (activeTab === "usage-stats") {
+      return usageStatsLoading || usageStatsRecalculating;
+    }
     if (activeTab === "properties") {
       return versioningLoading || objectLockLoading || lifecycleLoading || bucketTagsLoading || encryptionLoading;
     }
@@ -1312,6 +1381,8 @@ export default function BucketDetailPage({
     policyLoading,
     publicAccessLoading,
     replicationLoading,
+    usageStatsLoading,
+    usageStatsRecalculating,
     versioningLoading,
     websiteLoading,
   ]);
@@ -2869,9 +2940,8 @@ export default function BucketDetailPage({
             id: "overview",
             label: "Overview",
             content: (
-              <section className="space-y-4 ui-surface-card p-5">
+              <section className="space-y-4 px-1 py-2">
                 <header className="space-y-1">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Overview</p>
                   <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
                     {bucketName ? `Bucket ${bucketName}` : "Bucket overview"}
                   </h3>
@@ -2900,13 +2970,8 @@ export default function BucketDetailPage({
                     emptyHint="No object quota configured."
                   />
                 </div>
-                <div className={cx(uiCardMutedClass, "px-4 py-3")}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Bucket properties</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">Summary of enabled features.</p>
-                    </div>
-                  </div>
+                <div className="border-t border-[color:var(--ui-border-soft)] pt-4">
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Bucket properties</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {propertySummary.map((item) => (
                       <PropertySummaryChip key={item.label} label={item.label} state={item.state} tone={item.tone} />
@@ -4568,19 +4633,29 @@ export default function BucketDetailPage({
             ),
           },
           {
+            id: "usage-stats",
+            label: "Usage stats",
+            content: (
+              <BucketUsageStatsPanel
+                snapshot={usageStatsSnapshot}
+                loading={usageStatsLoading}
+                error={usageStatsError}
+                recalculating={usageStatsRecalculating}
+                onRefresh={loadUsageStats}
+                onRecalculate={recalculateUsageStats}
+              />
+            ),
+          },
+          {
             id: "metrics",
             label: "Metrics",
             disabled: !canViewBucketMetrics,
             content: (
               <div className="space-y-4">
-                <section className="space-y-4 ui-surface-card p-5">
-                  <header className="space-y-1">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Usage Stats</p>
-                    <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Current Usage and Quota</h3>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Live usage, quotas, and traffic sourced from backend metrics.
-                    </p>
-                  </header>
+                <MetricsCard
+                  title="Current usage and quota"
+                  description="Live usage, quotas, and traffic sourced from backend metrics."
+                >
                   <div className="grid gap-3 md:grid-cols-2">
                     <UsageTile
                       label="Storage"
@@ -4602,7 +4677,7 @@ export default function BucketDetailPage({
                       emptyHint="No object quota defined."
                     />
                   </div>
-                </section>
+                </MetricsCard>
                 {canViewBucketMetrics &&
                   (isCephAdmin ? (
                     endpointId && bucketName ? (

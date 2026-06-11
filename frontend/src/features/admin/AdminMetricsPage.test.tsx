@@ -1,4 +1,5 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +9,8 @@ const listStorageEndpointsMock = vi.fn();
 const fetchAdminStorageMock = vi.fn();
 const fetchAdminTrafficMock = vi.fn();
 const fetchAdminUsageHistoryTrendsMock = vi.fn();
+const getAdminUsageStatsAggregateMock = vi.fn();
+const streamAdminUsageStatsAggregateMock = vi.fn();
 let usageHistoryEnabled = false;
 
 function makeAxiosError(detail: string) {
@@ -89,6 +92,44 @@ function makeUsageHistoryTrends() {
   };
 }
 
+function makeUsageStatsAggregate() {
+  return {
+    scope_kind: "admin_managed",
+    scope_id: "7",
+    scope_name: "Ceph main",
+    managed_account_count: 2,
+    accounts_with_listed_buckets: 2,
+    skipped_account_count: 0,
+    bucket_count: 3,
+    buckets_with_snapshot: 2,
+    missing_bucket_count: 1,
+    partial_scan_count: 0,
+    object_version_count: 4,
+    current_version_count: 3,
+    noncurrent_version_count: 1,
+    delete_marker_count: 1,
+    total_bytes: 4096,
+    current_bytes: 3072,
+    noncurrent_bytes: 1024,
+    oldest_snapshot_at: "2026-06-10T12:00:00Z",
+    newest_snapshot_at: "2026-06-10T12:45:00Z",
+    warnings: ["Some buckets do not have usage stats snapshots yet."],
+    data_type_distribution: [
+      { key: "documents", label: "Documents", count: 3, bytes: 3072, ratio_count: 0.75, ratio_bytes: 0.75 },
+      { key: "archives", label: "Archives", count: 1, bytes: 1024, ratio_count: 0.25, ratio_bytes: 0.25 },
+    ],
+    storage_class_distribution: [
+      { key: "STANDARD", label: "STANDARD", count: 4, bytes: 4096, ratio_count: 1, ratio_bytes: 1 },
+    ],
+    size_distribution: [],
+    age_distribution: [],
+    current_vs_noncurrent: [
+      { key: "current", label: "Current versions", count: 3, bytes: 3072, ratio_count: 0.75, ratio_bytes: 0.75 },
+      { key: "noncurrent", label: "Non-current versions", count: 1, bytes: 1024, ratio_count: 0.25, ratio_bytes: 0.25 },
+    ],
+  };
+}
+
 vi.mock("../../api/storageEndpoints", async () => {
   const actual = await vi.importActual<typeof import("../../api/storageEndpoints")>("../../api/storageEndpoints");
   return {
@@ -110,6 +151,32 @@ vi.mock("../../api/usageHistory", () => ({
   fetchAdminUsageHistoryTrends: (...args: unknown[]) => fetchAdminUsageHistoryTrendsMock(...args),
 }));
 
+vi.mock("../../api/bucketUsageStats", () => ({
+  getAdminUsageStatsAggregate: (...args: unknown[]) => getAdminUsageStatsAggregateMock(...args),
+  streamAdminUsageStatsAggregate: (...args: unknown[]) => streamAdminUsageStatsAggregateMock(...args),
+}));
+
+vi.mock("recharts", () => {
+  const Passthrough = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
+  return {
+    Area: Passthrough,
+    AreaChart: Passthrough,
+    Bar: Passthrough,
+    BarChart: Passthrough,
+    CartesianGrid: Passthrough,
+    Cell: () => null,
+    Legend: () => null,
+    Line: Passthrough,
+    LineChart: Passthrough,
+    Pie: Passthrough,
+    PieChart: Passthrough,
+    ResponsiveContainer: Passthrough,
+    Tooltip: () => null,
+    XAxis: () => null,
+    YAxis: () => null,
+  };
+});
+
 vi.mock("../../components/GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({
     generalSettings: { usage_history_enabled: usageHistoryEnabled },
@@ -124,6 +191,8 @@ describe("AdminMetricsPage", () => {
     fetchAdminStorageMock.mockResolvedValue(makeStorageStats());
     fetchAdminTrafficMock.mockResolvedValue(makeTrafficStats());
     fetchAdminUsageHistoryTrendsMock.mockResolvedValue(makeUsageHistoryTrends());
+    getAdminUsageStatsAggregateMock.mockResolvedValue({ aggregate: makeUsageStatsAggregate() });
+    streamAdminUsageStatsAggregateMock.mockResolvedValue({ status: "completed" });
   });
 
   it("renders the admin control strip and empty state when no ceph endpoint is available", async () => {
@@ -154,9 +223,9 @@ describe("AdminMetricsPage", () => {
 
     expect(storageCard).not.toBeNull();
     expect(within(storageCard as HTMLElement).getByText("Storage snapshot")).toBeInTheDocument();
-    expect(within(storageCard as HTMLElement).getByText("Stored volume & objects")).toBeInTheDocument();
+    expect(within(storageCard as HTMLElement).queryByText("Stored volume & objects")).not.toBeInTheDocument();
     expect(screen.queryByText("Accounts & users")).not.toBeInTheDocument();
-    expect(screen.getByText("Bandwidth & requests")).toBeInTheDocument();
+    expect(screen.getByText("RGW traffic")).toBeInTheDocument();
   });
 
   it("renders the storage snapshot with the shared card surface", async () => {
@@ -176,6 +245,28 @@ describe("AdminMetricsPage", () => {
     expect(storageCard?.className).not.toContain("bg-gradient-to-br");
   });
 
+  it("renders managed accounts usage composition and recalculates the selected endpoint", async () => {
+    listStorageEndpointsMock.mockResolvedValue([makeCephEndpoint()]);
+
+    render(
+      <MemoryRouter>
+        <AdminMetricsPage />
+      </MemoryRouter>
+    );
+
+    const usageComposition = await screen.findByText("Managed accounts usage composition");
+    const storageBreakdown = screen.getByText("Storage breakdown");
+    expect(storageBreakdown.compareDocumentPosition(usageComposition) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("2 / 3 buckets covered")).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent?.startsWith("2 / 2 managed accounts listed") ?? false)).toBeInTheDocument();
+    expect(getAdminUsageStatsAggregateMock).toHaveBeenCalledWith(7);
+
+    fireEvent.click(screen.getByRole("button", { name: "Recalculate endpoint" }));
+
+    await waitFor(() => expect(streamAdminUsageStatsAggregateMock).toHaveBeenCalledWith(7, { parallelism: 8 }));
+    await waitFor(() => expect(getAdminUsageStatsAggregateMock).toHaveBeenCalledTimes(2));
+  });
+
   it("keeps disabled usage logs inside the traffic card without empty counters", async () => {
     listStorageEndpointsMock.mockResolvedValue([makeCephEndpoint()]);
     fetchAdminTrafficMock.mockRejectedValueOnce(makeAxiosError("Usage logs are disabled for this endpoint"));
@@ -191,9 +282,9 @@ describe("AdminMetricsPage", () => {
 
     expect(trafficCard).not.toBeNull();
     expect(within(trafficCard as HTMLElement).getByText("RGW traffic")).toBeInTheDocument();
-    expect(within(trafficCard as HTMLElement).getByText("Bandwidth & requests")).toBeInTheDocument();
+    expect(within(trafficCard as HTMLElement).queryByText("Bandwidth & requests")).not.toBeInTheDocument();
     expect(within(trafficCard as HTMLElement).queryByText("Egress")).not.toBeInTheDocument();
-    expect(screen.getByText("Accounts & users")).toBeInTheDocument();
+    expect(screen.getByText("Storage breakdown")).toBeInTheDocument();
   });
 
   it("renders usage history trends when the feature is enabled", async () => {
@@ -206,9 +297,10 @@ describe("AdminMetricsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Usage history trends")).toBeInTheDocument();
+    expect(await screen.findByText("Usage history")).toBeInTheDocument();
+    expect(screen.queryByText("Usage history trends")).not.toBeInTheDocument();
     expect(screen.getByText("Latest storage")).toBeInTheDocument();
-    expect(await screen.findByText("3.0 KB")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("3.0 KB").length).toBeGreaterThan(0));
     await waitFor(() =>
       expect(fetchAdminUsageHistoryTrendsMock).toHaveBeenCalledWith({
         window: "month",
@@ -229,7 +321,7 @@ describe("AdminMetricsPage", () => {
     );
 
     expect(await screen.findByText("Storage snapshot")).toBeInTheDocument();
-    expect(screen.queryByText("Usage history trends")).not.toBeInTheDocument();
+    expect(screen.queryByText("Usage history")).not.toBeInTheDocument();
     expect(fetchAdminUsageHistoryTrendsMock).not.toHaveBeenCalled();
   });
 });

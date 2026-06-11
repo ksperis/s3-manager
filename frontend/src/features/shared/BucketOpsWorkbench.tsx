@@ -123,6 +123,8 @@ import BucketDetailPage from "../manager/BucketDetailPage";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
 import type { BucketIntegrityUiTarget } from "./BucketIntegrityCheckModal";
+import BucketUsageStatsRunModal from "./BucketUsageStatsRunModal";
+import type { BucketUsageStatsUiTarget } from "./BucketUsageStatsRunModal";
 import BucketConfigBackupModal from "./BucketConfigBackupModal";
 import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal";
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureSummaryTooltip";
@@ -2542,6 +2544,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showIntegrityModal, setShowIntegrityModal] = useState(false);
+  const [showUsageStatsModal, setShowUsageStatsModal] = useState(false);
   const [showConfigBackupModal, setShowConfigBackupModal] = useState(false);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
   const [bulkConfigClipboard, setBulkConfigClipboard] = useState<BulkConfigClipboard | null>(() =>
@@ -3804,6 +3807,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       })
       .filter((target) => target.bucketName.trim().length > 0);
   }, [isStorageOps, selectedBucketItemByName, selectedBucketList]);
+  const selectedUsageStatsTargets = useMemo<BucketUsageStatsUiTarget[]>(
+    () => selectedIntegrityTargets.map((target) => ({ ...target })),
+    [selectedIntegrityTargets]
+  );
   const selectedUiTagSuggestions = useMemo(() => {
     if (selectedBucketList.length === 0) return [];
     const selectedNames = new Set(selectedBucketList.map(normalizeBucketName));
@@ -9950,6 +9957,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             onShowConfigBackupModal={!isStorageOps ? () => setShowConfigBackupModal(true) : undefined}
             onShowCompareModal={() => setShowCompareModal(true)}
             onShowIntegrityModal={() => setShowIntegrityModal(true)}
+            onShowUsageStatsModal={() => setShowUsageStatsModal(true)}
             openBulkUpdateModal={openBulkUpdateModal}
           />
 
@@ -10140,6 +10148,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           mode="storage-ops"
           targets={selectedIntegrityTargets}
           onClose={() => setShowIntegrityModal(false)}
+        />
+      )}
+      {!isStorageOps && showUsageStatsModal && selectedEndpointId && selectedUsageStatsTargets.length > 0 && (
+        <BucketUsageStatsRunModal
+          mode="ceph-admin"
+          endpointId={selectedEndpointId}
+          endpointName={selectedEndpoint?.name}
+          targets={selectedUsageStatsTargets}
+          onClose={() => setShowUsageStatsModal(false)}
+        />
+      )}
+      {isStorageOps && showUsageStatsModal && selectedUsageStatsTargets.length > 0 && (
+        <BucketUsageStatsRunModal
+          mode="storage-ops"
+          targets={selectedUsageStatsTargets}
+          onClose={() => setShowUsageStatsModal(false)}
         />
       )}
       {!isStorageOps && showConfigBackupModal && selectedEndpointId && selectedBucketList.length > 0 && (

@@ -32,7 +32,8 @@ The compose stack includes a `scheduler` container that triggers:
 
 - endpoint healthchecks (default every 5 minutes)
 - billing daily collection (default `02:00 UTC`, day offset `1`)
-- quota monitoring (default every hour)
+- quota monitoring for alerts (default every hour)
+- usage history collection for managed accounts and S3 users (default `03:00 UTC`)
 
 Set a strong shared token in `.env`:
 
@@ -45,6 +46,7 @@ Main scheduler knobs:
 - `HEALTHCHECK_CRON_SCHEDULE`
 - `BILLING_CRON_SCHEDULE`
 - `QUOTA_MONITOR_CRON_SCHEDULE`
+- `USAGE_HISTORY_CRON_SCHEDULE`
 - `BILLING_DAY_OFFSET`
 
 History retention / SMTP knobs:

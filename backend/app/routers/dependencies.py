@@ -1069,6 +1069,15 @@ def require_bucket_integrity_check_enabled(user: User = Depends(get_current_user
     return user
 
 
+def require_bucket_usage_stats_enabled(user: User = Depends(get_current_user)) -> User:
+    app_settings = load_app_settings()
+    if not bool(app_settings.general.bucket_usage_stats_enabled):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket usage stats feature is disabled")
+    if user.role not in _MANAGER_TOOL_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    return user
+
+
 def require_manager_feature_rules_enabled(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
     ensure_manager_tool_allowed(user, "feature_rules", db=db)
     return user

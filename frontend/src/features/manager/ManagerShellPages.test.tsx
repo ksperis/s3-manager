@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +15,8 @@ const getBucketPropertiesMock = vi.fn();
 const listManagerActivityMock = vi.fn();
 const fetchManagerTrafficMock = vi.fn();
 const fetchManagerUsageTrendsMock = vi.fn();
+const getManagerUsageStatsAggregateMock = vi.fn();
+let bucketUsageStatsEnabled = false;
 const LEGACY_MANAGER_BUCKET_COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.v1";
 const MANAGER_BUCKET_COLUMNS_SESSION_STORAGE_KEY = "manager.bucket_list.columns.session.v1";
 
@@ -41,9 +44,30 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({
     generalSettings: {
       endpoint_status_enabled: false,
+      bucket_usage_stats_enabled: bucketUsageStatsEnabled,
     },
   }),
 }));
+
+vi.mock("../../api/bucketUsageStats", () => ({
+  getManagerUsageStatsAggregate: (...args: unknown[]) => getManagerUsageStatsAggregateMock(...args),
+}));
+
+vi.mock("recharts", () => {
+  const Passthrough = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
+  return {
+    Bar: Passthrough,
+    BarChart: Passthrough,
+    CartesianGrid: Passthrough,
+    Cell: () => null,
+    Pie: Passthrough,
+    PieChart: Passthrough,
+    ResponsiveContainer: Passthrough,
+    Tooltip: () => null,
+    XAxis: () => null,
+    YAxis: () => null,
+  };
+});
 
 vi.mock("../browser/BrowserEmbed", () => ({
   default: (props: { onSelectedBucketNameChange?: (bucketName: string) => void }) => (
@@ -132,6 +156,52 @@ function trendText(value: string) {
   return (_content: string, element: Element | null) => element?.tagName === "SPAN" && element.textContent === value;
 }
 
+function setManagerUser() {
+  window.localStorage.setItem(
+    "user",
+    JSON.stringify({
+      role: "ui_user",
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        feature_rules: false,
+        ceph_s3_user_keys: true,
+      },
+    })
+  );
+}
+
+function usageStatsAggregate() {
+  return {
+    scope_kind: "manager",
+    scope_id: "account-1",
+    scope_name: "Account Alpha",
+    bucket_count: 2,
+    buckets_with_snapshot: 2,
+    missing_bucket_count: 0,
+    partial_scan_count: 0,
+    object_version_count: 3,
+    current_version_count: 3,
+    noncurrent_version_count: 0,
+    delete_marker_count: 0,
+    total_bytes: 4096,
+    current_bytes: 4096,
+    noncurrent_bytes: 0,
+    newest_snapshot_at: "2026-06-10T12:00:00Z",
+    oldest_snapshot_at: "2026-06-10T12:00:00Z",
+    warnings: [],
+    data_type_distribution: [
+      { key: "documents", label: "Documents", count: 2, bytes: 3072, ratio_count: 2 / 3, ratio_bytes: 0.75 },
+      { key: "images", label: "Images", count: 1, bytes: 1024, ratio_count: 1 / 3, ratio_bytes: 0.25 },
+    ],
+    storage_class_distribution: [],
+    size_distribution: [],
+    age_distribution: [],
+    current_vs_noncurrent: [],
+  };
+}
+
 function expectMetricValue(label: string, value: string) {
   const metricValue = document.querySelector(`[data-kpi-value="${label}"]`);
   expect(metricValue).not.toBeNull();
@@ -172,6 +242,8 @@ describe("manager shell pages", () => {
     listManagerActivityMock.mockResolvedValue([]);
     fetchManagerTrafficMock.mockResolvedValue(managerTrafficResponse(0, 0));
     fetchManagerUsageTrendsMock.mockResolvedValue({});
+    getManagerUsageStatsAggregateMock.mockResolvedValue({ aggregate: usageStatsAggregate() });
+    bucketUsageStatsEnabled = false;
     window.localStorage.clear();
     window.sessionStorage.clear();
   });
@@ -324,6 +396,92 @@ describe("manager shell pages", () => {
     expect(screen.queryByText("5.3 TB")).not.toBeInTheDocument();
     expect(screen.queryByText("4.2 M")).not.toBeInTheDocument();
     expect(fetchManagerTrafficMock).not.toHaveBeenCalled();
+  });
+
+  it("renders the compact data types card when bucket usage stats are enabled", async () => {
+    bucketUsageStatsEnabled = true;
+    setManagerUser();
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: true,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    const dataTypesCard = await screen.findByTestId("manager-dashboard-data-types");
+    const overviewGrid = screen.getByTestId("manager-dashboard-overview-grid");
+    const topBucketsCard = screen.getByTestId("manager-dashboard-top-buckets-card");
+    const recentActivityCard = screen.getByTestId("manager-dashboard-recent-activity-card");
+
+    expect(within(dataTypesCard).getByText("Data types")).toBeInTheDocument();
+    expect(within(dataTypesCard).getByText("2 / 2 buckets covered")).toBeInTheDocument();
+    expect(within(dataTypesCard).getByText("Documents")).toBeInTheDocument();
+    expect(within(dataTypesCard).getByTestId("manager-dashboard-data-type-color-documents")).toHaveStyle({
+      backgroundColor: "#2563EB",
+    });
+    expect(within(overviewGrid).getByText("Storage overview")).toBeInTheDocument();
+    expect(within(overviewGrid).getByText("Top buckets by storage")).toBeInTheDocument();
+    expect(within(overviewGrid).getByText("Recent activity")).toBeInTheDocument();
+    expect(topBucketsCard).toHaveClass("xl:col-span-5");
+    expect(recentActivityCard).toHaveClass("xl:col-span-12");
+    expect(getManagerUsageStatsAggregateMock).toHaveBeenCalledWith("account-1");
+  });
+
+  it("hides the dashboard data types card when bucket usage stats are disabled", async () => {
+    bucketUsageStatsEnabled = false;
+    setManagerUser();
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: true,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByTestId("manager-dashboard-data-types")).not.toBeInTheDocument();
+    expect(screen.getByTestId("manager-dashboard-top-buckets-card")).toHaveClass("xl:col-span-8");
+    expect(screen.getByTestId("manager-dashboard-recent-activity-card")).toHaveClass("xl:col-span-12");
+    expect(getManagerUsageStatsAggregateMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetchManagerTrafficMock).toHaveBeenCalledWith("account-1", "day"));
   });
 
   it("renders upload and download volumes from manager traffic usage", async () => {

@@ -6,6 +6,10 @@ import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listBuckets, type Bucket } from "../../api/buckets";
 import {
+  getManagerUsageStatsAggregate,
+  type BucketUsageStatsAggregate,
+} from "../../api/bucketUsageStats";
+import {
   fetchManagerWorkspaceHealthOverview,
   type HealthCheckStatus,
   type WorkspaceEndpointHealthEntry,
@@ -51,6 +55,7 @@ import {
   UserIcon,
 } from "../browser/browserIcons";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import { BucketUsageStatsDataTypesCard } from "../shared/BucketUsageStatsVisuals";
 import { useIamOverview } from "./useIamOverview";
 import { useManagerStats } from "./useManagerStats";
 import { useS3AccountContext } from "./S3AccountContext";
@@ -1205,6 +1210,7 @@ export default function ManagerDashboard() {
     sessionS3AccountName,
     selectedS3AccountType,
     hasS3AccountContext,
+    requiresS3AccountSelection,
     accountIdForApi,
     accessMode,
     managerStatsEnabled,
@@ -1229,6 +1235,9 @@ export default function ManagerDashboard() {
   const [trafficError, setTrafficError] = useState<string | null>(null);
   const [usageTrends, setUsageTrends] = useState<ManagerUsageTrendsResponse | null>(null);
   const [usageTrendsLoading, setUsageTrendsLoading] = useState(false);
+  const [usageStatsAggregate, setUsageStatsAggregate] = useState<BucketUsageStatsAggregate | null>(null);
+  const [usageStatsLoading, setUsageStatsLoading] = useState(false);
+  const [usageStatsError, setUsageStatsError] = useState<string | null>(null);
 
   const selected = useMemo(
     () => accounts.find((account) => account.id === selectedS3AccountId),
@@ -1243,6 +1252,10 @@ export default function ManagerDashboard() {
   const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
   const isS3User = selectedS3AccountType === "s3_user";
   const canManageIam = !isS3User && contextCanManageIam && iamFeatureEnabled;
+  const canLoadUsageStatsDataTypes =
+    hasContext &&
+    Boolean(requiresS3AccountSelection) &&
+    Boolean(generalSettings.bucket_usage_stats_enabled);
   const refreshKey = `${accessMode ?? "default"}:${refreshNonce}`;
   const { stats, loading, error } = useManagerStats(
     accountIdForApi,
@@ -1412,6 +1425,34 @@ export default function ManagerDashboard() {
       cancelled = true;
     };
   }, [accountIdForApi, hasContext, refreshNonce, usageFeatureEnabled]);
+
+  useEffect(() => {
+    if (!canLoadUsageStatsDataTypes) {
+      setUsageStatsAggregate(null);
+      setUsageStatsLoading(false);
+      setUsageStatsError(null);
+      return;
+    }
+    let cancelled = false;
+    setUsageStatsLoading(true);
+    setUsageStatsError(null);
+    getManagerUsageStatsAggregate(accountIdForApi)
+      .then((data) => {
+        if (!cancelled) setUsageStatsAggregate(data.aggregate);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setUsageStatsAggregate(null);
+          setUsageStatsError(extractApiError(err, "Unable to load usage data types."));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setUsageStatsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, canLoadUsageStatsDataTypes, refreshNonce]);
 
   const accountLabel = selected
     ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
@@ -1628,7 +1669,15 @@ export default function ManagerDashboard() {
       unavailableReason: noContextReason || (!snsFeatureEnabled ? "SNS topics are disabled for this endpoint." : null),
     },
   ];
-  const refreshing = loading || iamLoading || bucketCountLoading || workspaceHealthLoading || activityLoading || trafficLoading || usageTrendsLoading;
+  const refreshing =
+    loading ||
+    iamLoading ||
+    bucketCountLoading ||
+    workspaceHealthLoading ||
+    activityLoading ||
+    trafficLoading ||
+    usageTrendsLoading ||
+    usageStatsLoading;
 
   const handleRefresh = () => {
     setLastUpdated(new Date());
@@ -1666,16 +1715,35 @@ export default function ManagerDashboard() {
         ))}
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,1.18fr)_minmax(280px,0.98fr)]">
-        <StorageOverviewCard
-          usedBytes={storageUsedBytes}
-          quotaBytes={storageQuotaBytes}
-          trendBaseline={usageTrends?.storage ?? null}
-          referenceDate={workspaceHealth?.generated_at ?? lastUpdated}
-          unavailableReason={metricsUnavailableReason}
-        />
-        <TopBucketsCard rows={bucketRows} unavailableReason={topBucketsUnavailableReason} />
-        <RecentActivityCard rows={activityRows} loading={activityLoading} unavailableReason={activityUnavailableReason} />
+      <div data-testid="manager-dashboard-overview-grid" className="grid gap-3 lg:grid-cols-2 xl:grid-cols-12">
+        <div className="min-w-0 xl:col-span-4">
+          <StorageOverviewCard
+            usedBytes={storageUsedBytes}
+            quotaBytes={storageQuotaBytes}
+            trendBaseline={usageTrends?.storage ?? null}
+            referenceDate={workspaceHealth?.generated_at ?? lastUpdated}
+            unavailableReason={metricsUnavailableReason}
+          />
+        </div>
+        <div
+          className={cx("min-w-0", canLoadUsageStatsDataTypes ? "xl:col-span-5" : "xl:col-span-8")}
+          data-testid="manager-dashboard-top-buckets-card"
+        >
+          <TopBucketsCard rows={bucketRows} unavailableReason={topBucketsUnavailableReason} />
+        </div>
+        {canLoadUsageStatsDataTypes && (
+          <div className="min-w-0 xl:col-span-3">
+            <BucketUsageStatsDataTypesCard
+              aggregate={usageStatsAggregate}
+              loading={usageStatsLoading}
+              error={usageStatsError}
+              data-testid="manager-dashboard-data-types"
+            />
+          </div>
+        )}
+        <div className="min-w-0 lg:col-span-2 xl:col-span-12" data-testid="manager-dashboard-recent-activity-card">
+          <RecentActivityCard rows={activityRows} loading={activityLoading} unavailableReason={activityUnavailableReason} />
+        </div>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,0.88fr)_minmax(0,1.28fr)_minmax(0,0.9fr)_minmax(280px,1fr)]">

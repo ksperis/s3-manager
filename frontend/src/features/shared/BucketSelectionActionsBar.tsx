@@ -36,6 +36,7 @@ type BucketSelectionActionsBarProps = {
   onShowConfigBackupModal?: () => void;
   onShowCompareModal: () => void;
   onShowIntegrityModal: () => void;
+  onShowUsageStatsModal: () => void;
   openBulkUpdateModal: () => void;
 };
 
@@ -69,6 +70,7 @@ export default function BucketSelectionActionsBar({
   onShowConfigBackupModal,
   onShowCompareModal,
   onShowIntegrityModal,
+  onShowUsageStatsModal,
   openBulkUpdateModal,
 }: BucketSelectionActionsBarProps) {
   if (selectedCount <= 0) return null;
@@ -234,6 +236,13 @@ export default function BucketSelectionActionsBar({
             className={selectionActionButtonClass}
           >
             Check integrity
+          </button>
+          <button
+            type="button"
+            onClick={onShowUsageStatsModal}
+            className={selectionActionButtonClass}
+          >
+            Calculate stats
           </button>
           {!isStorageOps && onShowConfigBackupModal && (
             <button

@@ -2,7 +2,12 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  getAdminUsageStatsAggregate,
+  streamAdminUsageStatsAggregate,
+  type BucketUsageStatsAggregate,
+} from "../../api/bucketUsageStats";
 import {
   AdminStats,
   AdminTrafficStats,
@@ -17,6 +22,7 @@ import {
   type UsageHistoryTrendWindow,
 } from "../../api/usageHistory";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { MetricsCard } from "../../components/MetricsCard";
 import MetricsTrafficOverview, { MetricsSnapshotCard, MetricsSummaryCard } from "../../components/MetricsTrafficOverview";
 import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageControlStrip from "../../components/PageControlStrip";
@@ -28,6 +34,7 @@ import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSectio
 import { toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
+import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
 
 function extractError(err: unknown, fallback: string): string {
   return extractApiError(err, fallback);
@@ -53,6 +60,10 @@ export default function AdminMetricsPage() {
   const [usageHistoryTrends, setUsageHistoryTrends] = useState<UsageHistoryTrendResponse | null>(null);
   const [usageHistoryLoading, setUsageHistoryLoading] = useState<boolean>(false);
   const [usageHistoryError, setUsageHistoryError] = useState<string | null>(null);
+  const [usageStatsAggregate, setUsageStatsAggregate] = useState<BucketUsageStatsAggregate | null>(null);
+  const [usageStatsLoading, setUsageStatsLoading] = useState(false);
+  const [usageStatsError, setUsageStatsError] = useState<string | null>(null);
+  const [usageStatsRecalculating, setUsageStatsRecalculating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -206,6 +217,44 @@ export default function AdminMetricsPage() {
     };
   }, [endpointLoading, generalSettings.usage_history_enabled, selectedEndpointId, usageHistoryWindow]);
 
+  const loadUsageStatsAggregate = useCallback(async () => {
+    if (endpointLoading || selectedEndpointId == null) {
+      setUsageStatsAggregate(null);
+      setUsageStatsLoading(false);
+      setUsageStatsError(null);
+      return;
+    }
+    setUsageStatsLoading(true);
+    setUsageStatsError(null);
+    try {
+      const data = await getAdminUsageStatsAggregate(selectedEndpointId);
+      setUsageStatsAggregate(data.aggregate);
+    } catch (err) {
+      setUsageStatsAggregate(null);
+      setUsageStatsError(extractError(err, "Unable to load managed accounts usage composition."));
+    } finally {
+      setUsageStatsLoading(false);
+    }
+  }, [endpointLoading, selectedEndpointId]);
+
+  useEffect(() => {
+    void loadUsageStatsAggregate();
+  }, [loadUsageStatsAggregate]);
+
+  const handleRecalculateUsageStats = useCallback(async () => {
+    if (selectedEndpointId == null) return;
+    setUsageStatsRecalculating(true);
+    setUsageStatsError(null);
+    try {
+      await streamAdminUsageStatsAggregate(selectedEndpointId, { parallelism: 8 });
+      await loadUsageStatsAggregate();
+    } catch (err) {
+      setUsageStatsError(extractError(err, "Unable to recalculate managed accounts usage composition."));
+    } finally {
+      setUsageStatsRecalculating(false);
+    }
+  }, [loadUsageStatsAggregate, selectedEndpointId]);
+
   const storageTotals = storage?.storage_totals;
   const selectedEndpoint = useMemo(
     () => endpoints.find((endpoint) => endpoint.id === selectedEndpointId) ?? null,
@@ -237,13 +286,25 @@ export default function AdminMetricsPage() {
   const missingTraffic = selectedEndpointId != null && !traffic && !trafficLoading && !trafficError;
   const showStorageMetrics = !storageError;
   const showUsageHistoryTrends = Boolean(generalSettings.usage_history_enabled) && selectedEndpointId != null;
+  const usageStatsAggregateSection = (
+    <BucketUsageStatsAggregateCard
+      title="Managed accounts usage composition"
+      description="Latest calculated bucket snapshots for S3 accounts managed by the application on the selected endpoint."
+      aggregate={usageStatsAggregate}
+      loading={usageStatsLoading}
+      error={usageStatsError}
+      recalculating={usageStatsRecalculating}
+      recalculateLabel="Recalculate endpoint"
+      onRecalculate={handleRecalculateUsageStats}
+    />
+  );
 
   return (
     <div className="space-y-4 ui-caption leading-relaxed">
       <PageHeader
-        title="Metrics"
-        description="Centralized view of platform storage and traffic."
-        breadcrumbs={adminBreadcrumbs({ label: "Overview", to: "/admin" }, { label: "Metrics" })}
+        title="Usage & Metrics"
+        description="Managed account usage composition, platform storage, and traffic analytics."
+        breadcrumbs={adminBreadcrumbs({ label: "Overview", to: "/admin" }, { label: "Usage & Metrics" })}
       />
       <PageControlStrip
         label="Metrics scope"
@@ -293,93 +354,91 @@ export default function AdminMetricsPage() {
       {selectedEndpointId != null && (
         <>
           {storageError ? (
-            <MetricsUnavailableCard
-              eyebrow="Storage snapshot"
-              title="Stored volume & objects"
-              description="Aggregated stats across known S3 accounts."
-              message={storageError}
-              tone="warning"
-            />
+            <>
+              <MetricsUnavailableCard
+                title="Storage snapshot"
+                description="Aggregated stats across known S3 accounts."
+                message={storageError}
+                tone="warning"
+              />
+              {usageStatsAggregateSection}
+            </>
           ) : (
-            <MetricsSummaryCard
-              eyebrow="Storage snapshot"
-              title="Stored volume & objects"
-              description="Aggregated stats across known S3 accounts."
-              updatedAt={storage?.generated_at}
-            >
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricsSnapshotCard
-                  label="Stored volume"
-                  value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
-                  hint="Sum of known buckets"
-                  loading={storageLoading}
-                />
-                <MetricsSnapshotCard
-                  label="Objects"
-                  value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
-                  hint="Instant count"
-                  loading={storageLoading}
-                />
-                <MetricsSnapshotCard
-                  label="Visible buckets"
-                  value={storageTotals?.bucket_count != null ? formatCompactNumber(storageTotals.bucket_count) : "—"}
-                  hint="Based on root credentials"
-                  loading={storageLoading}
-                />
-                <MetricsSnapshotCard
-                  label="S3 accounts"
-                  value={storage ? formatCompactNumber(storage.total_accounts) : "—"}
-                  hint={`${formatCompactNumber(storage?.total_s3_users ?? 0)} S3 users`}
-                  loading={storageLoading}
-                />
-              </div>
-            </MetricsSummaryCard>
-          )}
+            <>
+              <MetricsSummaryCard
+                title="Storage snapshot"
+                description="Aggregated stats across known S3 accounts."
+                updatedAt={storage?.generated_at}
+              >
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <MetricsSnapshotCard
+                    label="Stored volume"
+                    value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
+                    hint="Sum of known buckets"
+                    loading={storageLoading}
+                  />
+                  <MetricsSnapshotCard
+                    label="Objects"
+                    value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
+                    hint="Instant count"
+                    loading={storageLoading}
+                  />
+                  <MetricsSnapshotCard
+                    label="Visible buckets"
+                    value={storageTotals?.bucket_count != null ? formatCompactNumber(storageTotals.bucket_count) : "—"}
+                    hint="Based on root credentials"
+                    loading={storageLoading}
+                  />
+                  <MetricsSnapshotCard
+                    label="S3 accounts"
+                    value={storage ? formatCompactNumber(storage.total_accounts) : "—"}
+                    hint={`${formatCompactNumber(storage?.total_s3_users ?? 0)} S3 users`}
+                    loading={storageLoading}
+                  />
+                </div>
+              </MetricsSummaryCard>
 
-          {showStorageMetrics && (
-            <section className="space-y-4 ui-surface-card p-5">
-              <header className="space-y-1">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage breakdown</p>
-                <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Accounts & users</h3>
-                <p className="ui-body text-slate-500 dark:text-slate-400">Account scan with graphical breakdown.</p>
-              </header>
-              <div className="grid gap-6 xl:grid-cols-2">
-                <UsageBreakdown
-                  title="Accounts (volume)"
-                  subtitle="Volume used per account (top 8)."
-                  loading={storageLoading}
-                  metric="bytes"
-                  items={accountUsageItems}
-                  emptyMessage="No volume data available."
-                />
-                <UsageBreakdown
-                  title="Accounts (objects)"
-                  subtitle="Object count per account (top 8)."
-                  loading={storageLoading}
-                  metric="objects"
-                  items={accountUsageItems}
-                  emptyMessage="No object data available."
-                />
-              </div>
-              <div className="grid gap-6 xl:grid-cols-2">
-                <UsageBreakdown
-                  title="S3 users (volume)"
-                  subtitle="Volume consumed per user."
-                  loading={storageLoading}
-                  metric="bytes"
-                  items={userUsageItems}
-                  emptyMessage="No S3 users with metrics."
-                />
-                <UsageBreakdown
-                  title="S3 users (objects)"
-                  subtitle="Object count per user."
-                  loading={storageLoading}
-                  metric="objects"
-                  items={userUsageItems}
-                  emptyMessage="No S3 users with metrics."
-                />
-              </div>
-            </section>
+              {showStorageMetrics && (
+                <MetricsCard
+                  title="Storage breakdown"
+                  description="Accounts and S3 users by volume and object count."
+                >
+                  <div className="grid gap-6 xl:grid-cols-2">
+                    <UsageBreakdown
+                      title="Accounts (volume)"
+                      loading={storageLoading}
+                      metric="bytes"
+                      items={accountUsageItems}
+                      emptyMessage="No volume data available."
+                    />
+                    <UsageBreakdown
+                      title="Accounts (objects)"
+                      loading={storageLoading}
+                      metric="objects"
+                      items={accountUsageItems}
+                      emptyMessage="No object data available."
+                    />
+                  </div>
+                  <div className="grid gap-6 xl:grid-cols-2">
+                    <UsageBreakdown
+                      title="S3 users (volume)"
+                      loading={storageLoading}
+                      metric="bytes"
+                      items={userUsageItems}
+                      emptyMessage="No S3 users with metrics."
+                    />
+                    <UsageBreakdown
+                      title="S3 users (objects)"
+                      loading={storageLoading}
+                      metric="objects"
+                      items={userUsageItems}
+                      emptyMessage="No S3 users with metrics."
+                    />
+                  </div>
+                </MetricsCard>
+              )}
+              {usageStatsAggregateSection}
+            </>
           )}
 
           {showUsageHistoryTrends && (

@@ -152,7 +152,7 @@ def test_run_monitor_skips_when_both_features_disabled(db_session, monkeypatch):
     result = service.run_monitor()
 
     assert result["status"] == "skipped"
-    assert result["reason"] == "Both quota_alerts_enabled and usage_history_enabled are disabled."
+    assert result["reason"] == "Both quota alerts and usage history collection are disabled for this run."
     assert result["retention"] == {"retention": "ok"}
 
 
@@ -187,6 +187,30 @@ def test_usage_history_hourly_and_daily_upserts(db_session, monkeypatch):
     assert daily.samples_count == 2
     assert int(daily.last_used_bytes) == 50
     assert int(daily.bucket_count) == 1
+
+
+def test_quota_monitor_mode_does_not_persist_usage_history(db_session, monkeypatch):
+    endpoint = _seed_endpoint(db_session)
+    _seed_account(db_session, endpoint)
+
+    fake_admin = _FakeAdminClient(usage_bytes=90, usage_objects=9, quota_bytes=100, quota_objects=10)
+
+    monkeypatch.setattr(quota_monitoring_service, "load_app_settings", lambda: _settings(quota_alerts_enabled=True, usage_history_enabled=True))
+    monkeypatch.setattr(quota_monitoring_service.DataRetentionService, "purge_all", lambda self: {})
+    monkeypatch.setattr(QuotaMonitoringService, "_resolve_admin_client", lambda self, endpoint, cache: fake_admin)
+    monkeypatch.setattr(QuotaMonitoringService, "_build_mailer", lambda self, notification_settings: (_FakeMailer(), None))
+
+    service = QuotaMonitoringService(db_session)
+    result = service.run_monitor(include_usage_history=False)
+
+    assert result["subjects_processed"] == 1
+    assert result["quota_alerts_enabled"] is True
+    assert result["usage_history_enabled"] is True
+    assert result["usage_history_collection_enabled"] is False
+    assert result["history_hourly_upserts"] == 0
+    assert result["history_daily_upserts"] == 0
+    assert db_session.query(QuotaUsageHourly).count() == 0
+    assert db_session.query(QuotaUsageDaily).count() == 0
 
 
 def test_usage_history_prefers_supervision_client_and_keeps_quota_optional(db_session, monkeypatch):

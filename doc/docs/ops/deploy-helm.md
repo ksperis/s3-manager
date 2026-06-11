@@ -19,7 +19,7 @@ helm install s3-manager helm/s3-manager \
 
 - Backend and frontend Deployments + Services.
 - Optional Ingress.
-- Built-in CronJobs for billing, healthchecks, and quota monitoring.
+- Built-in CronJobs for billing, healthchecks, quota monitoring, and usage history collection.
 - Optional bundled PostgreSQL in values (evaluate for your environment policies).
 
 Cron values blocks:
@@ -27,6 +27,7 @@ Cron values blocks:
 - `billingCronJob`
 - `healthcheckCronJob`
 - `quotaMonitorCronJob`
+- `usageHistoryCronJob`
 
 Backend env defaults include billing/quota retention knobs.
 Provide `SMTP_PASSWORD` via your secret injection policy.

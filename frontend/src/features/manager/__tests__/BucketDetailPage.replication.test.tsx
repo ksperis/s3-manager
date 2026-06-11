@@ -208,6 +208,25 @@ describe("BucketDetailPage replication state", () => {
     });
   });
 
+  it("renders the bucket overview without a redundant eyebrow or nested card shell", async () => {
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    const bucketTitle = await screen.findByRole("heading", { name: "Bucket demo-bucket" });
+    const overviewSection = bucketTitle.closest("section");
+
+    expect(overviewSection).not.toBeNull();
+    expect(overviewSection).not.toHaveClass("ui-surface-card");
+    expect(within(overviewSection as HTMLElement).queryByText("Overview")).not.toBeInTheDocument();
+    expect(within(overviewSection as HTMLElement).queryByText("Summary of enabled features.")).not.toBeInTheDocument();
+
+    const propertiesGroup = within(overviewSection as HTMLElement).getByText("Bucket properties").parentElement;
+    expect(propertiesGroup).not.toHaveClass("ui-surface-muted");
+  });
+
   it("treats replication payload with empty role and no rules as not configured", async () => {
     const user = userEvent.setup();
     render(
@@ -608,8 +627,8 @@ describe("BucketDetailPage replication state", () => {
 
     await user.click(metricsTab);
 
-    expect(screen.queryByText("Current Usage and Quota")).not.toBeInTheDocument();
-    expect(screen.queryByText("Traffic visualization")).not.toBeInTheDocument();
+    expect(screen.queryByText("Current usage and quota")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Traffic" })).not.toBeInTheDocument();
     expect(screen.queryByText("Metrics are unavailable: this connection endpoint is not a Ceph provider.")).not.toBeInTheDocument();
   });
 
@@ -626,9 +645,9 @@ describe("BucketDetailPage replication state", () => {
 
     await user.click(metricsTab);
 
-    expect(await screen.findByText("Current Usage and Quota")).toBeInTheDocument();
-    const trafficTitle = screen.getByRole("heading", { name: "Traffic visualization" });
-    expect(trafficTitle).toHaveClass("ui-subtitle");
+    expect(await screen.findByText("Current usage and quota")).toBeInTheDocument();
+    const trafficTitle = screen.getByRole("heading", { name: "Traffic" });
+    expect(trafficTitle).toHaveClass("ui-section");
     expect(screen.queryByText("Bucket: demo-bucket")).not.toBeInTheDocument();
   });
 

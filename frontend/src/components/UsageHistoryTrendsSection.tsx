@@ -17,16 +17,13 @@ import {
 } from "recharts";
 import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "../api/usageHistory";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../utils/format";
+import { MetricsCard, MetricsChartPanel } from "./MetricsCard";
 import MetricsUnavailableCard from "./MetricsUnavailableCard";
 import { MetricsSnapshotCard } from "./MetricsTrafficOverview";
 import {
   cx,
-  uiCardClass,
   uiCardMutedClass,
   uiMenuClass,
-  uiMutedTextClass,
-  uiPanelMutedClass,
-  uiTitleTextClass,
 } from "./ui/styles";
 
 const WINDOW_OPTIONS: { label: string; value: UsageHistoryTrendWindow; helper: string }[] = [
@@ -55,7 +52,7 @@ export default function UsageHistoryTrendsSection({
   onWindowChange,
   loading,
   error,
-  title = "Usage history trends",
+  title = "Usage history",
   description,
 }: UsageHistoryTrendsSectionProps) {
   const chartData = useMemo<TrendPoint[]>(
@@ -87,7 +84,6 @@ export default function UsageHistoryTrendsSection({
   if (error) {
     return (
       <MetricsUnavailableCard
-        eyebrow="Usage history"
         title={title}
         description="Stored quota snapshots over time."
         message={error}
@@ -99,7 +95,6 @@ export default function UsageHistoryTrendsSection({
   if (trends && !trends.available) {
     return (
       <MetricsUnavailableCard
-        eyebrow="Usage history"
         title={title}
         description="Stored quota snapshots over time."
         message={trends.unavailable_reason || "Usage history trends are unavailable for this context."}
@@ -108,13 +103,10 @@ export default function UsageHistoryTrendsSection({
   }
 
   return (
-    <section className={cx(uiCardClass, "space-y-5 p-5")}>
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Usage history</p>
-          <h3 className={cx("ui-section", uiTitleTextClass)}>{title}</h3>
-          <p className={cx("ui-body", uiMutedTextClass)}>{subtitle}</p>
-        </div>
+    <MetricsCard
+      title={title}
+      description={subtitle}
+      actions={
         <div className={cx(uiCardMutedClass, "flex items-center gap-2 rounded-full px-2 py-1")}>
           {WINDOW_OPTIONS.map((option) => (
             <button
@@ -131,7 +123,8 @@ export default function UsageHistoryTrendsSection({
             </button>
           ))}
         </div>
-      </header>
+      }
+    >
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricsSnapshotCard
@@ -203,7 +196,7 @@ export default function UsageHistoryTrendsSection({
           </ResponsiveContainer>
         </ChartCard>
       </div>
-    </section>
+    </MetricsCard>
   );
 }
 
@@ -216,29 +209,16 @@ type ChartCardProps = {
 };
 
 function ChartCard({ title, subtitle, children, loading, hasData }: ChartCardProps) {
-  if (loading) {
-    return (
-      <div className={cx(uiCardMutedClass, "p-4")}>
-        <p className={cx("ui-body", uiTitleTextClass)}>{title}</p>
-        {subtitle && <p className={cx("ui-caption", uiMutedTextClass)}>{subtitle}</p>}
-        <div className={cx(uiPanelMutedClass, "mt-4 h-48 animate-pulse")} />
-      </div>
-    );
-  }
   return (
-    <div className={cx(uiCardMutedClass, "p-4")}>
-      <p className={cx("ui-body", uiTitleTextClass)}>{title}</p>
-      {subtitle && <p className={cx("ui-caption", uiMutedTextClass)}>{subtitle}</p>}
-      {hasData ? <div className="mt-4">{children}</div> : <EmptyState />}
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className={cx(uiCardMutedClass, "mt-6 border-dashed px-4 py-6 text-center ui-body", uiMutedTextClass)}>
-      No usage history snapshots for this window yet.
-    </div>
+    <MetricsChartPanel
+      title={title}
+      description={subtitle}
+      loading={loading}
+      hasData={hasData}
+      emptyMessage="No usage history snapshots for this window yet."
+    >
+      {children}
+    </MetricsChartPanel>
   );
 }
 

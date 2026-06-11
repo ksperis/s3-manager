@@ -29,6 +29,7 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/manager/topics` | `user/feature-topics.md` | Covered |
 | `/manager/bucket-compare` | `user/feature-bucket-compare.md` | Covered |
 | `/manager/bucket-integrity` | `user/feature-bucket-integrity-check.md` | Covered |
+| `/manager/metrics`, `/ceph-admin/metrics`, and bucket usage stats tabs/actions | `user/feature-bucket-usage-stats.md` | Covered |
 | `/manager/migrations*` | `user/feature-bucket-migration.md` | Covered |
 | `/portal` and children | `user/workspace-portal.md` | Covered |
 | `/browser` | `user/workspace-browser.md` + `user/feature-objects-browser.md` | Covered |
