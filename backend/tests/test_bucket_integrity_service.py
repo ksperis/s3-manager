@@ -54,7 +54,9 @@ class FakeS3Client:
         self.paginators = paginators
         self.objects = objects
         self.get_calls: list[dict] = []
+        self.head_calls: list[dict] = []
         self.get_errors: dict[tuple[str, str | None], Exception] = {}
+        self.head_errors: dict[tuple[str, str | None], Exception] = {}
         self.delay_seconds = 0.0
         self._lock = threading.Lock()
         self._active_gets = 0
@@ -80,6 +82,14 @@ class FakeS3Client:
             with self._lock:
                 self._active_gets -= 1
 
+    def head_object(self, **kwargs):
+        self.head_calls.append(kwargs)
+        key = (kwargs["Key"], kwargs.get("VersionId"))
+        error = self.head_errors.get(key)
+        if error:
+            raise error
+        return {}
+
 
 class FakeIntegrityService(BucketIntegrityCheckService):
     def __init__(self, client: FakeS3Client):
@@ -102,6 +112,33 @@ def _client_error(code: str, message: str, operation: str = "GetObject") -> Clie
     return ClientError({"Error": {"Code": code, "Message": message}}, operation)
 
 
+def test_integrity_service_defaults_to_head_object_without_reading_bodies():
+    paginator = FakePaginator(
+        [
+            {"Contents": [{"Key": "a.txt", "LastModified": datetime(2026, 1, 1, tzinfo=timezone.utc)}]},
+            {"Contents": [{"Key": "b.txt", "LastModified": datetime(2026, 1, 2, tzinfo=timezone.utc)}]},
+        ]
+    )
+    client = FakeS3Client(
+        {"list_objects_v2": paginator},
+        {
+            ("a.txt", None): b"aa",
+            ("b.txt", None): b"bbb",
+        },
+    )
+    service = FakeIntegrityService(client)
+
+    result = service.run([_target()], BucketIntegrityOptions(parallelism=2))
+
+    assert result.status == "passed"
+    assert result.listed_count == 2
+    assert result.checked_count == 2
+    assert result.bytes_read == 0
+    assert paginator.calls == [{"Bucket": "bucket-a"}]
+    assert {call["Key"] for call in client.head_calls} == {"a.txt", "b.txt"}
+    assert client.get_calls == []
+
+
 def test_integrity_service_lists_paginated_latest_objects_and_reads_full_bodies():
     paginator = FakePaginator(
         [
@@ -118,7 +155,7 @@ def test_integrity_service_lists_paginated_latest_objects_and_reads_full_bodies(
     )
     service = FakeIntegrityService(client)
 
-    result = service.run([_target()], BucketIntegrityOptions(parallelism=2))
+    result = service.run([_target()], BucketIntegrityOptions(parallelism=2, check_mode="get"))
 
     assert result.status == "passed"
     assert result.listed_count == 2
@@ -148,7 +185,7 @@ def test_integrity_service_lists_versions_skips_delete_markers_and_applies_since
 
     result = service.run(
         [_target()],
-        BucketIntegrityOptions(parallelism=2, all_versions=True, since=cutoff),
+        BucketIntegrityOptions(parallelism=2, all_versions=True, check_mode="get", since=cutoff),
     )
 
     assert result.status == "passed"
@@ -165,7 +202,7 @@ def test_integrity_service_limits_bytes_read_per_object():
     )
     service = FakeIntegrityService(client)
 
-    result = service.run([_target()], BucketIntegrityOptions(max_mb_per_object=1))
+    result = service.run([_target()], BucketIntegrityOptions(check_mode="get", max_mb_per_object=1))
 
     assert result.status == "passed"
     assert result.bytes_read == 1024 * 1024
@@ -179,7 +216,7 @@ def test_integrity_service_reports_get_object_errors_as_object_failures():
     client.get_errors[("broken.txt", None)] = _client_error("AccessDenied", "denied")
     service = FakeIntegrityService(client)
 
-    result = service.run([_target()], BucketIntegrityOptions())
+    result = service.run([_target()], BucketIntegrityOptions(check_mode="get"))
 
     bucket = result.buckets[0]
     assert result.status == "completed_with_errors"
@@ -187,6 +224,26 @@ def test_integrity_service_reports_get_object_errors_as_object_failures():
     assert bucket.failures_sample[0].stage == "get"
     assert bucket.failures_sample[0].key == "broken.txt"
     assert "AccessDenied" in bucket.failures_sample[0].message
+
+
+def test_integrity_service_reports_head_object_errors_as_object_failures():
+    client = FakeS3Client(
+        {"list_objects_v2": FakePaginator([{"Contents": [{"Key": "missing-meta.txt"}]}])},
+        {("missing-meta.txt", None): b""},
+    )
+    client.head_errors[("missing-meta.txt", None)] = _client_error("AccessDenied", "denied", "HeadObject")
+    service = FakeIntegrityService(client)
+
+    result = service.run([_target()], BucketIntegrityOptions())
+
+    bucket = result.buckets[0]
+    assert result.status == "completed_with_errors"
+    assert bucket.failed_count == 1
+    assert bucket.bytes_read == 0
+    assert bucket.failures_sample[0].stage == "head"
+    assert bucket.failures_sample[0].key == "missing-meta.txt"
+    assert "AccessDenied" in bucket.failures_sample[0].message
+    assert client.get_calls == []
 
 
 def test_integrity_service_keeps_large_failure_sample_bounded():
@@ -199,7 +256,7 @@ def test_integrity_service_keeps_large_failure_sample_bounded():
         client.get_errors[(name, None)] = _client_error("AccessDenied", "denied")
     service = FakeIntegrityService(client)
 
-    result = service.run([_target()], BucketIntegrityOptions(parallelism=1))
+    result = service.run([_target()], BucketIntegrityOptions(parallelism=1, check_mode="get"))
 
     bucket = result.buckets[0]
     assert bucket.failed_count == 501
@@ -232,7 +289,7 @@ def test_integrity_service_uses_bounded_parallel_object_reads():
     client.delay_seconds = 0.03
     service = FakeIntegrityService(client)
 
-    result = service.run([_target()], BucketIntegrityOptions(parallelism=3))
+    result = service.run([_target()], BucketIntegrityOptions(parallelism=3, check_mode="get"))
 
     assert result.status == "passed"
     assert result.checked_count == len(object_names)

@@ -60,6 +60,7 @@ def stream_ceph_admin_bucket_integrity_check(
     options = BucketIntegrityOptions(
         parallelism=payload.parallelism,
         all_versions=payload.all_versions,
+        check_mode=payload.check_mode,
         since=payload.since,
         max_mb_per_object=payload.max_mb_per_object,
     )

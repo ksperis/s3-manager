@@ -10,11 +10,14 @@ export type BucketIntegrityTarget = {
   bucket_name: string;
 };
 
+export type BucketIntegrityCheckMode = "head" | "get";
+
 export type BucketIntegrityCheckPayload = {
   buckets?: string[];
   targets?: BucketIntegrityTarget[];
   parallelism?: number;
   all_versions?: boolean;
+  check_mode?: BucketIntegrityCheckMode;
   since?: string | null;
   max_mb_per_object?: number | null;
 };
@@ -23,7 +26,7 @@ export type BucketIntegrityFailure = {
   bucket_name: string;
   key?: string | null;
   version_id?: string | null;
-  stage: "list" | "get";
+  stage: "list" | "head" | "get";
   message: string;
 };
 
