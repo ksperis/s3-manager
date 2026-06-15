@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account as S3AccountDb, User, is_superadmin_ui_role
+from app.db import S3Account as S3AccountDb, User
 from app.models.app_settings import PortalSettingsOverride
 from app.models.portal import PortalAccountSettings
 from app.models.s3_account import (
@@ -64,23 +64,6 @@ def get_admin_accounts_listing_service(
     rgw_admin_client=Depends(get_optional_super_admin_rgw_client),
 ) -> S3AccountsService:
     return get_s3_accounts_service(db, rgw_admin_client=rgw_admin_client, allow_missing_admin=True)
-
-
-def _require_superadmin_for_privileged_target_change(
-    current_user: User,
-    account: S3AccountDb | None,
-    payload: S3AccountUpdate,
-) -> None:
-    if is_superadmin_ui_role(current_user.role) or account is None:
-        return
-    if payload.allow_manager_bucket_quota is None:
-        return
-    if bool(payload.allow_manager_bucket_quota) == bool(account.allow_manager_bucket_quota):
-        return
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Only superadmin users can change privileged target grants",
-    )
 
 
 @router.get("", response_model=PaginatedS3AccountsResponse)
@@ -253,15 +236,12 @@ def import_accounts(
 def update_account(
     account_id: int,
     payload: S3AccountUpdate,
-    db: Session = Depends(get_db),
     service: S3AccountsService = Depends(get_admin_accounts_service),
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> S3Account:
     try:
         logger.debug("Updating account %s", account_id)
-        account = db.query(S3AccountDb).filter(S3AccountDb.id == account_id).first()
-        _require_superadmin_for_privileged_target_change(current_user, account, payload)
         updated = service.update_account(account_id, payload)
         db_account_id = int(updated.db_id) if updated.db_id is not None else account_id
         audit_service.record_action(

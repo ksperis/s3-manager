@@ -35,7 +35,7 @@ import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
-import { isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
+import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
 type TextMatchMode = "contains" | "exact";
@@ -167,7 +167,7 @@ export default function S3UsersPage() {
   const showEditGeneralTab = editTab === "general";
   const showEditUsersTab = editTab === "users";
   const currentUser = useMemo(() => readStoredUser(), []);
-  const canManagePrivilegedTargets = isSuperAdminRole(currentUser?.role);
+  const canManagePrivilegedTargets = isAdminLikeRole(currentUser?.role);
   const showEditPrivilegedTab = canManagePrivilegedTargets && editTab === "privileged";
   const {
     catalog: adminTagCatalog,

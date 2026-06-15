@@ -16,7 +16,7 @@ def _ui_admin() -> User:
     )
 
 
-def test_ui_admin_cannot_grant_account_bucket_quota_target(client: TestClient, db_session):
+def test_ui_admin_can_grant_account_bucket_quota_target(client: TestClient, db_session):
     account = S3Account(name="privileged-account", rgw_account_id="RGW00000000000000042")
     db_session.add(account)
     db_session.commit()
@@ -29,10 +29,9 @@ def test_ui_admin_cannot_grant_account_bucket_quota_target(client: TestClient, d
         json={"allow_manager_bucket_quota": True},
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Only superadmin users can change privileged target grants"
+    assert response.status_code == 200, response.text
     db_session.refresh(account)
-    assert account.allow_manager_bucket_quota is False
+    assert account.allow_manager_bucket_quota is True
 
 
 def test_ui_admin_can_update_account_without_changing_privileged_target(client: TestClient, db_session):
@@ -54,7 +53,7 @@ def test_ui_admin_can_update_account_without_changing_privileged_target(client: 
     assert account.allow_manager_bucket_quota is False
 
 
-def test_ui_admin_cannot_grant_s3_user_privileged_targets(client: TestClient, db_session):
+def test_ui_admin_can_grant_s3_user_privileged_targets(client: TestClient, db_session):
     s3_user = S3User(
         name="privileged-user",
         rgw_user_uid="privileged-user",
@@ -75,11 +74,10 @@ def test_ui_admin_cannot_grant_s3_user_privileged_targets(client: TestClient, db
         },
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Only superadmin users can change privileged target grants"
+    assert response.status_code == 200, response.text
     db_session.refresh(s3_user)
-    assert s3_user.allow_manager_bucket_quota is False
-    assert s3_user.allow_manager_ceph_s3_user_keys is False
+    assert s3_user.allow_manager_bucket_quota is True
+    assert s3_user.allow_manager_ceph_s3_user_keys is True
 
 
 def test_ui_admin_can_update_s3_user_without_changing_privileged_targets(client: TestClient, db_session):

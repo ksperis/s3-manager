@@ -43,7 +43,7 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
-import { isAdminLikeRole, isSuperAdminRole } from "../../utils/workspaces";
+import { isAdminLikeRole } from "../../utils/workspaces";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 
 type SortField = "name" | "rgw_account_id";
@@ -194,7 +194,7 @@ export default function S3AccountsPage() {
     }
   }, []);
   const isSuperAdmin = isAdminLikeRole(currentUser?.role);
-  const canManagePrivilegedTargets = isSuperAdminRole(currentUser?.role);
+  const canManagePrivilegedTargets = isAdminLikeRole(currentUser?.role);
   const editingAccountId = editingS3Account?.db_id ?? null;
   const editingEndpoint = useMemo(() => {
     if (!editingS3Account?.storage_endpoint_id) return null;
