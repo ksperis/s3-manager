@@ -1411,10 +1411,15 @@ export default function BrowserPage({
   );
   const [operationsPanelOpen, setOperationsPanelOpen] = useState(false);
   const [operationsPanelDismissed, setOperationsPanelDismissed] = useState(false);
+  const operationsPanelVisibleRef = useRef(false);
   const [showOperationsDetailsModal, setShowOperationsDetailsModal] = useState(false);
   const showOperationsBar = useCallback(() => {
-    setOperationsPanelOpen(false);
+    setOperationsPanelOpen((open) => (operationsPanelVisibleRef.current ? open : false));
     setOperationsPanelDismissed(false);
+  }, []);
+  const dismissOperationsPanel = useCallback(() => {
+    setOperationsPanelOpen(false);
+    setOperationsPanelDismissed(true);
   }, []);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
@@ -11375,6 +11380,9 @@ export default function BrowserPage({
   const hasOperationsPanelContent = operationsPanelTotalCount > 0;
   const showOperationsPanel =
     hasOperationsPanelContent && (!operationsPanelDismissed || hasPendingOperations);
+  useEffect(() => {
+    operationsPanelVisibleRef.current = showOperationsPanel;
+  }, [showOperationsPanel]);
   const hasFinishedOperations =
     completedOperationsCount > 0 || failedOperationsCount > 0;
   const filtersAllInactive =
@@ -15297,7 +15305,7 @@ export default function BrowserPage({
           hasFinishedOperations={hasFinishedOperations}
           canDismiss={!hasPendingOperations}
           onClearFinishedOperations={clearFinishedOperations}
-          onDismiss={() => setOperationsPanelDismissed(true)}
+          onDismiss={dismissOperationsPanel}
           onOpenDetails={() => setShowOperationsDetailsModal(true)}
           onToggleOpen={() => setOperationsPanelOpen((open) => !open)}
         />

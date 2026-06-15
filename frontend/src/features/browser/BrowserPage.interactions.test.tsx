@@ -401,6 +401,16 @@ function createAbortablePromise(signal?: AbortSignal) {
   });
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 async function copyOrCutSelection(
   user: ReturnType<typeof userEvent.setup>,
   labels: string[],
@@ -3855,6 +3865,70 @@ describe("BrowserPage interactions", () => {
         name: "Download details (JSON)",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("keeps the operations panel expanded while queued uploads start", async () => {
+    const user = userEvent.setup();
+    fetchBrowserSettingsMock.mockResolvedValue({
+      allow_proxy_transfers: true,
+      direct_upload_parallelism: 3,
+      proxy_upload_parallelism: 1,
+      direct_download_parallelism: 3,
+      proxy_download_parallelism: 2,
+      other_operations_parallelism: 2,
+      streaming_zip_threshold_mb: 200,
+    });
+    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    const firstUpload = createDeferred<void>();
+    const secondUpload = createDeferred<void>();
+    let uploadCallCount = 0;
+    proxyUploadMock.mockImplementation(() => {
+      uploadCallCount += 1;
+      if (uploadCallCount === 1) return firstUpload.promise;
+      if (uploadCallCount === 2) return secondUpload.promise;
+      return Promise.resolve();
+    });
+
+    renderPage({ accountIdForApi: "acc-1" });
+    await findRowByLabel("a.txt");
+    const menu = await openContextMoreMenu(user);
+    expect(await within(menu).findByText("Proxy")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    const fileInput = document.querySelector(
+      'input[type="file"]:not([directory])',
+    ) as HTMLInputElement | null;
+    expect(fileInput).not.toBeNull();
+    fireEvent.change(fileInput as HTMLInputElement, {
+      target: {
+        files: [
+          new File(["first"], "first.txt", { type: "text/plain" }),
+          new File(["second"], "second.txt", { type: "text/plain" }),
+        ],
+      },
+    });
+
+    await waitFor(() => expect(proxyUploadMock).toHaveBeenCalledTimes(1));
+    const panel = await openOperationsPanel(user);
+    expect(
+      within(panel).getByRole("button", { name: "Collapse operations" }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      firstUpload.resolve();
+    });
+    await waitFor(() => expect(proxyUploadMock).toHaveBeenCalledTimes(2));
+
+    expect(
+      within(panel).getByRole("button", { name: "Collapse operations" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("button", { name: "Expand operations" }),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      secondUpload.resolve();
+    });
   });
 
   it("cancels cross-context move batches without deleting pending sources and keeps paste available", async () => {
