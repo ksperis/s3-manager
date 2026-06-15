@@ -27,7 +27,22 @@ import {
 } from "../../api/stats";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageHeader from "../../components/PageHeader";
-import { WorkspaceStatusDot } from "../../components/WorkspaceDashboardKit";
+import {
+  WorkspaceDashboardIconBubble as IconBubble,
+  WorkspaceDashboardKpiRow as KpiRow,
+  WorkspaceDashboardProgressBar as ProgressBar,
+  WorkspaceDashboardStorageEvolutionChart as StorageEvolutionChart,
+  WorkspaceDashboardUnavailableFrame as DashboardUnavailable,
+  WorkspaceStatusDot,
+  type WorkspaceDashboardStorageEvolutionPoint as StorageEvolutionPoint,
+  type WorkspaceDashboardTone as DashboardTone,
+} from "../../components/WorkspaceDashboardKit";
+import {
+  WORKSPACE_TRAFFIC_TREND_WINDOWS as TRAFFIC_TREND_WINDOWS,
+  buildWorkspaceDashboardKpis,
+  selectWorkspaceTrafficTrend,
+  type WorkspaceTrafficTrendSelection,
+} from "../../components/workspaceDashboardKpis";
 import UiBadge from "../../components/ui/UiBadge";
 import {
   cx,
@@ -60,27 +75,6 @@ import { useIamOverview } from "./useIamOverview";
 import { useManagerStats } from "./useManagerStats";
 import { useS3AccountContext } from "./S3AccountContext";
 
-type DashboardTone = "blue" | "emerald" | "violet" | "amber";
-
-type DashboardMetric = {
-  label: string;
-  value: string;
-  detail: string;
-  trend?: DashboardMetricTrend;
-  progress?: number | null;
-  progressLabel?: string;
-  compactValue?: boolean;
-  tone: DashboardTone;
-  icon: ReactNode;
-  to?: string;
-  unavailableReason?: string | null;
-};
-
-type DashboardMetricTrend = {
-  label: string;
-  tone: "positive" | "negative" | "neutral";
-};
-
 type BucketRankingRow = {
   name: string;
   storageBytes: number | null;
@@ -103,22 +97,6 @@ type QuickAction = {
   tone: DashboardTone;
   unavailableReason?: string | null;
 };
-
-type TrafficTrendSelection = {
-  totalBytes: number;
-  label: string;
-};
-
-type StorageEvolutionPoint = {
-  timestampMs: number;
-  usedBytes: number;
-};
-
-const TRAFFIC_TREND_WINDOWS: Array<{ window: TrafficWindow; label: string; minAgeDays: number }> = [
-  { window: "month", label: "last 30 days", minAgeDays: 28 },
-  { window: "week", label: "last week", minAgeDays: 6 },
-  { window: "day", label: "yesterday", minAgeDays: 0 },
-];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -160,50 +138,9 @@ function formatOptionalBytes(value?: number | null): string {
   return value == null ? "" : formatBytes(value);
 }
 
-function formatOptionalDashboardNumber(value?: number | null): string {
-  return value == null ? "" : formatDashboardNumber(value);
-}
-
 function formatLatency(value?: number | null): string {
   if (value == null) return "-";
   return `${Math.round(value)} ms`;
-}
-
-function trafficTotalBytes(stats?: ManagerTrafficStats | null): number {
-  if (!stats) return 0;
-  return (stats.totals.bytes_in ?? 0) + (stats.totals.bytes_out ?? 0);
-}
-
-function hasTrafficPointAtLeast(stats: ManagerTrafficStats, minAgeDays: number): boolean {
-  if (minAgeDays <= 0) return true;
-  const endMs = new Date(stats.end).getTime();
-  if (!Number.isFinite(endMs)) return false;
-  const threshold = endMs - minAgeDays * DAY_MS;
-  return (stats.series ?? []).some((point) => {
-    const pointMs = new Date(point.timestamp).getTime();
-    return Number.isFinite(pointMs) && pointMs <= threshold;
-  });
-}
-
-function selectTrafficTrend(statsByWindow: Partial<Record<TrafficWindow, ManagerTrafficStats>>): TrafficTrendSelection | null {
-  for (const option of TRAFFIC_TREND_WINDOWS) {
-    const stats = statsByWindow[option.window];
-    if (!stats) continue;
-    const totalBytes = trafficTotalBytes(stats);
-    if (totalBytes <= 0) continue;
-    if (!hasTrafficPointAtLeast(stats, option.minAgeDays)) continue;
-    return { totalBytes, label: option.label };
-  }
-  return null;
-}
-
-function formatTrafficTrend(selection: TrafficTrendSelection | null): DashboardMetricTrend | undefined {
-  if (!selection) return undefined;
-  return { label: `${formatBytes(selection.totalBytes)} vs ${selection.label}`, tone: "positive" };
-}
-
-function formatQuotaDetail(quota: string, usagePercent?: number | null): string {
-  return usagePercent == null ? `of ${quota}` : `of ${quota} (${formatPercentage(usagePercent)})`;
 }
 
 function formatQuotaStatusValue(
@@ -214,39 +151,6 @@ function formatQuotaStatusValue(
   if (used == null) return "";
   const usableQuota = quota != null && quota > 0 ? quota : null;
   return usableQuota == null ? formatter(used) : `${formatter(used)} / ${formatter(usableQuota)}`;
-}
-
-function trendToneClasses(tone: DashboardMetricTrend["tone"]): string {
-  if (tone === "negative") return "text-rose-600 dark:text-rose-300";
-  if (tone === "neutral") return "text-[var(--ui-text-muted)]";
-  return "text-emerald-600 dark:text-emerald-300";
-}
-
-function formatSignedTrend(
-  currentValue: number | null | undefined,
-  baselineValue: number | null | undefined,
-  label: string,
-  formatter: (value: number) => string
-): DashboardMetricTrend | undefined {
-  if (currentValue == null || baselineValue == null) return undefined;
-  const delta = currentValue - baselineValue;
-  const tone: DashboardMetricTrend["tone"] = delta > 0 ? "positive" : delta < 0 ? "negative" : "neutral";
-  return { label: `${formatter(Math.abs(delta))} vs ${label}`, tone };
-}
-
-function formatStorageTrend(
-  currentValue: number | null,
-  baseline?: ManagerUsageTrendBaseline | null
-): DashboardMetricTrend | undefined {
-  return formatSignedTrend(currentValue, baseline?.used_bytes, baseline?.label ?? "", formatBytes);
-}
-
-function formatCountTrend(
-  currentValue: number | null,
-  baselineValue: number | null | undefined,
-  baseline?: ManagerUsageTrendBaseline | null
-): DashboardMetricTrend | undefined {
-  return formatSignedTrend(currentValue, baselineValue, baseline?.label ?? "", formatDashboardNumber);
 }
 
 function trendWindowDays(baseline?: ManagerUsageTrendBaseline | null): number {
@@ -277,10 +181,6 @@ function buildStorageEvolutionPoints(
     timestampMs: startMs + (endMs - startMs) * step,
     usedBytes: Math.max(0, startValue + (currentValue - startValue) * step),
   }));
-}
-
-function formatShortDate(value: number): string {
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(value));
 }
 
 function formatSignedBytesDelta(value: number | null): string {
@@ -397,197 +297,6 @@ function buildActivityRows(logs: ManagerActivityEntry[]): ActivityRow[] {
   });
 }
 
-function toneClasses(tone: DashboardTone) {
-  if (tone === "emerald") {
-    return {
-      icon: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300",
-      soft: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300",
-      bar: "bg-emerald-500",
-    };
-  }
-  if (tone === "violet") {
-    return {
-      icon: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300",
-      soft: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300",
-      bar: "bg-violet-500",
-    };
-  }
-  if (tone === "amber") {
-    return {
-      icon: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300",
-      soft: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300",
-      bar: "bg-amber-500",
-    };
-  }
-  return {
-    icon: "bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-200",
-    soft: "bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-200",
-    bar: "bg-primary",
-  };
-}
-
-function DashboardUnavailable({
-  children,
-  className,
-}: {
-  reason?: string | null;
-  children: ReactNode;
-  className?: string;
-}) {
-  if (!className) return <>{children}</>;
-  return <div className={className}>{children}</div>;
-}
-
-function ProgressBar({
-  value,
-  tone = "blue",
-  className,
-  ariaLabel,
-}: {
-  value?: number | null;
-  tone?: DashboardTone;
-  className?: string;
-  ariaLabel?: string;
-}) {
-  const boundedValue = Math.max(0, Math.min(100, value ?? 0));
-  const width = `${boundedValue}%`;
-  return (
-    <div
-      className={cx("h-2 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700/60", className)}
-      {...(ariaLabel
-        ? {
-            role: "meter",
-            "aria-label": ariaLabel,
-            "aria-valuemin": 0,
-            "aria-valuemax": 100,
-            "aria-valuenow": Math.round(boundedValue),
-          }
-        : {})}
-    >
-      <div className={cx("h-full rounded-full", toneClasses(tone).bar)} style={{ width }} />
-    </div>
-  );
-}
-
-function IconBubble({ tone, children, className }: { tone: DashboardTone; children: ReactNode; className?: string }) {
-  return (
-    <span className={cx("flex shrink-0 items-center justify-center rounded-full", toneClasses(tone).icon, className)}>
-      {children}
-    </span>
-  );
-}
-
-function TrendArrowIcon({ tone }: { tone: Exclude<DashboardMetricTrend["tone"], "neutral"> }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      className={cx("h-3.5 w-3.5", tone === "negative" && "rotate-180")}
-      fill="none"
-      aria-hidden="true"
-    >
-      <path d="M8 13V3.75" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M4.75 7 8 3.75 11.25 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function splitTrendLabel(label: string): { value: string; qualifier: string } {
-  const marker = " vs ";
-  const markerIndex = label.indexOf(marker);
-  if (markerIndex === -1) return { value: label, qualifier: "" };
-  return {
-    value: label.slice(0, markerIndex),
-    qualifier: label.slice(markerIndex),
-  };
-}
-
-function MetricTrend({ trend }: { trend: DashboardMetricTrend }) {
-  const toneClass = trendToneClasses(trend.tone);
-  const { value, qualifier } = splitTrendLabel(trend.label);
-  return (
-    <p className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium leading-4 text-[var(--ui-text-muted)]">
-      {trend.tone === "neutral" ? (
-        <span className={cx("flex h-3.5 w-3.5 items-center justify-center", toneClass)} aria-hidden="true">
-          -
-        </span>
-      ) : (
-        <span className={toneClass}>
-          <TrendArrowIcon tone={trend.tone} />
-        </span>
-      )}
-      <span>
-        <span className={toneClass}>{value}</span>
-        {qualifier && <span>{qualifier}</span>}
-      </span>
-    </p>
-  );
-}
-
-function MetricCard({ metric }: { metric: DashboardMetric }) {
-  const content = (
-    <div
-      className={cx(uiCardClass, "flex h-full min-h-[152px] items-center gap-4 px-5 py-3.5 sm:gap-5")}
-      data-kpi-card={metric.label}
-    >
-      <IconBubble tone={metric.tone} className="h-14 w-14 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]">
-        {metric.icon}
-      </IconBubble>
-      <div className="grid min-h-[108px] min-w-0 flex-1 content-center grid-rows-[1rem_2rem_1rem_0.375rem_1rem] gap-y-1">
-        <div className="flex items-center gap-1.5">
-          <p className="whitespace-nowrap text-[11px] font-bold uppercase leading-4 text-[var(--ui-text-muted)]">{metric.label}</p>
-          {metric.label === "Storage used" && <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />}
-        </div>
-        <p
-          className={cx(
-            "font-semibold text-[var(--ui-text)]",
-            metric.compactValue ? "whitespace-nowrap text-[22px] leading-6" : "text-2xl leading-7"
-          )}
-          data-kpi-value={metric.label}
-        >
-          {metric.value}
-        </p>
-        <div className="min-w-0">
-          {metric.detail ? <p className={cx("text-[13px] leading-4", uiMutedTextClass)}>{metric.detail}</p> : <span className="block h-4" aria-hidden="true" />}
-        </div>
-        <div className="flex items-center">
-          {metric.progress != null ? (
-            <ProgressBar
-              value={metric.progress}
-              tone={metric.tone}
-              className="h-1.5 w-full max-w-[220px]"
-              ariaLabel={metric.progressLabel ?? `${metric.label} quota usage`}
-            />
-          ) : (
-            <span className="h-1.5 w-full max-w-[220px]" aria-hidden="true" />
-          )}
-        </div>
-        <div className="flex items-center">
-          {metric.trend ? (
-            <MetricTrend trend={metric.trend} />
-          ) : (
-            <span className="h-4" aria-hidden="true" />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
-  const framed = (
-    <DashboardUnavailable reason={metric.unavailableReason} className="h-full">
-      {content}
-    </DashboardUnavailable>
-  );
-  if (!metric.to || metric.unavailableReason) return framed;
-  return (
-    <Link
-      to={metric.to}
-      className="block h-full rounded-lg transition hover:-translate-y-[1px] hover:shadow-[var(--shell-menu-shadow)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-    >
-      {content}
-    </Link>
-  );
-}
-
 function StorageOverviewCard({
   usedBytes,
   quotaBytes,
@@ -615,6 +324,7 @@ function StorageOverviewCard({
       : growthDelta > 0
         ? "text-emerald-600 dark:text-emerald-300"
         : "text-rose-600 dark:text-rose-300";
+  const growthLabel = trendBaseline?.label ? `Growth (${trendBaseline.label})` : "Growth";
   const projectedFull = formatProjectedFull(usedBytes, quotaBytes, trendBaseline);
   const content = (
     <section className={cx(uiCardClass, "h-full p-4")}>
@@ -637,7 +347,7 @@ function StorageOverviewCard({
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <div className="h-full">
           <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
-            <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">Growth (30 days)</p>
+            <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">{growthLabel}</p>
             <p className={cx("mt-1 text-base font-semibold leading-5", growthToneClass)}>
               {formatSignedBytesDelta(growthDelta)}
             </p>
@@ -660,90 +370,6 @@ function StorageOverviewCard({
     <DashboardUnavailable reason={unavailableReason} className="h-full">
       {content}
     </DashboardUnavailable>
-  );
-}
-
-function StorageEvolutionChart({ points }: { points: StorageEvolutionPoint[] }) {
-  const chart = useMemo(() => {
-    if (points.length < 2) return null;
-    const width = 320;
-    const top = 8;
-    const bottom = 82;
-    const maxValue = Math.max(...points.map((point) => point.usedBytes), 1);
-    const axisMax = maxValue * 1.15;
-    const startMs = points[0]?.timestampMs ?? 0;
-    const endMs = points[points.length - 1]?.timestampMs ?? startMs + 1;
-    const rangeMs = Math.max(1, endMs - startMs);
-    const coordinates = points.map((point) => {
-      const x = ((point.timestampMs - startMs) / rangeMs) * width;
-      const y = bottom - (point.usedBytes / axisMax) * (bottom - top);
-      return { x, y };
-    });
-    const linePath = coordinates
-      .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
-      .join(" ");
-    return {
-      width,
-      top,
-      bottom,
-      axisMax,
-      linePath,
-      areaPath: `${linePath} L ${width} ${bottom} L 0 ${bottom} Z`,
-      xLabels: [points[0], points[Math.floor(points.length / 2)], points[points.length - 1]].map((point) =>
-        point ? formatShortDate(point.timestampMs) : ""
-      ),
-      yLabels: [axisMax, axisMax / 2, 0].map((value) => formatBytes(value)),
-    };
-  }, [points]);
-
-  if (!chart) {
-    return (
-      <div className="mt-4 flex h-[116px] items-center justify-center rounded-md border border-dashed border-[color:var(--ui-border-soft)] ui-caption text-[var(--ui-text-muted)]">
-        No storage history yet.
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-4" aria-label="Storage evolution chart">
-      <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] gap-x-3">
-        <div className="flex h-[92px] flex-col items-end justify-between py-1 pr-1 text-right text-[10px] font-medium leading-3 text-[var(--ui-text-muted)]">
-          {chart.yLabels.map((label, index) => (
-            <span key={`${label}-${index}`} className="whitespace-nowrap tabular-nums">
-              {label}
-            </span>
-          ))}
-        </div>
-        <svg className="h-[92px] w-full overflow-visible" viewBox="0 0 320 92" preserveAspectRatio="none" role="img">
-          <defs>
-            <linearGradient id="manager-storage-evolution-fill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="rgb(37 99 235)" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="rgb(37 99 235)" stopOpacity="0.02" />
-            </linearGradient>
-          </defs>
-          {[chart.top, (chart.top + chart.bottom) / 2, chart.bottom].map((y) => (
-            <line
-              key={y}
-              x1="0"
-              x2={chart.width}
-              y1={y}
-              y2={y}
-              stroke="currentColor"
-              strokeDasharray="3 4"
-              className="text-[var(--ui-border-soft)]"
-            />
-          ))}
-          <path d={chart.areaPath} fill="url(#manager-storage-evolution-fill)" />
-          <path d={chart.linePath} fill="none" stroke="rgb(37 99 235)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <div />
-        <div className="mt-1 flex justify-between text-[10px] font-medium leading-3 text-[var(--ui-text-muted)]">
-          {chart.xLabels.map((label, index) => (
-            <span key={`${label}-${index}`}>{label}</span>
-          ))}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -1097,8 +723,7 @@ function BackendHealthCard({
         )}
         <div className="mt-3 space-y-2">
           <HealthValue label="Latency (avg)" value={showEndpoint ? formatLatency(endpoint.latency_ms) : ""} />
-          <HealthValue label="Availability (24h)" value="" />
-          <HealthValue label="Error rate (24h)" value="" />
+          <HealthValue label="Last check" value={showEndpoint ? formatTimestamp(endpoint.checked_at) : ""} />
         </div>
       </div>
       <Link to="/manager/metrics" className="mt-2.5 inline-flex items-center gap-2 ui-caption font-semibold text-primary">
@@ -1230,7 +855,7 @@ export default function ManagerDashboard() {
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [trafficStats, setTrafficStats] = useState<ManagerTrafficStats | null>(null);
-  const [trafficTrend, setTrafficTrend] = useState<TrafficTrendSelection | null>(null);
+  const [trafficTrend, setTrafficTrend] = useState<WorkspaceTrafficTrendSelection | null>(null);
   const [trafficLoading, setTrafficLoading] = useState(false);
   const [trafficError, setTrafficError] = useState<string | null>(null);
   const [usageTrends, setUsageTrends] = useState<ManagerUsageTrendsResponse | null>(null);
@@ -1382,7 +1007,7 @@ export default function ManagerDashboard() {
         const statsByWindow = Object.fromEntries(entries) as Partial<Record<TrafficWindow, ManagerTrafficStats>>;
         const dayStats = statsByWindow.day ?? null;
         setTrafficStats(dayStats);
-        setTrafficTrend(selectTrafficTrend(statsByWindow));
+        setTrafficTrend(selectWorkspaceTrafficTrend(statsByWindow));
         const dayFailure = results.find(
           (result): result is PromiseRejectedResult => result.status === "rejected"
         );
@@ -1508,21 +1133,9 @@ export default function ManagerDashboard() {
     selected?.max_groups !== undefined && selected?.max_groups !== null
       ? selected.max_groups
       : null;
-  const storagePercent = percent(storageUsedBytes, storageQuotaBytes);
-  const bucketPercent = percent(visibleBucketCount, bucketQuota);
-  const objectPercent = percent(objectCount, objectQuota);
   const uploadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_in ?? null;
   const downloadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_out ?? null;
   const transferBytes = uploadBytes == null || downloadBytes == null ? null : uploadBytes + downloadBytes;
-  const trafficValue = transferBytes == null ? "" : formatBytes(transferBytes);
-  const trafficTrendLabel = trafficUnavailableReason ? undefined : formatTrafficTrend(trafficTrend);
-  const storageTrendLabel = metricsUnavailableReason ? undefined : formatStorageTrend(storageUsedBytes, usageTrends?.storage);
-  const bucketTrendLabel = bucketUnavailableReason
-    ? undefined
-    : formatCountTrend(visibleBucketCount, usageTrends?.buckets?.bucket_count, usageTrends?.buckets);
-  const objectTrendLabel = metricsUnavailableReason
-    ? undefined
-    : formatCountTrend(objectCount, usageTrends?.objects?.used_objects, usageTrends?.objects);
   const bucketRows = buildBucketRows(stats?.bucket_usage ?? []);
   const activityRows = activityUnavailableReason ? [] : buildActivityRows(activityLogs);
   const topBucketsUnavailableReason =
@@ -1559,64 +1172,53 @@ export default function ManagerDashboard() {
       icon: <FileIcon className="h-4 w-4" />,
     },
   ];
-  const metrics: DashboardMetric[] = [
-    {
-      label: "Storage used",
-      value: formatOptionalBytes(storageUsedBytes),
-      detail: storageQuotaBytes == null ? "" : formatQuotaDetail(formatBytes(storageQuotaBytes), storagePercent),
-      progress: storagePercent,
+  const metrics = buildWorkspaceDashboardKpis({
+    storage: {
+      usedBytes: storageUsedBytes,
+      quotaBytes: storageQuotaBytes,
       progressLabel: "Storage used quota usage",
-      trend: storageTrendLabel,
-      tone: "blue",
+      trendBaseline: metricsUnavailableReason ? null : usageTrends?.storage,
       icon: <BucketIcon className="h-7 w-7" />,
       to: "/manager/metrics",
       unavailableReason: metricsUnavailableReason,
     },
-    {
+    spaces: {
       label: "Buckets",
-      value: visibleBucketCount == null ? "" : visibleBucketCount.toLocaleString(),
-      detail:
-        bucketQuota == null
-          ? visibleBucketCount == null
-            ? ""
-            : "Buckets"
-          : formatQuotaDetail(`${bucketQuota.toLocaleString()} buckets`, bucketPercent),
-      progress: bucketPercent,
+      value: visibleBucketCount,
+      quota: bucketQuota,
+      unitLabel: "buckets",
+      knownDetail: "Buckets",
       progressLabel: "Buckets quota usage",
-      trend: bucketTrendLabel,
+      trendBaseline: bucketUnavailableReason ? null : usageTrends?.buckets,
+      trendBaselineValue: usageTrends?.buckets?.bucket_count,
       tone: "emerald",
       icon: <BucketCollectionIcon className="h-7 w-7" />,
       to: "/manager/buckets",
       unavailableReason: bucketUnavailableReason,
     },
-    {
+    objects: {
       label: "Objects",
-      value: formatOptionalDashboardNumber(objectCount),
-      detail:
-        objectQuota == null
-          ? objectCount == null
-            ? ""
-            : "Objects"
-          : formatQuotaDetail(`${formatDashboardNumber(objectQuota)} objects`, objectPercent),
-      progress: objectPercent,
+      value: objectCount,
+      quota: objectQuota,
+      unitLabel: "objects",
+      knownDetail: "Objects",
       progressLabel: "Objects quota usage",
-      trend: objectTrendLabel,
+      trendBaseline: metricsUnavailableReason ? null : usageTrends?.objects,
+      trendBaselineValue: usageTrends?.objects?.used_objects,
       tone: "violet",
       icon: <FileIcon className="h-7 w-7" />,
       to: "/manager/metrics",
       unavailableReason: metricsUnavailableReason,
     },
-    {
-      label: "Transfer",
-      value: trafficLoading ? "..." : trafficValue,
-      detail: trafficValue ? "Last 24h" : "",
-      trend: trafficTrendLabel,
-      tone: "amber",
+    transfer: {
+      bytes: transferBytes,
+      loading: trafficLoading,
+      trendSelection: trafficUnavailableReason ? null : trafficTrend,
       icon: <TransferIcon className="h-7 w-7" />,
       to: "/manager/metrics",
       unavailableReason: trafficUnavailableReason,
     },
-  ];
+  });
   const quickActions: QuickAction[] = [
     {
       label: "Create bucket",
@@ -1705,11 +1307,7 @@ export default function ManagerDashboard() {
         }
       />
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
-          <MetricCard key={metric.label} metric={metric} />
-        ))}
-      </div>
+      <KpiRow metrics={metrics} />
 
       <div data-testid="manager-dashboard-overview-grid" className="grid gap-3 lg:grid-cols-2 xl:grid-cols-12">
         <div className="min-w-0 xl:col-span-4">

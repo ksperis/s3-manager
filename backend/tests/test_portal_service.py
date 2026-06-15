@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -12,12 +12,13 @@ from app.db import (
     AccountRole,
     PortalPublicLink,
     PortalStorageSpaceMetadata,
+    QuotaUsageDaily,
     S3Account,
     StorageEndpoint,
     User,
     UserS3Account,
 )
-from app.models.app_settings import PortalSettings
+from app.models.app_settings import AppSettings, PortalSettings
 from app.models.bucket import Bucket
 from app.models.iam import AccessKey as IAMAccessKey, IAMUser
 from app.models.portal import (
@@ -50,6 +51,12 @@ def _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage
             using_root_key=False,
         ),
     )
+
+
+def _usage_history_settings(enabled: bool) -> AppSettings:
+    settings = AppSettings()
+    settings.general.usage_history_enabled = enabled
+    return settings
 
 
 def test_portal_bucket_creation_updates_user_policy(monkeypatch, db_session):
@@ -1262,6 +1269,130 @@ def test_portal_usage_exposes_quota_and_real_storage_space_breakdown(monkeypatch
         ("research-data", 700, 70),
         ("archive", 200, 20),
     ]
+
+
+def test_portal_usage_trends_exposes_scoped_account_baselines(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(True))
+    monkeypatch.setattr(portal_router, "utcnow", lambda: datetime(2026, 6, 9, 12, 0, 0))
+    endpoint = StorageEndpoint(
+        name="portal-trends-endpoint",
+        endpoint_url="https://portal-trends.example.test",
+        provider="ceph",
+        features_config=(
+            "features:\n"
+            "  metrics:\n"
+            "    enabled: true\n"
+        ),
+    )
+    account = S3Account(
+        name="portal-trends",
+        rgw_account_id="portal-trends",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        storage_endpoint=endpoint,
+    )
+    other_account = S3Account(
+        name="portal-trends-other",
+        rgw_account_id="portal-trends-other",
+        rgw_access_key="OTHER-AK",
+        rgw_secret_key="OTHER-SK",
+        storage_endpoint=endpoint,
+    )
+    user = User(email="usage-trends@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([endpoint, account, other_account, user])
+    db_session.commit()
+    db_session.refresh(account)
+    db_session.refresh(other_account)
+
+    db_session.add_all(
+        [
+            QuotaUsageDaily(
+                day=date(2026, 5, 10),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                last_used_bytes=100,
+                last_used_objects=10,
+                bucket_count=1,
+                updated_at=datetime(2026, 5, 10, 12, 0, 0),
+            ),
+            QuotaUsageDaily(
+                day=date(2026, 5, 10),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=other_account.id,
+                last_used_bytes=999,
+                last_used_objects=99,
+                bucket_count=9,
+                updated_at=datetime(2026, 5, 10, 12, 0, 0),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = portal_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
+
+    assert payload.storage is not None
+    assert payload.storage.window == "month"
+    assert payload.storage.used_bytes == 100
+    assert payload.objects is not None
+    assert payload.objects.used_objects == 10
+    assert payload.buckets is not None
+    assert payload.buckets.bucket_count == 1
+
+
+def test_portal_usage_trends_return_empty_when_history_disabled(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(False))
+    endpoint = StorageEndpoint(
+        name="portal-trends-disabled-endpoint",
+        endpoint_url="https://portal-trends-disabled.example.test",
+        provider="ceph",
+        features_config=(
+            "features:\n"
+            "  metrics:\n"
+            "    enabled: true\n"
+        ),
+    )
+    account = S3Account(
+        name="portal-trends-disabled",
+        rgw_account_id="portal-trends-disabled",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        storage_endpoint=endpoint,
+    )
+    user = User(email="usage-trends-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([endpoint, account, user])
+    db_session.commit()
+
+    payload = portal_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
+
+    assert payload.model_dump(exclude_none=True) == {}
+
+
+def test_portal_usage_trends_return_empty_without_baseline(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(True))
+    endpoint = StorageEndpoint(
+        name="portal-trends-empty-endpoint",
+        endpoint_url="https://portal-trends-empty.example.test",
+        provider="ceph",
+        features_config=(
+            "features:\n"
+            "  metrics:\n"
+            "    enabled: true\n"
+        ),
+    )
+    account = S3Account(
+        name="portal-trends-empty",
+        rgw_account_id="portal-trends-empty",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        storage_endpoint=endpoint,
+    )
+    user = User(email="usage-trends-empty@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([endpoint, account, user])
+    db_session.commit()
+
+    payload = portal_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
+
+    assert payload.model_dump(exclude_none=True) == {}
 
 
 def test_portal_alerts_are_derived_from_quota_public_spaces_and_transfer_errors(monkeypatch, db_session):

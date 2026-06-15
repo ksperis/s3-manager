@@ -403,6 +403,8 @@ describe("manager shell pages", () => {
     expect(screen.getByText("Quick actions")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Manage lifecycle" })).toHaveAttribute("href", "/manager/buckets");
     expect(screen.getByText("Storage backend health")).toBeInTheDocument();
+    expect(screen.queryByText("Availability (24h)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Error rate (24h)")).not.toBeInTheDocument();
     expect(screen.queryByText("Storage Usage")).not.toBeInTheDocument();
     expect(screen.queryByText("Metrics are unavailable for this context.")).not.toBeInTheDocument();
     expect(screen.queryByText("5.3 TB")).not.toBeInTheDocument();
@@ -930,6 +932,7 @@ describe("manager shell pages", () => {
       </MemoryRouter>
     );
 
+    expect(document.querySelector('[data-workspace-dashboard-kpi-row="true"]')).toBeInTheDocument();
     expect(screen.getByText("Top buckets by storage")).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: /Buckets\s+2\s+of 4 buckets \(50%\)/i })).toHaveAttribute("href", "/manager/buckets");
     expect(screen.getByRole("meter", { name: "Storage used quota usage" })).toHaveAttribute("aria-valuenow", "50");
@@ -948,6 +951,7 @@ describe("manager shell pages", () => {
     expect(quotaStatusScope.getByText("1 / 4")).toBeInTheDocument();
     expect(quotaStatusScope.queryByText("Bandwidth (month)")).not.toBeInTheDocument();
     expect(await screen.findByText(trendText("1.0 GB vs last 30 days"))).toBeInTheDocument();
+    expect(screen.getByText("Growth (last 30 days)")).toBeInTheDocument();
     expect(screen.getByText(trendText("1 vs last 30 days"))).toBeInTheDocument();
     expect(screen.getByText(trendText("4 vs last 30 days"))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View all buckets/ })).toHaveAttribute("href", "/manager/buckets");
@@ -1001,6 +1005,8 @@ describe("manager shell pages", () => {
     );
 
     expect(await screen.findByText(trendText("1.0 GB vs last week"))).toBeInTheDocument();
+    expect(screen.getByText("Growth (last week)")).toBeInTheDocument();
+    expect(screen.queryByText("Growth (30 days)")).not.toBeInTheDocument();
     expect(screen.getByText(trendText("0 vs yesterday"))).toBeInTheDocument();
     expect(screen.getByText(trendText("2 vs last week"))).toBeInTheDocument();
   });

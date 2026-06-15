@@ -1,0 +1,221 @@
+/*
+ * Copyright (c) 2026 Laurent Barbe
+ * Licensed under the Apache License, Version 2.0
+ */
+import type { ReactNode } from "react";
+import type { ManagerTrafficStats, ManagerUsageTrendBaseline, TrafficWindow } from "../api/stats";
+import { formatBytes, formatCompactNumber, formatPercentage } from "../utils/format";
+import type { WorkspaceDashboardMetric, WorkspaceDashboardMetricTrend, WorkspaceDashboardTone } from "./WorkspaceDashboardKit";
+
+export type WorkspaceTrafficTrendSelection = {
+  totalBytes: number;
+  label: string;
+};
+
+export const WORKSPACE_TRAFFIC_TREND_WINDOWS: Array<{ window: TrafficWindow; label: string; minAgeDays: number }> = [
+  { window: "month", label: "last 30 days", minAgeDays: 28 },
+  { window: "week", label: "last week", minAgeDays: 6 },
+  { window: "day", label: "yesterday", minAgeDays: 0 },
+];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type WorkspaceKpiEndpoint = {
+  to?: string;
+  unavailableReason?: string | null;
+};
+
+type WorkspaceKpiStorageConfig = WorkspaceKpiEndpoint & {
+  usedBytes?: number | null;
+  quotaBytes?: number | null;
+  quotaUnavailableDetail?: string;
+  trendBaseline?: ManagerUsageTrendBaseline | null;
+  progressLabel: string;
+  icon: ReactNode;
+};
+
+type WorkspaceKpiCountConfig = WorkspaceKpiEndpoint & {
+  label: string;
+  value?: number | null;
+  quota?: number | null;
+  unitLabel: string;
+  knownDetail?: string;
+  activeValue?: number | null;
+  activeLabel?: string;
+  trendBaseline?: ManagerUsageTrendBaseline | null;
+  trendBaselineValue?: number | null;
+  progressLabel?: string;
+  tone: WorkspaceDashboardTone;
+  icon: ReactNode;
+};
+
+type WorkspaceKpiTransferConfig = WorkspaceKpiEndpoint & {
+  bytes?: number | null;
+  loading?: boolean;
+  trendSelection?: WorkspaceTrafficTrendSelection | null;
+  detailLabel?: string;
+  icon: ReactNode;
+};
+
+export type BuildWorkspaceDashboardKpisConfig = {
+  storage: WorkspaceKpiStorageConfig;
+  spaces: WorkspaceKpiCountConfig;
+  objects: WorkspaceKpiCountConfig;
+  transfer: WorkspaceKpiTransferConfig;
+};
+
+export function workspaceDashboardPercent(used?: number | null, quota?: number | null): number | null {
+  if (used == null || quota == null || quota <= 0) return null;
+  return Math.max(0, Math.min(100, (used / quota) * 100));
+}
+
+export function formatWorkspaceDashboardNumber(value?: number | null): string {
+  if (value == null) return "-";
+  return formatCompactNumber(value)
+    .replace(/k$/, " K")
+    .replace(/M$/, " M")
+    .replace(/B$/, " B");
+}
+
+export function formatWorkspaceOptionalBytes(value?: number | null): string {
+  return value == null ? "" : formatBytes(value);
+}
+
+export function formatWorkspaceOptionalDashboardNumber(value?: number | null): string {
+  return value == null ? "" : formatWorkspaceDashboardNumber(value);
+}
+
+export function formatWorkspaceQuotaDetail(quota: string, usagePercent?: number | null): string {
+  return usagePercent == null ? `of ${quota}` : `of ${quota} (${formatPercentage(usagePercent)})`;
+}
+
+export function workspaceTrafficTotalBytes(stats?: ManagerTrafficStats | null): number {
+  if (!stats) return 0;
+  return (stats.totals.bytes_in ?? 0) + (stats.totals.bytes_out ?? 0);
+}
+
+function hasTrafficPointAtLeast(stats: ManagerTrafficStats, minAgeDays: number): boolean {
+  if (minAgeDays <= 0) return true;
+  const endMs = new Date(stats.end).getTime();
+  if (!Number.isFinite(endMs)) return false;
+  const threshold = endMs - minAgeDays * DAY_MS;
+  return (stats.series ?? []).some((point) => {
+    const pointMs = new Date(point.timestamp).getTime();
+    return Number.isFinite(pointMs) && pointMs <= threshold;
+  });
+}
+
+export function selectWorkspaceTrafficTrend(
+  statsByWindow: Partial<Record<TrafficWindow, ManagerTrafficStats>>
+): WorkspaceTrafficTrendSelection | null {
+  for (const option of WORKSPACE_TRAFFIC_TREND_WINDOWS) {
+    const stats = statsByWindow[option.window];
+    if (!stats) continue;
+    const totalBytes = workspaceTrafficTotalBytes(stats);
+    if (totalBytes <= 0) continue;
+    if (!hasTrafficPointAtLeast(stats, option.minAgeDays)) continue;
+    return { totalBytes, label: option.label };
+  }
+  return null;
+}
+
+export function formatWorkspaceTrafficTrend(
+  selection: WorkspaceTrafficTrendSelection | null
+): WorkspaceDashboardMetricTrend | undefined {
+  if (!selection) return undefined;
+  return { label: `${formatBytes(selection.totalBytes)} vs ${selection.label}`, tone: "positive" };
+}
+
+export function formatWorkspaceSignedTrend(
+  currentValue: number | null | undefined,
+  baselineValue: number | null | undefined,
+  label: string,
+  formatter: (value: number) => string
+): WorkspaceDashboardMetricTrend | undefined {
+  if (currentValue == null || baselineValue == null || !label) return undefined;
+  const delta = currentValue - baselineValue;
+  const tone: WorkspaceDashboardMetricTrend["tone"] = delta > 0 ? "positive" : delta < 0 ? "negative" : "neutral";
+  return { label: `${formatter(Math.abs(delta))} vs ${label}`, tone };
+}
+
+export function formatWorkspaceStorageTrend(
+  currentValue: number | null | undefined,
+  baseline?: ManagerUsageTrendBaseline | null
+): WorkspaceDashboardMetricTrend | undefined {
+  return formatWorkspaceSignedTrend(currentValue, baseline?.used_bytes, baseline?.label ?? "", formatBytes);
+}
+
+export function formatWorkspaceCountTrend(
+  currentValue: number | null | undefined,
+  baselineValue: number | null | undefined,
+  baseline?: ManagerUsageTrendBaseline | null
+): WorkspaceDashboardMetricTrend | undefined {
+  return formatWorkspaceSignedTrend(currentValue, baselineValue, baseline?.label ?? "", formatWorkspaceDashboardNumber);
+}
+
+function formatCountValue(value: number | null | undefined): string {
+  return value == null ? "" : value.toLocaleString();
+}
+
+function buildCountMetric(config: WorkspaceKpiCountConfig): WorkspaceDashboardMetric {
+  const progress = workspaceDashboardPercent(config.value, config.quota);
+  const detail =
+    config.quota != null
+      ? formatWorkspaceQuotaDetail(`${formatWorkspaceDashboardNumber(config.quota)} ${config.unitLabel}`, progress)
+      : config.activeValue != null && config.activeLabel
+        ? `${config.activeValue.toLocaleString()} ${config.activeLabel}`
+        : config.value == null
+          ? ""
+          : config.knownDetail ?? config.unitLabel;
+
+  return {
+    label: config.label,
+    value: formatCountValue(config.value),
+    detail,
+    progress,
+    progressLabel: config.progressLabel,
+    trend: formatWorkspaceCountTrend(config.value, config.trendBaselineValue, config.trendBaseline),
+    tone: config.tone,
+    icon: config.icon,
+    to: config.to,
+    unavailableReason: config.unavailableReason,
+  };
+}
+
+export function buildWorkspaceDashboardKpis(config: BuildWorkspaceDashboardKpisConfig): WorkspaceDashboardMetric[] {
+  const storagePercent = workspaceDashboardPercent(config.storage.usedBytes, config.storage.quotaBytes);
+  const storageMetric: WorkspaceDashboardMetric = {
+    label: "Storage used",
+    value: formatWorkspaceOptionalBytes(config.storage.usedBytes),
+    detail:
+      config.storage.quotaBytes == null
+        ? config.storage.quotaUnavailableDetail ?? ""
+        : formatWorkspaceQuotaDetail(formatBytes(config.storage.quotaBytes), storagePercent),
+    progress: storagePercent,
+    progressLabel: config.storage.progressLabel,
+    trend: formatWorkspaceStorageTrend(config.storage.usedBytes, config.storage.trendBaseline),
+    tone: "blue",
+    icon: config.storage.icon,
+    to: config.storage.to,
+    unavailableReason: config.storage.unavailableReason,
+  };
+
+  const transferValue = config.transfer.loading ? "..." : formatWorkspaceOptionalBytes(config.transfer.bytes);
+  const transferMetric: WorkspaceDashboardMetric = {
+    label: "Transfer",
+    value: transferValue,
+    detail: config.transfer.bytes == null ? "" : config.transfer.detailLabel ?? "Last 24h",
+    trend: config.transfer.loading || config.transfer.bytes == null ? undefined : formatWorkspaceTrafficTrend(config.transfer.trendSelection ?? null),
+    tone: "amber",
+    icon: config.transfer.icon,
+    to: config.transfer.to,
+    unavailableReason: config.transfer.unavailableReason,
+  };
+
+  return [
+    storageMetric,
+    buildCountMetric(config.spaces),
+    buildCountMetric(config.objects),
+    transferMetric,
+  ];
+}

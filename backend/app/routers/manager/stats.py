@@ -2,8 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 import logging
-from datetime import datetime, timedelta
-from typing import Literal, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -12,7 +11,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.db import QuotaUsageDaily, S3Account
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
-from app.models.manager_stats import ManagerUsageTrendBaseline, ManagerUsageTrendsResponse
+from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
 from app.routers.dependencies import (
     get_account_context,
@@ -25,6 +24,7 @@ from app.services.healthcheck_service import HealthCheckService
 from app.services.rgw_admin import RGWAdminError
 from app.services.rgw_iam import get_iam_service
 from app.services.traffic_service import TrafficService, TrafficWindow
+from app.services.usage_trends_service import account_usage_trend_filters, build_account_usage_trends
 from app.services.usage_history_service import UsageHistoryService
 from app.utils.s3_endpoint import resolve_iam_client_options
 
@@ -33,14 +33,6 @@ router = APIRouter(prefix="/manager/stats", tags=["manager-stats"])
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-UsageTrendWindow = Literal["month", "week", "day"]
-_USAGE_TREND_WINDOWS: tuple[tuple[UsageTrendWindow, str, int], ...] = (
-    ("month", "last 30 days", 28),
-    ("week", "last week", 6),
-    ("day", "yesterday", 1),
-)
-
-
 def _safe_list(operation: str, func):
     try:
         return func()
@@ -48,92 +40,8 @@ def _safe_list(operation: str, func):
         logger.warning("Unable to fetch IAM %s stats: %s", operation, exc)
         return []
 
-
-def _usage_trend_filters(account: S3Account) -> list | None:
-    if getattr(account, "s3_connection_id", None) is not None:
-        return None
-    endpoint_id = getattr(account, "storage_endpoint_id", None)
-    if endpoint_id is None:
-        return None
-    filters = [QuotaUsageDaily.storage_endpoint_id == int(endpoint_id)]
-    s3_user_id = getattr(account, "s3_user_id", None)
-    if s3_user_id is not None:
-        filters.extend(
-            [
-                QuotaUsageDaily.s3_user_id == int(s3_user_id),
-                QuotaUsageDaily.s3_account_id.is_(None),
-            ]
-        )
-    else:
-        filters.extend(
-            [
-                QuotaUsageDaily.s3_account_id == int(account.id),
-                QuotaUsageDaily.s3_user_id.is_(None),
-            ]
-        )
-    return filters
-
-
 def _usage_history_trend_filters(account: S3Account, model) -> list | None:
-    if getattr(account, "s3_connection_id", None) is not None:
-        return None
-    endpoint_id = getattr(account, "storage_endpoint_id", None)
-    if endpoint_id is None:
-        return None
-    filters = [model.storage_endpoint_id == int(endpoint_id)]
-    s3_user_id = getattr(account, "s3_user_id", None)
-    if s3_user_id is not None:
-        filters.extend(
-            [
-                model.s3_user_id == int(s3_user_id),
-                model.s3_account_id.is_(None),
-            ]
-        )
-    else:
-        filters.extend(
-            [
-                model.s3_account_id == int(account.id),
-                model.s3_user_id.is_(None),
-            ]
-        )
-    return filters
-
-
-def _serialize_usage_trend_baseline(
-    row: QuotaUsageDaily,
-    *,
-    window: UsageTrendWindow,
-    label: str,
-) -> ManagerUsageTrendBaseline:
-    return ManagerUsageTrendBaseline(
-        window=window,
-        label=label,
-        period_start=row.day.isoformat(),
-        used_bytes=int(row.last_used_bytes or 0),
-        used_objects=int(row.last_used_objects or 0),
-        bucket_count=int(row.bucket_count) if row.bucket_count is not None else None,
-        collected_at=row.updated_at.isoformat() if row.updated_at else None,
-    )
-
-
-def _select_usage_trend_baseline(
-    db: Session,
-    *,
-    filters: list,
-    value_column,
-) -> ManagerUsageTrendBaseline | None:
-    today = utcnow().date()
-    for window, label, min_age_days in _USAGE_TREND_WINDOWS:
-        cutoff = today - timedelta(days=min_age_days)
-        row = (
-            db.query(QuotaUsageDaily)
-            .filter(*filters, QuotaUsageDaily.day <= cutoff, value_column.isnot(None))
-            .order_by(QuotaUsageDaily.day.desc(), QuotaUsageDaily.updated_at.desc(), QuotaUsageDaily.id.desc())
-            .first()
-        )
-        if row is not None:
-            return _serialize_usage_trend_baseline(row, window=window, label=label)
-    return None
+    return account_usage_trend_filters(account, model)
 
 
 @router.get("/overview")
@@ -224,14 +132,7 @@ def account_usage_trends(
 ) -> ManagerUsageTrendsResponse:
     if not load_app_settings().general.usage_history_enabled:
         return ManagerUsageTrendsResponse()
-    filters = _usage_trend_filters(account)
-    if not filters:
-        return ManagerUsageTrendsResponse()
-    return ManagerUsageTrendsResponse(
-        storage=_select_usage_trend_baseline(db, filters=filters, value_column=QuotaUsageDaily.last_used_bytes),
-        objects=_select_usage_trend_baseline(db, filters=filters, value_column=QuotaUsageDaily.last_used_objects),
-        buckets=_select_usage_trend_baseline(db, filters=filters, value_column=QuotaUsageDaily.bucket_count),
-    )
+    return build_account_usage_trends(db, account, reference_date=utcnow().date())
 
 
 @router.get("/usage-history-trends", response_model=UsageHistoryTrendResponse)

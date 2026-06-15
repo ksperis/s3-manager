@@ -7,6 +7,7 @@ import { Bucket } from "./buckets";
 import { S3Account } from "./accounts";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { PortalSettings, PortalSettingsOverride, PortalSettingsOverridePolicy } from "./appSettings";
+import type { ManagerUsageTrendsResponse } from "./stats";
 
 export type PortalAccessKey = {
   access_key_id: string;
@@ -201,6 +202,11 @@ export async function fetchPortalState(accountId: S3AccountSelector): Promise<Po
 
 export async function fetchPortalUsage(accountId: S3AccountSelector): Promise<PortalUsage> {
   const { data } = await client.get<PortalUsage>("/portal/usage", { params: withS3AccountParam(undefined, accountId) });
+  return data;
+}
+
+export async function fetchPortalUsageTrends(accountId: S3AccountSelector): Promise<ManagerUsageTrendsResponse> {
+  const { data } = await client.get<ManagerUsageTrendsResponse>("/portal/usage-trends", { params: withS3AccountParam(undefined, accountId) });
   return data;
 }
 

@@ -32,6 +32,7 @@ from app.models.portal import (
     PortalUsage,
 )
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
+from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.s3_account import S3Account as S3AccountSchema
 from app.routers.dependencies import (
     AccountAccess,
@@ -51,6 +52,7 @@ from app.utils.storage_endpoint_features import (
 )
 from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.services.traffic_service import TrafficService, TrafficWindow, WINDOW_RESOLUTION_LABELS, WINDOW_DELTAS
+from app.services.usage_trends_service import build_account_usage_trends
 from app.services.rgw_admin import RGWAdminError
 from app.services.users_service import UsersService, get_users_service
 from app.utils.s3_account_ordering import s3_account_name_order_by
@@ -191,6 +193,22 @@ def portal_usage(
         return service.get_usage(actor, access)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
+
+
+@router.get("/usage-trends", response_model=ManagerUsageTrendsResponse, response_model_exclude_none=True)
+def portal_usage_trends(
+    access: AccountAccess = Depends(get_portal_account_access),
+    db: Session = Depends(get_db),
+) -> ManagerUsageTrendsResponse:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    endpoint = getattr(access.account, "storage_endpoint", None)
+    if endpoint and not resolve_feature_flags(endpoint).metrics_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage metrics are disabled for this endpoint")
+    if not load_app_settings().general.usage_history_enabled:
+        return ManagerUsageTrendsResponse()
+    return build_account_usage_trends(db, access.account, reference_date=utcnow().date())
 
 
 @router.get("/activity", response_model=list[PortalActivityItem])
