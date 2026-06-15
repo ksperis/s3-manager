@@ -49,9 +49,9 @@ def _upload(session: BackendSession, account_id: int, bucket_name: str, key: str
 def _run_manager_usage_stats(session: BackendSession, account_id: int, bucket_name: str) -> dict[str, Any]:
     response = session.request(
         "POST",
-        "/manager/bucket-usage-stats/stream",
+        f"/manager/buckets/{bucket_name}/usage-stats/stream",
         params={"account_id": account_id},
-        json={"buckets": [bucket_name], "parallelism": 1},
+        json={"parallelism": 1},
     )
     return _parse_sse_result(response.text)
 
