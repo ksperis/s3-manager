@@ -217,9 +217,11 @@ def _normalize_http_error_detail(detail: object) -> object:
 
 _BUCKET_LIST_CACHE: OrderedDict[_BucketListCacheKey, _BucketListCacheEntry] = OrderedDict()
 _BUCKET_LIST_CACHE_LOCK = Lock()
+_BUCKET_LIST_INFLIGHT: dict[_BucketListCacheKey, Future[_BucketListingSnapshot]] = {}
 _RGW_BUCKET_PAYLOAD_CACHE: OrderedDict[_RgwBucketPayloadCacheKey, _RgwBucketPayloadCacheEntry] = OrderedDict()
 _RGW_BUCKET_PAYLOAD_CACHE_LOCK = Lock()
-_RGW_BUCKET_PAYLOAD_INFLIGHT: dict[_RgwBucketPayloadCacheKey, Future[list[dict]]] = {}
+_RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS: dict[int, Lock] = {}
+_RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS_LOCK = Lock()
 _FEATURE_PARAM_UNAVAILABLE = object()
 _FEATURE_PARAM_SOURCE_BY_PARAM: dict[str, str] = {
     "lifecycle_rule_id": "lifecycle",
@@ -1859,10 +1861,22 @@ def _load_feature_param_snapshots(
 def _filter_requires_owner_metadata(query: CephAdminBucketFilterQuery | None) -> bool:
     if not query:
         return False
-    owner_related_fields = {"tenant", "owner", "owner_name", "owner_kind"} | _OWNER_ENRICHED_FIELDS
+    owner_related_fields = {"owner", "owner_kind", "tenant", "owner_name"} | _OWNER_ENRICHED_FIELDS
     for rule in query.rules:
         if rule.field in owner_related_fields:
             return True
+    return False
+
+
+def _filter_requires_tenant_metadata(query: CephAdminBucketFilterQuery | None) -> bool:
+    if not query:
+        return False
+    for rule in query.rules:
+        if rule.field == "tenant":
+            return True
+    owner_detail_fields = {"owner_name"} | _OWNER_ENRICHED_FIELDS
+    if any(rule.field in owner_detail_fields for rule in query.rules):
+        return _determine_owner_name_lookup_scope(query) != "account"
     return False
 
 
@@ -1885,6 +1899,14 @@ def _request_requires_owner_metadata(
     return _filter_requires_owner_metadata(query) or sort_by in {"tenant", "owner"} or bool(simple_filter)
 
 
+def _request_requires_tenant_metadata(
+    query: CephAdminBucketFilterQuery | None,
+    sort_by: str,
+    simple_filter: str | None,
+) -> bool:
+    return _filter_requires_tenant_metadata(query) or sort_by == "tenant" or bool(simple_filter)
+
+
 def _backfill_bucket_owner_metadata(
     ctx: CephAdminContext,
     buckets: list[CephAdminBucketSummary],
@@ -1903,7 +1925,8 @@ def _backfill_bucket_owner_metadata(
     pending = [
         bucket
         for bucket in buckets
-        if not bucket.owner or (include_tenant and bucket.tenant is None)
+        if not bucket.owner
+        or (include_tenant and bucket.tenant is None and _owner_kind_from_owner(bucket.owner) != "account")
     ]
     if not pending:
         return buckets
@@ -2399,27 +2422,46 @@ def _prune_rgw_bucket_payload_cache(now: float) -> None:
         _RGW_BUCKET_PAYLOAD_CACHE.popitem(last=False)
 
 
-def _get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> list[dict]:
-    key = _RgwBucketPayloadCacheKey(endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0), with_stats=with_stats)
+def _get_rgw_bucket_payload_endpoint_lock(endpoint_id: int) -> Lock:
+    with _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS_LOCK:
+        lock = _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS.get(endpoint_id)
+        if lock is None:
+            lock = Lock()
+            _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS[endpoint_id] = lock
+        return lock
+
+
+def _get_rgw_bucket_entries_from_cache(key: _RgwBucketPayloadCacheKey) -> list[dict] | None:
     now = monotonic()
-    is_owner = False
-    in_flight: Future[list[dict]] | None = None
     with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         _prune_rgw_bucket_payload_cache(now)
         cached = _RGW_BUCKET_PAYLOAD_CACHE.get(key)
         if cached is not None:
             _RGW_BUCKET_PAYLOAD_CACHE.move_to_end(key)
             return cached.entries
-        in_flight = _RGW_BUCKET_PAYLOAD_INFLIGHT.get(key)
-        if in_flight is None:
-            in_flight = Future()
-            _RGW_BUCKET_PAYLOAD_INFLIGHT[key] = in_flight
-            is_owner = True
 
-    if not is_owner:
-        return in_flight.result()
+        if not key.with_stats:
+            stats_key = _RgwBucketPayloadCacheKey(endpoint_id=key.endpoint_id, with_stats=True)
+            cached_stats = _RGW_BUCKET_PAYLOAD_CACHE.get(stats_key)
+            if cached_stats is not None:
+                _RGW_BUCKET_PAYLOAD_CACHE.move_to_end(stats_key)
+                return cached_stats.entries
+    return None
 
-    try:
+
+def _get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> list[dict]:
+    endpoint_id = int(getattr(ctx.endpoint, "id", 0) or 0)
+    key = _RgwBucketPayloadCacheKey(endpoint_id=endpoint_id, with_stats=with_stats)
+    cached = _get_rgw_bucket_entries_from_cache(key)
+    if cached is not None:
+        return cached
+
+    endpoint_lock = _get_rgw_bucket_payload_endpoint_lock(endpoint_id)
+    with endpoint_lock:
+        cached = _get_rgw_bucket_entries_from_cache(key)
+        if cached is not None:
+            return cached
+
         payload = ctx.rgw_admin.get_all_buckets(with_stats=with_stats)
         entries = extract_bucket_list(payload)
         expires_at = monotonic() + BUCKET_LIST_CACHE_TTL_SECONDS
@@ -2432,15 +2474,7 @@ def _get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> l
             )
             _RGW_BUCKET_PAYLOAD_CACHE.move_to_end(key)
             _prune_rgw_bucket_payload_cache(monotonic())
-        in_flight.set_result(entries)
         return entries
-    except Exception as exc:
-        in_flight.set_exception(exc)
-        raise
-    finally:
-        with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
-            if _RGW_BUCKET_PAYLOAD_INFLIGHT.get(key) is in_flight:
-                _RGW_BUCKET_PAYLOAD_INFLIGHT.pop(key, None)
 
 
 def _get_cached_bucket_listing(
@@ -2448,25 +2482,44 @@ def _get_cached_bucket_listing(
     builder: Callable[[], _BucketListingSnapshot],
 ) -> _BucketListingSnapshot:
     now = monotonic()
+    is_owner = False
+    in_flight: Future[_BucketListingSnapshot] | None = None
     with _BUCKET_LIST_CACHE_LOCK:
         _prune_bucket_listing_cache(now)
         cached = _BUCKET_LIST_CACHE.get(key)
         if cached is not None:
             _BUCKET_LIST_CACHE.move_to_end(key)
             return cached.listing
+        in_flight = _BUCKET_LIST_INFLIGHT.get(key)
+        if in_flight is None:
+            in_flight = Future()
+            _BUCKET_LIST_INFLIGHT[key] = in_flight
+            is_owner = True
 
-    listing = builder()
-    expires_at = monotonic() + BUCKET_LIST_CACHE_TTL_SECONDS
-    with _BUCKET_LIST_CACHE_LOCK:
-        _prune_bucket_listing_cache(monotonic())
-        _BUCKET_LIST_CACHE[key] = _BucketListCacheEntry(
-            endpoint_id=key.endpoint_id,
-            expires_at=expires_at,
-            listing=listing,
-        )
-        _BUCKET_LIST_CACHE.move_to_end(key)
-        _prune_bucket_listing_cache(monotonic())
-    return listing
+    if not is_owner:
+        return in_flight.result()
+
+    try:
+        listing = builder()
+        expires_at = monotonic() + BUCKET_LIST_CACHE_TTL_SECONDS
+        with _BUCKET_LIST_CACHE_LOCK:
+            _prune_bucket_listing_cache(monotonic())
+            _BUCKET_LIST_CACHE[key] = _BucketListCacheEntry(
+                endpoint_id=key.endpoint_id,
+                expires_at=expires_at,
+                listing=listing,
+            )
+            _BUCKET_LIST_CACHE.move_to_end(key)
+            _prune_bucket_listing_cache(monotonic())
+        in_flight.set_result(listing)
+        return listing
+    except Exception as exc:
+        in_flight.set_exception(exc)
+        raise
+    finally:
+        with _BUCKET_LIST_CACHE_LOCK:
+            if _BUCKET_LIST_INFLIGHT.get(key) is in_flight:
+                _BUCKET_LIST_INFLIGHT.pop(key, None)
 
 
 def _invalidate_bucket_listing_cache(endpoint_id: int) -> None:
@@ -2478,9 +2531,6 @@ def _invalidate_bucket_listing_cache(endpoint_id: int) -> None:
         invalid_keys = [key for key, entry in _RGW_BUCKET_PAYLOAD_CACHE.items() if entry.endpoint_id == endpoint_id]
         for key in invalid_keys:
             _RGW_BUCKET_PAYLOAD_CACHE.pop(key, None)
-        inflight_keys = [key for key in _RGW_BUCKET_PAYLOAD_INFLIGHT.keys() if key.endpoint_id == endpoint_id]
-        for key in inflight_keys:
-            _RGW_BUCKET_PAYLOAD_INFLIGHT.pop(key, None)
 
 
 def _require_sse_feature(ctx: CephAdminContext) -> None:
@@ -2578,6 +2628,11 @@ def _compute_bucket_listing(
     wants_owner_quota_usage = "owner_quota_usage" in include_set
     owner_usage_required_for_request = wants_owner_quota_usage or _filter_requires_owner_usage(advanced_filter)
     needs_owner_metadata = _request_requires_owner_metadata(
+        advanced_filter,
+        sort_by,
+        simple_filter if not advanced_filter else None,
+    )
+    needs_tenant_metadata = _request_requires_tenant_metadata(
         advanced_filter,
         sort_by,
         simple_filter if not advanced_filter else None,
@@ -2709,7 +2764,7 @@ def _compute_bucket_listing(
             results = _backfill_bucket_owner_metadata(
                 ctx,
                 results,
-                include_tenant=True,
+                include_tenant=needs_tenant_metadata,
                 **(
                     {
                         "progress": progress,

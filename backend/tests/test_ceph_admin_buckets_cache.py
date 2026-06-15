@@ -85,16 +85,16 @@ class FakeRGWAdmin:
 def clear_buckets_listing_cache():
     with buckets_router._BUCKET_LIST_CACHE_LOCK:
         buckets_router._BUCKET_LIST_CACHE.clear()
+        buckets_router._BUCKET_LIST_INFLIGHT.clear()
     with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
-        buckets_router._RGW_BUCKET_PAYLOAD_INFLIGHT.clear()
     invalidate_bucket_owner_metadata_cache()
     yield
     with buckets_router._BUCKET_LIST_CACHE_LOCK:
         buckets_router._BUCKET_LIST_CACHE.clear()
+        buckets_router._BUCKET_LIST_INFLIGHT.clear()
     with buckets_router._RGW_BUCKET_PAYLOAD_CACHE_LOCK:
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
-        buckets_router._RGW_BUCKET_PAYLOAD_INFLIGHT.clear()
     invalidate_bucket_owner_metadata_cache()
 
 
@@ -210,6 +210,131 @@ def test_ceph_admin_rgw_bucket_payload_cache_coalesces_parallel_misses():
 
     assert not errors
     assert rgw_admin.get_all_buckets_calls == 1
+    assert len(results) == 2
+    assert all(result.items[0].name == "bucket-a" for result in results)
+
+
+def test_ceph_admin_bucket_listing_snapshot_cache_coalesces_parallel_misses(monkeypatch: pytest.MonkeyPatch):
+    payload = [{"name": "bucket-a", "owner": "owner-a"}]
+    ctx, rgw_admin = _build_ctx(endpoint_id=178, payload=payload)
+    original_build_bucket_summary = buckets_router._build_bucket_summary
+    started = threading.Event()
+    unblock = threading.Event()
+    calls = 0
+    calls_lock = threading.Lock()
+    results = []
+    errors: list[Exception] = []
+
+    def blocking_build_bucket_summary(entry: dict):
+        nonlocal calls
+        with calls_lock:
+            calls += 1
+            call_number = calls
+        if call_number == 1:
+            started.set()
+            assert unblock.wait(timeout=1.0)
+        return original_build_bucket_summary(entry)
+
+    monkeypatch.setattr(buckets_router, "_build_bucket_summary", blocking_build_bucket_summary)
+
+    def worker() -> None:
+        try:
+            results.append(
+                buckets_router.list_buckets(
+                    page=1,
+                    page_size=25,
+                    filter=None,
+                    advanced_filter=None,
+                    sort_by="name",
+                    sort_dir="asc",
+                    include=[],
+                    with_stats=False,
+                    ctx=ctx,
+                )
+            )
+        except Exception as exc:  # pragma: no cover - defensive capture for thread boundary
+            errors.append(exc)
+
+    first = threading.Thread(target=worker)
+    second = threading.Thread(target=worker)
+    first.start()
+    assert started.wait(timeout=1.0)
+    second.start()
+    time.sleep(0.05)
+    with calls_lock:
+        assert calls == 1
+    unblock.set()
+    first.join(timeout=2.0)
+    second.join(timeout=2.0)
+
+    assert not errors
+    assert rgw_admin.get_all_buckets_calls == 1
+    assert len(results) == 2
+    assert all(result.items[0].name == "bucket-a" for result in results)
+    with calls_lock:
+        assert calls == 1
+
+
+def test_ceph_admin_rgw_bucket_payload_serializes_stats_variants_for_endpoint():
+    payload = [{"name": "bucket-a", "owner": "owner-a"}]
+    started = threading.Event()
+    unblock = threading.Event()
+
+    class BlockingStatsRGWAdmin(FakeRGWAdmin):
+        def __init__(self, payload: list[dict]):
+            super().__init__(payload)
+            self.requested_modes: list[bool] = []
+
+        def get_all_buckets(self, with_stats: bool = True):
+            self.get_all_buckets_calls += 1
+            self.requested_modes.append(with_stats)
+            if with_stats:
+                started.set()
+                assert unblock.wait(timeout=1.0)
+            return self._payload
+
+    rgw_admin = BlockingStatsRGWAdmin(payload)
+    ctx = SimpleNamespace(
+        endpoint=SimpleNamespace(id=179),
+        rgw_admin=rgw_admin,
+        access_key="AKIA_TEST",
+        secret_key="SECRET_TEST",
+    )
+    results = []
+    errors: list[Exception] = []
+
+    def worker(with_stats: bool) -> None:
+        try:
+            results.append(
+                buckets_router.list_buckets(
+                    page=1,
+                    page_size=25,
+                    filter=None,
+                    advanced_filter=None,
+                    sort_by="name",
+                    sort_dir="asc",
+                    include=[],
+                    with_stats=with_stats,
+                    ctx=ctx,
+                )
+            )
+        except Exception as exc:  # pragma: no cover - defensive capture for thread boundary
+            errors.append(exc)
+
+    first = threading.Thread(target=worker, args=(True,))
+    second = threading.Thread(target=worker, args=(False,))
+    first.start()
+    assert started.wait(timeout=1.0)
+    second.start()
+    time.sleep(0.05)
+    assert rgw_admin.get_all_buckets_calls == 1
+    unblock.set()
+    first.join(timeout=2.0)
+    second.join(timeout=2.0)
+
+    assert not errors
+    assert rgw_admin.get_all_buckets_calls == 1
+    assert rgw_admin.requested_modes == [True]
     assert len(results) == 2
     assert all(result.items[0].name == "bucket-a" for result in results)
 
@@ -659,6 +784,7 @@ def test_ceph_admin_bucket_listing_owner_filter_requires_top_level_owner():
     assert [item.name for item in response.items] == ["bucket-a"]
     assert response.items[0].owner == "RGW00000000000000001"
     assert rgw_admin.get_all_buckets_calls == 1
+    assert rgw_admin.get_bucket_info_calls == 0
 
 
 def test_ceph_admin_bucket_listing_any_mixed_filter_prefers_bulk_field_rules(monkeypatch: pytest.MonkeyPatch):
@@ -1044,6 +1170,7 @@ def test_ceph_admin_bucket_listing_owner_name_lookup_deduplicates_same_owner():
     )
 
     assert [item.owner_name for item in response.items] == ["Owner-RGW00000000000000001"] * 3
+    assert rgw_admin.get_bucket_info_calls == 0
     assert rgw_admin.get_account_calls == 1
 
 
@@ -1133,6 +1260,7 @@ def test_ceph_admin_bucket_listing_owner_name_filter_accounts_only_limits_rgw_ca
     )
 
     assert [item.name for item in response.items] == ["bucket-account"]
+    assert rgw_admin.get_bucket_info_calls == 0
     assert rgw_admin.get_account_calls == 1
     assert rgw_admin.get_user_calls == 0
 
@@ -2723,6 +2851,7 @@ def test_ceph_admin_owner_quota_columns_use_cached_account_listing_across_pages(
     assert first.items[0].owner_quota_max_objects == 42
     assert second.items[0].owner_quota_max_size_bytes == 4096
     assert second.items[0].owner_quota_max_objects == 42
+    assert rgw_admin.get_bucket_info_calls == 0
     assert rgw_admin.list_accounts_calls == 1
     assert rgw_admin.get_account_calls == 0
 
