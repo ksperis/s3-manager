@@ -128,8 +128,9 @@ export function BucketUsageStatsDataTypesCard({
   className,
   "data-testid": dataTestId,
 }: BucketUsageStatsDataTypesCardProps) {
-  const entries = nonEmptyUsageStatsEntries(aggregate?.data_type_distribution);
-  const topDataTypes = topEntries(entries, 4);
+  const rawEntries = nonEmptyUsageStatsEntries(aggregate?.data_type_distribution);
+  const entries = topEntries(rawEntries, rawEntries.length);
+  const topDataTypes = entries.slice(0, 4);
   const hasSnapshot = Boolean(aggregate && aggregate.buckets_with_snapshot > 0);
   const coverage = aggregate ? `${aggregate.buckets_with_snapshot} / ${aggregate.bucket_count} buckets covered` : "";
   const latest = aggregate?.newest_snapshot_at ? formatUsageStatsDate(aggregate.newest_snapshot_at) : null;

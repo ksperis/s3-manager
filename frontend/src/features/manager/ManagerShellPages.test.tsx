@@ -55,12 +55,23 @@ vi.mock("../../api/bucketUsageStats", () => ({
 
 vi.mock("recharts", () => {
   const Passthrough = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
+  const PieMock = ({
+    children,
+    data,
+  }: {
+    children?: ReactNode;
+    data?: Array<{ key?: string }>;
+  }) => (
+    <div data-testid="mock-pie" data-keys={(data ?? []).map((entry) => entry.key ?? "").join(",")}>
+      {children}
+    </div>
+  );
   return {
     Bar: Passthrough,
     BarChart: Passthrough,
     CartesianGrid: Passthrough,
     Cell: () => null,
-    Pie: Passthrough,
+    Pie: PieMock,
     PieChart: Passthrough,
     ResponsiveContainer: Passthrough,
     Tooltip: () => null,
@@ -192,8 +203,8 @@ function usageStatsAggregate() {
     oldest_snapshot_at: "2026-06-10T12:00:00Z",
     warnings: [],
     data_type_distribution: [
-      { key: "documents", label: "Documents", count: 2, bytes: 3072, ratio_count: 2 / 3, ratio_bytes: 0.75 },
       { key: "images", label: "Images", count: 1, bytes: 1024, ratio_count: 1 / 3, ratio_bytes: 0.25 },
+      { key: "documents", label: "Documents", count: 2, bytes: 3072, ratio_count: 2 / 3, ratio_bytes: 0.75 },
     ],
     storage_class_distribution: [],
     size_distribution: [],
@@ -440,6 +451,7 @@ describe("manager shell pages", () => {
     expect(within(dataTypesCard).getByTestId("manager-dashboard-data-type-color-documents")).toHaveStyle({
       backgroundColor: "#2563EB",
     });
+    expect(within(dataTypesCard).getByTestId("mock-pie")).toHaveAttribute("data-keys", "documents,images");
     expect(within(overviewGrid).getByText("Storage overview")).toBeInTheDocument();
     expect(within(overviewGrid).getByText("Top buckets by storage")).toBeInTheDocument();
     expect(within(overviewGrid).queryByText("Recent activity")).not.toBeInTheDocument();
