@@ -225,6 +225,7 @@ describe("AdminMetricsPage", () => {
     expect(within(storageCard as HTMLElement).getByText("Storage snapshot")).toBeInTheDocument();
     expect(within(storageCard as HTMLElement).queryByText("Stored volume & objects")).not.toBeInTheDocument();
     expect(screen.queryByText("Accounts & users")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
     expect(screen.getByText("RGW traffic")).toBeInTheDocument();
   });
 
@@ -254,9 +255,10 @@ describe("AdminMetricsPage", () => {
       </MemoryRouter>
     );
 
+    expect(await screen.findByText("Storage breakdown")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Usage composition" }));
     const usageComposition = await screen.findByText("Managed accounts usage composition");
-    const storageBreakdown = screen.getByText("Storage breakdown");
-    expect(storageBreakdown.compareDocumentPosition(usageComposition) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText("Storage breakdown")).not.toBeInTheDocument();
     expect(screen.getByText("2 / 3 buckets covered")).toBeInTheDocument();
     expect(screen.getByText((_, element) => element?.textContent?.startsWith("2 / 2 managed accounts listed") ?? false)).toBeInTheDocument();
     expect(getAdminUsageStatsAggregateMock).toHaveBeenCalledWith(7);
@@ -277,6 +279,8 @@ describe("AdminMetricsPage", () => {
       </MemoryRouter>
     );
 
+    await screen.findByText("Storage breakdown");
+    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
     const message = await screen.findByText("Usage logs are disabled for this endpoint");
     const trafficCard = message.closest("section");
 
@@ -284,7 +288,7 @@ describe("AdminMetricsPage", () => {
     expect(within(trafficCard as HTMLElement).getByText("RGW traffic")).toBeInTheDocument();
     expect(within(trafficCard as HTMLElement).queryByText("Bandwidth & requests")).not.toBeInTheDocument();
     expect(within(trafficCard as HTMLElement).queryByText("Egress")).not.toBeInTheDocument();
-    expect(screen.getByText("Storage breakdown")).toBeInTheDocument();
+    expect(screen.queryByText("Storage breakdown")).not.toBeInTheDocument();
   });
 
   it("renders usage history trends when the feature is enabled", async () => {
@@ -297,9 +301,9 @@ describe("AdminMetricsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Usage history")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Usage history" }));
+    expect(await screen.findByText("Latest storage")).toBeInTheDocument();
     expect(screen.queryByText("Usage history trends")).not.toBeInTheDocument();
-    expect(screen.getByText("Latest storage")).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText("3.0 KB").length).toBeGreaterThan(0));
     await waitFor(() =>
       expect(fetchAdminUsageHistoryTrendsMock).toHaveBeenCalledWith({
@@ -322,6 +326,7 @@ describe("AdminMetricsPage", () => {
 
     expect(await screen.findByText("Storage snapshot")).toBeInTheDocument();
     expect(screen.queryByText("Usage history")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Usage history" })).not.toBeInTheDocument();
     expect(fetchAdminUsageHistoryTrendsMock).not.toHaveBeenCalled();
   });
 });

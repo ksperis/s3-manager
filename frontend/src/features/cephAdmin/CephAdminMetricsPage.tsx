@@ -21,11 +21,15 @@ import MetricsTrafficOverview, { MetricsSnapshotCard, MetricsSummaryCard } from 
 import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
 import UsageBreakdown from "../../components/UsageBreakdown";
+import { cx, uiDividerClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+
+type CephAdminMetricsTab = "storage" | "usage-composition" | "traffic";
 
 function extractError(err: unknown, fallback: string): string {
   return extractApiError(err, fallback);
@@ -39,6 +43,7 @@ export default function CephAdminMetricsPage() {
     selectedEndpointAccessLoading,
     loading: endpointLoading,
   } = useCephAdminEndpoint();
+  const [activeTab, setActiveTab] = useState<CephAdminMetricsTab>("storage");
   const [storage, setStorage] = useState<CephAdminClusterStorageMetrics | null>(null);
   const [storageLoading, setStorageLoading] = useState<boolean>(true);
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -235,6 +240,21 @@ export default function CephAdminMetricsPage() {
       onRecalculate={handleRecalculateUsageStats}
     />
   ) : null;
+  const metricsTabs = useMemo(
+    () =>
+      [
+        { id: "storage" as const, label: "Storage" },
+        ...(canLoadUsageStatsAggregate ? [{ id: "usage-composition" as const, label: "Usage composition" }] : []),
+        { id: "traffic" as const, label: "Traffic" },
+      ],
+    [canLoadUsageStatsAggregate]
+  );
+
+  useEffect(() => {
+    if (!metricsTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(metricsTabs[0]?.id ?? "storage");
+    }
+  }, [activeTab, metricsTabs]);
 
   return (
     <div className="space-y-4 ui-caption leading-relaxed">
@@ -294,132 +314,148 @@ export default function CephAdminMetricsPage() {
             />
           )}
 
-          {metricsUnavailableError ? (
-            <>
+          <div className={cx("border-b pb-3", uiDividerClass)}>
+            <PageTabs
+              tabs={metricsTabs}
+              activeTab={activeTab}
+              onChange={(tab) => setActiveTab(tab as CephAdminMetricsTab)}
+              variant="bar"
+            />
+          </div>
+
+          {activeTab === "storage" ? (
+            metricsUnavailableError ? (
               <MetricsUnavailableCard
                 eyebrow="RGW metrics"
-                title="Storage and traffic metrics"
-                description="Cluster-wide RGW metrics for the selected endpoint."
+                title="Storage snapshot"
+                description="Aggregated stats across the entire RGW cluster."
                 message={metricsUnavailableError}
                 tone="warning"
               />
-              {usageStatsAggregateSection}
-            </>
-          ) : noMetricsSurfaceAvailable ? (
-            <>
+            ) : noMetricsSurfaceAvailable ? (
               <MetricsUnavailableCard
                 eyebrow="RGW metrics"
-                title="Storage and traffic metrics"
-                description="Cluster-wide RGW metrics for the selected endpoint."
+                title="Storage snapshot"
+                description="Aggregated stats across the entire RGW cluster."
                 message="Both storage metrics and usage logs are disabled for the selected endpoint."
                 tone="warning"
               />
-              {usageStatsAggregateSection}
-            </>
-          ) : storageDisabledMessage ? (
-            <>
+            ) : storageDisabledMessage ? (
               <MetricsUnavailableCard
                 title="Storage snapshot"
                 description="Aggregated stats across the entire RGW cluster."
                 message={storageDisabledMessage}
               />
-              {usageStatsAggregateSection}
-            </>
-          ) : storageError ? (
-            <>
+            ) : storageError ? (
               <MetricsUnavailableCard
                 title="Storage snapshot"
                 description="Aggregated stats across the entire RGW cluster."
                 message={storageError}
                 tone="error"
               />
-              {usageStatsAggregateSection}
-            </>
-          ) : storageFeatureEnabled ? (
-            <>
-              <MetricsSummaryCard
-                title="Storage snapshot"
-                description="Aggregated stats across the entire RGW cluster."
-                updatedAt={storage?.generated_at}
-              >
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <MetricsSnapshotCard
-                    label="Stored volume"
-                    value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
-                    hint="Sum of all visible buckets"
-                    loading={storageLoading}
-                  />
-                  <MetricsSnapshotCard
-                    label="Objects"
-                    value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
-                    hint="Instant cluster count"
-                    loading={storageLoading}
-                  />
-                  <MetricsSnapshotCard
-                    label="Buckets"
-                    value={formatCompactNumber(storageTotals?.bucket_count ?? storage?.total_buckets ?? 0)}
-                    hint="Across all owners"
-                    loading={storageLoading}
-                  />
-                  <MetricsSnapshotCard
-                    label="Owners"
-                    value={formatCompactNumber(storageTotals?.owners_with_usage ?? 0)}
-                    hint="Distinct bucket owners"
-                    loading={storageLoading}
-                  />
-                </div>
-              </MetricsSummaryCard>
+            ) : storageFeatureEnabled ? (
+              <>
+                <MetricsSummaryCard
+                  title="Storage snapshot"
+                  description="Aggregated stats across the entire RGW cluster."
+                  updatedAt={storage?.generated_at}
+                >
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <MetricsSnapshotCard
+                      label="Stored volume"
+                      value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
+                      hint="Sum of all visible buckets"
+                      loading={storageLoading}
+                    />
+                    <MetricsSnapshotCard
+                      label="Objects"
+                      value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
+                      hint="Instant cluster count"
+                      loading={storageLoading}
+                    />
+                    <MetricsSnapshotCard
+                      label="Buckets"
+                      value={formatCompactNumber(storageTotals?.bucket_count ?? storage?.total_buckets ?? 0)}
+                      hint="Across all owners"
+                      loading={storageLoading}
+                    />
+                    <MetricsSnapshotCard
+                      label="Owners"
+                      value={formatCompactNumber(storageTotals?.owners_with_usage ?? 0)}
+                      hint="Distinct bucket owners"
+                      loading={storageLoading}
+                    />
+                  </div>
+                </MetricsSummaryCard>
 
-              <MetricsCard
-                title="Storage breakdown"
-                description="Top consumers by owner and bucket."
-              >
-                <div className="grid gap-6 xl:grid-cols-2">
-                  <UsageBreakdown
-                    title="Owners (volume)"
-                    loading={storageLoading}
-                    metric="bytes"
-                    items={ownerUsageItems}
-                    emptyMessage="No owner volume data available."
-                  />
-                  <UsageBreakdown
-                    title="Owners (objects)"
-                    loading={storageLoading}
-                    metric="objects"
-                    items={ownerUsageItems}
-                    emptyMessage="No owner object data available."
-                  />
-                </div>
-                <div className="grid gap-6 xl:grid-cols-2">
-                  <UsageBreakdown
-                    title="Buckets (volume)"
-                    loading={storageLoading}
-                    metric="bytes"
-                    items={bucketUsageItems}
-                    emptyMessage="No bucket volume data available."
-                  />
-                  <UsageBreakdown
-                    title="Buckets (objects)"
-                    loading={storageLoading}
-                    metric="objects"
-                    items={bucketUsageItems}
-                    emptyMessage="No bucket object data available."
-                  />
-                </div>
-              </MetricsCard>
-              {usageStatsAggregateSection}
-            </>
-          ) : (
-            usageStatsAggregateSection
-          )}
+                <MetricsCard
+                  title="Storage breakdown"
+                  description="Top consumers by owner and bucket."
+                >
+                  <div className="grid gap-6 xl:grid-cols-2">
+                    <UsageBreakdown
+                      title="Owners (volume)"
+                      loading={storageLoading}
+                      metric="bytes"
+                      items={ownerUsageItems}
+                      emptyMessage="No owner volume data available."
+                    />
+                    <UsageBreakdown
+                      title="Owners (objects)"
+                      loading={storageLoading}
+                      metric="objects"
+                      items={ownerUsageItems}
+                      emptyMessage="No owner object data available."
+                    />
+                  </div>
+                  <div className="grid gap-6 xl:grid-cols-2">
+                    <UsageBreakdown
+                      title="Buckets (volume)"
+                      loading={storageLoading}
+                      metric="bytes"
+                      items={bucketUsageItems}
+                      emptyMessage="No bucket volume data available."
+                    />
+                    <UsageBreakdown
+                      title="Buckets (objects)"
+                      loading={storageLoading}
+                      metric="objects"
+                      items={bucketUsageItems}
+                      emptyMessage="No bucket object data available."
+                    />
+                  </div>
+                </MetricsCard>
+              </>
+            ) : null
+          ) : null}
 
-          {!metricsUnavailableError && !noMetricsSurfaceAvailable && trafficDisabledMessage ? (
+          {activeTab === "usage-composition" && canLoadUsageStatsAggregate ? usageStatsAggregateSection : null}
+
+          {activeTab === "traffic" && metricsUnavailableError ? (
+            <MetricsUnavailableCard
+              eyebrow="RGW metrics"
+              title="RGW traffic"
+              description="Reading cluster-wide RGW logs for the selected window."
+              message={metricsUnavailableError}
+              tone="warning"
+            />
+          ) : null}
+          {activeTab === "traffic" && !metricsUnavailableError && noMetricsSurfaceAvailable ? (
+            <MetricsUnavailableCard
+              eyebrow="RGW metrics"
+              title="RGW traffic"
+              description="Reading cluster-wide RGW logs for the selected window."
+              message="Both storage metrics and usage logs are disabled for the selected endpoint."
+              tone="warning"
+            />
+          ) : null}
+          {activeTab === "traffic" && !metricsUnavailableError && !noMetricsSurfaceAvailable && trafficDisabledMessage ? (
             <MetricsUnavailableCard
               title="RGW traffic"
               description="Reading cluster-wide RGW logs for the selected window."
               message={trafficDisabledMessage}
             />
-          ) : !metricsUnavailableError && !noMetricsSurfaceAvailable && usageLogFeatureEnabled ? (
+          ) : activeTab === "traffic" && !metricsUnavailableError && !noMetricsSurfaceAvailable && usageLogFeatureEnabled ? (
             <MetricsTrafficOverview
               traffic={traffic}
               window={window}

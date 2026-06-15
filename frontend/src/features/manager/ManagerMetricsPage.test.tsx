@@ -40,7 +40,7 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
 }));
 
 vi.mock("./TrafficAnalytics", () => ({
-  default: () => <div data-testid="traffic-analytics">traffic</div>,
+  default: ({ visible = true }: { visible?: boolean }) => (visible ? <div data-testid="traffic-analytics">traffic</div> : null),
 }));
 
 vi.mock("recharts", () => {
@@ -225,6 +225,8 @@ describe("ManagerMetricsPage", () => {
 
     expect(screen.getByText("Bucket breakdown (storage)")).toBeInTheDocument();
     expect(screen.getByText("Bucket breakdown (objects)")).toBeInTheDocument();
+    expect(screen.queryByTestId("traffic-analytics")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
     expect(screen.getByTestId("traffic-analytics")).toBeInTheDocument();
     expect(
       screen.queryByText("Connection context: platform metrics are disabled. Use a platform account with supervision enabled to access usage and traffic analytics.")
@@ -271,6 +273,7 @@ describe("ManagerMetricsPage", () => {
     expect(within(storageCard as HTMLElement).getByText("Storage analytics")).toBeInTheDocument();
     expect(within(storageCard as HTMLElement).queryByText("Bucket breakdown")).not.toBeInTheDocument();
     expect(screen.queryByText("Bucket breakdown (storage)")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
     expect(screen.getByTestId("traffic-analytics")).toBeInTheDocument();
   });
 
@@ -284,13 +287,17 @@ describe("ManagerMetricsPage", () => {
       </MemoryRouter>
     );
 
+    expect(screen.getByText("Bucket breakdown (storage)")).toBeInTheDocument();
+    expect(screen.queryByText("Traffic analytics are disabled for this endpoint.")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
+
     const message = screen.getByText("Traffic analytics are disabled for this endpoint.");
     const trafficCard = message.closest("section");
 
     expect(trafficCard).not.toBeNull();
     expect(within(trafficCard as HTMLElement).getByText("Traffic")).toBeInTheDocument();
     expect(within(trafficCard as HTMLElement).queryByText("Traffic visualization")).not.toBeInTheDocument();
-    expect(screen.getByText("Bucket breakdown (storage)")).toBeInTheDocument();
     expect(screen.queryByTestId("traffic-analytics")).not.toBeInTheDocument();
   });
 
@@ -330,6 +337,7 @@ describe("ManagerMetricsPage", () => {
     expect(storageCard).not.toBeNull();
     expect(within(storageCard as HTMLElement).getByText("Storage analytics")).toBeInTheDocument();
     expect(screen.queryByText("Bucket breakdown (storage)")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
     expect(screen.getByTestId("traffic-analytics")).toBeInTheDocument();
   });
 
@@ -344,9 +352,9 @@ describe("ManagerMetricsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Usage history")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Usage history" }));
+    expect(await screen.findByText("Latest storage")).toBeInTheDocument();
     expect(screen.queryByText("Usage history trends")).not.toBeInTheDocument();
-    expect(screen.getByText("Latest storage")).toBeInTheDocument();
     expect(screen.getByText("Storage evolution").parentElement).not.toHaveClass("ui-surface-muted");
     expect(screen.getByText("Objects & buckets").parentElement).not.toHaveClass("ui-surface-muted");
     expect(screen.getByText("4.0 KB")).toBeInTheDocument();
@@ -372,6 +380,7 @@ describe("ManagerMetricsPage", () => {
       </MemoryRouter>
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Usage history" }));
     expect(await screen.findByText(/private connection contexts/)).toBeInTheDocument();
     expect(fetchManagerUsageHistoryTrendsMock).toHaveBeenCalledWith("conn-1", "month");
   });
@@ -388,6 +397,7 @@ describe("ManagerMetricsPage", () => {
     );
 
     expect(screen.queryByText("Usage history")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Usage history" })).not.toBeInTheDocument();
     expect(fetchManagerUsageHistoryTrendsMock).not.toHaveBeenCalled();
   });
 
@@ -403,9 +413,10 @@ describe("ManagerMetricsPage", () => {
       </MemoryRouter>
     );
 
+    expect(screen.getByText("Bucket breakdown (storage)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Usage composition" }));
     const usageComposition = await screen.findByText("Account usage composition");
-    const storageBreakdown = screen.getByText("Bucket breakdown (storage)");
-    expect(storageBreakdown.compareDocumentPosition(usageComposition) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText("Bucket breakdown (storage)")).not.toBeInTheDocument();
     expect(screen.getByText("1 / 2 buckets covered")).toBeInTheDocument();
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();
     expect(getManagerUsageStatsAggregateMock).toHaveBeenCalledWith("conn-1");

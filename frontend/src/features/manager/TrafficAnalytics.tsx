@@ -58,9 +58,17 @@ type TrafficAnalyticsProps = {
   bucketName?: string;
   scope?: "manager" | "ceph-admin";
   enabled?: boolean;
+  visible?: boolean;
 };
 
-export default function TrafficAnalytics({ accountId, endpointId, bucketName, scope = "manager", enabled = true }: TrafficAnalyticsProps) {
+export default function TrafficAnalytics({
+  accountId,
+  endpointId,
+  bucketName,
+  scope = "manager",
+  enabled = true,
+  visible = true,
+}: TrafficAnalyticsProps) {
   const [window, setWindow] = useState<TrafficWindow>("week");
   const [traffic, setTraffic] = useState<ManagerTrafficStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -117,6 +125,10 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
   const primaryBuckets = useMemo(() => (traffic?.bucket_rankings ?? []).slice(0, 5), [traffic]);
   const topCategories = useMemo(() => (traffic?.category_breakdown ?? []).slice(0, 6), [traffic]);
   const requestPieData = useMemo(() => prepareRequestPie(traffic?.request_breakdown ?? []), [traffic]);
+
+  if (!visible) {
+    return null;
+  }
 
   return (
     <MetricsCard

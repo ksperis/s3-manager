@@ -20,7 +20,7 @@ Use **Ceph Admin** for Ceph RGW cluster-level operations.
    - **Users**: RGW user operations.
    - **Buckets**: cluster-level bucket inventory and configuration.
      Bucket quota and usage columns can be enabled as single-line atomic columns for easier reading and cleaner CSV exports.
-   - **Usage & Metrics**: cluster-level usage composition, endpoint storage metrics, and traffic metrics.
+   - **Usage & Metrics**: tabbed cluster-level usage composition, endpoint storage metrics, and traffic metrics.
    - **Browser**: object navigation when enabled.
 4. In **Buckets**, long-running bulk actions show progress bars with completion and failure counters.
    Bulk configuration actions include lifecycle rules and bucket notification

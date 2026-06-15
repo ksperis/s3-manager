@@ -179,6 +179,7 @@ describe("CephAdminMetricsPage", () => {
     expect(storageCard).not.toBeNull();
     expect(within(storageCard as HTMLElement).getByText("Storage snapshot")).toBeInTheDocument();
     expect(within(storageCard as HTMLElement).queryByText("Stored volume & objects")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
     expect(screen.getByText("RGW traffic")).toBeInTheDocument();
     expect(await screen.findAllByText("No usable metrics for this period yet.")).not.toHaveLength(0);
   });
@@ -188,13 +189,6 @@ describe("CephAdminMetricsPage", () => {
 
     renderPage();
 
-    const message = screen.getByText("Usage logs are disabled for this endpoint.");
-    const trafficCard = message.closest("section");
-
-    expect(trafficCard).not.toBeNull();
-    expect(within(trafficCard as HTMLElement).getByText("RGW traffic")).toBeInTheDocument();
-    expect(within(trafficCard as HTMLElement).queryByText("Bandwidth & requests")).not.toBeInTheDocument();
-    expect(within(trafficCard as HTMLElement).queryByText("Egress")).not.toBeInTheDocument();
     expect(screen.getByText("Storage breakdown")).toBeInTheDocument();
     const storageCard = screen.getByText("Storage snapshot").closest("section");
     expect(storageCard).toHaveClass("ui-surface-card");
@@ -203,6 +197,17 @@ describe("CephAdminMetricsPage", () => {
     expect(
       await screen.findByText((_content, element) => element?.textContent?.startsWith("Updated:") ?? false)
     ).toBeInTheDocument();
+    expect(screen.queryByText("Usage logs are disabled for this endpoint.")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
+
+    const message = screen.getByText("Usage logs are disabled for this endpoint.");
+    const trafficCard = message.closest("section");
+
+    expect(trafficCard).not.toBeNull();
+    expect(within(trafficCard as HTMLElement).getByText("RGW traffic")).toBeInTheDocument();
+    expect(within(trafficCard as HTMLElement).queryByText("Bandwidth & requests")).not.toBeInTheDocument();
+    expect(within(trafficCard as HTMLElement).queryByText("Egress")).not.toBeInTheDocument();
   });
 
   it("keeps usage composition visible when all live metrics are disabled", async () => {
@@ -210,9 +215,10 @@ describe("CephAdminMetricsPage", () => {
 
     renderPage();
 
+    expect(screen.getByText("Both storage metrics and usage logs are disabled for the selected endpoint.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Usage composition" }));
     expect(await screen.findByText("Cluster usage composition")).toBeInTheDocument();
     expect(screen.getByText("2 / 3 buckets covered")).toBeInTheDocument();
-    expect(screen.getByText("Both storage metrics and usage logs are disabled for the selected endpoint.")).toBeInTheDocument();
     expect(screen.queryByText("Storage metrics are disabled for this endpoint.")).not.toBeInTheDocument();
     expect(screen.queryByText("Usage logs are disabled for this endpoint.")).not.toBeInTheDocument();
   });
@@ -228,6 +234,7 @@ describe("CephAdminMetricsPage", () => {
     expect(storageCard).not.toBeNull();
     expect(within(storageCard as HTMLElement).getByText("Storage snapshot")).toBeInTheDocument();
     expect(screen.queryByText("Storage breakdown")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
     expect(screen.getByText("RGW traffic")).toBeInTheDocument();
   });
 
@@ -236,21 +243,23 @@ describe("CephAdminMetricsPage", () => {
 
     renderPage();
 
+    expect(await screen.findByText("Storage breakdown")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
     const message = await screen.findByText("Usage logs are disabled for this endpoint.");
     const trafficCard = message.closest("section");
 
     expect(trafficCard).not.toBeNull();
     expect(within(trafficCard as HTMLElement).getByText("RGW traffic")).toBeInTheDocument();
     expect(within(trafficCard as HTMLElement).queryByText("Egress")).not.toBeInTheDocument();
-    expect(screen.getByText("Storage breakdown")).toBeInTheDocument();
+    expect(screen.queryByText("Storage breakdown")).not.toBeInTheDocument();
   });
 
   it("recalculates cluster usage composition for the selected endpoint", async () => {
     renderPage();
 
+    fireEvent.click(screen.getByRole("button", { name: "Usage composition" }));
     const usageComposition = await screen.findByText("Cluster usage composition");
-    const storageBreakdown = screen.getByText("Storage breakdown");
-    expect(storageBreakdown.compareDocumentPosition(usageComposition) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText("Storage breakdown")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Recalculate cluster" }));
     expect(streamCephAdminUsageStatsAggregateMock).not.toHaveBeenCalled();
     const dialog = screen.getByRole("dialog", { name: "Recalculate cluster usage composition" });

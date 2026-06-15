@@ -13,7 +13,7 @@ Use **Manager** for account-scoped administration aligned with S3/IAM semantics.
 
 1. Open `/manager` and select the correct account/context.
    - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded `Standard` account and endpoint tags are shown directly in the selector. `Administrative` tags remain limited to management surfaces.
-2. Use **Usage & Metrics** for account-level usage composition, storage analytics, and traffic analytics.
+2. Use **Usage & Metrics** for tabbed account-level usage composition, storage analytics, usage history, and traffic analytics.
 3. Use **Storage** for buckets and manager browser (if enabled).
 4. Use **IAM** for users, groups, roles, and policies (if IAM capability is available).
 5. Use **Events** for SNS topics (if endpoint supports SNS).
