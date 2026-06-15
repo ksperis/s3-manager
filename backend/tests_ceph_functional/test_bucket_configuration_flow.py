@@ -140,6 +140,36 @@ def _delete_bucket(
     resource_tracker.discard_bucket(account_id, bucket_name)
 
 
+def _allow_server_access_log_delivery(
+    manager_session: BackendSession,
+    account_id: int | str,
+    source_bucket: str,
+    target_bucket: str,
+    target_prefix: str,
+) -> None:
+    target_resource = f"arn:aws:s3:::{target_bucket}/{target_prefix}*"
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "S3ManagerCephFunctionalLogDelivery",
+                "Effect": "Allow",
+                "Principal": {"Service": "logging.s3.amazonaws.com"},
+                "Action": "s3:PutObject",
+                "Resource": target_resource,
+                "Condition": {
+                    "ArnLike": {"aws:SourceArn": f"arn:aws:s3:::{source_bucket}"},
+                },
+            },
+        ],
+    }
+    manager_session.put(
+        f"/manager/buckets/{target_bucket}/policy",
+        params=_account_params(account_id),
+        json={"policy": policy},
+    )
+
+
 def _delete_topic(manager_session: BackendSession, account_id: int, topic_arn: str) -> None:
     if not topic_arn:
         return
@@ -466,13 +496,18 @@ def test_manager_bucket_logging_roundtrip(
         resource_tracker.track_bucket(account_id, created_bucket)
 
     try:
-        # This validates the plain S3 PutBucketLogging path. Some RGW clusters
-        # require explicit delivery grants on the target bucket and return
-        # AccessDenied for this minimal configuration.
+        target_prefix = "ceph-functional-logs/"
+        _allow_server_access_log_delivery(
+            manager_session,
+            account_id,
+            source_bucket=bucket_name,
+            target_bucket=logging_bucket,
+            target_prefix=target_prefix,
+        )
         logging_payload = {
             "enabled": True,
             "target_bucket": logging_bucket,
-            "target_prefix": "ceph-functional-logs/",
+            "target_prefix": target_prefix,
         }
         manager_session.put(
             f"/manager/buckets/{bucket_name}/logging",
