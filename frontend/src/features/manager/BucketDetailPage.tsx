@@ -54,7 +54,6 @@ import {
   putBucketLifecycle,
   setBucketVersioning,
   updateBucketAcl,
-  updateBucketQuota,
   updateBucketObjectLock,
   updateBucketPublicAccessBlock,
 } from "../../api/buckets";
@@ -2788,7 +2787,7 @@ export default function BucketDetailPage({
 
   const handleUpdateQuota = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bucketName || !canEditQuota) return;
+    if (!bucketName || !canEditQuota || !endpointId) return;
     setUpdatingQuota(true);
     setQuotaStatus(null);
     setQuotaError(null);
@@ -2810,12 +2809,7 @@ export default function BucketDetailPage({
         max_size_unit: maxSizeGb != null ? quotaSizeUnit : undefined,
         max_objects: maxObjects ?? undefined,
       };
-      if (isCephAdmin) {
-        if (!endpointId) return;
-        await updateCephAdminBucketQuota(endpointId, bucketName, payload);
-      } else {
-        await updateBucketQuota(accountId, bucketName, payload);
-      }
+      await updateCephAdminBucketQuota(endpointId, bucketName, payload);
       setQuotaStatus("Quota updated");
       await refreshBucketMeta();
     } catch (err) {

@@ -24,7 +24,6 @@ from app.models.bucket import (
     BucketPublicAccessBlock,
     BucketVersioningUpdate,
     BucketVersioningStatus,
-    BucketQuotaUpdate,
     BucketTagsUpdate,
     BucketWebsiteConfiguration,
 )
@@ -48,7 +47,6 @@ from app.routers.dependencies import (
     get_account_context,
     get_audit_logger,
     get_current_account_admin,
-    get_current_super_admin,
     require_bucket_compare_enabled,
 )
 
@@ -350,7 +348,6 @@ def update_versioning(
         metadata=audit_metadata,
     )
     return response
-
 
 @router.get("/{bucket_name}/object-lock", response_model=BucketObjectLock)
 def get_object_lock(
@@ -1126,33 +1123,5 @@ def delete_bucket(
         entity_type="bucket",
         entity_id=bucket_name,
         account=account,
-    )
-    return response
-
-
-@router.put("/{bucket_name}/quota")
-def update_quota(
-    bucket_name: str,
-    payload: BucketQuotaUpdate,
-    account: S3Account = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
-):
-    response, audit_metadata = bucket_config_actions.update_bucket_quota_config(
-        service=service,
-        account=account,
-        bucket_name=bucket_name,
-        payload=payload,
-    )
-    _invalidate_bucket_listing_for_account(account)
-    audit_service.record_action(
-        user=current_user,
-        scope="manager",
-        action="update_bucket_quota",
-        entity_type="bucket",
-        entity_id=bucket_name,
-        account=account,
-        metadata=audit_metadata,
     )
     return response

@@ -466,6 +466,9 @@ def test_manager_bucket_logging_roundtrip(
         resource_tracker.track_bucket(account_id, created_bucket)
 
     try:
+        # This validates the plain S3 PutBucketLogging path. Some RGW clusters
+        # require explicit delivery grants on the target bucket and return
+        # AccessDenied for this minimal configuration.
         logging_payload = {
             "enabled": True,
             "target_bucket": logging_bucket,
@@ -573,51 +576,6 @@ def test_manager_bucket_website_roundtrip(
     except BackendAPIError as exc:
         _skip_if_cluster_unavailable("manager bucket website", exc)
         raise
-    finally:
-        _delete_bucket(manager_session, resource_tracker, account_id, bucket_name)
-
-
-@pytest.mark.ceph_functional
-def test_manager_bucket_quota_roundtrip(
-    ceph_test_settings: CephTestSettings,
-    provisioned_account,
-    resource_tracker: ResourceTracker,
-    super_admin_session: BackendSession,
-) -> None:
-    manager_session: BackendSession = provisioned_account.manager_session
-    account_id = provisioned_account.account_id
-
-    bucket_name = _bucket_name(ceph_test_settings.test_prefix, "quota")
-    _create_bucket(manager_session, account_id, bucket_name)
-    resource_tracker.track_bucket(account_id, bucket_name)
-
-    try:
-        try:
-            run_or_skip(
-                "manager bucket quota update",
-                lambda: super_admin_session.put(
-                    f"/manager/buckets/{bucket_name}/quota",
-                    params=_account_params(account_id),
-                    json={"max_size_gb": 1, "max_objects": 1000},
-                ),
-            )
-        except BackendAPIError as exc:
-            if looks_unsupported(exc):
-                pytest.skip(f"Bucket quota updates unavailable on this cluster: {exc}")
-            raise
-
-        stats = _wait_for_value(
-            "bucket quota stats",
-            lambda: manager_session.get(
-                f"/manager/buckets/{bucket_name}/stats",
-                params=_account_params(account_id),
-            ),
-            lambda current: (
-                current.get("quota_max_size_bytes") == 1024**3 and current.get("quota_max_objects") == 1000
-            ),
-        )
-        assert stats["quota_max_size_bytes"] == 1024**3
-        assert stats["quota_max_objects"] == 1000
     finally:
         _delete_bucket(manager_session, resource_tracker, account_id, bucket_name)
 
