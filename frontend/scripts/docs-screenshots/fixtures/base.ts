@@ -639,6 +639,7 @@ const PORTAL_STATE = {
 const PORTAL_SETTINGS = {
   allow_portal_key: true,
   allow_portal_user_bucket_create: true,
+  allow_portal_named_bucket_create: false,
   allow_portal_user_access_key_create: true,
   max_portal_user_access_keys: 2,
   iam_group_manager_policy: {
@@ -662,6 +663,7 @@ const PORTAL_SETTINGS = {
   override_policy: {
     allow_portal_key: true,
     allow_portal_user_bucket_create: true,
+    allow_portal_named_bucket_create: true,
     allow_portal_user_access_key_create: true,
     iam_group_manager_policy: { actions: true, advanced_policy: true },
     iam_group_user_policy: { actions: true, advanced_policy: true },

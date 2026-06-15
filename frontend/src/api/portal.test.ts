@@ -24,6 +24,7 @@ import {
   fetchPortalStorageSpace,
   fetchPortalTransfers,
   fetchPortalUsageTrends,
+  importPortalStorageSpace,
   listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
   listPortalStorageSpaces,
@@ -63,12 +64,22 @@ describe("portal storage spaces api", () => {
   });
 
   it("creates and updates storage spaces through user-facing endpoints", async () => {
-    await createPortalStorageSpace("101", { name: "Research Data", description: "Lab files" });
+    await createPortalStorageSpace("101", {
+      name: "Research Data",
+      naming_mode: "named_bucket",
+      description: "Lab files",
+    });
+    await importPortalStorageSpace("101", { bucket_name: "existing-bucket", description: "Imported" });
     await updatePortalStorageSpace("101", "research data", { description: "Updated", archived: true });
 
     expect(clientMock.post).toHaveBeenCalledWith(
       "/portal/storage-spaces",
-      { name: "Research Data", description: "Lab files" },
+      { name: "Research Data", naming_mode: "named_bucket", description: "Lab files" },
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/storage-spaces/import",
+      { bucket_name: "existing-bucket", description: "Imported" },
       { params: { account_id: "101" } }
     );
     expect(clientMock.patch).toHaveBeenCalledWith(

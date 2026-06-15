@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ComponentProps } from "react";
@@ -44,6 +44,8 @@ const mocks = vi.hoisted(() => ({
           objectCount: 12,
           createdAt: "2026-03-10T10:00:00Z",
           shareCount: 3,
+          origin: "portal_generic",
+          nameEditable: true,
         },
       ],
       activity: [
@@ -102,6 +104,8 @@ describe("PortalStorageSpaceDetailPage", () => {
     vi.clearAllMocks();
     mocks.generalSettings.browser_enabled = true;
     mocks.generalSettings.browser_portal_enabled = true;
+    mocks.hookResult.workspace.spaces[0].nameEditable = true;
+    mocks.hookResult.workspace.spaces[0].origin = "portal_generic";
   });
 
   it("embeds the main Browser in locked portal-basic mode for the storage space", () => {
@@ -131,5 +135,24 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     expect(screen.getByText(/Le Browser Portal est désactivé/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
+  });
+
+  it("locks name editing and only saves description for non-renameable spaces", async () => {
+    mocks.hookResult.workspace.spaces[0].nameEditable = false;
+    mocks.hookResult.workspace.spaces[0].origin = "imported";
+
+    renderPage();
+
+    expect(screen.getByLabelText("Storage Space name")).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Storage Space description"), {
+      target: { value: "Updated description" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(mocks.updateStorageSpaceMock).toHaveBeenCalledWith("101", "research-data", {
+        description: "Updated description",
+      });
+    });
   });
 });

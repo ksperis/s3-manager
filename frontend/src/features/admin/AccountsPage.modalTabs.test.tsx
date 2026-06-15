@@ -29,6 +29,7 @@ const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
   effective: {
     allow_portal_key: false,
     allow_portal_user_bucket_create: true,
+    allow_portal_named_bucket_create: false,
     allow_portal_user_access_key_create: true,
     max_portal_user_access_keys: 2,
     iam_group_manager_policy: { actions: ["s3:*"], advanced_policy: null },
@@ -43,6 +44,7 @@ const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
     override_policy: {
       allow_portal_key: false,
       allow_portal_user_bucket_create: true,
+      allow_portal_named_bucket_create: true,
       allow_portal_user_access_key_create: true,
       iam_group_manager_policy: { actions: true, advanced_policy: false },
       iam_group_user_policy: { actions: true, advanced_policy: false },
@@ -60,6 +62,7 @@ const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
   override_policy: {
     allow_portal_key: false,
     allow_portal_user_bucket_create: true,
+    allow_portal_named_bucket_create: true,
     allow_portal_user_access_key_create: true,
     iam_group_manager_policy: { actions: true, advanced_policy: false },
     iam_group_user_policy: { actions: true, advanced_policy: false },
@@ -323,6 +326,7 @@ describe("AccountsPage modal tabs", () => {
       makePortalAccountSettings({
         portal_manager_override: {
           allow_portal_user_bucket_create: true,
+          allow_portal_named_bucket_create: true,
         },
       })
     );
@@ -363,13 +367,18 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
     await screen.findByText("Bucket management");
 
-    const dialog = screen.getByRole("dialog");
-    fireEvent.change(within(dialog).getAllByRole("combobox")[0], { target: { value: "disabled" } });
+    const bucketManagement = screen.getByText("Bucket management").closest("div")?.parentElement?.parentElement;
+    const namedBucketCreation = screen.getByText("Named bucket creation").closest("div")?.parentElement?.parentElement;
+    expect(bucketManagement).not.toBeNull();
+    expect(namedBucketCreation).not.toBeNull();
+    fireEvent.change(within(bucketManagement as HTMLElement).getByRole("combobox"), { target: { value: "disabled" } });
+    fireEvent.change(within(namedBucketCreation as HTMLElement).getByRole("combobox"), { target: { value: "enabled" } });
     fireEvent.click(screen.getByRole("button", { name: "Save overrides" }));
 
     await waitFor(() => {
       expect(updateAccountPortalSettingsMock).toHaveBeenCalledWith(1, {
         allow_portal_user_bucket_create: false,
+        allow_portal_named_bucket_create: true,
       });
     });
   });

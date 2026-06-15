@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import json
+import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -18,7 +19,7 @@ from app.db import (
     User,
     UserS3Account,
 )
-from app.models.app_settings import AppSettings, PortalSettings
+from app.models.app_settings import AppSettings, PortalSettings, PortalSettingsOverride
 from app.models.bucket import Bucket
 from app.models.iam import AccessKey as IAMAccessKey, IAMUser
 from app.models.portal import (
@@ -26,6 +27,7 @@ from app.models.portal import (
     PortalAlert,
     PortalIAMUser,
     PortalState,
+    PortalStorageSpace,
     PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
     PortalUsage,
@@ -916,6 +918,292 @@ def test_get_storage_space_keeps_bucket_scope_and_returns_none_when_hidden(monke
     assert visible.used_bytes == 4096
     assert visible.object_count == 24
     assert hidden is None
+
+
+def test_create_storage_space_generic_uses_uuid_bucket_and_editable_name(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-generic", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-generic@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    created_buckets = []
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        service,
+        "create_bucket",
+        lambda _user, _access, bucket_name, **kwargs: created_buckets.append((bucket_name, kwargs.get("portal_settings"))),
+    )
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name="Research Data",
+            role="Owner",
+            internal_bucket_name=bucket_name,
+            origin="portal_generic",
+            name_editable=True,
+        ),
+    )
+
+    storage_space = service.create_storage_space(user, access, name="Research Data", description="Lab files")
+
+    assert len(created_buckets) == 1
+    bucket_name = created_buckets[0][0]
+    assert str(uuid.UUID(bucket_name)) == bucket_name
+    metadata = (
+        db_session.query(PortalStorageSpaceMetadata)
+        .filter_by(account_id=account.id, bucket_name=bucket_name)
+        .one()
+    )
+    assert metadata.display_name == "Research Data"
+    assert metadata.description == "Lab files"
+    assert metadata.origin == "portal_generic"
+    assert metadata.name_editable is True
+    assert storage_space.id == bucket_name
+
+
+def test_create_storage_space_named_bucket_uses_legacy_slug_and_locks_name(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-named", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-named@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    portal_settings = PortalSettings()
+    portal_settings.allow_portal_named_bucket_create = True
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    created_buckets = []
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="research-data",
+                name="Research Data",
+                role="Owner",
+                internal_bucket_name="research-data",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        service,
+        "create_bucket",
+        lambda _user, _access, bucket_name, **_kwargs: created_buckets.append(bucket_name),
+    )
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name="Research Data",
+            role="Owner",
+            internal_bucket_name=bucket_name,
+            origin="portal_named",
+            name_editable=False,
+        ),
+    )
+
+    storage_space = service.create_storage_space(user, access, name="Research Data", naming_mode="named_bucket")
+
+    assert created_buckets == ["research-data-2"]
+    metadata = (
+        db_session.query(PortalStorageSpaceMetadata)
+        .filter_by(account_id=account.id, bucket_name="research-data-2")
+        .one()
+    )
+    assert metadata.display_name == "Research Data"
+    assert metadata.origin == "portal_named"
+    assert metadata.name_editable is False
+    assert storage_space.id == "research-data-2"
+
+
+def test_create_storage_space_named_bucket_requires_effective_setting(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-named-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-named-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        service,
+        "create_bucket",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Bucket should not be created")),
+    )
+
+    with pytest.raises(RuntimeError, match="Named bucket Storage Space creation is not allowed"):
+        service.create_storage_space(user, access, name="Research Data", naming_mode="named_bucket")
+
+
+def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-import", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-import@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    link = AccountIAMUser(user_id=user.id, account_id=account.id, iam_user_id="iam-uid", iam_username="portal-iam")
+    policy_calls = []
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **_kwargs: [{"name": "existing-bucket"}])
+    monkeypatch.setattr(service, "_get_iam_service", lambda _account: object())
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "_ensure_portal_user", lambda *_args, **_kwargs: (link, IAMUser(name="portal-iam"), False))
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_ensure_policy_and_key", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "_ensure_user_bucket_policy",
+        lambda _iam_service, iam_username, bucket_name, **_kwargs: policy_calls.append((iam_username, bucket_name)),
+    )
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name=bucket_name,
+            role="Owner",
+            internal_bucket_name=bucket_name,
+            origin="imported",
+            name_editable=False,
+        ),
+    )
+
+    storage_space = service.import_storage_space(user, access, bucket_name=" existing-bucket ", description="Imported bucket")
+
+    assert storage_space.id == "existing-bucket"
+    assert policy_calls == [("portal-iam", "existing-bucket")]
+    metadata = (
+        db_session.query(PortalStorageSpaceMetadata)
+        .filter_by(account_id=account.id, bucket_name="existing-bucket")
+        .one()
+    )
+    assert metadata.display_name == "existing-bucket"
+    assert metadata.description == "Imported bucket"
+    assert metadata.origin == "imported"
+    assert metadata.name_editable is False
+
+
+@pytest.mark.parametrize("origin", ["legacy", "imported"])
+def test_update_storage_space_locked_names_reject_rename_but_accept_description(origin, monkeypatch, db_session):
+    account = S3Account(name=f"portal-storage-update-{origin}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email=f"portal-storage-update-{origin}@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name=f"{origin}-bucket",
+        display_name=f"{origin.title()} Bucket",
+        description="Initial",
+        origin=origin,
+        name_editable=False,
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: f"{origin}-bucket")
+    monkeypatch.setattr(service, "_require_storage_space_owner", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name=metadata.display_name or bucket_name,
+            role="Owner",
+            description=metadata.description,
+            internal_bucket_name=bucket_name,
+            origin=origin,
+            name_editable=False,
+        ),
+    )
+
+    updated = service.update_storage_space(user, access, f"{origin}-bucket", description="Updated description")
+
+    assert updated.description == "Updated description"
+    assert metadata.description == "Updated description"
+    with pytest.raises(RuntimeError, match="cannot be changed"):
+        service.update_storage_space(user, access, f"{origin}-bucket", name="Renamed")
+
+
+def test_update_storage_space_allows_rename_when_name_is_editable(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-update-editable", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-update-editable@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="uuid-bucket",
+        display_name="Original Name",
+        origin="portal_generic",
+        name_editable=True,
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: "uuid-bucket")
+    monkeypatch.setattr(service, "_require_storage_space_owner", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name=metadata.display_name or bucket_name,
+            role="Owner",
+            internal_bucket_name=bucket_name,
+            origin="portal_generic",
+            name_editable=True,
+        ),
+    )
+
+    updated = service.update_storage_space(user, access, "uuid-bucket", name="Renamed Space")
+
+    assert updated.name == "Renamed Space"
+    assert metadata.display_name == "Renamed Space"
+
+
+def test_portal_named_bucket_account_override_requires_global_policy(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-override", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    db_session.add(account)
+    db_session.commit()
+
+    base = PortalSettings()
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_portal_settings", lambda: base)
+
+    with pytest.raises(RuntimeError, match="Override non autorise"):
+        service.update_portal_manager_override(
+            account,
+            PortalSettingsOverride(allow_portal_named_bucket_create=True),
+        )
+
+    base.override_policy.allow_portal_named_bucket_create = True
+    updated = service.update_portal_manager_override(
+        account,
+        PortalSettingsOverride(allow_portal_named_bucket_create=True),
+    )
+    assert updated.effective.allow_portal_named_bucket_create is True
+
+    service.update_admin_portal_settings_override(
+        account,
+        PortalSettingsOverride(allow_portal_named_bucket_create=False),
+    )
+    with pytest.raises(RuntimeError, match="Override verrouille"):
+        service.update_portal_manager_override(
+            account,
+            PortalSettingsOverride(allow_portal_named_bucket_create=True),
+        )
+    assert service.get_effective_portal_settings(account).allow_portal_named_bucket_create is False
 
 
 def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_session):

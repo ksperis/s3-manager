@@ -36,6 +36,7 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
       bucket_migration_enabled: true,
       bucket_compare_enabled: true,
       bucket_integrity_check_enabled: true,
+      bucket_usage_stats_enabled: true,
       manager_ceph_s3_user_keys_enabled: true,
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
@@ -46,6 +47,7 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
     portal: {
       allow_portal_key: false,
       allow_portal_user_bucket_create: true,
+      allow_portal_named_bucket_create: false,
       allow_portal_user_access_key_create: true,
       max_portal_user_access_keys: 2,
       iam_group_manager_policy: { actions: [], advanced_policy: null },
@@ -60,6 +62,7 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
       override_policy: {
         allow_portal_key: false,
         allow_portal_user_bucket_create: false,
+        allow_portal_named_bucket_create: false,
         allow_portal_user_access_key_create: false,
         iam_group_manager_policy: { actions: false, advanced_policy: false },
         iam_group_user_policy: { actions: false, advanced_policy: false },
