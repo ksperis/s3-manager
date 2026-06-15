@@ -5,6 +5,7 @@
 import { useId, useMemo, type HTMLAttributes, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { HealthCheckStatus } from "../api/healthchecks";
+import type { ManagerUsageTrendBaseline } from "../api/stats";
 import { formatBytes } from "../utils/format";
 import UiBadge from "./ui/UiBadge";
 import { cx, uiCardClass, uiMutedTextClass } from "./ui/styles";
@@ -65,6 +66,38 @@ export type WorkspaceDashboardStorageEvolutionPoint = {
   timestampMs: number;
   usedBytes: number;
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function workspaceTrendWindowDays(baseline?: ManagerUsageTrendBaseline | null): number {
+  if (baseline?.window === "day") return 1;
+  if (baseline?.window === "week") return 7;
+  return 30;
+}
+
+function workspaceTimestampMs(value: string | Date | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  const ms = parsed.getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+export function buildWorkspaceStorageEvolutionPoints(
+  currentValue: number | null | undefined,
+  baseline: ManagerUsageTrendBaseline | null | undefined,
+  referenceDate: string | Date | null | undefined
+): WorkspaceDashboardStorageEvolutionPoint[] {
+  if (currentValue == null) return [];
+  const endMs = workspaceTimestampMs(referenceDate) ?? workspaceTimestampMs(baseline?.collected_at) ?? Date.now();
+  const days = workspaceTrendWindowDays(baseline);
+  const startMs = endMs - days * DAY_MS;
+  const startValue = baseline?.used_bytes ?? currentValue;
+  const interpolationProfile = [0, 0.07, 0.16, 0.27, 0.4, 0.56, 0.7, 0.84, 0.93, 1];
+  return interpolationProfile.map((step) => ({
+    timestampMs: startMs + (endMs - startMs) * step,
+    usedBytes: Math.max(0, startValue + (currentValue - startValue) * step),
+  }));
+}
 
 export function workspaceStatusLabel(status: HealthCheckStatus): string {
   if (status === "up") return "Up";

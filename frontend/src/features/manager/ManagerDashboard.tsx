@@ -28,13 +28,13 @@ import {
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageHeader from "../../components/PageHeader";
 import {
+  buildWorkspaceStorageEvolutionPoints,
   WorkspaceDashboardIconBubble as IconBubble,
   WorkspaceDashboardKpiRow as KpiRow,
   WorkspaceDashboardProgressBar as ProgressBar,
   WorkspaceDashboardStorageEvolutionChart as StorageEvolutionChart,
   WorkspaceDashboardUnavailableFrame as DashboardUnavailable,
   WorkspaceStatusDot,
-  type WorkspaceDashboardStorageEvolutionPoint as StorageEvolutionPoint,
   type WorkspaceDashboardTone as DashboardTone,
 } from "../../components/WorkspaceDashboardKit";
 import {
@@ -157,30 +157,6 @@ function trendWindowDays(baseline?: ManagerUsageTrendBaseline | null): number {
   if (baseline?.window === "day") return 1;
   if (baseline?.window === "week") return 7;
   return 30;
-}
-
-function timestampMs(value: string | Date | null | undefined): number | null {
-  if (!value) return null;
-  const parsed = value instanceof Date ? value : new Date(value);
-  const ms = parsed.getTime();
-  return Number.isFinite(ms) ? ms : null;
-}
-
-function buildStorageEvolutionPoints(
-  currentValue: number | null,
-  baseline: ManagerUsageTrendBaseline | null | undefined,
-  referenceDate: string | Date | null | undefined
-): StorageEvolutionPoint[] {
-  if (currentValue == null) return [];
-  const endMs = timestampMs(referenceDate) ?? timestampMs(baseline?.collected_at) ?? Date.now();
-  const days = trendWindowDays(baseline);
-  const startMs = endMs - days * DAY_MS;
-  const startValue = baseline?.used_bytes ?? currentValue;
-  const interpolationProfile = [0, 0.07, 0.16, 0.27, 0.4, 0.56, 0.7, 0.84, 0.93, 1];
-  return interpolationProfile.map((step) => ({
-    timestampMs: startMs + (endMs - startMs) * step,
-    usedBytes: Math.max(0, startValue + (currentValue - startValue) * step),
-  }));
 }
 
 function formatSignedBytesDelta(value: number | null): string {
@@ -314,7 +290,7 @@ function StorageOverviewCard({
   const storageValue = unavailableReason ? "" : formatOptionalBytes(usedBytes);
   const quotaValue = unavailableReason || quotaBytes == null ? "" : formatBytes(quotaBytes);
   const chartPoints = useMemo(
-    () => (unavailableReason ? [] : buildStorageEvolutionPoints(usedBytes, trendBaseline, referenceDate)),
+    () => (unavailableReason ? [] : buildWorkspaceStorageEvolutionPoints(usedBytes, trendBaseline, referenceDate)),
     [referenceDate, trendBaseline, unavailableReason, usedBytes]
   );
   const growthDelta = usedBytes == null || trendBaseline?.used_bytes == null ? null : usedBytes - trendBaseline.used_bytes;

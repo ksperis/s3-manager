@@ -4,7 +4,7 @@
  */
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { createPortalStorageSpace, type PortalStorageSpaceRole } from "../../api/portal";
+import { createPortalStorageSpace, importPortalStorageSpace, type PortalStorageSpaceRole } from "../../api/portal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
@@ -37,11 +37,17 @@ export default function PortalStorageSpacesPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sort, setSort] = useState("name");
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newSpaceType, setNewSpaceType] = useState("Project");
+  const [newNamingMode, setNewNamingMode] = useState<"generic_uuid" | "named_bucket">("generic_uuid");
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [importBucketName, setImportBucketName] = useState("");
+  const [importDescription, setImportDescription] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
   const filteredSpaces = useMemo(() => {
     const filtered = workspace.spaces.filter((space) => {
@@ -64,6 +70,7 @@ export default function PortalStorageSpacesPage() {
   }, [normalizedQuery, roleFilter, sort, statusFilter, workspace.spaces]);
 
   const canCreate = Boolean(state?.can_manage_buckets);
+  const canUseNamedBucket = Boolean(state?.allow_named_bucket_create);
 
   const handleCreate = async () => {
     if (!accountIdForApi || !newName.trim()) return;
@@ -72,6 +79,7 @@ export default function PortalStorageSpacesPage() {
     try {
       const created = await createPortalStorageSpace(accountIdForApi, {
         name: newName.trim(),
+        naming_mode: canUseNamedBucket ? newNamingMode : "generic_uuid",
         description: newDescription.trim() || null,
         space_type: newSpaceType.trim() || null,
       });
@@ -81,6 +89,24 @@ export default function PortalStorageSpacesPage() {
       setCreateError(extractApiError(err, "Unable to create Storage Space."));
     } finally {
       setCreateBusy(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!accountIdForApi || !importBucketName.trim()) return;
+    setImportBusy(true);
+    setImportError(null);
+    try {
+      const imported = await importPortalStorageSpace(accountIdForApi, {
+        bucket_name: importBucketName.trim(),
+        description: importDescription.trim() || null,
+      });
+      navigate(storageSpacePath({ id: imported.id }));
+    } catch (err) {
+      console.error(err);
+      setImportError(extractApiError(err, "Unable to import bucket."));
+    } finally {
+      setImportBusy(false);
     }
   };
 
@@ -102,13 +128,35 @@ export default function PortalStorageSpacesPage() {
         title="Storage Spaces"
         description="Manage your storage spaces and their configuration."
         breadcrumbs={[{ label: "Portal" }, { label: "Storage Spaces" }]}
-        actions={canCreate ? [{ label: "Create storage space", onClick: () => setShowCreate((value) => !value) }] : []}
+        actions={
+          canCreate
+            ? [
+                { label: "Create storage space", onClick: () => setShowCreate((value) => !value) },
+                { label: "Import bucket", onClick: () => setShowImport((value) => !value), variant: "secondary" },
+              ]
+            : []
+        }
       />
 
       {showCreate ? (
         <UiCard title="Create Storage Space">
-          <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_180px_auto]">
-            <input className="ui-control h-9 text-xs" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Name" />
+          <div className="grid gap-3 lg:grid-cols-[180px_1fr_1.5fr_180px_auto]">
+            <select
+              className="ui-control h-9 py-1.5 text-xs"
+              value={newNamingMode}
+              onChange={(event) => setNewNamingMode(event.target.value as "generic_uuid" | "named_bucket")}
+              disabled={!canUseNamedBucket}
+              aria-label="Storage Space naming mode"
+            >
+              <option value="generic_uuid">Generic storage</option>
+              {canUseNamedBucket ? <option value="named_bucket">Named bucket</option> : null}
+            </select>
+            <input
+              className="ui-control h-9 text-xs"
+              value={newName}
+              onChange={(event) => setNewName(event.target.value)}
+              placeholder={newNamingMode === "named_bucket" ? "Storage Space and bucket name" : "Storage Space name"}
+            />
             <input className="ui-control h-9 text-xs" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder="Description" />
             <select className="ui-control h-9 py-1.5 text-xs" value={newSpaceType} onChange={(event) => setNewSpaceType(event.target.value)}>
               <option value="Project">Project</option>
@@ -121,6 +169,29 @@ export default function PortalStorageSpacesPage() {
             </UiButton>
           </div>
           {createError ? <div className="mt-3 text-xs font-semibold text-rose-600 dark:text-rose-300">{createError}</div> : null}
+        </UiCard>
+      ) : null}
+
+      {showImport ? (
+        <UiCard title="Import bucket">
+          <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto]">
+            <input
+              className="ui-control h-9 text-xs"
+              value={importBucketName}
+              onChange={(event) => setImportBucketName(event.target.value)}
+              placeholder="Bucket name"
+            />
+            <input
+              className="ui-control h-9 text-xs"
+              value={importDescription}
+              onChange={(event) => setImportDescription(event.target.value)}
+              placeholder="Description"
+            />
+            <UiButton disabled={!importBucketName.trim() || importBusy} onClick={handleImport} className="h-9 px-3 py-1.5">
+              {importBusy ? "Importing..." : "Import"}
+            </UiButton>
+          </div>
+          {importError ? <div className="mt-3 text-xs font-semibold text-rose-600 dark:text-rose-300">{importError}</div> : null}
         </UiCard>
       ) : null}
 

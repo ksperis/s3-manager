@@ -7,6 +7,7 @@ import client from "./client";
 export type PortalSettings = {
   allow_portal_key: boolean;
   allow_portal_user_bucket_create: boolean;
+  allow_portal_named_bucket_create: boolean;
   allow_portal_user_access_key_create: boolean;
   max_portal_user_access_keys: number;
   iam_group_manager_policy: PortalIAMPolicySettings;
@@ -36,6 +37,7 @@ export type PortalBucketDefaultsOverridePolicy = {
 export type PortalSettingsOverridePolicy = {
   allow_portal_key: boolean;
   allow_portal_user_bucket_create: boolean;
+  allow_portal_named_bucket_create: boolean;
   allow_portal_user_access_key_create: boolean;
   iam_group_manager_policy: PortalIAMPolicyOverridePolicy;
   iam_group_user_policy: PortalIAMPolicyOverridePolicy;
@@ -65,6 +67,7 @@ export type PortalBucketDefaultsOverride = {
 export type PortalSettingsOverride = {
   allow_portal_key?: boolean | null;
   allow_portal_user_bucket_create?: boolean | null;
+  allow_portal_named_bucket_create?: boolean | null;
   allow_portal_user_access_key_create?: boolean | null;
   iam_group_manager_policy?: PortalIAMPolicyOverride | null;
   iam_group_user_policy?: PortalIAMPolicyOverride | null;

@@ -625,6 +625,7 @@ const PORTAL_STATE = {
   ],
   buckets: MANAGER_BUCKETS,
   total_buckets: MANAGER_BUCKETS.length,
+  max_buckets: 12,
   s3_endpoint: "https://s3-default.docs.example.com",
   used_bytes: Math.round(8.32 * TB),
   used_objects: 17_100_000,

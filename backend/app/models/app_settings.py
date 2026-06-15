@@ -75,6 +75,7 @@ class PortalBucketDefaultsOverridePolicy(BaseModel):
 class PortalSettingsOverridePolicy(BaseModel):
     allow_portal_key: bool = False
     allow_portal_user_bucket_create: bool = False
+    allow_portal_named_bucket_create: bool = False
     allow_portal_user_access_key_create: bool = False
     iam_group_manager_policy: PortalIAMPolicyOverridePolicy = Field(default_factory=PortalIAMPolicyOverridePolicy)
     iam_group_user_policy: PortalIAMPolicyOverridePolicy = Field(default_factory=PortalIAMPolicyOverridePolicy)
@@ -106,6 +107,7 @@ class PortalBucketDefaultsOverride(BaseModel):
 class PortalSettingsOverride(BaseModel):
     allow_portal_key: Optional[bool] = None
     allow_portal_user_bucket_create: Optional[bool] = None
+    allow_portal_named_bucket_create: Optional[bool] = None
     allow_portal_user_access_key_create: Optional[bool] = None
     iam_group_manager_policy: Optional[PortalIAMPolicyOverride] = None
     iam_group_user_policy: Optional[PortalIAMPolicyOverride] = None
@@ -214,6 +216,7 @@ class LoginSettings(BaseModel):
 class PortalSettings(BaseModel):
     allow_portal_key: bool = False
     allow_portal_user_bucket_create: bool = True
+    allow_portal_named_bucket_create: bool = False
     allow_portal_user_access_key_create: bool = True
     max_portal_user_access_keys: int = Field(default=2, ge=1)
     iam_group_manager_policy: PortalIAMPolicySettings = Field(

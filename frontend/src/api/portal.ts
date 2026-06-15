@@ -35,6 +35,7 @@ export type PortalState = {
   iam_provisioned?: boolean;
   buckets: Bucket[];
   total_buckets?: number | null;
+  max_buckets?: number | null;
   s3_endpoint?: string | null;
   used_bytes?: number | null;
   used_objects?: number | null;
@@ -44,6 +45,7 @@ export type PortalState = {
   account_role?: string | null;
   can_manage_buckets?: boolean;
   can_manage_portal_users?: boolean;
+  allow_named_bucket_create?: boolean;
 };
 
 export type PortalUsage = {
@@ -83,12 +85,24 @@ export type PortalStorageSpaceSummary = {
   quota_max_objects?: number | null;
   internal_bucket_name?: string | null;
   archived_at?: string | null;
+  origin?: "legacy" | "portal_generic" | "portal_named" | "imported";
+  name_editable?: boolean;
 };
 
 export type PortalStorageSpace = PortalStorageSpaceSummary;
 
 export type PortalStorageSpaceCreate = {
   name: string;
+  naming_mode?: "generic_uuid" | "named_bucket";
+  description?: string | null;
+  owner_label?: string | null;
+  space_type?: string | null;
+  project_key?: string | null;
+  dataset_label?: string | null;
+};
+
+export type PortalStorageSpaceImport = {
+  bucket_name: string;
   description?: string | null;
   owner_label?: string | null;
   space_type?: string | null;
@@ -274,6 +288,16 @@ export async function createPortalStorageSpace(
   payload: PortalStorageSpaceCreate
 ): Promise<PortalStorageSpace> {
   const { data } = await client.post<PortalStorageSpace>("/portal/storage-spaces", payload, {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function importPortalStorageSpace(
+  accountId: S3AccountSelector,
+  payload: PortalStorageSpaceImport
+): Promise<PortalStorageSpace> {
+  const { data } = await client.post<PortalStorageSpace>("/portal/storage-spaces/import", payload, {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;

@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => {
       usedObjects: 12,
       quotaBytes: 1024,
       quotaObjects: 100,
+      maxBuckets: 4,
       requestCount: 12600,
       dataInBytes: 256,
       dataOutBytes: 128,
@@ -196,6 +197,8 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.getByText(trendText("1 vs last 30 days"))).toBeInTheDocument();
     expect(screen.getByText(trendText("4 vs last 30 days"))).toBeInTheDocument();
     expect(screen.getByText(trendText("2.0 KB vs last 30 days"))).toBeInTheDocument();
+    expect(screen.getByText("1 / 4 spaces (25%)")).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "Storage spaces quota usage" })).toHaveAttribute("aria-valuenow", "25");
     expect(screen.getByText("Last 24h")).toBeInTheDocument();
     expect(screen.queryByText("Last 7 days")).not.toBeInTheDocument();
     expect(screen.queryByText(/requests/i)).not.toBeInTheDocument();
@@ -209,7 +212,7 @@ describe("PortalDashboard storage workspace UX", () => {
     );
 
     expect(screen.getByRole("link", { name: /Storage used/ })).toHaveAttribute("href", "/portal/usage");
-    expect(screen.getByRole("link", { name: /Storage spaces 1 1 active/ })).toHaveAttribute("href", "/portal/storage-spaces");
+    expect(screen.getByRole("link", { name: /Storage spaces 1 1 \/ 4 spaces/ })).toHaveAttribute("href", "/portal/storage-spaces");
     expect(screen.getByRole("link", { name: /Objects/ })).toHaveAttribute("href", "/portal/usage");
     expect(screen.getByRole("link", { name: /^Transfer\s+384 B/ })).toHaveAttribute("href", "/portal/usage");
     expect(screen.getByRole("link", { name: "Research Data" })).toHaveAttribute(
@@ -219,6 +222,73 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.getByRole("link", { name: /Shares/ })).toHaveAttribute("href", "/portal/shares");
     expect(screen.getByRole("link", { name: /Transfers/ })).toHaveAttribute("href", "/portal/transfers");
     expect(screen.queryByRole("link", { name: /Create user|Create policy|SNS|Lifecycle/i })).not.toBeInTheDocument();
+  });
+
+  it("uses day traffic stats for Transfer even when workspace transfer totals are empty", () => {
+    const dayTraffic = {
+      ...mocks.hookResult.traffic,
+      totals: { bytes_in: 2048, bytes_out: 1024, ops: 12, success_ops: 12 },
+    };
+    mocks.hookResult.workspace = {
+      ...mocks.hookResult.workspace,
+      dataInBytes: null,
+      dataOutBytes: null,
+    };
+    mocks.hookResult.traffic = null;
+    mocks.hookResult.trafficByWindow = {
+      ...mocks.hookResult.trafficByWindow,
+      day: dayTraffic,
+    };
+
+    render(
+      <MemoryRouter>
+        <PortalDashboard />
+      </MemoryRouter>
+    );
+
+    expect(kpiValue("Transfer")).toBe("3.0 KB");
+    expect(screen.getAllByText("2.0 KB").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("1.0 KB")).toBeInTheDocument();
+  });
+
+  it("builds the storage overview chart from storage usage trends instead of traffic", () => {
+    mocks.hookResult.traffic = null;
+    mocks.hookResult.trafficByWindow = {};
+    mocks.hookResult.usageTrends = {
+      ...mocks.hookResult.usageTrends,
+      storage: {
+        window: "month",
+        label: "last 30 days",
+        period_start: "2026-05-10",
+        used_bytes: 128,
+        collected_at: "2026-05-10T00:00:00Z",
+      },
+    };
+
+    render(
+      <MemoryRouter>
+        <PortalDashboard />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByLabelText("Storage evolution chart")).toBeInTheDocument();
+    expect(screen.queryByText("Storage usage unavailable.")).not.toBeInTheDocument();
+  });
+
+  it("keeps active storage spaces detail when max bucket quota is unknown", () => {
+    mocks.hookResult.workspace = {
+      ...mocks.hookResult.workspace,
+      maxBuckets: null,
+    };
+
+    render(
+      <MemoryRouter>
+        <PortalDashboard />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: /Storage spaces 1 1 active/ })).toHaveAttribute("href", "/portal/storage-spaces");
+    expect(screen.queryByRole("meter", { name: "Storage spaces quota usage" })).not.toBeInTheDocument();
   });
 
   it("keeps real zero usage values visible", () => {
@@ -275,6 +345,7 @@ describe("PortalDashboard storage workspace UX", () => {
       usedObjects: null,
       quotaBytes: null,
       quotaObjects: null,
+      maxBuckets: null,
       requestCount: null,
       dataInBytes: null,
       dataOutBytes: null,
@@ -297,7 +368,7 @@ describe("PortalDashboard storage workspace UX", () => {
     );
 
     expect(screen.getAllByText("Quota unavailable").length).toBeGreaterThan(0);
-    expect(screen.getByText("No usage trend available.")).toBeInTheDocument();
+    expect(screen.getByText("Storage usage unavailable.")).toBeInTheDocument();
     expect(screen.getByText("No Storage Spaces to display.")).toBeInTheDocument();
     expect(screen.getByText("No recent activity.")).toBeInTheDocument();
     expect(screen.getByText("No recent transfers.")).toBeInTheDocument();

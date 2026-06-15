@@ -40,6 +40,7 @@ class PortalState(BaseModel):
     iam_provisioned: bool = False
     buckets: list[Bucket]
     total_buckets: Optional[int] = None
+    max_buckets: Optional[int] = None
     s3_endpoint: Optional[str] = None
     used_bytes: Optional[int] = None
     used_objects: Optional[int] = None
@@ -49,6 +50,7 @@ class PortalState(BaseModel):
     account_role: Optional[str] = None
     can_manage_buckets: bool = False
     can_manage_portal_users: bool = False
+    allow_named_bucket_create: bool = False
 
 
 class PortalUsageStorageSpace(BaseModel):
@@ -69,6 +71,8 @@ class PortalUsage(BaseModel):
 
 
 PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner"]
+PortalStorageSpaceOrigin = Literal["legacy", "portal_generic", "portal_named", "imported"]
+PortalStorageSpaceNamingMode = Literal["generic_uuid", "named_bucket"]
 PortalStorageSpaceShareDirection = Literal["with_me", "by_me"]
 PortalTransferDirection = Literal["Upload", "Download"]
 PortalTransferStatus = Literal["Completed", "Uploading", "Queued", "Failed"]
@@ -94,6 +98,8 @@ class PortalStorageSpaceSummary(BaseModel):
     quota_max_objects: Optional[int] = None
     internal_bucket_name: Optional[str] = None
     archived_at: Optional[datetime] = None
+    origin: PortalStorageSpaceOrigin = "legacy"
+    name_editable: bool = False
 
 
 class PortalStorageSpace(PortalStorageSpaceSummary):
@@ -102,6 +108,7 @@ class PortalStorageSpace(PortalStorageSpaceSummary):
 
 class PortalStorageSpaceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    naming_mode: PortalStorageSpaceNamingMode = "generic_uuid"
     description: Optional[str] = Field(default=None, max_length=2000)
     owner_label: Optional[str] = Field(default=None, max_length=120)
     space_type: Optional[str] = Field(default=None, max_length=80)
@@ -114,6 +121,23 @@ class PortalStorageSpaceCreate(BaseModel):
         cleaned = " ".join(value.split())
         if not cleaned:
             raise ValueError("Storage Space name is required")
+        return cleaned
+
+
+class PortalStorageSpaceImport(BaseModel):
+    bucket_name: str = Field(min_length=1, max_length=63)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    owner_label: Optional[str] = Field(default=None, max_length=120)
+    space_type: Optional[str] = Field(default=None, max_length=80)
+    project_key: Optional[str] = Field(default=None, max_length=80)
+    dataset_label: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("bucket_name")
+    @classmethod
+    def _validate_bucket_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Bucket name is required")
         return cleaned
 
 

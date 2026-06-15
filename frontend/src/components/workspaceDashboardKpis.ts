@@ -89,6 +89,17 @@ export function formatWorkspaceQuotaDetail(quota: string, usagePercent?: number 
   return usagePercent == null ? `of ${quota}` : `of ${quota} (${formatPercentage(usagePercent)})`;
 }
 
+export function formatWorkspaceCountQuotaDetail(
+  value: number | null | undefined,
+  quota: number,
+  unitLabel: string,
+  usagePercent?: number | null
+): string {
+  if (value == null) return formatWorkspaceQuotaDetail(`${formatWorkspaceDashboardNumber(quota)} ${unitLabel}`, usagePercent);
+  const detail = `${formatWorkspaceDashboardNumber(value)} / ${formatWorkspaceDashboardNumber(quota)} ${unitLabel}`;
+  return usagePercent == null ? detail : `${detail} (${formatPercentage(usagePercent)})`;
+}
+
 export function workspaceTrafficTotalBytes(stats?: ManagerTrafficStats | null): number {
   if (!stats) return 0;
   return (stats.totals.bytes_in ?? 0) + (stats.totals.bytes_out ?? 0);
@@ -161,7 +172,7 @@ function buildCountMetric(config: WorkspaceKpiCountConfig): WorkspaceDashboardMe
   const progress = workspaceDashboardPercent(config.value, config.quota);
   const detail =
     config.quota != null
-      ? formatWorkspaceQuotaDetail(`${formatWorkspaceDashboardNumber(config.quota)} ${config.unitLabel}`, progress)
+      ? formatWorkspaceCountQuotaDetail(config.value, config.quota, config.unitLabel, progress)
       : config.activeValue != null && config.activeLabel
         ? `${config.activeValue.toLocaleString()} ${config.activeLabel}`
         : config.value == null

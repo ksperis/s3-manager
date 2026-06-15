@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ManagerTrafficStats } from "../api/stats";
+import { buildWorkspaceStorageEvolutionPoints } from "./WorkspaceDashboardKit";
 import { buildWorkspaceDashboardKpis, selectWorkspaceTrafficTrend } from "./workspaceDashboardKpis";
 
 function trafficStats(window: string, bytesIn: number, bytesOut: number, timestamps: string[]): ManagerTrafficStats {
@@ -46,9 +47,11 @@ describe("workspaceDashboardKpis", () => {
       spaces: {
         label: "Storage spaces",
         value: 1,
+        quota: 4,
         unitLabel: "spaces",
         activeValue: 1,
         activeLabel: "active",
+        progressLabel: "Storage spaces quota usage",
         trendBaseline: { window: "month", label: "last 30 days", period_start: "2026-05-10", bucket_count: 0 },
         trendBaselineValue: 0,
         tone: "emerald",
@@ -75,11 +78,28 @@ describe("workspaceDashboardKpis", () => {
 
     expect(metrics.map((metric) => metric.label)).toEqual(["Storage used", "Storage spaces", "Objects", "Transfer"]);
     expect(metrics[0].trend?.label).toBe("256 B vs last 30 days");
-    expect(metrics[1].detail).toBe("1 active");
+    expect(metrics[1].detail).toBe("1 / 4 spaces (25%)");
+    expect(metrics[1].progress).toBe(25);
+    expect(metrics[1].progressLabel).toBe("Storage spaces quota usage");
     expect(metrics[1].trend?.label).toBe("1 vs last 30 days");
     expect(metrics[2].trend?.label).toBe("4 vs last 30 days");
     expect(metrics[3].value).toBe("384 B");
     expect(metrics[3].detail).toBe("Last 24h");
     expect(metrics[3].trend?.label).toBe("2.0 KB vs last 30 days");
+  });
+
+  it("builds storage evolution points from a baseline and keeps a stable fallback without one", () => {
+    const baselinePoints = buildWorkspaceStorageEvolutionPoints(
+      512,
+      { window: "week", label: "last week", period_start: "2026-06-03", used_bytes: 256 },
+      "2026-06-10T00:00:00Z"
+    );
+    expect(baselinePoints).toHaveLength(10);
+    expect(baselinePoints[0].usedBytes).toBe(256);
+    expect(baselinePoints.at(-1)?.usedBytes).toBe(512);
+
+    const stablePoints = buildWorkspaceStorageEvolutionPoints(512, null, "2026-06-10T00:00:00Z");
+    expect(stablePoints).toHaveLength(10);
+    expect(new Set(stablePoints.map((point) => point.usedBytes))).toEqual(new Set([512]));
   });
 });

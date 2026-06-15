@@ -76,6 +76,38 @@ def test_traffic_service_aggregates_usage_entries():
     assert request_groups.get("delete") == 1
 
 
+def test_traffic_service_aggregates_multiple_bucket_filters():
+    account = _make_account()
+    payload = {
+        "entries": [
+            {
+                "bucket": "alpha",
+                "time": "2024-03-10 10:00:00",
+                "categories": [{"category": "get_obj", "bytes_sent": 200, "bytes_received": 10, "ops": 2, "successful_ops": 2}],
+            },
+            {
+                "bucket": "beta",
+                "time": "2024-03-10 11:00:00",
+                "categories": [{"category": "put_obj", "bytes_sent": 20, "bytes_received": 300, "ops": 3, "successful_ops": 3}],
+            },
+            {
+                "bucket": "other",
+                "time": "2024-03-10 11:30:00",
+                "categories": [{"category": "put_obj", "bytes_sent": 5000, "bytes_received": 5000, "ops": 9, "successful_ops": 9}],
+            },
+        ]
+    }
+    fake_client = FakeRGWClient([payload])
+    service = TrafficService(account, rgw_client=fake_client, admin_client=fake_client)
+    reference = datetime(2024, 3, 10, 12, 0, tzinfo=timezone.utc)
+
+    result = service.get_traffic(TrafficWindow.DAY, bucket_filters={"alpha", "beta"}, now=reference)
+
+    assert result["totals"]["bytes_out"] == 220
+    assert result["totals"]["bytes_in"] == 310
+    assert {entry["bucket"] for entry in result["bucket_rankings"]} == {"alpha", "beta"}
+
+
 def test_traffic_service_requires_credentials():
     account = S3Account(name="broken", rgw_access_key=None, rgw_secret_key=None)
     with pytest.raises(ValueError):

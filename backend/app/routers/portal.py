@@ -24,6 +24,7 @@ from app.models.portal import (
     PortalStorageObjectDetail,
     PortalStorageSpace,
     PortalStorageSpaceCreate,
+    PortalStorageSpaceImport,
     PortalStorageSpaceShare,
     PortalStorageSpaceSharePayload,
     PortalStorageSpaceShareUpdate,
@@ -78,7 +79,7 @@ def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
     if "not found" in lowered:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
-    if "not allowed" in lowered or "not provisioned" in lowered or "owner role required" in lowered:
+    if "not allowed" in lowered or "not provisioned" in lowered or "owner role required" in lowered or "cannot be changed" in lowered:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
     raise_bad_gateway_from_runtime(exc)
 
@@ -376,6 +377,7 @@ def create_portal_storage_space(
             actor,
             access,
             name=payload.name,
+            naming_mode=payload.naming_mode,
             description=payload.description,
             owner_label=payload.owner_label,
             space_type=payload.space_type,
@@ -386,6 +388,41 @@ def create_portal_storage_space(
             user=actor,
             scope="portal",
             action="create_storage_space",
+            entity_type="storage_space",
+            entity_id=storage_space.id,
+            account=access.account,
+            metadata={"storage_space_id": storage_space.id},
+        )
+        return storage_space
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.post("/storage-spaces/import", response_model=PortalStorageSpace, status_code=status.HTTP_201_CREATED)
+def import_portal_storage_space(
+    payload: PortalStorageSpaceImport,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpace:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        storage_space = service.import_storage_space(
+            actor,
+            access,
+            bucket_name=payload.bucket_name,
+            description=payload.description,
+            owner_label=payload.owner_label,
+            space_type=payload.space_type,
+            project_key=payload.project_key,
+            dataset_label=payload.dataset_label,
+        )
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="import_storage_space",
             entity_type="storage_space",
             entity_id=storage_space.id,
             account=access.account,
@@ -790,23 +827,23 @@ def portal_traffic(
     endpoint = getattr(account, "storage_endpoint", None)
     if endpoint and not resolve_feature_flags(endpoint).usage_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage logs are disabled for this endpoint")
+    bucket_filters: Optional[set[str]] = None
     if not access.capabilities.can_manage_buckets:
         requested_bucket = (bucket or "").strip()
-        if not requested_bucket:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Bucket filter is required for this role.",
-            )
         allowed_buckets = set(portal_service.list_existing_user_bucket_access(actor, account, access.role))
-        if requested_bucket not in allowed_buckets:
+        if requested_bucket and requested_bucket not in allowed_buckets:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket access not allowed for this role.")
-        bucket = requested_bucket
+        if requested_bucket:
+            bucket = requested_bucket
+        else:
+            bucket = None
+            bucket_filters = allowed_buckets
     try:
         traffic_service = TrafficService(account)
     except ValueError as exc:
         raise_bad_gateway_from_runtime(exc)
     try:
-        return traffic_service.get_traffic(window=window, bucket=bucket)
+        return traffic_service.get_traffic(window=window, bucket=bucket, bucket_filters=bucket_filters)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RGWAdminError as exc:

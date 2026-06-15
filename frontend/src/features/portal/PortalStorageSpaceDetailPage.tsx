@@ -92,7 +92,7 @@ export default function PortalStorageSpaceDetailPage() {
     setMessage(null);
     try {
       await updatePortalStorageSpace(accountIdForApi, space.id, {
-        name: metadataName.trim() || space.name,
+        ...(space.nameEditable ? { name: metadataName.trim() || space.name } : {}),
         description: metadataDescription.trim() || null,
       });
       setMessage("Storage Space mis à jour.");
@@ -145,6 +145,7 @@ export default function PortalStorageSpaceDetailPage() {
 
   const browserAvailable =
     Boolean(generalSettings.browser_enabled) && Boolean(generalSettings.browser_portal_enabled);
+  const canRename = space.role === "Owner" && space.nameEditable;
   const lockedBucketName = space.internalName ?? space.id;
   const quotaPercent =
     space.quotaBytes && space.usedBytes
@@ -171,7 +172,14 @@ export default function PortalStorageSpaceDetailPage() {
       {space.role === "Owner" ? (
         <UiCard title="Storage Space details">
           <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto_auto]">
-            <input className="ui-control h-9 text-xs" value={metadataName} onChange={(event) => setMetadataName(event.target.value)} aria-label="Storage Space name" />
+            <input
+              className="ui-control h-9 text-xs disabled:opacity-70"
+              value={metadataName}
+              onChange={(event) => setMetadataName(event.target.value)}
+              aria-label="Storage Space name"
+              disabled={!canRename || metadataBusy}
+              title={canRename ? "Storage Space name" : "Name locked for this Storage Space"}
+            />
             <input className="ui-control h-9 text-xs" value={metadataDescription} onChange={(event) => setMetadataDescription(event.target.value)} aria-label="Storage Space description" />
             <UiButton disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 px-3 py-1.5">
               Save

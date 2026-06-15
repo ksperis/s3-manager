@@ -26,6 +26,8 @@ export type PortalWorkspaceSpace = {
   id: string;
   name: string;
   internalName: string | null;
+  origin: "legacy" | "portal_generic" | "portal_named" | "imported";
+  nameEditable: boolean;
   description: string;
   ownerLabel: string | null;
   spaceType: string | null;
@@ -94,6 +96,7 @@ export type PortalWorkspaceModel = {
   usedObjects?: number | null;
   quotaBytes?: number | null;
   quotaObjects?: number | null;
+  maxBuckets?: number | null;
   requestCount?: number | null;
   dataInBytes?: number | null;
   dataOutBytes?: number | null;
@@ -177,6 +180,8 @@ export function buildPortalWorkspaceModel({
       id: storageSpace.id,
       name: usageSpace?.name ?? name,
       internalName: storageSpace.internal_bucket_name ?? null,
+      origin: storageSpace.origin ?? "legacy",
+      nameEditable: Boolean(storageSpace.name_editable),
       description: storageSpace.description ?? `${name} storage space`,
       ownerLabel: storageSpace.owner_label ?? null,
       spaceType: storageSpace.space_type ?? null,
@@ -211,6 +216,7 @@ export function buildPortalWorkspaceModel({
     usedObjects: usage?.used_objects ?? state?.used_objects ?? spaceObjectCount,
     quotaBytes: usage?.quota_max_size_bytes ?? state?.quota_max_size_bytes ?? null,
     quotaObjects: usage?.quota_max_objects ?? state?.quota_max_objects ?? null,
+    maxBuckets: state?.max_buckets ?? null,
     requestCount: null,
     dataInBytes: null,
     dataOutBytes: null,

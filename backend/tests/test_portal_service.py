@@ -34,6 +34,7 @@ from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import s3_client
 from app.services.portal_service import PortalAccessKeyLimitExceeded, PortalService
+from app.services.traffic_service import TrafficWindow
 from app.utils.time import utcnow
 
 
@@ -324,6 +325,131 @@ def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
     assert state.buckets == []
     assert state.total_buckets == 0
     assert state.just_created is False
+
+
+def test_get_state_exposes_portal_bucket_quota_limit(monkeypatch, db_session):
+    account = S3Account(
+        name="portal-account-with-bucket-limit",
+        rgw_account_id="tenant-a",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    user = User(email="portal-limit@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+    service = PortalService(db_session)
+
+    class FakeQuotaAdmin:
+        def get_account(self, account_id, allow_not_found=False, allow_not_implemented=False):
+            assert account_id == "tenant-a"
+            assert allow_not_found is True
+            assert allow_not_implemented is True
+            return {
+                "quota": {"enabled": True, "max_size": 2048, "max_objects": 12},
+                "limits": {"max_buckets": "4"},
+            }
+
+    monkeypatch.setattr(service, "_quota_admin_for_account", lambda acc: FakeQuotaAdmin())
+    monkeypatch.setattr(service, "_get_iam_service", lambda *_args, **_kwargs: pytest.fail("IAM should not initialize without a portal link"))
+
+    state = service.get_state(user, access)
+
+    assert state.quota_max_size_bytes == 2048
+    assert state.quota_max_objects == 12
+    assert state.max_buckets == 4
+
+
+def test_get_state_keeps_bucket_quota_null_when_limit_is_absent(monkeypatch, db_session):
+    account = S3Account(
+        name="portal-account-without-bucket-limit",
+        rgw_account_id="tenant-no-limit",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    user = User(email="portal-no-limit@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user)
+    service = PortalService(db_session)
+
+    class FakeQuotaAdmin:
+        def get_account(self, account_id, allow_not_found=False, allow_not_implemented=False):
+            return {"quota": {"enabled": True, "max_size": 2048, "max_objects": 12}}
+
+    monkeypatch.setattr(service, "_quota_admin_for_account", lambda acc: FakeQuotaAdmin())
+
+    state = service.get_state(user, access)
+
+    assert state.max_buckets is None
+
+
+def test_portal_traffic_aggregates_visible_buckets_for_portal_user(monkeypatch, db_session):
+    account = S3Account(name="portal-traffic-scope", rgw_account_id="tenant-traffic")
+    user = User(email="portal-traffic@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user)
+    service = PortalService(db_session)
+    captured: dict = {}
+
+    monkeypatch.setattr(
+        service,
+        "list_existing_user_bucket_access",
+        lambda actor, scoped_account, role: ["bucket-a", "bucket-b"],  # noqa: ARG005
+    )
+
+    class FakeTrafficService:
+        def __init__(self, scoped_account):
+            captured["account"] = scoped_account
+
+        def get_traffic(self, *, window, bucket=None, bucket_filters=None):
+            captured["window"] = window
+            captured["bucket"] = bucket
+            captured["bucket_filters"] = bucket_filters
+            return {
+                "window": window.value,
+                "start": "2026-06-10T00:00:00+00:00",
+                "end": "2026-06-11T00:00:00+00:00",
+                "resolution": "hourly",
+                "bucket_filter": None,
+                "data_points": 1,
+                "series": [{"timestamp": "2026-06-10T00:00:00+00:00", "bytes_in": 2, "bytes_out": 3, "ops": 1, "success_ops": 1}],
+                "totals": {"bytes_in": 2, "bytes_out": 3, "ops": 1, "success_ops": 1, "success_rate": 1},
+                "bucket_rankings": [],
+                "user_rankings": [],
+                "request_breakdown": [],
+                "category_breakdown": [],
+            }
+
+    monkeypatch.setattr(portal_router, "TrafficService", FakeTrafficService)
+
+    result = portal_router.portal_traffic(
+        window=TrafficWindow.DAY,
+        bucket=None,
+        access=access,
+        portal_service=service,
+    )
+
+    assert result["totals"]["bytes_in"] == 2
+    assert captured["account"] == account
+    assert captured["bucket"] is None
+    assert captured["bucket_filters"] == {"bucket-a", "bucket-b"}
 
 
 def test_list_access_keys_without_bootstrap_returns_empty(monkeypatch, db_session):

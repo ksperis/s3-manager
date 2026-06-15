@@ -8,6 +8,7 @@ import type { HealthCheckStatus } from "../../api/healthchecks";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import {
+  buildWorkspaceStorageEvolutionPoints,
   WorkspaceDashboardCard,
   WorkspaceDashboardEmptyState,
   WorkspaceDashboardIconBubble as IconBubble,
@@ -21,6 +22,7 @@ import {
 import {
   buildWorkspaceDashboardKpis,
   selectWorkspaceTrafficTrend,
+  workspaceTrafficTotalBytes,
 } from "../../components/workspaceDashboardKpis";
 import UiBadge from "../../components/ui/UiBadge";
 import { cx, uiCardClass, uiMutedTextClass } from "../../components/ui/styles";
@@ -165,35 +167,20 @@ function buildTransferRows(workspaceTransfers: ReturnType<typeof usePortalWorksp
   }));
 }
 
-function buildTrafficTrendPoints(
-  traffic: ReturnType<typeof usePortalWorkspaceData>["traffic"]
-): WorkspaceDashboardStorageEvolutionPoint[] {
-  return (traffic?.series ?? [])
-    .map((point) => {
-      const timestampMs = new Date(point.timestamp).getTime();
-      if (!Number.isFinite(timestampMs)) return null;
-      return {
-        timestampMs,
-        usedBytes: Math.max(0, point.bytes_in + point.bytes_out),
-      };
-    })
-    .filter((point): point is WorkspaceDashboardStorageEvolutionPoint => point != null);
-}
-
 function StorageOverviewCard({
   usedBytes,
   quotaBytes,
   objectCount,
   dataInBytes,
   dataOutBytes,
-  trafficTrendPoints,
+  storageTrendPoints,
 }: {
   usedBytes: number | null | undefined;
   quotaBytes: number | null | undefined;
   objectCount: number | null | undefined;
   dataInBytes: number | null | undefined;
   dataOutBytes: number | null | undefined;
-  trafficTrendPoints: WorkspaceDashboardStorageEvolutionPoint[];
+  storageTrendPoints: WorkspaceDashboardStorageEvolutionPoint[];
 }) {
   const usagePercent = percent(usedBytes, quotaBytes);
   return (
@@ -220,7 +207,7 @@ function StorageOverviewCard({
       ) : (
         <p className={cx("mt-3 ui-caption font-semibold", uiMutedTextClass)}>Quota unavailable</p>
       )}
-      <WorkspaceDashboardStorageEvolutionChart points={trafficTrendPoints} emptyLabel="No usage trend available." />
+      <WorkspaceDashboardStorageEvolutionChart points={storageTrendPoints} emptyLabel="Storage usage unavailable." />
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
           <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">Objects</p>
@@ -453,15 +440,18 @@ export default function PortalDashboard() {
   const storageRows = useMemo(() => buildStorageRows(workspace.spaces), [workspace.spaces]);
   const activityRows = useMemo(() => buildActivityRows(workspace.activity), [workspace.activity]);
   const transferRows = useMemo(() => buildTransferRows(workspace.transfers), [workspace.transfers]);
-  const trafficTrendPoints = useMemo(() => buildTrafficTrendPoints(trafficByWindow.week ?? traffic), [traffic, trafficByWindow]);
+  const currentTraffic = trafficByWindow.day ?? traffic;
+  const dataInBytes = currentTraffic?.totals.bytes_in ?? null;
+  const dataOutBytes = currentTraffic?.totals.bytes_out ?? null;
+  const storageTrendPoints = useMemo(
+    () => buildWorkspaceStorageEvolutionPoints(workspace.usedBytes, usageTrends?.storage, currentTraffic?.end),
+    [currentTraffic?.end, usageTrends?.storage, workspace.usedBytes]
+  );
   const trafficTrend = useMemo(() => selectWorkspaceTrafficTrend(trafficByWindow), [trafficByWindow]);
   const healthStatus = workspaceHealthStatus(health);
   const alerts = (workspace.alerts.length > 0 ? workspace.alerts : healthAlerts).slice(0, 4);
   const activeSpaces = workspace.spaces.filter((space) => space.status !== "Archived").length;
-  const transferBytes =
-    workspace.dataInBytes == null || workspace.dataOutBytes == null
-      ? null
-      : workspace.dataInBytes + workspace.dataOutBytes;
+  const transferBytes = currentTraffic ? workspaceTrafficTotalBytes(currentTraffic) : null;
   const metrics = buildWorkspaceDashboardKpis({
     storage: {
       usedBytes: workspace.usedBytes,
@@ -475,9 +465,11 @@ export default function PortalDashboard() {
     spaces: {
       label: "Storage spaces",
       value: workspace.spaces.length,
+      quota: workspace.maxBuckets,
       unitLabel: "spaces",
       activeValue: activeSpaces,
       activeLabel: "active",
+      progressLabel: "Storage spaces quota usage",
       trendBaseline: usageTrends?.buckets,
       trendBaselineValue: usageTrends?.buckets?.bucket_count,
       tone: "emerald",
@@ -582,9 +574,9 @@ export default function PortalDashboard() {
             usedBytes={workspace.usedBytes}
             quotaBytes={workspace.quotaBytes}
             objectCount={workspace.usedObjects}
-            dataInBytes={workspace.dataInBytes}
-            dataOutBytes={workspace.dataOutBytes}
-            trafficTrendPoints={trafficTrendPoints}
+            dataInBytes={dataInBytes}
+            dataOutBytes={dataOutBytes}
+            storageTrendPoints={storageTrendPoints}
           />
         </div>
         <div className="min-w-0 xl:col-span-8">
