@@ -1237,7 +1237,6 @@ export default function ManagerDashboard() {
   const [usageTrendsLoading, setUsageTrendsLoading] = useState(false);
   const [usageStatsAggregate, setUsageStatsAggregate] = useState<BucketUsageStatsAggregate | null>(null);
   const [usageStatsLoading, setUsageStatsLoading] = useState(false);
-  const [usageStatsError, setUsageStatsError] = useState<string | null>(null);
 
   const selected = useMemo(
     () => accounts.find((account) => account.id === selectedS3AccountId),
@@ -1430,20 +1429,17 @@ export default function ManagerDashboard() {
     if (!canLoadUsageStatsDataTypes) {
       setUsageStatsAggregate(null);
       setUsageStatsLoading(false);
-      setUsageStatsError(null);
       return;
     }
     let cancelled = false;
     setUsageStatsLoading(true);
-    setUsageStatsError(null);
     getManagerUsageStatsAggregate(accountIdForApi)
       .then((data) => {
         if (!cancelled) setUsageStatsAggregate(data.aggregate);
       })
-      .catch((err) => {
+      .catch(() => {
         if (!cancelled) {
           setUsageStatsAggregate(null);
-          setUsageStatsError(extractApiError(err, "Unable to load usage data types."));
         }
       })
       .finally(() => {
@@ -1736,7 +1732,6 @@ export default function ManagerDashboard() {
             <BucketUsageStatsDataTypesCard
               aggregate={usageStatsAggregate}
               loading={usageStatsLoading}
-              error={usageStatsError}
               data-testid="manager-dashboard-data-types"
             />
           </div>

@@ -450,6 +450,45 @@ describe("manager shell pages", () => {
     expect(getManagerUsageStatsAggregateMock).toHaveBeenCalledWith("account-1");
   });
 
+  it("keeps the compact data types card quiet when usage stats fail to load", async () => {
+    bucketUsageStatsEnabled = true;
+    getManagerUsageStatsAggregateMock.mockRejectedValue(new Error("Network Error"));
+    setManagerUser();
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: true,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    const dataTypesCard = await screen.findByTestId("manager-dashboard-data-types");
+
+    expect(await within(dataTypesCard).findByText("No usage stats snapshot yet.")).toBeInTheDocument();
+    expect(within(dataTypesCard).queryByText("Network Error")).not.toBeInTheDocument();
+    expect(screen.queryByText("Network Error")).not.toBeInTheDocument();
+    expect(getManagerUsageStatsAggregateMock).toHaveBeenCalledWith("account-1");
+  });
+
   it("hides the dashboard data types card when bucket usage stats are disabled", async () => {
     bucketUsageStatsEnabled = false;
     setManagerUser();
