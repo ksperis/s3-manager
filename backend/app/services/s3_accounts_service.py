@@ -620,6 +620,7 @@ class S3AccountsService:
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+                    allow_manager_bucket_quota=bool(acc.allow_manager_bucket_quota),
                     tags=self.tags.get_account_tags(acc),
                 )
             )
@@ -644,6 +645,7 @@ class S3AccountsService:
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+                    allow_manager_bucket_quota=bool(acc.allow_manager_bucket_quota),
                     tags=self.tags.get_account_tags(acc),
                 )
             )
@@ -704,6 +706,7 @@ class S3AccountsService:
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+            allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
             tags=self.tags.get_account_tags(account),
         )
 
@@ -801,6 +804,7 @@ class S3AccountsService:
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+                    allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
                     tags=[],
                 )
             )
@@ -887,6 +891,7 @@ class S3AccountsService:
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+            allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
             tags=self.tags.get_account_tags(account),
         )
 
@@ -904,6 +909,8 @@ class S3AccountsService:
             account.storage_endpoint_id = endpoint.id
         if payload.tags is not None:
             self.tags.replace_account_tags(account, payload.tags)
+        if payload.allow_manager_bucket_quota is not None:
+            account.allow_manager_bucket_quota = bool(payload.allow_manager_bucket_quota)
 
         if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
             quota_requested = payload.quota_max_size_gb is not None or payload.quota_max_objects is not None
@@ -1013,6 +1020,7 @@ class S3AccountsService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+            allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
             tags=self.tags.get_account_tags(account),
         )
 

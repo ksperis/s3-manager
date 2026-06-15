@@ -27,6 +27,7 @@ type S3AccountContextType = {
   managerStatsEnabled: boolean | null;
   managerStatsMessage: string | null;
   managerBrowserEnabled: boolean | null;
+  managerBucketQuotaEnabled: boolean | null;
   managerCephKeysEnabled: boolean | null;
 };
 
@@ -45,6 +46,7 @@ const S3AccountContext = createContext<S3AccountContextType>({
   managerStatsEnabled: null,
   managerStatsMessage: null,
   managerBrowserEnabled: null,
+  managerBucketQuotaEnabled: null,
   managerCephKeysEnabled: null,
 });
 
@@ -101,6 +103,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
   const [managerStatsEnabled, setManagerStatsEnabled] = useState<boolean | null>(null);
   const [managerStatsMessage, setManagerStatsMessage] = useState<string | null>(null);
   const [managerBrowserEnabled, setManagerBrowserEnabled] = useState<boolean | null>(null);
+  const [managerBucketQuotaEnabled, setManagerBucketQuotaEnabled] = useState<boolean | null>(null);
   const [managerCephKeysEnabled, setManagerCephKeysEnabled] = useState<boolean | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -206,6 +209,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
       setManagerStatsEnabled(null);
       setManagerStatsMessage(null);
       setManagerBrowserEnabled(null);
+      setManagerBucketQuotaEnabled(null);
       setManagerCephKeysEnabled(null);
       return;
     }
@@ -213,6 +217,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
     setManagerStatsEnabled(null);
     setManagerStatsMessage(null);
     setManagerBrowserEnabled(null);
+    setManagerBucketQuotaEnabled(null);
     setManagerCephKeysEnabled(null);
     fetchManagerContext(accountIdForApi)
       .then((data) => {
@@ -222,6 +227,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         setManagerStatsEnabled(Boolean(data.manager_stats_enabled));
         setManagerStatsMessage(data.manager_stats_message ?? null);
         setManagerBrowserEnabled(data.manager_browser_enabled !== false);
+        setManagerBucketQuotaEnabled(Boolean(data.manager_bucket_quota_enabled));
         setManagerCephKeysEnabled(Boolean(data.manager_ceph_keys_enabled));
       })
       .catch(() => {
@@ -231,6 +237,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         setManagerStatsEnabled(null);
         setManagerStatsMessage(null);
         setManagerBrowserEnabled(null);
+        setManagerBucketQuotaEnabled(null);
         setManagerCephKeysEnabled(null);
       });
     return () => {
@@ -255,6 +262,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         managerStatsEnabled,
         managerStatsMessage,
         managerBrowserEnabled,
+        managerBucketQuotaEnabled,
         managerCephKeysEnabled,
       }}
     >

@@ -117,6 +117,7 @@ describe("BucketDetailPage replication state", () => {
       accountIdForApi: null,
       requiresS3AccountSelection: false,
       accessMode: "admin",
+      managerBucketQuotaEnabled: false,
     });
     useCephAdminEndpointMock.mockReturnValue({
       selectedEndpointId: 1,
@@ -235,6 +236,7 @@ describe("BucketDetailPage replication state", () => {
       accountIdForApi: "ceph-account",
       requiresS3AccountSelection: true,
       accessMode: "admin",
+      managerBucketQuotaEnabled: false,
     });
 
     render(
@@ -268,6 +270,7 @@ describe("BucketDetailPage replication state", () => {
       accountIdForApi: "ceph-account",
       requiresS3AccountSelection: true,
       accessMode: "admin",
+      managerBucketQuotaEnabled: true,
     });
 
     render(
@@ -694,6 +697,7 @@ describe("BucketDetailPage replication state", () => {
       accountIdForApi: "conn-aws",
       requiresS3AccountSelection: true,
       accessMode: "connection",
+      managerBucketQuotaEnabled: false,
     });
 
     render(

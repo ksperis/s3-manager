@@ -263,6 +263,88 @@ describe("S3UsersPage modal tabs", () => {
     );
   });
 
+  it("submits privileged access grants from the S3 user edit tab", async () => {
+    render(
+      <MemoryRouter>
+        <S3UsersPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("rgw-user-1");
+    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Privileged access" }));
+
+    const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
+    const keysCheckbox = screen.getByRole("checkbox", { name: /Ceph S3 User keys/ });
+    expect(quotaCheckbox).not.toBeChecked();
+    expect(keysCheckbox).not.toBeChecked();
+    fireEvent.click(quotaCheckbox);
+    fireEvent.click(keysCheckbox);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(updateS3UserMock).toHaveBeenCalled();
+    });
+
+    const lastCall = updateS3UserMock.mock.calls.at(-1);
+    expect(lastCall?.[1]).toEqual(
+      expect.objectContaining({
+        allow_manager_bucket_quota: true,
+        allow_manager_ceph_s3_user_keys: true,
+      })
+    );
+  });
+
+  it("hides privileged access grants from non-superadmin S3 user edits", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 2, role: "ui_admin" }));
+    listS3UsersMock.mockResolvedValueOnce({
+      items: [
+        {
+          id: 5,
+          name: "rgw-user-1",
+          rgw_user_uid: "rgw-uid-1",
+          tags: [makeTag(601, "legacy")],
+          email: "rgw-user-1@example.com",
+          storage_endpoint_id: 10,
+          storage_endpoint_name: "ceph-main",
+          storage_endpoint_url: "https://ceph.example.test",
+          user_ids: [],
+          quota_max_size_gb: 1,
+          quota_max_objects: 100,
+          bucket_count: 0,
+          allow_manager_bucket_quota: true,
+          allow_manager_ceph_s3_user_keys: true,
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <S3UsersPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("rgw-user-1");
+    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
+
+    expect(await screen.findByRole("button", { name: "General" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Privileged access" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(updateS3UserMock).toHaveBeenCalled();
+    });
+
+    const lastCall = updateS3UserMock.mock.calls.at(-1);
+    expect(lastCall?.[1]).not.toHaveProperty("allow_manager_bucket_quota");
+    expect(lastCall?.[1]).not.toHaveProperty("allow_manager_ceph_s3_user_keys");
+  });
+
   it("creates a user with tags", async () => {
     render(
       <MemoryRouter>

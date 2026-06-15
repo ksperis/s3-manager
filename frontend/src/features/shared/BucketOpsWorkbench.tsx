@@ -3795,6 +3795,17 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     });
     return next;
   }, [items]);
+  const storageOpsQuotaUnavailableSelectedBuckets = useMemo(() => {
+    const unavailable = new Set<string>();
+    if (!isStorageOps) return unavailable;
+    selectedBucketList.forEach((bucketName) => {
+      const bucket = selectedBucketItemByName.get(bucketName) as StorageOpsBucket | undefined;
+      if (bucket && bucket.bucket_quota_available === false) {
+        unavailable.add(bucketName);
+      }
+    });
+    return unavailable;
+  }, [isStorageOps, selectedBucketItemByName, selectedBucketList]);
   const selectedIntegrityTargets = useMemo<BucketIntegrityUiTarget[]>(() => {
     if (!isStorageOps) {
       return selectedBucketList.map((bucketName) => ({ bucketName }));
@@ -4679,6 +4690,15 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     payload: ParsedQuotaInput,
     skipConfigured: boolean
   ): Promise<BulkPreviewItem> => {
+    if (storageOpsQuotaUnavailableSelectedBuckets.has(bucketName)) {
+      return {
+        bucket: bucketName,
+        changed: false,
+        before: [{ text: "Bucket quota management unavailable." }],
+        after: [{ text: "Skipped." }],
+        error: "Bucket quota management is not available for this context.",
+      };
+    }
     const currentQuota = await fetchBucketQuota(bucketName);
     if (skipConfigured && hasConfiguredQuota(currentQuota)) {
       return {
@@ -6003,6 +6023,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       BULK_CONCURRENCY_LIMIT,
       async (bucketName) => {
         if (bulkOperation === "set_quota" && parsedQuota) {
+          if (storageOpsQuotaUnavailableSelectedBuckets.has(bucketName)) {
+            throw new Error("Bucket quota management is not available for this context.");
+          }
           const currentQuota = await fetchBucketQuota(bucketName);
           if (bulkQuotaSkipConfigured && hasConfiguredQuota(currentQuota)) {
             return { changed: false };

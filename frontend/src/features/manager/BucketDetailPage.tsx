@@ -333,7 +333,14 @@ export default function BucketDetailPage({
   const params = useParams<{ bucketName: string }>();
   const bucketName = bucketNameOverride ?? params.bucketName;
   const isCephAdmin = mode === "ceph-admin";
-  const { accounts, selectedS3AccountId, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
+  const {
+    accounts,
+    selectedS3AccountId,
+    accountIdForApi,
+    requiresS3AccountSelection,
+    accessMode,
+    managerBucketQuotaEnabled,
+  } = useS3AccountContext();
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
   const [bucket, setBucket] = useState<Bucket | null>(null);
   const [loadingBucket, setLoadingBucket] = useState(false);
@@ -501,10 +508,11 @@ export default function BucketDetailPage({
   const hasContext = isCephAdmin ? hasCephContext : hasAccountContext;
   const storedUser = useMemo(() => readStoredUser(), []);
   const managerBucketQuotaAccess = Boolean(getManagerToolAccess(storedUser)?.bucket_quota);
-  const quotaOverrideAllows = quotaAvailableOverride !== false;
+  const hasQuotaOverride = quotaAvailableOverride !== null;
+  const quotaTargetAllows = hasQuotaOverride ? quotaAvailableOverride !== false : Boolean(managerBucketQuotaEnabled);
   const quotaFeatureEnabled = isCephAdmin
     ? isCephEndpoint
-    : Boolean(isCephEndpoint || (accountIdOverride && managerBucketQuotaAccess && quotaOverrideAllows));
+    : Boolean((isCephEndpoint || hasQuotaOverride) && quotaTargetAllows);
   const showQuotaTab = isCephAdmin || Boolean(quotaFeatureEnabled && managerBucketQuotaAccess && hasAccountContext);
   const showObjectsTab = !isCephAdmin && !hideObjectsTab;
   const availableTabs = useMemo(() => {

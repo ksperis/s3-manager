@@ -266,6 +266,71 @@ describe("AccountsPage modal tabs", () => {
     );
   });
 
+  it("submits privileged access grants from the account edit tab", async () => {
+    render(<AccountsPage />);
+
+    await screen.findByText("acc-1");
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Privileged access" }));
+
+    const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
+    expect(quotaCheckbox).not.toBeChecked();
+    fireEvent.click(quotaCheckbox);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateS3AccountMock).toHaveBeenCalled();
+    });
+
+    const lastCall = updateS3AccountMock.mock.calls.at(-1);
+    expect(lastCall?.[1]).toEqual(
+      expect.objectContaining({
+        allow_manager_bucket_quota: true,
+      })
+    );
+  });
+
+  it("hides privileged access grants from non-superadmin account edits", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 2, role: "ui_admin" }));
+    getS3AccountMock.mockResolvedValueOnce({
+      id: "RGW000000000000001",
+      db_id: 1,
+      name: "acc-1",
+      tags: [makeTag(501, "gold", "amber")],
+      rgw_account_id: "RGW000000000000001",
+      storage_endpoint_id: 10,
+      storage_endpoint_name: "ceph-main",
+      storage_endpoint_url: "https://ceph.example.test",
+      storage_endpoint_capabilities: {
+        account: true,
+        admin: true,
+        usage: true,
+      },
+      quota_max_size_gb: null,
+      quota_max_objects: null,
+      user_ids: [],
+      user_links: [],
+      allow_manager_bucket_quota: true,
+    });
+
+    render(<AccountsPage />);
+
+    await screen.findByText("acc-1");
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+
+    expect(await screen.findByRole("button", { name: "General" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Privileged access" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateS3AccountMock).toHaveBeenCalled();
+    });
+
+    const lastCall = updateS3AccountMock.mock.calls.at(-1);
+    expect(lastCall?.[1]).not.toHaveProperty("allow_manager_bucket_quota");
+  });
+
   it("shows portal overrides tab when the portal feature is enabled", async () => {
     portalEnabled = true;
     fetchAccountPortalSettingsMock.mockResolvedValueOnce(

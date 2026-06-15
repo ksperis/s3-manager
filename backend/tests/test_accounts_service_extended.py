@@ -260,6 +260,24 @@ def test_update_account_adds_and_removes_links_with_quota_request(db_session, mo
     )
 
 
+def test_update_account_persists_privileged_bucket_quota_grant(db_session, monkeypatch):
+    endpoint = _seed_endpoint(db_session, name="ceph-target-grant", is_default=True)
+    account = _seed_account(db_session, endpoint.id, name="target-grant-acc", rgw_account_id="RGW-TARGET-GRANT")
+    assert account.allow_manager_bucket_quota is False
+
+    service, _ = _service(db_session)
+    monkeypatch.setattr(service, "_account_quota", lambda *args, **kwargs: (None, None))
+
+    updated = service.update_account(
+        account.id,
+        S3AccountUpdate(allow_manager_bucket_quota=True),
+    )
+
+    assert updated.allow_manager_bucket_quota is True
+    db_session.refresh(account)
+    assert account.allow_manager_bucket_quota is True
+
+
 def test_delete_account_guardrails_and_success(db_session, monkeypatch):
     endpoint = _seed_endpoint(db_session, name="ceph-delete", is_default=True)
     account = _seed_account(db_session, endpoint.id, name="delete-acc", rgw_account_id="RGW-DEL-1")

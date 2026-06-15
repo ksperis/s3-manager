@@ -20,7 +20,7 @@ def _quota_user(*, allowed: bool) -> User:
     )
 
 
-def _quota_account() -> S3Account:
+def _quota_account(*, allow_target: bool = True) -> S3Account:
     endpoint = StorageEndpoint(
         id=22,
         name="Ceph quota endpoint",
@@ -37,6 +37,7 @@ def _quota_account() -> S3Account:
         rgw_account_id="RGW00000000000000033",
         rgw_access_key="account-ak",
         rgw_secret_key="account-sk",
+        allow_manager_bucket_quota=allow_target,
     )
     account.storage_endpoint = endpoint
     return account
@@ -66,6 +67,27 @@ def test_manager_bucket_quota_update_requires_privileged_access(client, db_sessi
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Not authorized"
+
+
+def test_manager_bucket_quota_update_requires_target_grant(client, db_session):
+    user = _quota_user(allowed=True)
+    account = _quota_account(allow_target=False)
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
+    app.dependency_overrides[dependencies.get_current_actor] = lambda: user
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
+    try:
+        response = client.put(
+            "/api/manager/buckets/demo-bucket/quota",
+            params={"account_id": account.id},
+            json={"max_size_gb": 1, "max_objects": 1000},
+        )
+    finally:
+        app.dependency_overrides.pop(dependencies.get_current_user, None)
+        app.dependency_overrides.pop(dependencies.get_current_actor, None)
+        app.dependency_overrides.pop(dependencies.get_account_context, None)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Bucket quota management is not available for this context"
 
 
 def test_manager_bucket_quota_update_succeeds_with_privileged_access(client, db_session):

@@ -290,6 +290,31 @@ def test_update_links_normalizes_non_ui_roles_to_ui_user(db_session, monkeypatch
     assert link is not None
 
 
+def test_update_user_persists_privileged_target_grants(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    fake = FakeRGWAdmin()
+    service = _build_service(db_session, monkeypatch, fake)
+
+    created = service.create_user(S3UserCreate(name="Privileged", uid="privileged-target", storage_endpoint_id=endpoint.id))
+    record = db_session.query(S3User).filter_by(id=created.id).one()
+    assert record.allow_manager_bucket_quota is False
+    assert record.allow_manager_ceph_s3_user_keys is False
+
+    updated = service.update_user(
+        created.id,
+        S3UserUpdate(
+            allow_manager_bucket_quota=True,
+            allow_manager_ceph_s3_user_keys=True,
+        ),
+    )
+
+    assert updated.allow_manager_bucket_quota is True
+    assert updated.allow_manager_ceph_s3_user_keys is True
+    db_session.refresh(record)
+    assert record.allow_manager_bucket_quota is True
+    assert record.allow_manager_ceph_s3_user_keys is True
+
+
 def test_rotate_keys_replaces_old_credentials_and_deletes_previous(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session)
     fake = FakeRGWAdmin()

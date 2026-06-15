@@ -312,6 +312,8 @@ def _build_s3_user_account(s3_user: S3User) -> S3Account:
     account.rgw_secret_key = s3_user.rgw_secret_key
     account.storage_endpoint_id = s3_user.storage_endpoint_id
     account.storage_endpoint = s3_user.storage_endpoint
+    account.allow_manager_bucket_quota = bool(s3_user.allow_manager_bucket_quota)
+    account.allow_manager_ceph_s3_user_keys = bool(s3_user.allow_manager_ceph_s3_user_keys)  # type: ignore[attr-defined]
     account.s3_user_id = s3_user.id  # type: ignore[attr-defined]
     return account
 
@@ -1113,7 +1115,38 @@ def is_manager_bucket_quota_available(
 ) -> bool:
     if user is not None and not user_has_manager_tool_access(user, "bucket_quota", db=db):
         return False
-    return _is_ceph_endpoint_admin_available(account)
+    if not _is_ceph_endpoint_admin_available(account):
+        return False
+    return _target_allows_manager_bucket_quota(account, db=db)
+
+
+def _s3_user_flag_enabled(
+    account: S3Account,
+    flag_name: str,
+    *,
+    db: Session | None = None,
+) -> bool:
+    s3_user_id = getattr(account, "s3_user_id", None)
+    if s3_user_id is None:
+        return False
+    if db is not None:
+        row = db.query(S3User).filter(S3User.id == s3_user_id).first()
+        if row is not None:
+            return bool(getattr(row, flag_name, False))
+    return bool(getattr(account, flag_name, False))
+
+
+def _target_allows_manager_bucket_quota(account: S3Account, *, db: Session | None = None) -> bool:
+    if getattr(account, "s3_connection_id", None) is not None:
+        return False
+    if getattr(account, "s3_user_id", None) is not None:
+        return _s3_user_flag_enabled(account, "allow_manager_bucket_quota", db=db)
+    account_id = getattr(account, "id", None)
+    if db is not None and isinstance(account_id, int) and account_id > 0:
+        row = db.query(S3Account).filter(S3Account.id == account_id).first()
+        if row is not None:
+            return bool(getattr(row, "allow_manager_bucket_quota", False))
+    return bool(getattr(account, "allow_manager_bucket_quota", False))
 
 
 def require_manager_bucket_quota(
@@ -1151,6 +1184,8 @@ def is_manager_ceph_s3_user_keys_available(
 
     s3_user_id = getattr(account, "s3_user_id", None)
     if s3_user_id is None:
+        return False
+    if not _s3_user_flag_enabled(account, "allow_manager_ceph_s3_user_keys", db=db):
         return False
 
     return _is_ceph_endpoint_admin_available(account)

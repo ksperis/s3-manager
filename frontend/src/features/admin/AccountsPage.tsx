@@ -43,11 +43,11 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
-import { isAdminLikeRole } from "../../utils/workspaces";
+import { isAdminLikeRole, isSuperAdminRole } from "../../utils/workspaces";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 
 type SortField = "name" | "rgw_account_id";
-type EditTab = "general" | "users" | "portal";
+type EditTab = "general" | "users" | "privileged" | "portal";
 type TriState = "inherit" | "enabled" | "disabled";
 type PolicyMode = "inherit" | "actions";
 type TextMatchMode = "contains" | "exact";
@@ -153,6 +153,7 @@ export default function S3AccountsPage() {
     quota_max_size_unit: "GiB",
     quota_max_objects: "",
     user_links: [] as AccountUserLink[],
+    allow_manager_bucket_quota: false,
   });
   const [editInitialSignature, setEditInitialSignature] = useState("");
   const [portalInitialSignature, setPortalInitialSignature] = useState("");
@@ -193,6 +194,7 @@ export default function S3AccountsPage() {
     }
   }, []);
   const isSuperAdmin = isAdminLikeRole(currentUser?.role);
+  const canManagePrivilegedTargets = isSuperAdminRole(currentUser?.role);
   const editingAccountId = editingS3Account?.db_id ?? null;
   const editingEndpoint = useMemo(() => {
     if (!editingS3Account?.storage_endpoint_id) return null;
@@ -214,6 +216,7 @@ export default function S3AccountsPage() {
   const portalManagerOverride = portalAccountSettings?.portal_manager_override ?? null;
   const showGeneralTab = editTab === "general";
   const showUsersTab = editTab === "users";
+  const showPrivilegedTab = editTab === "privileged";
   const showPortalTab = portalEnabled && editTab === "portal";
   const hasPortalManagerOverrides = useMemo(() => {
     if (!portalManagerOverride) return false;
@@ -868,6 +871,7 @@ export default function S3AccountsPage() {
       quota_max_size_gb: quota.value,
       quota_max_size_unit: quota.unit,
       quota_max_objects: detail.quota_max_objects != null ? String(detail.quota_max_objects) : "",
+      allow_manager_bucket_quota: Boolean(detail.allow_manager_bucket_quota),
       user_links:
         detail.user_links?.map((link) => ({
           user_id: link.user_id,
@@ -899,6 +903,9 @@ export default function S3AccountsPage() {
       const payload = {
         user_links: editForm.user_links,
         tags: normalizeUiTags(editForm.tags),
+        ...(canManagePrivilegedTargets
+          ? { allow_manager_bucket_quota: editForm.allow_manager_bucket_quota }
+          : {}),
         ...(allowQuotaUpdates
           ? {
               quota_max_size_gb: editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null,
@@ -1453,6 +1460,19 @@ export default function S3AccountsPage() {
               >
                 Linked UI users
               </button>
+              {canManagePrivilegedTargets && (
+                <button
+                  type="button"
+                  onClick={() => setEditTab("privileged")}
+                  className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                    editTab === "privileged"
+                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                  }`}
+                >
+                  Privileged access
+                </button>
+              )}
               {portalEnabled && (
                 <button
                   type="button"
@@ -1757,6 +1777,28 @@ export default function S3AccountsPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+              {canManagePrivilegedTargets && showPrivilegedTab && (
+                <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                  <label className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                      checked={editForm.allow_manager_bucket_quota}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          allow_manager_bucket_quota: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>
+                      <span className="block ui-body font-medium text-slate-800 dark:text-slate-100">
+                        Bucket quota management
+                      </span>
+                    </span>
+                  </label>
                 </div>
               )}
               {showPortalTab && (

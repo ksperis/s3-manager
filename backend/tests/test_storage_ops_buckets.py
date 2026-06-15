@@ -1517,6 +1517,7 @@ def test_storage_ops_bucket_listing_marks_quota_available_for_ceph_admin_context
     def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
         return SimpleNamespace(
             context_id=account_ref,
+            allow_manager_bucket_quota=True,
             storage_endpoint=SimpleNamespace(
                 provider="ceph",
                 admin_endpoint="https://admin.example.test",
@@ -1541,6 +1542,54 @@ def test_storage_ops_bucket_listing_marks_quota_available_for_ceph_admin_context
         assert response.status_code == 200
         payload = response.json()
         assert payload["items"][0]["bucket_quota_available"] is True
+    finally:
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
+        app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
+        app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
+
+
+def test_storage_ops_bucket_listing_marks_quota_unavailable_for_connection_context(client, monkeypatch):
+    def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
+        assert workspace == "manager"
+        return [
+            ExecutionContext(
+                kind="connection",
+                id="conn-2",
+                display_name="Connection",
+                endpoint_name="Primary",
+                capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
+            )
+        ]
+
+    def fake_get_account_context(*, request, account_ref, actor, db):  # noqa: ARG001
+        return SimpleNamespace(
+            context_id=account_ref,
+            s3_connection_id=2,
+            allow_manager_bucket_quota=True,
+            storage_endpoint=SimpleNamespace(
+                provider="ceph",
+                admin_endpoint="https://admin.example.test",
+                admin_access_key="admin-ak",
+                admin_secret_key="admin-sk",
+                features_config='{"admin":{"enabled":true,"endpoint":"https://admin.example.test"}}',
+            ),
+        )
+
+    class FakeBucketsService:
+        def list_buckets(self, account, include=None, with_stats=True):  # noqa: ARG002
+            return [Bucket(name="alpha")]
+
+    monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
+    monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
+
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
+    app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
+    app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
+    try:
+        response = client.get("/api/storage-ops/buckets")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["items"][0]["bucket_quota_available"] is False
     finally:
         app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)

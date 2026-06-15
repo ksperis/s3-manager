@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import User
+from app.db import S3User as S3UserDb, User, is_superadmin_ui_role
 from app.models.s3_user import (
     PaginatedS3UsersResponse,
     S3User,
@@ -37,6 +37,27 @@ def get_admin_s3_users_service(
     rgw_admin_client=Depends(get_optional_super_admin_rgw_client),
 ) -> S3UsersService:
     return get_s3_users_service(db, rgw_admin_client=rgw_admin_client)
+
+
+def _require_superadmin_for_privileged_target_change(
+    current_user: User,
+    s3_user: S3UserDb | None,
+    payload: S3UserUpdate,
+) -> None:
+    if is_superadmin_ui_role(current_user.role) or s3_user is None:
+        return
+    requested = {
+        "allow_manager_bucket_quota": payload.allow_manager_bucket_quota,
+        "allow_manager_ceph_s3_user_keys": payload.allow_manager_ceph_s3_user_keys,
+    }
+    for field_name, value in requested.items():
+        if value is None:
+            continue
+        if bool(value) != bool(getattr(s3_user, field_name, False)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only superadmin users can change privileged target grants",
+            )
 
 
 @router.get("", response_model=PaginatedS3UsersResponse)
@@ -140,11 +161,14 @@ def import_s3_users(
 def update_s3_user(
     user_id: int,
     payload: S3UserUpdate,
+    db: Session = Depends(get_db),
     service: S3UsersService = Depends(get_admin_s3_users_service),
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> S3User:
     try:
+        s3_user = db.query(S3UserDb).filter(S3UserDb.id == user_id).first()
+        _require_superadmin_for_privileged_target_change(current_user, s3_user, payload)
         updated = service.update_user(user_id, payload)
         audit_service.record_action(
             user=current_user,

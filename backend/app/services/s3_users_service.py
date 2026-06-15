@@ -388,6 +388,8 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            allow_manager_bucket_quota=bool(row.allow_manager_bucket_quota),
+            allow_manager_ceph_s3_user_keys=bool(row.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(row),
         )
 
@@ -416,6 +418,8 @@ class S3UsersService:
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                    allow_manager_bucket_quota=bool(row.allow_manager_bucket_quota),
+                    allow_manager_ceph_s3_user_keys=bool(row.allow_manager_ceph_s3_user_keys),
                     tags=self.tags.get_s3_user_tags(row),
                 )
             )
@@ -526,6 +530,8 @@ class S3UsersService:
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
             bucket_count=bucket_count,
+            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
+            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -593,6 +599,8 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_url=endpoint.endpoint_url,
+            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
+            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -651,6 +659,8 @@ class S3UsersService:
                     storage_endpoint_id=endpoint.id,
                     storage_endpoint_name=endpoint.name,
                     storage_endpoint_url=endpoint.endpoint_url,
+                    allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
+                    allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
                     tags=[],
                 )
             )
@@ -675,6 +685,10 @@ class S3UsersService:
             self._ensure_links(s3_user, payload.user_ids)
         if payload.tags is not None:
             self.tags.replace_s3_user_tags(s3_user, payload.tags)
+        if payload.allow_manager_bucket_quota is not None:
+            s3_user.allow_manager_bucket_quota = bool(payload.allow_manager_bucket_quota)
+        if payload.allow_manager_ceph_s3_user_keys is not None:
+            s3_user.allow_manager_ceph_s3_user_keys = bool(payload.allow_manager_ceph_s3_user_keys)
 
         if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
             self._apply_user_quota(
@@ -709,6 +723,8 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
+            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -772,6 +788,8 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id if endpoint else s3_user.storage_endpoint_id,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
+            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
