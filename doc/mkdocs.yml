@@ -115,6 +115,7 @@ nav:
       - UI theme guidelines: developer/ui-theme-guidelines.md
       - AI assistant guidelines: developer/ai-assistant-guidelines.md
       - Identity and execution model: developer/identity-and-execution-model.md
+      - Workspace surface separation: developer/workspace-surface-separation.md
       - Repository layout: developer/repo-layout.md
       - Local development: developer/local-development.md
       - Contributing: developer/contributing.md
