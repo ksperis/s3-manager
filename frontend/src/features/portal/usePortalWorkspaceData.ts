@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import type { ManagerTrafficStats } from "../../api/stats";
+import type { ManagerTrafficStats, TrafficWindow } from "../../api/stats";
 import { fetchPortalWorkspaceHealthOverview, type WorkspaceEndpointHealthOverviewResponse } from "../../api/healthchecks";
 import {
   fetchPortalActivity,
@@ -100,7 +100,8 @@ function alertFromApi(item: PortalAlert): PortalWorkspaceAlert {
 export function usePortalWorkspaceData({
   includeTraffic = false,
   includeHealth = false,
-}: { includeTraffic?: boolean; includeHealth?: boolean } = {}) {
+  trafficWindow = "week",
+}: { includeTraffic?: boolean; includeHealth?: boolean; trafficWindow?: TrafficWindow } = {}) {
   const { t } = useI18n();
   const accountContext = usePortalAccountContext();
   const { accountIdForApi, selectedAccount, hasAccountContext, loading: accountLoading, error: accountError } = accountContext;
@@ -124,6 +125,7 @@ export function usePortalWorkspaceData({
   const [stateError, setStateError] = useState<string | null>(null);
   const [storageSpacesError, setStorageSpacesError] = useState<string | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
+  const [trafficError, setTrafficError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -250,18 +252,32 @@ export function usePortalWorkspaceData({
     if (!includeTraffic || !hasAccountContext || !accountIdForApi) {
       setTraffic(null);
       setTrafficLoading(false);
+      setTrafficError(null);
       return () => {
         cancelled = true;
       };
     }
     setTrafficLoading(true);
-    fetchPortalTraffic(accountIdForApi, "week")
+    setTrafficError(null);
+    fetchPortalTraffic(accountIdForApi, trafficWindow)
       .then((data) => {
         if (!cancelled) setTraffic(data);
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setTraffic(null);
+        if (!cancelled) {
+          setTraffic(null);
+          setTrafficError(
+            extractApiError(
+              err,
+              t({
+                en: "Traffic data is unavailable.",
+                fr: "Les donnees de trafic sont indisponibles.",
+                de: "Traffic-Daten sind nicht verfugbar.",
+              })
+            )
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setTrafficLoading(false);
@@ -269,7 +285,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, includeTraffic]);
+  }, [accountIdForApi, hasAccountContext, includeTraffic, t, trafficWindow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -460,5 +476,6 @@ export function usePortalWorkspaceData({
     stateError,
     storageSpacesError,
     usageError,
+    trafficError,
   };
 }

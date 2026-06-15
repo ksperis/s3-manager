@@ -81,6 +81,7 @@ export function MetricsSnapshotCard({ label, value, hint, loading }: MetricsSnap
 }
 
 type MetricsTrafficOverviewProps = {
+  title?: string;
   traffic: ManagerTrafficStats | null | undefined;
   window: TrafficWindow;
   onWindowChange: (value: TrafficWindow) => void;
@@ -93,6 +94,7 @@ type MetricsTrafficOverviewProps = {
 };
 
 export default function MetricsTrafficOverview({
+  title = "RGW traffic",
   traffic,
   window,
   onWindowChange,
@@ -185,7 +187,7 @@ export default function MetricsTrafficOverview({
 
   return (
     <MetricsCard
-      title="RGW traffic"
+      title={title}
       description={subtitle}
       actions={
         <div className="flex items-center gap-2 rounded-full bg-[var(--ui-surface-muted)] px-2 py-1">
