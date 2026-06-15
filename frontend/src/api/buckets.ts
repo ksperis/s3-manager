@@ -378,6 +378,22 @@ export async function updateBucketPublicAccessBlock(
   return data;
 }
 
+export type BucketQuotaUpdate = {
+  max_size_gb?: number | null;
+  max_size_unit?: string | null;
+  max_objects?: number | null;
+};
+
+export async function updateBucketQuota(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: BucketQuotaUpdate
+): Promise<void> {
+  await client.put(`${bucketPath(bucketName)}/quota`, payload, {
+    params: withS3AccountParam(undefined, accountId),
+  });
+}
+
 export async function getBucketVersioning(
   accountId: S3AccountSelector,
   bucketName: string

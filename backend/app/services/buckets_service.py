@@ -52,6 +52,7 @@ from app.utils.rgw import (
     resolve_account_scope,
     resolve_admin_uid,
     get_supervision_credentials,
+    is_rgw_account_id,
 )
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -99,6 +100,31 @@ class BucketsService:
             )
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to initialize admin client: {exc}") from exc
+
+    def _rgw_bucket_quota_admin_for_account(self, account: S3Account):
+        endpoint = getattr(account, "storage_endpoint", None)
+        if endpoint is None:
+            raise RuntimeError("Storage endpoint is not configured for this context")
+        flags = resolve_feature_flags(endpoint)
+        if not flags.admin_enabled:
+            raise RuntimeError("Admin API is disabled for this endpoint")
+        access_key = (getattr(endpoint, "admin_access_key", None) or "").strip()
+        secret_key = (getattr(endpoint, "admin_secret_key", None) or "").strip()
+        if not access_key or not secret_key:
+            raise RuntimeError("Endpoint admin credentials are not configured for this endpoint")
+        try:
+            admin_endpoint = resolve_admin_endpoint(endpoint)
+            if not admin_endpoint:
+                raise RuntimeError("Admin endpoint is not configured for this endpoint")
+            return get_rgw_admin_client(
+                access_key=access_key,
+                secret_key=secret_key,
+                endpoint=admin_endpoint,
+                region=endpoint.region,
+                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+            )
+        except RGWAdminError as exc:
+            raise RuntimeError(f"Unable to initialize bucket quota admin client: {exc}") from exc
 
     def _admin_bucket_list(self, account: S3Account, with_stats: bool = True) -> list[dict]:
         uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
@@ -148,6 +174,57 @@ class BucketsService:
             except (TypeError, ValueError):
                 quota_objects = None
         return quota_size, quota_objects
+
+    def _split_tenant_uid(self, value: str) -> tuple[str | None, str]:
+        tenant, sep, uid = value.partition("$")
+        if sep:
+            return tenant or None, uid
+        return None, value
+
+    def _resolve_bucket_owner_identity(self, entry: dict) -> tuple[str | None, str | None]:
+        if not isinstance(entry, dict):
+            return None, None
+        tenant = str(entry.get("tenant") or "").strip() or None
+        owner = str(entry.get("owner") or "").strip() or None
+        if owner and "$" in owner:
+            split_tenant, split_uid = self._split_tenant_uid(owner)
+            if split_tenant:
+                tenant = split_tenant
+            owner = split_uid or None
+        if not owner:
+            return None, None
+        if is_rgw_account_id(owner):
+            return owner, None
+        if tenant:
+            return None, f"{tenant}${owner}"
+        return None, owner
+
+    def _resolve_bucket_quota_scope(
+        self,
+        name: str,
+        account: S3Account,
+        client: RGWAdminClient,
+    ) -> tuple[Optional[str], Optional[str], str]:
+        account_id, tenant = resolve_account_scope(account.rgw_account_id)
+        root_identifier = account_id or tenant
+        root_uid = resolve_admin_uid(root_identifier, account.rgw_user_uid)
+        if root_uid:
+            return account_id, tenant, root_uid
+
+        try:
+            bucket_info = client.get_bucket_info(name, stats=False, allow_not_found=True)
+        except RGWAdminError as exc:
+            raise RuntimeError(f"Unable to resolve bucket owner for quota update: {exc}") from exc
+        if not bucket_info:
+            raise RuntimeError("Unable to set bucket quota: bucket not found")
+
+        owner_account_id, owner_uid = self._resolve_bucket_owner_identity(bucket_info)
+        account_id, tenant = resolve_account_scope(owner_account_id)
+        root_identifier = account_id or tenant
+        root_uid = resolve_admin_uid(root_identifier, owner_uid)
+        if not root_uid:
+            raise RuntimeError("Unable to set bucket quota: bucket owner uid is missing")
+        return account_id, tenant, root_uid
 
     def list_buckets(
         self,
@@ -1229,12 +1306,8 @@ class BucketsService:
         payload: BucketQuotaUpdate,
         rgw_admin: Optional[RGWAdminClient] = None,
     ) -> None:
-        account_id, tenant = resolve_account_scope(account.rgw_account_id)
-        root_identifier = account_id or tenant
-        root_uid = resolve_admin_uid(root_identifier, account.rgw_user_uid)
-        if not root_uid:
-            raise RuntimeError("Unable to set bucket quota: bucket owner uid is missing")
-        client = rgw_admin or self._rgw_admin_for_account(account)
+        client = rgw_admin or self._rgw_bucket_quota_admin_for_account(account)
+        _account_id, tenant, root_uid = self._resolve_bucket_quota_scope(name, account, client)
         max_size_bytes = None
         if payload.max_size_gb is not None:
             try:

@@ -406,6 +406,7 @@ describe("UsersPage modal tabs", () => {
             bucket_integrity_check: true,
             bucket_migration: true,
             feature_rules: false,
+            bucket_quota: false,
             ceph_s3_user_keys: false,
           },
           accounts: [],
@@ -429,7 +430,7 @@ describe("UsersPage modal tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Manager tools" }));
 
     expect(screen.getByText("Bucket tools")).toBeInTheDocument();
-    expect(screen.getByText("Ceph tools")).toBeInTheDocument();
+    expect(screen.getByText("Privileged Ceph access")).toBeInTheDocument();
     const bucketToolsGroup = screen.getByText("Bucket tools").closest("div");
     expect(bucketToolsGroup).not.toBeNull();
     expect(within(bucketToolsGroup as HTMLElement).getByText("Bucket compare")).toBeInTheDocument();
@@ -456,6 +457,7 @@ describe("UsersPage modal tabs", () => {
           bucket_integrity_check: true,
           bucket_migration: true,
           feature_rules: false,
+          bucket_quota: false,
           ceph_s3_user_keys: false,
         },
       })

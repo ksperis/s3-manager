@@ -56,6 +56,7 @@ import {
   updateBucketAcl,
   updateBucketObjectLock,
   updateBucketPublicAccessBlock,
+  updateBucketQuota,
 } from "../../api/buckets";
 import {
   deleteCephAdminBucketCors,
@@ -114,7 +115,7 @@ import { MetricsCard } from "../../components/MetricsCard";
 import UsageTile from "../../components/UsageTile";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { formatCompactNumber } from "../../utils/format";
-import { isAdminLikeRole } from "../../utils/workspaces";
+import { getManagerToolAccess, isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import { useS3AccountContext } from "./S3AccountContext";
 import TrafficAnalytics from "./TrafficAnalytics";
 import BucketUsageStatsPanel from "../shared/BucketUsageStatsPanel";
@@ -151,15 +152,7 @@ import {
 import { extractApiError, isApiFeatureNotImplemented } from "../../utils/apiError";
 
 function getUserRole(): string | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as { role?: string | null };
-    return parsed.role ?? null;
-  } catch {
-    return null;
-  }
+  return readStoredUser()?.role ?? null;
 }
 
 function formatBytes(value?: number | null) {
@@ -324,6 +317,7 @@ type BucketDetailPageProps = {
   mode?: BucketDetailMode;
   bucketNameOverride?: string;
   accountIdOverride?: string | null;
+  quotaAvailableOverride?: boolean | null;
   embedded?: boolean;
   hideObjectsTab?: boolean;
 };
@@ -332,6 +326,7 @@ export default function BucketDetailPage({
   mode = "manager",
   bucketNameOverride,
   accountIdOverride = null,
+  quotaAvailableOverride = null,
   embedded = false,
   hideObjectsTab = false,
 }: BucketDetailPageProps) {
@@ -499,16 +494,32 @@ export default function BucketDetailPage({
     return null;
   }, [accountIdOverride, accounts, isCephAdmin, requiresS3AccountSelection, selectedS3AccountId]);
   const isCephEndpoint = isCephAdmin || selectedS3Account?.endpoint_provider === "ceph";
+  const accountId = accountIdOverride ?? accountIdForApi ?? null;
+  const hasAccountContext = !requiresS3AccountSelection || accountId !== null;
+  const endpointId = selectedEndpointId ?? null;
+  const hasCephContext = Boolean(endpointId);
+  const hasContext = isCephAdmin ? hasCephContext : hasAccountContext;
+  const storedUser = useMemo(() => readStoredUser(), []);
+  const managerBucketQuotaAccess = Boolean(getManagerToolAccess(storedUser)?.bucket_quota);
+  const quotaOverrideAllows = quotaAvailableOverride !== false;
+  const quotaFeatureEnabled = isCephAdmin
+    ? isCephEndpoint
+    : Boolean(isCephEndpoint || (accountIdOverride && managerBucketQuotaAccess && quotaOverrideAllows));
+  const showQuotaTab = isCephAdmin || Boolean(quotaFeatureEnabled && managerBucketQuotaAccess && hasAccountContext);
   const showObjectsTab = !isCephAdmin && !hideObjectsTab;
   const availableTabs = useMemo(() => {
     if (isCephAdmin) {
       return ["overview", "ceph", "usage-stats", "properties", "permissions", "advanced", "metrics"];
     }
-    if (showObjectsTab) {
-      return ["overview", "objects", "usage-stats", "properties", "permissions", "advanced", "metrics"];
+    const baseTabs = showObjectsTab
+      ? ["overview", "objects", "usage-stats", "properties", "permissions", "advanced", "metrics"]
+      : ["overview", "usage-stats", "properties", "permissions", "advanced", "metrics"];
+    if (showQuotaTab) {
+      const insertAt = Math.max(1, baseTabs.indexOf("usage-stats"));
+      return [...baseTabs.slice(0, insertAt), "ceph", ...baseTabs.slice(insertAt)];
     }
-    return ["overview", "usage-stats", "properties", "permissions", "advanced", "metrics"];
-  }, [isCephAdmin, showObjectsTab]);
+    return baseTabs;
+  }, [isCephAdmin, showObjectsTab, showQuotaTab]);
 
   useEffect(() => {
     if (!availableTabs.includes(activeTab)) {
@@ -540,7 +551,6 @@ export default function BucketDetailPage({
     }
     return selectedS3Account?.storage_endpoint_capabilities?.replication === true;
   }, [isCephAdmin, isCephEndpoint, selectedEndpoint, selectedS3Account]);
-  const quotaFeatureEnabled = isCephEndpoint;
   const usageFeatureEnabled = useMemo(() => {
     if (isCephAdmin) {
       return selectedEndpoint?.capabilities?.metrics ?? true;
@@ -548,11 +558,6 @@ export default function BucketDetailPage({
     return selectedS3Account?.storage_endpoint_capabilities?.metrics ?? true;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
   const canViewBucketMetrics = Boolean(isCephEndpoint && usageFeatureEnabled);
-  const accountId = accountIdOverride ?? accountIdForApi ?? null;
-  const hasAccountContext = !requiresS3AccountSelection || accountId !== null;
-  const endpointId = selectedEndpointId ?? null;
-  const hasCephContext = Boolean(endpointId);
-  const hasContext = isCephAdmin ? hasCephContext : hasAccountContext;
   const staticWebsiteBlocked = !staticWebsiteEnabled;
   const exampleS3AccountId = selectedS3Account?.rgw_account_id || "ACCOUNT00000000000000001";
 
@@ -579,7 +584,9 @@ export default function BucketDetailPage({
 }`;
   const userRole = getUserRole();
   const isAdmin = isAdminLikeRole(userRole);
-  const canEditQuota = quotaFeatureEnabled && isCephAdmin && isAdmin && hasCephContext;
+  const canEditQuota =
+    quotaFeatureEnabled &&
+    ((isCephAdmin && isAdmin && hasCephContext) || (!isCephAdmin && managerBucketQuotaAccess && hasAccountContext));
   const quotaSectionRestricted = quotaFeatureEnabled && !canEditQuota;
   const objectLockPersistentlyEnabled = (objectLockConfig?.enabled ?? null) === true;
   const objectLockActive = (objectLockEnabled ?? null) === true || objectLockPersistentlyEnabled;
@@ -2787,7 +2794,7 @@ export default function BucketDetailPage({
 
   const handleUpdateQuota = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bucketName || !canEditQuota || !endpointId) return;
+    if (!bucketName || !canEditQuota) return;
     setUpdatingQuota(true);
     setQuotaStatus(null);
     setQuotaError(null);
@@ -2809,7 +2816,13 @@ export default function BucketDetailPage({
         max_size_unit: maxSizeGb != null ? quotaSizeUnit : undefined,
         max_objects: maxObjects ?? undefined,
       };
-      await updateCephAdminBucketQuota(endpointId, bucketName, payload);
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await updateCephAdminBucketQuota(endpointId, bucketName, payload);
+      } else {
+        if (!accountId) return;
+        await updateBucketQuota(accountId, bucketName, payload);
+      }
       setQuotaStatus("Quota updated");
       await refreshBucketMeta();
     } catch (err) {
@@ -4691,11 +4704,11 @@ export default function BucketDetailPage({
               </div>
             ),
           },
-          ...(isCephAdmin
+          ...(showQuotaTab
             ? [
                 {
                   id: "ceph",
-                  label: "Ceph Admin",
+                  label: isCephAdmin ? "Ceph Admin" : "Privileged Ceph",
                   content: (
                     <div className="space-y-3">
                       <BucketFeatureCard
@@ -4715,7 +4728,13 @@ export default function BucketDetailPage({
                               form={quotaFormId}
                               disabled={updatingQuota || !canEditQuota}
                               className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                              title={!quotaFeatureEnabled ? "Unavailable on this endpoint" : !canEditQuota ? "Admins only" : undefined}
+                              title={
+                                !quotaFeatureEnabled
+                                  ? "Unavailable on this endpoint"
+                                  : !canEditQuota
+                                    ? "Privileged Ceph access required"
+                                    : undefined
+                              }
                             >
                               {updatingQuota ? "Saving..." : "Save"}
                             </button>
@@ -4777,7 +4796,7 @@ export default function BucketDetailPage({
                   </form>
                   <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                     {quotaFeatureEnabled
-                      ? `Leave empty to remove the quota. ${canEditQuota ? "" : "(Read-only for this role.)"}`
+                      ? `Leave empty to remove the quota. ${canEditQuota ? "" : "(Privileged Ceph access required.)"}`
                       : "Quota management is unavailable on this endpoint."}
                   </p>
                       </BucketFeatureCard>

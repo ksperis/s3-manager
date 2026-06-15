@@ -73,6 +73,7 @@ import {
 import {
   STORAGE_OPS_SCOPE_ID,
   decodeStorageOpsBucketRef,
+  type StorageOpsBucket,
   deleteStorageOpsBucketCors,
   deleteStorageOpsBucketLifecycle,
   deleteStorageOpsBucketLogging,
@@ -136,6 +137,7 @@ import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
 import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
 import { buildUiTagItems, extractUiTagLabels, filterSelectorVisibleUiTags } from "../../utils/uiTags";
+import { getManagerToolAccess, readStoredUser } from "../../utils/workspaces";
 import {
   buildBucketPolicySummaryLines,
   buildBucketTagSummaryLines,
@@ -2399,6 +2401,7 @@ type BucketOpsWorkbenchProps = {
 type StorageOpsEditingBucket = {
   bucketName: string;
   contextId: string;
+  bucketQuotaAvailable: boolean;
 };
 
 export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchProps) {
@@ -2438,6 +2441,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const staticWebsiteFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.static_website === true;
   const snsFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.sns === true;
   const sseFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.sse !== false;
+  const storedUser = useMemo(() => readStoredUser(), []);
+  const canManageBucketQuota = !isStorageOps || Boolean(getManagerToolAccess(storedUser)?.bucket_quota);
+  const quotaOperationDisabledReason = !usageFeatureEnabled
+    ? "bucket stats unavailable"
+    : !canManageBucketQuota
+      ? "privileged Ceph access required"
+      : null;
 
   const listBuckets = isStorageOps ? listStorageOpsBuckets : listCephAdminBuckets;
   const streamBuckets = isStorageOps ? streamStorageOpsBuckets : streamCephAdminBuckets;
@@ -4505,13 +4515,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   ]);
 
   useEffect(() => {
-    if (!usageFeatureEnabled && bulkOperation === "set_quota") {
+    if ((quotaOperationDisabledReason || !usageFeatureEnabled) && bulkOperation === "set_quota") {
       setBulkOperation("");
     }
     if (!snsFeatureEnabled && (bulkOperation === "add_notifications" || bulkOperation === "delete_notifications")) {
       setBulkOperation("");
     }
-  }, [bulkOperation, snsFeatureEnabled, usageFeatureEnabled]);
+  }, [bulkOperation, quotaOperationDisabledReason, snsFeatureEnabled, usageFeatureEnabled]);
 
   const openBulkUpdateModal = () => {
     bulkCopyRunTokenRef.current += 1;
@@ -5354,6 +5364,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setBulkPreviewError("Use 'Copy selected configs' for this operation.");
       return;
     }
+    if (bulkOperation === "set_quota" && quotaOperationDisabledReason) {
+      setBulkPreviewError(`Set bucket quota is unavailable: ${quotaOperationDisabledReason}.`);
+      return;
+    }
     if (bulkOperation === "paste_configs") {
       if (bulkPastePlan.error) {
         setBulkPreviewError(bulkPastePlan.error);
@@ -5648,6 +5662,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
     if (bulkOperation === "copy_configs") {
       setBulkApplyError("Use 'Copy selected configs' for this operation.");
+      return;
+    }
+    if (bulkOperation === "set_quota" && quotaOperationDisabledReason) {
+      setBulkApplyError(`Set bucket quota is unavailable: ${quotaOperationDisabledReason}.`);
       return;
     }
     if (bulkOperation === "paste_configs") {
@@ -8134,7 +8152,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                 const contextId = getStorageOpsContextId(currentBucket);
                 const bucketName = getStorageOpsBucketName(currentBucket);
                 if (!contextId || !bucketName) return;
-                setEditingStorageOpsBucket({ bucketName, contextId });
+                setEditingStorageOpsBucket({
+                  bucketName,
+                  contextId,
+                  bucketQuotaAvailable: Boolean((currentBucket as StorageOpsBucket).bucket_quota_available),
+                });
                 return;
               }
               setEditingBucketName(currentBucket.name);
@@ -10120,6 +10142,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             mode="manager"
             bucketNameOverride={editingStorageOpsBucket.bucketName}
             accountIdOverride={editingStorageOpsBucket.contextId}
+            quotaAvailableOverride={editingStorageOpsBucket.bucketQuotaAvailable}
             embedded
             hideObjectsTab
           />
@@ -10198,8 +10221,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                   <option value="paste_configs" disabled={!bulkConfigClipboard}>
                     {bulkConfigClipboard ? "Paste copied configs" : "Paste copied configs (nothing copied)"}
                   </option>
-                  <option value="set_quota" disabled={!usageFeatureEnabled}>
-                    {usageFeatureEnabled ? "Set bucket quota" : "Set bucket quota (bucket stats unavailable)"}
+                  <option value="set_quota" disabled={Boolean(quotaOperationDisabledReason)}>
+                    {quotaOperationDisabledReason
+                      ? `Set bucket quota (${quotaOperationDisabledReason})`
+                      : "Set bucket quota"}
                   </option>
                   <option value="add_public_access_block">Add block public access</option>
                   <option value="remove_public_access_block">Remove block public access</option>
@@ -10815,6 +10840,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                       (bulkOperation === "delete_cors" && !hasCorsDeleteCriteria) ||
                       (bulkOperation === "add_policy" && !bulkPolicyText.trim()) ||
                       (bulkOperation === "delete_policy" && !hasPolicyDeleteCriteria) ||
+                      (bulkOperation === "set_quota" && Boolean(quotaOperationDisabledReason)) ||
                       (bulkOperation === "paste_configs" && Boolean(bulkPastePlan.error))
                     }
                     className="rounded-md bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
@@ -10921,7 +10947,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                   type="button"
                   className="rounded-full bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={applyBulkUpdate}
-                  disabled={!bulkPreviewReady || bulkApplyLoading}
+                  disabled={!bulkPreviewReady || bulkApplyLoading || (bulkOperation === "set_quota" && Boolean(quotaOperationDisabledReason))}
                 >
                   {bulkApplyLoading ? "Applying..." : "Apply changes"}
                 </button>

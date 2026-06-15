@@ -266,7 +266,7 @@ def test_set_bucket_quota_calls_single_scope_without_user_lookup(monkeypatch):
             captured.update(kwargs)
             return {"ok": True}
 
-    monkeypatch.setattr(service, "_rgw_admin_for_account", lambda *_: FakeRGWAdmin())
+    monkeypatch.setattr(service, "_rgw_bucket_quota_admin_for_account", lambda *_: FakeRGWAdmin())
 
     service.set_bucket_quota(
         "bucket-a",
@@ -299,7 +299,7 @@ def test_set_bucket_quota_uses_injected_rgw_admin_client(monkeypatch):
 
     monkeypatch.setattr(
         service,
-        "_rgw_admin_for_account",
+        "_rgw_bucket_quota_admin_for_account",
         lambda *_: (_ for _ in ()).throw(AssertionError("injected rgw_admin must be used")),
     )
 
@@ -315,6 +315,50 @@ def test_set_bucket_quota_uses_injected_rgw_admin_client(monkeypatch):
     assert captured["tenant"] is None
 
 
+def test_set_bucket_quota_uses_endpoint_admin_credentials(monkeypatch):
+    service = BucketsService()
+    account = S3Account(
+        name="quota-owner-account",
+        rgw_account_id="RGW00000000000000009",
+        rgw_user_uid=None,
+    )
+    account.storage_endpoint = StorageEndpoint(
+        name="Ceph endpoint",
+        endpoint_url="https://s3.example.test",
+        admin_endpoint="https://admin.example.test",
+        provider="ceph",
+        admin_access_key="endpoint-admin-ak",
+        admin_secret_key="endpoint-admin-sk",
+        ceph_admin_access_key="ceph-admin-ak",
+        ceph_admin_secret_key="ceph-admin-sk",
+        features_config='{"admin":{"enabled":true,"endpoint":"https://admin.example.test"}}',
+    )
+    captured: dict = {}
+
+    class FakeRGWAdmin:
+        def set_bucket_quota(self, **kwargs):
+            captured["quota"] = kwargs
+            return {"ok": True}
+
+    def fake_get_rgw_admin_client(**kwargs):
+        captured["client"] = kwargs
+        return FakeRGWAdmin()
+
+    monkeypatch.setattr("app.services.buckets_service.get_rgw_admin_client", fake_get_rgw_admin_client)
+
+    service.set_bucket_quota(
+        "bucket-b",
+        account,
+        BucketQuotaUpdate(max_size_gb=5, max_size_unit="GiB"),
+    )
+
+    assert captured["client"]["access_key"] == "endpoint-admin-ak"
+    assert captured["client"]["secret_key"] == "endpoint-admin-sk"
+    assert captured["client"]["access_key"] != "ceph-admin-ak"
+    assert captured["quota"]["bucket"] == "bucket-b"
+    assert captured["quota"]["uid"] == "RGW00000000000000009-admin"
+
+
 def test_set_bucket_quota_raises_when_rgw_reports_not_found(monkeypatch):
     service = BucketsService()
     account = S3Account(
@@ -327,7 +371,7 @@ def test_set_bucket_quota_raises_when_rgw_reports_not_found(monkeypatch):
         def set_bucket_quota(self, **kwargs):
             return {"not_found": True}
 
-    monkeypatch.setattr(service, "_rgw_admin_for_account", lambda *_: FakeRGWAdmin())
+    monkeypatch.setattr(service, "_rgw_bucket_quota_admin_for_account", lambda *_: FakeRGWAdmin())
 
     try:
         service.set_bucket_quota(

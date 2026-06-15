@@ -16,6 +16,7 @@ export type ManagerToolAccess = {
   bucket_integrity_check: boolean;
   bucket_migration: boolean;
   feature_rules: boolean;
+  bucket_quota: boolean;
   ceph_s3_user_keys: boolean;
 };
 

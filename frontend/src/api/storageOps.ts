@@ -26,7 +26,6 @@ import {
   setBucketVersioning,
   updateBucketObjectLock,
   updateBucketPublicAccessBlock,
-  updateBucketQuota,
 } from "./buckets";
 import type {
   BucketCors,
@@ -68,6 +67,7 @@ export type StorageOpsBucket = CephAdminBucket & {
   context_kind: "account" | "connection" | "s3_user";
   endpoint_name?: string | null;
   bucket_name?: string | null;
+  bucket_quota_available?: boolean | null;
 };
 
 export type StorageOpsSummary = {
@@ -332,6 +332,6 @@ export async function updateStorageOpsBucketQuota(
   bucketRef: string,
   payload: BucketQuotaUpdate
 ): Promise<void> {
-  const { contextId, bucketName } = resolveBucketTarget(bucketRef);
-  await updateBucketQuota(contextId, bucketName, payload);
+  resolveBucketTarget(bucketRef);
+  await client.put(`/storage-ops/buckets/${encodeURIComponent(bucketRef)}/quota`, payload);
 }

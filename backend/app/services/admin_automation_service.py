@@ -797,6 +797,7 @@ class AdminAutomationService:
                 "bucket_integrity_check": bool(user.can_access_manager_bucket_integrity_check),
                 "bucket_migration": bool(user.can_access_manager_bucket_migration),
                 "feature_rules": bool(user.can_access_manager_feature_rules),
+                "bucket_quota": bool(user.can_access_manager_bucket_quota),
                 "ceph_s3_user_keys": bool(user.can_access_manager_ceph_s3_user_keys),
             }
             desired_access = spec.manager_tool_access.model_dump()

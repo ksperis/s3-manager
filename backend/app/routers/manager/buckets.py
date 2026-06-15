@@ -22,6 +22,7 @@ from app.models.bucket import (
     BucketReplicationConfiguration,
     BucketProperties,
     BucketPublicAccessBlock,
+    BucketQuotaUpdate,
     BucketVersioningUpdate,
     BucketVersioningStatus,
     BucketTagsUpdate,
@@ -47,7 +48,9 @@ from app.routers.dependencies import (
     get_account_context,
     get_audit_logger,
     get_current_account_admin,
+    get_current_user,
     require_bucket_compare_enabled,
+    require_manager_bucket_quota,
 )
 
 router = APIRouter(prefix="/manager/buckets", tags=["manager-buckets"])
@@ -129,6 +132,34 @@ def get_bucket_stats(
         return service.get_bucket_stats(bucket_name, account, with_stats=with_stats)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
+
+
+@router.put("/{bucket_name}/quota", status_code=status.HTTP_200_OK)
+def update_quota(
+    bucket_name: str,
+    payload: BucketQuotaUpdate,
+    account: S3Account = Depends(require_manager_bucket_quota),
+    service: BucketsService = Depends(get_buckets_service),
+    current_user: User = Depends(get_current_user),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> dict[str, str]:
+    response, audit_metadata = bucket_config_actions.update_bucket_quota_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_quota",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return response
 
 
 @router.post("/compare", response_model=ManagerBucketCompareResult)

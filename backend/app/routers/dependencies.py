@@ -55,6 +55,7 @@ ManagerToolKey = Literal[
     "bucket_integrity_check",
     "bucket_migration",
     "feature_rules",
+    "bucket_quota",
     "ceph_s3_user_keys",
 ]
 
@@ -63,6 +64,7 @@ _MANAGER_TOOL_ACCESS_FIELDS: dict[ManagerToolKey, str] = {
     "bucket_integrity_check": "can_access_manager_bucket_integrity_check",
     "bucket_migration": "can_access_manager_bucket_migration",
     "feature_rules": "can_access_manager_feature_rules",
+    "bucket_quota": "can_access_manager_bucket_quota",
     "ceph_s3_user_keys": "can_access_manager_ceph_s3_user_keys",
 }
 
@@ -1083,6 +1085,59 @@ def require_manager_feature_rules_enabled(user: User = Depends(get_current_user)
     return user
 
 
+def _is_ceph_endpoint_admin_available(account: S3Account) -> bool:
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint is None:
+        return False
+    try:
+        if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
+            return False
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+    flags = resolve_feature_flags(endpoint)
+    if not flags.admin_enabled:
+        return False
+    if not resolve_admin_endpoint(endpoint):
+        return False
+
+    access_key = (getattr(endpoint, "admin_access_key", None) or "").strip()
+    secret_key = (getattr(endpoint, "admin_secret_key", None) or "").strip()
+    return bool(access_key and secret_key)
+
+
+def is_manager_bucket_quota_available(
+    account: S3Account,
+    user: Optional[User] = None,
+    db: Session | None = None,
+) -> bool:
+    if user is not None and not user_has_manager_tool_access(user, "bucket_quota", db=db):
+        return False
+    return _is_ceph_endpoint_admin_available(account)
+
+
+def require_manager_bucket_quota(
+    user: User = Depends(get_current_user),
+    account: S3Account = Depends(get_account_context),
+    db: Session = Depends(get_db),
+) -> S3Account:
+    ensure_manager_tool_allowed(user, "bucket_quota", db=db)
+    if not is_manager_bucket_quota_available(account, user, db=db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bucket quota management is not available for this context",
+        )
+    return account
+
+
+def require_storage_ops_bucket_quota(
+    user: User = Depends(get_current_storage_ops_admin),
+    db: Session = Depends(get_db),
+) -> User:
+    ensure_manager_tool_allowed(user, "bucket_quota", db=db)
+    return user
+
+
 def is_manager_ceph_s3_user_keys_available(
     account: S3Account,
     user: Optional[User] = None,
@@ -1098,24 +1153,7 @@ def is_manager_ceph_s3_user_keys_available(
     if s3_user_id is None:
         return False
 
-    endpoint = getattr(account, "storage_endpoint", None)
-    if endpoint is None:
-        return False
-    if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
-        return False
-
-    flags = resolve_feature_flags(endpoint)
-    if not flags.admin_enabled:
-        return False
-    if not resolve_admin_endpoint(endpoint):
-        return False
-
-    access_key = (getattr(endpoint, "admin_access_key", None) or "").strip()
-    secret_key = (getattr(endpoint, "admin_secret_key", None) or "").strip()
-    if not access_key or not secret_key:
-        return False
-
-    return True
+    return _is_ceph_endpoint_admin_available(account)
 
 
 def require_manager_ceph_s3_user_keys(

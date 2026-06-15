@@ -31,6 +31,7 @@ function setStoredUser(featureRules: boolean, effectiveFeatureRules = featureRul
         bucket_integrity_check: false,
         bucket_migration: false,
         feature_rules: featureRules,
+        bucket_quota: false,
         ceph_s3_user_keys: false,
       },
       effective_access: {
@@ -39,6 +40,7 @@ function setStoredUser(featureRules: boolean, effectiveFeatureRules = featureRul
           bucket_integrity_check: false,
           bucket_migration: false,
           feature_rules: effectiveFeatureRules,
+          bucket_quota: false,
           ceph_s3_user_keys: false,
         },
       },

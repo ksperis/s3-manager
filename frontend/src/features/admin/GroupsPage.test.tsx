@@ -107,6 +107,7 @@ describe("GroupsPage", () => {
             bucket_integrity_check: false,
             bucket_migration: false,
             feature_rules: false,
+            bucket_quota: false,
             ceph_s3_user_keys: false,
           },
           user_ids: [2],
@@ -181,6 +182,7 @@ describe("GroupsPage", () => {
     expect(screen.getByRole("checkbox", { name: "Bucket integrity check" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Bucket migration" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Feature rule inventory" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Bucket quota management" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Ceph S3 User keys" })).not.toBeChecked();
     fireEvent.click(screen.getByRole("checkbox", { name: "Bucket compare" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Feature rule inventory" }));
@@ -201,6 +203,7 @@ describe("GroupsPage", () => {
         bucket_integrity_check: false,
         bucket_migration: false,
         feature_rules: true,
+        bucket_quota: false,
         ceph_s3_user_keys: false,
       },
       user_ids: [2],
@@ -224,6 +227,7 @@ describe("GroupsPage", () => {
             bucket_integrity_check: false,
             bucket_migration: false,
             feature_rules: false,
+            bucket_quota: false,
             ceph_s3_user_keys: false,
           },
           user_ids: [2],

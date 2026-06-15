@@ -120,6 +120,7 @@ function setStoredManagerUser(overrides?: Record<string, unknown>) {
         bucket_integrity_check: false,
         bucket_migration: false,
         feature_rules: true,
+        bucket_quota: false,
         ceph_s3_user_keys: true,
       },
       ...overrides,
@@ -179,6 +180,7 @@ describe("ManagerLayout", () => {
         bucket_integrity_check: true,
         bucket_migration: false,
         feature_rules: true,
+        bucket_quota: false,
         ceph_s3_user_keys: true,
       },
     });
@@ -208,6 +210,7 @@ describe("ManagerLayout", () => {
         bucket_integrity_check: false,
         bucket_migration: false,
         feature_rules: false,
+        bucket_quota: false,
         ceph_s3_user_keys: true,
       },
     });
@@ -238,6 +241,7 @@ describe("ManagerLayout", () => {
         bucket_integrity_check: false,
         bucket_migration: false,
         feature_rules: false,
+        bucket_quota: false,
         ceph_s3_user_keys: true,
       },
     });
@@ -260,6 +264,7 @@ describe("ManagerLayout", () => {
         bucket_integrity_check: false,
         bucket_migration: false,
         feature_rules: false,
+        bucket_quota: false,
         ceph_s3_user_keys: true,
       },
       effective_access: {
@@ -268,6 +273,7 @@ describe("ManagerLayout", () => {
           bucket_integrity_check: false,
           bucket_migration: false,
           feature_rules: true,
+          bucket_quota: false,
           ceph_s3_user_keys: true,
         },
       },

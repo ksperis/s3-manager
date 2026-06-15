@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 import pytest
 from app.main import app
-from app.db import S3Account, User, UserRole
+from app.db import S3Account, UiGroup, User, UserRole
 from app.routers import dependencies
 from fastapi.testclient import TestClient
 
@@ -110,6 +110,7 @@ def test_superadmin_can_create_superadmin_and_grant_ceph_admin(client: TestClien
         "bucket_integrity_check": False,
         "bucket_migration": False,
         "feature_rules": False,
+        "bucket_quota": False,
         "ceph_s3_user_keys": False,
     }
 
@@ -143,6 +144,7 @@ def test_admin_can_configure_manager_tool_access_on_update(client: TestClient, d
                 "bucket_integrity_check": True,
                 "bucket_migration": False,
                 "feature_rules": True,
+                "bucket_quota": False,
                 "ceph_s3_user_keys": True,
             },
         },
@@ -154,8 +156,75 @@ def test_admin_can_configure_manager_tool_access_on_update(client: TestClient, d
         "bucket_integrity_check": True,
         "bucket_migration": False,
         "feature_rules": True,
+        "bucket_quota": False,
         "ceph_s3_user_keys": True,
     }
+
+
+def test_admin_cannot_grant_bucket_quota_access(client: TestClient, db_session):
+    target = User(
+        email="target-bucket-quota@example.com",
+        full_name="Target Bucket Quota",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    db_session.add(target)
+    db_session.commit()
+
+    admin_user = User(
+        id=1011,
+        email="admin-bucket-quota@example.com",
+        full_name="Admin Bucket Quota",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    app.dependency_overrides[dependencies.get_current_super_admin] = lambda: admin_user
+
+    response = client.put(
+        f"/api/admin/users/{target.id}",
+        json={
+            "manager_tool_access": {
+                "bucket_quota": True,
+            },
+        },
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "Only superadmin users can promote superadmins or grant privileged Ceph access"
+
+
+def test_admin_cannot_assign_group_that_grants_bucket_quota(client: TestClient, db_session):
+    group = UiGroup(
+        name="Privileged quota group",
+        can_access_manager_bucket_quota=True,
+    )
+    db_session.add(group)
+    db_session.commit()
+
+    admin_user = User(
+        id=1012,
+        email="admin-bucket-quota-group@example.com",
+        full_name="Admin Bucket Quota Group",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    app.dependency_overrides[dependencies.get_current_super_admin] = lambda: admin_user
+
+    response = client.post(
+        "/api/admin/users",
+        json={
+            "email": "new-user-with-quota-group@example.com",
+            "password": "secret-pass-05",
+            "role": UserRole.UI_USER.value,
+            "group_ids": [group.id],
+        },
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "Only superadmin users can assign groups that grant privileged Ceph access"
 
 
 def test_admin_can_configure_browser_advanced_features_on_update(client: TestClient, db_session):

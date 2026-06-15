@@ -2315,7 +2315,7 @@ export default function UsersPage() {
                 <ManagerToolAccessSection
                   title="Bucket tools"
                   description="Manager tools for bucket-level operations."
-                  tools={managerToolDefinitions.filter((tool) => tool.key !== "ceph_s3_user_keys")}
+                  tools={managerToolDefinitions.filter((tool) => tool.key !== "ceph_s3_user_keys" && tool.key !== "bucket_quota")}
                   access={editForm.manager_tool_access ?? editingUser.manager_tool_access}
                   isToolDisabled={(tool) => !editTargetSupportsManagerTools || !tool.enabled}
                   onChange={(key: ManagerToolKey, value) =>
@@ -2329,9 +2329,9 @@ export default function UsersPage() {
                   }
                 />
                 <ManagerToolAccessSection
-                  title="Ceph tools"
-                  description="Manager tools for Ceph-specific S3 User workflows."
-                  tools={managerToolDefinitions.filter((tool) => tool.key === "ceph_s3_user_keys")}
+                  title="Privileged Ceph access"
+                  description="Ceph admin-API actions exposed outside the Ceph Admin workspace."
+                  tools={managerToolDefinitions.filter((tool) => tool.key === "ceph_s3_user_keys" || tool.key === "bucket_quota")}
                   access={editForm.manager_tool_access ?? editingUser.manager_tool_access}
                   isToolDisabled={(tool) => !editTargetSupportsManagerTools || !tool.enabled}
                   onChange={(key: ManagerToolKey, value) =>

@@ -15,6 +15,7 @@ export const DEFAULT_MANAGER_TOOL_ACCESS: ManagerToolAccess = {
   bucket_integrity_check: false,
   bucket_migration: false,
   feature_rules: false,
+  bucket_quota: false,
   ceph_s3_user_keys: false,
 };
 
@@ -35,6 +36,7 @@ export function normalizeManagerToolAccess(access?: ManagerToolAccess | null): M
     bucket_integrity_check: Boolean(access?.bucket_integrity_check),
     bucket_migration: Boolean(access?.bucket_migration),
     feature_rules: Boolean(access?.feature_rules),
+    bucket_quota: Boolean(access?.bucket_quota),
     ceph_s3_user_keys: Boolean(access?.ceph_s3_user_keys),
   };
 }
@@ -68,6 +70,12 @@ export function buildManagerToolDefinitions(settings: {
       key: "feature_rules",
       title: "Feature rule inventory",
       description: "Allow access to Manager > Tools > Feature rules.",
+      enabled: true,
+    },
+    {
+      key: "bucket_quota",
+      title: "Bucket quota management",
+      description: "Allow privileged Ceph bucket quota updates in Manager and Storage Ops.",
       enabled: true,
     },
     {
