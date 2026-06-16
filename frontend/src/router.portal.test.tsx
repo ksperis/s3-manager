@@ -78,6 +78,7 @@ describe("portal routes", () => {
       "storage-spaces",
       "storage-spaces/:spaceId/objects/*",
       "storage-spaces/:spaceId",
+      "access-keys",
       "shares",
       "activity",
       "transfers",
@@ -102,7 +103,6 @@ describe("portal routes", () => {
       "users",
       "groups",
       "policies",
-      "access-keys",
       "iam-compliance",
       "account-settings",
     ].forEach((path) => {

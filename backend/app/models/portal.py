@@ -53,6 +53,14 @@ class PortalState(BaseModel):
     allow_named_bucket_create: bool = False
 
 
+class PortalAccessKeysState(BaseModel):
+    iam_user: PortalIAMUser
+    s3_endpoint: Optional[str] = None
+    access_keys: list[PortalAccessKey]
+    can_manage_access_keys: bool = False
+    max_access_keys: int = Field(default=2, ge=1)
+
+
 class PortalUsageStorageSpace(BaseModel):
     id: str
     name: str

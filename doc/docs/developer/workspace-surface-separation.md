@@ -79,6 +79,7 @@ Portal canonical routes are:
 - `/portal/storage-spaces`
 - `/portal/storage-spaces/:spaceId`
 - `/portal/storage-spaces/:spaceId/objects/*`
+- `/portal/access-keys`
 - `/portal/shares`
 - `/portal/activity`
 - `/portal/transfers`
@@ -86,9 +87,10 @@ Portal canonical routes are:
 - `/portal/settings`
 
 Portal administration mock pages such as `/portal/users`, `/portal/groups`,
-`/portal/policies`, and `/portal/access-keys` are intentionally not routed in
-the production Portal surface. They can return later only as real user-facing
-Portal features or isolated demo/test fixtures.
+and `/portal/policies` are intentionally not routed in the production Portal
+surface. They can return later only as real user-facing Portal features or
+isolated demo/test fixtures. `/portal/access-keys` is a real user-facing Portal
+feature and must stay limited to the current user's non-Portal IAM keys.
 
 ## Portal Backend Cleanup Notes
 
@@ -100,7 +102,6 @@ removed from the Portal router and API client:
 - `/portal/buckets*`;
 - `/portal/bootstrap`;
 - `/portal/users*` bucket-grant and Portal user-management routes;
-- `/portal/access-keys*`;
 - `/portal/account-settings`;
 - `/portal/iam-compliance*`.
 - `/portal/settings` advanced Portal settings payloads.
@@ -125,6 +126,8 @@ Use these replacement surfaces instead:
 - Public links: `/portal/storage-spaces/{spaceId}/public-links*`.
 - Usage, activity, transfers, alerts, traffic, health, and billing source:
   the remaining Portal read endpoints.
+- External S3 credentials:
+  `/portal/access-keys`, excluding the active Portal runtime key.
 - Portal override governance:
   `/admin/accounts/{accountId}/portal-settings`.
 

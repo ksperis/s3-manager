@@ -70,6 +70,7 @@ const loadManagerFeatureRulesPage = () => import("./features/manager/ManagerFeat
 const loadManagerCephKeysPage = () => import("./features/manager/ManagerCephKeysPage");
 const loadPortalLayout = () => import("./features/portal/PortalLayout");
 const loadPortalDashboard = () => import("./features/portal/PortalDashboard");
+const loadPortalAccessKeysPage = () => import("./features/portal/PortalAccessKeysPage");
 const loadPortalStorageSpacesPage = () => import("./features/portal/PortalStorageSpacesPage");
 const loadPortalStorageSpaceDetailPage = () => import("./features/portal/PortalStorageSpaceDetailPage");
 const loadPortalObjectDetailPage = () => import("./features/portal/PortalObjectDetailPage");
@@ -141,6 +142,7 @@ const ManagerFeatureRulesPage = lazy(loadManagerFeatureRulesPage);
 const ManagerCephKeysPage = lazy(loadManagerCephKeysPage);
 const PortalLayout = lazy(loadPortalLayout);
 const PortalDashboard = lazy(loadPortalDashboard);
+const PortalAccessKeysPage = lazy(loadPortalAccessKeysPage);
 const PortalStorageSpacesPage = lazy(loadPortalStorageSpacesPage);
 const PortalStorageSpaceDetailPage = lazy(loadPortalStorageSpaceDetailPage);
 const PortalObjectDetailPage = lazy(loadPortalObjectDetailPage);
@@ -651,6 +653,7 @@ export function createAppRoutes() {
               <Route path="storage-spaces" element={<PortalStorageSpacesPage />} />
               <Route path="storage-spaces/:spaceId/objects/*" element={<PortalObjectDetailPage />} />
               <Route path="storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
+              <Route path="access-keys" element={<PortalAccessKeysPage />} />
               <Route path="shares" element={<PortalSharesPage />} />
               <Route path="activity" element={<PortalActivityPage />} />
               <Route path="transfers" element={<PortalTransfersPage />} />

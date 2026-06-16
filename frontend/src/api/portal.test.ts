@@ -13,8 +13,11 @@ vi.mock("./client", () => ({
 }));
 
 import {
+  createPortalAccessKey,
   fetchPortalActivity,
+  deletePortalAccessKey,
   fetchPortalAlerts,
+  fetchPortalAccessKeysState,
   grantPortalStorageSpaceShare,
   createPortalStorageSpace,
   createPortalStorageSpacePublicLink,
@@ -30,6 +33,7 @@ import {
   listPortalStorageSpaces,
   revokePortalStorageSpacePublicLink,
   revokePortalStorageSpaceShare,
+  updatePortalAccessKeyStatus,
   updatePortalStorageSpace,
   updatePortalStorageSpaceShare,
 } from "./portal";
@@ -203,6 +207,30 @@ describe("portal storage spaces api", () => {
     });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/alerts", {
       params: { account_id: "101", limit: 5 },
+    });
+  });
+
+  it("manages portal access keys through user-facing endpoints", async () => {
+    await fetchPortalAccessKeysState("101");
+    await createPortalAccessKey("101");
+    await updatePortalAccessKeyStatus("101", "AK USER", false);
+    await deletePortalAccessKey("101", "AK USER");
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/access-keys", {
+      params: { account_id: "101" },
+    });
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/access-keys",
+      undefined,
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.put).toHaveBeenCalledWith(
+      "/portal/access-keys/AK%20USER/status",
+      { active: false },
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.delete).toHaveBeenCalledWith("/portal/access-keys/AK%20USER", {
+      params: { account_id: "101" },
     });
   });
 

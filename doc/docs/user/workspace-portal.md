@@ -21,11 +21,13 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
    activity, shared spaces, transfers, and simple alerts.
 4. Use **Storage Spaces** to open an assigned space, browse files, upload,
    download, and share with collaborators.
-5. Use **Shares** to review items shared with you, items shared by you, and
+5. Use **Access keys** to generate S3 credentials for external tools. The
+   Portal runtime key is not shown in this list.
+6. Use **Shares** to review items shared with you, items shared by you, and
    public links when enabled.
-6. Use **Activity**, **Transfers**, and **Usage & Analytics** for collaboration
+7. Use **Activity**, **Transfers**, and **Usage & Analytics** for collaboration
    history and consumption tracking.
-7. Use **Settings** for simple account and preference changes.
+8. Use **Settings** for simple account and preference changes.
 
 ## Portal V3 workflows
 
@@ -58,6 +60,17 @@ Storage Space label in the UI, and uses the Portal execution identity.
 Advanced object features such as versions, tags, raw metadata headers, object
 lock, diagnostics, and batch operations belong in Browser or Manager, not in
 Portal.
+
+### Access keys for external tools
+
+Portal users can create IAM access keys for S3-compatible clients such as CLI
+tools, backup jobs, or desktop browsers. The secret is displayed only once when
+the key is created, so copy it before leaving the page.
+
+The key used internally by Portal to execute file operations is intentionally
+hidden and cannot be disabled or deleted from the Access keys page. Admins can
+disable Portal user key creation and set the maximum number of user-managed
+keys from Portal settings.
 
 ### Sharing and roles
 

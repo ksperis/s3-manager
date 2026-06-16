@@ -48,6 +48,14 @@ export type PortalState = {
   allow_named_bucket_create?: boolean;
 };
 
+export type PortalAccessKeysState = {
+  iam_user: PortalIAMUser;
+  s3_endpoint?: string | null;
+  access_keys: PortalAccessKey[];
+  can_manage_access_keys: boolean;
+  max_access_keys: number;
+};
+
 export type PortalUsage = {
   used_bytes?: number | null;
   used_objects?: number | null;
@@ -212,6 +220,41 @@ export async function listPortalAccounts(): Promise<S3Account[]> {
 export async function fetchPortalState(accountId: S3AccountSelector): Promise<PortalState> {
   const { data } = await client.get<PortalState>("/portal/state", { params: withS3AccountParam(undefined, accountId) });
   return data;
+}
+
+export async function fetchPortalAccessKeysState(accountId: S3AccountSelector): Promise<PortalAccessKeysState> {
+  const { data } = await client.get<PortalAccessKeysState>("/portal/access-keys", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function createPortalAccessKey(accountId: S3AccountSelector): Promise<PortalAccessKey> {
+  const { data } = await client.post<PortalAccessKey>(
+    "/portal/access-keys",
+    undefined,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function updatePortalAccessKeyStatus(
+  accountId: S3AccountSelector,
+  accessKeyId: string,
+  active: boolean
+): Promise<PortalAccessKey> {
+  const { data } = await client.put<PortalAccessKey>(
+    `/portal/access-keys/${encodeURIComponent(accessKeyId)}/status`,
+    { active },
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function deletePortalAccessKey(accountId: S3AccountSelector, accessKeyId: string): Promise<void> {
+  await client.delete(`/portal/access-keys/${encodeURIComponent(accessKeyId)}`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
 }
 
 export async function fetchPortalUsage(accountId: S3AccountSelector): Promise<PortalUsage> {

@@ -42,6 +42,7 @@ from app.models.bucket import Bucket
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser
 from app.models.portal import (
     PortalAccessKey,
+    PortalAccessKeysState,
     PortalAccountSettings,
     PortalActivityItem,
     PortalAlert,
@@ -107,6 +108,14 @@ def _extract_account_limit(payload: Any, key: str) -> Optional[int]:
 
 class PortalAccessKeyLimitExceeded(RuntimeError):
     """Raised when a portal user reaches the configured IAM user key limit."""
+
+
+class PortalAccessKeyManagementDisabled(RuntimeError):
+    """Raised when portal access-key mutations are disabled by settings."""
+
+
+class PortalAccessKeyProtected(RuntimeError):
+    """Raised when a request targets the active portal credential."""
 
 
 class PortalService:
@@ -3044,10 +3053,41 @@ class PortalService:
             return []
         return self._list_access_keys(link, iam_service, include_portal=False)
 
+    def get_access_keys_state(self, user: User, access: "AccountAccess") -> PortalAccessKeysState:
+        portal_settings = self._effective_portal_settings(access.account)
+        link = self._existing_portal_link(user, access.account)
+        iam_user = None
+        access_keys: list[PortalAccessKey] = []
+        if link and link.iam_username:
+            iam_service = self._get_iam_service(access.account)
+            iam_user = iam_service.get_user(link.iam_username)
+            if iam_user:
+                access_keys = self._list_access_keys(link, iam_service, include_portal=False)
+        return PortalAccessKeysState(
+            iam_user=PortalIAMUser(
+                iam_user_id=link.iam_user_id if link else None,
+                iam_username=link.iam_username if link else None,
+                arn=iam_user.arn if iam_user else None,
+                created_at=link.created_at if link else None,
+            ),
+            s3_endpoint=resolve_s3_endpoint(access.account),
+            access_keys=access_keys,
+            can_manage_access_keys=portal_settings.allow_portal_user_access_key_create,
+            max_access_keys=portal_settings.max_portal_user_access_keys,
+        )
+
+    def _ensure_access_key_management_allowed(self, access: "AccountAccess") -> PortalSettings:
+        portal_settings = self._effective_portal_settings(access.account)
+        if not portal_settings.allow_portal_user_access_key_create:
+            raise PortalAccessKeyManagementDisabled("Portal access-key management is disabled for this account.")
+        return portal_settings
+
     def create_access_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
+        portal_settings = self._effective_portal_settings(access.account)
+        if not portal_settings.allow_portal_user_access_key_create:
+            raise PortalAccessKeyManagementDisabled("Portal access-key management is disabled for this account.")
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        portal_settings = self._effective_portal_settings(access.account)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
@@ -3120,14 +3160,14 @@ class PortalService:
         return portal_key
 
     def update_access_key_status(self, user: User, access: "AccountAccess", access_key_id: str, active: bool) -> PortalAccessKey:
+        portal_settings = self._ensure_access_key_management_allowed(access)
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        portal_settings = self._effective_portal_settings(access.account)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
-        if access_key_id == link.active_access_key and not active:
-            raise RuntimeError("Impossible de désactiver la clé portail")
+        if access_key_id == link.active_access_key:
+            raise PortalAccessKeyProtected("Cannot update the portal access key")
         status_value = "Active" if active else "Inactive"
         iam_service.update_access_key_status(link.iam_username, access_key_id, status_value)
         metas = iam_service.list_access_keys(link.iam_username)
@@ -3144,12 +3184,12 @@ class PortalService:
         )
 
     def delete_access_key(self, user: User, access: "AccountAccess", access_key_id: str) -> None:
+        portal_settings = self._ensure_access_key_management_allowed(access)
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        portal_settings = self._effective_portal_settings(access.account)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if access_key_id == link.active_access_key:
-            raise RuntimeError("Cannot delete the portal access key")
+            raise PortalAccessKeyProtected("Cannot delete the portal access key")
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
         iam_service.delete_access_key(link.iam_username, access_key_id)

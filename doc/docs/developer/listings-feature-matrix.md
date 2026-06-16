@@ -61,6 +61,12 @@ This page audits the main UI listing surfaces in the repository and records whic
 | `Manager` `/manager/migrations/new` | Migration wizard source bucket selector | Source buckets to migrate | `listBuckets -> GET /manager/buckets` | `No` | `Yes (FE)` | `Yes (FE)` | `No` | `Yes (BE bucket_listing_cache)` | `Yes` | `Yes (FE)` | `No` | `No` | `Yes (FE select filtered)` | `No` | Selection survives wizard step changes and filter changes, but it is stored only in component state. Source context changes reconcile the selection to still-existing buckets. |
 | `Manager` `/manager/migrations/:migrationId` | Migration detail item list | Per-bucket migration items | `streamManagerMigration -> GET /manager/migrations/{id}/stream`<br>`getManagerMigration -> GET /manager/migrations/{id}` | `No` | `Yes (FE)` | `Yes (FE)` | `No` | `No` | `No` | `No` | `No` | `No` | `Yes (FE list-level ops)` | `Yes (BE SSE with FE polling fallback)` | Focus filters and priority sorting are FE-only. Bulk retry or rollback actions operate on status-derived subsets, not on explicit row selection. |
 
+## Portal
+
+| Workspace / Route(s) | Listing Surface | Entity | Data Source (FE API + BE endpoint/service) | Search (FE/BE) | Filter (FE/BE) | Sort (FE/BE) | Pagination (FE/BE + mode) | Cache (FE/BE) | Multi-select FE | Selection Persistence (FE session) | Selection Persistence (Browser storage FE) | Multi-select BE (strict batch API) | Bulk Actions | Streaming / Live refresh | Notes / Limitations |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `Portal` `/portal/access-keys` | Portal access keys table | User-managed IAM access keys for external S3 tools | `fetchPortalAccessKeysState -> GET /portal/access-keys` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | `No` | The active Portal runtime key is excluded from the API and filtered defensively in the UI. Create, status, and delete actions are row-by-row and gated by Portal settings. |
+
 ## Browser
 
 | Workspace / Route(s) | Listing Surface | Entity | Data Source (FE API + BE endpoint/service) | Search (FE/BE) | Filter (FE/BE) | Sort (FE/BE) | Pagination (FE/BE + mode) | Cache (FE/BE) | Multi-select FE | Selection Persistence (FE session) | Selection Persistence (Browser storage FE) | Multi-select BE (strict batch API) | Bulk Actions | Streaming / Live refresh | Notes / Limitations |

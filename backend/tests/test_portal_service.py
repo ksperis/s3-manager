@@ -24,6 +24,7 @@ from app.models.bucket import Bucket
 from app.models.iam import AccessKey as IAMAccessKey, IAMUser
 from app.models.portal import (
     PortalAccessKey,
+    PortalAccessKeyStatusChange,
     PortalAlert,
     PortalIAMUser,
     PortalState,
@@ -35,7 +36,12 @@ from app.models.portal import (
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import s3_client
-from app.services.portal_service import PortalAccessKeyLimitExceeded, PortalService
+from app.services.portal_service import (
+    PortalAccessKeyLimitExceeded,
+    PortalAccessKeyManagementDisabled,
+    PortalAccessKeyProtected,
+    PortalService,
+)
 from app.services.traffic_service import TrafficWindow
 from app.utils.time import utcnow
 
@@ -590,6 +596,52 @@ def test_get_state_hides_portal_key_for_portal_user_even_when_setting_enabled(mo
 
     assert state.iam_provisioned is True
     assert [key.access_key_id for key in state.access_keys] == ["AK-USER"]
+    assert all(not key.is_portal for key in state.access_keys)
+
+
+def test_access_keys_state_hides_portal_key_and_exposes_policy(monkeypatch, db_session):
+    account = S3Account(name="portal-account-keys-state", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-keys-state@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    link = AccountIAMUser(
+        user_id=user.id,
+        account_id=account.id,
+        iam_user_id="iam-uid",
+        iam_username="portal-user-iam",
+        active_access_key="AK-PORTAL",
+        active_secret_key="SK-PORTAL",
+    )
+    db_session.add(link)
+    db_session.commit()
+
+    service = PortalService(db_session)
+
+    class _FakeIAMService:
+        def get_user(self, iam_username):
+            return IAMUser(name=iam_username, arn=f"arn:aws:iam:::user/{iam_username}")
+
+        def list_access_keys(self, iam_username):  # noqa: ARG002
+            return [
+                PortalAccessKey(access_key_id="AK-PORTAL", status="Active", created_at="2026-01-01T00:00:00Z"),
+                PortalAccessKey(access_key_id="AK-USER", status="Inactive", created_at="2026-01-02T00:00:00Z"),
+            ]
+
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
+    monkeypatch.setattr(
+        service,
+        "_effective_portal_settings",
+        lambda acc: PortalSettings(allow_portal_user_access_key_create=True, max_portal_user_access_keys=3),
+    )
+
+    state = service.get_access_keys_state(user, _portal_access(account, user))
+
+    assert state.iam_user.iam_username == "portal-user-iam"
+    assert state.can_manage_access_keys is True
+    assert state.max_access_keys == 3
+    assert [key.access_key_id for key in state.access_keys] == ["AK-USER"]
+    assert state.access_keys[0].secret_access_key is None
     assert all(not key.is_portal for key in state.access_keys)
 
 
@@ -2063,6 +2115,49 @@ def test_portal_object_download_route_audits_scope_portal(db_session):
     assert audit_service.actions[0]["metadata"] == {"storage_space_id": "research-data"}
 
 
+def test_create_access_key_rejects_when_management_disabled(monkeypatch, db_session):
+    account = S3Account(name="portal-account-key-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-key-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(allow_portal_user_access_key_create=False))
+    monkeypatch.setattr(service, "_ensure_portal_user", lambda *args, **kwargs: pytest.fail("portal user should not be provisioned"))
+
+    with pytest.raises(PortalAccessKeyManagementDisabled):
+        service.create_access_key(user, _portal_access(account, user))
+
+
+def test_access_key_mutations_reject_portal_key(monkeypatch, db_session):
+    account = S3Account(name="portal-account-key-protected", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-key-protected@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    service = PortalService(db_session)
+    link = AccountIAMUser(
+        user_id=user.id,
+        account_id=account.id,
+        iam_user_id="iam-uid",
+        iam_username="portal-iam",
+        active_access_key="AK-PORTAL",
+        active_secret_key="SK-PORTAL",
+    )
+    fake_iam_user = IAMUser(name="portal-iam", arn="arn:aws:iam:::user/portal-iam")
+
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(allow_portal_user_access_key_create=True))
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: object())
+    monkeypatch.setattr(service, "_ensure_portal_user", lambda *args, **kwargs: (link, fake_iam_user, False))
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *args, **kwargs: None)
+
+    access = _portal_access(account, user)
+    with pytest.raises(PortalAccessKeyProtected, match="Cannot update"):
+        service.update_access_key_status(user, access, "AK-PORTAL", True)
+    with pytest.raises(PortalAccessKeyProtected, match="Cannot delete"):
+        service.delete_access_key(user, access, "AK-PORTAL")
+
+
 def test_create_access_key_rejects_when_limit_reached(monkeypatch, db_session):
     account = S3Account(name="portal-account-key-limit", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-key-limit@example.com", hashed_password="x", role="ui_user")
@@ -2176,6 +2271,91 @@ def test_create_access_key_allows_when_below_limit(monkeypatch, db_session):
     assert iam_service.create_calls == 1
 
 
+def test_portal_access_key_routes_record_audit(db_session):
+    account = S3Account(name="portal-account-key-routes", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-key-routes@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    access = _portal_access(account, user)
+
+    class FakeService:
+        def create_access_key(self, user_obj, access_obj):
+            assert user_obj == user
+            assert access_obj == access
+            return PortalAccessKey(access_key_id="AK-NEW", secret_access_key="SK-NEW", is_portal=False)
+
+        def update_access_key_status(self, user_obj, access_obj, access_key_id, active):
+            assert user_obj == user
+            assert access_obj == access
+            assert access_key_id == "AK-NEW"
+            assert active is False
+            return PortalAccessKey(access_key_id="AK-NEW", status="Inactive", is_active=False, is_portal=False)
+
+        def delete_access_key(self, user_obj, access_obj, access_key_id):
+            assert user_obj == user
+            assert access_obj == access
+            assert access_key_id == "AK-NEW"
+
+    class FakeAuditService:
+        def __init__(self):
+            self.actions = []
+
+        def record_action(self, **kwargs):
+            self.actions.append(kwargs)
+
+    audit_service = FakeAuditService()
+    service = FakeService()
+
+    created = portal_router.create_portal_access_key(access=access, audit_service=audit_service, service=service)
+    updated = portal_router.update_portal_access_key_status(
+        "AK-NEW",
+        PortalAccessKeyStatusChange(active=False),
+        access=access,
+        audit_service=audit_service,
+        service=service,
+    )
+    deleted = portal_router.delete_portal_access_key("AK-NEW", access=access, audit_service=audit_service, service=service)
+
+    assert created.access_key_id == "AK-NEW"
+    assert created.secret_access_key == "SK-NEW"
+    assert updated.is_active is False
+    assert deleted.status_code == 204
+    assert [entry["action"] for entry in audit_service.actions] == [
+        "create_portal_access_key",
+        "update_portal_access_key_status",
+        "delete_portal_access_key",
+    ]
+    assert all(entry["scope"] == "portal" for entry in audit_service.actions)
+    assert all(entry["entity_type"] == "portal_access_key" for entry in audit_service.actions)
+    assert audit_service.actions[0]["metadata"] == {"access_key_id": "AK-NEW"}
+    assert audit_service.actions[1]["metadata"] == {"access_key_id": "AK-NEW", "active": False}
+    assert audit_service.actions[2]["metadata"] == {"access_key_id": "AK-NEW"}
+
+
+def test_portal_access_key_routes_translate_disabled_management(db_session):
+    account = S3Account(name="portal-account-key-route-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-key-route-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    class FakeService:
+        def create_access_key(self, user_obj, access_obj):  # noqa: ARG002
+            raise PortalAccessKeyManagementDisabled("Portal access-key management is disabled for this account.")
+
+    class FakeAuditService:
+        def record_action(self, **kwargs):  # noqa: ANN003
+            pytest.fail("disabled access-key creation should not be audited")
+
+    with pytest.raises(HTTPException) as exc:
+        portal_router.create_portal_access_key(
+            access=_portal_access(account, user),
+            audit_service=FakeAuditService(),
+            service=FakeService(),
+        )
+
+    assert exc.value.status_code == 403
+
+
 def test_portal_router_no_longer_exposes_legacy_backend_surfaces():
     route_keys = {
         (method, route.path)
@@ -2190,11 +2370,7 @@ def test_portal_router_no_longer_exposes_legacy_backend_surfaces():
         ("GET", "/portal/buckets/{bucket_name}/stats"),
         ("POST", "/portal/buckets"),
         ("DELETE", "/portal/buckets/{bucket_name}"),
-        ("GET", "/portal/access-keys"),
-        ("POST", "/portal/access-keys"),
         ("POST", "/portal/access-keys/portal/rotate"),
-        ("PUT", "/portal/access-keys/{access_key_id}/status"),
-        ("DELETE", "/portal/access-keys/{access_key_id}"),
         ("GET", "/portal/account-settings"),
         ("PUT", "/portal/account-settings"),
         ("GET", "/portal/iam-compliance"),
@@ -2210,3 +2386,10 @@ def test_portal_router_no_longer_exposes_legacy_backend_surfaces():
     }
 
     assert removed_routes.isdisjoint(route_keys)
+    expected_routes = {
+        ("GET", "/portal/access-keys"),
+        ("POST", "/portal/access-keys"),
+        ("PUT", "/portal/access-keys/{access_key_id}/status"),
+        ("DELETE", "/portal/access-keys/{access_key_id}"),
+    }
+    assert expected_routes.issubset(route_keys)
