@@ -4,6 +4,13 @@
 
 Use this feature when you need a quick usage snapshot for buckets, including object type mix, storage classes, object sizes, object age, and versioned storage split. The latest bucket snapshots are also aggregated on the Manager and Ceph Admin **Usage & Metrics** pages.
 
+## Visual example
+
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/feature-bucket-usage-stats.light.png" alt="Manager usage composition showing bucket usage stats distributions and coverage" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/feature-bucket-usage-stats.dark.png" alt="Manager usage composition showing bucket usage stats distributions and coverage" loading="lazy">
+</div>
+
 ## Prerequisites
 
 - Manager: `bucket_usage_stats_enabled` set to true.

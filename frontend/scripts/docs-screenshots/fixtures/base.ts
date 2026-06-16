@@ -212,6 +212,7 @@ const GENERAL_SETTINGS = {
   bucket_migration_enabled: true,
   bucket_compare_enabled: true,
   bucket_integrity_check_enabled: true,
+  bucket_usage_stats_enabled: true,
   manager_ceph_s3_user_keys_enabled: true,
   allow_login_access_keys: false,
   allow_login_endpoint_list: true,
@@ -344,6 +345,48 @@ const MANAGER_BUCKETS = [
 const MANAGER_TOTAL_BYTES = MANAGER_BUCKETS.reduce((acc, item) => acc + (item.used_bytes ?? 0), 0);
 const MANAGER_TOTAL_OBJECTS = MANAGER_BUCKETS.reduce((acc, item) => acc + (item.object_count ?? 0), 0);
 const MANAGER_BUCKET_COUNT = MANAGER_BUCKETS.length;
+const MANAGER_USAGE_STATS_AGGREGATE = {
+  scope_kind: "manager_account",
+  scope_id: "acc-helios",
+  scope_name: "Helios Retail",
+  bucket_count: MANAGER_BUCKET_COUNT,
+  buckets_with_snapshot: MANAGER_BUCKET_COUNT,
+  missing_bucket_count: 0,
+  partial_scan_count: 0,
+  object_version_count: MANAGER_TOTAL_OBJECTS + 340,
+  current_version_count: MANAGER_TOTAL_OBJECTS,
+  noncurrent_version_count: 340,
+  delete_marker_count: 17,
+  total_bytes: MANAGER_TOTAL_BYTES,
+  current_bytes: Math.round(MANAGER_TOTAL_BYTES * 0.72),
+  noncurrent_bytes: MANAGER_TOTAL_BYTES - Math.round(MANAGER_TOTAL_BYTES * 0.72),
+  data_type_distribution: [
+    { key: "logs", label: "Logs", count: 1_120, bytes: Math.round(MANAGER_TOTAL_BYTES * 0.42), ratio_count: 0.54, ratio_bytes: 0.42 },
+    { key: "backup", label: "Backups", count: 760, bytes: Math.round(MANAGER_TOTAL_BYTES * 0.38), ratio_count: 0.37, ratio_bytes: 0.38 },
+    { key: "json", label: "JSON", count: 182, bytes: MANAGER_TOTAL_BYTES - Math.round(MANAGER_TOTAL_BYTES * 0.42) - Math.round(MANAGER_TOTAL_BYTES * 0.38), ratio_count: 0.09, ratio_bytes: 0.20 },
+  ],
+  storage_class_distribution: [
+    { key: "STANDARD", label: "STANDARD", count: 1_560, bytes: Math.round(MANAGER_TOTAL_BYTES * 0.74), ratio_count: 0.76, ratio_bytes: 0.74 },
+    { key: "STANDARD_IA", label: "STANDARD_IA", count: 502, bytes: MANAGER_TOTAL_BYTES - Math.round(MANAGER_TOTAL_BYTES * 0.74), ratio_count: 0.24, ratio_bytes: 0.26 },
+  ],
+  size_distribution: [
+    { key: "small", label: "< 1 MiB", count: 1_284, bytes: Math.round(MANAGER_TOTAL_BYTES * 0.18), ratio_count: 0.62, ratio_bytes: 0.18 },
+    { key: "medium", label: "1-128 MiB", count: 646, bytes: Math.round(MANAGER_TOTAL_BYTES * 0.47), ratio_count: 0.31, ratio_bytes: 0.47 },
+    { key: "large", label: "> 128 MiB", count: 132, bytes: MANAGER_TOTAL_BYTES - Math.round(MANAGER_TOTAL_BYTES * 0.18) - Math.round(MANAGER_TOTAL_BYTES * 0.47), ratio_count: 0.07, ratio_bytes: 0.35 },
+  ],
+  age_distribution: [
+    { key: "recent", label: "< 7 days", count: 512, bytes: Math.round(MANAGER_TOTAL_BYTES * 0.22), ratio_count: 0.25, ratio_bytes: 0.22 },
+    { key: "month", label: "7-30 days", count: 1_106, bytes: Math.round(MANAGER_TOTAL_BYTES * 0.51), ratio_count: 0.54, ratio_bytes: 0.51 },
+    { key: "older", label: "> 30 days", count: 444, bytes: MANAGER_TOTAL_BYTES - Math.round(MANAGER_TOTAL_BYTES * 0.22) - Math.round(MANAGER_TOTAL_BYTES * 0.51), ratio_count: 0.21, ratio_bytes: 0.27 },
+  ],
+  current_vs_noncurrent: [
+    { key: "current", label: "Current", count: MANAGER_TOTAL_OBJECTS, bytes: Math.round(MANAGER_TOTAL_BYTES * 0.72), ratio_count: 0.84, ratio_bytes: 0.72 },
+    { key: "noncurrent", label: "Non-current", count: 340, bytes: MANAGER_TOTAL_BYTES - Math.round(MANAGER_TOTAL_BYTES * 0.72), ratio_count: 0.16, ratio_bytes: 0.28 },
+  ],
+  warnings: [],
+  oldest_snapshot_at: "2026-03-08T08:45:00Z",
+  newest_snapshot_at: NOW,
+};
 
 function managerTrafficPayload(window: string) {
   const seriesByWindow = {
@@ -1500,6 +1543,13 @@ export function buildBaseRules(): MockRule[] {
           largest_bucket: { name: "helios-retail-backups", used_bytes: 902_122_001, object_count: 342 },
           most_objects_bucket: { name: "helios-retail-logs", used_bytes: 182_554_321, object_count: 1284 },
         },
+      },
+    },
+    {
+      id: "manager-usage-stats-aggregate",
+      path: /^\/manager\/usage-stats\/latest$/,
+      body: {
+        aggregate: MANAGER_USAGE_STATS_AGGREGATE,
       },
     },
     {
