@@ -1626,6 +1626,7 @@ def test_storage_ops_bucket_quota_update_resolves_context_and_updates_quota(clie
     monkeypatch.setattr(storage_ops_router, "is_manager_bucket_quota_available", fake_is_manager_bucket_quota_available)
 
     app.dependency_overrides[storage_ops_router.require_storage_ops_bucket_quota] = lambda: user
+    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     app.dependency_overrides[storage_ops_router.get_audit_logger] = lambda: FakeAuditService()
     try:
@@ -1635,6 +1636,7 @@ def test_storage_ops_bucket_quota_update_resolves_context_and_updates_quota(clie
         )
     finally:
         app.dependency_overrides.pop(storage_ops_router.require_storage_ops_bucket_quota, None)
+        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
         app.dependency_overrides.pop(storage_ops_router.get_audit_logger, None)
 

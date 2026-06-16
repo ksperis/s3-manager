@@ -74,12 +74,12 @@ class EnvStorageEndpoint(BaseModel):
 
     @field_validator("latitude")
     @classmethod
-    def validate_latitude(cls, value: Optional[float]) -> Optional[float]:
+    def validate_latitude(_cls, value: Optional[float]) -> Optional[float]:
         return StorageEndpointBase.validate_latitude(value)
 
     @field_validator("longitude")
     @classmethod
-    def validate_longitude(cls, value: Optional[float]) -> Optional[float]:
+    def validate_longitude(_cls, value: Optional[float]) -> Optional[float]:
         return StorageEndpointBase.validate_longitude(value)
 
 

@@ -443,13 +443,13 @@ describe("manager shell pages", () => {
     );
 
     const dataTypesCard = await screen.findByTestId("manager-dashboard-data-types");
+    expect(await within(dataTypesCard).findByText("2 / 2 buckets covered")).toBeInTheDocument();
     const overviewGrid = screen.getByTestId("manager-dashboard-overview-grid");
     const activityIncidentsRow = screen.getByTestId("manager-dashboard-activity-incidents-row");
     const topBucketsCard = screen.getByTestId("manager-dashboard-top-buckets-card");
     const recentActivityCard = screen.getByTestId("manager-dashboard-recent-activity-card");
 
     expect(within(dataTypesCard).getByText("Data types")).toBeInTheDocument();
-    expect(within(dataTypesCard).getByText("2 / 2 buckets covered")).toBeInTheDocument();
     expect(within(dataTypesCard).getByText("Documents")).toBeInTheDocument();
     expect(within(dataTypesCard).getByTestId("manager-dashboard-data-type-color-documents")).toHaveStyle({
       backgroundColor: "#2563EB",

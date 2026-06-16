@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.db import S3Account, StorageEndpoint, User, UserRole
 from app.main import app
 from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, BucketUsageStatsSnapshot
+from app.routers import dependencies
 from app.routers.admin import usage_stats as admin_usage_stats_router
 from app.routers.ceph_admin import usage_stats as ceph_usage_stats_router
 from app.routers.manager import usage_stats as manager_usage_stats_router
@@ -121,9 +122,14 @@ def test_ceph_admin_usage_stats_latest_aggregates_endpoint_scope(client: TestCli
     ctx = type("Ctx", (), {"endpoint": type("Endpoint", (), {"id": 7, "name": "Ceph Lab"})()})()
 
     monkeypatch.setattr(ceph_usage_stats_router, "_list_ceph_bucket_names", lambda ctx: ["bucket-a", "bucket-b"])
+    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     app.dependency_overrides[ceph_usage_stats_router.get_ceph_admin_context] = lambda: ctx
 
-    response = client.get("/api/ceph-admin/endpoints/7/usage-stats/latest")
+    try:
+        response = client.get("/api/ceph-admin/endpoints/7/usage-stats/latest")
+    finally:
+        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
+        app.dependency_overrides.pop(ceph_usage_stats_router.get_ceph_admin_context, None)
 
     assert response.status_code == 200, response.text
     aggregate = response.json()["aggregate"]
@@ -166,10 +172,16 @@ def test_ceph_admin_usage_stats_stream_builds_endpoint_targets(client: TestClien
     monkeypatch.setattr(ceph_usage_stats_router, "_list_ceph_bucket_names", lambda ctx: ["bucket-a", "bucket-b"])
     monkeypatch.setattr(ceph_usage_stats_router, "BucketUsageStatsService", FakeService)
     monkeypatch.setattr(ceph_usage_stats_router, "stream_bucket_usage_stats", fake_stream)
+    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     app.dependency_overrides[ceph_usage_stats_router.get_ceph_admin_context] = lambda: ctx
     app.dependency_overrides[ceph_usage_stats_router.get_current_ceph_admin] = lambda: user
 
-    response = client.post("/api/ceph-admin/endpoints/7/usage-stats/stream", json={"parallelism": 4})
+    try:
+        response = client.post("/api/ceph-admin/endpoints/7/usage-stats/stream", json={"parallelism": 4})
+    finally:
+        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
+        app.dependency_overrides.pop(ceph_usage_stats_router.get_ceph_admin_context, None)
+        app.dependency_overrides.pop(ceph_usage_stats_router.get_current_ceph_admin, None)
 
     assert response.status_code == 200, response.text
     targets = captured["targets"]
