@@ -71,6 +71,8 @@ type QuickLink = {
   icon: ReactNode;
 };
 
+const TOP_STORAGE_SPACES_LIMIT = 4;
+
 function percent(used?: number | null, quota?: number | null): number | null {
   if (used == null || quota == null || quota <= 0) return null;
   return Math.max(0, Math.min(100, (used / quota) * 100));
@@ -131,7 +133,7 @@ function workspaceHealthLabel(status: HealthCheckStatus): string {
 function buildStorageRows(spaces: PortalWorkspaceSpace[]): StorageSpaceRow[] {
   const rows = [...spaces]
     .sort((left, right) => (right.usedBytes ?? 0) - (left.usedBytes ?? 0))
-    .slice(0, 5);
+    .slice(0, TOP_STORAGE_SPACES_LIMIT);
   const maxBytes = Math.max(...rows.map((row) => row.usedBytes ?? 0), 1);
   return rows.map((space) => {
     const quotaPercent = percent(space.usedBytes, space.quotaBytes);

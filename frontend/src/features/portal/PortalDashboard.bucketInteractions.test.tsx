@@ -204,6 +204,31 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.queryByText(/requests/i)).not.toBeInTheDocument();
   });
 
+  it("limits the top storage spaces card to the four largest spaces", () => {
+    const baseSpace = mocks.hookResult.workspace.spaces[0];
+    mocks.hookResult.workspace.spaces = [
+      { ...baseSpace, id: "research-data", name: "Research Data", internalName: "research-data", usedBytes: 512, objectCount: 12 },
+      { ...baseSpace, id: "genomics-archive", name: "Genomics Archive", internalName: "genomics-archive", usedBytes: 2048, objectCount: 40 },
+      { ...baseSpace, id: "telemetry-lake", name: "Telemetry Lake", internalName: "telemetry-lake", usedBytes: 1536, objectCount: 35 },
+      { ...baseSpace, id: "lab-notes", name: "Lab Notes", internalName: "lab-notes", usedBytes: 1024, objectCount: 28 },
+      { ...baseSpace, id: "cold-vault", name: "Cold Vault", internalName: "cold-vault", usedBytes: 256, objectCount: 8 },
+    ];
+
+    render(
+      <MemoryRouter>
+        <PortalDashboard />
+      </MemoryRouter>
+    );
+
+    const topStorageSpaces = screen.getByRole("heading", { name: "Top storage spaces" }).closest("section");
+    expect(topStorageSpaces).not.toBeNull();
+    expect(within(topStorageSpaces!).getByText("Genomics Archive")).toBeInTheDocument();
+    expect(within(topStorageSpaces!).getByText("Telemetry Lake")).toBeInTheDocument();
+    expect(within(topStorageSpaces!).getByText("Lab Notes")).toBeInTheDocument();
+    expect(within(topStorageSpaces!).getByText("Research Data")).toBeInTheDocument();
+    expect(within(topStorageSpaces!).queryByText("Cold Vault")).not.toBeInTheDocument();
+  });
+
   it("opens only useful portal routes from dashboard cards and rows", () => {
     render(
       <MemoryRouter>
