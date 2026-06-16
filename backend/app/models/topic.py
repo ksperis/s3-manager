@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class TopicSubscription(BaseModel):
     name: str
-    bucket: Optional[str] = None
+    bucket: Optional[str] = Field(default=None, description="Deprecated; Ceph notification bindings expose their full ID in name")
     endpoint_address: Optional[str] = None
     endpoint_topic: Optional[str] = None
     endpoint_args: dict[str, Any] = Field(default_factory=dict)

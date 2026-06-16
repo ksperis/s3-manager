@@ -112,10 +112,10 @@ const buildAttributesSignature = (
     attributeItems,
   });
 
-const topicNotificationBuckets = (topic: Topic): string[] =>
+const topicNotificationIds = (topic: Topic): string[] =>
   (topic.subscriptions ?? [])
-    .map((subscription) => subscription.bucket)
-    .filter((bucket): bucket is string => Boolean(bucket));
+    .map((subscription) => subscription.name.trim())
+    .filter(Boolean);
 
 export default function TopicsPage() {
   const {
@@ -478,7 +478,12 @@ export default function TopicsPage() {
   const filteredTopics = useMemo(() => {
     const needle = topicFilter.trim().toLowerCase();
     if (!needle) return topics;
-    return topics.filter((topic) => topic.name.toLowerCase().includes(needle) || topic.arn.toLowerCase().includes(needle));
+    return topics.filter(
+      (topic) =>
+        topic.name.toLowerCase().includes(needle) ||
+        topic.arn.toLowerCase().includes(needle) ||
+        topicNotificationIds(topic).some((notificationId) => notificationId.toLowerCase().includes(needle))
+    );
   }, [topicFilter, topics]);
   const createCurrentSignature = useMemo(() => stableSignature({ newTopicName }), [newTopicName]);
   const policyCurrentSignature = useMemo(() => stableSignature({ policyText }), [policyText]);
@@ -566,7 +571,7 @@ export default function TopicsPage() {
                 type="text"
                 value={topicFilter}
                 onChange={(e) => setTopicFilter(e.target.value)}
-                placeholder="Search by topic name or ARN"
+                placeholder="Search by topic, ARN, or notification ID"
                 className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             }
@@ -585,7 +590,7 @@ export default function TopicsPage() {
                 {filteredTableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load topics." tone="error" />}
                 {filteredTableStatus === "empty" && <TableEmptyState colSpan={3} message="No topics." />}
                 {filteredTopics.map((topic) => {
-                  const notificationBuckets = topicNotificationBuckets(topic);
+                  const notificationIds = topicNotificationIds(topic);
                   return (
                     <tr key={topic.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="manager-table-cell-wide px-6 py-4">
@@ -597,12 +602,12 @@ export default function TopicsPage() {
                       <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">
                         {topic.is_ceph ? (
                           <>
-                            <div>Notifications: {notificationBuckets.length}</div>
-                            {notificationBuckets.length > 0 && (
+                            <div>Notifications: {notificationIds.length}</div>
+                            {notificationIds.length > 0 && (
                               <ul className="mt-1 space-y-0.5">
-                                {notificationBuckets.map((bucket, index) => (
-                                  <li key={`${bucket}-${index}`}>
-                                    Bucket: {bucket}
+                                {notificationIds.map((notificationId, index) => (
+                                  <li key={`${notificationId}-${index}`}>
+                                    Notification: {notificationId}
                                   </li>
                                 ))}
                               </ul>

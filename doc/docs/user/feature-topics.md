@@ -21,8 +21,9 @@ Use this guide to manage SNS topic resources from Manager.
 ## Expected result
 
 SNS topics are managed within the selected manager context.
-For Ceph RGW endpoints, notification bindings returned as `notif.*` entries are
-shown as destinations under their parent topic instead of separate topics.
+For Ceph RGW endpoints, notification bindings returned by the topic API are
+shown as **Notification** entries under their parent topic instead of separate
+topics.
 
 ## Limits / feature flags
 

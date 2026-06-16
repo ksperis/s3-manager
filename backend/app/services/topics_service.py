@@ -44,11 +44,30 @@ class TopicsService:
         "TopicName",
         "EndPoint",
         "EndpointAddress",
+        "endpoint_address",
         "EndpointArgs",
+        "endpoint_args",
         "EndpointTopic",
+        "endpoint_topic",
+        "push-endpoint",
+        "push_endpoint",
         "Persistent",
         "persistent",
     }
+    _CEPH_NOTIFICATION_BINDING_KEYS = {
+        "EndPoint",
+        "EndpointAddress",
+        "endpoint_address",
+        "EndpointArgs",
+        "endpoint_args",
+        "EndpointTopic",
+        "endpoint_topic",
+        "push-endpoint",
+        "push_endpoint",
+        "Persistent",
+        "persistent",
+    }
+    _CEPH_NOTIFICATION_ENDPOINT_KEYS = {"EndpointAddress", "EndpointArgs", "EndpointTopic"}
 
     def __init__(self) -> None:
         pass
@@ -201,15 +220,27 @@ class TopicsService:
             return str(name)
         return self._topic_name_from_arn(arn)
 
-    def _is_ceph_notification_entry(self, entry: dict[str, Any], arn: str) -> bool:
-        return self._entry_name(entry, arn).startswith("notif.")
+    def _has_non_empty_ceph_notification_value(self, value: Any) -> bool:
+        parsed = self._coerce_attribute_value(value)
+        if parsed is None or parsed == "":
+            return False
+        if isinstance(parsed, (dict, list)):
+            return bool(parsed)
+        return True
 
-    def _bucket_from_notification_name(self, name: str) -> Optional[str]:
-        if not name.startswith("notif."):
-            return None
-        suffix = name.removeprefix("notif.")
-        bucket, _, _topic = suffix.partition("_")
-        return bucket or None
+    def _is_ceph_notification_entry(self, entry: dict[str, Any], _arn: str) -> bool:
+        endpoint = self._coerce_attribute_value(entry.get("EndPoint"))
+        if isinstance(endpoint, dict) and any(
+            self._has_non_empty_ceph_notification_value(endpoint.get(key)) for key in self._CEPH_NOTIFICATION_ENDPOINT_KEYS
+        ):
+            return True
+        if not isinstance(endpoint, dict) and self._has_non_empty_ceph_notification_value(endpoint):
+            return True
+        return any(
+            self._has_non_empty_ceph_notification_value(entry.get(key))
+            for key in self._CEPH_NOTIFICATION_BINDING_KEYS
+            if key != "EndPoint"
+        )
 
     def _is_sensitive_metadata_key(self, key: str) -> bool:
         normalized = key.replace("-", "_").lower()
@@ -268,7 +299,6 @@ class TopicsService:
         )
         return TopicSubscription(
             name=name,
-            bucket=self._bucket_from_notification_name(name),
             endpoint_address=endpoint_address,
             endpoint_topic=endpoint_topic,
             endpoint_args=endpoint_args,

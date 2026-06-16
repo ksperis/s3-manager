@@ -193,7 +193,7 @@ def test_list_topics_reconstructs_ceph_topics_and_subscriptions(monkeypatch):
             {"TopicArn": arn, "Name": "topic-generic_test_unistra_preprod2"},
             {
                 "TopicArn": arn,
-                "Name": "notif.bucket-one_topic-generic_test_unistra_preprod2",
+                "Name": "projet-test-s3ls-unistra-preprod",
                 "EndpointAddress": "https://notify.example.test/hooks/topic",
                 "EndpointTopic": "endpoint-topic",
                 "EndpointArgs": "persistent=true&verify-ssl=false&time_to_live=60",
@@ -222,8 +222,8 @@ def test_list_topics_reconstructs_ceph_topics_and_subscriptions(monkeypatch):
     assert attributes_calls == [arn]
     assert len(topic.subscriptions) == 1
     subscription = topic.subscriptions[0]
-    assert subscription.name == "notif.bucket-one_topic-generic_test_unistra_preprod2"
-    assert subscription.bucket == "bucket-one"
+    assert subscription.name == "projet-test-s3ls-unistra-preprod"
+    assert subscription.bucket is None
     assert subscription.endpoint_address == "https://notify.example.test/hooks/topic"
     assert subscription.endpoint_topic == "endpoint-topic"
     assert subscription.endpoint_args == {"persistent": True, "verify-ssl": False, "time_to_live": 60}
@@ -231,7 +231,7 @@ def test_list_topics_reconstructs_ceph_topics_and_subscriptions(monkeypatch):
     assert subscription.metadata == {"OpaqueData": "trace=lab"}
 
 
-def test_list_topics_treats_ceph_notif_entries_as_bindings(monkeypatch):
+def test_list_topics_treats_ceph_notification_entries_as_bindings_without_prefix(monkeypatch):
     service = TopicsService()
     arn = "arn:aws:sns:default:tenant:topic-from-arn"
     monkeypatch.setattr(
@@ -240,7 +240,7 @@ def test_list_topics_treats_ceph_notif_entries_as_bindings(monkeypatch):
         lambda *_, **__: [
             {
                 "TopicArn": arn,
-                "Name": "notif.bucket_topic-from-arn",
+                "Name": "projet-test-s3ls-unistra-preprod",
                 "EndPoint": json.dumps(
                     {
                         "EndpointAddress": "https://notify.example.test/hooks/current",
@@ -258,7 +258,8 @@ def test_list_topics_treats_ceph_notif_entries_as_bindings(monkeypatch):
     assert len(topics) == 1
     assert topics[0].is_ceph is True
     assert topics[0].name == "topic-from-arn"
-    assert topics[0].subscriptions[0].name == "notif.bucket_topic-from-arn"
+    assert topics[0].subscriptions[0].name == "projet-test-s3ls-unistra-preprod"
+    assert topics[0].subscriptions[0].bucket is None
     assert topics[0].subscriptions[0].endpoint_address == "https://notify.example.test/hooks/current"
     assert topics[0].subscriptions[0].endpoint_args == {"persistent": False, "verify-ssl": True}
 
