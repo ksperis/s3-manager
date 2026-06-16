@@ -89,6 +89,7 @@ export default function ManagerMigrationsListPage() {
           <ListToolbar
             title="Migrations"
             description="Operational list of migration runs for the active source context."
+            showHeading={false}
             countLabel={`${sortedMigrations.length} result(s)`}
           />
           <div className="max-h-[720px] space-y-2 overflow-auto p-4">

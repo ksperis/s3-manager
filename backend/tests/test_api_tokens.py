@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
-from app.core.security import get_password_hash
+from app.core.security import create_access_token, decode_token, get_password_hash
 from app.db import User, UserRole
 from app.main import app
 from app.routers import dependencies
@@ -94,6 +94,44 @@ def test_api_token_lifecycle_and_auth_usage(auth_client, db_session):
         headers={"Authorization": f"Bearer {api_token}"},
     )
     assert after_revoke.status_code == 401
+
+
+def test_api_token_auth_rejects_same_jti_with_different_token_hash(auth_client, db_session):
+    admin = _create_user(
+        db_session,
+        email="api-admin-exact-token@example.com",
+        password="supersecret",
+        role=UserRole.UI_ADMIN.value,
+    )
+    login_token = _login(auth_client, email=admin.email, password="supersecret")
+
+    create_response = auth_client.post(
+        "/api/auth/api-tokens",
+        json={"name": "exact-token", "expires_in_days": 30},
+        headers={"Authorization": f"Bearer {login_token}"},
+    )
+    assert create_response.status_code == 201
+    api_token = create_response.json()["access_token"]
+    claims = decode_token(api_token)
+    assert claims is not None
+
+    forged_same_jti = create_access_token(
+        data={
+            "sub": claims["sub"],
+            "uid": claims["uid"],
+            "role": claims["role"],
+            "auth_type": claims["auth_type"],
+            "typ": claims["typ"],
+            "jti": claims["jti"],
+            "extra": "different-token-string",
+        },
+    )
+
+    response = auth_client.get(
+        "/api/admin/users/minimal",
+        headers={"Authorization": f"Bearer {forged_same_jti}"},
+    )
+    assert response.status_code == 401
 
 
 def test_non_admin_cannot_create_api_token(auth_client, db_session):

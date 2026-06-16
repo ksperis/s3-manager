@@ -17,6 +17,7 @@ const portalNavSections: SidebarSection[] = [
     links: [
       { to: "/portal", label: "Dashboard", end: true, icon: <HomeIcon /> },
       { to: "/portal/storage-spaces", label: "Storage Spaces", icon: <StorageIcon /> },
+      { to: "/portal/access-keys", label: "Access keys", icon: <KeyIcon /> },
       { to: "/portal/shares", label: "Shares", icon: <ShareIcon /> },
       { to: "/portal/activity", label: "Activity", icon: <ActivityIcon /> },
       { to: "/portal/transfers", label: "Transfers", icon: <TransferIcon /> },
@@ -51,7 +52,7 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
         placeholder={selectedLabel}
         widthClassName={mode === "icon" ? "w-9" : "w-48 lg:w-[20rem] xl:w-[26rem] min-w-[12rem] max-w-[40vw]"}
         menuMinWidthClassName="min-w-[18rem]"
-        icon={<AccountControlIcon className="h-4 w-4 text-slate-500 dark:text-slate-300" />}
+        icon={<AccountControlIcon className="h-4 w-4" />}
         disabled={loading}
         triggerMode={mode}
       />
@@ -153,6 +154,15 @@ function StorageIcon() {
     <IconBase>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M3.5 6.2 10 3.5l6.5 2.7L10 9 3.5 6.2Z" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M3.5 10 10 12.8 16.5 10M3.5 13.7 10 16.5l6.5-2.8" />
+    </IconBase>
+  );
+}
+
+function KeyIcon() {
+  return (
+    <IconBase>
+      <circle cx="7.2" cy="10" r="3.2" strokeWidth={1.7} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M10.2 10h6.3m-2 0v2.4m-2.2-2.4v1.7" />
     </IconBase>
   );
 }

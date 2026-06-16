@@ -155,6 +155,21 @@ flows unless the pathway is explicit, authorized, and audited.
   action, target entity, and account context.
 - Include executor or workflow identifiers in audit metadata when available.
 
+## Local UI validation for AI agents
+
+When a frontend change affects a real workspace route, do a browser-level smoke
+test whenever runtime behavior matters. Starting Vite, passing type checks, or
+passing unit tests alone does not prove that the route renders.
+
+Use the workflow in [Local development](local-development.md#manual-ui-smoke-test)
+for exact commands, login notes, and test-option tradeoffs. During validation,
+check visible route content, key DOM state, and browser console errors. Do not
+commit Playwright reports, temporary screenshots, traces, videos, tokens, or
+copied secrets.
+
+For repeated admin or manager route checks, propose a small authenticated
+Playwright smoke suite instead of adding one-off browser scripts.
+
 ## Git commits authored by AI assistants
 
 When an AI assistant creates a Git commit in this repository, it must use a

@@ -22,7 +22,10 @@ from app.routers.admin import s3_accounts as admin_s3_accounts
 from app.routers.admin import audit as admin_audit
 from app.routers.admin import stats as admin_stats
 from app.routers.admin import billing as admin_billing
+from app.routers.admin import usage_history as admin_usage_history
+from app.routers.admin import usage_stats as admin_usage_stats
 from app.routers.admin import users as admin_users
+from app.routers.admin import groups as admin_groups
 from app.routers.admin import s3_users as admin_s3_users
 from app.routers.admin import s3_connections as admin_s3_connections
 from app.routers.admin import tag_definitions as admin_tag_definitions
@@ -37,18 +40,23 @@ from app.routers.ceph_admin import accounts as ceph_admin_accounts
 from app.routers.ceph_admin import users as ceph_admin_users
 from app.routers.ceph_admin import buckets as ceph_admin_buckets
 from app.routers.ceph_admin import integrity as ceph_admin_integrity
+from app.routers.ceph_admin import usage_stats as ceph_admin_usage_stats
 from app.routers.ceph_admin import metrics as ceph_admin_metrics
 from app.routers.storage_ops import summary as storage_ops_summary
 from app.routers.storage_ops import buckets as storage_ops_buckets
 from app.routers.storage_ops import integrity as storage_ops_integrity
+from app.routers.storage_ops import usage_stats as storage_ops_usage_stats
 from app.routers.internal import billing_collect as internal_billing
 from app.routers.internal import healthchecks as internal_healthchecks
 from app.routers.internal import quota_monitor as internal_quota_monitor
+from app.routers.internal import usage_history as internal_usage_history
 from app.routers.internal import s3_connections as internal_s3_connections
 from app.routers.manager import s3_accounts as manager_accounts
+from app.routers.manager import activity as manager_activity
 from app.routers.manager import buckets as manager_buckets
 from app.routers.manager import context as manager_context
 from app.routers.manager import ceph_keys as manager_ceph_keys
+from app.routers.manager import feature_rules as manager_feature_rules
 from app.routers.manager import iam_groups, iam_roles, iam_users
 from app.routers.manager import iam_overview
 from app.routers.manager import objects as manager_objects
@@ -57,6 +65,7 @@ from app.routers.manager import topics as manager_topics
 from app.routers.manager import stats as manager_stats
 from app.routers.manager import migrations as manager_migrations
 from app.routers.manager import integrity as manager_integrity
+from app.routers.manager import usage_stats as manager_usage_stats
 from app.services.bucket_migration_service import get_bucket_migration_worker
 from app.routers.dependencies import (
     require_browser_enabled,
@@ -139,7 +148,10 @@ app.include_router(admin_tag_definitions.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_audit.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_stats.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_billing.router, prefix=settings.api_v1_prefix)
+app.include_router(admin_usage_history.router, prefix=settings.api_v1_prefix)
+app.include_router(admin_usage_stats.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_users.router, prefix=settings.api_v1_prefix)
+app.include_router(admin_groups.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_storage_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_settings.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_key_rotation.router, prefix=settings.api_v1_prefix)
@@ -151,13 +163,16 @@ app.include_router(ceph_admin_accounts.router, prefix=settings.api_v1_prefix, de
 app.include_router(ceph_admin_users.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_integrity.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_usage_stats.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_metrics.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(storage_ops_summary.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
 app.include_router(storage_ops_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
 app.include_router(storage_ops_integrity.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
+app.include_router(storage_ops_usage_stats.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
 app.include_router(internal_billing.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_healthchecks.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_quota_monitor.router, prefix=settings.api_v1_prefix)
+app.include_router(internal_usage_history.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_s3_connections.router, prefix=settings.api_v1_prefix)
 app.include_router(
     manager_accounts.router,
@@ -170,12 +185,22 @@ app.include_router(
     dependencies=[Depends(require_manager_context_enabled)],
 )
 app.include_router(
+    manager_activity.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
     manager_ceph_keys.router,
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_manager_enabled)],
 )
 app.include_router(
     manager_buckets.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_feature_rules.router,
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_manager_enabled)],
 )
@@ -236,6 +261,11 @@ app.include_router(
 )
 app.include_router(
     manager_integrity.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_usage_stats.router,
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_manager_enabled)],
 )

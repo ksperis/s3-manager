@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import math
 from datetime import datetime
 from typing import Literal, Optional
 
@@ -56,6 +57,8 @@ class StorageEndpointBase(BaseModel):
     ceph_admin_access_key: Optional[str] = None
     ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
+    latitude: Optional[float] = Field(default=None)
+    longitude: Optional[float] = Field(default=None)
 
     @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
     @classmethod
@@ -63,6 +66,24 @@ class StorageEndpointBase(BaseModel):
         if isinstance(value, str):
             value = value.strip()
         return value or None
+
+    @field_validator("latitude")
+    @classmethod
+    def validate_latitude(cls, value: Optional[float]) -> Optional[float]:
+        if value is None:
+            return None
+        if not math.isfinite(value) or value < -90 or value > 90:
+            raise ValueError("Latitude must be a finite number between -90 and 90.")
+        return value
+
+    @field_validator("longitude")
+    @classmethod
+    def validate_longitude(cls, value: Optional[float]) -> Optional[float]:
+        if value is None:
+            return None
+        if not math.isfinite(value) or value < -180 or value > 180:
+            raise ValueError("Longitude must be a finite number between -180 and 180.")
+        return value
 
 
 class StorageEndpointCreate(StorageEndpointBase):
@@ -84,6 +105,8 @@ class StorageEndpointUpdate(BaseModel):
     ceph_admin_access_key: Optional[str] = None
     ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
     @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
     @classmethod
@@ -91,6 +114,16 @@ class StorageEndpointUpdate(BaseModel):
         if isinstance(value, str):
             value = value.strip()
         return value or None
+
+    @field_validator("latitude")
+    @classmethod
+    def validate_optional_latitude(cls, value: Optional[float]) -> Optional[float]:
+        return StorageEndpointBase.validate_latitude(value)
+
+    @field_validator("longitude")
+    @classmethod
+    def validate_optional_longitude(cls, value: Optional[float]) -> Optional[float]:
+        return StorageEndpointBase.validate_longitude(value)
 
 
 class StorageEndpointTagsUpdate(BaseModel):

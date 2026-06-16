@@ -4,6 +4,16 @@
  */
 import ActionProgressCard from "./ActionProgressCard";
 import type { ActionProgressState } from "./actionProgress";
+import {
+  cx,
+  uiButtonBaseClass,
+  uiButtonVariants,
+  uiInputClass,
+  uiMenuClass,
+  uiMenuItemClass,
+  uiMutedTextClass,
+  uiTitleTextClass,
+} from "../../components/ui/styles";
 
 type SelectionTagAction = "add" | "remove";
 type SelectionExportFormat = "text" | "csv" | "json";
@@ -26,8 +36,21 @@ type BucketSelectionActionsBarProps = {
   onShowConfigBackupModal?: () => void;
   onShowCompareModal: () => void;
   onShowIntegrityModal: () => void;
+  onShowUsageStatsModal: () => void;
   openBulkUpdateModal: () => void;
 };
+
+const selectionSummaryClass = cx(
+  uiButtonBaseClass,
+  uiButtonVariants.secondary,
+  "list-none px-2.5 py-1.5 [&::-webkit-details-marker]:hidden"
+);
+const selectionMenuClass = cx(uiMenuClass, "absolute left-0 z-50 mt-1 p-2");
+const selectionMenuItemClass = cx(
+  uiMenuItemClass,
+  "flex w-full items-center text-left ui-caption font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+);
+const selectionActionButtonClass = cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-2.5 py-1.5");
 
 export default function BucketSelectionActionsBar({
   selectedCount,
@@ -47,15 +70,16 @@ export default function BucketSelectionActionsBar({
   onShowConfigBackupModal,
   onShowCompareModal,
   onShowIntegrityModal,
+  onShowUsageStatsModal,
   openBulkUpdateModal,
 }: BucketSelectionActionsBarProps) {
   if (selectedCount <= 0) return null;
 
   return (
-    <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+    <div className="border-b border-[color:var(--ui-border-soft)] px-4 py-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
+          <p className={cx("ui-body", uiTitleTextClass)}>
             {selectedCount} bucket{selectedCount > 1 ? "s" : ""} selected
             {hiddenSelectedCount > 0 && (
               <span className="ml-2 ui-caption font-semibold text-red-600 dark:text-red-400">
@@ -66,20 +90,20 @@ export default function BucketSelectionActionsBar({
           <button
             type="button"
             onClick={clearSelection}
-            className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+            className={cx(uiButtonBaseClass, uiButtonVariants.danger, "px-2.5 py-1.5")}
           >
             Clear selection
           </button>
           <details className="relative">
-            <summary className="list-none rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600 [&::-webkit-details-marker]:hidden">
+            <summary className={selectionSummaryClass}>
               + Tag selection
             </summary>
-            <div className="absolute left-0 z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className={cx(selectionMenuClass, "w-64")}>
               {availableUiTags.length === 0 ? (
-                <p className="ui-caption text-slate-500 dark:text-slate-400">No existing UI tags yet.</p>
+                <p className={cx("ui-caption", uiMutedTextClass)}>No existing UI tags yet.</p>
               ) : (
                 <>
-                  <p className="px-1 pb-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <p className={cx("px-1 pb-1 ui-caption font-semibold uppercase", uiMutedTextClass)}>
                     Suggestions
                   </p>
                   <div className="max-h-40 space-y-1 overflow-auto">
@@ -87,7 +111,7 @@ export default function BucketSelectionActionsBar({
                       <button
                         key={`selection-add:${tag}`}
                         type="button"
-                        className="flex w-full items-center rounded-md px-2 py-1 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                        className={cx(selectionMenuItemClass, "!px-2 !py-1")}
                         onClick={(event) => {
                           event.preventDefault();
                           void applyUiTagToSelection(tag, "add");
@@ -101,19 +125,19 @@ export default function BucketSelectionActionsBar({
                   </div>
                 </>
               )}
-              <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 dark:border-slate-700">
-                <p className="px-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Custom</p>
+              <div className="mt-2 space-y-1 border-t border-[color:var(--ui-border-soft)] pt-2">
+                <p className={cx("px-1 ui-caption font-semibold uppercase", uiMutedTextClass)}>Custom</p>
                 <div className="flex items-center gap-1.5">
                   <input
                     type="text"
                     value={selectionTagAddInput}
                     onChange={(event) => setSelectionTagAddInput(event.target.value)}
                     placeholder="new-tag"
-                    className="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className={cx(uiInputClass, "min-w-0 flex-1 px-2 py-1 ui-caption")}
                   />
                   <button
                     type="button"
-                    className="rounded-md bg-primary px-2 py-1 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    className={cx(uiButtonBaseClass, uiButtonVariants.primary, "px-2 py-1")}
                     disabled={parsedSelectionTagAddInput.length === 0 || selectionTagActionLoading !== null}
                     onClick={(event) => {
                       event.preventDefault();
@@ -131,20 +155,20 @@ export default function BucketSelectionActionsBar({
             </div>
           </details>
           <details className="relative">
-            <summary className="list-none rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600 [&::-webkit-details-marker]:hidden">
+            <summary className={selectionSummaryClass}>
               - Tag selection
             </summary>
-            <div className="absolute left-0 z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className={cx(selectionMenuClass, "w-64")}>
               {selectedUiTagSuggestions.length === 0 ? (
-                <p className="ui-caption text-slate-500 dark:text-slate-400">No UI tags found on this selection.</p>
+                <p className={cx("ui-caption", uiMutedTextClass)}>No UI tags found on this selection.</p>
               ) : (
                 <div className="max-h-48 space-y-1 overflow-auto">
                   {selectedUiTagSuggestions.map((tag) => (
                     <button
-                      key={`selection-remove:${tag}`}
-                      type="button"
-                      className="flex w-full items-center rounded-md px-2 py-1 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                      onClick={(event) => {
+                        key={`selection-remove:${tag}`}
+                        type="button"
+                        className={cx(selectionMenuItemClass, "!px-2 !py-1")}
+                        onClick={(event) => {
                         event.preventDefault();
                         void applyUiTagToSelection(tag, "remove");
                         const parent = event.currentTarget.closest("details");
@@ -161,13 +185,13 @@ export default function BucketSelectionActionsBar({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <details className="relative">
-            <summary className="list-none rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600 [&::-webkit-details-marker]:hidden">
+            <summary className={selectionSummaryClass}>
               {selectionExportLoading ? "Exporting..." : "Export list"}
             </summary>
-            <div className="absolute left-0 z-50 mt-1 w-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className={cx(uiMenuClass, "absolute left-0 z-50 mt-1 w-72 p-1.5")}>
               <button
                 type="button"
-                className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800"
+                className={selectionMenuItemClass}
                 disabled={selectionExportLoading !== null}
                 onClick={(event) => {
                   event.preventDefault();
@@ -180,7 +204,7 @@ export default function BucketSelectionActionsBar({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800"
+                className={selectionMenuItemClass}
                 disabled={selectionExportLoading !== null}
                 onClick={(event) => {
                   event.preventDefault();
@@ -193,7 +217,7 @@ export default function BucketSelectionActionsBar({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800"
+                className={selectionMenuItemClass}
                 disabled={selectionExportLoading !== null}
                 onClick={(event) => {
                   event.preventDefault();
@@ -209,15 +233,22 @@ export default function BucketSelectionActionsBar({
           <button
             type="button"
             onClick={onShowIntegrityModal}
-            className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+            className={selectionActionButtonClass}
           >
             Check integrity
+          </button>
+          <button
+            type="button"
+            onClick={onShowUsageStatsModal}
+            className={selectionActionButtonClass}
+          >
+            Calculate stats
           </button>
           {!isStorageOps && onShowConfigBackupModal && (
             <button
               type="button"
               onClick={onShowConfigBackupModal}
-              className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+              className={selectionActionButtonClass}
             >
               Backup configs
             </button>
@@ -226,7 +257,7 @@ export default function BucketSelectionActionsBar({
             <button
               type="button"
               onClick={onShowCompareModal}
-              className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+              className={selectionActionButtonClass}
             >
               Compare buckets
             </button>
@@ -234,7 +265,7 @@ export default function BucketSelectionActionsBar({
           <button
             type="button"
             onClick={openBulkUpdateModal}
-            className="rounded-md bg-primary px-2.5 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
+            className={cx(uiButtonBaseClass, uiButtonVariants.primary, "px-2.5 py-1.5")}
           >
             Bulk update
           </button>

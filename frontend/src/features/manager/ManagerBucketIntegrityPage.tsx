@@ -10,6 +10,7 @@ import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import ManagerTable, { managerTableCheckboxCellClass, managerTablePrimaryCellClass } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
 import BucketIntegrityCheckModal from "../shared/BucketIntegrityCheckModal";
@@ -141,6 +142,7 @@ export default function ManagerBucketIntegrityPage() {
           <ListToolbar
             title="Buckets"
             description={`${sourceContext ? sourceContext.display_name : "Source context"} - Select buckets to check.`}
+            showHeading={false}
             countLabel={`${filteredBuckets.length} result(s)`}
             search={
               <input
@@ -182,38 +184,29 @@ export default function ManagerBucketIntegrityPage() {
               </button>
             }
           />
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-900/70">
-                <tr>
-                  <th className="w-12 px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Select
-                  </th>
-                  <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Bucket
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {tableStatus === "loading" && <TableEmptyState colSpan={2} message="Loading buckets..." />}
-                {tableStatus === "error" && <TableEmptyState colSpan={2} message="Unable to load buckets." tone="error" />}
-                {tableStatus === "empty" && <TableEmptyState colSpan={2} message="No buckets." />}
-                {filteredBuckets.map((bucket) => (
-                  <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedBuckets.has(bucket.name)}
-                        onChange={() => toggleBucket(bucket.name)}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 dark:border-slate-600"
-                      />
-                    </td>
-                    <td className="px-4 py-2 ui-body font-semibold text-slate-800 dark:text-slate-100">{bucket.name}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ManagerTable
+            columns={[
+              { key: "select", label: "Select", className: "w-12", hideLabel: true },
+              { key: "bucket", label: "Bucket" },
+            ]}
+          >
+            {tableStatus === "loading" && <TableEmptyState colSpan={2} message="Loading buckets..." />}
+            {tableStatus === "error" && <TableEmptyState colSpan={2} message="Unable to load buckets." tone="error" />}
+            {tableStatus === "empty" && <TableEmptyState colSpan={2} message="No buckets." />}
+            {filteredBuckets.map((bucket) => (
+              <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <td className={managerTableCheckboxCellClass}>
+                  <input
+                    type="checkbox"
+                    checked={selectedBuckets.has(bucket.name)}
+                    onChange={() => toggleBucket(bucket.name)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 dark:border-slate-600"
+                  />
+                </td>
+                <td className={managerTablePrimaryCellClass}>{bucket.name}</td>
+              </tr>
+            ))}
+          </ManagerTable>
         </div>
       )}
 

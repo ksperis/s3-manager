@@ -10,14 +10,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db import (
-    BillingAssignment,
-    BillingRateCard,
-    BillingStorageDaily,
-    BillingUsageDaily,
-    EndpointHealthCheck,
-    EndpointHealthLatest,
-    EndpointHealthRollup,
-    EndpointHealthStatusSegment,
     S3Account,
     S3Connection,
     S3User,
@@ -25,6 +17,7 @@ from app.db import (
     StorageProvider,
 )
 from app.models.storage_endpoint import (
+    StorageEndpointBase,
     StorageEndpointFeatureDetectionRequest,
     StorageEndpointFeatureDetectionResult,
     StorageEndpointAdminOpsPermissions,
@@ -33,6 +26,7 @@ from app.models.storage_endpoint import (
     StorageEndpointTagsUpdate,
     StorageEndpointUpdate,
 )
+from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.services.tags_service import TagsService
 from app.utils.s3_endpoint import configured_s3_endpoint
@@ -66,6 +60,8 @@ class EnvStorageEndpoint(BaseModel):
     ceph_admin_access_key: Optional[str] = None
     ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     features: Optional[dict[str, dict[str, object]]] = None
     is_default: bool = False
 
@@ -75,6 +71,16 @@ class EnvStorageEndpoint(BaseModel):
         if isinstance(value, str):
             value = value.strip()
         return value or None
+
+    @field_validator("latitude")
+    @classmethod
+    def validate_latitude(cls, value: Optional[float]) -> Optional[float]:
+        return StorageEndpointBase.validate_latitude(value)
+
+    @field_validator("longitude")
+    @classmethod
+    def validate_longitude(cls, value: Optional[float]) -> Optional[float]:
+        return StorageEndpointBase.validate_longitude(value)
 
 
 class StorageEndpointsService:
@@ -262,6 +268,8 @@ class StorageEndpointsService:
             region=endpoint.region,
             force_path_style=bool(getattr(endpoint, "force_path_style", False)),
             verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+            latitude=endpoint.latitude,
+            longitude=endpoint.longitude,
             provider=provider,
             admin_access_key=endpoint.admin_access_key,
             supervision_access_key=endpoint.supervision_access_key,
@@ -519,6 +527,8 @@ class StorageEndpointsService:
                 endpoint.region = region
                 endpoint.force_path_style = force_path_style
                 endpoint.verify_tls = verify_tls
+                endpoint.latitude = entry.latitude
+                endpoint.longitude = entry.longitude
                 endpoint.provider = provider.value
                 endpoint.admin_access_key = admin_access
                 endpoint.admin_secret_key = admin_secret
@@ -540,6 +550,8 @@ class StorageEndpointsService:
                     region=region,
                     force_path_style=force_path_style,
                     verify_tls=verify_tls,
+                    latitude=entry.latitude,
+                    longitude=entry.longitude,
                     provider=provider.value,
                     admin_access_key=admin_access,
                     admin_secret_key=admin_secret,
@@ -651,6 +663,8 @@ class StorageEndpointsService:
             region=region,
             force_path_style=force_path_style,
             verify_tls=verify_tls,
+            latitude=payload.latitude,
+            longitude=payload.longitude,
             provider=provider.value,
             admin_access_key=admin_access,
             admin_secret_key=admin_secret,
@@ -701,6 +715,8 @@ class StorageEndpointsService:
             if "verify_tls" in fields_set and payload.verify_tls is not None
             else bool(getattr(endpoint, "verify_tls", True))
         )
+        latitude = payload.latitude if "latitude" in fields_set else endpoint.latitude
+        longitude = payload.longitude if "longitude" in fields_set else endpoint.longitude
         provider = self._normalize_provider(payload.provider if "provider" in fields_set else endpoint.provider)
         region = self._normalize_region(provider, region)
         admin_access = (
@@ -776,6 +792,8 @@ class StorageEndpointsService:
         endpoint.region = region
         endpoint.force_path_style = force_path_style
         endpoint.verify_tls = verify_tls
+        endpoint.latitude = latitude
+        endpoint.longitude = longitude
         endpoint.provider = provider.value
         endpoint.admin_access_key = admin_access
         endpoint.admin_secret_key = admin_secret
@@ -799,41 +817,20 @@ class StorageEndpointsService:
         linked_accounts = self.db.query(S3Account).filter(S3Account.storage_endpoint_id == endpoint.id).count()
         linked_users = self.db.query(S3User).filter(S3User.storage_endpoint_id == endpoint.id).count()
         linked_connections = self.db.query(S3Connection).filter(S3Connection.storage_endpoint_id == endpoint.id).count()
-        billing_usage = self.db.query(BillingUsageDaily).filter(BillingUsageDaily.storage_endpoint_id == endpoint.id).count()
-        billing_storage = self.db.query(BillingStorageDaily).filter(BillingStorageDaily.storage_endpoint_id == endpoint.id).count()
-        billing_rate_cards = self.db.query(BillingRateCard).filter(BillingRateCard.storage_endpoint_id == endpoint.id).count()
-        billing_assignments = self.db.query(BillingAssignment).filter(BillingAssignment.storage_endpoint_id == endpoint.id).count()
         has_refs = any(
             count > 0
             for count in [
                 linked_accounts,
                 linked_users,
                 linked_connections,
-                billing_usage,
-                billing_storage,
-                billing_rate_cards,
-                billing_assignments,
             ]
         )
         if has_refs:
             raise ValueError(
                 "Unable to delete this endpoint: "
-                f"accounts={linked_accounts}, users={linked_users}, connections={linked_connections}, "
-                f"billing={billing_usage + billing_storage + billing_rate_cards + billing_assignments}."
+                f"accounts={linked_accounts}, users={linked_users}, connections={linked_connections}."
             )
-        # Endpoint health telemetry is endpoint-scoped and must be removed with the endpoint.
-        self.db.query(EndpointHealthCheck).filter(EndpointHealthCheck.storage_endpoint_id == endpoint.id).delete(
-            synchronize_session=False
-        )
-        self.db.query(EndpointHealthLatest).filter(EndpointHealthLatest.storage_endpoint_id == endpoint.id).delete(
-            synchronize_session=False
-        )
-        self.db.query(EndpointHealthStatusSegment).filter(
-            EndpointHealthStatusSegment.storage_endpoint_id == endpoint.id
-        ).delete(synchronize_session=False)
-        self.db.query(EndpointHealthRollup).filter(EndpointHealthRollup.storage_endpoint_id == endpoint.id).delete(
-            synchronize_session=False
-        )
+        ResourceDeletionPurgeService(self.db).purge_endpoint_derived_data(endpoint.id)
         self.db.delete(endpoint)
         self.db.flush()
         self.tags.cleanup_orphan_definitions()

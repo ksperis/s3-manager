@@ -140,6 +140,36 @@ def _delete_bucket(
     resource_tracker.discard_bucket(account_id, bucket_name)
 
 
+def _allow_server_access_log_delivery(
+    manager_session: BackendSession,
+    account_id: int | str,
+    source_bucket: str,
+    target_bucket: str,
+    target_prefix: str,
+) -> None:
+    target_resource = f"arn:aws:s3:::{target_bucket}/{target_prefix}*"
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "S3ManagerCephFunctionalLogDelivery",
+                "Effect": "Allow",
+                "Principal": {"Service": "logging.s3.amazonaws.com"},
+                "Action": "s3:PutObject",
+                "Resource": target_resource,
+                "Condition": {
+                    "ArnLike": {"aws:SourceArn": f"arn:aws:s3:::{source_bucket}"},
+                },
+            },
+        ],
+    }
+    manager_session.put(
+        f"/manager/buckets/{target_bucket}/policy",
+        params=_account_params(account_id),
+        json={"policy": policy},
+    )
+
+
 def _delete_topic(manager_session: BackendSession, account_id: int, topic_arn: str) -> None:
     if not topic_arn:
         return
@@ -466,10 +496,18 @@ def test_manager_bucket_logging_roundtrip(
         resource_tracker.track_bucket(account_id, created_bucket)
 
     try:
+        target_prefix = "ceph-functional-logs/"
+        _allow_server_access_log_delivery(
+            manager_session,
+            account_id,
+            source_bucket=bucket_name,
+            target_bucket=logging_bucket,
+            target_prefix=target_prefix,
+        )
         logging_payload = {
             "enabled": True,
             "target_bucket": logging_bucket,
-            "target_prefix": "ceph-functional-logs/",
+            "target_prefix": target_prefix,
         }
         manager_session.put(
             f"/manager/buckets/{bucket_name}/logging",
@@ -573,51 +611,6 @@ def test_manager_bucket_website_roundtrip(
     except BackendAPIError as exc:
         _skip_if_cluster_unavailable("manager bucket website", exc)
         raise
-    finally:
-        _delete_bucket(manager_session, resource_tracker, account_id, bucket_name)
-
-
-@pytest.mark.ceph_functional
-def test_manager_bucket_quota_roundtrip(
-    ceph_test_settings: CephTestSettings,
-    provisioned_account,
-    resource_tracker: ResourceTracker,
-    super_admin_session: BackendSession,
-) -> None:
-    manager_session: BackendSession = provisioned_account.manager_session
-    account_id = provisioned_account.account_id
-
-    bucket_name = _bucket_name(ceph_test_settings.test_prefix, "quota")
-    _create_bucket(manager_session, account_id, bucket_name)
-    resource_tracker.track_bucket(account_id, bucket_name)
-
-    try:
-        try:
-            run_or_skip(
-                "manager bucket quota update",
-                lambda: super_admin_session.put(
-                    f"/manager/buckets/{bucket_name}/quota",
-                    params=_account_params(account_id),
-                    json={"max_size_gb": 1, "max_objects": 1000},
-                ),
-            )
-        except BackendAPIError as exc:
-            if looks_unsupported(exc):
-                pytest.skip(f"Bucket quota updates unavailable on this cluster: {exc}")
-            raise
-
-        stats = _wait_for_value(
-            "bucket quota stats",
-            lambda: manager_session.get(
-                f"/manager/buckets/{bucket_name}/stats",
-                params=_account_params(account_id),
-            ),
-            lambda current: (
-                current.get("quota_max_size_bytes") == 1024**3 and current.get("quota_max_objects") == 1000
-            ),
-        )
-        assert stats["quota_max_size_bytes"] == 1024**3
-        assert stats["quota_max_objects"] == 1000
     finally:
         _delete_bucket(manager_session, resource_tracker, account_id, bucket_name)
 

@@ -86,6 +86,7 @@ nav:
       - "How-to: Storage Ops UI tags": user/howto-storage-ops-ui-tags.md
       - "Feature: Bucket compare": user/feature-bucket-compare.md
       - "Feature: Bucket integrity check": user/feature-bucket-integrity-check.md
+      - "Feature: Bucket usage stats": user/feature-bucket-usage-stats.md
       - "Feature: Bucket migration": user/feature-bucket-migration.md
       - Troubleshooting: user/troubleshooting.md
   - Ops / Sysadmin Guide:
@@ -111,8 +112,10 @@ nav:
       - "Architecture: frontend": developer/architecture-frontend.md
       - "Architecture: database": developer/architecture-database.md
       - Principles: developer/principles.md
+      - UI theme guidelines: developer/ui-theme-guidelines.md
       - AI assistant guidelines: developer/ai-assistant-guidelines.md
       - Identity and execution model: developer/identity-and-execution-model.md
+      - Workspace surface separation: developer/workspace-surface-separation.md
       - Repository layout: developer/repo-layout.md
       - Local development: developer/local-development.md
       - Contributing: developer/contributing.md

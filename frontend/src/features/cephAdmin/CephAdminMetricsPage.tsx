@@ -2,7 +2,12 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  getCephAdminUsageStatsAggregate,
+  streamCephAdminUsageStatsAggregate,
+  type BucketUsageStatsAggregate,
+} from "../../api/bucketUsageStats";
 import {
   CephAdminClusterStorageMetrics,
   CephAdminClusterTrafficMetrics,
@@ -10,14 +15,21 @@ import {
   fetchCephAdminClusterTraffic,
 } from "../../api/cephAdmin";
 import { TrafficWindow } from "../../api/stats";
-import MetricsTrafficOverview, { MetricsSnapshotCard } from "../../components/MetricsTrafficOverview";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
+import { MetricsCard } from "../../components/MetricsCard";
+import MetricsTrafficOverview, { MetricsSnapshotCard, MetricsSummaryCard } from "../../components/MetricsTrafficOverview";
 import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
 import UsageBreakdown from "../../components/UsageBreakdown";
+import { cx, uiDividerClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
+import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+
+type CephAdminMetricsTab = "storage" | "usage-composition" | "traffic";
 
 function extractError(err: unknown, fallback: string): string {
   return extractApiError(err, fallback);
@@ -31,6 +43,7 @@ export default function CephAdminMetricsPage() {
     selectedEndpointAccessLoading,
     loading: endpointLoading,
   } = useCephAdminEndpoint();
+  const [activeTab, setActiveTab] = useState<CephAdminMetricsTab>("storage");
   const [storage, setStorage] = useState<CephAdminClusterStorageMetrics | null>(null);
   const [storageLoading, setStorageLoading] = useState<boolean>(true);
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -38,13 +51,70 @@ export default function CephAdminMetricsPage() {
   const [traffic, setTraffic] = useState<CephAdminClusterTrafficMetrics | null>(null);
   const [trafficLoading, setTrafficLoading] = useState<boolean>(false);
   const [trafficError, setTrafficError] = useState<string | null>(null);
+  const [usageStatsAggregate, setUsageStatsAggregate] = useState<BucketUsageStatsAggregate | null>(null);
+  const [usageStatsLoading, setUsageStatsLoading] = useState(false);
+  const [usageStatsError, setUsageStatsError] = useState<string | null>(null);
+  const [usageStatsRecalculating, setUsageStatsRecalculating] = useState(false);
+  const [usageStatsConfirmOpen, setUsageStatsConfirmOpen] = useState(false);
 
   const [window, setWindow] = useState<TrafficWindow>("week");
   const metricsCredentialsReady = !selectedEndpointAccessLoading && Boolean(selectedEndpointAccess?.can_metrics);
+  const usageStatsAccessReady = !selectedEndpointAccessLoading && Boolean(selectedEndpointAccess?.can_admin);
   const storageFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
   const usageLogFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
   const canLoadStorage = selectedEndpointId != null && metricsCredentialsReady && storageFeatureEnabled;
   const canLoadTraffic = selectedEndpointId != null && metricsCredentialsReady && usageLogFeatureEnabled;
+  const canLoadUsageStatsAggregate = selectedEndpointId != null && usageStatsAccessReady;
+
+  const loadUsageStatsAggregate = useCallback(async () => {
+    const endpointId = selectedEndpointId;
+    if (!canLoadUsageStatsAggregate || endpointId == null) {
+      setUsageStatsAggregate(null);
+      setUsageStatsLoading(false);
+      setUsageStatsError(null);
+      return;
+    }
+    setUsageStatsLoading(true);
+    setUsageStatsError(null);
+    try {
+      const data = await getCephAdminUsageStatsAggregate(endpointId);
+      setUsageStatsAggregate(data.aggregate);
+    } catch (err) {
+      setUsageStatsAggregate(null);
+      setUsageStatsError(extractError(err, "Unable to load cluster usage composition."));
+    } finally {
+      setUsageStatsLoading(false);
+    }
+  }, [canLoadUsageStatsAggregate, selectedEndpointId]);
+
+  useEffect(() => {
+    void loadUsageStatsAggregate();
+  }, [loadUsageStatsAggregate]);
+
+  const runUsageStatsRecalculation = useCallback(async () => {
+    const endpointId = selectedEndpointId;
+    if (!canLoadUsageStatsAggregate || endpointId == null) return;
+    setUsageStatsRecalculating(true);
+    setUsageStatsError(null);
+    try {
+      await streamCephAdminUsageStatsAggregate(endpointId, { parallelism: 8 });
+      await loadUsageStatsAggregate();
+    } catch (err) {
+      setUsageStatsError(extractError(err, "Unable to recalculate cluster usage composition."));
+    } finally {
+      setUsageStatsRecalculating(false);
+    }
+  }, [canLoadUsageStatsAggregate, loadUsageStatsAggregate, selectedEndpointId]);
+
+  const handleRecalculateUsageStats = useCallback(() => {
+    if (!canLoadUsageStatsAggregate || selectedEndpointId == null) return;
+    setUsageStatsConfirmOpen(true);
+  }, [canLoadUsageStatsAggregate, selectedEndpointId]);
+
+  const handleConfirmRecalculateUsageStats = useCallback(() => {
+    setUsageStatsConfirmOpen(false);
+    void runUsageStatsRecalculation();
+  }, [runUsageStatsRecalculation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,30 +228,57 @@ export default function CephAdminMetricsPage() {
   const noMetricsSurfaceAvailable =
     selectedEndpointId != null && metricsCredentialsReady && !storageFeatureEnabled && !usageLogFeatureEnabled;
   const missingTraffic = canLoadTraffic && !traffic && !trafficLoading && !trafficError;
+  const usageStatsAggregateSection = canLoadUsageStatsAggregate ? (
+    <BucketUsageStatsAggregateCard
+      title="Cluster usage composition"
+      description="Latest calculated bucket snapshots for the selected Ceph endpoint."
+      aggregate={usageStatsAggregate}
+      loading={usageStatsLoading}
+      error={usageStatsError}
+      recalculating={usageStatsRecalculating}
+      recalculateLabel="Recalculate cluster"
+      onRecalculate={handleRecalculateUsageStats}
+    />
+  ) : null;
+  const metricsTabs = useMemo(
+    () =>
+      [
+        { id: "storage" as const, label: "Storage" },
+        ...(canLoadUsageStatsAggregate ? [{ id: "usage-composition" as const, label: "Usage composition" }] : []),
+        { id: "traffic" as const, label: "Traffic" },
+      ],
+    [canLoadUsageStatsAggregate]
+  );
+
+  useEffect(() => {
+    if (!metricsTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(metricsTabs[0]?.id ?? "storage");
+    }
+  }, [activeTab, metricsTabs]);
 
   return (
     <div className="space-y-4 ui-caption leading-relaxed">
       <PageHeader
-        title="Metrics"
-        description="Cluster-wide Ceph RGW storage and traffic metrics."
-        breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Metrics" }]}
+        title="Usage & Metrics"
+        description="Latest calculated logical usage composition plus cluster-wide Ceph RGW storage and traffic metrics."
+        breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Usage & Metrics" }]}
       />
 
       {endpointRequired ? (
         <PageEmptyState
-          title="Select a Ceph endpoint before opening metrics"
-          description="Cluster metrics are endpoint-scoped. Choose an endpoint to load storage snapshots, traffic analytics, and owner breakdowns."
+          title="Select a Ceph endpoint before opening usage and metrics"
+          description="Cluster usage composition and metrics are endpoint-scoped. Choose an endpoint to load usage snapshots, storage metrics, traffic analytics, and owner breakdowns."
           primaryAction={{ label: "Return to Ceph Admin", to: "/ceph-admin" }}
           tone="warning"
         />
-      ) : metricsUnavailableError ? (
+      ) : metricsUnavailableError && !canLoadUsageStatsAggregate ? (
         <PageEmptyState
           title="Metrics credentials are not configured for this endpoint"
           description="This endpoint does not currently expose Ceph admin metrics. Configure supervision credentials before opening storage and traffic analytics."
           primaryAction={{ label: "Return to Ceph Admin", to: "/ceph-admin" }}
           tone="warning"
         />
-      ) : noMetricsSurfaceAvailable ? (
+      ) : noMetricsSurfaceAvailable && !canLoadUsageStatsAggregate ? (
         <PageEmptyState
           title="Metrics are disabled for this endpoint"
           description="Both storage metrics and usage logs are disabled for the selected endpoint. Enable at least one capability to restore analytics on this page."
@@ -190,119 +287,175 @@ export default function CephAdminMetricsPage() {
         />
       ) : (
         <>
-          {storageDisabledMessage ? (
-            <MetricsUnavailableCard
-              eyebrow="Storage snapshot"
-              title="Stored volume & objects"
-              description="Aggregated stats across the entire RGW cluster."
-              message={storageDisabledMessage}
+          {usageStatsConfirmOpen && (
+            <ConfirmActionDialog
+              title="Recalculate cluster usage composition"
+              description="This operation can be costly because it lists object versions across every bucket on the selected Ceph endpoint."
+              confirmLabel="Start recalculation"
+              cancelLabel="Cancel"
+              tone="primary"
+              onCancel={() => setUsageStatsConfirmOpen(false)}
+              onConfirm={handleConfirmRecalculateUsageStats}
+              details={[
+                { label: "Endpoint", value: selectedEndpoint?.name ?? `Endpoint ${selectedEndpointId}` },
+                {
+                  label: "Buckets",
+                  value:
+                    usageStatsAggregate?.bucket_count != null
+                      ? `${usageStatsAggregate.bucket_count} bucket${usageStatsAggregate.bucket_count === 1 ? "" : "s"}`
+                      : "Unknown",
+                },
+              ]}
+              impacts={[
+                "The calculation may generate significant RGW listing traffic on large or heavily versioned buckets.",
+                "If the calculation fails, the latest successful snapshot remains visible.",
+              ]}
+              warning="Start this only when a fresh cluster-wide logical usage composition is needed."
             />
-          ) : storageError ? (
-            <MetricsUnavailableCard
-              eyebrow="Storage snapshot"
-              title="Stored volume & objects"
-              description="Aggregated stats across the entire RGW cluster."
-              message={storageError}
-              tone="error"
+          )}
+
+          <div className={cx("border-b pb-3", uiDividerClass)}>
+            <PageTabs
+              tabs={metricsTabs}
+              activeTab={activeTab}
+              onChange={(tab) => setActiveTab(tab as CephAdminMetricsTab)}
+              variant="bar"
             />
-          ) : storageFeatureEnabled ? (
-            <>
-              <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
-                <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
-                  <div>
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage snapshot</p>
-                    <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Stored volume & objects</h3>
-                    <p className="ui-body text-slate-500 dark:text-slate-400">Aggregated stats across the entire RGW cluster.</p>
+          </div>
+
+          {activeTab === "storage" ? (
+            metricsUnavailableError ? (
+              <MetricsUnavailableCard
+                eyebrow="RGW metrics"
+                title="Storage snapshot"
+                description="Aggregated stats across the entire RGW cluster."
+                message={metricsUnavailableError}
+                tone="warning"
+              />
+            ) : noMetricsSurfaceAvailable ? (
+              <MetricsUnavailableCard
+                eyebrow="RGW metrics"
+                title="Storage snapshot"
+                description="Aggregated stats across the entire RGW cluster."
+                message="Both storage metrics and usage logs are disabled for the selected endpoint."
+                tone="warning"
+              />
+            ) : storageDisabledMessage ? (
+              <MetricsUnavailableCard
+                title="Storage snapshot"
+                description="Aggregated stats across the entire RGW cluster."
+                message={storageDisabledMessage}
+              />
+            ) : storageError ? (
+              <MetricsUnavailableCard
+                title="Storage snapshot"
+                description="Aggregated stats across the entire RGW cluster."
+                message={storageError}
+                tone="error"
+              />
+            ) : storageFeatureEnabled ? (
+              <>
+                <MetricsSummaryCard
+                  title="Storage snapshot"
+                  description="Aggregated stats across the entire RGW cluster."
+                  updatedAt={storage?.generated_at}
+                >
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <MetricsSnapshotCard
+                      label="Stored volume"
+                      value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
+                      hint="Sum of all visible buckets"
+                      loading={storageLoading}
+                    />
+                    <MetricsSnapshotCard
+                      label="Objects"
+                      value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
+                      hint="Instant cluster count"
+                      loading={storageLoading}
+                    />
+                    <MetricsSnapshotCard
+                      label="Buckets"
+                      value={formatCompactNumber(storageTotals?.bucket_count ?? storage?.total_buckets ?? 0)}
+                      hint="Across all owners"
+                      loading={storageLoading}
+                    />
+                    <MetricsSnapshotCard
+                      label="Owners"
+                      value={formatCompactNumber(storageTotals?.owners_with_usage ?? 0)}
+                      hint="Distinct bucket owners"
+                      loading={storageLoading}
+                    />
                   </div>
-                  {storage?.generated_at && (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Updated:&nbsp;{new Date(storage.generated_at).toLocaleString()}
-                    </p>
-                  )}
-                </header>
+                </MetricsSummaryCard>
 
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <MetricsSnapshotCard
-                    label="Stored volume"
-                    value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
-                    hint="Sum of all visible buckets"
-                    loading={storageLoading}
-                  />
-                  <MetricsSnapshotCard
-                    label="Objects"
-                    value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
-                    hint="Instant cluster count"
-                    loading={storageLoading}
-                  />
-                  <MetricsSnapshotCard
-                    label="Buckets"
-                    value={formatCompactNumber(storageTotals?.bucket_count ?? storage?.total_buckets ?? 0)}
-                    hint="Across all owners"
-                    loading={storageLoading}
-                  />
-                  <MetricsSnapshotCard
-                    label="Owners"
-                    value={formatCompactNumber(storageTotals?.owners_with_usage ?? 0)}
-                    hint="Distinct bucket owners"
-                    loading={storageLoading}
-                  />
-                </div>
-              </section>
-
-              <section className="space-y-4 ui-surface-card p-5">
-                <header className="space-y-1">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage breakdown</p>
-                  <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Owners & buckets</h3>
-                  <p className="ui-body text-slate-500 dark:text-slate-400">Top consumers by owner and bucket.</p>
-                </header>
-                <div className="grid gap-6 xl:grid-cols-2">
-                  <UsageBreakdown
-                    title="Owners (volume)"
-                    subtitle="Volume used per owner (top 8)."
-                    loading={storageLoading}
-                    metric="bytes"
-                    items={ownerUsageItems}
-                    emptyMessage="No owner volume data available."
-                  />
-                  <UsageBreakdown
-                    title="Owners (objects)"
-                    subtitle="Object count per owner (top 8)."
-                    loading={storageLoading}
-                    metric="objects"
-                    items={ownerUsageItems}
-                    emptyMessage="No owner object data available."
-                  />
-                </div>
-                <div className="grid gap-6 xl:grid-cols-2">
-                  <UsageBreakdown
-                    title="Buckets (volume)"
-                    subtitle="Volume used per bucket (top 8)."
-                    loading={storageLoading}
-                    metric="bytes"
-                    items={bucketUsageItems}
-                    emptyMessage="No bucket volume data available."
-                  />
-                  <UsageBreakdown
-                    title="Buckets (objects)"
-                    subtitle="Object count per bucket (top 8)."
-                    loading={storageLoading}
-                    metric="objects"
-                    items={bucketUsageItems}
-                    emptyMessage="No bucket object data available."
-                  />
-                </div>
-              </section>
-            </>
+                <MetricsCard
+                  title="Storage breakdown"
+                  description="Top consumers by owner and bucket."
+                >
+                  <div className="grid gap-6 xl:grid-cols-2">
+                    <UsageBreakdown
+                      title="Owners (volume)"
+                      loading={storageLoading}
+                      metric="bytes"
+                      items={ownerUsageItems}
+                      emptyMessage="No owner volume data available."
+                    />
+                    <UsageBreakdown
+                      title="Owners (objects)"
+                      loading={storageLoading}
+                      metric="objects"
+                      items={ownerUsageItems}
+                      emptyMessage="No owner object data available."
+                    />
+                  </div>
+                  <div className="grid gap-6 xl:grid-cols-2">
+                    <UsageBreakdown
+                      title="Buckets (volume)"
+                      loading={storageLoading}
+                      metric="bytes"
+                      items={bucketUsageItems}
+                      emptyMessage="No bucket volume data available."
+                    />
+                    <UsageBreakdown
+                      title="Buckets (objects)"
+                      loading={storageLoading}
+                      metric="objects"
+                      items={bucketUsageItems}
+                      emptyMessage="No bucket object data available."
+                    />
+                  </div>
+                </MetricsCard>
+              </>
+            ) : null
           ) : null}
 
-          {trafficDisabledMessage ? (
+          {activeTab === "usage-composition" && canLoadUsageStatsAggregate ? usageStatsAggregateSection : null}
+
+          {activeTab === "traffic" && metricsUnavailableError ? (
             <MetricsUnavailableCard
-              eyebrow="RGW traffic"
-              title="Bandwidth & requests"
+              eyebrow="RGW metrics"
+              title="RGW traffic"
+              description="Reading cluster-wide RGW logs for the selected window."
+              message={metricsUnavailableError}
+              tone="warning"
+            />
+          ) : null}
+          {activeTab === "traffic" && !metricsUnavailableError && noMetricsSurfaceAvailable ? (
+            <MetricsUnavailableCard
+              eyebrow="RGW metrics"
+              title="RGW traffic"
+              description="Reading cluster-wide RGW logs for the selected window."
+              message="Both storage metrics and usage logs are disabled for the selected endpoint."
+              tone="warning"
+            />
+          ) : null}
+          {activeTab === "traffic" && !metricsUnavailableError && !noMetricsSurfaceAvailable && trafficDisabledMessage ? (
+            <MetricsUnavailableCard
+              title="RGW traffic"
               description="Reading cluster-wide RGW logs for the selected window."
               message={trafficDisabledMessage}
             />
-          ) : usageLogFeatureEnabled ? (
+          ) : activeTab === "traffic" && !metricsUnavailableError && !noMetricsSurfaceAvailable && usageLogFeatureEnabled ? (
             <MetricsTrafficOverview
               traffic={traffic}
               window={window}

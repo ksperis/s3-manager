@@ -36,11 +36,13 @@ function CephAdminShell() {
   const usageFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
   const trafficFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
   const canAdmin = endpointSelected && !selectedEndpointAccessLoading && Boolean(selectedEndpointAccess?.can_admin);
-  const canMetrics =
+  const canViewRgwMetrics =
     endpointSelected &&
     !selectedEndpointAccessLoading &&
     Boolean(selectedEndpointAccess?.can_metrics) &&
     (usageFeatureEnabled || trafficFeatureEnabled);
+  const canUsageStats = Boolean(canAdmin);
+  const canMetrics = canViewRgwMetrics || canUsageStats;
   const canAccounts =
     endpointSelected &&
     !selectedEndpointAccessLoading &&
@@ -63,8 +65,9 @@ function CephAdminShell() {
   const metricsDisabledHint = (() => {
     const commonHint = resolveCommonEndpointHint();
     if (commonHint) return commonHint;
-    if (!selectedEndpointAccess?.can_metrics) return "Metrics access is not granted for this endpoint.";
-    if (!usageFeatureEnabled && !trafficFeatureEnabled) return "Metrics are unavailable for this endpoint capabilities.";
+    if (!selectedEndpointAccess?.can_metrics && !canUsageStats) return "Metrics access is not granted for this endpoint.";
+    if (!usageFeatureEnabled && !trafficFeatureEnabled && !canUsageStats)
+      return "Metrics are unavailable for this endpoint capabilities.";
     return undefined;
   })();
   const accountsDisabledHint = (() => {
@@ -105,7 +108,7 @@ function CephAdminShell() {
         { to: "/ceph-admin", label: "Dashboard", end: true },
         {
           to: "/ceph-admin/metrics",
-          label: "Metrics",
+          label: "Usage & Metrics",
           disabled: !canMetrics,
           disabledHint: !canMetrics ? metricsDisabledHint : undefined,
         },

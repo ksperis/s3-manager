@@ -26,6 +26,7 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import PaginationControls from "../../components/PaginationControls";
 import { PortalSettingsItem, PortalSettingsSection } from "../../components/PortalSettingsLayout";
@@ -46,13 +47,14 @@ import { isAdminLikeRole } from "../../utils/workspaces";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 
 type SortField = "name" | "rgw_account_id";
-type EditTab = "general" | "users" | "portal";
+type EditTab = "general" | "users" | "privileged" | "portal";
 type TriState = "inherit" | "enabled" | "disabled";
 type PolicyMode = "inherit" | "actions";
 type TextMatchMode = "contains" | "exact";
 type PortalAccountRole = "portal_none" | "portal_user" | "portal_manager";
 type PortalOverrideFormSnapshot = {
   bucketCreate: TriState;
+  namedBucketCreate: TriState;
   accessKeyCreate: TriState;
   versioning: TriState;
   lifecycle: TriState;
@@ -152,6 +154,7 @@ export default function S3AccountsPage() {
     quota_max_size_unit: "GiB",
     quota_max_objects: "",
     user_links: [] as AccountUserLink[],
+    allow_manager_bucket_quota: false,
   });
   const [editInitialSignature, setEditInitialSignature] = useState("");
   const [portalInitialSignature, setPortalInitialSignature] = useState("");
@@ -162,6 +165,7 @@ export default function S3AccountsPage() {
   const [portalSettingsSaving, setPortalSettingsSaving] = useState(false);
   const [portalSettingsMessage, setPortalSettingsMessage] = useState<string | null>(null);
   const [adminPortalBucketCreateOverride, setAdminPortalBucketCreateOverride] = useState<TriState>("inherit");
+  const [adminPortalNamedBucketCreateOverride, setAdminPortalNamedBucketCreateOverride] = useState<TriState>("inherit");
   const [adminPortalAccessKeyCreateOverride, setAdminPortalAccessKeyCreateOverride] = useState<TriState>("inherit");
   const [adminBucketVersioningOverride, setAdminBucketVersioningOverride] = useState<TriState>("inherit");
   const [adminBucketLifecycleOverride, setAdminBucketLifecycleOverride] = useState<TriState>("inherit");
@@ -192,6 +196,7 @@ export default function S3AccountsPage() {
     }
   }, []);
   const isSuperAdmin = isAdminLikeRole(currentUser?.role);
+  const canManagePrivilegedTargets = isAdminLikeRole(currentUser?.role);
   const editingAccountId = editingS3Account?.db_id ?? null;
   const editingEndpoint = useMemo(() => {
     if (!editingS3Account?.storage_endpoint_id) return null;
@@ -213,12 +218,14 @@ export default function S3AccountsPage() {
   const portalManagerOverride = portalAccountSettings?.portal_manager_override ?? null;
   const showGeneralTab = editTab === "general";
   const showUsersTab = editTab === "users";
+  const showPrivilegedTab = editTab === "privileged";
   const showPortalTab = portalEnabled && editTab === "portal";
   const hasPortalManagerOverrides = useMemo(() => {
     if (!portalManagerOverride) return false;
     if (
       portalManagerOverride.allow_portal_key != null ||
       portalManagerOverride.allow_portal_user_bucket_create != null ||
+      portalManagerOverride.allow_portal_named_bucket_create != null ||
       portalManagerOverride.allow_portal_user_access_key_create != null
     ) {
       return true;
@@ -446,6 +453,7 @@ export default function S3AccountsPage() {
   useEffect(() => {
     if (!portalAccountSettings) {
       setAdminPortalBucketCreateOverride("inherit");
+      setAdminPortalNamedBucketCreateOverride("inherit");
       setAdminPortalAccessKeyCreateOverride("inherit");
       setAdminBucketVersioningOverride("inherit");
       setAdminBucketLifecycleOverride("inherit");
@@ -463,6 +471,7 @@ export default function S3AccountsPage() {
     const override = portalAccountSettings.admin_override;
     const effective = portalAccountSettings.effective;
     const bucketCreate = resolveTriState(override.allow_portal_user_bucket_create);
+    const namedBucketCreate = resolveTriState(override.allow_portal_named_bucket_create);
     const accessKeyCreate = resolveTriState(override.allow_portal_user_access_key_create);
     const bucketDefaultsOverride = override.bucket_defaults;
     const versioning = resolveTriState(bucketDefaultsOverride?.versioning);
@@ -491,6 +500,7 @@ export default function S3AccountsPage() {
     const bucketPolicyActionsText = (bucketOverride?.actions ?? (effective.bucket_access_policy.actions || [])).join("\n");
 
     setAdminPortalBucketCreateOverride(bucketCreate);
+    setAdminPortalNamedBucketCreateOverride(namedBucketCreate);
     setAdminPortalAccessKeyCreateOverride(accessKeyCreate);
     setAdminBucketVersioningOverride(versioning);
     setAdminBucketLifecycleOverride(lifecycle);
@@ -506,6 +516,7 @@ export default function S3AccountsPage() {
     setPortalInitialSignature(
       buildPortalOverrideFormSignature({
         bucketCreate,
+        namedBucketCreate,
         accessKeyCreate,
         versioning,
         lifecycle,
@@ -815,6 +826,7 @@ export default function S3AccountsPage() {
     () =>
       buildPortalOverrideFormSignature({
         bucketCreate: adminPortalBucketCreateOverride,
+        namedBucketCreate: adminPortalNamedBucketCreateOverride,
         accessKeyCreate: adminPortalAccessKeyCreateOverride,
         versioning: adminBucketVersioningOverride,
         lifecycle: adminBucketLifecycleOverride,
@@ -836,6 +848,7 @@ export default function S3AccountsPage() {
       adminBucketPolicyActionsText,
       adminBucketPolicyMode,
       adminBucketVersioningOverride,
+      adminPortalNamedBucketCreateOverride,
       adminManagerPolicyActionsText,
       adminManagerPolicyMode,
       adminPortalAccessKeyCreateOverride,
@@ -867,6 +880,7 @@ export default function S3AccountsPage() {
       quota_max_size_gb: quota.value,
       quota_max_size_unit: quota.unit,
       quota_max_objects: detail.quota_max_objects != null ? String(detail.quota_max_objects) : "",
+      allow_manager_bucket_quota: Boolean(detail.allow_manager_bucket_quota),
       user_links:
         detail.user_links?.map((link) => ({
           user_id: link.user_id,
@@ -898,6 +912,9 @@ export default function S3AccountsPage() {
       const payload = {
         user_links: editForm.user_links,
         tags: normalizeUiTags(editForm.tags),
+        ...(canManagePrivilegedTargets
+          ? { allow_manager_bucket_quota: editForm.allow_manager_bucket_quota }
+          : {}),
         ...(allowQuotaUpdates
           ? {
               quota_max_size_gb: editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null,
@@ -920,6 +937,10 @@ export default function S3AccountsPage() {
     const allowBucketCreateValue = toOverrideValue(adminPortalBucketCreateOverride);
     if (allowBucketCreateValue !== undefined) {
       payload.allow_portal_user_bucket_create = allowBucketCreateValue;
+    }
+    const allowNamedBucketCreateValue = toOverrideValue(adminPortalNamedBucketCreateOverride);
+    if (allowNamedBucketCreateValue !== undefined) {
+      payload.allow_portal_named_bucket_create = allowNamedBucketCreateValue;
     }
     const allowAccessKeyCreateValue = toOverrideValue(adminPortalAccessKeyCreateOverride);
     if (allowAccessKeyCreateValue !== undefined) {
@@ -1035,7 +1056,7 @@ export default function S3AccountsPage() {
       <PageHeader
         title="Accounts"
         description="Provision Ceph RGW accounts (tenants), quotas, and root users."
-        breadcrumbs={[{ label: "Admin" }, { label: "Accounts" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Accounts" })}
         actions={
           isSuperAdmin
             ? [
@@ -1452,6 +1473,19 @@ export default function S3AccountsPage() {
               >
                 Linked UI users
               </button>
+              {canManagePrivilegedTargets && (
+                <button
+                  type="button"
+                  onClick={() => setEditTab("privileged")}
+                  className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                    editTab === "privileged"
+                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                  }`}
+                >
+                  Privileged access
+                </button>
+              )}
               {portalEnabled && (
                 <button
                   type="button"
@@ -1758,6 +1792,28 @@ export default function S3AccountsPage() {
                   )}
                 </div>
               )}
+              {canManagePrivilegedTargets && showPrivilegedTab && (
+                <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                  <label className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                      checked={editForm.allow_manager_bucket_quota}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          allow_manager_bucket_quota: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>
+                      <span className="block ui-body font-medium text-slate-800 dark:text-slate-100">
+                        Bucket quota management
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
               {showPortalTab && (
                 <div className="ui-surface-card p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1807,6 +1863,24 @@ export default function S3AccountsPage() {
                               <select
                                 value={adminPortalBucketCreateOverride}
                                 onChange={(e) => setAdminPortalBucketCreateOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                          <PortalSettingsItem
+                            title="Named bucket creation"
+                            description={`Effective for portal users: ${
+                              effectivePortalSettings.allow_portal_named_bucket_create ? "enabled" : "disabled"
+                            }`}
+                            action={
+                              <select
+                                value={adminPortalNamedBucketCreateOverride}
+                                onChange={(e) => setAdminPortalNamedBucketCreateOverride(e.target.value as TriState)}
                                 className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 disabled={portalSettingsLoading || portalSettingsSaving}
                               >
@@ -2050,6 +2124,7 @@ export default function S3AccountsPage() {
         <ListToolbar
           title="Accounts"
           description="Search matches all records."
+          showHeading={false}
           countLabel={`${totalAccounts} entr${totalAccounts === 1 ? "y" : "ies"}`}
           search={
             <div className="flex items-center gap-2">

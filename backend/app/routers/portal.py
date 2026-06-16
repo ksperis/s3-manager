@@ -2,11 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 import logging
-import os
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -14,6 +13,9 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.db import AccountRole, S3Account, User, UserS3Account, is_admin_ui_role
 from app.models.portal import (
+    PortalAccessKey,
+    PortalAccessKeysState,
+    PortalAccessKeyStatusChange,
     PortalActivityItem,
     PortalAlert,
     PortalEligibility,
@@ -23,11 +25,9 @@ from app.models.portal import (
     PortalTransfer,
     PortalStorageObjectDeleteResponse,
     PortalStorageObjectDetail,
-    PortalStorageObjectFolderCreate,
-    PortalStorageObjectListing,
-    PortalStorageObjectUploadResponse,
     PortalStorageSpace,
     PortalStorageSpaceCreate,
+    PortalStorageSpaceImport,
     PortalStorageSpaceShare,
     PortalStorageSpaceSharePayload,
     PortalStorageSpaceShareUpdate,
@@ -36,6 +36,7 @@ from app.models.portal import (
     PortalUsage,
 )
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
+from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.s3_account import S3Account as S3AccountSchema
 from app.routers.dependencies import (
     AccountAccess,
@@ -45,7 +46,13 @@ from app.routers.dependencies import (
 )
 from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.services.audit_service import AuditService
-from app.services.portal_service import PortalService, get_portal_service
+from app.services.portal_service import (
+    PortalAccessKeyLimitExceeded,
+    PortalAccessKeyManagementDisabled,
+    PortalAccessKeyProtected,
+    PortalService,
+    get_portal_service,
+)
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.healthcheck_service import HealthCheckService
 from app.utils.storage_endpoint_features import (
@@ -55,11 +62,13 @@ from app.utils.storage_endpoint_features import (
 )
 from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.services.traffic_service import TrafficService, TrafficWindow, WINDOW_RESOLUTION_LABELS, WINDOW_DELTAS
+from app.services.usage_trends_service import build_account_usage_trends
 from app.services.rgw_admin import RGWAdminError
 from app.services.users_service import UsersService, get_users_service
 from app.utils.s3_account_ordering import s3_account_name_order_by
 from app.services.billing_service import BillingService
 from app.services.app_settings_service import load_app_settings
+from app.services.effective_access_service import EffectiveAccessService
 from app.models.billing import BillingSubjectDetail
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
@@ -79,7 +88,23 @@ def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
     if "not found" in lowered:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
-    if "not allowed" in lowered or "not provisioned" in lowered or "owner role required" in lowered:
+    if "not allowed" in lowered or "not provisioned" in lowered or "owner role required" in lowered or "cannot be changed" in lowered:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
+    raise_bad_gateway_from_runtime(exc)
+
+
+def _raise_portal_access_key_runtime(exc: RuntimeError) -> None:
+    detail = str(exc)
+    lowered = detail.lower()
+    if isinstance(exc, PortalAccessKeyManagementDisabled):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
+    if isinstance(exc, PortalAccessKeyLimitExceeded):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+    if isinstance(exc, PortalAccessKeyProtected):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
+    if "not found" in lowered or "introuvable" in lowered:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
+    if "not allowed" in lowered or "not provisioned" in lowered:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
     raise_bad_gateway_from_runtime(exc)
 
@@ -90,15 +115,13 @@ def list_portal_accounts(
     db: Session = Depends(get_db),
 ) -> list[S3AccountSchema]:
     quota_service = get_s3_accounts_service(db, allow_missing_admin=True)
-    links = (
-        db.query(UserS3Account)
-        .filter(
-            UserS3Account.user_id == user.id,
-            UserS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]),
-        )
-        .all()
-    )
-    account_ids = {l.account_id for l in links}
+    links = [
+        link
+        for link in EffectiveAccessService(db).resolve_user(user).account_links
+        if link.account_role in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}
+    ]
+    account_ids = {link.account_id for link in links}
+    account_role_by_id = {link.account_id: link.account_role for link in links}
     accounts = (
         db.query(S3Account).filter(S3Account.id.in_(account_ids)).order_by(*s3_account_name_order_by(S3Account)).all()
         if account_ids
@@ -146,6 +169,7 @@ def list_portal_accounts(
                     if endpoint
                     else None
                 ),
+                account_role=account_role_by_id.get(acc.id),
             )
         )
     return results
@@ -195,6 +219,22 @@ def portal_usage(
         return service.get_usage(actor, access)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
+
+
+@router.get("/usage-trends", response_model=ManagerUsageTrendsResponse, response_model_exclude_none=True)
+def portal_usage_trends(
+    access: AccountAccess = Depends(get_portal_account_access),
+    db: Session = Depends(get_db),
+) -> ManagerUsageTrendsResponse:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    endpoint = getattr(access.account, "storage_endpoint", None)
+    if endpoint and not resolve_feature_flags(endpoint).metrics_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage metrics are disabled for this endpoint")
+    if not load_app_settings().general.usage_history_enabled:
+        return ManagerUsageTrendsResponse()
+    return build_account_usage_trends(db, access.account, reference_date=utcnow().date())
 
 
 @router.get("/activity", response_model=list[PortalActivityItem])
@@ -298,6 +338,98 @@ def portal_alerts(
         _raise_portal_storage_runtime(exc)
 
 
+@router.get("/access-keys", response_model=PortalAccessKeysState)
+def portal_access_keys(
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalAccessKeysState:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.get_access_keys_state(actor, access)
+    except RuntimeError as exc:
+        _raise_portal_access_key_runtime(exc)
+
+
+@router.post("/access-keys", response_model=PortalAccessKey, status_code=status.HTTP_201_CREATED)
+def create_portal_access_key(
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalAccessKey:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        key = service.create_access_key(actor, access)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="create_portal_access_key",
+            entity_type="portal_access_key",
+            entity_id=key.access_key_id,
+            account=access.account,
+            metadata={"access_key_id": key.access_key_id},
+        )
+        return key
+    except RuntimeError as exc:
+        _raise_portal_access_key_runtime(exc)
+
+
+@router.put("/access-keys/{access_key_id}/status", response_model=PortalAccessKey)
+def update_portal_access_key_status(
+    access_key_id: str,
+    payload: PortalAccessKeyStatusChange,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalAccessKey:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        key = service.update_access_key_status(actor, access, access_key_id, payload.active)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="update_portal_access_key_status",
+            entity_type="portal_access_key",
+            entity_id=access_key_id,
+            account=access.account,
+            metadata={"access_key_id": access_key_id, "active": payload.active},
+        )
+        return key
+    except RuntimeError as exc:
+        _raise_portal_access_key_runtime(exc)
+
+
+@router.delete("/access-keys/{access_key_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+def delete_portal_access_key(
+    access_key_id: str,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> Response:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        service.delete_access_key(actor, access, access_key_id)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="delete_portal_access_key",
+            entity_type="portal_access_key",
+            entity_id=access_key_id,
+            account=access.account,
+            metadata={"access_key_id": access_key_id},
+        )
+    except RuntimeError as exc:
+        _raise_portal_access_key_runtime(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/billing/me", response_model=BillingSubjectDetail)
 def portal_billing_me(
     month: str = Query(..., description="YYYY-MM"),
@@ -362,6 +494,7 @@ def create_portal_storage_space(
             actor,
             access,
             name=payload.name,
+            naming_mode=payload.naming_mode,
             description=payload.description,
             owner_label=payload.owner_label,
             space_type=payload.space_type,
@@ -372,6 +505,41 @@ def create_portal_storage_space(
             user=actor,
             scope="portal",
             action="create_storage_space",
+            entity_type="storage_space",
+            entity_id=storage_space.id,
+            account=access.account,
+            metadata={"storage_space_id": storage_space.id},
+        )
+        return storage_space
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.post("/storage-spaces/import", response_model=PortalStorageSpace, status_code=status.HTTP_201_CREATED)
+def import_portal_storage_space(
+    payload: PortalStorageSpaceImport,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpace:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        storage_space = service.import_storage_space(
+            actor,
+            access,
+            bucket_name=payload.bucket_name,
+            description=payload.description,
+            owner_label=payload.owner_label,
+            space_type=payload.space_type,
+            project_key=payload.project_key,
+            dataset_label=payload.dataset_label,
+        )
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="import_storage_space",
             entity_type="storage_space",
             entity_id=storage_space.id,
             account=access.account,
@@ -421,31 +589,6 @@ def update_portal_storage_space(
         _raise_portal_storage_runtime(exc)
 
 
-@router.get("/storage-spaces/{space_id}/objects", response_model=PortalStorageObjectListing)
-def portal_storage_space_objects(
-    space_id: str,
-    prefix: str = Query("", description="Object prefix to browse"),
-    continuation_token: Optional[str] = Query(None),
-    max_keys: int = Query(1000, ge=1, le=1000),
-    access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> PortalStorageObjectListing:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        return service.list_storage_space_objects(
-            actor,
-            access,
-            space_id,
-            prefix=prefix,
-            continuation_token=continuation_token,
-            max_keys=max_keys,
-        )
-    except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
-
-
 @router.get("/storage-spaces/{space_id}/objects/detail", response_model=PortalStorageObjectDetail)
 def portal_storage_space_object_detail(
     space_id: str,
@@ -459,117 +602,6 @@ def portal_storage_space_object_detail(
     try:
         return service.get_storage_space_object_detail(actor, access, space_id, key)
     except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
-
-
-@router.post(
-    "/storage-spaces/{space_id}/objects/upload",
-    response_model=PortalStorageObjectUploadResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def portal_upload_storage_space_object(
-    space_id: str,
-    file: UploadFile = File(...),
-    prefix: str = Form(""),
-    key: Optional[str] = Form(None),
-    access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> PortalStorageObjectUploadResponse:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    if not file.filename:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing filename")
-    target_key = key.strip().lstrip("/") if key else ""
-    if not target_key:
-        normalized_prefix = (prefix or "").lstrip("/")
-        if normalized_prefix and not normalized_prefix.endswith("/"):
-            normalized_prefix = f"{normalized_prefix}/"
-        target_key = f"{normalized_prefix}{os.path.basename(file.filename)}"
-    if not target_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing object key")
-    try:
-        contents = await file.read()
-        uploaded_key = service.upload_storage_space_object(
-            actor,
-            access,
-            space_id,
-            target_key,
-            file_obj=contents,
-            content_type=file.content_type,
-        )
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="upload_object",
-            entity_type="object",
-            entity_id=uploaded_key,
-            account=access.account,
-            metadata={
-                "storage_space_id": space_id,
-                "content_type": file.content_type,
-                "size_bytes": len(contents),
-            },
-        )
-        return PortalStorageObjectUploadResponse(key=uploaded_key, message="Uploaded")
-    except RuntimeError as exc:
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="upload_object",
-            entity_type="object",
-            entity_id=target_key,
-            account=access.account,
-            metadata={
-                "storage_space_id": space_id,
-                "content_type": file.content_type,
-            },
-            status="failed",
-            message=str(exc),
-        )
-        _raise_portal_storage_runtime(exc)
-
-
-@router.post(
-    "/storage-spaces/{space_id}/objects/folders",
-    response_model=PortalStorageObjectUploadResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def portal_create_storage_space_folder(
-    space_id: str,
-    payload: PortalStorageObjectFolderCreate,
-    access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> PortalStorageObjectUploadResponse:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        key = service.create_storage_space_folder(actor, access, space_id, payload.prefix, payload.name)
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="create_folder",
-            entity_type="object",
-            entity_id=key,
-            account=access.account,
-            metadata={"storage_space_id": space_id},
-        )
-        return PortalStorageObjectUploadResponse(key=key, message="Folder created")
-    except RuntimeError as exc:
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="create_folder",
-            entity_type="object",
-            entity_id=f"{payload.prefix.rstrip('/')}/{payload.name.strip('/')}/",
-            account=access.account,
-            metadata={"storage_space_id": space_id},
-            status="failed",
-            message=str(exc),
-        )
         _raise_portal_storage_runtime(exc)
 
 
@@ -912,23 +944,23 @@ def portal_traffic(
     endpoint = getattr(account, "storage_endpoint", None)
     if endpoint and not resolve_feature_flags(endpoint).usage_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage logs are disabled for this endpoint")
+    bucket_filters: Optional[set[str]] = None
     if not access.capabilities.can_manage_buckets:
         requested_bucket = (bucket or "").strip()
-        if not requested_bucket:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Bucket filter is required for this role.",
-            )
         allowed_buckets = set(portal_service.list_existing_user_bucket_access(actor, account, access.role))
-        if requested_bucket not in allowed_buckets:
+        if requested_bucket and requested_bucket not in allowed_buckets:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket access not allowed for this role.")
-        bucket = requested_bucket
+        if requested_bucket:
+            bucket = requested_bucket
+        else:
+            bucket = None
+            bucket_filters = allowed_buckets
     try:
         traffic_service = TrafficService(account)
     except ValueError as exc:
         raise_bad_gateway_from_runtime(exc)
     try:
-        return traffic_service.get_traffic(window=window, bucket=bucket)
+        return traffic_service.get_traffic(window=window, bucket=bucket, bucket_filters=bucket_filters)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RGWAdminError as exc:

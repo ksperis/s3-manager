@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
   PortalSettingsItem,
@@ -253,11 +254,7 @@ export default function GeneralSettingsPage() {
       <PageHeader
         title="General settings"
         description="Global options for the platform."
-        breadcrumbs={[
-          { label: "Admin" },
-          { label: "General" },
-          { label: "Settings" },
-        ]}
+        breadcrumbs={adminBreadcrumbs({ label: "General" }, { label: "Settings" })}
         actions={[
           {
             label: resetting ? "Resetting..." : "Reset to defaults",
@@ -341,6 +338,7 @@ export default function GeneralSettingsPage() {
                       disabled={isFeatureLocked("portal_enabled")}
                       onChange={(value) => handleToggle("portal_enabled", value)}
                       ariaLabel="Portal feature"
+                      badge={{ visible: true, label: "Experimental", tone: "warning" }}
                     />
                   }
                 >

@@ -36,18 +36,20 @@ const viewports = [
   { name: "mobile", width: 390, height: 844 },
 ];
 
-async function seedPortalSession(page: Page) {
-  await page.addInitScript((user) => {
+const themes = ["light", "dark"] as const;
+
+async function seedPortalSession(page: Page, theme: (typeof themes)[number]) {
+  await page.addInitScript((storage) => {
     localStorage.clear();
     localStorage.setItem("token", "docs-token");
-    localStorage.setItem("user", JSON.stringify(user));
+    localStorage.setItem("user", JSON.stringify(storage.user));
     localStorage.setItem("selectedWorkspace", "portal");
     localStorage.setItem("selectedPortalAccountId", "101");
-    localStorage.setItem("theme", "light");
-  }, portalUser);
+    localStorage.setItem("theme", storage.theme);
+  }, { user: portalUser, theme });
 }
 
-async function openPortalRoute(page: Page, routePath: string, scenarioId: string) {
+async function openPortalRoute(page: Page, routePath: string, scenarioId: string, theme: (typeof themes)[number]) {
   const mockRegistry = await registerApiMocks(
     page,
     [
@@ -60,41 +62,52 @@ async function openPortalRoute(page: Page, routePath: string, scenarioId: string
     ],
     scenarioId
   );
-  await seedPortalSession(page);
+  await page.emulateMedia({ colorScheme: theme });
+  await seedPortalSession(page, theme);
   await page.goto(routePath, { waitUntil: "domcontentloaded" });
   return mockRegistry;
 }
 
 test.describe("Portal visual QA", () => {
   for (const viewport of viewports) {
-    for (const route of portalRoutes) {
-      test(`${viewport.name} ${route.path}`, async ({ page }) => {
-        await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        const mockRegistry = await openPortalRoute(page, route.path, `portal-visual-qa-${viewport.name}-${route.path}`);
+    for (const theme of themes) {
+      for (const route of portalRoutes) {
+        test(`${viewport.name} ${theme} ${route.path}`, async ({ page }) => {
+          await page.setViewportSize({ width: viewport.width, height: viewport.height });
+          const mockRegistry = await openPortalRoute(
+            page,
+            route.path,
+            `portal-visual-qa-${viewport.name}-${theme}-${route.path}`,
+            theme
+          );
 
-        const main = page.locator("main");
-        await expect(main.getByText(route.expected, { exact: false }).first()).toBeVisible();
-        await expect(main.getByText("Open in Browser", { exact: false })).toHaveCount(0);
-        await expect(main.getByText("/portal/browser", { exact: false })).toHaveCount(0);
+          const main = page.locator("main");
+          await expect(main.getByText(route.expected, { exact: false }).first()).toBeVisible();
+          await expect(main.getByText("/portal/browser", { exact: false })).toHaveCount(0);
+          if (route.path.startsWith("/portal/storage-spaces/") && !route.path.includes("/objects/")) {
+            await expect(main.getByRole("button", { name: "Selected storage space" })).toBeVisible();
+            await expect(main.getByRole("button", { name: "Search options" })).toHaveCount(0);
+          }
 
-        const horizontalOverflow = await page.evaluate(() => (
-          Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth
-        ));
-        expect(horizontalOverflow).toBeLessThanOrEqual(2);
+          const horizontalOverflow = await page.evaluate(() => (
+            Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth
+          ));
+          expect(horizontalOverflow).toBeLessThanOrEqual(2);
 
-        await page.keyboard.press("Tab");
-        const activeElement = await page.evaluate(() => {
-          const active = document.activeElement;
-          return {
-            tag: active?.tagName ?? null,
-            ariaLabel: active?.getAttribute("aria-label") ?? null,
-            text: active?.textContent?.trim().slice(0, 80) ?? null,
-          };
+          await page.keyboard.press("Tab");
+          const activeElement = await page.evaluate(() => {
+            const active = document.activeElement;
+            return {
+              tag: active?.tagName ?? null,
+              ariaLabel: active?.getAttribute("aria-label") ?? null,
+              text: active?.textContent?.trim().slice(0, 80) ?? null,
+            };
+          });
+          expect(activeElement.tag).not.toBe("BODY");
+
+          mockRegistry.assertNoUnmatched();
         });
-        expect(activeElement.tag).not.toBe("BODY");
-
-        mockRegistry.assertNoUnmatched();
-      });
+      }
     }
   }
 });

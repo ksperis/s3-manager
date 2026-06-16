@@ -22,9 +22,9 @@ from app.models.bucket import (
     BucketReplicationConfiguration,
     BucketProperties,
     BucketPublicAccessBlock,
+    BucketQuotaUpdate,
     BucketVersioningUpdate,
     BucketVersioningStatus,
-    BucketQuotaUpdate,
     BucketTagsUpdate,
     BucketWebsiteConfiguration,
 )
@@ -48,8 +48,9 @@ from app.routers.dependencies import (
     get_account_context,
     get_audit_logger,
     get_current_account_admin,
-    get_current_super_admin,
+    get_current_user,
     require_bucket_compare_enabled,
+    require_manager_bucket_quota,
 )
 
 router = APIRouter(prefix="/manager/buckets", tags=["manager-buckets"])
@@ -133,6 +134,34 @@ def get_bucket_stats(
         raise_bad_gateway_from_runtime(exc)
 
 
+@router.put("/{bucket_name}/quota", status_code=status.HTTP_200_OK)
+def update_quota(
+    bucket_name: str,
+    payload: BucketQuotaUpdate,
+    account: S3Account = Depends(require_manager_bucket_quota),
+    service: BucketsService = Depends(get_buckets_service),
+    current_user: User = Depends(get_current_user),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> dict[str, str]:
+    response, audit_metadata = bucket_config_actions.update_bucket_quota_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_quota",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return response
+
+
 @router.post("/compare", response_model=ManagerBucketCompareResult)
 def compare_bucket_pair(
     payload: ManagerBucketCompareRequest,
@@ -168,7 +197,6 @@ def compare_bucket_pair(
                 source_account,
                 payload.target_bucket,
                 target_account,
-                diff_sample_limit=payload.diff_sample_limit,
                 ignore_modified_after=payload.ignore_modified_after,
             )
         if payload.include_config:
@@ -238,9 +266,8 @@ def run_compare_bucket_action(
             payload.target_bucket,
             target_account,
             action=payload.action,
+            object_keys=payload.object_keys,
             parallelism=payload.parallelism,
-            object_key=payload.object_key,
-            ignore_modified_after=payload.ignore_modified_after,
         )
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
@@ -260,8 +287,8 @@ def run_compare_bucket_action(
             "target_context_id": target_context_id,
             "source_bucket": payload.source_bucket,
             "target_bucket": payload.target_bucket,
-            "object_key": payload.object_key,
-            "ignore_modified_after": payload.ignore_modified_after.isoformat() if payload.ignore_modified_after else None,
+            "object_keys_count": len(payload.object_keys),
+            "object_keys_sample": payload.object_keys[:50],
             "planned_count": action_result.planned_count,
             "succeeded_count": action_result.succeeded_count,
             "failed_count": action_result.failed_count,
@@ -352,7 +379,6 @@ def update_versioning(
         metadata=audit_metadata,
     )
     return response
-
 
 @router.get("/{bucket_name}/object-lock", response_model=BucketObjectLock)
 def get_object_lock(
@@ -1128,33 +1154,5 @@ def delete_bucket(
         entity_type="bucket",
         entity_id=bucket_name,
         account=account,
-    )
-    return response
-
-
-@router.put("/{bucket_name}/quota")
-def update_quota(
-    bucket_name: str,
-    payload: BucketQuotaUpdate,
-    account: S3Account = Depends(get_account_context),
-    service: BucketsService = Depends(get_buckets_service),
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
-):
-    response, audit_metadata = bucket_config_actions.update_bucket_quota_config(
-        service=service,
-        account=account,
-        bucket_name=bucket_name,
-        payload=payload,
-    )
-    _invalidate_bucket_listing_for_account(account)
-    audit_service.record_action(
-        user=current_user,
-        scope="manager",
-        action="update_bucket_quota",
-        entity_type="bucket",
-        entity_id=bucket_name,
-        account=account,
-        metadata=audit_metadata,
     )
     return response

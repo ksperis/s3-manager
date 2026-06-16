@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import S3Connection, User
 from app.models.session import ManagerSessionPrincipal
-from app.routers.dependencies import get_account_context, get_current_actor, is_manager_ceph_s3_user_keys_available
+from app.routers.dependencies import (
+    get_account_context,
+    get_current_actor,
+    is_manager_bucket_quota_available,
+    is_manager_ceph_s3_user_keys_available,
+)
 from app.services.app_settings_service import load_app_settings
 from app.services.connection_identity_service import ConnectionIdentityService
 from app.utils.rgw import has_supervision_credentials, resolve_admin_uid
@@ -24,6 +29,7 @@ class ManagerContext(BaseModel):
     manager_stats_enabled: bool = False
     manager_stats_message: Optional[str] = None
     manager_browser_enabled: bool = True
+    manager_bucket_quota_enabled: bool = False
     manager_ceph_keys_enabled: bool = False
 
 
@@ -101,7 +107,12 @@ def get_manager_context(
         iam_identity = connection_iam_identity
 
     manager_ceph_keys_enabled = (
-        is_manager_ceph_s3_user_keys_available(account, actor)
+        is_manager_ceph_s3_user_keys_available(account, actor, db=db)
+        if isinstance(actor, User)
+        else False
+    )
+    manager_bucket_quota_enabled = (
+        is_manager_bucket_quota_available(account, actor, db=db)
         if isinstance(actor, User)
         else False
     )
@@ -113,5 +124,6 @@ def get_manager_context(
         manager_stats_enabled=manager_stats_enabled,
         manager_stats_message=manager_stats_message,
         manager_browser_enabled=manager_browser_enabled,
+        manager_bucket_quota_enabled=manager_bucket_quota_enabled,
         manager_ceph_keys_enabled=manager_ceph_keys_enabled,
     )

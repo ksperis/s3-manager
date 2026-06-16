@@ -1,3 +1,4 @@
+import AdminDashboardMap, { type AdminDashboardMapMarker } from "./components/AdminDashboardMap";
 /*
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
@@ -13,9 +14,9 @@ import {
   type HealthCheckStatus,
   type WorkspaceEndpointHealthEntry,
   type WorkspaceEndpointHealthOverviewResponse,
-  type WorkspaceEndpointIncidentEntry,
 } from "../../api/healthchecks";
 import { dismissOnboarding, fetchOnboardingStatus, type OnboardingStatus } from "../../api/onboarding";
+import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import {
   type AdminStorageStats,
   type AdminSummary,
@@ -27,6 +28,7 @@ import {
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import {
   type WorkspaceDashboardFeature,
   type WorkspaceDashboardFeatureGroup,
@@ -63,103 +65,11 @@ import {
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import setupIllustration from "./assets/admin-dashboard-setup.png";
-import mapDark from "./assets/admin-dashboard-map-dark.png";
-import mapLight from "./assets/admin-dashboard-map-light.png";
 
 const ENDPOINT_STATUS_MAX_AGE_HOURS = 24;
 const ENDPOINT_STATUS_MAX_AGE_MS = ENDPOINT_STATUS_MAX_AGE_HOURS * 60 * 60 * 1000;
+const ADMIN_INCIDENT_HISTORY_MINUTES = 7 * 24 * 60;
 const MAX_ENDPOINT_ROWS = 6;
-
-const MOCK_ENDPOINTS: WorkspaceEndpointHealthEntry[] = [
-  {
-    endpoint_id: -1,
-    name: "INRAE-eprod-debug",
-    endpoint_url: "https://example.invalid",
-    status: "up",
-    checked_at: "2026-06-05T11:15:00Z",
-    latency_ms: 76,
-    check_mode: "http",
-  },
-  {
-    endpoint_id: -2,
-    name: "INRAE-eprod-geo-tls",
-    endpoint_url: "https://example.invalid",
-    status: "up",
-    checked_at: "2026-06-05T11:15:00Z",
-    latency_ms: 86,
-    check_mode: "http",
-  },
-  {
-    endpoint_id: -3,
-    name: "INRAE-eprod-geo-idf",
-    endpoint_url: "https://example.invalid",
-    status: "down",
-    checked_at: "2026-06-05T11:15:00Z",
-    latency_ms: null,
-    check_mode: "http",
-  },
-];
-
-const MOCK_INCIDENTS: WorkspaceEndpointIncidentEntry[] = [
-  {
-    endpoint_id: -1,
-    endpoint_name: "LAB 81",
-    status: "down",
-    start: "2026-06-05T07:55:00Z",
-    end: null,
-    duration_minutes: null,
-    check_mode: "http",
-    ongoing: true,
-    recent: true,
-  },
-  {
-    endpoint_id: -2,
-    endpoint_name: "INRAE-eprod-tls",
-    status: "degraded",
-    start: "2026-06-03T15:20:00Z",
-    end: "2026-06-05T07:55:00Z",
-    duration_minutes: 2435,
-    check_mode: "http",
-    ongoing: false,
-    recent: true,
-  },
-];
-
-const MOCK_AUDIT_LOGS: AuditLogEntry[] = [
-  {
-    id: -1,
-    created_at: "2026-06-05T11:14:00Z",
-    user_email: "admin@example.com",
-    user_role: "ui_superadmin",
-    scope: "admin",
-    action: "storage_endpoint.health_up",
-    entity_type: "endpoint",
-    entity_id: "INRAE-eprod-idf",
-    status: "success",
-  },
-  {
-    id: -2,
-    created_at: "2026-06-05T11:11:00Z",
-    user_email: "admin@example.com",
-    user_role: "ui_superadmin",
-    scope: "admin",
-    action: "auth.login",
-    entity_type: "user",
-    entity_id: "admin@example.com",
-    status: "success",
-  },
-  {
-    id: -3,
-    created_at: "2026-06-05T10:58:00Z",
-    user_email: "admin@example.com",
-    user_role: "ui_superadmin",
-    scope: "manager",
-    action: "bucket.created",
-    entity_type: "bucket",
-    entity_id: "research-team",
-    status: "success",
-  },
-];
 
 function parseBackendIsoDate(value?: string | null): Date | null {
   if (!value) return null;
@@ -222,13 +132,12 @@ function trafficOpsSeries(traffic: AdminTrafficStats | null): number[] {
   return (traffic?.series ?? []).map((point) => point.ops ?? 0).filter((value) => Number.isFinite(value));
 }
 
-function AdminDashboardMap() {
-  return (
-    <div className="h-[148px] overflow-hidden rounded-md border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface-muted)]">
-      <img src={mapLight} alt="" className="block h-full w-full object-cover dark:hidden" />
-      <img src={mapDark} alt="" className="hidden h-full w-full object-cover dark:block" />
-    </div>
-  );
+function formatOptionalBytes(value?: number | null): string {
+  return value == null ? "" : formatBytes(value);
+}
+
+function formatOptionalCompactNumber(value?: number | null): string {
+  return value == null ? "" : formatCompactNumber(value);
 }
 
 function OnboardingPanel({
@@ -354,34 +263,38 @@ function EndpointHealthSection({
   data,
   loading,
   unavailableReason,
+  mapMarkers,
+  mapLoading,
+  mapError,
 }: {
   data: WorkspaceEndpointHealthOverviewResponse | null;
   loading: boolean;
   unavailableReason?: string | null;
+  mapMarkers: AdminDashboardMapMarker[];
+  mapLoading: boolean;
+  mapError?: string | null;
 }) {
-  const displayData =
-    data ??
-    ({
-      generated_at: "2026-06-05T11:15:00Z",
-      incident_highlight_minutes: 720,
-      endpoint_count: 9,
-      up_count: 8,
-      degraded_count: 0,
-      down_count: 1,
-      unknown_count: 0,
-      endpoints: MOCK_ENDPOINTS,
-      incidents: MOCK_INCIDENTS,
-    } satisfies WorkspaceEndpointHealthOverviewResponse);
   const content = (
     <div className="grid gap-3 xl:grid-cols-[1.08fr_0.92fr]">
-      <EndpointHealthCard data={displayData} loading={loading} />
-      <WorkspaceIncidentsCard
-        incidents={displayData.incidents}
+      <EndpointHealthCard
+        data={data}
         loading={loading}
-        incidentHighlightMinutes={displayData.incident_highlight_minutes}
-        action={{ to: "/admin/endpoint-status", label: "View all incidents" }}
-        showEmptyState
+        unavailableReason={unavailableReason}
+        mapMarkers={mapMarkers}
+        mapLoading={mapLoading}
+        mapError={mapError}
       />
+      {unavailableReason && !data ? (
+        <BlankIncidentsCard />
+      ) : (
+        <WorkspaceIncidentsCard
+          incidents={data?.incidents ?? []}
+          loading={loading}
+          incidentHighlightMinutes={data?.incident_highlight_minutes}
+          action={{ to: "/admin/endpoint-status", label: "View all incidents" }}
+          showEmptyState
+        />
+      )}
     </div>
   );
 
@@ -389,8 +302,30 @@ function EndpointHealthSection({
   return <WorkspaceDashboardUnavailableFrame reason={unavailableReason}>{content}</WorkspaceDashboardUnavailableFrame>;
 }
 
-function EndpointHealthCard({ data, loading }: { data: WorkspaceEndpointHealthOverviewResponse; loading: boolean }) {
-  const endpoints = data.endpoints.slice(0, MAX_ENDPOINT_ROWS);
+function BlankIncidentsCard() {
+  return (
+    <section className={cx(uiCardClass, "min-h-[180px] p-4")}>
+      <h2 className="ui-body font-semibold text-[var(--ui-text)]">Ongoing / Recent Incidents</h2>
+    </section>
+  );
+}
+
+function EndpointHealthCard({
+  data,
+  loading,
+  unavailableReason,
+  mapMarkers,
+  mapLoading,
+  mapError,
+}: {
+  data: WorkspaceEndpointHealthOverviewResponse | null;
+  loading: boolean;
+  unavailableReason?: string | null;
+  mapMarkers: AdminDashboardMapMarker[];
+  mapLoading: boolean;
+  mapError?: string | null;
+}) {
+  const endpoints = data?.endpoints.slice(0, MAX_ENDPOINT_ROWS) ?? [];
   return (
     <section className={cx(uiCardClass, "p-4")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -399,7 +334,7 @@ function EndpointHealthCard({ data, loading }: { data: WorkspaceEndpointHealthOv
           <p className={cx("ui-caption", uiMutedTextClass)}>Real-time status and latency.</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <span className={cx("ui-caption", uiMutedTextClass)}>Updated {formatTimestamp(data.generated_at)}</span>
+          <span className={cx("ui-caption", uiMutedTextClass)}>Updated {data ? formatTimestamp(data.generated_at) : ""}</span>
           <Link to="/admin/endpoint-status" className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-2.5 py-1.5")}>
             Open Endpoint Status
           </Link>
@@ -411,31 +346,27 @@ function EndpointHealthCard({ data, loading }: { data: WorkspaceEndpointHealthOv
       ) : (
         <>
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <WorkspaceStatusCounter label="Up" value={data.up_count} status="up" />
-            <WorkspaceStatusCounter label="Degraded" value={data.degraded_count} status="degraded" />
-            <WorkspaceStatusCounter label="Down" value={data.down_count} status="down" />
-            <WorkspaceStatusCounter label="Unknown" value={data.unknown_count} status="unknown" />
+            <WorkspaceStatusCounter label="Up" value={unavailableReason ? null : data?.up_count} status="up" />
+            <WorkspaceStatusCounter label="Degraded" value={unavailableReason ? null : data?.degraded_count} status="degraded" />
+            <WorkspaceStatusCounter label="Down" value={unavailableReason ? null : data?.down_count} status="down" />
+            <WorkspaceStatusCounter label="Unknown" value={unavailableReason ? null : data?.unknown_count} status="unknown" />
           </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
             <div className="space-y-1.5">
-              {endpoints.length === 0 ? (
+              {endpoints.length === 0 && !unavailableReason ? (
                 <p className={cx("ui-caption", uiMutedTextClass)}>No endpoint linked to this workspace context.</p>
               ) : (
                 endpoints.map((endpoint) => (
                   <EndpointRow key={endpoint.endpoint_id} endpoint={endpoint} />
                 ))
               )}
-              {data.endpoints.length > MAX_ENDPOINT_ROWS && (
-                <p className="ui-caption font-medium text-primary">+ {data.endpoints.length - MAX_ENDPOINT_ROWS} more endpoint(s)</p>
+              {(data?.endpoints.length ?? 0) > MAX_ENDPOINT_ROWS && (
+                <p className="ui-caption font-medium text-primary">+ {(data?.endpoints.length ?? 0) - MAX_ENDPOINT_ROWS} more endpoint(s)</p>
               )}
             </div>
-            <AdminDashboardMap />
-          </div>
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-3 ui-caption text-[var(--ui-text-muted)]">
-            <LegendItem label={`Up (${data.up_count})`} status="up" />
-            <LegendItem label={`Degraded (${data.degraded_count})`} status="degraded" />
-            <LegendItem label={`Down (${data.down_count})`} status="down" />
-            <LegendItem label={`Unknown (${data.unknown_count})`} status="unknown" />
+            {!unavailableReason && (
+              <AdminDashboardMap markers={mapMarkers} loading={mapLoading} error={mapError} />
+            )}
           </div>
         </>
       )}
@@ -455,15 +386,6 @@ function EndpointRow({ endpoint }: { endpoint: WorkspaceEndpointHealthEntry }) {
       <span className={cx("truncate", uiMutedTextClass)}>{formatTimestamp(endpoint.checked_at)}</span>
       <WorkspaceStatusPill status={endpoint.status} />
     </div>
-  );
-}
-
-function LegendItem({ label, status }: { label: string; status: HealthCheckStatus }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <WorkspaceStatusDot status={status} />
-      {label}
-    </span>
   );
 }
 
@@ -495,25 +417,25 @@ function PlatformSummary({
   const metrics: WorkspacePlatformMetric[] = [
     {
       label: "Buckets",
-      value: storageLoading ? "..." : formatCompactNumber(storageTotals?.bucket_count ?? storage?.total_buckets ?? null),
+      value: storageLoading ? "..." : formatOptionalCompactNumber(storageReason ? null : storageTotals?.bucket_count ?? storage?.total_buckets ?? null),
       tone: "blue",
       unavailableReason: storageReason || "Trend unavailable",
     },
     {
       label: "Objects",
-      value: storageLoading ? "..." : formatCompactNumber(storageTotals?.object_count ?? null),
+      value: storageLoading ? "..." : formatOptionalCompactNumber(storageReason ? null : storageTotals?.object_count ?? null),
       tone: "violet",
       unavailableReason: storageReason || "Trend unavailable",
     },
     {
       label: "Stored data",
-      value: storageLoading ? "..." : formatBytes(storageTotals?.used_bytes ?? null),
+      value: storageLoading ? "..." : formatOptionalBytes(storageReason ? null : storageTotals?.used_bytes ?? null),
       tone: "emerald",
       unavailableReason: storageReason || "Trend unavailable",
     },
     {
       label: "Requests (24h)",
-      value: trafficLoading ? "..." : formatCompactNumber(traffic?.totals.ops ?? null),
+      value: trafficLoading ? "..." : formatOptionalCompactNumber(trafficReason ? null : traffic?.totals.ops ?? null),
       delta: trafficReason ? undefined : traffic?.totals.success_rate != null ? `${formatPercentage(traffic.totals.success_rate * 100)} success` : undefined,
       series: requestsSeries.length > 0 ? requestsSeries : undefined,
       tone: "blue",
@@ -547,7 +469,7 @@ function RecentActivityCard({
   loading: boolean;
   unavailableReason?: string | null;
 }) {
-  const displayLogs = logs.length > 0 ? logs : MOCK_AUDIT_LOGS;
+  const displayLogs = unavailableReason ? [] : logs;
   const content = (
     <section className={cx(uiCardClass, "h-full p-4")}>
       <h2 className="ui-body font-semibold text-[var(--ui-text)]">Recent activity</h2>
@@ -557,7 +479,7 @@ function RecentActivityCard({
             <div key={key} className={cx(uiCardMutedClass, "h-8 animate-pulse")} />
           ))}
         </div>
-      ) : logs.length === 0 && !unavailableReason ? (
+      ) : displayLogs.length === 0 && !unavailableReason ? (
         <div className={cx(uiCardMutedClass, "mt-4 border-dashed px-3 py-6 text-center ui-caption", uiMutedTextClass)}>
           No recent audit activity.
         </div>
@@ -594,6 +516,9 @@ export default function AdminDashboard() {
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
+  const [mapEndpoints, setMapEndpoints] = useState<StorageEndpoint[]>([]);
+  const [mapEndpointsLoading, setMapEndpointsLoading] = useState(false);
+  const [mapEndpointsError, setMapEndpointsError] = useState<string | null>(null);
   const [healthOverview, setHealthOverview] = useState<EndpointHealthOverviewResponse | null>(null);
   const [healthOverviewLoading, setHealthOverviewLoading] = useState(false);
   const [healthOverviewError, setHealthOverviewError] = useState<string | null>(null);
@@ -778,7 +703,7 @@ export default function AdminDashboard() {
     let cancelled = false;
     setWorkspaceHealthLoading(true);
     setWorkspaceHealthError(null);
-    fetchHealthWorkspaceOverview()
+    fetchHealthWorkspaceOverview(undefined, ADMIN_INCIDENT_HISTORY_MINUTES)
       .then((data) => {
         if (cancelled) return;
         setWorkspaceHealth(data);
@@ -792,6 +717,36 @@ export default function AdminDashboard() {
       .finally(() => {
         if (!cancelled) {
           setWorkspaceHealthLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [generalSettings.endpoint_status_enabled, refreshNonce]);
+
+  useEffect(() => {
+    if (!generalSettings.endpoint_status_enabled) {
+      setMapEndpoints([]);
+      setMapEndpointsError(null);
+      setMapEndpointsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setMapEndpointsLoading(true);
+    setMapEndpointsError(null);
+    listStorageEndpoints()
+      .then((data) => {
+        if (cancelled) return;
+        setMapEndpoints(data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMapEndpoints([]);
+        setMapEndpointsError(extractApiError(err, "Unable to load endpoint map coordinates."));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setMapEndpointsLoading(false);
         }
       });
     return () => {
@@ -929,6 +884,20 @@ export default function AdminDashboard() {
     ];
   }, [summary]);
 
+  const mapMarkers = useMemo<AdminDashboardMapMarker[]>(() => {
+    const statusByEndpointId = new Map<number, HealthCheckStatus>();
+    workspaceHealth?.endpoints.forEach((endpoint) => {
+      statusByEndpointId.set(endpoint.endpoint_id, endpoint.status);
+    });
+    return mapEndpoints.map((endpoint) => ({
+      id: endpoint.id,
+      name: endpoint.name,
+      latitude: endpoint.latitude,
+      longitude: endpoint.longitude,
+      status: statusByEndpointId.get(endpoint.id) ?? "unknown",
+    }));
+  }, [mapEndpoints, workspaceHealth]);
+
   const endpointUnavailableReason = !generalSettings.endpoint_status_enabled
     ? "Endpoint Status feature is disabled."
     : workspaceHealthError
@@ -942,14 +911,20 @@ export default function AdminDashboard() {
     healthOverviewError ||
     (healthScore == null && !healthOverviewLoading ? "7-day endpoint health history is not available." : null);
   const refreshing =
-    summaryLoading || storageLoading || trafficLoading || auditLoading || workspaceHealthLoading || healthOverviewLoading;
+    summaryLoading ||
+    storageLoading ||
+    trafficLoading ||
+    auditLoading ||
+    workspaceHealthLoading ||
+    healthOverviewLoading ||
+    mapEndpointsLoading;
 
   return (
     <div className="space-y-4" data-testid="admin-dashboard">
       <PageHeader
         title="Admin overview"
         description="Monitor the health and status of your S3 infrastructure."
-        breadcrumbs={[{ label: "Admin" }, { label: "Dashboard" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Dashboard" })}
         rightContent={
           <div className="flex items-center gap-3">
             <span className={cx("hidden ui-caption sm:inline", uiMutedTextClass)}>
@@ -997,6 +972,9 @@ export default function AdminDashboard() {
         data={workspaceHealth}
         loading={workspaceHealthLoading}
         unavailableReason={endpointUnavailableReason}
+        mapMarkers={mapMarkers}
+        mapLoading={mapEndpointsLoading}
+        mapError={mapEndpointsError}
       />
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,0.9fr)]">

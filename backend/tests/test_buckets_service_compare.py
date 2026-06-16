@@ -60,7 +60,7 @@ def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
         lambda bucket_name, _account: payloads[bucket_name],
     )
 
-    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target, diff_sample_limit=20)
+    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target)
 
     assert diff.source_count == 3
     assert diff.target_count == 3
@@ -95,7 +95,7 @@ def test_compare_bucket_content_detects_md5_mismatch(monkeypatch):
         lambda bucket_name, _account: payloads[bucket_name],
     )
 
-    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target, diff_sample_limit=20)
+    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target)
 
     assert diff.matched_count == 0
     assert diff.different_count == 1
@@ -134,7 +134,7 @@ def test_compare_bucket_content_reports_different_sample(monkeypatch):
         lambda bucket_name, _account: payloads[bucket_name],
     )
 
-    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target, diff_sample_limit=20)
+    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target)
 
     assert diff.different_count == 1
     assert len(diff.different_sample) == 1
@@ -144,6 +144,38 @@ def test_compare_bucket_content_reports_different_sample(monkeypatch):
     assert diff.different_sample[0].target_last_modified == older
     assert diff.different_sample[0].source_storage_class == "STANDARD"
     assert diff.different_sample[0].target_storage_class == "STANDARD_IA"
+
+
+def test_compare_bucket_content_returns_complete_diff(monkeypatch):
+    service = BucketsService()
+    source = _build_account("source")
+    target = _build_account("target")
+    source_payload = {f"source-only-{index:04d}": {"size": index} for index in range(1005)}
+    target_payload = {f"target-only-{index:04d}": {"size": index} for index in range(1003)}
+    for index in range(1007):
+        key = f"different-{index:04d}"
+        source_payload[key] = {"size": index}
+        target_payload[key] = {"size": index + 1}
+    payloads = {
+        "source-bucket": source_payload,
+        "target-bucket": target_payload,
+    }
+    monkeypatch.setattr(
+        service,
+        "_list_bucket_objects_for_compare",
+        lambda bucket_name, _account: payloads[bucket_name],
+    )
+
+    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target)
+
+    assert diff.only_source_count == 1005
+    assert diff.only_target_count == 1003
+    assert diff.different_count == 1007
+    assert len(diff.only_source_sample) == 1005
+    assert len(diff.only_target_sample) == 1003
+    assert len(diff.only_source_details) == 1005
+    assert len(diff.only_target_details) == 1003
+    assert len(diff.different_sample) == 1007
 
 
 def test_compare_bucket_content_excludes_entire_key_after_cutoff(monkeypatch):
@@ -175,7 +207,6 @@ def test_compare_bucket_content_excludes_entire_key_after_cutoff(monkeypatch):
         source,
         "target-bucket",
         target,
-        diff_sample_limit=20,
         ignore_modified_after=cutoff,
     )
 
@@ -214,25 +245,15 @@ def test_compare_bucket_content_wraps_list_objects_client_error(monkeypatch):
     assert "ListObjectsV2 failed with AccessDenied" in message
 
 
-def test_compare_remediation_supports_single_object_and_cutoff(monkeypatch):
+def test_compare_remediation_uses_requested_object_keys(monkeypatch):
     service = BucketsService()
     source = _build_account("source")
     target = _build_account("target")
-    older = datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc)
-    newer = datetime(2026, 3, 3, 10, 0, tzinfo=timezone.utc)
-    cutoff = datetime(2026, 3, 2, 10, 0, tzinfo=timezone.utc)
-    payloads = {
-        "source-bucket": {
-            "old-only-source": {"size": 1, "etag": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "last_modified": older},
-            "new-only-source": {"size": 1, "etag": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "last_modified": newer},
-        },
-        "target-bucket": {},
-    }
     copied_keys: list[str] = []
     monkeypatch.setattr(
         service,
         "_list_bucket_objects_for_compare",
-        lambda bucket_name, _account: payloads[bucket_name],
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("remediation must not re-list objects")),
     )
     monkeypatch.setattr(service, "_account_client", lambda _account: object())
     monkeypatch.setattr(service, "_accounts_share_storage_endpoint", lambda _source, _target: True)
@@ -248,26 +269,11 @@ def test_compare_remediation_supports_single_object_and_cutoff(monkeypatch):
         "target-bucket",
         target,
         action="sync_source_only",
-        object_key="old-only-source",
-        ignore_modified_after=cutoff,
+        object_keys=["old-only-source"],
     )
 
     assert result.planned_count == 1
     assert result.succeeded_count == 1
-    assert copied_keys == ["old-only-source"]
-
-    skipped = service.run_compare_content_remediation(
-        "source-bucket",
-        source,
-        "target-bucket",
-        target,
-        action="sync_source_only",
-        object_key="new-only-source",
-        ignore_modified_after=cutoff,
-    )
-
-    assert skipped.planned_count == 0
-    assert skipped.succeeded_count == 0
     assert copied_keys == ["old-only-source"]
 
 

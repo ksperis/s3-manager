@@ -10,6 +10,7 @@ describe("buildPortalWorkspaceModel", () => {
         iam_user: {},
         access_keys: [],
         buckets: [{ name: "legacy-bucket" }],
+        max_buckets: 4,
         can_manage_buckets: true,
       },
       storageSpaces: [
@@ -23,6 +24,8 @@ describe("buildPortalWorkspaceModel", () => {
           used_bytes: 2048,
           object_count: 12,
           internal_bucket_name: "research-data",
+          origin: "portal_generic",
+          name_editable: true,
         },
       ],
       usage: null,
@@ -34,11 +37,14 @@ describe("buildPortalWorkspaceModel", () => {
       id: "research-data",
       name: "Research Data",
       internalName: "research-data",
+      origin: "portal_generic",
+      nameEditable: true,
       role: "Owner",
       status: "Active",
       usedBytes: 2048,
       objectCount: 12,
     });
+    expect(workspace.maxBuckets).toBe(4);
   });
 
   it("keeps an empty canonical storage space list empty", () => {

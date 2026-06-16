@@ -32,6 +32,28 @@ export const INACTIVE_ADVANCED_PROGRESS: AdvancedSearchProgress = {
   total: 0,
 };
 
+export const advancedFilterRootClass = "fixed inset-x-0 bottom-0 top-14 z-[46]";
+
+export const advancedFilterBackdropClass = "absolute inset-0 bg-black/50";
+
+export const advancedFilterDrawerClass =
+  "absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-[color:var(--ui-border)] bg-white text-[var(--ui-text)] shadow-[var(--shell-menu-shadow)] dark:bg-neutral-950 dark:text-slate-100";
+
+export const advancedFilterHeaderClass = "border-b border-[color:var(--ui-border-soft)] px-4 py-3";
+
+export const advancedFilterBodyClass = "flex-1 overflow-y-auto px-4 py-4";
+
+export const advancedFilterFooterClass = "border-t border-[color:var(--ui-border-soft)] bg-white px-4 py-3 dark:bg-neutral-950";
+
+export const advancedFilterSummaryClass =
+  "rounded-lg border border-[color:var(--ui-border)] bg-neutral-50 p-3 text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] dark:bg-neutral-900/80";
+
+export const advancedFilterSectionClass =
+  "rounded-lg border border-[color:var(--ui-border)] bg-white p-3 text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] dark:bg-neutral-900/70";
+
+export const advancedFilterAccordionClass =
+  "rounded-lg border border-[color:var(--ui-border)] bg-white text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] dark:bg-neutral-900/70";
+
 export const FILTER_COST_LABEL: Record<FilterCostLevel, string> = {
   none: "No additional cost",
   low: "Low cost",

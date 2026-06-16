@@ -11,7 +11,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import create_access_token, hash_refresh_token
+from app.core.security import constant_time_equal, create_access_token, hash_refresh_token
 from app.db import ApiToken, User, is_admin_ui_role
 
 settings = get_settings()
@@ -103,7 +103,7 @@ class ApiTokenService:
             self.db.refresh(row)
         return row
 
-    def resolve_user_from_claims(self, claims: dict) -> Optional[User]:
+    def resolve_user_from_claims(self, claims: dict, *, token: Optional[str] = None) -> Optional[User]:
         token_type = claims.get("typ")
         auth_type = claims.get("auth_type")
         if token_type != "api_admin" and auth_type != "api_token":
@@ -118,6 +118,8 @@ class ApiTokenService:
             return None
         row = self.db.query(ApiToken).filter(ApiToken.jti == jti).first()
         if not row:
+            return None
+        if not constant_time_equal(hash_refresh_token(token or ""), row.token_hash):
             return None
         now = utcnow()
         if row.revoked_at is not None or row.expires_at <= now:

@@ -2,10 +2,9 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CreateUserPayload,
-  ManagerToolAccess,
   UpdateUserPayload,
   User,
   assignUserToS3Account,
@@ -14,6 +13,7 @@ import {
   listUsers,
   updateUser,
 } from "../../api/users";
+import { UiGroupSummary, listMinimalGroups } from "../../api/groups";
 import { S3AccountSummary, listMinimalS3Accounts, updateS3Account } from "../../api/accounts";
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
@@ -21,26 +21,44 @@ import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import AssociationSummary, {
+  AccountAssociationChips,
+  AssociationChips,
+  type AssociationAccountItem,
+  type AssociationChipItem,
+} from "./AssociationSummary";
+import {
+  BrowserAccessSection,
+  ManagerToolAccessSection,
+  WorkspaceAccessSection,
+} from "./AdminAccessSections";
+import AdminModalTabs from "./AdminModalTabs";
+import {
+  DEFAULT_MANAGER_TOOL_ACCESS,
+  PORTAL_ROLE_OPTIONS,
+  buildManagerToolDefinitions,
+  normalizeManagerToolAccess,
+  normalizePortalRole,
+  type ManagerToolKey,
+  type PortalAccountRole,
+} from "./adminAccessConfig";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
-import {
-  PortalSettingsItem,
-  PortalSettingsSection,
-  PortalSettingsToggleAction,
-} from "../../components/PortalSettingsLayout";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import { cx, uiCardMutedClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
-type UserModalTab = "general" | "associations" | "access" | "manager_tools";
+type UserModalTab = "general" | "associations" | "groups" | "access" | "browser" | "manager_tools";
 type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 
 type AccountSelection = {
@@ -49,105 +67,39 @@ type AccountSelection = {
   account_role?: PortalAccountRole;
 };
 
-type PortalAccountRole = "portal_none" | "portal_user" | "portal_manager";
-
 type Option = {
   id: number;
   label: string;
 };
 
-const DEFAULT_MANAGER_TOOL_ACCESS: ManagerToolAccess = {
-  bucket_compare: false,
-  bucket_integrity_check: false,
-  bucket_migration: false,
-  ceph_s3_user_keys: false,
-};
-const PORTAL_ROLE_OPTIONS: { value: PortalAccountRole; label: string }[] = [
-  { value: "portal_none", label: "No portal access" },
-  { value: "portal_user", label: "Portal user" },
-  { value: "portal_manager", label: "Portal manager" },
-];
-
-function normalizePortalRole(value?: string | null): PortalAccountRole {
-  if (value === "portal_user" || value === "portal_manager") return value;
-  return "portal_none";
-}
-
-function normalizeManagerToolAccess(access?: ManagerToolAccess | null): ManagerToolAccess {
-  return {
-    bucket_compare: Boolean(access?.bucket_compare),
-    bucket_integrity_check: Boolean(access?.bucket_integrity_check),
-    bucket_migration: Boolean(access?.bucket_migration),
-    ceph_s3_user_keys: Boolean(access?.ceph_s3_user_keys),
-  };
-}
-
-const userModalTabsContainerClass =
-  "flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60";
-const userModalTabButtonClass = (active: boolean) =>
-  `rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-    active
-      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-  }`;
 const userModalLabelClass = "ui-body font-medium text-slate-700 dark:text-slate-200";
 const userModalFieldClass =
-  "rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
+  "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 ui-body text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
 const userModalCancelButtonClass =
-  "rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800";
-const userModalSettingsGroupClass =
-  "rounded-xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40";
+  "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-4 py-2 ui-body font-medium text-[var(--ui-text)] hover:bg-[var(--ui-hover)]";
+const associationTableContainerClass = uiTableContainerClass;
+const associationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
+const associationAddPanelClass = cx(uiCardMutedClass, "space-y-2 px-3 py-2");
+const associationCompactInputClass =
+  "w-44 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2 py-1 ui-caption text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
+const associationCompactSelectClass =
+  "w-44 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2 py-1 ui-caption text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
+const associationSecondaryButtonClass =
+  "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 ui-caption font-semibold text-[var(--ui-text)] hover:bg-[var(--ui-hover)]";
+const associationOptionRowClass = (selected: boolean) =>
+  `flex items-center justify-between rounded-md px-2 py-1 ${
+    selected ? "bg-[var(--ui-selected-bg)]" : "hover:bg-[var(--ui-hover)]"
+  }`;
+const associationAccountOptionRowClass = (selected: boolean) =>
+  `flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
+    selected ? "bg-[var(--ui-selected-bg)]" : "hover:bg-[var(--ui-hover)]"
+  }`;
 const roleAccessHelpItems = [
   { role: "No Access", access: "No workspace access (profile only)" },
   { role: "User", access: "Non-admin workspaces only" },
   { role: "Admin", access: "User access + /admin" },
   { role: "Superadmin", access: "Admin access + /admin settings" },
 ];
-
-function UserModalPrimaryTabs({
-  activeTab,
-  onTabChange,
-  showManagerTools = false,
-}: {
-  activeTab: UserModalTab;
-  onTabChange: (tab: UserModalTab) => void;
-  showManagerTools?: boolean;
-}) {
-  return (
-    <div className={userModalTabsContainerClass}>
-      <button
-        type="button"
-        onClick={() => onTabChange("general")}
-        className={userModalTabButtonClass(activeTab === "general")}
-      >
-        General
-      </button>
-      <button
-        type="button"
-        onClick={() => onTabChange("associations")}
-        className={userModalTabButtonClass(activeTab === "associations")}
-      >
-        Associations
-      </button>
-      <button
-        type="button"
-        onClick={() => onTabChange("access")}
-        className={userModalTabButtonClass(activeTab === "access")}
-      >
-        Workspaces
-      </button>
-      {showManagerTools && (
-        <button
-          type="button"
-          onClick={() => onTabChange("manager_tools")}
-          className={userModalTabButtonClass(activeTab === "manager_tools")}
-        >
-          Manager tools
-        </button>
-      )}
-    </div>
-  );
-}
 
 function RoleAccessHelp({
   open,
@@ -297,9 +249,9 @@ const AssociationsTabs = ({
                     {accounts.showPanel ? "Close" : "Add accounts"}
                   </button>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <div className={associationTableContainerClass}>
+                  <table className={associationTableClass}>
+                    <thead>
                       <tr>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Account
@@ -315,7 +267,7 @@ const AssociationsTabs = ({
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    <tbody>
                       {accounts.selected.length === 0 ? (
                         <tr>
                           <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
@@ -358,7 +310,7 @@ const AssociationsTabs = ({
                                       )
                                     )
                                   }
-                                  className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  className={associationCompactSelectClass}
                                 >
                                   {PORTAL_ROLE_OPTIONS.map((option) => (
                                     <option key={option.value} value={option.value}>
@@ -386,7 +338,7 @@ const AssociationsTabs = ({
                   </table>
                 </div>
                 {accounts.showPanel && (
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div className={associationAddPanelClass}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add accounts</span>
@@ -397,7 +349,7 @@ const AssociationsTabs = ({
                         value={accounts.search}
                         onChange={(e) => accounts.setSearch(e.target.value)}
                         placeholder="Search..."
-                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className={associationCompactInputClass}
                       />
                     </div>
                     <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
@@ -413,11 +365,7 @@ const AssociationsTabs = ({
                         return (
                           <div
                             key={opt.id}
-                            className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
-                              isSelected
-                                ? "bg-slate-50 dark:bg-slate-800/60"
-                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                            }`}
+                            className={associationAccountOptionRowClass(isSelected)}
                           >
                             <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                               <input
@@ -465,7 +413,7 @@ const AssociationsTabs = ({
                             accounts.setSelections([]);
                             accounts.setSearch("");
                           }}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                          className={associationSecondaryButtonClass}
                         >
                           Cancel
                         </button>
@@ -512,9 +460,9 @@ const AssociationsTabs = ({
                     {s3Users.showPanel ? "Close" : "Add users"}
                   </button>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <div className={associationTableContainerClass}>
+                  <table className={associationTableClass}>
+                    <thead>
                       <tr>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           User
@@ -524,7 +472,7 @@ const AssociationsTabs = ({
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    <tbody>
                       {s3Users.selected.length === 0 ? (
                         <tr>
                           <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
@@ -553,7 +501,7 @@ const AssociationsTabs = ({
                   </table>
                 </div>
                 {s3Users.showPanel && (
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div className={associationAddPanelClass}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add users</span>
@@ -564,7 +512,7 @@ const AssociationsTabs = ({
                         value={s3Users.search}
                         onChange={(e) => s3Users.setSearch(e.target.value)}
                         placeholder="Search..."
-                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className={associationCompactInputClass}
                       />
                     </div>
                     <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
@@ -578,11 +526,7 @@ const AssociationsTabs = ({
                         return (
                           <div
                             key={opt.id}
-                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
-                              isSelected
-                                ? "bg-slate-50 dark:bg-slate-800/60"
-                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                            }`}
+                            className={associationOptionRowClass(isSelected)}
                           >
                             <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                               <input
@@ -614,7 +558,7 @@ const AssociationsTabs = ({
                             s3Users.setSelections([]);
                             s3Users.setSearch("");
                           }}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                          className={associationSecondaryButtonClass}
                         >
                           Cancel
                         </button>
@@ -658,9 +602,9 @@ const AssociationsTabs = ({
                     {connections.showPanel ? "Close" : "Add connections"}
                   </button>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <div className={associationTableContainerClass}>
+                  <table className={associationTableClass}>
+                    <thead>
                       <tr>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Connection
@@ -670,7 +614,7 @@ const AssociationsTabs = ({
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    <tbody>
                       {connections.selected.length === 0 ? (
                         <tr>
                           <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
@@ -701,7 +645,7 @@ const AssociationsTabs = ({
                   </table>
                 </div>
                 {connections.showPanel && (
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div className={associationAddPanelClass}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add connections</span>
@@ -712,7 +656,7 @@ const AssociationsTabs = ({
                         value={connections.search}
                         onChange={(e) => connections.setSearch(e.target.value)}
                         placeholder="Search..."
-                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className={associationCompactInputClass}
                       />
                     </div>
                     <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
@@ -726,11 +670,7 @@ const AssociationsTabs = ({
                         return (
                           <div
                             key={opt.id}
-                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
-                              isSelected
-                                ? "bg-slate-50 dark:bg-slate-800/60"
-                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                            }`}
+                            className={associationOptionRowClass(isSelected)}
                           >
                             <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                               <input
@@ -762,7 +702,7 @@ const AssociationsTabs = ({
                             connections.setSelections([]);
                             connections.setSearch("");
                           }}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                          className={associationSecondaryButtonClass}
                         >
                           Cancel
                         </button>
@@ -818,6 +758,9 @@ export default function UsersPage() {
   const [s3Connections, setS3Connections] = useState<S3ConnectionSummary[]>([]);
   const [s3ConnectionsLoaded, setS3ConnectionsLoaded] = useState(false);
   const [s3ConnectionsLoading, setS3ConnectionsLoading] = useState(false);
+  const [groups, setGroups] = useState<UiGroupSummary[]>([]);
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [groupsLoading, setGroupsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -828,6 +771,7 @@ export default function UsersPage() {
     role: "ui_user",
     can_access_ceph_admin: false,
     can_access_storage_ops: false,
+    browser_advanced_features_enabled: false,
   });
   const [form, setForm] = useState<CreateUserPayload>(() => createFormTemplate());
   const [createInitialSignature, setCreateInitialSignature] = useState(() =>
@@ -836,6 +780,7 @@ export default function UsersPage() {
       selectedAccounts: [],
       selectedS3Users: [],
       selectedS3Connections: [],
+      selectedGroups: [],
       pendingAccountSelections: [],
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
@@ -845,10 +790,12 @@ export default function UsersPage() {
   const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<AccountSelection[]>([]);
   const [createSelectedS3Users, setCreateSelectedS3Users] = useState<number[]>([]);
   const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
+  const [createSelectedGroups, setCreateSelectedGroups] = useState<number[]>([]);
   const [createAccountAdminChoice, setCreateAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [createS3AccountSearch, setCreateS3AccountSearch] = useState("");
   const [createS3Search, setCreateS3Search] = useState("");
   const [createConnectionSearch, setCreateConnectionSearch] = useState("");
+  const [createGroupSearch, setCreateGroupSearch] = useState("");
   const [createModalTab, setCreateModalTab] = useState<UserModalTab>("general");
   const [createAssociationsTab, setCreateAssociationsTab] = useState<"accounts" | "s3_users" | "connections">("accounts");
   const [showCreateAccountPanel, setShowCreateAccountPanel] = useState(false);
@@ -865,6 +812,7 @@ export default function UsersPage() {
       selectedAccounts: [],
       selectedS3Users: [],
       selectedS3Connections: [],
+      selectedGroups: [],
       pendingAccountSelections: [],
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
@@ -874,10 +822,12 @@ export default function UsersPage() {
   const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<AccountSelection[]>([]);
   const [editSelectedS3Users, setEditSelectedS3Users] = useState<number[]>([]);
   const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
+  const [editSelectedGroups, setEditSelectedGroups] = useState<number[]>([]);
   const [editAccountAdminChoice, setEditAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [editS3AccountSearch, setEditS3AccountSearch] = useState("");
   const [editS3Search, setEditS3Search] = useState("");
   const [editConnectionSearch, setEditConnectionSearch] = useState("");
+  const [editGroupSearch, setEditGroupSearch] = useState("");
   const [editModalTab, setEditModalTab] = useState<UserModalTab>("general");
   const [editAssociationsTab, setEditAssociationsTab] = useState<"accounts" | "s3_users" | "connections">("accounts");
   const [showEditAccountPanel, setShowEditAccountPanel] = useState(false);
@@ -903,6 +853,7 @@ export default function UsersPage() {
   const s3AccountsLoadStateRef = useRef<AuxiliaryLoadState>("idle");
   const s3UsersLoadStateRef = useRef<AuxiliaryLoadState>("idle");
   const s3ConnectionsLoadStateRef = useRef<AuxiliaryLoadState>("idle");
+  const groupsLoadStateRef = useRef<AuxiliaryLoadState>("idle");
   const accountDbId = (account: S3AccountSummary) => account.db_id ?? Number(account.id);
   const accountOptions = useMemo(
     () =>
@@ -937,6 +888,11 @@ export default function UsersPage() {
     s3Connections.forEach((conn) => map.set(conn.id, conn.name));
     return map;
   }, [s3Connections]);
+  const groupLabelById = useMemo(() => {
+    const map = new Map<number, string>();
+    groups.forEach((group) => map.set(group.id, group.name));
+    return map;
+  }, [groups]);
   const availableCreateS3Accounts = useMemo(() => {
     const query = createS3AccountSearch.trim().toLowerCase();
     const selectedIds = new Set(createSelectedS3Accounts.map((a) => Number(a.id)));
@@ -978,6 +934,14 @@ export default function UsersPage() {
         (!query || opt.label.toLowerCase().includes(query))
     );
   }, [s3SharedConnectionOptions, editSelectedS3Connections, editConnectionSearch]);
+  const visibleCreateGroups = useMemo(() => {
+    const query = createGroupSearch.trim().toLowerCase();
+    return groups.filter((group) => !query || group.name.toLowerCase().includes(query));
+  }, [createGroupSearch, groups]);
+  const visibleEditGroups = useMemo(() => {
+    const query = editGroupSearch.trim().toLowerCase();
+    return groups.filter((group) => !query || group.name.toLowerCase().includes(query));
+  }, [editGroupSearch, groups]);
   const limitedOptions = <T,>(options: T[]) => options.slice(0, MAX_VISIBLE_OPTIONS);
   const visibleCreateS3Accounts = limitedOptions(availableCreateS3Accounts);
   const visibleEditS3Accounts = limitedOptions(availableEditS3Accounts);
@@ -1000,57 +964,6 @@ export default function UsersPage() {
     if (value === "ui_none" || value === "none") return "No access";
     return role || "-";
   };
-  const renderS3UserChips = useCallback(
-    (user: User) => {
-      const labels =
-        user.s3_user_details && user.s3_user_details.length > 0
-          ? user.s3_user_details.map((entry) => entry.name || `User #${entry.id}`)
-          : (user.s3_users ?? []).map((id) => s3UserLabelById.get(Number(id)) ?? `User #${id}`);
-      if (labels.length === 0) return null;
-      return (
-        <div className="flex flex-wrap gap-2">
-          {labels.map((label, index) => (
-            <span
-              key={`${label}-${index}`}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-      );
-    },
-    [s3UserLabelById]
-  );
-  const renderS3ConnectionChips = useCallback(
-    (user: User) => {
-      const linkedIds = (user.s3_connections ?? []).map((id) => Number(id));
-      const linkedLabels =
-        user.s3_connection_details && user.s3_connection_details.length > 0
-          ? user.s3_connection_details.map((entry) => ({
-              id: entry.id,
-              label: entry.name || `Connection #${entry.id}`,
-            }))
-          : linkedIds.map((id) => ({
-              id,
-              label: s3ConnectionLabelById.get(Number(id)) ?? `Connection #${id}`,
-            }));
-      if (linkedLabels.length === 0) return null;
-      return (
-        <div className="flex flex-wrap gap-2">
-          {linkedLabels.map((entry) => (
-            <span
-              key={`linked-${entry.id}`}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-            >
-              {entry.label}
-            </span>
-          ))}
-        </div>
-      );
-    },
-    [s3ConnectionLabelById]
-  );
   const editRoleValue = normalizeUiRoleValue(editForm.role ?? editingUser?.role ?? "ui_user");
   const createRoleValue = normalizeUiRoleValue(form.role);
   const createTargetSupportsCephAdmin = createRoleValue === "ui_admin" || createRoleValue === "ui_superadmin";
@@ -1065,32 +978,7 @@ export default function UsersPage() {
   const editCanGrantCephAdmin = currentIsSuperAdmin && editTargetSupportsCephAdmin;
   const editCanGrantStorageOps = currentIsAdminLike && editTargetSupportsStorageOps;
   const managerToolDefinitions = useMemo(
-    () => [
-      {
-        key: "bucket_compare" as const,
-        title: "Bucket compare",
-        description: "Allow access to Manager > Tools > Compare.",
-        enabled: Boolean(generalSettings.bucket_compare_enabled),
-      },
-      {
-        key: "bucket_integrity_check" as const,
-        title: "Bucket integrity check",
-        description: "Allow access to Manager > Tools > Integrity.",
-        enabled: Boolean(generalSettings.bucket_integrity_check_enabled),
-      },
-      {
-        key: "bucket_migration" as const,
-        title: "Bucket migration",
-        description: "Allow access to Manager > Tools > Migration.",
-        enabled: Boolean(generalSettings.bucket_migration_enabled),
-      },
-      {
-        key: "ceph_s3_user_keys" as const,
-        title: "Ceph S3 User keys",
-        description: "Allow access to Manager > Ceph > Access keys.",
-        enabled: Boolean(generalSettings.manager_ceph_s3_user_keys_enabled),
-      },
-    ],
+    () => buildManagerToolDefinitions(generalSettings),
     [
       generalSettings.bucket_compare_enabled,
       generalSettings.bucket_integrity_check_enabled,
@@ -1108,83 +996,136 @@ export default function UsersPage() {
     return parsed.toLocaleString();
   };
 
-  const renderAccountChips = (user: User) => {
-    if (!user.accounts || user.accounts.length === 0) return null;
+  const renderAssociationSummary = (user: User) => {
+    const accountIds =
+      user.accounts && user.accounts.length > 0
+        ? user.accounts.map((id) => Number(id))
+        : (user.account_links ?? []).map((link) => Number(link.account_id));
     const adminByAccountId = new Map<number, boolean>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
     );
     const portalRoleByAccountId = new Map<number, PortalAccountRole>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
     );
+    const accountItems: AssociationAccountItem[] = accountIds.map((id) => ({
+      id,
+      label: accountOptionsById.get(id)?.name ?? `Account #${id}`,
+      account_admin: adminByAccountId.get(id) === true,
+      account_role: portalRoleByAccountId.get(id) ?? "portal_none",
+    }));
+    const s3UserItems: AssociationChipItem[] =
+      user.s3_user_details && user.s3_user_details.length > 0
+        ? user.s3_user_details.map((entry) => ({ id: entry.id, label: entry.name || `User #${entry.id}` }))
+        : (user.s3_users ?? []).map((id) => ({
+            id: Number(id),
+            label: s3UserLabelById.get(Number(id)) ?? `User #${id}`,
+          }));
+    const connectionItems: AssociationChipItem[] =
+      user.s3_connection_details && user.s3_connection_details.length > 0
+        ? user.s3_connection_details.map((entry) => ({
+            id: entry.id,
+            label: entry.name || `Connection #${entry.id}`,
+          }))
+        : (user.s3_connections ?? []).map((id) => ({
+            id: Number(id),
+            label: s3ConnectionLabelById.get(Number(id)) ?? `Connection #${id}`,
+          }));
+    const groupItems: AssociationChipItem[] =
+      user.group_details && user.group_details.length > 0
+        ? user.group_details.map((entry) => ({ id: entry.id, label: entry.name || `Group #${entry.id}` }))
+        : (user.group_ids ?? []).map((id) => ({
+            id: Number(id),
+            label: groupLabelById.get(Number(id)) ?? `Group #${id}`,
+          }));
     return (
-      <div className="flex flex-wrap gap-2">
-        {user.accounts.map((id) => {
-          const label = accountOptionsById.get(Number(id))?.name ?? `Account #${id}`;
-          const isAccountAdmin = adminByAccountId.get(Number(id)) === true;
-          const portalRole = portalRoleByAccountId.get(Number(id)) ?? "portal_none";
-          return (
-            <span
-              key={`${id}-${isAccountAdmin ? "admin" : "user"}-${portalRole}`}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-            >
-              <span>{label}</span>
-              {isAccountAdmin && (
-                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                  Admin
-                </span>
-              )}
-              {portalRole !== "portal_none" && (
-                <span className="rounded-full bg-sky-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
-                  {portalRole === "portal_manager" ? "Portal manager" : "Portal user"}
-                </span>
-              )}
-            </span>
-          );
-        })}
-      </div>
+      <AssociationSummary
+        sections={[
+          {
+            label: "Accounts",
+            value: <AccountAssociationChips accounts={accountItems} />,
+            visible: accountItems.length > 0,
+          },
+          { label: "Users", value: <AssociationChips items={s3UserItems} />, visible: s3UserItems.length > 0 },
+          {
+            label: "Connections",
+            value: <AssociationChips items={connectionItems} />,
+            visible: connectionItems.length > 0,
+          },
+          { label: "Groups", value: <AssociationChips items={groupItems} />, visible: groupItems.length > 0 },
+        ]}
+      />
     );
   };
 
-  const renderAssociationSummary = (user: User) => {
-    const hasAccounts = Boolean(user.accounts && user.accounts.length > 0);
-    const hasS3Users = Boolean(user.s3_users && user.s3_users.length > 0);
-    const hasConnections = Boolean(user.s3_connections && user.s3_connections.length > 0);
-    if (!hasAccounts && !hasS3Users && !hasConnections) {
-      return <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>;
-    }
-    const accountChips = hasAccounts ? renderAccountChips(user) : null;
-    const s3UserChips = hasS3Users ? renderS3UserChips(user) : null;
-    const connectionChips = hasConnections ? renderS3ConnectionChips(user) : null;
-    const sections = [
-      { label: "Accounts", value: accountChips ?? "-" },
-      { label: "Users", value: s3UserChips ?? "-" },
-      { label: "Connections", value: connectionChips ?? "-" },
-    ].filter((section) => {
-      if (section.label === "Accounts") return hasAccounts;
-      if (section.label === "Users") return hasS3Users;
-      return hasConnections;
-    });
-    if (sections.length > 1) {
-      return (
-        <div className="space-y-1">
-          {sections.map((section) => (
-            <div key={section.label}>
-              <div className="ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                {section.label}
-              </div>
-              <div className="ui-caption text-slate-600 dark:text-slate-300">{section.value}</div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-    const single = sections[0];
+  const renderGroupsSelector = ({
+    selectedIds,
+    onToggle,
+    search,
+    setSearch,
+    visibleGroups,
+  }: {
+    selectedIds: number[];
+    onToggle: (groupId: number) => void;
+    search: string;
+    setSearch: Dispatch<SetStateAction<string>>;
+    visibleGroups: UiGroupSummary[];
+  }) => {
+    const limitedGroups = limitedOptions(visibleGroups);
     return (
-      <div>
-        <div className="ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-          {single.label}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <label className={userModalLabelClass}>Groups</label>
+            <span className="ui-caption text-slate-500 dark:text-slate-400">{selectedIds.length} selected</span>
+          </div>
+          <input
+            type="text"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search groups..."
+            className={`${associationCompactInputClass} w-full sm:w-56`}
+          />
         </div>
-        <div className="ui-caption text-slate-600 dark:text-slate-300">{single.value}</div>
+        <div className={associationAddPanelClass}>
+          <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+            {groupsLoading ? (
+              <p className="ui-caption text-slate-500 dark:text-slate-400">Loading groups...</p>
+            ) : groupsLoaded && groups.length === 0 ? (
+              <p className="ui-caption text-slate-500 dark:text-slate-400">No UI groups available.</p>
+            ) : visibleGroups.length === 0 ? (
+              <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+            ) : null}
+            {limitedGroups.map((group) => {
+              const checked = selectedIds.includes(group.id);
+              return (
+                <label
+                  key={group.id}
+                  className={associationOptionRowClass(checked)}
+                >
+                  <span className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => onToggle(group.id)}
+                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    <span>{group.name}</span>
+                  </span>
+                  {group.description && (
+                    <span className="max-w-md truncate ui-caption text-slate-500 dark:text-slate-400">
+                      {group.description}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+            {visibleGroups.length > MAX_VISIBLE_OPTIONS && (
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     );
   };
@@ -1314,6 +1255,30 @@ export default function UsersPage() {
     await fetchS3Connections();
   }, [fetchS3Connections]);
 
+  const fetchGroups = useCallback(async () => {
+    if (groupsLoadStateRef.current === "loading") return;
+    groupsLoadStateRef.current = "loading";
+    setGroupsLoading(true);
+    try {
+      const data = await listMinimalGroups();
+      setGroups(data);
+      setGroupsLoaded(true);
+      groupsLoadStateRef.current = "loaded";
+    } catch (err) {
+      groupsLoadStateRef.current = "error";
+      console.error(err);
+    } finally {
+      setGroupsLoading(false);
+    }
+  }, []);
+
+  const ensureGroups = useCallback(async (options?: { retryOnError?: boolean }) => {
+    const loadState = groupsLoadStateRef.current;
+    if (loadState === "loaded" || loadState === "loading") return;
+    if (loadState === "error" && !options?.retryOnError) return;
+    await fetchGroups();
+  }, [fetchGroups]);
+
   const ensureAssociationOptionsForTab = useCallback(
     async (tab: AssociationTab, options?: { retryOnError?: boolean }) => {
       if (tab === "accounts") {
@@ -1337,6 +1302,12 @@ export default function UsersPage() {
     ensureS3Accounts();
   }, [ensureS3Accounts]);
 
+  useEffect(() => {
+    if ((showCreateModal && createModalTab === "groups") || (showEditModal && editModalTab === "groups")) {
+      void ensureGroups({ retryOnError: true });
+    }
+  }, [createModalTab, editModalTab, ensureGroups, showCreateModal, showEditModal]);
+
   const toggleCreateAccountSelection = (accountId: number) => {
     setCreateAccountSelections((prev) =>
       prev.includes(accountId) ? prev.filter((id) => id !== accountId) : [...prev, accountId]
@@ -1352,6 +1323,12 @@ export default function UsersPage() {
   const toggleCreateConnectionSelection = (connectionId: number) => {
     setCreateConnectionSelections((prev) =>
       prev.includes(connectionId) ? prev.filter((id) => id !== connectionId) : [...prev, connectionId]
+    );
+  };
+
+  const toggleCreateGroupSelection = (groupId: number) => {
+    setCreateSelectedGroups((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
     );
   };
 
@@ -1373,12 +1350,19 @@ export default function UsersPage() {
     );
   };
 
+  const toggleEditGroupSelection = (groupId: number) => {
+    setEditSelectedGroups((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    );
+  };
+
   const emptyCreateSignature = () =>
     stableSignature({
       form: createFormTemplate(),
       selectedAccounts: [],
       selectedS3Users: [],
       selectedS3Connections: [],
+      selectedGroups: [],
       pendingAccountSelections: [],
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
@@ -1392,6 +1376,7 @@ export default function UsersPage() {
         selectedAccounts: createSelectedS3Accounts,
         selectedS3Users: createSelectedS3Users,
         selectedS3Connections: createSelectedS3Connections,
+        selectedGroups: createSelectedGroups,
         pendingAccountSelections: createAccountSelections,
         pendingS3UserSelections: createS3UserSelections,
         pendingConnectionSelections: createConnectionSelections,
@@ -1404,6 +1389,7 @@ export default function UsersPage() {
       createS3UserSelections,
       createSelectedS3Accounts,
       createSelectedS3Connections,
+      createSelectedGroups,
       createSelectedS3Users,
       form,
     ]
@@ -1414,10 +1400,12 @@ export default function UsersPage() {
     setCreateSelectedS3Accounts([]);
     setCreateSelectedS3Users([]);
     setCreateSelectedS3Connections([]);
+    setCreateSelectedGroups([]);
     setCreateAccountAdminChoice({});
     setCreateS3AccountSearch("");
     setCreateS3Search("");
     setCreateConnectionSearch("");
+    setCreateGroupSearch("");
     setCreateModalTab("general");
     setCreateAssociationsTab("accounts");
     setShowCreateAccountPanel(false);
@@ -1442,6 +1430,7 @@ export default function UsersPage() {
         selectedAccounts: editSelectedS3Accounts,
         selectedS3Users: editSelectedS3Users,
         selectedS3Connections: editSelectedS3Connections,
+        selectedGroups: editSelectedGroups,
         pendingAccountSelections: editAccountSelections,
         pendingS3UserSelections: editS3UserSelections,
         pendingConnectionSelections: editConnectionSelections,
@@ -1455,6 +1444,7 @@ export default function UsersPage() {
       editS3UserSelections,
       editSelectedS3Accounts,
       editSelectedS3Connections,
+      editSelectedGroups,
       editSelectedS3Users,
     ]
   );
@@ -1468,6 +1458,8 @@ export default function UsersPage() {
     setEditS3Search("");
     setEditSelectedS3Connections([]);
     setEditConnectionSearch("");
+    setEditSelectedGroups([]);
+    setEditGroupSearch("");
     setEditModalTab("general");
     setEditAssociationsTab("accounts");
     setShowEditAccountPanel(false);
@@ -1485,6 +1477,7 @@ export default function UsersPage() {
         selectedAccounts: [],
         selectedS3Users: [],
         selectedS3Connections: [],
+        selectedGroups: [],
         pendingAccountSelections: [],
         pendingS3UserSelections: [],
         pendingConnectionSelections: [],
@@ -1526,6 +1519,8 @@ export default function UsersPage() {
         currentIsAdminLike && (normalizedRole === "ui_user" || normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin")
           ? Boolean(form.can_access_storage_ops)
           : false,
+      browser_advanced_features_enabled: Boolean(form.browser_advanced_features_enabled),
+      group_ids: createSelectedGroups,
     };
     try {
       const created = await createUser(payload);
@@ -1580,6 +1575,7 @@ export default function UsersPage() {
           ? Boolean(user.can_access_storage_ops)
           : false,
       manager_tool_access: normalizeManagerToolAccess(user.manager_tool_access),
+      browser_advanced_features_enabled: Boolean(user.browser_advanced_features_enabled),
     };
     setEditingUser(user);
     setEditForm(nextEditForm);
@@ -1598,11 +1594,17 @@ export default function UsersPage() {
     setEditSelectedS3Accounts(selectedAccounts);
     const nextSelectedS3Users = user.s3_users ? user.s3_users.map((id) => Number(id)) : [];
     const nextSelectedS3Connections = user.s3_connections ? user.s3_connections.map((id) => Number(id)) : [];
+    const nextSelectedGroups =
+      user.group_ids && user.group_ids.length > 0
+        ? user.group_ids.map((id) => Number(id))
+        : (user.group_details ?? []).map((group) => Number(group.id));
     setEditSelectedS3Users(nextSelectedS3Users);
     setEditSelectedS3Connections(nextSelectedS3Connections);
+    setEditSelectedGroups(nextSelectedGroups);
     setEditS3AccountSearch("");
     setEditS3Search("");
     setEditConnectionSearch("");
+    setEditGroupSearch("");
     const hasAccounts = selectedAccounts.length > 0;
     const hasS3Users = Boolean(user.s3_users && user.s3_users.length > 0);
     const hasConnections = Boolean(user.s3_connections && user.s3_connections.length > 0);
@@ -1627,6 +1629,7 @@ export default function UsersPage() {
         selectedAccounts,
         selectedS3Users: nextSelectedS3Users,
         selectedS3Connections: nextSelectedS3Connections,
+        selectedGroups: nextSelectedGroups,
         pendingAccountSelections: [],
         pendingS3UserSelections: [],
         pendingConnectionSelections: [],
@@ -1671,6 +1674,10 @@ export default function UsersPage() {
         nextRole === "ui_user" || nextRole === "ui_admin" || nextRole === "ui_superadmin"
           ? normalizeManagerToolAccess(editForm.manager_tool_access ?? editingUser.manager_tool_access)
           : { ...DEFAULT_MANAGER_TOOL_ACCESS };
+      payload.browser_advanced_features_enabled = Boolean(
+        editForm.browser_advanced_features_enabled ?? editingUser.browser_advanced_features_enabled
+      );
+      payload.group_ids = editSelectedGroups;
       payload.s3_user_ids = editSelectedS3Users;
       payload.s3_connection_ids = editSelectedS3Connections;
       const updatedUser = await updateUser(editingUser.id, payload);
@@ -1778,9 +1785,9 @@ export default function UsersPage() {
     }
   };
 
-  const usersDescription = "Create, edit, delete, and link UI users to RGW accounts, S3 users, and S3 connections.";
-  const associationLabel = "S3 Accounts / Users / Connections";
-  const filterPlaceholder = "Search by email, role, account, user, or connection";
+  const usersDescription = "Create, edit, delete, and link UI users to groups, RGW accounts, S3 users, and S3 connections.";
+  const associationLabel = "Associations / Groups";
+  const filterPlaceholder = "Search by email, role, group, account, user, or connection";
   const tableStatus = resolveListTableStatus({
     loading,
     error,
@@ -1792,7 +1799,7 @@ export default function UsersPage() {
       <PageHeader
         title="UI Users"
         description={usersDescription}
-        breadcrumbs={[{ label: "Admin" }, { label: "Interface" }, { label: "UI Users" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Interface" }, { label: "UI Users" })}
         actions={[
           {
             label: "Create user",
@@ -1823,7 +1830,17 @@ export default function UsersPage() {
             </PageBanner>
           )}
           <form onSubmit={handleCreate} className="space-y-4">
-            <UserModalPrimaryTabs activeTab={createModalTab} onTabChange={setCreateModalTab} />
+            <AdminModalTabs<UserModalTab>
+              activeTab={createModalTab}
+              onTabChange={setCreateModalTab}
+              tabs={[
+                { id: "general", label: "General" },
+                { id: "associations", label: "Associations" },
+                { id: "groups", label: "Groups" },
+                { id: "access", label: "Workspaces" },
+                { id: "browser", label: "Browser" },
+              ]}
+            />
 
             {createModalTab === "general" && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -1884,50 +1901,48 @@ export default function UsersPage() {
             )}
 
             {createModalTab === "access" && (
-              <div className={userModalSettingsGroupClass}>
-                <PortalSettingsSection
-                  title="Mass management workspaces"
-                  description="Additional operational workspaces available to this UI user."
-                  layout="stack"
-                >
-                  <PortalSettingsItem
-                    title="Ceph Admin access"
-                    description='Allow access to /ceph-admin. Grantable only by Superadmin for roles "Admin" and "Superadmin".'
-                    className={!createCanGrantCephAdmin ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
-                    action={
-                      <PortalSettingsToggleAction
-                        checked={createCanGrantCephAdmin && Boolean(form.can_access_ceph_admin)}
-                        disabled={!createCanGrantCephAdmin}
-                        onChange={(value) =>
-                          setForm((f) => ({
-                            ...f,
-                            can_access_ceph_admin: value,
-                          }))
-                        }
-                        ariaLabel="Allow access to /ceph-admin"
-                      />
-                    }
-                  />
-                  <PortalSettingsItem
-                    title="Storage Ops access"
-                    description='Allow access to /storage-ops. Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.'
-                    className={!createCanGrantStorageOps ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
-                    action={
-                      <PortalSettingsToggleAction
-                        checked={createCanGrantStorageOps && Boolean(form.can_access_storage_ops)}
-                        disabled={!createCanGrantStorageOps}
-                        onChange={(value) =>
-                          setForm((f) => ({
-                            ...f,
-                            can_access_storage_ops: value,
-                          }))
-                        }
-                        ariaLabel="Allow access to /storage-ops"
-                      />
-                    }
-                  />
-                </PortalSettingsSection>
-              </div>
+              <WorkspaceAccessSection
+                description="Additional operational workspaces available to this UI user."
+                cephAdmin={{
+                  title: "Ceph Admin access",
+                  description:
+                    'Allow access to /ceph-admin. Grantable only by Superadmin for roles "Admin" and "Superadmin".',
+                  checked: createCanGrantCephAdmin && Boolean(form.can_access_ceph_admin),
+                  disabled: !createCanGrantCephAdmin,
+                  onChange: (value) =>
+                    setForm((f) => ({
+                      ...f,
+                      can_access_ceph_admin: value,
+                    })),
+                  ariaLabel: "Allow access to /ceph-admin",
+                }}
+                storageOps={{
+                  title: "Storage Ops access",
+                  description:
+                    'Allow access to /storage-ops. Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.',
+                  checked: createCanGrantStorageOps && Boolean(form.can_access_storage_ops),
+                  disabled: !createCanGrantStorageOps,
+                  onChange: (value) =>
+                    setForm((f) => ({
+                      ...f,
+                      can_access_storage_ops: value,
+                    })),
+                  ariaLabel: "Allow access to /storage-ops",
+                }}
+              />
+            )}
+
+            {createModalTab === "browser" && (
+              <BrowserAccessSection
+                description="Browser options for this UI user. Groups can also grant these options."
+                checked={Boolean(form.browser_advanced_features_enabled)}
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    browser_advanced_features_enabled: value,
+                  }))
+                }
+              />
             )}
 
             {createModalTab === "associations" && (
@@ -1994,6 +2009,15 @@ export default function UsersPage() {
               />
             )}
 
+            {createModalTab === "groups" &&
+              renderGroupsSelector({
+                selectedIds: createSelectedGroups,
+                onToggle: toggleCreateGroupSelection,
+                search: createGroupSearch,
+                setSearch: setCreateGroupSearch,
+                visibleGroups: visibleCreateGroups,
+              })}
+
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
@@ -2018,6 +2042,7 @@ export default function UsersPage() {
         <ListToolbar
           title="Users"
           description="Search matches across the full user record, including role and linked entities."
+          showHeading={false}
           countLabel={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"}`}
           search={
             <div className="flex items-center gap-2">
@@ -2167,7 +2192,18 @@ export default function UsersPage() {
             </PageBanner>
           )}
           <form onSubmit={submitEdit} className="space-y-4">
-            <UserModalPrimaryTabs activeTab={editModalTab} onTabChange={setEditModalTab} showManagerTools />
+            <AdminModalTabs<UserModalTab>
+              activeTab={editModalTab}
+              onTabChange={setEditModalTab}
+              tabs={[
+                { id: "general", label: "General" },
+                { id: "associations", label: "Associations" },
+                { id: "groups", label: "Groups" },
+                { id: "access", label: "Workspaces" },
+                { id: "browser", label: "Browser" },
+                { id: "manager_tools", label: "Manager tools" },
+              ]}
+            />
 
             {editModalTab === "general" && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -2225,50 +2261,48 @@ export default function UsersPage() {
             )}
 
             {editModalTab === "access" && (
-              <div className={userModalSettingsGroupClass}>
-                <PortalSettingsSection
-                  title="Mass management workspaces"
-                  description="Additional operational workspaces available to this UI user."
-                  layout="stack"
-                >
-                  <PortalSettingsItem
-                    title="Ceph Admin access"
-                    description='Allow access to /ceph-admin. Grantable only by Superadmin for roles "Admin" and "Superadmin".'
-                    className={!editCanGrantCephAdmin ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
-                    action={
-                      <PortalSettingsToggleAction
-                        checked={editCanGrantCephAdmin && Boolean(editForm.can_access_ceph_admin)}
-                        disabled={!editCanGrantCephAdmin}
-                        onChange={(value) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            can_access_ceph_admin: value,
-                          }))
-                        }
-                        ariaLabel="Allow access to /ceph-admin"
-                      />
-                    }
-                  />
-                  <PortalSettingsItem
-                    title="Storage Ops access"
-                    description='Allow access to /storage-ops. Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.'
-                    className={!editCanGrantStorageOps ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
-                    action={
-                      <PortalSettingsToggleAction
-                        checked={editCanGrantStorageOps && Boolean(editForm.can_access_storage_ops)}
-                        disabled={!editCanGrantStorageOps}
-                        onChange={(value) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            can_access_storage_ops: value,
-                          }))
-                        }
-                        ariaLabel="Allow access to /storage-ops"
-                      />
-                    }
-                  />
-                </PortalSettingsSection>
-              </div>
+              <WorkspaceAccessSection
+                description="Additional operational workspaces available to this UI user."
+                cephAdmin={{
+                  title: "Ceph Admin access",
+                  description:
+                    'Allow access to /ceph-admin. Grantable only by Superadmin for roles "Admin" and "Superadmin".',
+                  checked: editCanGrantCephAdmin && Boolean(editForm.can_access_ceph_admin),
+                  disabled: !editCanGrantCephAdmin,
+                  onChange: (value) =>
+                    setEditForm((f) => ({
+                      ...f,
+                      can_access_ceph_admin: value,
+                    })),
+                  ariaLabel: "Allow access to /ceph-admin",
+                }}
+                storageOps={{
+                  title: "Storage Ops access",
+                  description:
+                    'Allow access to /storage-ops. Grantable by Admin or Superadmin for roles "User" and "Admin"; "Superadmin" role updates require Superadmin.',
+                  checked: editCanGrantStorageOps && Boolean(editForm.can_access_storage_ops),
+                  disabled: !editCanGrantStorageOps,
+                  onChange: (value) =>
+                    setEditForm((f) => ({
+                      ...f,
+                      can_access_storage_ops: value,
+                    })),
+                  ariaLabel: "Allow access to /storage-ops",
+                }}
+              />
+            )}
+
+            {editModalTab === "browser" && (
+              <BrowserAccessSection
+                description="Browser options for this UI user. Groups can also grant these options."
+                checked={Boolean(editForm.browser_advanced_features_enabled ?? editingUser.browser_advanced_features_enabled)}
+                onChange={(value) =>
+                  setEditForm((current) => ({
+                    ...current,
+                    browser_advanced_features_enabled: value,
+                  }))
+                }
+              />
             )}
 
             {editModalTab === "manager_tools" && (
@@ -2278,84 +2312,38 @@ export default function UsersPage() {
                     Manager tool access requires the target role to be User, Admin, or Superadmin.
                   </PageBanner>
                 )}
-                <div className={userModalSettingsGroupClass}>
-                  <PortalSettingsSection
-                    title="Bucket tools"
-                    description="Manager tools for bucket-level operations."
-                    layout="stack"
-                  >
-                    {managerToolDefinitions
-                      .filter((tool) => tool.key !== "ceph_s3_user_keys")
-                      .map((tool) => {
-                        const access = normalizeManagerToolAccess(editForm.manager_tool_access ?? editingUser.manager_tool_access);
-                        const disabled = !editTargetSupportsManagerTools || !tool.enabled;
-                        return (
-                          <PortalSettingsItem
-                            key={tool.key}
-                            title={tool.title}
-                            description={tool.description}
-                            className={disabled ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
-                            action={
-                              <PortalSettingsToggleAction
-                                checked={Boolean(access[tool.key])}
-                                disabled={disabled}
-                                onChange={(value) =>
-                                  setEditForm((f) => ({
-                                    ...f,
-                                    manager_tool_access: {
-                                      ...normalizeManagerToolAccess(f.manager_tool_access ?? editingUser.manager_tool_access),
-                                      [tool.key]: value,
-                                    },
-                                  }))
-                                }
-                                ariaLabel={tool.title}
-                                badge={{ visible: !tool.enabled, label: "Disabled globally", tone: "neutral" }}
-                              />
-                            }
-                          />
-                        );
-                      })}
-                  </PortalSettingsSection>
-                </div>
-                <div className={userModalSettingsGroupClass}>
-                  <PortalSettingsSection
-                    title="Ceph tools"
-                    description="Manager tools for Ceph-specific S3 User workflows."
-                    layout="stack"
-                  >
-                    {managerToolDefinitions
-                      .filter((tool) => tool.key === "ceph_s3_user_keys")
-                      .map((tool) => {
-                        const access = normalizeManagerToolAccess(editForm.manager_tool_access ?? editingUser.manager_tool_access);
-                        const disabled = !editTargetSupportsManagerTools || !tool.enabled;
-                        return (
-                          <PortalSettingsItem
-                            key={tool.key}
-                            title={tool.title}
-                            description={tool.description}
-                            className={disabled ? "bg-slate-50 opacity-75 dark:bg-slate-900/50" : "bg-white dark:bg-slate-900"}
-                            action={
-                              <PortalSettingsToggleAction
-                                checked={Boolean(access[tool.key])}
-                                disabled={disabled}
-                                onChange={(value) =>
-                                  setEditForm((f) => ({
-                                    ...f,
-                                    manager_tool_access: {
-                                      ...normalizeManagerToolAccess(f.manager_tool_access ?? editingUser.manager_tool_access),
-                                      [tool.key]: value,
-                                    },
-                                  }))
-                                }
-                                ariaLabel={tool.title}
-                                badge={{ visible: !tool.enabled, label: "Disabled globally", tone: "neutral" }}
-                              />
-                            }
-                          />
-                        );
-                      })}
-                  </PortalSettingsSection>
-                </div>
+                <ManagerToolAccessSection
+                  title="Bucket tools"
+                  description="Manager tools for bucket-level operations."
+                  tools={managerToolDefinitions.filter((tool) => tool.key !== "ceph_s3_user_keys" && tool.key !== "bucket_quota")}
+                  access={editForm.manager_tool_access ?? editingUser.manager_tool_access}
+                  isToolDisabled={(tool) => !editTargetSupportsManagerTools || !tool.enabled}
+                  onChange={(key: ManagerToolKey, value) =>
+                    setEditForm((f) => ({
+                      ...f,
+                      manager_tool_access: {
+                        ...normalizeManagerToolAccess(f.manager_tool_access ?? editingUser.manager_tool_access),
+                        [key]: value,
+                      },
+                    }))
+                  }
+                />
+                <ManagerToolAccessSection
+                  title="Privileged Ceph access"
+                  description="Ceph admin-API actions exposed outside the Ceph Admin workspace."
+                  tools={managerToolDefinitions.filter((tool) => tool.key === "ceph_s3_user_keys" || tool.key === "bucket_quota")}
+                  access={editForm.manager_tool_access ?? editingUser.manager_tool_access}
+                  isToolDisabled={(tool) => !editTargetSupportsManagerTools || !tool.enabled}
+                  onChange={(key: ManagerToolKey, value) =>
+                    setEditForm((f) => ({
+                      ...f,
+                      manager_tool_access: {
+                        ...normalizeManagerToolAccess(f.manager_tool_access ?? editingUser.manager_tool_access),
+                        [key]: value,
+                      },
+                    }))
+                  }
+                />
               </div>
             )}
 
@@ -2422,6 +2410,15 @@ export default function UsersPage() {
                 }}
               />
             )}
+
+            {editModalTab === "groups" &&
+              renderGroupsSelector({
+                selectedIds: editSelectedGroups,
+                onToggle: toggleEditGroupSelection,
+                search: editGroupSearch,
+                setSearch: setEditGroupSearch,
+                visibleGroups: visibleEditGroups,
+              })}
 
             <div className="flex items-center justify-end gap-3">
               <button

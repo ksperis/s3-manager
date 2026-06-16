@@ -168,7 +168,7 @@ describe("BrowserPage multipart uploads modal", () => {
     await user.click(within(confirmDialog).getByRole("button", { name: "Abort" }));
 
     await waitFor(() => {
-      expect(abortMultipartUploadMock).toHaveBeenCalledWith("acc-1", "bucket-1", "upload-123", "uploads/big-file.bin");
+      expect(abortMultipartUploadMock).toHaveBeenCalledWith("acc-1", "bucket-1", "upload-123", "uploads/big-file.bin", undefined);
     });
 
     await waitFor(() => {

@@ -26,6 +26,7 @@ class S3Account(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)
     portal_settings_override = Column(Text, nullable=True)
+    allow_manager_bucket_quota = Column(Boolean, default=False, nullable=False, server_default="0")
 
     storage_endpoint = relationship("StorageEndpoint", lazy="joined")
 

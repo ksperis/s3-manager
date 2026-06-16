@@ -18,6 +18,7 @@ import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
@@ -215,7 +216,7 @@ export default function EndpointStatusPage() {
       <PageHeader
         title="Endpoint Status"
         description="Global operational view across all storage endpoints."
-        breadcrumbs={[{ label: "Admin" }, { label: "Connectivity" }, { label: "Endpoint Status" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Connectivity" }, { label: "Endpoint Status" })}
         actions={[
           { label: runLoading ? "Running..." : "Check now", onClick: handleRunNow },
           { label: "Refresh", onClick: loadAll, variant: "ghost" },

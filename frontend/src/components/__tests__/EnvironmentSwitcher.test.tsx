@@ -42,6 +42,7 @@ const baseSettings: GeneralSettings = {
   bucket_migration_enabled: true,
   bucket_compare_enabled: true,
   bucket_integrity_check_enabled: true,
+  bucket_usage_stats_enabled: true,
   manager_ceph_s3_user_keys_enabled: true,
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,

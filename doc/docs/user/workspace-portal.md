@@ -8,6 +8,8 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 ## Prerequisites
 
 - The global `portal_enabled` setting is enabled.
+- The global `browser_enabled` and `browser_portal_enabled` settings are
+  enabled to browse files inside a Storage Space.
 - Your UI user is explicitly linked to the account with Portal access.
 - The account is backed by a storage endpoint configured by the platform team.
 
@@ -19,11 +21,13 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
    activity, shared spaces, transfers, and simple alerts.
 4. Use **Storage Spaces** to open an assigned space, browse files, upload,
    download, and share with collaborators.
-5. Use **Shares** to review items shared with you, items shared by you, and
+5. Use **Access keys** to generate S3 credentials for external tools. The
+   Portal runtime key is not shown in this list.
+6. Use **Shares** to review items shared with you, items shared by you, and
    public links when enabled.
-6. Use **Activity**, **Transfers**, and **Usage & Analytics** for collaboration
+7. Use **Activity**, **Transfers**, and **Usage & Analytics** for collaboration
    history and consumption tracking.
-7. Use **Settings** for simple account and preference changes.
+8. Use **Settings** for simple account and preference changes.
 
 ## Portal V3 workflows
 
@@ -49,9 +53,24 @@ From a Storage Space, users can:
 - delete files only when their role allows it;
 - open a file detail view with safe metadata and a safe preview when available.
 
+The file browser shown inside a Storage Space is the main Browser in a locked,
+minimal Portal profile. It opens only the selected Storage Space, keeps the
+Storage Space label in the UI, and uses the Portal execution identity.
+
 Advanced object features such as versions, tags, raw metadata headers, object
 lock, diagnostics, and batch operations belong in Browser or Manager, not in
 Portal.
+
+### Access keys for external tools
+
+Portal users can create IAM access keys for S3-compatible clients such as CLI
+tools, backup jobs, or desktop browsers. The secret is displayed only once when
+the key is created, so copy it before leaving the page.
+
+The key used internally by Portal to execute file operations is intentionally
+hidden and cannot be disabled or deleted from the Access keys page. Admins can
+disable Portal user key creation and set the maximum number of user-managed
+keys from Portal settings.
 
 ### Sharing and roles
 
@@ -116,8 +135,10 @@ backend.
     administration rights.
 
 !!! note
-    Portal requires `portal_enabled` and an explicit account link. Advanced
-    object inspection belongs in `/browser`, not inside Portal.
+    Portal requires `portal_enabled` and an explicit account link. File browsing
+    inside Storage Spaces also requires `browser_enabled` and
+    `browser_portal_enabled`. Advanced object inspection belongs in `/browser`,
+    not inside Portal.
 
 ## Related pages
 

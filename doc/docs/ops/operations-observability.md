@@ -4,7 +4,7 @@
 
 - `GET /health` returns backend liveness.
 - Endpoint status requires periodic healthcheck jobs.
-- Quota alerts/history requires periodic quota monitor jobs.
+- Quota alerts require periodic quota monitor jobs; usage history requires the daily usage history job.
 
 ## Logs
 

@@ -11,6 +11,7 @@ from .refresh_session import RefreshSession
 from .api_token import ApiToken
 from .s3_user import S3User, UserS3User
 from .s3_connection import S3Connection, UserS3Connection
+from .ui_group import UiGroup, UserUiGroup, UiGroupS3Account, UiGroupS3User, UiGroupS3Connection
 from .tag_definition import TagDefinition, StorageEndpointTag, S3AccountTag, S3UserTag, S3ConnectionTag
 from .oidc import OidcLoginState
 from .billing import BillingAssignment, BillingRateCard, BillingStorageDaily, BillingUsageDaily
@@ -22,6 +23,7 @@ from .healthcheck import (
     EndpointHealthStatusSegment,
 )
 from .bucket_migration import BucketMigration, BucketMigrationEvent, BucketMigrationItem
+from .bucket_usage_stats import BucketUsageStatsSnapshot
 from .portal import PortalPublicLink, PortalStorageSpaceMetadata
 
 __all__ = [
@@ -45,6 +47,11 @@ __all__ = [
     "UserS3User",
     "S3Connection",
     "UserS3Connection",
+    "UiGroup",
+    "UserUiGroup",
+    "UiGroupS3Account",
+    "UiGroupS3User",
+    "UiGroupS3Connection",
     "TagDefinition",
     "StorageEndpointTag",
     "S3AccountTag",
@@ -65,6 +72,7 @@ __all__ = [
     "BucketMigration",
     "BucketMigrationItem",
     "BucketMigrationEvent",
+    "BucketUsageStatsSnapshot",
     "PortalStorageSpaceMetadata",
     "PortalPublicLink",
 ]

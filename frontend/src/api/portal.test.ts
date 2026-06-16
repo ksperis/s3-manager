@@ -13,26 +13,29 @@ vi.mock("./client", () => ({
 }));
 
 import {
+  createPortalAccessKey,
   fetchPortalActivity,
+  deletePortalAccessKey,
   fetchPortalAlerts,
+  fetchPortalAccessKeysState,
   grantPortalStorageSpaceShare,
   createPortalStorageSpace,
-  createPortalStorageSpaceFolder,
   createPortalStorageSpacePublicLink,
   deletePortalStorageSpaceObject,
   downloadPortalStorageSpaceObject,
   fetchPortalStorageSpaceObjectDetail,
   fetchPortalStorageSpace,
   fetchPortalTransfers,
+  fetchPortalUsageTrends,
+  importPortalStorageSpace,
   listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
-  listPortalStorageSpaceObjects,
   listPortalStorageSpaces,
   revokePortalStorageSpacePublicLink,
   revokePortalStorageSpaceShare,
+  updatePortalAccessKeyStatus,
   updatePortalStorageSpace,
   updatePortalStorageSpaceShare,
-  uploadPortalStorageSpaceObject,
 } from "./portal";
 
 describe("portal storage spaces api", () => {
@@ -65,12 +68,22 @@ describe("portal storage spaces api", () => {
   });
 
   it("creates and updates storage spaces through user-facing endpoints", async () => {
-    await createPortalStorageSpace("101", { name: "Research Data", description: "Lab files" });
+    await createPortalStorageSpace("101", {
+      name: "Research Data",
+      naming_mode: "named_bucket",
+      description: "Lab files",
+    });
+    await importPortalStorageSpace("101", { bucket_name: "existing-bucket", description: "Imported" });
     await updatePortalStorageSpace("101", "research data", { description: "Updated", archived: true });
 
     expect(clientMock.post).toHaveBeenCalledWith(
       "/portal/storage-spaces",
-      { name: "Research Data", description: "Lab files" },
+      { name: "Research Data", naming_mode: "named_bucket", description: "Lab files" },
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/storage-spaces/import",
+      { bucket_name: "existing-bucket", description: "Imported" },
       { params: { account_id: "101" } }
     );
     expect(clientMock.patch).toHaveBeenCalledWith(
@@ -92,42 +105,8 @@ describe("portal storage spaces api", () => {
     });
   });
 
-  it("lists storage space objects through the portal object endpoint", async () => {
-    clientMock.get.mockResolvedValueOnce({ data: { prefix: "raw-data/", prefixes: [], objects: [] } });
-
-    await listPortalStorageSpaceObjects("101", "research data", {
-      prefix: "raw-data/",
-      continuationToken: "token",
-      maxKeys: 200,
-    });
-
-    expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/objects", {
-      params: {
-        account_id: "101",
-        prefix: "raw-data/",
-        continuation_token: "token",
-        max_keys: 200,
-      },
-    });
-  });
-
-  it("uploads a storage space object with multipart form data", async () => {
-    const file = new File(["hello"], "report.csv", { type: "text/csv" });
-
-    await uploadPortalStorageSpaceObject("101", "research data", file, { prefix: "raw-data/" });
-
-    expect(clientMock.post).toHaveBeenCalledTimes(1);
-    const [url, formData, config] = clientMock.post.mock.calls[0];
-    expect(url).toBe("/portal/storage-spaces/research%20data/objects/upload");
-    expect(formData).toBeInstanceOf(FormData);
-    expect(formData.get("file")).toBe(file);
-    expect(formData.get("prefix")).toBe("raw-data/");
-    expect(config).toEqual({ params: { account_id: "101" } });
-  });
-
-  it("fetches object detail and creates folders without browser endpoints", async () => {
+  it("fetches object detail and deletes objects through portal object detail endpoints", async () => {
     await fetchPortalStorageSpaceObjectDetail("101", "research data", "raw-data/report.csv");
-    await createPortalStorageSpaceFolder("101", "research data", { prefix: "raw-data/", name: "new-folder" });
     await deletePortalStorageSpaceObject("101", "research data", "raw-data/old.csv");
 
     expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/objects/detail", {
@@ -136,11 +115,6 @@ describe("portal storage spaces api", () => {
         key: "raw-data/report.csv",
       },
     });
-    expect(clientMock.post).toHaveBeenCalledWith(
-      "/portal/storage-spaces/research%20data/objects/folders",
-      { prefix: "raw-data/", name: "new-folder" },
-      { params: { account_id: "101" } }
-    );
     expect(clientMock.delete).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/objects", {
       params: { account_id: "101", key: "raw-data/old.csv" },
     });
@@ -233,6 +207,38 @@ describe("portal storage spaces api", () => {
     });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/alerts", {
       params: { account_id: "101", limit: 5 },
+    });
+  });
+
+  it("manages portal access keys through user-facing endpoints", async () => {
+    await fetchPortalAccessKeysState("101");
+    await createPortalAccessKey("101");
+    await updatePortalAccessKeyStatus("101", "AK USER", false);
+    await deletePortalAccessKey("101", "AK USER");
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/access-keys", {
+      params: { account_id: "101" },
+    });
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/access-keys",
+      undefined,
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.put).toHaveBeenCalledWith(
+      "/portal/access-keys/AK%20USER/status",
+      { active: false },
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.delete).toHaveBeenCalledWith("/portal/access-keys/AK%20USER", {
+      params: { account_id: "101" },
+    });
+  });
+
+  it("fetches portal usage trends for dashboard KPI baselines", async () => {
+    await fetchPortalUsageTrends("101");
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/usage-trends", {
+      params: { account_id: "101" },
     });
   });
 });

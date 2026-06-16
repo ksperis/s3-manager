@@ -12,58 +12,16 @@ import { SidebarSection } from "../../components/Sidebar";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
+import {
+  getManagerToolAccess,
+  readStoredUser,
+} from "../../utils/workspaces";
 
 type SessionCapabilities = {
   can_manage_iam?: boolean;
   can_manage_buckets?: boolean;
   can_view_traffic?: boolean;
 };
-
-type SessionUserPayload = {
-  role?: string;
-  capabilities?: SessionCapabilities;
-  manager_tool_access?: {
-    bucket_compare?: boolean;
-    bucket_integrity_check?: boolean;
-    bucket_migration?: boolean;
-    ceph_s3_user_keys?: boolean;
-  } | null;
-};
-
-function getUserCapabilities(): SessionCapabilities | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as SessionUserPayload;
-    return parsed.capabilities ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function getUserRole(): string | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as SessionUserPayload;
-    return typeof parsed.role === "string" ? parsed.role : null;
-  } catch {
-    return null;
-  }
-}
-
-function getStoredUser(): SessionUserPayload | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as SessionUserPayload;
-  } catch {
-    return null;
-  }
-}
 
 function ManagerShell() {
   const {
@@ -87,8 +45,8 @@ function ManagerShell() {
   const selected = accounts.find((a) => a.id === selectedS3AccountId);
   const showSelector = requiresS3AccountSelection && accounts.length > 1;
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
-  const storedUser = getStoredUser();
-  const fallbackCapabilities = storedUser?.capabilities ?? getUserCapabilities();
+  const storedUser = readStoredUser();
+  const fallbackCapabilities = (storedUser?.capabilities as SessionCapabilities | undefined) ?? null;
   const capabilities = fallbackCapabilities ?? {
     can_manage_iam: true,
     can_manage_buckets: true,
@@ -100,14 +58,15 @@ function ManagerShell() {
     canManageBuckets && Boolean(generalSettings.bucket_compare_enabled) && Boolean(requiresS3AccountSelection);
   const canAccessBucketIntegrity =
     canManageBuckets && Boolean(generalSettings.bucket_integrity_check_enabled) && Boolean(requiresS3AccountSelection);
-  const userRole = storedUser?.role ?? getUserRole();
-  const managerToolAccess = storedUser?.manager_tool_access ?? null;
+  const userRole = storedUser?.role ?? null;
+  const managerToolAccess = getManagerToolAccess(storedUser);
   const canAccessMigration =
     Boolean(generalSettings.bucket_migration_enabled) &&
     Boolean(managerToolAccess?.bucket_migration) &&
     (userRole === "ui_admin" || userRole === "ui_superadmin" || userRole === "ui_user");
   const canAccessBucketCompareForUser = Boolean(managerToolAccess?.bucket_compare);
   const canAccessBucketIntegrityForUser = Boolean(managerToolAccess?.bucket_integrity_check);
+  const canAccessFeatureRulesForUser = Boolean(managerToolAccess?.feature_rules);
   const canShowBucketCompare = canAccessBucketCompare && canAccessBucketCompareForUser;
   const canShowBucketIntegrity = canAccessBucketIntegrity && canAccessBucketIntegrityForUser;
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
@@ -116,7 +75,10 @@ function ManagerShell() {
   const usageFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
   const metricsFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
   const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
-  const canViewMetricsMenu = Boolean(managerStatsEnabled) && (usageFeatureEnabled || metricsFeatureEnabled);
+  const canViewUsageStatsMenu =
+    canManageBuckets && Boolean(requiresS3AccountSelection) && Boolean(generalSettings.bucket_usage_stats_enabled);
+  const canViewMetricsMenu =
+    canViewUsageStatsMenu || (Boolean(managerStatsEnabled) && (usageFeatureEnabled || metricsFeatureEnabled));
   const managerMetricsDisabledHint =
     managerStatsEnabled === null
       ? "Metrics availability is loading for this context."
@@ -218,7 +180,7 @@ function ManagerShell() {
         { to: "/manager", label: "Dashboard", end: true },
         {
           to: "/manager/metrics",
-          label: "Metrics",
+          label: "Usage & Metrics",
           disabled: !canViewMetricsMenu,
           disabledHint: !canViewMetricsMenu ? managerMetricsDisabledHint : undefined,
         },
@@ -263,8 +225,11 @@ function ManagerShell() {
     });
   }
 
-  if (canManageBuckets && (canShowBucketCompare || canShowBucketIntegrity || canAccessMigration)) {
+  if (canManageBuckets) {
     const toolsLinks: SidebarSection[number]["links"] = [];
+    if (canAccessFeatureRulesForUser) {
+      toolsLinks.push({ to: "/manager/feature-rules", label: "Feature rules" });
+    }
     if (canShowBucketCompare) {
       toolsLinks.push({ to: "/manager/bucket-compare", label: "Compare" });
     }
@@ -274,10 +239,12 @@ function ManagerShell() {
     if (canAccessMigration) {
       toolsLinks.push({ to: "/manager/migrations", label: "Migration" });
     }
-    navSections.push({
-      label: "Tools",
-      links: toolsLinks,
-    });
+    if (toolsLinks.length > 0) {
+      navSections.push({
+        label: "Tools",
+        links: toolsLinks,
+      });
+    }
   }
 
   return (

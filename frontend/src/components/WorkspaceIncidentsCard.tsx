@@ -27,6 +27,10 @@ function formatTimestamp(value?: string | null) {
 
 function formatIncidentWindow(minutes?: number | null) {
   const value = Math.max(1, Number(minutes ?? 720));
+  if (value % (24 * 60) === 0) {
+    const days = value / (24 * 60);
+    return `${days} day${days > 1 ? "s" : ""}`;
+  }
   if (value % 60 === 0) {
     const hours = value / 60;
     return `${hours} hour${hours > 1 ? "s" : ""}`;

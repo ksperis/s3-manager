@@ -51,7 +51,9 @@ function buildSettings(): AppSettings {
       browser_enabled: true,
       browser_root_enabled: true,
       browser_manager_enabled: false,
+      browser_portal_enabled: true,
       browser_ceph_admin_enabled: true,
+      portal_enabled: true,
       billing_enabled: false,
       endpoint_status_enabled: false,
       quota_alerts_enabled: false,
@@ -59,6 +61,7 @@ function buildSettings(): AppSettings {
       bucket_migration_enabled: true,
       bucket_compare_enabled: true,
       bucket_integrity_check_enabled: false,
+      bucket_usage_stats_enabled: true,
       manager_ceph_s3_user_keys_enabled: false,
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
@@ -107,6 +110,7 @@ function unlockedFeatureLocks(): GeneralFeatureLocks {
     ceph_admin_enabled: { forced: false, value: null, source: null },
     storage_ops_enabled: { forced: false, value: null, source: null },
     browser_enabled: { forced: false, value: null, source: null },
+    portal_enabled: { forced: false, value: null, source: null },
     billing_enabled: { forced: false, value: null, source: null },
     endpoint_status_enabled: { forced: false, value: null, source: null },
   };
@@ -166,6 +170,13 @@ describe("GeneralSettingsPage branding", () => {
     await screen.findByLabelText("Primary color picker");
     expect(screen.queryByLabelText("Bucket migration tool")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Bucket compare tool")).not.toBeInTheDocument();
+  });
+
+  it("shows Experimental badge on portal feature toggle", async () => {
+    render(<GeneralSettingsPage />);
+
+    await screen.findByLabelText("Portal feature");
+    expect(screen.getByText("Experimental")).toBeInTheDocument();
   });
 
   it("sends a quota SMTP test email with current quota notification settings", async () => {

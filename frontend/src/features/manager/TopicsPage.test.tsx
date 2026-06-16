@@ -129,4 +129,92 @@ describe("TopicsPage", () => {
       persistent: "true",
     });
   });
+
+  it("renders Ceph notification bindings under a single topic row", async () => {
+    const topicArn = "arn:aws:sns:default:tenant:ceph-topic-main";
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: 7,
+          display_name: "Lab account",
+          storage_endpoint_capabilities: { sns: true },
+        },
+      ],
+      selectedS3AccountId: 7,
+      accountIdForApi: 7,
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      accessMode: "default",
+      iamIdentity: null,
+    });
+    listTopicsMock.mockResolvedValue([
+      {
+        name: "ceph-topic-main",
+        arn: topicArn,
+        is_ceph: true,
+        subscriptions_confirmed: 2,
+        subscriptions_pending: 0,
+        subscriptions: [
+          {
+            name: "notif.bucket-alpha_ceph-topic-main",
+            bucket: "bucket-alpha",
+            endpoint_address: "https://notify.example.test/hooks/a",
+            endpoint_topic: "endpoint-topic-a",
+            endpoint_args: { "verify-ssl": false, time_to_live: 60 },
+            persistent: true,
+            metadata: { OpaqueData: "trace-a" },
+          },
+          {
+            name: "notif.bucket-beta_ceph-topic-main",
+            bucket: "bucket-beta",
+            endpoint_address: "https://notify.example.test/hooks/b",
+            endpoint_topic: "endpoint-topic-b",
+            endpoint_args: { "verify-ssl": true },
+            persistent: false,
+            metadata: { OpaqueData: "trace-b" },
+          },
+          {
+            name: "notif.unknown_ceph-topic-main",
+            bucket: null,
+            endpoint_address: "https://notify.example.test/hooks/hidden",
+            endpoint_topic: "endpoint-topic-hidden",
+            endpoint_args: { Version: "2012-10-17" },
+            persistent: true,
+            metadata: { OpaqueData: "hidden-trace" },
+          },
+        ],
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <TopicsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("ceph-topic-main")).toBeInTheDocument();
+    expect(screen.getAllByText("ceph-topic-main")).toHaveLength(1);
+    expect(screen.getByText("Notifications: 2")).toBeInTheDocument();
+    expect(screen.queryByText("Confirmed: 2")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pending: 0")).not.toBeInTheDocument();
+    const bucketAlpha = screen.getByText("Bucket: bucket-alpha");
+    const bucketBeta = screen.getByText("Bucket: bucket-beta");
+    expect(bucketAlpha).toBeInTheDocument();
+    expect(bucketBeta).toBeInTheDocument();
+    expect(bucketAlpha.tagName).toBe("LI");
+    expect(bucketBeta.tagName).toBe("LI");
+    expect(bucketAlpha).not.toHaveClass("rounded-md");
+    expect(bucketAlpha).not.toHaveClass("border");
+    expect(bucketAlpha).not.toHaveClass("bg-slate-50");
+    expect(screen.queryByText("notif.bucket-alpha_ceph-topic-main")).not.toBeInTheDocument();
+    expect(screen.queryByText("notif.bucket-beta_ceph-topic-main")).not.toBeInTheDocument();
+    expect(screen.queryByText("notif.unknown_ceph-topic-main")).not.toBeInTheDocument();
+    expect(screen.queryByText("Endpoint: https://notify.example.test/hooks/a")).not.toBeInTheDocument();
+    expect(screen.queryByText("Endpoint topic: endpoint-topic-a")).not.toBeInTheDocument();
+    expect(screen.queryByText("Persistent: true")).not.toBeInTheDocument();
+    expect(screen.queryByText("verify-ssl: false · time_to_live: 60 · OpaqueData: trace-a")).not.toBeInTheDocument();
+    expect(screen.queryByText("Endpoint: https://notify.example.test/hooks/b")).not.toBeInTheDocument();
+    expect(screen.queryByText("Endpoint: https://notify.example.test/hooks/hidden")).not.toBeInTheDocument();
+    expect(screen.queryByText("Version: 2012-10-17")).not.toBeInTheDocument();
+  });
 });

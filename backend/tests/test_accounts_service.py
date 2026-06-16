@@ -1,11 +1,27 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from datetime import date, datetime
 from typing import Optional
 
 import pytest
 
 from app.services.s3_accounts_service import S3AccountsService
-from app.db import S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.db import (
+    BillingAssignment,
+    BillingRateCard,
+    BillingStorageDaily,
+    BillingUsageDaily,
+    BucketUsageStatsSnapshot,
+    QuotaAlertState,
+    QuotaUsageDaily,
+    QuotaUsageHourly,
+    S3Account,
+    StorageEndpoint,
+    StorageProvider,
+    User,
+    UserRole,
+    UserS3Account,
+)
 from app.models.s3_account import S3AccountCreate, S3AccountImport
 from app.services.rgw_admin import RGWAdminError
 
@@ -39,10 +55,11 @@ def _build_service(db_session, monkeypatch, fake_admin) -> S3AccountsService:
 
 
 class FakeRGWAdmin:
-    def __init__(self):
+    def __init__(self, account_payload: Optional[dict[str, object]] = None):
         self.created_accounts: list[tuple[str, str]] = []
         self.created_users: list[str] = []
         self.quota_calls: list[dict[str, object]] = []
+        self.account_payload = account_payload
 
     def create_account(self, account_id: str, account_name: str):
         self.created_accounts.append((account_id, account_name))
@@ -94,6 +111,8 @@ class FakeRGWAdmin:
         allow_not_found: bool = False,
         allow_not_implemented: bool = False,
     ):
+        if self.account_payload is not None:
+            return self.account_payload
         return {"id": account_id, "user_list": []}
 
 
@@ -135,6 +154,36 @@ def test_create_account_requires_account_api_feature(db_session, monkeypatch):
 
     with pytest.raises(ValueError, match="does not support RGW account API"):
         svc.create_account_with_manager(payload)
+
+
+def test_get_account_limits_returns_quota_and_entity_limits(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
+    account = S3Account(
+        name="LimitedAccount",
+        rgw_account_id="RGW-LIMITED",
+        storage_endpoint_id=endpoint.id,
+    )
+    db_session.add(account)
+    db_session.commit()
+    fake_admin = FakeRGWAdmin(
+        {
+            "id": "RGW-LIMITED",
+            "quota": {
+                "enabled": True,
+                "max_size": 10 * 1024 ** 3,
+                "max_objects": 2_000,
+            },
+            "limits": {
+                "max_buckets": "8",
+                "max_users": "20",
+                "max_roles": 12,
+                "max_groups": 6,
+            },
+        }
+    )
+    svc = _build_service(db_session, monkeypatch, fake_admin)
+
+    assert svc.get_account_limits(account) == (10, 2_000, 8, 20, 12, 6)
 
 
 class FakeRGWAdminImport:
@@ -293,6 +342,68 @@ class FakeRGWDeleteAdminFails(FakeRGWDeleteAdmin):
         raise RGWAdminError("delete_user failed")
 
 
+def _seed_account_derived_rows(db_session, *, endpoint: StorageEndpoint, account: S3Account) -> None:
+    rate_card = BillingRateCard(
+        name=f"account-delete-rate-{account.id}",
+        currency="EUR",
+        effective_from=date(2026, 1, 1),
+        storage_endpoint_id=endpoint.id,
+    )
+    db_session.add(rate_card)
+    db_session.flush()
+    db_session.add_all(
+        [
+            BillingAssignment(
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                rate_card_id=rate_card.id,
+            ),
+            BillingUsageDaily(
+                day=date(2026, 1, 1),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                source="rgw_admin_usage",
+            ),
+            BillingStorageDaily(
+                day=date(2026, 1, 1),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                source="rgw_admin_bucket_stats",
+            ),
+            QuotaUsageHourly(
+                hour_ts=datetime(2026, 1, 1, 8, 0, 0),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                used_bytes=1,
+                used_objects=1,
+            ),
+            QuotaUsageDaily(
+                day=date(2026, 1, 1),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                last_used_bytes=1,
+                last_used_objects=1,
+            ),
+            QuotaAlertState(
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+            ),
+            BucketUsageStatsSnapshot(
+                scope_kind="manager",
+                scope_id=str(account.id),
+                scope_name=account.name,
+                bucket_name="account-bucket",
+                data_type_distribution_json="[]",
+                storage_class_distribution_json="[]",
+                size_distribution_json="[]",
+                age_distribution_json="[]",
+                current_noncurrent_distribution_json="[]",
+            ),
+        ]
+    )
+    db_session.commit()
+
+
 def test_delete_account_skips_rgw_when_flag_false(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
     account = S3Account(name="DeleteMe", rgw_account_id="RGW00000000000000001", storage_endpoint_id=endpoint.id)
@@ -310,6 +421,33 @@ def test_delete_account_skips_rgw_when_flag_false(db_session, monkeypatch):
     assert fake_admin.deleted == []
     assert fake_admin.deleted_users == []
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
+
+
+def test_delete_account_purges_derived_database_rows(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session, account_enabled=True, is_default=True)
+    account = S3Account(name="DeleteDerived", rgw_account_id="RGW00000000000000004", storage_endpoint_id=endpoint.id)
+    db_session.add(account)
+    db_session.commit()
+    _seed_account_derived_rows(db_session, endpoint=endpoint, account=account)
+
+    fake_admin = FakeRGWDeleteAdmin()
+    svc = _build_service(db_session, monkeypatch, fake_admin)
+    svc.delete_account(account.id, delete_rgw=False)
+
+    assert db_session.query(BillingAssignment).filter(BillingAssignment.s3_account_id == account.id).count() == 0
+    assert db_session.query(BillingUsageDaily).filter(BillingUsageDaily.s3_account_id == account.id).count() == 0
+    assert (
+        db_session.query(BillingStorageDaily).filter(BillingStorageDaily.s3_account_id == account.id).count() == 0
+    )
+    assert db_session.query(QuotaUsageHourly).filter(QuotaUsageHourly.s3_account_id == account.id).count() == 0
+    assert db_session.query(QuotaUsageDaily).filter(QuotaUsageDaily.s3_account_id == account.id).count() == 0
+    assert db_session.query(QuotaAlertState).filter(QuotaAlertState.s3_account_id == account.id).count() == 0
+    assert (
+        db_session.query(BucketUsageStatsSnapshot)
+        .filter(BucketUsageStatsSnapshot.scope_kind == "manager", BucketUsageStatsSnapshot.scope_id == str(account.id))
+        .count()
+        == 0
+    )
 
 
 def test_delete_account_calls_rgw_when_flag_true(db_session, monkeypatch):

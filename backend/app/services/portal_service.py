@@ -6,8 +6,8 @@ import logging
 import os
 import re
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
-from io import BytesIO
 from typing import Any, Optional, Tuple, TYPE_CHECKING
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -42,6 +42,7 @@ from app.models.bucket import Bucket
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser
 from app.models.portal import (
     PortalAccessKey,
+    PortalAccessKeysState,
     PortalAccountSettings,
     PortalActivityItem,
     PortalAlert,
@@ -53,8 +54,7 @@ from app.models.portal import (
     PortalTransfer,
     PortalStorageObjectDetail,
     PortalStorageSpace,
-    PortalStorageObject,
-    PortalStorageObjectListing,
+    PortalStorageSpaceNamingMode,
     PortalStorageSpaceRole,
     PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
@@ -70,6 +70,7 @@ from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resol
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_admin_endpoint
 from app.utils.s3_endpoint import resolve_s3_client_options, resolve_s3_endpoint
 from app.utils.normalize import normalize_string_list
+from app.utils.quota_stats import extract_quota_limits
 from app.utils.usage_stats import extract_usage_stats
 from app.utils.time import utcnow
 
@@ -80,8 +81,41 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _parse_positive_limit(value: Any) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        parsed = int(value)
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            parsed = int(float(normalized))
+        except ValueError:
+            return None
+    else:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _extract_account_limit(payload: Any, key: str) -> Optional[int]:
+    if not isinstance(payload, dict):
+        return None
+    limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
+    return _parse_positive_limit(payload.get(key) or limits_payload.get(key))
+
+
 class PortalAccessKeyLimitExceeded(RuntimeError):
     """Raised when a portal user reaches the configured IAM user key limit."""
+
+
+class PortalAccessKeyManagementDisabled(RuntimeError):
+    """Raised when portal access-key mutations are disabled by settings."""
+
+
+class PortalAccessKeyProtected(RuntimeError):
+    """Raised when a request targets the active portal credential."""
 
 
 class PortalService:
@@ -206,6 +240,8 @@ class PortalService:
             portal_settings.allow_portal_key = override.allow_portal_key
         if override.allow_portal_user_bucket_create is not None:
             portal_settings.allow_portal_user_bucket_create = override.allow_portal_user_bucket_create
+        if override.allow_portal_named_bucket_create is not None:
+            portal_settings.allow_portal_named_bucket_create = override.allow_portal_named_bucket_create
         if override.allow_portal_user_access_key_create is not None:
             portal_settings.allow_portal_user_access_key_create = override.allow_portal_user_access_key_create
         self._apply_policy_override(
@@ -255,6 +291,12 @@ class PortalService:
             and admin_override.allow_portal_user_bucket_create is None
         ):
             portal_settings.allow_portal_user_bucket_create = override.allow_portal_user_bucket_create
+        if (
+            override.allow_portal_named_bucket_create is not None
+            and policy.allow_portal_named_bucket_create
+            and admin_override.allow_portal_named_bucket_create is None
+        ):
+            portal_settings.allow_portal_named_bucket_create = override.allow_portal_named_bucket_create
         if (
             override.allow_portal_user_access_key_create is not None
             and policy.allow_portal_user_access_key_create
@@ -322,6 +364,11 @@ class PortalService:
                 issues.append("Override non autorise pour la creation de bucket portail.")
             if admin_override.allow_portal_user_bucket_create is not None:
                 issues.append("Override verrouille par l'admin pour la creation de bucket portail.")
+        if override.allow_portal_named_bucket_create is not None:
+            if not policy.allow_portal_named_bucket_create:
+                issues.append("Override non autorise pour la creation de bucket nomme portail.")
+            if admin_override.allow_portal_named_bucket_create is not None:
+                issues.append("Override verrouille par l'admin pour la creation de bucket nomme portail.")
         if override.allow_portal_user_access_key_create is not None:
             if not policy.allow_portal_user_access_key_create:
                 issues.append("Override non autorise pour la creation de cle d'acces portail.")
@@ -711,6 +758,24 @@ class PortalService:
         except RGWAdminError as exc:
             logger.warning("Unable to fetch portal quota for %s: %s", account.rgw_account_id, exc)
             return None, None
+
+    def _account_limits(self, account: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
+        if not account.rgw_account_id:
+            return None, None, None
+        admin = self._quota_admin_for_account(account)
+        if not admin:
+            return None, None, None
+        try:
+            payload = admin.get_account(
+                account.rgw_account_id,
+                allow_not_found=True,
+                allow_not_implemented=True,
+            ) or {}
+        except RGWAdminError as exc:
+            logger.warning("Unable to fetch portal account limits for %s: %s", account.rgw_account_id, exc)
+            return None, None, None
+        max_size_bytes, max_objects = extract_quota_limits(payload, keys=("quota", "account_quota"))
+        return max_size_bytes, max_objects, _extract_account_limit(payload, "max_buckets")
 
     def _admin_bucket_list(self, account: S3Account, admin: Optional[RGWAdminClient] = None) -> list[dict]:
         uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
@@ -1646,6 +1711,18 @@ class PortalService:
             counter += 1
         return candidate
 
+    def _unique_uuid_storage_space_bucket_name(self, existing: set[str]) -> str:
+        candidate = str(uuid.uuid4())
+        while candidate in existing:
+            candidate = str(uuid.uuid4())
+        return candidate
+
+    def _storage_space_origin(self, metadata: PortalStorageSpaceMetadata | None) -> str:
+        value = metadata.origin if metadata and metadata.origin else "legacy"
+        if value in {"legacy", "portal_generic", "portal_named", "imported"}:
+            return value
+        return "legacy"
+
     def _storage_space_role(self, access: "AccountAccess") -> PortalStorageSpaceRole:
         if access.capabilities.can_manage_buckets or access.role == AccountRole.PORTAL_MANAGER.value:
             return "Owner"
@@ -1691,6 +1768,8 @@ class PortalService:
             quota_max_objects=bucket.quota_max_objects,
             internal_bucket_name=bucket.name,
             archived_at=metadata.archived_at if metadata else None,
+            origin=self._storage_space_origin(metadata),
+            name_editable=bool(metadata and metadata.name_editable),
         )
 
     def list_storage_spaces(
@@ -1801,6 +1880,7 @@ class PortalService:
         access: "AccountAccess",
         *,
         name: str,
+        naming_mode: PortalStorageSpaceNamingMode = "generic_uuid",
         description: Optional[str] = None,
         owner_label: Optional[str] = None,
         space_type: Optional[str] = None,
@@ -1813,7 +1893,16 @@ class PortalService:
         if not (access.capabilities.can_manage_buckets or (allow_portal_user_create and is_portal_user)):
             raise RuntimeError("Storage Space creation not allowed for this role.")
         existing = {space.internal_bucket_name or space.id for space in self.list_storage_spaces(user, access, include_archived=True)}
-        bucket_name = self._unique_storage_space_bucket_name(name, existing)
+        if naming_mode == "named_bucket":
+            if not portal_settings.allow_portal_named_bucket_create:
+                raise RuntimeError("Named bucket Storage Space creation is not allowed for this account.")
+            bucket_name = self._unique_storage_space_bucket_name(name, existing)
+            origin = "portal_named"
+            name_editable = False
+        else:
+            bucket_name = self._unique_uuid_storage_space_bucket_name(existing)
+            origin = "portal_generic"
+            name_editable = True
         self.create_bucket(user, access, bucket_name, portal_settings=portal_settings)
         metadata = PortalStorageSpaceMetadata(
             account_id=access.account.id,
@@ -1824,12 +1913,72 @@ class PortalService:
             space_type=space_type,
             project_key=project_key,
             dataset_label=dataset_label,
+            origin=origin,
+            name_editable=name_editable,
         )
         self.db.add(metadata)
         self.db.commit()
         storage_space = self.get_storage_space(user, access, bucket_name)
         if storage_space is None:
             raise RuntimeError("Created Storage Space is not visible.")
+        return storage_space
+
+    def import_storage_space(
+        self,
+        user: User,
+        access: "AccountAccess",
+        *,
+        bucket_name: str,
+        description: Optional[str] = None,
+        owner_label: Optional[str] = None,
+        space_type: Optional[str] = None,
+        project_key: Optional[str] = None,
+        dataset_label: Optional[str] = None,
+    ) -> PortalStorageSpace:
+        cleaned_bucket_name = (bucket_name or "").strip()
+        if not cleaned_bucket_name:
+            raise RuntimeError("Bucket name requis.")
+        if not access.capabilities.can_manage_buckets:
+            raise RuntimeError("Storage Space import not allowed for this role.")
+        access_key, secret_key = self._account_credentials(access.account)
+        buckets = s3_client.list_buckets(
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._s3_client_kwargs(access.account),
+        )
+        if cleaned_bucket_name not in {bucket.get("name") for bucket in buckets}:
+            raise RuntimeError("Bucket not found for this account.")
+        portal_settings = self._effective_portal_settings(access.account)
+        iam_service = self._get_iam_service(access.account)
+        link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
+        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
+        self._ensure_policy_and_key(link, iam_service)
+        self._ensure_user_bucket_policy(iam_service, link.iam_username, cleaned_bucket_name, portal_settings=portal_settings)
+        metadata = self._storage_space_metadata(access.account, cleaned_bucket_name)
+        if metadata is None:
+            metadata = PortalStorageSpaceMetadata(account_id=access.account.id, bucket_name=cleaned_bucket_name)
+            self.db.add(metadata)
+        metadata.display_name = cleaned_bucket_name
+        if description is not None:
+            metadata.description = description
+        if owner_label is not None:
+            metadata.owner_label = owner_label
+        elif not metadata.owner_label:
+            metadata.owner_label = access.account.name
+        if space_type is not None:
+            metadata.space_type = space_type
+        if project_key is not None:
+            metadata.project_key = project_key
+        if dataset_label is not None:
+            metadata.dataset_label = dataset_label
+        metadata.origin = "imported"
+        metadata.name_editable = False
+        metadata.updated_at = utcnow()
+        self.db.add(metadata)
+        self.db.commit()
+        storage_space = self.get_storage_space(user, access, cleaned_bucket_name)
+        if storage_space is None:
+            raise RuntimeError("Imported Storage Space is not visible.")
         return storage_space
 
     def update_storage_space(
@@ -1855,7 +2004,11 @@ class PortalService:
             metadata = PortalStorageSpaceMetadata(account_id=access.account.id, bucket_name=bucket_name)
             self.db.add(metadata)
         if name is not None:
-            metadata.display_name = name
+            current_name = self._display_storage_space_name(bucket_name, metadata)
+            if not metadata.name_editable and name != current_name:
+                raise RuntimeError("Storage Space name cannot be changed for this bucket.")
+            if metadata.name_editable:
+                metadata.display_name = name
         if description is not None:
             metadata.description = description
         if owner_label is not None:
@@ -1924,84 +2077,6 @@ class PortalService:
     def _object_name(self, key: str) -> str:
         normalized = key.rstrip("/")
         return os.path.basename(normalized) or normalized or key
-
-    def list_storage_space_objects(
-        self,
-        user: User,
-        access: "AccountAccess",
-        space_id: str,
-        prefix: str = "",
-        continuation_token: Optional[str] = None,
-        max_keys: int = 1000,
-    ) -> PortalStorageObjectListing:
-        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
-        if not bucket_name:
-            raise RuntimeError("Storage space not found or not allowed.")
-        client = self._portal_object_client(user, access.account)
-        safe_max_keys = max(1, min(int(max_keys or 1000), 1000))
-        normalized_prefix = (prefix or "").lstrip("/")
-        kwargs: dict[str, Any] = {
-            "Bucket": bucket_name,
-            "Prefix": normalized_prefix,
-            "Delimiter": "/",
-            "MaxKeys": safe_max_keys,
-        }
-        if continuation_token:
-            kwargs["ContinuationToken"] = continuation_token
-        try:
-            resp = client.list_objects_v2(**kwargs)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to list objects for storage space '{space_id}': {exc}") from exc
-
-        objects: list[PortalStorageObject] = []
-        for obj in resp.get("Contents", []):
-            key = obj.get("Key")
-            if not key:
-                continue
-            if normalized_prefix and key.rstrip("/") == normalized_prefix.rstrip("/") and int(obj.get("Size") or 0) == 0:
-                continue
-            objects.append(
-                PortalStorageObject(
-                    key=key,
-                    name=self._object_name(key),
-                    size=int(obj.get("Size") or 0),
-                    last_modified=obj.get("LastModified"),
-                )
-            )
-        prefixes = [item.get("Prefix") for item in resp.get("CommonPrefixes", []) if item.get("Prefix")]
-        return PortalStorageObjectListing(
-            prefix=normalized_prefix,
-            objects=objects,
-            prefixes=prefixes,
-            is_truncated=bool(resp.get("IsTruncated")),
-            next_continuation_token=resp.get("NextContinuationToken"),
-        )
-
-    def upload_storage_space_object(
-        self,
-        user: User,
-        access: "AccountAccess",
-        space_id: str,
-        key: str,
-        file_obj,
-        content_type: Optional[str] = None,
-    ) -> str:
-        target_key = (key or "").lstrip("/")
-        if not target_key:
-            raise RuntimeError("Object key is required.")
-        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
-        if not bucket_name:
-            raise RuntimeError("Storage space not found or not allowed.")
-        if self._user_storage_space_role(user, access, bucket_name) == "Viewer":
-            raise RuntimeError("Upload not allowed for this storage space role.")
-        client = self._portal_object_client(user, access.account)
-        extra_args = {"ContentType": content_type} if content_type else None
-        stream = file_obj if hasattr(file_obj, "read") else BytesIO(file_obj)
-        try:
-            client.upload_fileobj(stream, bucket_name, target_key, ExtraArgs=extra_args)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to upload object '{target_key}' in storage space '{space_id}': {exc}") from exc
-        return target_key
 
     def download_storage_space_object(
         self,
@@ -2089,33 +2164,6 @@ class PortalService:
             preview_text=preview_text,
             preview_unavailable_reason=preview_reason,
         )
-
-    def create_storage_space_folder(
-        self,
-        user: User,
-        access: "AccountAccess",
-        space_id: str,
-        prefix: str,
-        name: str,
-    ) -> str:
-        folder_name = (name or "").strip().strip("/")
-        if not folder_name:
-            raise RuntimeError("Folder name is required.")
-        base_prefix = (prefix or "").lstrip("/")
-        if base_prefix and not base_prefix.endswith("/"):
-            base_prefix = f"{base_prefix}/"
-        target_key = f"{base_prefix}{folder_name}/"
-        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
-        if not bucket_name:
-            raise RuntimeError("Storage space not found or not allowed.")
-        if self._user_storage_space_role(user, access, bucket_name) == "Viewer":
-            raise RuntimeError("Folder creation not allowed for this storage space role.")
-        client = self._portal_object_client(user, access.account)
-        try:
-            client.put_object(Bucket=bucket_name, Key=target_key, Body=b"", ContentType="application/x-directory")
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to create folder '{target_key}' in storage space '{space_id}': {exc}") from exc
-        return target_key
 
     def delete_storage_space_object(
         self,
@@ -2866,7 +2914,8 @@ class PortalService:
                             logger.warning("Unable to list buckets with existing portal credentials for %s: %s", user.email, exc)
                             buckets = []
         total_buckets = len(buckets)
-        quota_max_size_bytes, quota_max_objects = self._account_quota(account)
+        quota_max_size_bytes, quota_max_objects, max_buckets = self._account_limits(account)
+        portal_settings = self._effective_portal_settings(account)
         return PortalState(
             account_id=account.id,
             iam_user=PortalIAMUser(
@@ -2879,6 +2928,7 @@ class PortalService:
             iam_provisioned=iam_provisioned,
             buckets=buckets,
             total_buckets=total_buckets,
+            max_buckets=max_buckets,
             s3_endpoint=resolve_s3_endpoint(account),
             used_bytes=used_bytes,
             used_objects=used_objects,
@@ -2888,6 +2938,7 @@ class PortalService:
             account_role=access.role,
             can_manage_buckets=access.capabilities.can_manage_buckets,
             can_manage_portal_users=access.capabilities.can_manage_portal_users,
+            allow_named_bucket_create=portal_settings.allow_portal_named_bucket_create,
         )
 
     def get_usage(self, user: User, access: "AccountAccess") -> PortalUsage:
@@ -3002,10 +3053,41 @@ class PortalService:
             return []
         return self._list_access_keys(link, iam_service, include_portal=False)
 
+    def get_access_keys_state(self, user: User, access: "AccountAccess") -> PortalAccessKeysState:
+        portal_settings = self._effective_portal_settings(access.account)
+        link = self._existing_portal_link(user, access.account)
+        iam_user = None
+        access_keys: list[PortalAccessKey] = []
+        if link and link.iam_username:
+            iam_service = self._get_iam_service(access.account)
+            iam_user = iam_service.get_user(link.iam_username)
+            if iam_user:
+                access_keys = self._list_access_keys(link, iam_service, include_portal=False)
+        return PortalAccessKeysState(
+            iam_user=PortalIAMUser(
+                iam_user_id=link.iam_user_id if link else None,
+                iam_username=link.iam_username if link else None,
+                arn=iam_user.arn if iam_user else None,
+                created_at=link.created_at if link else None,
+            ),
+            s3_endpoint=resolve_s3_endpoint(access.account),
+            access_keys=access_keys,
+            can_manage_access_keys=portal_settings.allow_portal_user_access_key_create,
+            max_access_keys=portal_settings.max_portal_user_access_keys,
+        )
+
+    def _ensure_access_key_management_allowed(self, access: "AccountAccess") -> PortalSettings:
+        portal_settings = self._effective_portal_settings(access.account)
+        if not portal_settings.allow_portal_user_access_key_create:
+            raise PortalAccessKeyManagementDisabled("Portal access-key management is disabled for this account.")
+        return portal_settings
+
     def create_access_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
+        portal_settings = self._effective_portal_settings(access.account)
+        if not portal_settings.allow_portal_user_access_key_create:
+            raise PortalAccessKeyManagementDisabled("Portal access-key management is disabled for this account.")
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        portal_settings = self._effective_portal_settings(access.account)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
@@ -3078,14 +3160,14 @@ class PortalService:
         return portal_key
 
     def update_access_key_status(self, user: User, access: "AccountAccess", access_key_id: str, active: bool) -> PortalAccessKey:
+        portal_settings = self._ensure_access_key_management_allowed(access)
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        portal_settings = self._effective_portal_settings(access.account)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
-        if access_key_id == link.active_access_key and not active:
-            raise RuntimeError("Impossible de désactiver la clé portail")
+        if access_key_id == link.active_access_key:
+            raise PortalAccessKeyProtected("Cannot update the portal access key")
         status_value = "Active" if active else "Inactive"
         iam_service.update_access_key_status(link.iam_username, access_key_id, status_value)
         metas = iam_service.list_access_keys(link.iam_username)
@@ -3102,12 +3184,12 @@ class PortalService:
         )
 
     def delete_access_key(self, user: User, access: "AccountAccess", access_key_id: str) -> None:
+        portal_settings = self._ensure_access_key_management_allowed(access)
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        portal_settings = self._effective_portal_settings(access.account)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if access_key_id == link.active_access_key:
-            raise RuntimeError("Cannot delete the portal access key")
+            raise PortalAccessKeyProtected("Cannot delete the portal access key")
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
         iam_service.delete_access_key(link.iam_username, access_key_id)

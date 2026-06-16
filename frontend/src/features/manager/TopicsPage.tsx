@@ -112,6 +112,11 @@ const buildAttributesSignature = (
     attributeItems,
   });
 
+const topicNotificationBuckets = (topic: Topic): string[] =>
+  (topic.subscriptions ?? [])
+    .map((subscription) => subscription.bucket)
+    .filter((bucket): bucket is string => Boolean(bucket));
+
 export default function TopicsPage() {
   const {
     accounts,
@@ -554,6 +559,7 @@ export default function TopicsPage() {
           <ListToolbar
             title="Topics"
             description={`${accountLabel} · Topic inventory, subscriptions, attributes, and policies.`}
+            showHeading={false}
             countLabel={`${filteredTopics.length} result(s)`}
             search={
               <input
@@ -578,7 +584,9 @@ export default function TopicsPage() {
                 {filteredTableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading topics..." />}
                 {filteredTableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load topics." tone="error" />}
                 {filteredTableStatus === "empty" && <TableEmptyState colSpan={3} message="No topics." />}
-                {filteredTopics.map((topic) => (
+                {filteredTopics.map((topic) => {
+                  const notificationBuckets = topicNotificationBuckets(topic);
+                  return (
                     <tr key={topic.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="manager-table-cell-wide px-6 py-4">
                         <div className="flex flex-col">
@@ -587,8 +595,25 @@ export default function TopicsPage() {
                         </div>
                       </td>
                       <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">
-                        <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
-                        <div>Pending: {topic.subscriptions_pending ?? 0}</div>
+                        {topic.is_ceph ? (
+                          <>
+                            <div>Notifications: {notificationBuckets.length}</div>
+                            {notificationBuckets.length > 0 && (
+                              <ul className="mt-1 space-y-0.5">
+                                {notificationBuckets.map((bucket, index) => (
+                                  <li key={`${bucket}-${index}`}>
+                                    Bucket: {bucket}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
+                            <div>Pending: {topic.subscriptions_pending ?? 0}</div>
+                          </>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -616,7 +641,8 @@ export default function TopicsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

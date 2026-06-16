@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { ReactNode } from "react";
+import { cx, uiCardClass, uiMutedTextClass, uiTitleTextClass } from "./ui/styles";
 
 type HeaderProps = {
   title: string;
@@ -13,14 +14,14 @@ type HeaderProps = {
 
 export default function Header({ title, subtitle, context, inlineAction }: HeaderProps) {
   return (
-    <header className="mb-4 rounded-xl border border-slate-200/80 bg-gradient-to-r from-slate-50 to-white px-4 py-3 shadow-sm dark:border-slate-800 dark:from-slate-900/60 dark:to-slate-900/20">
+    <header className={cx("mb-4 px-4 py-3", uiCardClass)}>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
-          {subtitle && <p className="ui-caption font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{subtitle}</p>}
+          {subtitle && <p className={cx("ui-caption font-semibold uppercase", uiMutedTextClass)}>{subtitle}</p>}
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="ui-title font-semibold text-slate-900 dark:text-white">{title}</h1>
+            <h1 className={cx("ui-title", uiTitleTextClass)}>{title}</h1>
             {context && (
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              <span className="rounded-full border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-2.5 py-0.5 ui-caption font-semibold text-[var(--ui-text)]">
                 {context}
               </span>
             )}

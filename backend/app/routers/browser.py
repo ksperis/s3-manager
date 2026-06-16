@@ -97,13 +97,18 @@ from app.routers.dependencies import (
     get_current_account_admin,
     get_current_super_admin,
     get_optional_sse_customer_context,
+    require_portal_browser_basic_route,
 )
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
 from app.services import bucket_config_actions
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.buckets_service import BucketsService, get_buckets_service
-router = APIRouter(prefix="/browser", tags=["browser"])
+router = APIRouter(
+    prefix="/browser",
+    tags=["browser"],
+    dependencies=[Depends(require_portal_browser_basic_route)],
+)
 
 
 def _build_attachment_content_disposition(filename: str) -> str:

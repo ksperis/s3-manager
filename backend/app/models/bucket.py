@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime
-from typing import Optional, List, Literal
+from typing import Any, Optional, List, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -157,6 +157,27 @@ class BucketEncryptionConfiguration(BaseModel):
 
 class BucketNotificationConfiguration(BaseModel):
     configuration: dict = Field(default_factory=dict)
+
+
+FeatureRuleInventoryFeature = Literal["lifecycle", "policy", "cors", "notifications", "tags"]
+FeatureRuleInventoryStatus = Literal["configured", "empty", "unavailable"]
+
+
+class FeatureRuleInventoryRule(BaseModel):
+    id: str
+    type: str
+    title: str
+    summary: str
+    chips: list[str] = Field(default_factory=list)
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
+class FeatureRuleInventoryBucket(BaseModel):
+    bucket_name: str
+    feature: FeatureRuleInventoryFeature
+    status: FeatureRuleInventoryStatus
+    rules: list[FeatureRuleInventoryRule] = Field(default_factory=list)
+    error: Optional[str] = None
 
 
 class BucketReplicationConfiguration(BaseModel):

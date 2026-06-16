@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import axios from "axios";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
@@ -16,8 +16,15 @@ import {
   BucketTag,
   createBucket,
   deleteBucket,
+  getBucketCors,
+  getBucketLogging,
+  getBucketNotifications,
+  getBucketPolicy,
+  getBucketProperties,
+  getBucketWebsite,
   listBuckets,
 } from "../../api/buckets";
+import type { BucketProperties } from "../../api/buckets";
 import { S3AccountSelector } from "../../api/accountParams";
 import { useS3AccountContext } from "./S3AccountContext";
 import PageHeader from "../../components/PageHeader";
@@ -36,8 +43,24 @@ import {
   normalizeS3BucketName,
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
+import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
+import { compareByNullableField, type SortableField } from "../../utils/sortValues";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "../shared/BucketFeatureSummaryTooltip";
+import type { BucketFeatureTooltipState } from "../shared/BucketFeatureSummaryTooltip";
+import {
+  buildBucketPolicySummaryLines,
+  buildBucketTagSummaryLines,
+  buildCorsRuleSummaryLines,
+  buildLifecycleRuleSummaryLines,
+  buildLoggingSummaryLines,
+  buildNotificationSummaryLines,
+  buildObjectLockSummaryLines,
+  buildPublicAccessBlockSummaryLines,
+  buildVersioningSummaryLines,
+  buildWebsiteSummaryLines,
+} from "../shared/bucketFeatureSummaries";
 
 type BucketForm = {
   name: string;
@@ -54,6 +77,7 @@ const defaultForm: BucketForm = {
 const buildDefaultForm = (): BucketForm => ({
   ...defaultForm,
 });
+const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
 function QuotaBar({ usedBytes, quotaBytes }: { usedBytes?: number | null; quotaBytes?: number | null }) {
   if (!quotaBytes || quotaBytes <= 0) {
@@ -117,6 +141,7 @@ type BucketListRow = Bucket & {
   tags?: BucketTag[] | null;
   features?: Record<string, BucketFeatureStatus> | null;
 };
+type SortField = SortableField<BucketListRow>;
 
 type ColumnId =
   | "used_bytes"
@@ -136,12 +161,47 @@ type ColumnId =
   | "notifications"
   | "quota_status";
 
-const COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.v1";
+type ManagerFeatureKey =
+  | "versioning"
+  | "object_lock"
+  | "block_public_access"
+  | "lifecycle_rules"
+  | "static_website"
+  | "bucket_policy"
+  | "cors"
+  | "access_logging"
+  | "notifications";
+
+const MANAGER_FEATURE_LABELS: Record<ManagerFeatureKey, string> = {
+  versioning: "Versioning",
+  object_lock: "Object Lock",
+  block_public_access: "Block public access",
+  lifecycle_rules: "Lifecycle rules",
+  static_website: "Static website",
+  bucket_policy: "Bucket policy",
+  cors: "CORS",
+  access_logging: "Access logging",
+  notifications: "Notifications",
+};
+
+const LEGACY_COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.v1";
+const COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.session.v1";
 const defaultVisibleColumns: ColumnId[] = ["used_bytes", "object_count"];
 
 const loadVisibleColumns = (): ColumnId[] => {
   if (typeof window === "undefined") return defaultVisibleColumns;
-  const raw = localStorage.getItem(COLUMNS_STORAGE_KEY);
+  try {
+    window.localStorage.removeItem(LEGACY_COLUMNS_STORAGE_KEY);
+  } catch {
+    // Ignore storage access failures; the default column set remains safe.
+  }
+
+  let raw: string | null = null;
+  try {
+    raw = window.sessionStorage.getItem(COLUMNS_STORAGE_KEY);
+  } catch {
+    return defaultVisibleColumns;
+  }
   if (!raw) return defaultVisibleColumns;
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -173,7 +233,11 @@ const loadVisibleColumns = (): ColumnId[] => {
 
 const persistVisibleColumns = (value: ColumnId[]) => {
   if (typeof window === "undefined") return;
-  localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(value));
+  try {
+    window.sessionStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(value));
+  } catch {
+    // Ignore storage write failures; the in-memory selection still applies for this render.
+  }
 };
 
 export default function BucketsPage() {
@@ -205,7 +269,13 @@ export default function BucketsPage() {
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const fetchRequestRef = useRef(0);
-  const [sort, setSort] = useState<{ field: keyof Bucket; direction: "asc" | "desc" }>({
+  const [activeFeatureTooltipKey, setActiveFeatureTooltipKey] = useState<string | null>(null);
+  const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, BucketFeatureTooltipState>>({});
+  const featureTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
+  const bucketPropertiesCacheRef = useRef<Record<string, BucketProperties>>({});
+  const bucketPropertiesInflightRef = useRef<Record<string, Promise<BucketProperties>>>({});
+  const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
+  const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>({
     field: "used_bytes",
     direction: "desc",
   });
@@ -239,21 +309,21 @@ export default function BucketsPage() {
   );
   const featureColumnOptions = useMemo(
     () =>
-      [
-        { id: "versioning" as const, label: "Versioning", key: "versioning" },
-        { id: "object_lock" as const, label: "Object Lock", key: "object_lock" },
-        { id: "block_public_access" as const, label: "Block public access", key: "block_public_access" },
-        { id: "lifecycle_rules" as const, label: "Lifecycle rules", key: "lifecycle_rules" },
-        { id: "static_website" as const, label: "Static website", key: "static_website" },
-        { id: "bucket_policy" as const, label: "Bucket policy", key: "bucket_policy" },
-        { id: "cors" as const, label: "CORS", key: "cors" },
-        { id: "access_logging" as const, label: "Access logging", key: "access_logging" },
-        { id: "notifications" as const, label: "Notifications", key: "notifications" },
+      ([
+        { id: "versioning", label: "Versioning", key: "versioning" },
+        { id: "object_lock", label: "Object Lock", key: "object_lock" },
+        { id: "block_public_access", label: "Block public access", key: "block_public_access" },
+        { id: "lifecycle_rules", label: "Lifecycle rules", key: "lifecycle_rules" },
+        { id: "static_website", label: "Static website", key: "static_website" },
+        { id: "bucket_policy", label: "Bucket policy", key: "bucket_policy" },
+        { id: "cors", label: "CORS", key: "cors" },
+        { id: "access_logging", label: "Access logging", key: "access_logging" },
+        { id: "notifications", label: "Notifications", key: "notifications" },
       ].filter(
         (option) =>
           (option.id !== "static_website" || staticWebsiteFeatureEnabled) &&
           (option.id !== "notifications" || snsFeatureEnabled)
-      ),
+      ) as Array<{ id: ManagerFeatureKey; label: string; key: ManagerFeatureKey }>),
     [snsFeatureEnabled, staticWebsiteFeatureEnabled]
   );
   const accountLabel = selectedS3Account
@@ -287,7 +357,7 @@ export default function BucketsPage() {
   type ColumnDef = {
     id: string;
     label: string;
-    field?: keyof Bucket | null;
+    field?: SortField | null;
     align?: "left" | "right";
     render: (bucket: BucketListRow) => ReactNode;
   };
@@ -295,50 +365,167 @@ export default function BucketsPage() {
   const quotaConfigured = (bucket: BucketListRow) =>
     Boolean((bucket.quota_max_size_bytes ?? 0) > 0 || (bucket.quota_max_objects ?? 0) > 0);
 
-  const renderTagList = (tags?: BucketTag[] | null) => {
+  const bucketTooltipCacheKey = (bucket: BucketListRow) => bucket.name;
+  const featureTooltipCacheKey = (bucket: BucketListRow, featureKey: ManagerFeatureKey) =>
+    `${bucketTooltipCacheKey(bucket)}:${featureKey}`;
+  const tagsTooltipCacheKey = (bucketName: string) => `${bucketName}:tags`;
+
+  const getBucketPropertiesCached = async (bucket: BucketListRow): Promise<BucketProperties> => {
+    const bucketKey = bucketTooltipCacheKey(bucket);
+    const cached = bucketPropertiesCacheRef.current[bucketKey];
+    if (cached) return cached;
+    const inflight = bucketPropertiesInflightRef.current[bucketKey];
+    if (inflight) return inflight;
+    const accountId = accountIdForApi ?? null;
+    const promise = getBucketProperties(accountId, bucket.name)
+      .then((properties) => {
+        bucketPropertiesCacheRef.current[bucketKey] = properties;
+        return properties;
+      })
+      .finally(() => {
+        delete bucketPropertiesInflightRef.current[bucketKey];
+      });
+    bucketPropertiesInflightRef.current[bucketKey] = promise;
+    return promise;
+  };
+
+  const buildFeatureTooltipLines = async (bucket: BucketListRow, featureKey: ManagerFeatureKey): Promise<string[]> => {
+    const accountId = accountIdForApi ?? null;
+
+    if (featureKey === "versioning") {
+      const properties = await getBucketPropertiesCached(bucket);
+      return buildVersioningSummaryLines(properties.versioning_status);
+    }
+
+    if (featureKey === "object_lock") {
+      const properties = await getBucketPropertiesCached(bucket);
+      return buildObjectLockSummaryLines(properties.object_lock_enabled, properties.object_lock);
+    }
+
+    if (featureKey === "block_public_access") {
+      const properties = await getBucketPropertiesCached(bucket);
+      return buildPublicAccessBlockSummaryLines(properties.public_access_block as Record<string, unknown> | null | undefined);
+    }
+
+    if (featureKey === "lifecycle_rules") {
+      const properties = await getBucketPropertiesCached(bucket);
+      return buildLifecycleRuleSummaryLines(properties.lifecycle_rules as unknown[]);
+    }
+
+    if (featureKey === "cors") {
+      const properties = await getBucketPropertiesCached(bucket);
+      const inlineRules = Array.isArray(properties.cors_rules) ? properties.cors_rules : null;
+      if (inlineRules) return buildCorsRuleSummaryLines(inlineRules);
+      const cors = await getBucketCors(accountId, bucket.name);
+      return buildCorsRuleSummaryLines(cors.rules);
+    }
+
+    if (featureKey === "static_website") {
+      const website = await getBucketWebsite(accountId, bucket.name);
+      return buildWebsiteSummaryLines(website as Record<string, unknown>);
+    }
+
+    if (featureKey === "bucket_policy") {
+      const policy = await getBucketPolicy(accountId, bucket.name);
+      return buildBucketPolicySummaryLines(policy.policy);
+    }
+
+    if (featureKey === "access_logging") {
+      const logging = await getBucketLogging(accountId, bucket.name);
+      return buildLoggingSummaryLines(logging as Record<string, unknown>);
+    }
+
+    if (featureKey === "notifications") {
+      const notifications = await getBucketNotifications(accountId, bucket.name);
+      return buildNotificationSummaryLines(notifications.configuration);
+    }
+
+    return ["No additional details available."];
+  };
+
+  const loadFeatureTooltip = (bucket: BucketListRow, featureKey: ManagerFeatureKey) => {
+    if (needsS3AccountSelection) return;
+    const key = featureTooltipCacheKey(bucket, featureKey);
+    const current = featureTooltipState[key];
+    if (current?.status === "ready" || current?.status === "loading") return;
+    if (featureTooltipInflightRef.current[key]) return;
+
+    const work = (async () => {
+      setFeatureTooltipState((prev) => ({ ...prev, [key]: { status: "loading" } }));
+      try {
+        const lines = await buildFeatureTooltipLines(bucket, featureKey);
+        setFeatureTooltipState((prev) => ({ ...prev, [key]: { status: "ready", lines } }));
+      } catch (err) {
+        setFeatureTooltipState((prev) => ({
+          ...prev,
+          [key]: { status: "error", message: extractError(err) },
+        }));
+      } finally {
+        delete featureTooltipInflightRef.current[key];
+      }
+    })();
+    featureTooltipInflightRef.current[key] = work;
+  };
+
+  const renderTagList = (tags?: BucketTag[] | null, bucketName = "bucket") => {
     const safeTags = Array.isArray(tags) ? tags.filter((t) => (t.key ?? "").trim()) : [];
     if (safeTags.length === 0) return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
     const maxShown = 3;
     const shown = safeTags.slice(0, maxShown);
     const remaining = safeTags.length - shown.length;
-    const title = safeTags.map((t) => `${t.key}=${t.value}`).join("\n");
+    const tagKey = tagsTooltipCacheKey(bucketName);
+    const tooltip: BucketFeatureTooltipState = { status: "ready", lines: buildBucketTagSummaryLines(safeTags) };
     return (
-      <div className="flex flex-wrap gap-1.5" title={title}>
-        {shown.map((t) => (
-          <span
-            key={`${t.key}:${t.value}`}
-            className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-          >
-            {t.key}={t.value}
-          </span>
-        ))}
-        {remaining > 0 && (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-            +{remaining}
-          </span>
-        )}
-      </div>
+      <BucketSummaryTooltip
+        label="S3 tags"
+        tooltip={tooltip}
+        open={activeTagsTooltipKey === tagKey}
+        onOpen={() => setActiveTagsTooltipKey(tagKey)}
+        onClose={() => setActiveTagsTooltipKey((prev) => (prev === tagKey ? null : prev))}
+        cacheKey={tagKey}
+        buttonClassName="inline-flex max-w-full cursor-default text-left"
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {shown.map((t) => (
+            <span
+              key={`${t.key}:${t.value}`}
+              className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              {t.key}={t.value}
+            </span>
+          ))}
+          {remaining > 0 && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              +{remaining}
+            </span>
+          )}
+        </div>
+      </BucketSummaryTooltip>
     );
   };
 
-  const renderFeatureChip = (featureKey: string, bucket: BucketListRow) => {
+  const renderFeatureChip = (featureKey: ManagerFeatureKey, bucket: BucketListRow) => {
     const status = bucket.features?.[featureKey] ?? null;
     if (!status) return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
-    return <PropertySummaryChip compact state={status.state} tone={status.tone} title={`${featureKey}: ${status.state}`} />;
+    const tooltipKey = featureTooltipCacheKey(bucket, featureKey);
+    return (
+      <BucketFeatureSummaryChip
+        label={MANAGER_FEATURE_LABELS[featureKey]}
+        state={status.state}
+        tone={status.tone}
+        tooltip={featureTooltipState[tooltipKey]}
+        open={activeFeatureTooltipKey === tooltipKey}
+        onOpen={() => {
+          setActiveFeatureTooltipKey(tooltipKey);
+          loadFeatureTooltip(bucket, featureKey);
+        }}
+        onClose={() => setActiveFeatureTooltipKey((prev) => (prev === tooltipKey ? null : prev))}
+        cacheKey={tooltipKey}
+      />
+    );
   };
 
-  const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
-  };
-
-  const fetchBuckets = async (accountId: S3AccountSelector) => {
+  const fetchBuckets = useCallback(async (accountId: S3AccountSelector) => {
     const requestId = fetchRequestRef.current + 1;
     fetchRequestRef.current = requestId;
     setError(null);
@@ -382,7 +569,7 @@ export default function BucketsPage() {
         setLoading(false);
       }
     }
-  };
+  }, [includeParams, requiresStats]);
 
   useEffect(() => {
     if (needsS3AccountSelection) {
@@ -393,7 +580,16 @@ export default function BucketsPage() {
       return;
     }
     fetchBuckets(accountIdForApi ?? null);
-  }, [accountIdForApi, needsS3AccountSelection, includeParams.join(","), requiresStats]);
+  }, [accountIdForApi, fetchBuckets, needsS3AccountSelection]);
+
+  useEffect(() => {
+    setActiveFeatureTooltipKey(null);
+    setFeatureTooltipState({});
+    featureTooltipInflightRef.current = {};
+    bucketPropertiesCacheRef.current = {};
+    bucketPropertiesInflightRef.current = {};
+    setActiveTagsTooltipKey(null);
+  }, [accountIdForApi]);
 
   useEffect(() => {
     persistVisibleColumns(visibleColumns);
@@ -434,21 +630,12 @@ export default function BucketsPage() {
     const q = filter.trim().toLowerCase();
     const items = q ? buckets.filter((b) => b.name.toLowerCase().includes(q)) : buckets;
     const sorted = [...items].sort((a, b) => {
-      const aVal = (a as any)[sort.field];
-      const bVal = (b as any)[sort.field];
-      if (aVal == null && bVal == null) return 0;
-      if (aVal == null) return sort.direction === "asc" ? 1 : -1;
-      if (bVal == null) return sort.direction === "asc" ? -1 : 1;
-      if (typeof aVal === "string" && typeof bVal === "string") {
-        return sort.direction === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      }
-      const diff = Number(aVal) - Number(bVal);
-      return sort.direction === "asc" ? diff : -diff;
+      return compareByNullableField(a, b, sort.field, sort.direction);
     });
     return sorted;
   }, [buckets, filter, sort]);
 
-  const toggleSort = (field: keyof Bucket) => {
+  const toggleSort = (field: SortField) => {
     setSort((prev) => {
       if (prev.field === field) {
         return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
@@ -615,7 +802,7 @@ export default function BucketsPage() {
         id: "tags",
         label: "Tags",
         field: null,
-        render: (bucket) => renderTagList(bucket.tags),
+        render: (bucket) => renderTagList(bucket.tags, bucket.name),
       });
     }
 
@@ -742,6 +929,7 @@ export default function BucketsPage() {
           <ListToolbar
             title="Buckets"
             description="Paginated list of buckets for the active context."
+            showHeading={false}
             countLabel={`${filteredBuckets.length} bucket(s)`}
             search={
               <div className="flex items-center gap-2 sm:justify-end">
@@ -835,7 +1023,7 @@ export default function BucketsPage() {
                       activeField={sort.field}
                       direction={sort.direction}
                       align={col.align ?? (col.label === "Actions" ? "right" : "left")}
-                      onSort={col.field ? (field) => toggleSort(field as keyof Bucket) : undefined}
+                      onSort={col.field ? (field) => toggleSort(field) : undefined}
                     />
                   ))}
                 </tr>

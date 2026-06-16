@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { BucketIntegrityResult } from "../../api/bucketIntegrity";
+import type { BucketIntegrityCheckPayload, BucketIntegrityResult } from "../../api/bucketIntegrity";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
 
 const streamManagerBucketIntegrityCheckMock = vi.fn();
@@ -115,6 +115,54 @@ describe("BucketIntegrityCheckModal results", () => {
     expect(within(bucketDetails).getByText("broken.txt")).toBeInTheDocument();
     expect(within(bucketDetails).getByText("v1")).toBeInTheDocument();
     expect(within(bucketDetails).getByText("AccessDenied: denied")).toBeInTheDocument();
+  });
+
+  it("runs HEAD mode by default and GET mode when selected", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <BucketIntegrityCheckModal
+        mode="manager"
+        contextId="ctx-1"
+        contextName="Context 1"
+        targets={[{ bucketName: "bucket-a" }]}
+        onClose={() => undefined}
+      />
+    );
+
+    const maxMbInput = screen.getByLabelText("Max MB per object") as HTMLInputElement;
+    expect(maxMbInput).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Run check" }));
+    await waitFor(() => {
+      expect(streamManagerBucketIntegrityCheckMock).toHaveBeenCalledTimes(1);
+    });
+    let payload = streamManagerBucketIntegrityCheckMock.mock.calls[0][1] as BucketIntegrityCheckPayload;
+    expect(payload.check_mode).toBe("head");
+    expect(payload.max_mb_per_object).toBeUndefined();
+
+    vi.clearAllMocks();
+    streamManagerBucketIntegrityCheckMock.mockResolvedValue(buildIntegrityResult());
+    rerender(
+      <BucketIntegrityCheckModal
+        mode="manager"
+        contextId="ctx-1"
+        contextName="Context 1"
+        targets={[{ bucketName: "bucket-a" }]}
+        onClose={() => undefined}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "GET body" }));
+    const enabledMaxMbInput = screen.getByLabelText("Max MB per object") as HTMLInputElement;
+    expect(enabledMaxMbInput).not.toBeDisabled();
+    await user.type(enabledMaxMbInput, "1.5");
+    await user.click(screen.getByRole("button", { name: "Run check" }));
+    await waitFor(() => {
+      expect(streamManagerBucketIntegrityCheckMock).toHaveBeenCalledTimes(1);
+    });
+    payload = streamManagerBucketIntegrityCheckMock.mock.calls[0][1] as BucketIntegrityCheckPayload;
+    expect(payload.check_mode).toBe("get");
+    expect(payload.max_mb_per_object).toBe(1.5);
   });
 
   it("filters bucket results by object text, status, and error state", async () => {

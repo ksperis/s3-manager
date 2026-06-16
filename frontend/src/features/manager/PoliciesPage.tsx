@@ -176,6 +176,7 @@ export default function PoliciesPage() {
           <ListToolbar
             title="Policies"
             description="Managed IAM policies available in the selected execution context."
+            showHeading={false}
             countLabel={`${filteredPolicies.length} result(s)`}
             search={
               <input

@@ -9,18 +9,17 @@ from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session
 
 from app.db import (
-    BillingAssignment,
-    BillingStorageDaily,
-    BillingUsageDaily,
     S3UserTag,
     S3User as S3UserModel,
     StorageEndpoint,
     StorageProvider,
     TagDefinition,
+    UiGroupS3User,
     User,
     UserS3User as UserS3UserModel,
     UserRole,
 )
+from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.tags_service import TagsService
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -36,11 +35,45 @@ from app.models.s3_user import (
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services import s3_client
 from app.utils.s3_endpoint import resolve_s3_client_options
-from app.utils.quota_stats import bytes_to_gb
+from app.utils.quota_stats import bytes_to_gb, extract_quota_limits
 from app.utils.size_units import size_to_bytes
 from app.utils.s3_user_ordering import s3_user_name_order_by
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_positive_limit(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        parsed = int(value)
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            parsed = int(float(normalized))
+        except ValueError:
+            return None
+    else:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _extract_user_payload(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    user_payload = raw.get("user")
+    if isinstance(user_payload, dict):
+        return user_payload
+    return raw
+
+
+def _extract_max_buckets(payload: Any) -> Optional[int]:
+    user_payload = _extract_user_payload(payload)
+    return _parse_positive_limit(user_payload.get("max_buckets") or (payload.get("max_buckets") if isinstance(payload, dict) else None))
 
 
 class S3UsersService:
@@ -134,6 +167,20 @@ class S3UsersService:
 
     def get_user_quota(self, s3_user: S3UserModel) -> tuple[Optional[float], Optional[int]]:
         return self._user_quota(s3_user)
+
+    def get_user_limits(self, s3_user: S3UserModel) -> tuple[Optional[float], Optional[int], Optional[int]]:
+        try:
+            rgw_admin = self._admin_for_user(s3_user)
+        except ValueError as exc:
+            logger.warning("Unable to resolve RGW admin for %s: %s", s3_user.rgw_user_uid, exc)
+            return None, None, None
+        try:
+            payload = rgw_admin.get_user(s3_user.rgw_user_uid, allow_not_found=True) or {}
+        except RGWAdminError as exc:
+            logger.warning("Unable to fetch S3 user limits for %s: %s", s3_user.rgw_user_uid, exc)
+            return None, None, None
+        max_size_bytes, max_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
+        return bytes_to_gb(max_size_bytes), max_objects, _extract_max_buckets(payload)
 
     def _apply_user_quota(
         self,
@@ -341,6 +388,8 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            allow_manager_bucket_quota=bool(row.allow_manager_bucket_quota),
+            allow_manager_ceph_s3_user_keys=bool(row.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(row),
         )
 
@@ -369,6 +418,8 @@ class S3UsersService:
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                    allow_manager_bucket_quota=bool(row.allow_manager_bucket_quota),
+                    allow_manager_ceph_s3_user_keys=bool(row.allow_manager_ceph_s3_user_keys),
                     tags=self.tags.get_s3_user_tags(row),
                 )
             )
@@ -479,6 +530,8 @@ class S3UsersService:
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
             bucket_count=bucket_count,
+            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
+            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -546,6 +599,8 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_url=endpoint.endpoint_url,
+            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
+            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -604,6 +659,8 @@ class S3UsersService:
                     storage_endpoint_id=endpoint.id,
                     storage_endpoint_name=endpoint.name,
                     storage_endpoint_url=endpoint.endpoint_url,
+                    allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
+                    allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
                     tags=[],
                 )
             )
@@ -628,6 +685,10 @@ class S3UsersService:
             self._ensure_links(s3_user, payload.user_ids)
         if payload.tags is not None:
             self.tags.replace_s3_user_tags(s3_user, payload.tags)
+        if payload.allow_manager_bucket_quota is not None:
+            s3_user.allow_manager_bucket_quota = bool(payload.allow_manager_bucket_quota)
+        if payload.allow_manager_ceph_s3_user_keys is not None:
+            s3_user.allow_manager_ceph_s3_user_keys = bool(payload.allow_manager_ceph_s3_user_keys)
 
         if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
             self._apply_user_quota(
@@ -662,6 +723,8 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
+            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -725,6 +788,8 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id if endpoint else s3_user.storage_endpoint_id,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
+            allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
 
@@ -902,21 +967,10 @@ class S3UsersService:
             .filter(UserS3UserModel.s3_user_id == s3_user.id)
             .delete(synchronize_session=False)
         )
-        (
-            self.db.query(BillingAssignment)
-            .filter(BillingAssignment.s3_user_id == s3_user.id)
-            .update({BillingAssignment.s3_user_id: None}, synchronize_session=False)
+        self.db.query(UiGroupS3User).filter(UiGroupS3User.s3_user_id == s3_user.id).delete(
+            synchronize_session=False
         )
-        (
-            self.db.query(BillingUsageDaily)
-            .filter(BillingUsageDaily.s3_user_id == s3_user.id)
-            .update({BillingUsageDaily.s3_user_id: None}, synchronize_session=False)
-        )
-        (
-            self.db.query(BillingStorageDaily)
-            .filter(BillingStorageDaily.s3_user_id == s3_user.id)
-            .update({BillingStorageDaily.s3_user_id: None}, synchronize_session=False)
-        )
+        ResourceDeletionPurgeService(self.db).purge_s3_user_derived_data(s3_user.id)
         self.db.delete(s3_user)
         self.db.flush()
         self.tags.cleanup_orphan_definitions()

@@ -20,6 +20,8 @@ export type S3User = {
   storage_endpoint_name?: string | null;
   storage_endpoint_url?: string | null;
   bucket_count?: number | null;
+  allow_manager_bucket_quota?: boolean;
+  allow_manager_ceph_s3_user_keys?: boolean;
 };
 
 export type S3UserSummary = {
@@ -30,6 +32,8 @@ export type S3UserSummary = {
   storage_endpoint_id?: number | null;
   storage_endpoint_name?: string | null;
   storage_endpoint_url?: string | null;
+  allow_manager_bucket_quota?: boolean;
+  allow_manager_ceph_s3_user_keys?: boolean;
 };
 
 export type CreateS3UserPayload = {
@@ -41,6 +45,8 @@ export type CreateS3UserPayload = {
   quota_max_objects?: number | null;
   storage_endpoint_id?: number | null;
   tags?: TagDefinitionInput[] | null;
+  allow_manager_bucket_quota?: boolean | null;
+  allow_manager_ceph_s3_user_keys?: boolean | null;
 };
 
 export type ImportS3UserPayload = {

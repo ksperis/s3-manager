@@ -100,6 +100,7 @@ function buildGeneralSettings(overrides?: Record<string, unknown>) {
     bucket_migration_enabled: false,
     bucket_compare_enabled: true,
     bucket_integrity_check_enabled: false,
+    bucket_usage_stats_enabled: true,
     manager_ceph_s3_user_keys_enabled: true,
     allow_login_access_keys: false,
     allow_login_endpoint_list: false,
@@ -118,6 +119,8 @@ function setStoredManagerUser(overrides?: Record<string, unknown>) {
         bucket_compare: true,
         bucket_integrity_check: false,
         bucket_migration: false,
+        feature_rules: true,
+        bucket_quota: false,
         ceph_s3_user_keys: true,
       },
       ...overrides,
@@ -170,12 +173,14 @@ describe("ManagerLayout", () => {
     expect(labels).not.toContain("Ceph");
   });
 
-  it("shows Integrity tool when bucket integrity flag is enabled", () => {
+  it("shows Feature rules and Integrity tools when bucket integrity flag is enabled", () => {
     setStoredManagerUser({
       manager_tool_access: {
         bucket_compare: false,
         bucket_integrity_check: true,
         bucket_migration: false,
+        feature_rules: true,
+        bucket_quota: false,
         ceph_s3_user_keys: true,
       },
     });
@@ -194,10 +199,99 @@ describe("ManagerLayout", () => {
     );
 
     const toolsSection = capturedNavSections.find((section) => section.label === "Tools");
-    expect(toolsSection?.links.map((link) => link.label)).toEqual(["Integrity"]);
+    expect(toolsSection?.links.map((link) => link.label)).toEqual(["Feature rules", "Integrity"]);
+    expect(toolsSection?.links.map((link) => link.to)).toEqual(["/manager/feature-rules", "/manager/bucket-integrity"]);
   });
 
-  it("shows a loading hint for disabled Metrics while manager context is loading", () => {
+  it("does not expose a dedicated Usage stats tool link", () => {
+    setStoredManagerUser({
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        feature_rules: false,
+        bucket_quota: false,
+        ceph_s3_user_keys: true,
+      },
+    });
+    useS3AccountContextMock.mockReturnValue(buildContext());
+    useGeneralSettingsMock.mockReturnValue({
+      generalSettings: buildGeneralSettings({
+        bucket_usage_stats_enabled: true,
+      }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const toolsSection = capturedNavSections.find((section) => section.label === "Tools");
+    expect(toolsSection).toBeUndefined();
+    expect(capturedNavSections.flatMap((section) => section.links).map((link) => link.to)).not.toContain(
+      "/manager/bucket-usage-stats"
+    );
+  });
+
+  it("hides Feature rules when the manager tool access is not enabled", () => {
+    setStoredManagerUser({
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        feature_rules: false,
+        bucket_quota: false,
+        ceph_s3_user_keys: true,
+      },
+    });
+    useS3AccountContextMock.mockReturnValue(buildContext());
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    expect(capturedNavSections.find((section) => section.label === "Tools")).toBeUndefined();
+  });
+
+  it("shows Feature rules when manager tool access is inherited from effective access", () => {
+    setStoredManagerUser({
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        feature_rules: false,
+        bucket_quota: false,
+        ceph_s3_user_keys: true,
+      },
+      effective_access: {
+        manager_tool_access: {
+          bucket_compare: false,
+          bucket_integrity_check: false,
+          bucket_migration: false,
+          feature_rules: true,
+          bucket_quota: false,
+          ceph_s3_user_keys: true,
+        },
+      },
+    });
+    useS3AccountContextMock.mockReturnValue(buildContext());
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const toolsSection = capturedNavSections.find((section) => section.label === "Tools");
+    expect(toolsSection?.links.map((link) => link.label)).toEqual(["Feature rules"]);
+  });
+
+  it("keeps Usage & Metrics enabled while manager metrics context is loading when usage stats are enabled", () => {
     useS3AccountContextMock.mockReturnValue(buildContext({ managerStatsEnabled: null }));
     useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
@@ -209,19 +303,21 @@ describe("ManagerLayout", () => {
 
     const metricsLink = capturedNavSections
       .find((section) => section.label === "Overview")
-      ?.links.find((link) => link.label === "Metrics");
-    expect(metricsLink?.disabled).toBe(true);
-    expect(metricsLink?.disabledHint).toBe("Metrics availability is loading for this context.");
+      ?.links.find((link) => link.label === "Usage & Metrics");
+    expect(metricsLink?.disabled).toBe(false);
+    expect(metricsLink?.disabledHint).toBeUndefined();
   });
 
-  it("uses backend metrics message when Metrics is disabled", () => {
+  it("uses backend metrics message when Usage & Metrics is disabled", () => {
     useS3AccountContextMock.mockReturnValue(
       buildContext({
         managerStatsEnabled: false,
         managerStatsMessage: "Manager metrics are temporarily blocked for this account.",
       })
     );
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+    useGeneralSettingsMock.mockReturnValue({
+      generalSettings: buildGeneralSettings({ bucket_usage_stats_enabled: false }),
+    });
 
     render(
       <MemoryRouter initialEntries={["/manager"]}>
@@ -231,14 +327,16 @@ describe("ManagerLayout", () => {
 
     const metricsLink = capturedNavSections
       .find((section) => section.label === "Overview")
-      ?.links.find((link) => link.label === "Metrics");
+      ?.links.find((link) => link.label === "Usage & Metrics");
     expect(metricsLink?.disabled).toBe(true);
     expect(metricsLink?.disabledHint).toBe("Manager metrics are temporarily blocked for this account.");
   });
 
-  it("uses a default message when Metrics is disabled without backend reason", () => {
+  it("uses a default message when Usage & Metrics is disabled without backend reason", () => {
     useS3AccountContextMock.mockReturnValue(buildContext({ managerStatsEnabled: false, managerStatsMessage: null }));
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+    useGeneralSettingsMock.mockReturnValue({
+      generalSettings: buildGeneralSettings({ bucket_usage_stats_enabled: false }),
+    });
 
     render(
       <MemoryRouter initialEntries={["/manager"]}>
@@ -248,7 +346,7 @@ describe("ManagerLayout", () => {
 
     const metricsLink = capturedNavSections
       .find((section) => section.label === "Overview")
-      ?.links.find((link) => link.label === "Metrics");
+      ?.links.find((link) => link.label === "Usage & Metrics");
     expect(metricsLink?.disabled).toBe(true);
     expect(metricsLink?.disabledHint).toBe("Metrics are disabled for this context.");
   });
@@ -266,7 +364,9 @@ describe("ManagerLayout", () => {
         ],
       })
     );
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+    useGeneralSettingsMock.mockReturnValue({
+      generalSettings: buildGeneralSettings({ bucket_usage_stats_enabled: false }),
+    });
 
     render(
       <MemoryRouter initialEntries={["/manager"]}>
@@ -276,7 +376,7 @@ describe("ManagerLayout", () => {
 
     const metricsLink = capturedNavSections
       .find((section) => section.label === "Overview")
-      ?.links.find((link) => link.label === "Metrics");
+      ?.links.find((link) => link.label === "Usage & Metrics");
     expect(metricsLink?.disabled).toBe(true);
     expect(metricsLink?.disabledHint).toBe("Metrics are unavailable for this endpoint capabilities.");
   });

@@ -25,4 +25,23 @@ describe("ListToolbar", () => {
     expect(screen.getByRole("button", { name: "Columns" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
   });
+
+  it("can hide the visible heading while keeping an accessible label", () => {
+    render(
+      <div className="ui-surface-card">
+        <ListToolbar
+          title="Buckets"
+          description="Paginated list of buckets."
+          showHeading={false}
+          countLabel="4 buckets"
+          search={<input aria-label="Search buckets" />}
+        />
+      </div>
+    );
+
+    expect(screen.getByRole("region", { name: "Buckets" })).toBeInTheDocument();
+    expect(screen.queryByText("Paginated list of buckets.")).not.toBeInTheDocument();
+    expect(screen.getByText("4 buckets")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search buckets")).toBeInTheDocument();
+  });
 });

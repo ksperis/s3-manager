@@ -2,7 +2,12 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  getAdminUsageStatsAggregate,
+  streamAdminUsageStatsAggregate,
+  type BucketUsageStatsAggregate,
+} from "../../api/bucketUsageStats";
 import {
   AdminStats,
   AdminTrafficStats,
@@ -11,21 +16,37 @@ import {
   fetchAdminTraffic,
 } from "../../api/stats";
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
-import MetricsTrafficOverview, { MetricsSnapshotCard } from "../../components/MetricsTrafficOverview";
+import {
+  fetchAdminUsageHistoryTrends,
+  type UsageHistoryTrendResponse,
+  type UsageHistoryTrendWindow,
+} from "../../api/usageHistory";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { MetricsCard } from "../../components/MetricsCard";
+import MetricsTrafficOverview, { MetricsSnapshotCard, MetricsSummaryCard } from "../../components/MetricsTrafficOverview";
 import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import UsageBreakdown from "../../components/UsageBreakdown";
+import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
 import { toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
+import { cx, uiDividerClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
+import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
+
+type AdminMetricsTab = "storage" | "usage-composition" | "usage-history" | "traffic";
 
 function extractError(err: unknown, fallback: string): string {
   return extractApiError(err, fallback);
 }
 
 export default function AdminMetricsPage() {
+  const { generalSettings } = useGeneralSettings();
+  const [activeTab, setActiveTab] = useState<AdminMetricsTab>("storage");
   const [storage, setStorage] = useState<AdminStats | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [storageLoading, setStorageLoading] = useState<boolean>(true);
@@ -40,6 +61,14 @@ export default function AdminMetricsPage() {
   const [trafficLoading, setTrafficLoading] = useState<boolean>(false);
 
   const [window, setWindow] = useState<TrafficWindow>("week");
+  const [usageHistoryWindow, setUsageHistoryWindow] = useState<UsageHistoryTrendWindow>("month");
+  const [usageHistoryTrends, setUsageHistoryTrends] = useState<UsageHistoryTrendResponse | null>(null);
+  const [usageHistoryLoading, setUsageHistoryLoading] = useState<boolean>(false);
+  const [usageHistoryError, setUsageHistoryError] = useState<string | null>(null);
+  const [usageStatsAggregate, setUsageStatsAggregate] = useState<BucketUsageStatsAggregate | null>(null);
+  const [usageStatsLoading, setUsageStatsLoading] = useState(false);
+  const [usageStatsError, setUsageStatsError] = useState<string | null>(null);
+  const [usageStatsRecalculating, setUsageStatsRecalculating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,6 +179,87 @@ export default function AdminMetricsPage() {
     };
   }, [endpointLoading, selectedEndpointId, window]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadUsageHistoryTrends() {
+      if (!generalSettings.usage_history_enabled || endpointLoading) {
+        setUsageHistoryTrends(null);
+        setUsageHistoryLoading(false);
+        setUsageHistoryError(null);
+        return;
+      }
+      if (selectedEndpointId == null) {
+        setUsageHistoryTrends(null);
+        setUsageHistoryLoading(false);
+        return;
+      }
+      setUsageHistoryTrends(null);
+      setUsageHistoryLoading(true);
+      setUsageHistoryError(null);
+      try {
+        const data = await fetchAdminUsageHistoryTrends({
+          window: usageHistoryWindow,
+          endpointId: selectedEndpointId,
+          subjectType: "all",
+        });
+        if (!cancelled) {
+          setUsageHistoryTrends(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setUsageHistoryTrends(null);
+          setUsageHistoryError(extractError(err, "Unable to load usage history trends."));
+        }
+      } finally {
+        if (!cancelled) {
+          setUsageHistoryLoading(false);
+        }
+      }
+    }
+    loadUsageHistoryTrends();
+    return () => {
+      cancelled = true;
+    };
+  }, [endpointLoading, generalSettings.usage_history_enabled, selectedEndpointId, usageHistoryWindow]);
+
+  const loadUsageStatsAggregate = useCallback(async () => {
+    if (endpointLoading || selectedEndpointId == null) {
+      setUsageStatsAggregate(null);
+      setUsageStatsLoading(false);
+      setUsageStatsError(null);
+      return;
+    }
+    setUsageStatsLoading(true);
+    setUsageStatsError(null);
+    try {
+      const data = await getAdminUsageStatsAggregate(selectedEndpointId);
+      setUsageStatsAggregate(data.aggregate);
+    } catch (err) {
+      setUsageStatsAggregate(null);
+      setUsageStatsError(extractError(err, "Unable to load managed accounts usage composition."));
+    } finally {
+      setUsageStatsLoading(false);
+    }
+  }, [endpointLoading, selectedEndpointId]);
+
+  useEffect(() => {
+    void loadUsageStatsAggregate();
+  }, [loadUsageStatsAggregate]);
+
+  const handleRecalculateUsageStats = useCallback(async () => {
+    if (selectedEndpointId == null) return;
+    setUsageStatsRecalculating(true);
+    setUsageStatsError(null);
+    try {
+      await streamAdminUsageStatsAggregate(selectedEndpointId, { parallelism: 8 });
+      await loadUsageStatsAggregate();
+    } catch (err) {
+      setUsageStatsError(extractError(err, "Unable to recalculate managed accounts usage composition."));
+    } finally {
+      setUsageStatsRecalculating(false);
+    }
+  }, [loadUsageStatsAggregate, selectedEndpointId]);
+
   const storageTotals = storage?.storage_totals;
   const selectedEndpoint = useMemo(
     () => endpoints.find((endpoint) => endpoint.id === selectedEndpointId) ?? null,
@@ -180,13 +290,42 @@ export default function AdminMetricsPage() {
 
   const missingTraffic = selectedEndpointId != null && !traffic && !trafficLoading && !trafficError;
   const showStorageMetrics = !storageError;
+  const showUsageHistoryTrends = Boolean(generalSettings.usage_history_enabled) && selectedEndpointId != null;
+  const metricsTabs = useMemo(
+    () =>
+      [
+        { id: "storage" as const, label: "Storage" },
+        { id: "usage-composition" as const, label: "Usage composition" },
+        ...(showUsageHistoryTrends ? [{ id: "usage-history" as const, label: "Usage history" }] : []),
+        { id: "traffic" as const, label: "Traffic" },
+      ],
+    [showUsageHistoryTrends]
+  );
+  const usageStatsAggregateSection = (
+    <BucketUsageStatsAggregateCard
+      title="Managed accounts usage composition"
+      description="Latest calculated bucket snapshots for S3 accounts managed by the application on the selected endpoint."
+      aggregate={usageStatsAggregate}
+      loading={usageStatsLoading}
+      error={usageStatsError}
+      recalculating={usageStatsRecalculating}
+      recalculateLabel="Recalculate endpoint"
+      onRecalculate={handleRecalculateUsageStats}
+    />
+  );
+
+  useEffect(() => {
+    if (!metricsTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(metricsTabs[0]?.id ?? "storage");
+    }
+  }, [activeTab, metricsTabs]);
 
   return (
     <div className="space-y-4 ui-caption leading-relaxed">
       <PageHeader
-        title="Metrics"
-        description="Centralized view of platform storage and traffic."
-        breadcrumbs={[{ label: "Admin" }, { label: "Overview", to: "/admin" }, { label: "Metrics" }]}
+        title="Usage & Metrics"
+        description="Managed account usage composition, platform storage, and traffic analytics."
+        breadcrumbs={adminBreadcrumbs({ label: "Overview", to: "/admin" }, { label: "Usage & Metrics" })}
       />
       <PageControlStrip
         label="Metrics scope"
@@ -235,112 +374,124 @@ export default function AdminMetricsPage() {
 
       {selectedEndpointId != null && (
         <>
-          {storageError ? (
-            <MetricsUnavailableCard
-              eyebrow="Storage snapshot"
-              title="Stored volume & objects"
-              description="Aggregated stats across known S3 accounts."
-              message={storageError}
-              tone="warning"
+          <div className={cx("border-b pb-3", uiDividerClass)}>
+            <PageTabs
+              tabs={metricsTabs}
+              activeTab={activeTab}
+              onChange={(tab) => setActiveTab(tab as AdminMetricsTab)}
+              variant="bar"
             />
-          ) : (
-            <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
-              <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
-                <div>
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage snapshot</p>
-                  <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Stored volume & objects</h3>
-                  <p className="ui-body text-slate-500 dark:text-slate-400">Aggregated stats across known S3 accounts.</p>
-                </div>
-                {storage?.generated_at && (
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Updated:&nbsp;{new Date(storage.generated_at).toLocaleString()}
-                  </p>
+          </div>
+
+          {activeTab === "storage" ? (
+            storageError ? (
+              <MetricsUnavailableCard
+                title="Storage snapshot"
+                description="Aggregated stats across known S3 accounts."
+                message={storageError}
+                tone="warning"
+              />
+            ) : (
+              <>
+                <MetricsSummaryCard
+                  title="Storage snapshot"
+                  description="Aggregated stats across known S3 accounts."
+                  updatedAt={storage?.generated_at}
+                >
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <MetricsSnapshotCard
+                      label="Stored volume"
+                      value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
+                      hint="Sum of known buckets"
+                      loading={storageLoading}
+                    />
+                    <MetricsSnapshotCard
+                      label="Objects"
+                      value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
+                      hint="Instant count"
+                      loading={storageLoading}
+                    />
+                    <MetricsSnapshotCard
+                      label="Visible buckets"
+                      value={storageTotals?.bucket_count != null ? formatCompactNumber(storageTotals.bucket_count) : "—"}
+                      hint="Based on root credentials"
+                      loading={storageLoading}
+                    />
+                    <MetricsSnapshotCard
+                      label="S3 accounts"
+                      value={storage ? formatCompactNumber(storage.total_accounts) : "—"}
+                      hint={`${formatCompactNumber(storage?.total_s3_users ?? 0)} S3 users`}
+                      loading={storageLoading}
+                    />
+                  </div>
+                </MetricsSummaryCard>
+
+                {showStorageMetrics && (
+                  <MetricsCard
+                    title="Storage breakdown"
+                    description="Accounts and S3 users by volume and object count."
+                  >
+                    <div className="grid gap-6 xl:grid-cols-2">
+                      <UsageBreakdown
+                        title="Accounts (volume)"
+                        loading={storageLoading}
+                        metric="bytes"
+                        items={accountUsageItems}
+                        emptyMessage="No volume data available."
+                      />
+                      <UsageBreakdown
+                        title="Accounts (objects)"
+                        loading={storageLoading}
+                        metric="objects"
+                        items={accountUsageItems}
+                        emptyMessage="No object data available."
+                      />
+                    </div>
+                    <div className="grid gap-6 xl:grid-cols-2">
+                      <UsageBreakdown
+                        title="S3 users (volume)"
+                        loading={storageLoading}
+                        metric="bytes"
+                        items={userUsageItems}
+                        emptyMessage="No S3 users with metrics."
+                      />
+                      <UsageBreakdown
+                        title="S3 users (objects)"
+                        loading={storageLoading}
+                        metric="objects"
+                        items={userUsageItems}
+                        emptyMessage="No S3 users with metrics."
+                      />
+                    </div>
+                  </MetricsCard>
                 )}
-              </header>
+              </>
+            )
+          ) : null}
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricsSnapshotCard
-                  label="Stored volume"
-                  value={storageTotals?.used_bytes != null ? formatBytes(storageTotals.used_bytes) : "—"}
-                  hint="Sum of known buckets"
-                  loading={storageLoading}
-                />
-                <MetricsSnapshotCard
-                  label="Objects"
-                  value={storageTotals?.object_count != null ? formatCompactNumber(storageTotals.object_count) : "—"}
-                  hint="Instant count"
-                  loading={storageLoading}
-                />
-                <MetricsSnapshotCard
-                  label="Visible buckets"
-                  value={storageTotals?.bucket_count != null ? formatCompactNumber(storageTotals.bucket_count) : "—"}
-                  hint="Based on root credentials"
-                  loading={storageLoading}
-                />
-                <MetricsSnapshotCard
-                  label="S3 accounts"
-                  value={storage ? formatCompactNumber(storage.total_accounts) : "—"}
-                  hint={`${formatCompactNumber(storage?.total_s3_users ?? 0)} S3 users`}
-                  loading={storageLoading}
-                />
-              </div>
-            </section>
+          {activeTab === "usage-composition" ? usageStatsAggregateSection : null}
+
+          {activeTab === "usage-history" && showUsageHistoryTrends && (
+            <UsageHistoryTrendsSection
+              trends={usageHistoryTrends}
+              window={usageHistoryWindow}
+              onWindowChange={setUsageHistoryWindow}
+              loading={usageHistoryLoading}
+              error={usageHistoryError}
+              description="Stored quota snapshots across accounts and S3 users for the selected endpoint."
+            />
           )}
 
-          <MetricsTrafficOverview
-            traffic={traffic}
-            window={window}
-            onWindowChange={setWindow}
-            loading={trafficLoading}
-            error={trafficError}
-            showEmpty={missingTraffic}
-          />
-
-          {showStorageMetrics && (
-            <section className="space-y-4 ui-surface-card p-5">
-              <header className="space-y-1">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage breakdown</p>
-                <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Accounts & users</h3>
-                <p className="ui-body text-slate-500 dark:text-slate-400">Account scan with graphical breakdown.</p>
-              </header>
-              <div className="grid gap-6 xl:grid-cols-2">
-                <UsageBreakdown
-                  title="Accounts (volume)"
-                  subtitle="Volume used per account (top 8)."
-                  loading={storageLoading}
-                  metric="bytes"
-                  items={accountUsageItems}
-                  emptyMessage="No volume data available."
-                />
-                <UsageBreakdown
-                  title="Accounts (objects)"
-                  subtitle="Object count per account (top 8)."
-                  loading={storageLoading}
-                  metric="objects"
-                  items={accountUsageItems}
-                  emptyMessage="No object data available."
-                />
-              </div>
-              <div className="grid gap-6 xl:grid-cols-2">
-                <UsageBreakdown
-                  title="S3 users (volume)"
-                  subtitle="Volume consumed per user."
-                  loading={storageLoading}
-                  metric="bytes"
-                  items={userUsageItems}
-                  emptyMessage="No S3 users with metrics."
-                />
-                <UsageBreakdown
-                  title="S3 users (objects)"
-                  subtitle="Object count per user."
-                  loading={storageLoading}
-                  metric="objects"
-                  items={userUsageItems}
-                  emptyMessage="No S3 users with metrics."
-                />
-              </div>
-            </section>
-          )}
+          {activeTab === "traffic" ? (
+            <MetricsTrafficOverview
+              traffic={traffic}
+              window={window}
+              onWindowChange={setWindow}
+              loading={trafficLoading}
+              error={trafficError}
+              showEmpty={missingTraffic}
+            />
+          ) : null}
         </>
       )}
     </div>

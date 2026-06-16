@@ -14,18 +14,52 @@ def _client_error(code: str, message: str = "boom") -> ClientError:
     return ClientError({"Error": {"Code": code, "Message": message}}, "SNSOp")
 
 
+class _FakeEvents:
+    def __init__(self):
+        self.handlers: dict[str, list] = {}
+
+    def register(self, event_name, handler):
+        self.handlers.setdefault(event_name, []).append(handler)
+
+    def unregister(self, event_name, handler):
+        handlers = self.handlers.get(event_name, [])
+        if handler in handlers:
+            handlers.remove(handler)
+
+    def emit(self, event_name, **kwargs):
+        for handler in list(self.handlers.get(event_name, [])):
+            handler(**kwargs)
+
+
+class _FakeHTTPResponse:
+    def __init__(self, content: bytes):
+        self.content = content
+
+
+class _FakeMeta:
+    def __init__(self):
+        self.events = _FakeEvents()
+
+
 class _FakeSNSClient:
     def __init__(self):
         self.calls: list[tuple[str, dict]] = []
         self.topic_pages: list[dict] = []
+        self.raw_topic_pages: list[bytes] = []
         self.raise_on: dict[str, Exception] = {}
         self.attributes_payload: dict = {"Attributes": {}}
+        self.meta = _FakeMeta()
 
     def list_topics(self, **kwargs):
         self.calls.append(("list_topics", kwargs))
         err = self.raise_on.get("list_topics")
         if err:
             raise err
+        if self.raw_topic_pages:
+            self.meta.events.emit(
+                "after-call.sns.ListTopics",
+                http_response=_FakeHTTPResponse(self.raw_topic_pages.pop(0)),
+            )
         if self.topic_pages:
             return self.topic_pages.pop(0)
         return {"Topics": []}
@@ -76,6 +110,71 @@ def test_list_topics_handles_pagination(monkeypatch):
     assert topics == [{"TopicArn": "arn:1"}, {"TopicArn": "arn:2"}]
     assert fake.calls[0] == ("list_topics", {})
     assert fake.calls[1] == ("list_topics", {"NextToken": "next"})
+
+
+def test_list_topics_raw_preserves_ceph_fields(monkeypatch):
+    fake = _FakeSNSClient()
+    fake.topic_pages = [
+        {"Topics": [{"TopicArn": "arn:aws:sns:default:tenant:topic"}], "NextToken": "next"},
+        {"Topics": [{"TopicArn": "arn:aws:sns:default:tenant:topic"}]},
+    ]
+    fake.raw_topic_pages = [
+        b"""<ListTopicsResponse xmlns="http://sns.amazonaws.com/doc/2010-03-31/">
+  <ListTopicsResult>
+    <Topics>
+      <member>
+        <TopicArn>arn:aws:sns:default:tenant:topic</TopicArn>
+        <Name>topic</Name>
+        <EndPoint>
+          <EndpointAddress>https://notify.example.test/one</EndpointAddress>
+          <EndpointTopic>topic</EndpointTopic>
+          <EndpointArgs>persistent=true&amp;verify-ssl=false</EndpointArgs>
+        </EndPoint>
+      </member>
+    </Topics>
+  </ListTopicsResult>
+</ListTopicsResponse>""",
+        b"""<ListTopicsResponse xmlns="http://sns.amazonaws.com/doc/2010-03-31/">
+  <ListTopicsResult>
+    <Topics>
+      <member>
+        <TopicArn>arn:aws:sns:default:tenant:topic</TopicArn>
+        <Name>notif.bucket_topic</Name>
+        <EndpointAddress>https://notify.example.test/two</EndpointAddress>
+        <EndpointTopic>topic</EndpointTopic>
+        <Persistent>true</Persistent>
+        <OpaqueData>trace=lab</OpaqueData>
+      </member>
+    </Topics>
+  </ListTopicsResult>
+</ListTopicsResponse>""",
+    ]
+    monkeypatch.setattr(sns_client, "get_sns_client", lambda *args, **kwargs: fake)
+
+    topics = sns_client.list_topics_raw(endpoint="https://sns.example.test")
+
+    assert topics == [
+        {
+            "TopicArn": "arn:aws:sns:default:tenant:topic",
+            "Name": "topic",
+            "EndPoint": {
+                "EndpointAddress": "https://notify.example.test/one",
+                "EndpointTopic": "topic",
+                "EndpointArgs": "persistent=true&verify-ssl=false",
+            },
+        },
+        {
+            "TopicArn": "arn:aws:sns:default:tenant:topic",
+            "Name": "notif.bucket_topic",
+            "EndpointAddress": "https://notify.example.test/two",
+            "EndpointTopic": "topic",
+            "Persistent": "true",
+            "OpaqueData": "trace=lab",
+        },
+    ]
+    assert fake.calls[0] == ("list_topics", {})
+    assert fake.calls[1] == ("list_topics", {"NextToken": "next"})
+    assert fake.meta.events.handlers["after-call.sns.ListTopics"] == []
 
 
 def test_list_topics_wraps_errors(monkeypatch):

@@ -263,6 +263,73 @@ describe("S3UsersPage modal tabs", () => {
     );
   });
 
+  it("submits privileged access grants from the S3 user edit tab", async () => {
+    render(
+      <MemoryRouter>
+        <S3UsersPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("rgw-user-1");
+    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Privileged access" }));
+
+    const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
+    const keysCheckbox = screen.getByRole("checkbox", { name: /Ceph S3 User keys/ });
+    expect(quotaCheckbox).not.toBeChecked();
+    expect(keysCheckbox).not.toBeChecked();
+    fireEvent.click(quotaCheckbox);
+    fireEvent.click(keysCheckbox);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(updateS3UserMock).toHaveBeenCalled();
+    });
+
+    const lastCall = updateS3UserMock.mock.calls.at(-1);
+    expect(lastCall?.[1]).toEqual(
+      expect.objectContaining({
+        allow_manager_bucket_quota: true,
+        allow_manager_ceph_s3_user_keys: true,
+      })
+    );
+  });
+
+  it("lets ui_admin submit privileged access grants from S3 user edits", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 2, role: "ui_admin" }));
+
+    render(
+      <MemoryRouter>
+        <S3UsersPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("rgw-user-1");
+    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Privileged access" }));
+
+    const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
+    const keysCheckbox = screen.getByRole("checkbox", { name: /Ceph S3 User keys/ });
+    expect(quotaCheckbox).not.toBeChecked();
+    expect(keysCheckbox).not.toBeChecked();
+    fireEvent.click(quotaCheckbox);
+    fireEvent.click(keysCheckbox);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(updateS3UserMock).toHaveBeenCalled();
+    });
+
+    const lastCall = updateS3UserMock.mock.calls.at(-1);
+    expect(lastCall?.[1]).toEqual(
+      expect.objectContaining({
+        allow_manager_bucket_quota: true,
+        allow_manager_ceph_s3_user_keys: true,
+      })
+    );
+  });
+
   it("creates a user with tags", async () => {
     render(
       <MemoryRouter>

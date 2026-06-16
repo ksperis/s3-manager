@@ -6,7 +6,7 @@ import { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiMutedTextClass, uiTitleTextClass } from "./ui/styles";
 
-type Breadcrumb = { label: string; to?: string };
+export type PageBreadcrumb = { label: string; to?: string };
 type Action = {
   label: string;
   onClick?: () => void;
@@ -18,7 +18,7 @@ type Action = {
 type PageHeaderProps = {
   title: string;
   description?: string;
-  breadcrumbs?: Breadcrumb[];
+  breadcrumbs?: PageBreadcrumb[];
   actions?: Action[];
   inlineContent?: ReactNode;
   rightContent?: ReactNode;

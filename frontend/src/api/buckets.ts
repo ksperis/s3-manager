@@ -21,6 +21,25 @@ function bucketPath(bucketName: string): string {
 
 export type BucketFeatureTone = "active" | "inactive" | "unknown";
 export type BucketFeatureStatus = { state: string; tone: BucketFeatureTone };
+export type FeatureRuleFeature = "lifecycle" | "policy" | "cors" | "notifications" | "tags";
+export type FeatureRuleInventoryStatus = "configured" | "empty" | "unavailable";
+
+export type FeatureRuleInventoryRule = {
+  id: string;
+  type: string;
+  title: string;
+  summary: string;
+  chips: string[];
+  raw: Record<string, unknown>;
+};
+
+export type FeatureRuleInventoryBucket = {
+  bucket_name: string;
+  feature: FeatureRuleFeature;
+  status: FeatureRuleInventoryStatus;
+  rules: FeatureRuleInventoryRule[];
+  error?: string | null;
+};
 
 export type Bucket = {
   name: string;
@@ -47,6 +66,16 @@ export async function listBuckets(
       },
       accountId
     ),
+  });
+  return data;
+}
+
+export async function listFeatureRuleInventory(
+  accountId: S3AccountSelector,
+  feature: FeatureRuleFeature
+): Promise<FeatureRuleInventoryBucket[]> {
+  const { data } = await client.get<FeatureRuleInventoryBucket[]>("/manager/feature-rules", {
+    params: withS3AccountParam({ feature }, accountId),
   });
   return data;
 }
@@ -184,7 +213,6 @@ export type ManagerBucketCompareRequest = {
   include_content?: boolean;
   include_config?: boolean;
   config_features?: ManagerBucketCompareConfigFeature[];
-  diff_sample_limit?: number;
   ignore_modified_after?: string | null;
 };
 
@@ -254,9 +282,8 @@ export type ManagerBucketCompareActionRequest = {
   source_bucket: string;
   target_bucket: string;
   action: ManagerBucketCompareAction;
+  object_keys: string[];
   parallelism?: number;
-  object_key?: string | null;
-  ignore_modified_after?: string | null;
 };
 
 export type ManagerBucketCompareActionResult = {
@@ -349,6 +376,22 @@ export async function updateBucketPublicAccessBlock(
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
+}
+
+export type BucketQuotaUpdate = {
+  max_size_gb?: number | null;
+  max_size_unit?: string | null;
+  max_objects?: number | null;
+};
+
+export async function updateBucketQuota(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: BucketQuotaUpdate
+): Promise<void> {
+  await client.put(`${bucketPath(bucketName)}/quota`, payload, {
+    params: withS3AccountParam(undefined, accountId),
+  });
 }
 
 export async function getBucketVersioning(
@@ -601,22 +644,6 @@ export async function putBucketWebsite(
 
 export async function deleteBucketWebsite(accountId: S3AccountSelector, bucketName: string): Promise<void> {
   await client.delete(`${bucketPath(bucketName)}/website`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-}
-
-export type BucketQuotaUpdate = {
-  max_size_gb?: number | null;
-  max_size_unit?: string | null;
-  max_objects?: number | null;
-};
-
-export async function updateBucketQuota(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  payload: BucketQuotaUpdate
-): Promise<void> {
-  await client.put(`${bucketPath(bucketName)}/quota`, payload, {
     params: withS3AccountParam(undefined, accountId),
   });
 }

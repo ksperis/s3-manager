@@ -253,6 +253,7 @@ export default function ManagerCephKeysPage() {
           <ListToolbar
             title="Keys"
             description="The portal key is locked and cannot be disabled or deleted from this page."
+            showHeading={false}
             countLabel={`${filteredKeys.length} result(s)`}
             search={
               <input

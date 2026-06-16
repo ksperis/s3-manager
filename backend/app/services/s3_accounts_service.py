@@ -8,12 +8,10 @@ from app.db import (
     AccountIAMUser,
     AccountRole,
     AuditLog,
-    BillingAssignment,
-    BillingStorageDaily,
-    BillingUsageDaily,
     S3Account,
     StorageEndpoint,
     StorageProvider,
+    UiGroupS3Account,
     User,
     UserS3Account,
     is_admin_ui_role,
@@ -26,6 +24,7 @@ from app.models.s3_account import (
     S3AccountSummary,
     S3AccountUpdate,
 )
+from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.tags_service import TagsService
@@ -40,13 +39,40 @@ import random
 from typing import Optional, Any
 from app.utils.rgw import extract_bucket_list, normalize_rgw_identifier, resolve_admin_uid
 from app.utils.usage_stats import extract_usage_stats
-from app.utils.quota_stats import bytes_to_gb
+from app.utils.quota_stats import bytes_to_gb, extract_quota_limits
 from app.utils.size_units import size_to_bytes
 from app.utils.s3_account_ordering import s3_account_name_order_by
 
 
 logger = logging.getLogger(__name__)
 ACCOUNT_ROLE_VALUES = {entry.value for entry in AccountRole}
+
+
+def _parse_positive_limit(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        parsed = int(value)
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            parsed = int(float(normalized))
+        except ValueError:
+            return None
+    else:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _extract_account_limit(payload: Any, key: str) -> Optional[int]:
+    if not isinstance(payload, dict):
+        return None
+    limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
+    return _parse_positive_limit(payload.get(key) or limits_payload.get(key))
 
 
 class S3AccountsService:
@@ -241,6 +267,34 @@ class S3AccountsService:
 
     def get_account_quota(self, account: S3Account) -> tuple[Optional[float], Optional[int]]:
         return self._account_quota(account)
+
+    def get_account_limits(
+        self,
+        account: S3Account,
+    ) -> tuple[Optional[float], Optional[int], Optional[int], Optional[int], Optional[int], Optional[int]]:
+        if not account.rgw_account_id:
+            return None, None, None, None, None, None
+        rgw_admin = self._admin_for_account(account, allow_missing=True)
+        if not rgw_admin:
+            return None, None, None, None, None, None
+        try:
+            payload = rgw_admin.get_account(
+                account.rgw_account_id,
+                allow_not_found=True,
+                allow_not_implemented=True,
+            ) or {}
+        except RGWAdminError as exc:
+            logger.warning("Unable to fetch account limits for %s: %s", account.rgw_account_id, exc)
+            return None, None, None, None, None, None
+        max_size_bytes, max_objects = extract_quota_limits(payload, keys=("quota", "account_quota"))
+        return (
+            bytes_to_gb(max_size_bytes),
+            max_objects,
+            _extract_account_limit(payload, "max_buckets"),
+            _extract_account_limit(payload, "max_users"),
+            _extract_account_limit(payload, "max_roles"),
+            _extract_account_limit(payload, "max_groups"),
+        )
 
     def _normalize_account_key(self, account_id: Optional[str]) -> Optional[str]:
         if not account_id:
@@ -566,6 +620,7 @@ class S3AccountsService:
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+                    allow_manager_bucket_quota=bool(acc.allow_manager_bucket_quota),
                     tags=self.tags.get_account_tags(acc),
                 )
             )
@@ -590,6 +645,7 @@ class S3AccountsService:
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+                    allow_manager_bucket_quota=bool(acc.allow_manager_bucket_quota),
                     tags=self.tags.get_account_tags(acc),
                 )
             )
@@ -650,6 +706,7 @@ class S3AccountsService:
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+            allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
             tags=self.tags.get_account_tags(account),
         )
 
@@ -747,6 +804,7 @@ class S3AccountsService:
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+                    allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
                     tags=[],
                 )
             )
@@ -833,6 +891,7 @@ class S3AccountsService:
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+            allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
             tags=self.tags.get_account_tags(account),
         )
 
@@ -850,6 +909,8 @@ class S3AccountsService:
             account.storage_endpoint_id = endpoint.id
         if payload.tags is not None:
             self.tags.replace_account_tags(account, payload.tags)
+        if payload.allow_manager_bucket_quota is not None:
+            account.allow_manager_bucket_quota = bool(payload.allow_manager_bucket_quota)
 
         if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
             quota_requested = payload.quota_max_size_gb is not None or payload.quota_max_objects is not None
@@ -959,6 +1020,7 @@ class S3AccountsService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
+            allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
             tags=self.tags.get_account_tags(account),
         )
 
@@ -1034,21 +1096,10 @@ class S3AccountsService:
     def _remove_account_entry(self, account: S3Account) -> None:
         self.db.query(AccountIAMUser).filter(AccountIAMUser.account_id == account.id).delete()
         self.db.query(UserS3Account).filter(UserS3Account.account_id == account.id).delete()
-        (
-            self.db.query(BillingAssignment)
-            .filter(BillingAssignment.s3_account_id == account.id)
-            .update({BillingAssignment.s3_account_id: None}, synchronize_session=False)
+        self.db.query(UiGroupS3Account).filter(UiGroupS3Account.account_id == account.id).delete(
+            synchronize_session=False
         )
-        (
-            self.db.query(BillingUsageDaily)
-            .filter(BillingUsageDaily.s3_account_id == account.id)
-            .update({BillingUsageDaily.s3_account_id: None}, synchronize_session=False)
-        )
-        (
-            self.db.query(BillingStorageDaily)
-            .filter(BillingStorageDaily.s3_account_id == account.id)
-            .update({BillingStorageDaily.s3_account_id: None}, synchronize_session=False)
-        )
+        ResourceDeletionPurgeService(self.db).purge_account_derived_data(account.id)
         (
             self.db.query(AuditLog)
             .filter(AuditLog.account_id == account.id)

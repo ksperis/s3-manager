@@ -22,6 +22,7 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
+import { cx, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import type { PortalWorkspaceRole } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
@@ -93,7 +94,7 @@ function SharesTable({
         <tbody>
           {shares.map((share) => (
             <tr key={share.id}>
-              <td className="font-bold text-slate-950">{share.spaceName}</td>
+              <td className={cx("font-bold", uiTitleTextClass)}>{share.spaceName}</td>
               <td>{share.person}</td>
               <td>
                 {editable && share.userId ? (
@@ -132,7 +133,7 @@ function SharesTable({
           ))}
           {shares.length === 0 ? (
             <tr>
-              <td colSpan={editable ? 6 : 5} className="py-6 text-center text-xs font-semibold text-slate-500">
+              <td colSpan={editable ? 6 : 5} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
                 No shares to display.
               </td>
             </tr>
@@ -351,10 +352,10 @@ export default function PortalSharesPage() {
       />
       {sharesError ? <PageBanner tone="warning">{sharesError}</PageBanner> : null}
       <UiCard>
-        <div className="mb-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+        <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
           <PageTabs tabs={[...tabs]} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as ShareTab)} variant="bar" />
         </div>
-        {sharesLoading ? <div className="mb-3 text-xs font-semibold text-slate-500">Loading share permissions...</div> : null}
+        {sharesLoading ? <div className={cx("mb-3 text-xs font-semibold", uiMutedTextClass)}>Loading share permissions...</div> : null}
         {activeTab === "links" ? (
           <div className="overflow-x-auto">
             <table className="ui-data-table min-w-[860px]">
@@ -371,11 +372,11 @@ export default function PortalSharesPage() {
               <tbody>
                 {publicLinks.map((link) => (
                   <tr key={link.id}>
-                    <td className="font-bold text-slate-950">{link.storage_space_name}</td>
+                    <td className={cx("font-bold", uiTitleTextClass)}>{link.storage_space_name}</td>
                     <td>{link.object_name}</td>
                     <td><UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{link.status}</UiBadge></td>
                     <td>{link.expires_at ? new Date(link.expires_at).toLocaleDateString() : "-"}</td>
-                    <td className="max-w-[260px] truncate text-blue-700">{link.url}</td>
+                    <td className="max-w-[260px] truncate text-primary dark:text-primary-200">{link.url}</td>
                     <td className="text-right">
                       {link.status === "Active" ? (
                         <button
@@ -392,7 +393,7 @@ export default function PortalSharesPage() {
                 ))}
                 {publicLinks.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-xs font-semibold text-slate-500">
+                    <td colSpan={6} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
                       No public links to display.
                     </td>
                   </tr>
@@ -409,7 +410,7 @@ export default function PortalSharesPage() {
             onRevoke={handleRevoke}
           />
         )}
-        <div className="mt-4 flex items-center justify-between text-[11px] font-semibold text-slate-500">
+        <div className={cx("mt-4 flex items-center justify-between text-[11px] font-semibold", uiMutedTextClass)}>
           <span>{shares.length} of {shares.length}</span>
         </div>
       </UiCard>

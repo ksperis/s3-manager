@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import type { ManagerTrafficStats } from "../../api/stats";
+import type { ManagerTrafficStats, ManagerUsageTrendsResponse, TrafficWindow } from "../../api/stats";
 import { fetchPortalWorkspaceHealthOverview, type WorkspaceEndpointHealthOverviewResponse } from "../../api/healthchecks";
 import {
   fetchPortalActivity,
@@ -13,6 +13,7 @@ import {
   listPortalStorageSpaces,
   fetchPortalTraffic,
   fetchPortalUsage,
+  fetchPortalUsageTrends,
   type PortalActivityItem,
   type PortalAlert,
   type PortalStorageSpaceSummary,
@@ -20,6 +21,7 @@ import {
   type PortalTransfer,
   type PortalUsage,
 } from "../../api/portal";
+import { WORKSPACE_TRAFFIC_TREND_WINDOWS } from "../../components/workspaceDashboardKpis";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import {
@@ -99,8 +101,17 @@ function alertFromApi(item: PortalAlert): PortalWorkspaceAlert {
 
 export function usePortalWorkspaceData({
   includeTraffic = false,
+  includeTrafficTrend = false,
   includeHealth = false,
-}: { includeTraffic?: boolean; includeHealth?: boolean } = {}) {
+  includeUsageTrends = false,
+  trafficWindow = "week",
+}: {
+  includeTraffic?: boolean;
+  includeTrafficTrend?: boolean;
+  includeHealth?: boolean;
+  includeUsageTrends?: boolean;
+  trafficWindow?: TrafficWindow;
+} = {}) {
   const { t } = useI18n();
   const accountContext = usePortalAccountContext();
   const { accountIdForApi, selectedAccount, hasAccountContext, loading: accountLoading, error: accountError } = accountContext;
@@ -108,6 +119,8 @@ export function usePortalWorkspaceData({
   const [storageSpaces, setStorageSpaces] = useState<PortalStorageSpaceSummary[] | null>(null);
   const [usage, setUsage] = useState<PortalUsage | null>(null);
   const [traffic, setTraffic] = useState<ManagerTrafficStats | null>(null);
+  const [trafficByWindow, setTrafficByWindow] = useState<Partial<Record<TrafficWindow, ManagerTrafficStats>>>({});
+  const [usageTrends, setUsageTrends] = useState<ManagerUsageTrendsResponse | null>(null);
   const [health, setHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [activity, setActivity] = useState<PortalActivityItem[] | null>(null);
   const [transfers, setTransfers] = useState<PortalTransfer[] | null>(null);
@@ -117,6 +130,7 @@ export function usePortalWorkspaceData({
   const [storageSpacesLoading, setStorageSpacesLoading] = useState(false);
   const [usageLoading, setUsageLoading] = useState(false);
   const [trafficLoading, setTrafficLoading] = useState(false);
+  const [usageTrendsLoading, setUsageTrendsLoading] = useState(false);
   const [healthLoading, setHealthLoading] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
   const [transfersLoading, setTransfersLoading] = useState(false);
@@ -124,6 +138,8 @@ export function usePortalWorkspaceData({
   const [stateError, setStateError] = useState<string | null>(null);
   const [storageSpacesError, setStorageSpacesError] = useState<string | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
+  const [usageTrendsError, setUsageTrendsError] = useState<string | null>(null);
+  const [trafficError, setTrafficError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,21 +263,103 @@ export function usePortalWorkspaceData({
 
   useEffect(() => {
     let cancelled = false;
+    if (!includeUsageTrends || !hasAccountContext || !accountIdForApi) {
+      setUsageTrends(null);
+      setUsageTrendsLoading(false);
+      setUsageTrendsError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setUsageTrendsLoading(true);
+    setUsageTrendsError(null);
+    fetchPortalUsageTrends(accountIdForApi)
+      .then((data) => {
+        if (!cancelled) setUsageTrends(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) {
+          setUsageTrends(null);
+          setUsageTrendsError(
+            extractApiError(
+              err,
+              t({
+                en: "Usage trend data is unavailable.",
+                fr: "Les tendances d'usage sont indisponibles.",
+                de: "Nutzungstrends sind nicht verfugbar.",
+              })
+            )
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setUsageTrendsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, hasAccountContext, includeUsageTrends, t]);
+
+  useEffect(() => {
+    let cancelled = false;
     if (!includeTraffic || !hasAccountContext || !accountIdForApi) {
       setTraffic(null);
+      setTrafficByWindow({});
       setTrafficLoading(false);
+      setTrafficError(null);
       return () => {
         cancelled = true;
       };
     }
     setTrafficLoading(true);
-    fetchPortalTraffic(accountIdForApi, "week")
-      .then((data) => {
-        if (!cancelled) setTraffic(data);
+    setTrafficError(null);
+    const windows = includeTrafficTrend
+      ? WORKSPACE_TRAFFIC_TREND_WINDOWS.map((option) => option.window)
+      : [trafficWindow];
+    Promise.allSettled(
+      windows.map((window) => fetchPortalTraffic(accountIdForApi, window).then((data) => [window, data] as const))
+    )
+      .then((results) => {
+        if (cancelled) return;
+        const entries = results
+          .filter((result): result is PromiseFulfilledResult<readonly [TrafficWindow, ManagerTrafficStats]> => result.status === "fulfilled")
+          .map((result) => result.value);
+        const statsByWindow = Object.fromEntries(entries) as Partial<Record<TrafficWindow, ManagerTrafficStats>>;
+        const selectedWindow = includeTrafficTrend ? "day" : trafficWindow;
+        const selectedTraffic = statsByWindow[selectedWindow] ?? null;
+        const selectedFailure = results[windows.indexOf(selectedWindow)];
+        setTrafficByWindow(statsByWindow);
+        setTraffic(selectedTraffic);
+        setTrafficError(
+          selectedTraffic
+            ? null
+            : extractApiError(
+                selectedFailure?.status === "rejected" ? selectedFailure.reason : undefined,
+                t({
+                  en: "Traffic data is unavailable.",
+                  fr: "Les donnees de trafic sont indisponibles.",
+                  de: "Traffic-Daten sind nicht verfugbar.",
+                })
+              )
+        );
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setTraffic(null);
+        if (!cancelled) {
+          setTraffic(null);
+          setTrafficByWindow({});
+          setTrafficError(
+            extractApiError(
+              err,
+              t({
+                en: "Traffic data is unavailable.",
+                fr: "Les donnees de trafic sont indisponibles.",
+                de: "Traffic-Daten sind nicht verfugbar.",
+              })
+            )
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setTrafficLoading(false);
@@ -269,7 +367,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, includeTraffic]);
+  }, [accountIdForApi, hasAccountContext, includeTraffic, includeTrafficTrend, t, trafficWindow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -444,6 +542,8 @@ export function usePortalWorkspaceData({
     storageSpaces,
     usage,
     traffic,
+    trafficByWindow,
+    usageTrends,
     health,
     healthAlerts,
     workspace,
@@ -452,6 +552,7 @@ export function usePortalWorkspaceData({
     storageSpacesLoading,
     usageLoading,
     trafficLoading,
+    usageTrendsLoading,
     healthLoading,
     activityLoading,
     transfersLoading,
@@ -460,5 +561,7 @@ export function usePortalWorkspaceData({
     stateError,
     storageSpacesError,
     usageError,
+    usageTrendsError,
+    trafficError,
   };
 }

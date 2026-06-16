@@ -29,6 +29,11 @@ class LinkedS3Connection(BaseModel):
     access_browser: Optional[bool] = None
 
 
+class LinkedUiGroup(BaseModel):
+    id: int
+    name: str
+
+
 class AccountMembership(BaseModel):
     account_id: int
     account_admin: Optional[bool] = None
@@ -39,6 +44,8 @@ class ManagerToolAccess(BaseModel):
     bucket_compare: bool = False
     bucket_integrity_check: bool = False
     bucket_migration: bool = False
+    feature_rules: bool = False
+    bucket_quota: bool = False
     ceph_s3_user_keys: bool = False
 
 
@@ -61,6 +68,7 @@ class User(BaseModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
+    browser_advanced_features_enabled: bool = False
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False
@@ -77,6 +85,8 @@ class UserCreate(BaseModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: Optional[ManagerToolAccess] = None
+    browser_advanced_features_enabled: bool = False
+    group_ids: Optional[list[int]] = None
 
 
 class UserUpdate(BaseModel):
@@ -88,8 +98,10 @@ class UserUpdate(BaseModel):
     can_access_ceph_admin: Optional[bool] = None
     can_access_storage_ops: Optional[bool] = None
     manager_tool_access: Optional[ManagerToolAccess] = None
+    browser_advanced_features_enabled: Optional[bool] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
+    group_ids: Optional[list[int]] = None
 
 
 class UserSelfUpdate(BaseModel):
@@ -108,6 +120,19 @@ class UserAssignS3Account(BaseModel):
     account_role: Optional[str] = None
 
 
+class EffectiveUserAccess(BaseModel):
+    can_access_ceph_admin: bool = False
+    can_access_storage_ops: bool = False
+    manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
+    browser_advanced_features_enabled: bool = False
+    accounts: list[int] = []
+    account_links: list[AccountMembership] = []
+    s3_users: list[int] = []
+    s3_user_details: list[LinkedS3User] = []
+    s3_connections: list[int] = []
+    s3_connection_details: list[LinkedS3Connection] = []
+
+
 class UserOut(BaseModel):
     id: int
     email: str
@@ -121,15 +146,19 @@ class UserOut(BaseModel):
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
+    browser_advanced_features_enabled: bool = False
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False
     accounts: list[int] = []
     account_links: list[AccountMembership] = []
+    group_ids: list[int] = []
+    group_details: list[LinkedUiGroup] = []
     s3_users: list[int] = []
     s3_user_details: list[LinkedS3User] = []
     s3_connections: list[int] = []
     s3_connection_details: list[LinkedS3Connection] = []
+    effective_access: Optional[EffectiveUserAccess] = None
     auth_provider: Optional[str] = None
     last_login_at: Optional[datetime] = None
 

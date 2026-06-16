@@ -4,6 +4,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
   PortalSettingsItem,
@@ -55,6 +56,12 @@ export default function PortalSettingsPage() {
 
   const handleToggleAllowPortalBucketCreate = (value: boolean) => {
     setSettings((prev) => (prev ? { ...prev, portal: { ...prev.portal, allow_portal_user_bucket_create: value } } : prev));
+  };
+
+  const handleToggleAllowPortalNamedBucketCreate = (value: boolean) => {
+    setSettings((prev) =>
+      prev ? { ...prev, portal: { ...prev.portal, allow_portal_named_bucket_create: value } } : prev
+    );
   };
 
   const handleToggleAllowPortalAccessKeyCreate = (value: boolean) => {
@@ -111,7 +118,10 @@ export default function PortalSettingsPage() {
     );
   };
 
-  const handleOverrideToggle = (field: "allow_portal_user_bucket_create" | "allow_portal_user_access_key_create", value: boolean) => {
+  const handleOverrideToggle = (
+    field: "allow_portal_user_bucket_create" | "allow_portal_named_bucket_create" | "allow_portal_user_access_key_create",
+    value: boolean
+  ) => {
     updateOverridePolicy((policy) => ({ ...policy, [field]: value }));
   };
 
@@ -262,6 +272,7 @@ export default function PortalSettingsPage() {
   };
 
   const portalBucketCreateEnabled = Boolean(settings?.portal.allow_portal_user_bucket_create);
+  const portalNamedBucketCreateEnabled = Boolean(settings?.portal.allow_portal_named_bucket_create);
   const portalAccessKeyCreateEnabled = Boolean(settings?.portal.allow_portal_user_access_key_create);
   const portalMaxAccessKeys = settings?.portal.max_portal_user_access_keys ?? 2;
   const bucketVersioningEnabled = Boolean(settings?.portal.bucket_defaults.versioning);
@@ -273,11 +284,7 @@ export default function PortalSettingsPage() {
       <PageHeader
         title="Portal settings"
         description="Configure portal behavior."
-        breadcrumbs={[
-          { label: "Admin" },
-          { label: "Portal" },
-          { label: "Settings" },
-        ]}
+        breadcrumbs={adminBreadcrumbs({ label: "Portal" }, { label: "Settings" })}
         rightContent={
           <div className="flex flex-wrap gap-2">
             <UiButton
@@ -320,6 +327,30 @@ export default function PortalSettingsPage() {
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.allow_portal_user_bucket_create)}
                       onChange={(e) => handleOverrideToggle("allow_portal_user_bucket_create", e.target.checked)}
+                      className={uiCheckboxClass}
+                      disabled={!settings}
+                    />
+                  </label>
+                </div>
+              }
+            />
+            <PortalSettingsItem
+              title="Named bucket creation"
+              description="Allow the portal create form to create a locked Storage Space whose bucket name is based on the submitted name."
+              action={
+                <div className="flex flex-col gap-2 sm:items-end">
+                  <PortalSettingsToggleAction
+                    checked={portalNamedBucketCreateEnabled}
+                    onChange={(value) => handleToggleAllowPortalNamedBucketCreate(value)}
+                    disabled={!settings}
+                    ariaLabel="Portal named bucket creation"
+                  />
+                  <label className={allowOverrideLabelClass}>
+                    <span>Allow override</span>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(settings?.portal.override_policy.allow_portal_named_bucket_create)}
+                      onChange={(e) => handleOverrideToggle("allow_portal_named_bucket_create", e.target.checked)}
                       className={uiCheckboxClass}
                       disabled={!settings}
                     />

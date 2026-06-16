@@ -38,6 +38,38 @@ def _wait_for_object_absence(
     raise AssertionError(f"Object '{object_key}' still listed in bucket '{bucket_name}' after deletion")
 
 
+def _wait_for_manager_activity(
+    manager_session: BackendSession,
+    *,
+    account_id: int,
+    action: str,
+    entity_type: str,
+    entity_id: str | None = None,
+    timeout: float = 8.0,
+    interval: float = 0.25,
+) -> dict:
+    deadline = time.monotonic() + timeout
+    last_entries: list[dict] = []
+    while time.monotonic() < deadline:
+        last_entries = manager_session.get(
+            "/manager/activity",
+            params={"account_id": account_id, "limit": 20},
+        )
+        for entry in last_entries:
+            if entry.get("action") != action:
+                continue
+            if entry.get("entity_type") != entity_type:
+                continue
+            if entity_id is not None and entry.get("entity_id") != entity_id:
+                continue
+            return entry
+        time.sleep(interval)
+    raise AssertionError(
+        f"Manager activity entry action={action!r} entity_type={entity_type!r} "
+        f"entity_id={entity_id!r} not found in {last_entries!r}"
+    )
+
+
 @pytest.mark.ceph_functional
 def test_account_bucket_object_flow(
     ceph_test_settings: CephTestSettings,
@@ -51,6 +83,7 @@ def test_account_bucket_object_flow(
     account_id = provisioned_account.account_id
     manager_session: BackendSession = provisioned_account.manager_session
     manager_user_id = provisioned_account.manager_user_id
+    manager_email = provisioned_account.manager_email
 
     bucket_name = _bucket_name(ceph_test_settings.test_prefix)
     manager_session.post(
@@ -64,6 +97,17 @@ def test_account_bucket_object_flow(
         expected_status=201,
     )
     resource_tracker.track_bucket(account_id, bucket_name)
+    create_activity = _wait_for_manager_activity(
+        manager_session,
+        account_id=account_id,
+        action="create_bucket",
+        entity_type="bucket",
+        entity_id=bucket_name,
+    )
+    assert create_activity["account_id"] == account_id
+    assert create_activity["account_name"] == provisioned_account.account_name
+    assert create_activity["status"] == "success"
+    assert create_activity["user_email"] == manager_email
 
     buckets = manager_session.get("/manager/buckets", params={"account_id": account_id})
     assert any(bucket["name"] == bucket_name for bucket in buckets), "Bucket creation not reflected in listing"
@@ -136,6 +180,15 @@ def test_account_bucket_object_flow(
     ).json()
 
     assert upload_response["key"] == object_key
+    upload_activity = _wait_for_manager_activity(
+        manager_session,
+        account_id=account_id,
+        action="upload_object",
+        entity_type="object",
+        entity_id=object_key,
+    )
+    assert upload_activity["account_id"] == account_id
+    assert upload_activity["user_email"] == manager_email
 
     listed_objects = manager_session.get(
         f"/manager/buckets/{bucket_name}/objects",
@@ -155,6 +208,14 @@ def test_account_bucket_object_flow(
         json={"keys": [object_key]},
         expected_status=200,
     )
+    delete_activity = _wait_for_manager_activity(
+        manager_session,
+        account_id=account_id,
+        action="delete_objects",
+        entity_type="object",
+    )
+    assert delete_activity["account_id"] == account_id
+    assert delete_activity["user_email"] == manager_email
     _wait_for_object_absence(
         manager_session,
         account_id=account_id,

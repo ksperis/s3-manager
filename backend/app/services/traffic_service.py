@@ -172,14 +172,28 @@ def _normalize_bucket_name(value: Optional[str]) -> Optional[str]:
     return slug
 
 
+def _normalize_bucket_filters(bucket_filter: Optional[str | Iterable[str]]) -> Optional[set[str]]:
+    if bucket_filter is None:
+        return None
+    if isinstance(bucket_filter, str):
+        normalized = _normalize_bucket_name(bucket_filter)
+        return {normalized} if normalized else set()
+    normalized_values = {
+        normalized
+        for value in bucket_filter
+        if (normalized := _normalize_bucket_name(value))
+    }
+    return normalized_values
+
+
 def aggregate_usage(
     entries: Iterable[dict],
     start: datetime,
     end: datetime,
-    bucket_filter: Optional[str] = None,
+    bucket_filter: Optional[str | Iterable[str]] = None,
     window: Optional[TrafficWindow] = None,
 ) -> Dict[str, Any]:
-    normalized_filter = _normalize_bucket_name(bucket_filter) if bucket_filter else None
+    normalized_filters = _normalize_bucket_filters(bucket_filter)
     timeline: dict[str, dict[str, int]] = defaultdict(
         lambda: {"bytes_in": 0, "bytes_out": 0, "ops": 0, "success_ops": 0}
     )
@@ -202,7 +216,7 @@ def aggregate_usage(
             bucket_value = str(bucket_value)
         bucket = bucket_value
         bucket_normalized = _normalize_bucket_name(bucket_value)
-        if normalized_filter and bucket_normalized != normalized_filter:
+        if normalized_filters is not None and bucket_normalized not in normalized_filters:
             continue
         user = entry.get("user") or entry.get("owner") or "unknown"
         categories = _normalize_categories(entry.get("categories"))
@@ -354,6 +368,7 @@ class TrafficService:
         self,
         window: TrafficWindow,
         bucket: Optional[str] = None,
+        bucket_filters: Optional[Iterable[str]] = None,
         now: Optional[datetime] = None,
     ) -> Dict[str, Any]:
         if window not in WINDOW_DELTAS:
@@ -362,7 +377,13 @@ class TrafficService:
         start = window_start(reference, window)
         payload = self._fetch_usage(start=start, end=reference, bucket=bucket)
         entries = flatten_usage_entries(payload)
-        aggregation = aggregate_usage(entries, start=start, end=reference, bucket_filter=bucket, window=window)
+        aggregation = aggregate_usage(
+            entries,
+            start=start,
+            end=reference,
+            bucket_filter=bucket if bucket else bucket_filters,
+            window=window,
+        )
         aggregation.update(
             {
                 "window": window.value if isinstance(window, TrafficWindow) else str(window),

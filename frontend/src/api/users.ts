@@ -15,7 +15,27 @@ export type ManagerToolAccess = {
   bucket_compare: boolean;
   bucket_integrity_check: boolean;
   bucket_migration: boolean;
+  feature_rules: boolean;
+  bucket_quota: boolean;
   ceph_s3_user_keys: boolean;
+};
+
+export type EffectiveUserAccess = {
+  can_access_ceph_admin: boolean;
+  can_access_storage_ops: boolean;
+  manager_tool_access: ManagerToolAccess;
+  browser_advanced_features_enabled: boolean;
+  accounts: number[];
+  account_links: AccountMembership[];
+  s3_users: number[];
+  s3_user_details: { id: number; name: string }[];
+  s3_connections: number[];
+  s3_connection_details: {
+    id: number;
+    name: string;
+    access_manager?: boolean | null;
+    access_browser?: boolean | null;
+  }[];
 };
 
 export type User = {
@@ -28,11 +48,14 @@ export type User = {
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
+  browser_advanced_features_enabled?: boolean;
   ui_language?: "en" | "fr" | "de" | null;
   quota_alerts_enabled?: boolean;
   quota_alerts_global_watch?: boolean;
   accounts?: number[];
   account_links?: AccountMembership[];
+  group_ids?: number[];
+  group_details?: { id: number; name: string }[];
   s3_users?: number[];
   s3_user_details?: { id: number; name: string }[];
   s3_connections?: number[];
@@ -42,6 +65,7 @@ export type User = {
     access_manager?: boolean | null;
     access_browser?: boolean | null;
   }[];
+  effective_access?: EffectiveUserAccess | null;
   is_active?: boolean;
   is_root?: boolean;
   auth_provider?: string | null;
@@ -60,6 +84,8 @@ export type CreateUserPayload = {
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
+  browser_advanced_features_enabled?: boolean;
+  group_ids?: number[] | null;
 };
 
 export type UpdateUserPayload = {
@@ -69,9 +95,11 @@ export type UpdateUserPayload = {
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
+  browser_advanced_features_enabled?: boolean;
   is_active?: boolean;
   s3_user_ids?: number[] | null;
   s3_connection_ids?: number[] | null;
+  group_ids?: number[] | null;
 };
 
 export type UpdateCurrentUserPayload = {

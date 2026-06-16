@@ -254,6 +254,30 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     expect(screen.queryByText("Owner quota")).not.toBeInTheDocument();
   });
 
+  it("shows S3 tag summaries from the shared bucket workbench tag column", async () => {
+    window.localStorage.setItem(STORAGE_OPS_COLUMNS_STORAGE_KEY, JSON.stringify(["context_name", "tags"]));
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [
+        {
+          ...baseBucket,
+          tags: [
+            { key: "project", value: "archive" },
+            { key: "env", value: "prod" },
+          ],
+        },
+      ],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.focus(screen.getByRole("button", { name: "S3 tags details" }));
+
+    expect(await screen.findByText("project: archive")).toBeInTheDocument();
+    expect(screen.getByText("env: prod")).toBeInTheDocument();
+  });
+
   it("selects and deselects filtered storage ops contexts in the compact advanced filter", async () => {
     mocks.listStorageOpsBuckets.mockResolvedValue({
       items: [baseBucket],
@@ -325,6 +349,41 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
       rules?: Array<{ field?: string; op?: string; value?: unknown }>;
     };
     expect(payload.rules).toEqual(expect.arrayContaining([{ field: "endpoint_name", op: "eq", value: "Archive" }]));
+  });
+
+  it("collapses secondary advanced filter sections by default", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [baseBucket],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
+
+    const metricsSection = await screen.findByRole("button", { name: /Storage Metrics and Quota/i });
+    const featureStatesSection = screen.getByRole("button", { name: /Feature states/i });
+    const featureDetailsSection = screen.getByRole("button", { name: /Feature details/i });
+
+    expect(metricsSection).toHaveAttribute("aria-expanded", "false");
+    expect(featureStatesSection).toHaveAttribute("aria-expanded", "false");
+    expect(featureDetailsSection).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Quota usage %")).not.toBeInTheDocument();
+    expect(screen.queryByText("Disabled or Suspended")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rule name")).not.toBeInTheDocument();
+
+    fireEvent.click(metricsSection);
+    expect(metricsSection).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Quota usage %")).toBeInTheDocument();
+
+    fireEvent.click(featureStatesSection);
+    expect(featureStatesSection).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Disabled or Suspended")).toBeInTheDocument();
+
+    fireEvent.click(featureDetailsSection);
+    expect(featureDetailsSection).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByText("Rule name").length).toBeGreaterThan(0);
   });
 
   it("shows detailed advanced search progress while streaming bucket filters", async () => {
@@ -491,6 +550,16 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     fireEvent.click(screen.getByRole("button", { name: "Columns" }));
     const notificationsColumn = await screen.findByLabelText("Notifications");
     expect(notificationsColumn).toBeInTheDocument();
+    const notificationsGroup = notificationsColumn.closest("div");
+    expect(notificationsGroup).not.toBeNull();
+    fireEvent.click(within(notificationsGroup as HTMLElement).getByRole("button", { name: "Details ▸" }));
+    expect(screen.getByLabelText("Notification topic names")).toBeInTheDocument();
+    const sseColumn = screen.getByLabelText("Server-side encryption");
+    const sseGroup = sseColumn.closest("div");
+    expect(sseGroup).not.toBeNull();
+    fireEvent.click(within(sseGroup as HTMLElement).getByRole("button", { name: "Details ▸" }));
+    expect(screen.getByLabelText("SSE algorithms")).toBeInTheDocument();
+    expect(screen.getByLabelText("SSE KMS key IDs")).toBeInTheDocument();
 
     fireEvent.click(notificationsColumn);
 
@@ -502,6 +571,89 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
       )
     );
     expect(await screen.findByText("Configured")).toBeInTheDocument();
+  });
+
+  it("renders feature detail columns and exports flat CSV values", async () => {
+    const blobs: Array<{ text: () => Promise<string> }> = [];
+    class MockBlob {
+      private readonly content: string;
+
+      constructor(parts: unknown[]) {
+        this.content = parts.map((part) => String(part)).join("");
+      }
+
+      async text() {
+        return this.content;
+      }
+    }
+    Object.defineProperty(globalThis, "Blob", {
+      configurable: true,
+      writable: true,
+      value: MockBlob,
+    });
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: vi.fn((blob: { text: () => Promise<string> }) => {
+        blobs.push(blob);
+        return "blob:mock";
+      }),
+    });
+    window.localStorage.setItem(
+      STORAGE_OPS_COLUMNS_STORAGE_KEY,
+      JSON.stringify(["object_lock_retention_years", "policy_has_conditions", "notification_topic_names", "sse_algorithms"])
+    );
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [
+        {
+          ...baseBucket,
+          column_details: {
+            object_lock_retention_years: 1,
+            policy_has_conditions: true,
+            notification_topic_names: ["archive-topic", "images-topic"],
+            sse_algorithms: ["aws:kms"],
+          },
+        },
+      ],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    expect(screen.getByText("Object Lock retention years")).toBeInTheDocument();
+    expect(screen.getByText("Policy has conditions")).toBeInTheDocument();
+    expect(screen.getByText("Notification topic names")).toBeInTheDocument();
+    expect(screen.getByText("SSE algorithms")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("Yes")).toBeInTheDocument();
+    expect(screen.getByText("archive-topic, images-topic")).toBeInTheDocument();
+    expect(screen.getByText("aws:kms")).toBeInTheDocument();
+
+    const bucketRow = screen.getByText("bucket-a").closest("tr");
+    expect(bucketRow).not.toBeNull();
+    fireEvent.click(within(bucketRow as HTMLElement).getByRole("checkbox"));
+
+    fireEvent.click(screen.getByText("Export list"));
+    fireEvent.click(await screen.findByRole("button", { name: "CSV (selected columns)" }));
+
+    await waitFor(() => expect(mocks.listStorageOpsBuckets.mock.calls.length).toBeGreaterThanOrEqual(3));
+    expect(mocks.listStorageOpsBuckets.mock.calls.at(-1)?.[1]).toEqual(
+      expect.objectContaining({
+        include: expect.arrayContaining([
+          "object_lock_retention_years",
+          "policy_has_conditions",
+          "notification_topic_names",
+          "sse_algorithms",
+        ]),
+        with_stats: false,
+      })
+    );
+
+    expect(blobs).toHaveLength(1);
+    const csv = await blobs[0].text();
+    expect(csv).toContain('"Name","Object Lock retention years","Policy has conditions","Notification topic names","SSE algorithms"');
+    expect(csv).toContain('"bucket-a","1","Yes","archive-topic, images-topic","aws:kms"');
   });
 
   it("groups bucket and owner quota picker options behind detail toggles", async () => {

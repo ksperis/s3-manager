@@ -18,7 +18,6 @@ import {
 } from "../../api/cephAdmin";
 import {
   BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS,
-  CompareObjectSampleNotice,
   CompareVisibleKeysCopyFeedback,
   copyCompareObjectKeysToClipboard,
   extractCompareError,
@@ -62,7 +61,6 @@ type CephAdminBucketCompareModalProps = {
 };
 
 const extractError = extractCompareError;
-const DIFF_SAMPLE_LIMIT = 1000;
 
 const copyFeedbackToneClass: Record<CompareVisibleKeysCopyFeedback["tone"], string> = {
   success:
@@ -473,7 +471,6 @@ export default function CephAdminBucketCompareModal({
               include_content: includeContent,
               include_config: includeConfig,
               config_features: includeConfig ? selectedConfigFeatures : undefined,
-              diff_sample_limit: DIFF_SAMPLE_LIMIT,
               ignore_modified_after: ignoreModifiedAfterIso,
             },
             { signal: controller.signal }
@@ -649,13 +646,13 @@ export default function CephAdminBucketCompareModal({
       setCopyFeedback({
         id,
         tone: "success",
-        message: `Copied ${keys.length} visible key${keys.length === 1 ? "" : "s"} to clipboard.`,
+        message: `Copied ${keys.length} key${keys.length === 1 ? "" : "s"} to clipboard.`,
       });
     } catch {
       setCopyFeedback({
         id,
         tone: "danger",
-        message: "Unable to copy visible keys to clipboard.",
+        message: "Unable to copy keys to clipboard.",
       });
     }
   }, []);
@@ -1055,7 +1052,7 @@ export default function CephAdminBucketCompareModal({
                 <UiDetails
                   key={`${item.sourceBucket}->${item.targetBucket}:${item.status}:${bucketHasDifferences ? "diff" : "same"}`}
                   defaultOpen={false}
-                  className="rounded-lg border border-slate-200 dark:border-slate-800"
+                  className="border-t border-[color:var(--ui-border-soft)] first:border-t-0"
                 >
                   <summary className="cursor-pointer list-none px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1077,14 +1074,14 @@ export default function CephAdminBucketCompareModal({
                       <div className="h-full bg-primary-500 transition-[width] duration-200" style={{ width: `${progressValue}%` }} />
                     </div>
                   </summary>
-                  <div className="space-y-3 border-t border-slate-200 px-3 py-3 dark:border-slate-800">
+                  <div className="space-y-3 px-3 pb-3">
                     {item.error && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{item.error}</p>}
                     {content && (
                       <UiDetails
                         defaultOpen={false}
-                        className="rounded-md border border-slate-200 dark:border-slate-800"
+                        className="border-t border-[color:var(--ui-border-soft)] pt-3"
                       >
-                        <summary className="cursor-pointer list-none px-2.5 py-2">
+                        <summary className="cursor-pointer list-none py-1.5">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
                               Content diff (md5 or size)
@@ -1094,7 +1091,7 @@ export default function CephAdminBucketCompareModal({
                             </UiBadge>
                           </div>
                         </summary>
-                        <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
+                        <div className="mt-2 space-y-3">
                           {contentSections.map((section) => {
                             const sectionFeedbackId = `${item.sourceBucket}:${item.targetBucket}:content:${section.key}`;
                             const sectionCopyFeedback = copyFeedback?.id === sectionFeedbackId ? copyFeedback : null;
@@ -1102,9 +1099,9 @@ export default function CephAdminBucketCompareModal({
                               <UiDetails
                                 key={sectionFeedbackId}
                                 defaultOpen={false}
-                                className="rounded-md border border-slate-200 dark:border-slate-800"
+                                className="border-t border-[color:var(--ui-border-soft)] pt-2 first:border-t-0 first:pt-0"
                               >
-                                <summary className="cursor-pointer list-none px-2 py-1.5">
+                                <summary className="cursor-pointer list-none py-1.5">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
@@ -1122,16 +1119,12 @@ export default function CephAdminBucketCompareModal({
                                           void copyVisibleKeys(sectionFeedbackId, section.copyKeys);
                                         }}
                                       >
-                                        Copy visible keys
+                                        Copy keys
                                       </UiButton>
                                     )}
                                   </div>
                                 </summary>
-                                <div className="space-y-2 border-t border-slate-200 px-2 py-2 dark:border-slate-800">
-                                  <CompareObjectSampleNotice
-                                    visibleCount={section.copyKeys.length}
-                                    totalCount={section.objectCount}
-                                  />
+                                <div className="mt-1 space-y-2 pb-2">
                                   {sectionCopyFeedback && (
                                     <p
                                       className={`rounded-md border px-2 py-1 ui-caption font-semibold ${copyFeedbackToneClass[sectionCopyFeedback.tone]}`}
@@ -1175,9 +1168,9 @@ export default function CephAdminBucketCompareModal({
                     {item.result?.config_diff && (
                       <UiDetails
                         defaultOpen={false}
-                        className="rounded-md border border-slate-200 dark:border-slate-800"
+                        className="border-t border-[color:var(--ui-border-soft)] pt-3"
                       >
-                        <summary className="cursor-pointer list-none px-2.5 py-2">
+                        <summary className="cursor-pointer list-none py-1.5">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Config diff</span>
                             <UiBadge tone={getChangedTone(configHasDifferences)} className="px-2 text-[10px]">
@@ -1185,14 +1178,14 @@ export default function CephAdminBucketCompareModal({
                             </UiBadge>
                           </div>
                         </summary>
-                        <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
+                        <div className="mt-2 space-y-3">
                           {configSections.map((section) => (
                             <UiDetails
                               key={`${item.sourceBucket}:${item.targetBucket}:config:${section.key}`}
                               defaultOpen={false}
-                              className="rounded-md border border-slate-200 dark:border-slate-800"
+                              className="border-t border-[color:var(--ui-border-soft)] pt-2 first:border-t-0 first:pt-0"
                             >
-                              <summary className="cursor-pointer list-none px-2 py-1.5">
+                              <summary className="cursor-pointer list-none py-1.5">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
                                   <UiBadge tone={getChangedTone(section.changed)} className="px-2 text-[10px]">
@@ -1200,7 +1193,7 @@ export default function CephAdminBucketCompareModal({
                                   </UiBadge>
                                 </div>
                               </summary>
-                              <div className="grid gap-2 border-t border-slate-200 px-2 py-2 lg:grid-cols-2 dark:border-slate-800">
+                              <div className="mt-1 grid gap-2 pb-2 lg:grid-cols-2">
                                 <div className="space-y-1">
                                   <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     Source

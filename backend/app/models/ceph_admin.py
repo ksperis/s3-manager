@@ -363,6 +363,7 @@ BucketFeatureParam = Literal[
     "lifecycle_abort_multipart_days",
     "object_lock_mode",
     "object_lock_retention_days",
+    "object_lock_retention_years",
     "bpa_block_public_acls",
     "bpa_ignore_public_acls",
     "bpa_block_public_policy",
@@ -371,10 +372,24 @@ BucketFeatureParam = Literal[
     "cors_allowed_origin",
     "logging_enabled",
     "logging_target_bucket",
+    "logging_target_prefix",
     "website_index_present",
+    "website_index_document",
+    "website_error_document",
     "website_redirect_host_present",
+    "website_redirect_host",
+    "website_routing_rule_count",
     "policy_statement_count",
     "policy_has_conditions",
+    "notification_rule_id",
+    "notification_rule_type",
+    "notification_topic_name",
+    "notification_event",
+    "notification_filter_prefix",
+    "notification_filter_suffix",
+    "notification_eventbridge_present",
+    "sse_algorithm",
+    "sse_kms_key_id",
 ]
 BucketFeatureParamQuantifier = Literal["any", "none"]
 BucketCompareConfigFeature = Literal[
@@ -442,6 +457,7 @@ class CephAdminBucketFilterRule(BaseModel):
                     "lifecycle_abort_multipart_days": ({"lifecycle_rules"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
                     "object_lock_mode": ({"object_lock"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
                     "object_lock_retention_days": ({"object_lock"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
+                    "object_lock_retention_years": ({"object_lock"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
                     "bpa_block_public_acls": ({"block_public_access"}, {"eq", "neq"}, True),
                     "bpa_ignore_public_acls": ({"block_public_access"}, {"eq", "neq"}, True),
                     "bpa_block_public_policy": ({"block_public_access"}, {"eq", "neq"}, True),
@@ -450,10 +466,24 @@ class CephAdminBucketFilterRule(BaseModel):
                     "cors_allowed_origin": ({"cors"}, {"has", "has_not", "eq", "neq"}, True),
                     "logging_enabled": ({"access_logging"}, {"eq", "neq"}, True),
                     "logging_target_bucket": ({"access_logging"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
+                    "logging_target_prefix": ({"access_logging"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
                     "website_index_present": ({"static_website"}, {"eq", "neq"}, True),
+                    "website_index_document": ({"static_website"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
+                    "website_error_document": ({"static_website"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
                     "website_redirect_host_present": ({"static_website"}, {"eq", "neq"}, True),
+                    "website_redirect_host": ({"static_website"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
+                    "website_routing_rule_count": ({"static_website"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
                     "policy_statement_count": ({"bucket_policy"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
                     "policy_has_conditions": ({"bucket_policy"}, {"eq", "neq"}, True),
+                    "notification_rule_id": ({"notifications"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
+                    "notification_rule_type": ({"notifications"}, {"has", "has_not"}, True),
+                    "notification_topic_name": ({"notifications"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
+                    "notification_event": ({"notifications"}, {"has", "has_not"}, True),
+                    "notification_filter_prefix": ({"notifications"}, {"has", "has_not"}, True),
+                    "notification_filter_suffix": ({"notifications"}, {"has", "has_not"}, True),
+                    "notification_eventbridge_present": ({"notifications"}, {"eq", "neq"}, True),
+                    "sse_algorithm": ({"server_side_encryption"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
+                    "sse_kms_key_id": ({"server_side_encryption"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
                 }
                 feature_keys, allowed_ops, requires_value = allowed[self.param]
                 if feature not in feature_keys:
@@ -480,7 +510,6 @@ class CephAdminBucketCompareRequest(BaseModel):
     include_content: bool = True
     include_config: bool = False
     config_features: Optional[list[BucketCompareConfigFeature]] = None
-    diff_sample_limit: int = Field(default=1000, ge=1, le=2000)
     ignore_modified_after: Optional[datetime] = None
 
     @model_validator(mode="after")

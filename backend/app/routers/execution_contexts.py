@@ -7,10 +7,12 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, S3Connection, S3User, User, UserS3Account, UserS3Connection, UserS3User
+from app.db import S3Account, S3Connection, S3User, User, UserS3Account
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.routers.dependencies import get_current_account_user
+from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_users_service import S3UsersService
+from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
 from app.services.tags_service import TagsService
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import resolve_connection_details
@@ -33,6 +35,12 @@ def _connection_can_manage_iam(connection: S3Connection) -> bool:
 
 def _build_account_context(
     account: S3Account,
+    quota_max_size_gb: Optional[float],
+    quota_max_objects: Optional[int],
+    max_buckets: Optional[int],
+    max_users: Optional[int],
+    max_roles: Optional[int],
+    max_groups: Optional[int],
     *,
     tags_service: TagsService,
     manager_account_is_admin: Optional[bool] = None,
@@ -50,6 +58,12 @@ def _build_account_context(
         display_name=account.name,
         manager_account_is_admin=manager_account_is_admin,
         rgw_account_id=account.rgw_account_id,
+        max_buckets=max_buckets,
+        max_users=max_users,
+        max_roles=max_roles,
+        max_groups=max_groups,
+        quota_max_size_gb=quota_max_size_gb,
+        quota_max_objects=quota_max_objects,
         endpoint_id=endpoint.id if endpoint else None,
         endpoint_name=endpoint.name if endpoint else None,
         endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
@@ -69,6 +83,7 @@ def _build_legacy_user_context(
     s3_user: S3User,
     quota_max_size_gb: Optional[float],
     quota_max_objects: Optional[int],
+    max_buckets: Optional[int],
     *,
     tags_service: TagsService,
 ) -> ExecutionContext:
@@ -82,6 +97,7 @@ def _build_legacy_user_context(
         kind="legacy_user",
         id=f"s3u-{s3_user.id}",
         display_name=s3_user.name,
+        max_buckets=max_buckets,
         quota_max_size_gb=quota_max_size_gb,
         quota_max_objects=quota_max_objects,
         endpoint_id=endpoint.id if endpoint else None,
@@ -147,7 +163,7 @@ def _build_connection_context(
     )
 
 
-def _manager_account_allowed(link: UserS3Account) -> bool:
+def _manager_account_allowed(link: UserS3Account | EffectiveAccountLink) -> bool:
     return bool(link.account_admin or link.is_root)
 
 
@@ -157,13 +173,11 @@ def list_execution_contexts(
     user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
 ) -> list[ExecutionContext]:
+    s3_accounts_service = get_s3_accounts_service(db, allow_missing_admin=True)
     s3_users_service = S3UsersService(db)
     tags_service = TagsService(db)
-    links = (
-        db.query(UserS3Account)
-        .filter(UserS3Account.user_id == user.id)
-        .all()
-    )
+    effective = EffectiveAccessService(db).resolve_user(user)
+    links = effective.account_links
     account_ids = {link.account_id for link in links}
     accounts = (
         db.query(S3Account).filter(S3Account.id.in_(account_ids)).all()
@@ -171,22 +185,14 @@ def list_execution_contexts(
         else []
     )
 
-    s3_links = (
-        db.query(UserS3User)
-        .filter(UserS3User.user_id == user.id)
-        .all()
-    )
-    s3_ids = {link.s3_user_id for link in s3_links}
+    s3_ids = set(effective.s3_user_ids)
     s3_users = (
         db.query(S3User).filter(S3User.id.in_(s3_ids)).all()
         if s3_ids
         else []
     )
 
-    user_connection_ids = (
-        db.query(UserS3Connection.s3_connection_id)
-        .filter(UserS3Connection.user_id == user.id)
-    )
+    user_connection_ids = effective.s3_connection_ids
     now = utcnow()
     connections = (
         db.query(S3Connection)
@@ -211,25 +217,59 @@ def list_execution_contexts(
                 continue
             account = account_by_id.get(link.account_id)
             if account is not None:
+                (
+                    quota_max_size_gb,
+                    quota_max_objects,
+                    max_buckets,
+                    max_users,
+                    max_roles,
+                    max_groups,
+                ) = s3_accounts_service.get_account_limits(account)
                 results.append(
                     _build_account_context(
                         account,
+                        quota_max_size_gb,
+                        quota_max_objects,
+                        max_buckets,
+                        max_users,
+                        max_roles,
+                        max_groups,
                         tags_service=tags_service,
                         manager_account_is_admin=bool(link.account_admin or link.is_root),
                     )
                 )
     elif workspace is None:
         for account in accounts:
-            results.append(_build_account_context(account, tags_service=tags_service))
+            (
+                quota_max_size_gb,
+                quota_max_objects,
+                max_buckets,
+                max_users,
+                max_roles,
+                max_groups,
+            ) = s3_accounts_service.get_account_limits(account)
+            results.append(
+                _build_account_context(
+                    account,
+                    quota_max_size_gb,
+                    quota_max_objects,
+                    max_buckets,
+                    max_users,
+                    max_roles,
+                    max_groups,
+                    tags_service=tags_service,
+                )
+            )
 
     if workspace in {None, "manager", "browser"}:
         for s3_user in s3_users:
-            quota_max_size_gb, quota_max_objects = s3_users_service.get_user_quota(s3_user)
+            quota_max_size_gb, quota_max_objects, max_buckets = s3_users_service.get_user_limits(s3_user)
             results.append(
                 _build_legacy_user_context(
                     s3_user,
                     quota_max_size_gb,
                     quota_max_objects,
+                    max_buckets,
                     tags_service=tags_service,
                 )
             )

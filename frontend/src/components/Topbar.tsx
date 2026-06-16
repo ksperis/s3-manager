@@ -552,15 +552,6 @@ export default function Topbar({
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             {contextAction && <div className="hidden sm:flex">{contextAction}</div>}
 
-            <button
-              type="button"
-              aria-label="Search"
-              title="Search"
-              className="shell-icon-button inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-transparent transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-            >
-              <SearchIcon className="h-4 w-4" />
-            </button>
-
             <ThemeToggle />
 
             <div ref={accountMenuRootRef} className="relative">
@@ -735,15 +726,6 @@ export default function Topbar({
         </Modal>
       )}
     </>
-  );
-}
-
-function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
-      <circle cx="11" cy="11" r="6.5" strokeWidth={1.7} />
-      <path strokeLinecap="round" strokeWidth={1.7} d="m16 16 4.5 4.5" />
-    </svg>
   );
 }
 

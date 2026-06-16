@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
   PortalSettingsItem,
@@ -71,6 +72,20 @@ export default function ManagerSettingsPage() {
             general: {
               ...prev.general,
               bucket_integrity_check_enabled: value,
+            },
+          }
+        : prev
+    );
+  };
+
+  const handleToggleBucketUsageStats = (value: boolean) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            general: {
+              ...prev.general,
+              bucket_usage_stats_enabled: value,
             },
           }
         : prev
@@ -176,6 +191,7 @@ export default function ManagerSettingsPage() {
                     bucket_migration_enabled: defaults.general.bucket_migration_enabled,
                     bucket_compare_enabled: defaults.general.bucket_compare_enabled,
                     bucket_integrity_check_enabled: defaults.general.bucket_integrity_check_enabled,
+                    bucket_usage_stats_enabled: defaults.general.bucket_usage_stats_enabled,
                     manager_ceph_s3_user_keys_enabled: defaults.general.manager_ceph_s3_user_keys_enabled,
                   },
                 }
@@ -194,11 +210,7 @@ export default function ManagerSettingsPage() {
       <PageHeader
         title="Manager settings"
         description="Configure manager workspace access and extra operational tools."
-        breadcrumbs={[
-          { label: "Admin" },
-          { label: "Manager" },
-          { label: "Settings" },
-        ]}
+        breadcrumbs={adminBreadcrumbs({ label: "Manager" }, { label: "Settings" })}
         actions={[
           {
             label: resetting ? "Resetting..." : "Reset to defaults",
@@ -275,6 +287,17 @@ export default function ManagerSettingsPage() {
                       checked={Boolean(settings.general.bucket_integrity_check_enabled)}
                       onChange={(value) => handleToggleBucketIntegrityCheckTool(value)}
                       ariaLabel="Bucket integrity check tool"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Bucket usage stats"
+                  description="Enables bucket usage statistics on Manager pages and bucket details."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={Boolean(settings.general.bucket_usage_stats_enabled)}
+                      onChange={(value) => handleToggleBucketUsageStats(value)}
+                      ariaLabel="Bucket usage stats"
                     />
                   }
                 />

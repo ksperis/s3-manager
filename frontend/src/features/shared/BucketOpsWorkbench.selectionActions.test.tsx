@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   streamCephAdminBuckets: vi.fn(),
   refreshCephAdminBucketListingCache: vi.fn(),
   refreshStorageOpsBucketListingCache: vi.fn(),
+  listStorageOpsBuckets: vi.fn(),
+  streamStorageOpsBuckets: vi.fn(),
   noopAsync: vi.fn(async () => ({})),
   navigate: vi.fn(),
 }));
@@ -69,7 +71,7 @@ vi.mock("../../api/storageOps", () => ({
   getStorageOpsBucketProperties: mocks.noopAsync,
   getStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
   getStorageOpsBucketWebsite: mocks.noopAsync,
-  listStorageOpsBuckets: vi.fn(),
+  listStorageOpsBuckets: mocks.listStorageOpsBuckets,
   putStorageOpsBucketCors: mocks.noopAsync,
   putStorageOpsBucketLifecycle: mocks.noopAsync,
   putStorageOpsBucketLogging: mocks.noopAsync,
@@ -77,7 +79,7 @@ vi.mock("../../api/storageOps", () => ({
   putStorageOpsBucketPolicy: mocks.noopAsync,
   refreshStorageOpsBucketListingCache: mocks.refreshStorageOpsBucketListingCache,
   setStorageOpsBucketVersioning: mocks.noopAsync,
-  streamStorageOpsBuckets: vi.fn(),
+  streamStorageOpsBuckets: mocks.streamStorageOpsBuckets,
   updateStorageOpsBucketObjectLock: mocks.noopAsync,
   updateStorageOpsBucketPublicAccessBlock: mocks.noopAsync,
   updateStorageOpsBucketQuota: mocks.noopAsync,
@@ -221,6 +223,8 @@ describe("BucketOpsWorkbench selection actions", () => {
     mocks.backupCephAdminBucketConfigs.mockReset();
     mocks.listCephAdminBuckets.mockReset();
     mocks.streamCephAdminBuckets.mockReset();
+    mocks.listStorageOpsBuckets.mockReset();
+    mocks.streamStorageOpsBuckets.mockReset();
     mocks.refreshCephAdminBucketListingCache.mockReset();
     mocks.refreshStorageOpsBucketListingCache.mockReset();
     mocks.refreshCephAdminBucketListingCache.mockResolvedValue({ refreshed: true });
@@ -448,5 +452,119 @@ describe("BucketOpsWorkbench selection actions", () => {
     expect(await screen.findByRole("dialog", { name: "Bulk update" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Add or update notification configurations" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Delete notification configurations" })).toBeInTheDocument();
+  });
+
+  it("disables Storage Ops bulk quota updates without privileged Ceph access", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [{ name: "conn-2::bucket-001", bucket_name: "bucket-001", context_id: "conn-2" }],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+      stats_available: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="storage-ops" shell={{ pageDescription: "Storage Ops buckets" }} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger bulk update" }));
+
+    const quotaOption = screen.getByRole("option", {
+      name: "Set bucket quota (privileged Ceph access required)",
+    }) as HTMLOptionElement;
+    expect(quotaOption.disabled).toBe(true);
+  });
+
+  it("enables Storage Ops bulk quota updates with privileged Ceph access", async () => {
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_user",
+        manager_tool_access: {
+          bucket_compare: false,
+          bucket_integrity_check: false,
+          bucket_migration: false,
+          feature_rules: false,
+          bucket_quota: true,
+          ceph_s3_user_keys: false,
+        },
+      })
+    );
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [{ name: "conn-2::bucket-001", bucket_name: "bucket-001", context_id: "conn-2" }],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+      stats_available: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="storage-ops" shell={{ pageDescription: "Storage Ops buckets" }} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger bulk update" }));
+
+    const quotaOption = screen.getByRole("option", { name: "Set bucket quota" }) as HTMLOptionElement;
+    expect(quotaOption.disabled).toBe(false);
+  });
+
+  it("reports Storage Ops bulk quota items without target grants during preview", async () => {
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_user",
+        manager_tool_access: {
+          bucket_compare: false,
+          bucket_integrity_check: false,
+          bucket_migration: false,
+          feature_rules: false,
+          bucket_quota: true,
+          ceph_s3_user_keys: false,
+        },
+      })
+    );
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [
+        {
+          name: "conn-2::bucket-001",
+          bucket_name: "bucket-001",
+          context_id: "conn-2",
+          bucket_quota_available: false,
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+      stats_available: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="storage-ops" shell={{ pageDescription: "Storage Ops buckets" }} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger bulk update" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Bulk update" });
+    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "set_quota" } });
+    const quotaInputs = await within(dialog).findAllByPlaceholderText("Leave empty to clear");
+    fireEvent.change(quotaInputs[0], { target: { value: "1" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Preview" }));
+
+    expect(await screen.findByText("Bucket quota management is not available for this context.")).toBeInTheDocument();
   });
 });

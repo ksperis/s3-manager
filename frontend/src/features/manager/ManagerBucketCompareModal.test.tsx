@@ -150,7 +150,15 @@ async function runInitialComparison() {
   });
   expect(compareManagerBucketPairMock).toHaveBeenCalledWith(
     "ctx-source",
-    expect.objectContaining({ diff_sample_limit: 1000 }),
+    {
+      target_context_id: "ctx-target",
+      source_bucket: "bucket-a",
+      target_bucket: "bucket-a",
+      include_content: true,
+      include_config: false,
+      config_features: undefined,
+      ignore_modified_after: null,
+    },
     expect.anything()
   );
   return user;
@@ -185,6 +193,12 @@ async function openContentDetails(user: ReturnType<typeof userEvent.setup>) {
 async function openSourceOnlyDetails(user: ReturnType<typeof userEvent.setup>) {
   await openContentDetails(user);
   return openDetailsByLabel(user, "Source only (2)");
+}
+
+async function openObjectMetadata(user: ReturnType<typeof userEvent.setup>, container: HTMLElement, key: string) {
+  const objectButton = within(container).getByRole("button", { name: new RegExp(key) });
+  await user.click(objectButton);
+  return objectButton;
 }
 
 describe("ManagerBucketCompareModal remediation actions", () => {
@@ -256,18 +270,20 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     const user = await runInitialComparison();
     await openContentDetails(user);
 
-    expect(await screen.findByRole("button", { name: "Re-run and sync all missing" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Re-run and sync all different" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Re-run and delete all extra" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Sync all missing" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sync all different" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete all extra" })).toBeInTheDocument();
   });
 
   it("opens a confirmation modal before running remediation", async () => {
     const user = await runInitialComparison();
     await openContentDetails(user);
-    await user.click(await screen.findByRole("button", { name: "Re-run and sync all missing" }));
+    await user.click(await screen.findByRole("button", { name: "Sync all missing" }));
 
-    expect(await screen.findByText("Confirm re-run and sync missing objects")).toBeInTheDocument();
-    expect(screen.getByText(/Estimated objects impacted:/i)).toHaveTextContent("2");
+    expect(await screen.findByText("Confirm sync missing objects")).toBeInTheDocument();
+    expect(screen.getByText(/Objects impacted:/i)).toHaveTextContent("2");
+    expect(screen.getAllByText("source-only-1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("source-only-2").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
   });
 
@@ -298,7 +314,7 @@ describe("ManagerBucketCompareModal remediation actions", () => {
 
     const user = await runInitialComparison();
     await openContentDetails(user);
-    await user.click(await screen.findByRole("button", { name: "Re-run and sync all missing" }));
+    await user.click(await screen.findByRole("button", { name: "Sync all missing" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
@@ -311,6 +327,7 @@ describe("ManagerBucketCompareModal remediation actions", () => {
         source_bucket: "bucket-a",
         target_bucket: "bucket-a",
         action: "sync_source_only",
+        object_keys: ["source-only-1", "source-only-2"],
       })
     );
     await waitFor(() => {
@@ -323,7 +340,6 @@ describe("ManagerBucketCompareModal remediation actions", () => {
         source_bucket: "bucket-a",
         target_bucket: "bucket-a",
         include_content: true,
-        diff_sample_limit: 1000,
       })
     );
   });
@@ -361,16 +377,16 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     );
 
     await openContentDetails(user);
-    await user.click(await screen.findByRole("button", { name: "Re-run and sync all missing" }));
+    await user.click(await screen.findByRole("button", { name: "Sync all missing" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
       expect(runManagerBucketCompareActionMock).toHaveBeenCalled();
     });
-    expect(runManagerBucketCompareActionMock).toHaveBeenCalledWith(
-      "ctx-source",
-      expect.objectContaining({ ignore_modified_after: expectedIso })
+    expect(runManagerBucketCompareActionMock.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ object_keys: ["source-only-1", "source-only-2"] })
     );
+    expect(runManagerBucketCompareActionMock.mock.calls[0][1]).not.toHaveProperty("ignore_modified_after");
   });
 
   it("runs a single-object remediation from an object row", async () => {
@@ -378,7 +394,8 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     runManagerBucketCompareActionMock.mockResolvedValueOnce(buildActionResult({ planned_count: 1, succeeded_count: 1 }));
 
     const user = await runInitialComparison();
-    await openSourceOnlyDetails(user);
+    const sourceOnlyDetails = await openSourceOnlyDetails(user);
+    await openObjectMetadata(user, sourceOnlyDetails, "source-only-1");
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: "Sync this object" }).length).toBeGreaterThan(0);
     });
@@ -392,20 +409,25 @@ describe("ManagerBucketCompareModal remediation actions", () => {
       "ctx-source",
       expect.objectContaining({
         action: "sync_source_only",
-        object_key: "source-only-1",
+        object_keys: ["source-only-1"],
       })
     );
   });
 
   it("renders object details and opens Browser links in a new tab", async () => {
     const user = await runInitialComparison();
-    await openSourceOnlyDetails(user);
+    const sourceOnlyDetails = await openSourceOnlyDetails(user);
 
     expect(screen.queryByText(/Only \d+ of \d+ objects are visible in this section/i)).not.toBeInTheDocument();
     expect(await screen.findByText("source-only-1")).toBeInTheDocument();
-    expect(screen.getByText("1.0 KB")).toBeInTheDocument();
-    expect(screen.getAllByText(/Storage STANDARD/i).length).toBeGreaterThan(0);
-    const exploreLinks = screen.getAllByRole("link", { name: "Explore" });
+    expect(within(sourceOnlyDetails).queryByText("1.0 KB")).not.toBeInTheDocument();
+
+    const objectButton = await openObjectMetadata(user, sourceOnlyDetails, "source-only-1");
+    expect(objectButton).toHaveAttribute("aria-expanded", "true");
+    expect(within(sourceOnlyDetails).getByText("1.0 KB")).toBeInTheDocument();
+    expect(within(sourceOnlyDetails).getByText("Storage")).toBeInTheDocument();
+    expect(within(sourceOnlyDetails).getByText("STANDARD")).toBeInTheDocument();
+    const exploreLinks = within(sourceOnlyDetails).getAllByRole("link", { name: "Explore" });
     expect(exploreLinks.length).toBeGreaterThan(0);
     expect(exploreLinks[0]).toHaveAttribute("target", "_blank");
     expect(exploreLinks[0]).toHaveAttribute("rel", "noreferrer");
@@ -420,6 +442,7 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     const user = await runInitialComparison();
     const sourceOnlyDetails = await openSourceOnlyDetails(user);
 
+    await openObjectMetadata(user, sourceOnlyDetails, "source-only-1");
     await user.click(within(sourceOnlyDetails).getAllByRole("button", { name: "Download" })[0]);
 
     await waitFor(() => {
@@ -431,7 +454,7 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     expect(await screen.findByText("Download started for source-only-1.")).toBeInTheDocument();
   });
 
-  it("shows a section warning only when visible object rows are incomplete", async () => {
+  it("does not show sample warnings for content sections", async () => {
     compareManagerBucketPairMock.mockResolvedValueOnce(
       buildCompareResult({
         content_diff: {
@@ -446,28 +469,28 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     await openContentDetails(user);
     await openDetailsByLabel(user, "Source only (3)");
 
-    expect(screen.getByText("Only 2 of 3 objects are visible in this section. Use the section counter for the total.")).toBeInTheDocument();
+    expect(screen.queryByText(/Only 2 of 3 objects are visible/i)).not.toBeInTheDocument();
   });
 
-  it("copies visible object keys from a content section", async () => {
+  it("copies object keys from a content section", async () => {
     const user = await runInitialComparison();
     await openSourceOnlyDetails(user);
 
     const sourceOnlyDetails = closestDetails(await screen.findByText("Source only (2)"));
-    await user.click(within(sourceOnlyDetails).getByRole("button", { name: "Copy visible keys" }));
+    await user.click(within(sourceOnlyDetails).getByRole("button", { name: "Copy keys" }));
 
     await waitFor(() => {
       expect(clipboardWriteTextMock).toHaveBeenCalledWith("source-only-1\nsource-only-2");
     });
-    expect(await within(sourceOnlyDetails).findByText("Copied 2 visible keys to clipboard.")).toBeInTheDocument();
+    expect(await within(sourceOnlyDetails).findByText("Copied 2 keys to clipboard.")).toBeInTheDocument();
   });
 
-  it("copies each visible different object key once", async () => {
+  it("copies each different object key once", async () => {
     const user = await runInitialComparison();
     await openContentDetails(user);
 
     const differentDetails = closestDetails(await screen.findByText("Different objects (1)"));
-    await user.click(within(differentDetails).getByRole("button", { name: "Copy visible keys" }));
+    await user.click(within(differentDetails).getByRole("button", { name: "Copy keys" }));
 
     await waitFor(() => {
       expect(clipboardWriteTextMock).toHaveBeenCalledWith("different-1");
@@ -495,13 +518,15 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     await user.click(screen.getByRole("button", { name: /run comparison/i }));
 
     await openSourceOnlyDetails(user);
-    expect(await screen.findByText("source-only-1")).toBeInTheDocument();
+    const sourceOnlyDetails = closestDetails(await screen.findByText("Source only (2)"));
+    expect(await within(sourceOnlyDetails).findByText("source-only-1")).toBeInTheDocument();
+    await openObjectMetadata(user, sourceOnlyDetails, "source-only-1");
     expect(screen.queryByRole("link", { name: "Explore" })).not.toBeInTheDocument();
-    const exploreButtons = screen.getAllByRole("button", { name: "Explore" });
+    const exploreButtons = within(sourceOnlyDetails).getAllByRole("button", { name: "Explore" });
     expect(exploreButtons.length).toBeGreaterThan(0);
     expect(exploreButtons.every((button) => button.hasAttribute("disabled"))).toBe(true);
     expect(exploreButtons[0]).toHaveAttribute("title", "Manager Browser is disabled for this surface.");
-    const downloadButtons = screen.getAllByRole("button", { name: "Download" });
+    const downloadButtons = within(sourceOnlyDetails).getAllByRole("button", { name: "Download" });
     expect(downloadButtons.length).toBeGreaterThan(0);
     expect(downloadButtons.every((button) => button.hasAttribute("disabled"))).toBe(true);
     expect(downloadButtons[0]).toHaveAttribute("title", "Manager Browser is disabled for this surface.");
@@ -540,7 +565,7 @@ describe("ManagerBucketCompareModal remediation actions", () => {
 
     const user = await runInitialComparison();
     await openContentDetails(user);
-    await user.click(await screen.findByRole("button", { name: "Re-run and sync all missing" }));
+    await user.click(await screen.findByRole("button", { name: "Sync all missing" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
@@ -557,7 +582,7 @@ describe("ManagerBucketCompareModal remediation actions", () => {
 
     const user = await runInitialComparison();
     await openContentDetails(user);
-    await user.click(await screen.findByRole("button", { name: "Re-run and sync all missing" }));
+    await user.click(await screen.findByRole("button", { name: "Sync all missing" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(await screen.findByText(/Action failed: boom/i)).toBeInTheDocument();

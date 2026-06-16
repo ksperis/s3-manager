@@ -8,6 +8,7 @@ import { StorageEndpoint, listStorageEndpoints } from "../../api/storageEndpoint
 import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
@@ -172,11 +173,7 @@ export default function KeyRotationPage() {
       <PageHeader
         title="S3 key rotation"
         description="Rotate endpoint and managed RGW keys across selected storage endpoints."
-        breadcrumbs={[
-          { label: "Admin" },
-          { label: "Settings" },
-          { label: "Key rotation" },
-        ]}
+        breadcrumbs={adminBreadcrumbs({ label: "Settings" }, { label: "Key rotation" })}
         actions={[
           {
             label: running ? "Rotating..." : "Run rotation",

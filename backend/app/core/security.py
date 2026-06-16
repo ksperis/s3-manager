@@ -47,6 +47,12 @@ def hash_refresh_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def constant_time_equal(value: Optional[str], expected: Optional[str]) -> bool:
+    if value is None or expected is None:
+        return False
+    return secrets.compare_digest(value, expected)
+
+
 def decode_token(token: str) -> Optional[Dict[str, Any]]:
     for key in _get_jwt_key_ring().all_keys():
         try:

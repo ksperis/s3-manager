@@ -5,12 +5,14 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Navigate, Outlet, Route, RouterProvider, createBrowserRouter, createRoutesFromElements } from "react-router-dom";
 import Layout from "./components/Layout";
+import { cx, uiCardClass } from "./components/ui/styles";
 import { useS3AccountContext } from "./features/manager/S3AccountContext";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
 import { fetchCurrentUser } from "./api/users";
 import RouteErrorPage from "./features/shared/RouteErrorPage";
 import {
   hasPortalWorkspaceAccess,
+  getManagerToolAccess,
   isAdminLikeRole,
   isSuperAdminRole,
   readStoredUser,
@@ -25,9 +27,11 @@ const loadUnauthorizedPage = () => import("./features/auth/UnauthorizedPage");
 const loadS3AccountsPage = () => import("./features/admin/AccountsPage");
 const loadAuditLogsPage = () => import("./features/admin/AuditLogsPage");
 const loadUsersPage = () => import("./features/admin/UsersPage");
+const loadGroupsPage = () => import("./features/admin/GroupsPage");
 const loadAdminDashboard = () => import("./features/admin/AdminDashboard");
 const loadAdminMetricsPage = () => import("./features/admin/AdminMetricsPage");
 const loadBillingPage = () => import("./features/admin/BillingPage");
+const loadUsageHistoryPage = () => import("./features/admin/UsageHistoryPage");
 const loadS3UsersPage = () => import("./features/admin/S3UsersPage");
 const loadS3UserKeysPage = () => import("./features/admin/S3UserKeysPage");
 const loadS3ConnectionsPage = () => import("./features/admin/S3ConnectionsPage");
@@ -62,9 +66,11 @@ const loadManagerMigrationDetailPage = () => import("./features/manager/ManagerM
 const loadManagerMigrationWizardPage = () => import("./features/manager/ManagerMigrationWizardPage");
 const loadManagerBucketComparePage = () => import("./features/manager/ManagerBucketComparePage");
 const loadManagerBucketIntegrityPage = () => import("./features/manager/ManagerBucketIntegrityPage");
+const loadManagerFeatureRulesPage = () => import("./features/manager/ManagerFeatureRulesPage");
 const loadManagerCephKeysPage = () => import("./features/manager/ManagerCephKeysPage");
 const loadPortalLayout = () => import("./features/portal/PortalLayout");
 const loadPortalDashboard = () => import("./features/portal/PortalDashboard");
+const loadPortalAccessKeysPage = () => import("./features/portal/PortalAccessKeysPage");
 const loadPortalStorageSpacesPage = () => import("./features/portal/PortalStorageSpacesPage");
 const loadPortalStorageSpaceDetailPage = () => import("./features/portal/PortalStorageSpaceDetailPage");
 const loadPortalObjectDetailPage = () => import("./features/portal/PortalObjectDetailPage");
@@ -93,9 +99,11 @@ const UnauthorizedPage = lazy(loadUnauthorizedPage);
 const S3AccountsPage = lazy(loadS3AccountsPage);
 const AuditLogsPage = lazy(loadAuditLogsPage);
 const UsersPage = lazy(loadUsersPage);
+const GroupsPage = lazy(loadGroupsPage);
 const AdminDashboard = lazy(loadAdminDashboard);
 const AdminMetricsPage = lazy(loadAdminMetricsPage);
 const BillingPage = lazy(loadBillingPage);
+const UsageHistoryPage = lazy(loadUsageHistoryPage);
 const S3UsersPage = lazy(loadS3UsersPage);
 const S3UserKeysPage = lazy(loadS3UserKeysPage);
 const S3ConnectionsPage = lazy(loadS3ConnectionsPage);
@@ -130,9 +138,11 @@ const ManagerMigrationDetailPage = lazy(loadManagerMigrationDetailPage);
 const ManagerMigrationWizardPage = lazy(loadManagerMigrationWizardPage);
 const ManagerBucketComparePage = lazy(loadManagerBucketComparePage);
 const ManagerBucketIntegrityPage = lazy(loadManagerBucketIntegrityPage);
+const ManagerFeatureRulesPage = lazy(loadManagerFeatureRulesPage);
 const ManagerCephKeysPage = lazy(loadManagerCephKeysPage);
 const PortalLayout = lazy(loadPortalLayout);
 const PortalDashboard = lazy(loadPortalDashboard);
+const PortalAccessKeysPage = lazy(loadPortalAccessKeysPage);
 const PortalStorageSpacesPage = lazy(loadPortalStorageSpacesPage);
 const PortalStorageSpaceDetailPage = lazy(loadPortalStorageSpaceDetailPage);
 const PortalObjectDetailPage = lazy(loadPortalObjectDetailPage);
@@ -161,8 +171,8 @@ const USER_ROLE = "ui_user";
 
 function RouteFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 ui-body font-semibold text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+    <div className="shell-page flex min-h-screen items-center justify-center px-4">
+      <div className={cx("px-4 py-3 ui-body font-semibold", uiCardClass)}>
         Loading workspace...
       </div>
     </div>
@@ -173,6 +183,7 @@ export const buildAdminNav = (
   portalEnabled: boolean,
   browserEnabled: boolean,
   billingEnabled: boolean,
+  usageHistoryEnabled: boolean,
   endpointStatusEnabled: boolean,
   isSuperAdmin: boolean
 ) => {
@@ -199,13 +210,17 @@ export const buildAdminNav = (
       label: "Overview",
       links: [
         { to: "/admin", label: "Dashboard", end: true },
-        { to: "/admin/metrics", label: "Metrics" },
+        { to: "/admin/metrics", label: "Usage & Metrics" },
         ...(billingEnabled ? [{ to: "/admin/billing", label: "Billing" }] : []),
+        ...(usageHistoryEnabled ? [{ to: "/admin/usage-history", label: "Usage History" }] : []),
       ],
     },
     {
       label: "Platform",
-      links: [{ to: "/admin/users", label: "UI Users" }],
+      links: [
+        { to: "/admin/users", label: "UI Users" },
+        { to: "/admin/groups", label: "UI Groups" },
+      ],
     },
     {
       label: "Managed Tenants",
@@ -260,6 +275,7 @@ function AdminLayoutShell() {
     generalSettings.portal_enabled,
     generalSettings.browser_enabled,
     generalSettings.billing_enabled,
+    generalSettings.usage_history_enabled,
     generalSettings.endpoint_status_enabled,
     canConfigureApp
   );
@@ -276,6 +292,11 @@ function AdminLayoutShell() {
 function AdminBillingRoute() {
   const { generalSettings } = useGeneralSettings();
   return generalSettings.billing_enabled ? <BillingPage /> : <FeatureDisabledPage feature="Billing" />;
+}
+
+function AdminUsageHistoryRoute() {
+  const { generalSettings } = useGeneralSettings();
+  return generalSettings.usage_history_enabled ? <UsageHistoryPage /> : <FeatureDisabledPage feature="Usage history" />;
 }
 
 function AdminPortalSettingsRoute() {
@@ -435,7 +456,7 @@ function canAccessManagerMigration(
 ): boolean {
   if (!generalSettings.bucket_migration_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
-  return Boolean(user.manager_tool_access?.bucket_migration);
+  return Boolean(getManagerToolAccess(user)?.bucket_migration);
 }
 
 function canAccessManagerBucketCompare(
@@ -444,7 +465,7 @@ function canAccessManagerBucketCompare(
 ): boolean {
   if (!generalSettings.bucket_compare_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
-  if (!user.manager_tool_access?.bucket_compare) return false;
+  if (!getManagerToolAccess(user)?.bucket_compare) return false;
   return user.capabilities?.can_manage_buckets !== false;
 }
 
@@ -454,7 +475,14 @@ function canAccessManagerBucketIntegrity(
 ): boolean {
   if (!generalSettings.bucket_integrity_check_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
-  if (!user.manager_tool_access?.bucket_integrity_check) return false;
+  if (!getManagerToolAccess(user)?.bucket_integrity_check) return false;
+  return user.capabilities?.can_manage_buckets !== false;
+}
+
+function canAccessManagerFeatureRules(user: SessionUser | null): boolean {
+  if (!user?.role) return false;
+  if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
+  if (!getManagerToolAccess(user)?.feature_rules) return false;
   return user.capabilities?.can_manage_buckets !== false;
 }
 
@@ -502,6 +530,14 @@ function RequireManagerBucketIntegrityFeature() {
   return <Navigate to="/unauthorized" replace />;
 }
 
+export function RequireManagerFeatureRulesTool() {
+  const user = getStoredUser();
+  if (canAccessManagerFeatureRules(user)) {
+    return <Outlet />;
+  }
+  return <Navigate to="/unauthorized" replace />;
+}
+
 export function createAppRoutes() {
   return createRoutesFromElements(
     <Route element={<Outlet />} errorElement={<RouteErrorPage />}>
@@ -523,9 +559,11 @@ export function createAppRoutes() {
             <Route path="endpoint-status" element={<AdminEndpointStatusRoute />} />
             <Route path="endpoint-status/:endpointId" element={<AdminEndpointStatusDetailRoute />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="groups" element={<GroupsPage />} />
             <Route path="audit" element={<AuditLogsPage />} />
             <Route path="metrics" element={<AdminMetricsPage />} />
             <Route path="billing" element={<AdminBillingRoute />} />
+            <Route path="usage-history" element={<AdminUsageHistoryRoute />} />
             <Route element={<RequireRole roles={[SUPERADMIN_ROLE]} />}>
               <Route path="general-settings" element={<GeneralSettingsPage />} />
               <Route path="manager-settings" element={<ManagerSettingsPage />} />
@@ -590,6 +628,9 @@ export function createAppRoutes() {
               <Route element={<RequireManagerBucketIntegrityFeature />}>
                 <Route path="bucket-integrity" element={<ManagerBucketIntegrityPage />} />
               </Route>
+              <Route element={<RequireManagerFeatureRulesTool />}>
+                <Route path="feature-rules" element={<ManagerFeatureRulesPage />} />
+              </Route>
               <Route element={<RequireManagerMigrationFeature />}>
                 <Route path="migrations" element={<ManagerMigrationsPage />} />
                 <Route path="migrations/new" element={<ManagerMigrationWizardPage />} />
@@ -612,6 +653,7 @@ export function createAppRoutes() {
               <Route path="storage-spaces" element={<PortalStorageSpacesPage />} />
               <Route path="storage-spaces/:spaceId/objects/*" element={<PortalObjectDetailPage />} />
               <Route path="storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
+              <Route path="access-keys" element={<PortalAccessKeysPage />} />
               <Route path="shares" element={<PortalSharesPage />} />
               <Route path="activity" element={<PortalActivityPage />} />
               <Route path="transfers" element={<PortalTransfersPage />} />

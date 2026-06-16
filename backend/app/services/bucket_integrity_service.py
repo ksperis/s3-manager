@@ -13,9 +13,11 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.db import S3Account
 from app.models.bucket_integrity import (
     BucketIntegrityBucketResult,
+    BucketIntegrityCheckMode,
     BucketIntegrityCheckProgress,
     BucketIntegrityCheckResult,
     BucketIntegrityFailure,
+    BucketIntegrityFailureStage,
 )
 from app.services import s3_client
 from app.utils.s3_endpoint import resolve_s3_client_options
@@ -46,6 +48,7 @@ class BucketIntegrityResolvedTarget:
 class BucketIntegrityOptions:
     parallelism: int = 10
     all_versions: bool = False
+    check_mode: BucketIntegrityCheckMode = "head"
     since: datetime | None = None
     max_mb_per_object: float | None = None
 
@@ -67,6 +70,7 @@ class _ObjectRef:
 class _ObjectCheckResult:
     key: str
     version_id: str | None
+    stage: BucketIntegrityFailureStage
     success: bool
     bytes_read: int = 0
     message: str | None = None
@@ -90,6 +94,13 @@ def _normalize_since(value: datetime | None) -> datetime | None:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def _object_request_kwargs(bucket_name: str, obj: _ObjectRef) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {"Bucket": bucket_name, "Key": obj.key}
+    if obj.version_id:
+        kwargs["VersionId"] = obj.version_id
+    return kwargs
 
 
 class BucketIntegrityCheckService:
@@ -179,9 +190,7 @@ class BucketIntegrityCheckService:
     ) -> _ObjectCheckResult:
         body = None
         total_read = 0
-        kwargs: dict[str, Any] = {"Bucket": bucket_name, "Key": obj.key}
-        if obj.version_id:
-            kwargs["VersionId"] = obj.version_id
+        kwargs = _object_request_kwargs(bucket_name, obj)
         try:
             response = client.get_object(**kwargs)
             body = response.get("Body")
@@ -202,6 +211,7 @@ class BucketIntegrityCheckService:
             return _ObjectCheckResult(
                 key=obj.key,
                 version_id=obj.version_id,
+                stage="get",
                 success=False,
                 bytes_read=total_read,
                 message=_format_storage_error(exc),
@@ -215,9 +225,46 @@ class BucketIntegrityCheckService:
         return _ObjectCheckResult(
             key=obj.key,
             version_id=obj.version_id,
+            stage="get",
             success=True,
             bytes_read=total_read,
         )
+
+    def _head_object(
+        self,
+        client: Any,
+        bucket_name: str,
+        obj: _ObjectRef,
+    ) -> _ObjectCheckResult:
+        try:
+            client.head_object(**_object_request_kwargs(bucket_name, obj))
+        except (ClientError, BotoCoreError, RuntimeError) as exc:
+            return _ObjectCheckResult(
+                key=obj.key,
+                version_id=obj.version_id,
+                stage="head",
+                success=False,
+                message=_format_storage_error(exc),
+            )
+        return _ObjectCheckResult(
+            key=obj.key,
+            version_id=obj.version_id,
+            stage="head",
+            success=True,
+        )
+
+    def _check_object(
+        self,
+        client: Any,
+        bucket_name: str,
+        obj: _ObjectRef,
+        *,
+        check_mode: BucketIntegrityCheckMode,
+        max_bytes: int | None,
+    ) -> _ObjectCheckResult:
+        if check_mode == "head":
+            return self._head_object(client, bucket_name, obj)
+        return self._read_object(client, bucket_name, obj, max_bytes=max_bytes)
 
     def run(
         self,
@@ -364,7 +411,16 @@ class BucketIntegrityCheckService:
                     if cancel_check:
                         cancel_check()
                     listed_count += 1
-                    pending.add(executor.submit(self._read_object, client, target.bucket_name, obj, max_bytes=max_bytes))
+                    pending.add(
+                        executor.submit(
+                            self._check_object,
+                            client,
+                            target.bucket_name,
+                            obj,
+                            check_mode=options.check_mode,
+                            max_bytes=max_bytes,
+                        )
+                    )
                     if len(pending) >= worker_count * 2:
                         done, pending = wait(pending, return_when=FIRST_COMPLETED)
                         for future in done:
@@ -375,10 +431,10 @@ class BucketIntegrityCheckService:
                                 add_failure(
                                     BucketIntegrityFailure(
                                         bucket_name=target.bucket_name,
-                                        stage="get",
+                                        stage=result.stage,
                                         key=result.key,
                                         version_id=result.version_id,
-                                        message=result.message or "Object read failed",
+                                        message=result.message or "Object check failed",
                                     )
                                 )
                         emit("verify")
@@ -395,10 +451,10 @@ class BucketIntegrityCheckService:
                             add_failure(
                                 BucketIntegrityFailure(
                                     bucket_name=target.bucket_name,
-                                    stage="get",
+                                    stage=result.stage,
                                     key=result.key,
                                     version_id=result.version_id,
-                                    message=result.message or "Object read failed",
+                                    message=result.message or "Object check failed",
                                 )
                             )
                     emit("verify")

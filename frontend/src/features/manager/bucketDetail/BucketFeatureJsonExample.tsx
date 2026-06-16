@@ -22,7 +22,7 @@ export default function BucketFeatureJsonExample({
   disabled = false,
 }: BucketFeatureJsonExampleProps) {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+    <div className="rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-2 ui-caption text-[var(--ui-text-muted)]">
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"

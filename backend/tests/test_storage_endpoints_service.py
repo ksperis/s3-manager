@@ -1,15 +1,26 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import json
+from datetime import date, datetime
 
 import pytest
+from pydantic import ValidationError
 
 from app.db import (
+    BillingAssignment,
+    BillingRateCard,
+    BillingStorageDaily,
+    BillingUsageDaily,
+    BucketUsageStatsSnapshot,
     EndpointHealthCheck,
     EndpointHealthLatest,
     EndpointHealthRollup,
     EndpointHealthStatusSegment,
     HealthCheckStatus,
+    QuotaAlertState,
+    QuotaUsageDaily,
+    QuotaUsageHourly,
+    S3Account,
     S3Connection,
     StorageEndpoint,
     StorageProvider,
@@ -255,6 +266,51 @@ def test_create_update_and_serialize_endpoint_force_path_style(db_session):
     assert persisted.force_path_style is False
 
 
+def test_create_update_and_serialize_endpoint_coordinates(db_session):
+    service = StorageEndpointsService(db_session)
+
+    created = service.create_endpoint(
+        StorageEndpointCreate(
+            name="Geo Endpoint",
+            endpoint_url="https://geo.example.test",
+            provider=StorageProvider.OTHER,
+            latitude=48.8566,
+            longitude=2.3522,
+        )
+    )
+
+    assert created.latitude == 48.8566
+    assert created.longitude == 2.3522
+    persisted = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == created.id).first()
+    assert persisted is not None
+    assert persisted.latitude == 48.8566
+    assert persisted.longitude == 2.3522
+
+    updated = service.update_endpoint(
+        created.id,
+        StorageEndpointUpdate(latitude=None, longitude=-1.5536),
+    )
+
+    assert updated.latitude is None
+    assert updated.longitude == -1.5536
+    db_session.refresh(persisted)
+    assert persisted.latitude is None
+    assert persisted.longitude == -1.5536
+
+
+def test_endpoint_coordinates_reject_invalid_ranges():
+    with pytest.raises(ValidationError, match="Latitude must be a finite number between -90 and 90"):
+        StorageEndpointCreate(
+            name="Invalid Latitude",
+            endpoint_url="https://invalid-lat.example.test",
+            provider=StorageProvider.OTHER,
+            latitude=91,
+        )
+
+    with pytest.raises(ValidationError, match="Longitude must be a finite number between -180 and 180"):
+        StorageEndpointUpdate(longitude=-181)
+
+
 def test_aws_endpoint_helpers_are_partition_aware():
     assert AWS_S3_ENDPOINT == aws_s3_endpoint_for_region(AWS_DEFAULT_REGION)
     assert AWS_STS_ENDPOINT == aws_sts_endpoint_for_region(AWS_DEFAULT_REGION)
@@ -361,6 +417,8 @@ def test_sync_env_endpoints_skips_admin_ops_permissions_resolution(db_session, m
                     "admin_access_key": "AKIA-ADMIN",
                     "admin_secret_key": "SECRET-ADMIN",
                     "features_config": "features:\n  admin:\n    enabled: true\n",
+                    "latitude": 43.6047,
+                    "longitude": 1.4442,
                     "is_default": True,
                 }
             ]
@@ -387,6 +445,8 @@ def test_sync_env_endpoints_skips_admin_ops_permissions_resolution(db_session, m
     synced = service.sync_env_endpoints()
     assert len(synced) == 1
     assert synced[0].force_path_style is True
+    assert synced[0].latitude == 43.6047
+    assert synced[0].longitude == 1.4442
     assert calls["count"] == 0
 
 
@@ -531,11 +591,79 @@ def test_delete_endpoint_blocks_when_references_exist(db_session):
         assert "Unable to delete this endpoint" in str(exc)
 
 
-def test_delete_endpoint_cascades_healthcheck_records(db_session):
+def test_delete_endpoint_purges_derived_database_rows(db_session):
     endpoint = _create_ceph_endpoint(db_session, name="ceph-delete-health-cascade")
+    detached_account = S3Account(name="endpoint-history-account", storage_endpoint_id=None)
+    db_session.add(detached_account)
+    db_session.flush()
+    rate_card = BillingRateCard(
+        name="endpoint-delete-rate",
+        currency="EUR",
+        effective_from=date(2026, 1, 1),
+        storage_endpoint_id=endpoint.id,
+    )
+    db_session.add(rate_card)
+    db_session.flush()
     now = utcnow()
     db_session.add_all(
         [
+            BillingAssignment(
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=detached_account.id,
+                rate_card_id=rate_card.id,
+            ),
+            BillingUsageDaily(
+                day=date(2026, 1, 1),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=detached_account.id,
+                source="rgw_admin_usage",
+            ),
+            BillingStorageDaily(
+                day=date(2026, 1, 1),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=detached_account.id,
+                source="rgw_admin_bucket_stats",
+            ),
+            QuotaUsageHourly(
+                hour_ts=datetime(2026, 1, 1, 8, 0, 0),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=detached_account.id,
+                used_bytes=1,
+                used_objects=1,
+            ),
+            QuotaUsageDaily(
+                day=date(2026, 1, 1),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=detached_account.id,
+                last_used_bytes=1,
+                last_used_objects=1,
+            ),
+            QuotaAlertState(
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=detached_account.id,
+            ),
+            BucketUsageStatsSnapshot(
+                scope_kind="admin_managed",
+                scope_id=str(endpoint.id),
+                scope_name=endpoint.name,
+                bucket_name="admin-managed-bucket",
+                data_type_distribution_json="[]",
+                storage_class_distribution_json="[]",
+                size_distribution_json="[]",
+                age_distribution_json="[]",
+                current_noncurrent_distribution_json="[]",
+            ),
+            BucketUsageStatsSnapshot(
+                scope_kind="ceph_admin",
+                scope_id=str(endpoint.id),
+                scope_name=endpoint.name,
+                bucket_name="ceph-admin-bucket",
+                data_type_distribution_json="[]",
+                storage_class_distribution_json="[]",
+                size_distribution_json="[]",
+                age_distribution_json="[]",
+                current_noncurrent_distribution_json="[]",
+            ),
             EndpointHealthCheck(
                 storage_endpoint_id=endpoint.id,
                 checked_at=now,
@@ -577,6 +705,27 @@ def test_delete_endpoint_cascades_healthcheck_records(db_session):
     service.delete_endpoint(endpoint.id)
 
     assert db_session.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint.id).count() == 0
+    assert db_session.query(BillingAssignment).filter(BillingAssignment.storage_endpoint_id == endpoint.id).count() == 0
+    assert db_session.query(BillingUsageDaily).filter(BillingUsageDaily.storage_endpoint_id == endpoint.id).count() == 0
+    assert (
+        db_session.query(BillingStorageDaily)
+        .filter(BillingStorageDaily.storage_endpoint_id == endpoint.id)
+        .count()
+        == 0
+    )
+    assert db_session.query(BillingRateCard).filter(BillingRateCard.storage_endpoint_id == endpoint.id).count() == 0
+    assert db_session.query(QuotaUsageHourly).filter(QuotaUsageHourly.storage_endpoint_id == endpoint.id).count() == 0
+    assert db_session.query(QuotaUsageDaily).filter(QuotaUsageDaily.storage_endpoint_id == endpoint.id).count() == 0
+    assert db_session.query(QuotaAlertState).filter(QuotaAlertState.storage_endpoint_id == endpoint.id).count() == 0
+    assert (
+        db_session.query(BucketUsageStatsSnapshot)
+        .filter(
+            BucketUsageStatsSnapshot.scope_kind.in_(("admin_managed", "ceph_admin")),
+            BucketUsageStatsSnapshot.scope_id == str(endpoint.id),
+        )
+        .count()
+        == 0
+    )
     assert (
         db_session.query(EndpointHealthCheck)
         .filter(EndpointHealthCheck.storage_endpoint_id == endpoint.id)

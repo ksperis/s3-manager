@@ -13,9 +13,14 @@ import {
   fetchManagerTraffic,
 } from "../../api/stats";
 import { fetchCephAdminClusterTraffic } from "../../api/cephAdmin";
+import {
+  MetricsCard,
+  MetricsChartPanel,
+  MetricsLegendList,
+  MetricsTile,
+} from "../../components/MetricsCard";
 import PageBanner from "../../components/PageBanner";
 import TrafficBytesChart from "../../components/TrafficBytesChart";
-import { cx, uiCardClass, uiCardMutedClass } from "../../components/ui/styles";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
 import {
@@ -53,9 +58,17 @@ type TrafficAnalyticsProps = {
   bucketName?: string;
   scope?: "manager" | "ceph-admin";
   enabled?: boolean;
+  visible?: boolean;
 };
 
-export default function TrafficAnalytics({ accountId, endpointId, bucketName, scope = "manager", enabled = true }: TrafficAnalyticsProps) {
+export default function TrafficAnalytics({
+  accountId,
+  endpointId,
+  bucketName,
+  scope = "manager",
+  enabled = true,
+  visible = true,
+}: TrafficAnalyticsProps) {
   const [window, setWindow] = useState<TrafficWindow>("week");
   const [traffic, setTraffic] = useState<ManagerTrafficStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -113,17 +126,16 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
   const topCategories = useMemo(() => (traffic?.category_breakdown ?? []).slice(0, 6), [traffic]);
   const requestPieData = useMemo(() => prepareRequestPie(traffic?.request_breakdown ?? []), [traffic]);
 
+  if (!visible) {
+    return null;
+  }
+
   return (
-    <section className={cx(uiCardClass, "space-y-4 p-4")}>
-      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Traffic</p>
-          <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Traffic visualization</h3>
-          <p className="ui-caption text-slate-500 dark:text-slate-400">
-            Ingress/egress volume, request types, and busiest buckets.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-900/60">
+    <MetricsCard
+      title="Traffic"
+      description="Ingress/egress volume, request types, and busiest buckets."
+      actions={
+        <div className="flex items-center gap-2 rounded-full bg-[var(--ui-surface-muted)] px-2 py-1">
           {WINDOW_OPTIONS.map((option) => (
             <button
               key={option.value}
@@ -139,7 +151,8 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
             </button>
           ))}
         </div>
-      </header>
+      }
+    >
 
       {error && <PageBanner tone="warning">{error}</PageBanner>}
 
@@ -203,20 +216,15 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
                     <Tooltip formatter={(value) => formatBytes(Number(value))} />
                   </PieChart>
                 </ResponsiveContainer>
-                <ul className="flex-1 space-y-2 ui-body">
-                  {(traffic?.request_breakdown ?? []).map((entry) => (
-                    <li key={entry.group} className={cx(uiCardMutedClass, "flex items-center justify-between px-3 py-2")}>
-                      <span className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                        <span
-                          className="h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: REQUEST_COLORS[entry.group] ?? "#94A3B8" }}
-                        />
-                        {entry.group}
-                      </span>
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">{formatCompactNumber(entry.ops)} ops</span>
-                    </li>
-                  ))}
-                </ul>
+                <MetricsLegendList
+                  className="flex-1"
+                  items={(traffic?.request_breakdown ?? []).map((entry) => ({
+                    key: entry.group,
+                    label: entry.group,
+                    color: REQUEST_COLORS[entry.group] ?? "#94A3B8",
+                    value: `${formatCompactNumber(entry.ops)} ops`,
+                  }))}
+                />
               </div>
             </ChartCard>
           </div>
@@ -229,7 +237,7 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
           <CategoryChart categories={topCategories} loading={loading} />
         </div>
       )}
-    </section>
+    </MetricsCard>
   );
 }
 
@@ -241,13 +249,7 @@ type TotalCardProps = {
 };
 
 function TrafficTotalCard({ label, value, hint, loading }: TotalCardProps) {
-  return (
-    <div className="rounded-lg border border-slate-200/80 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/60">
-      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1.5 ui-title font-semibold text-slate-900 dark:text-white">{loading ? "…" : value}</p>
-      {hint && <p className="ui-caption text-slate-500 dark:text-slate-400">{hint}</p>}
-    </div>
-  );
+  return <MetricsTile label={label} value={value} hint={hint} loading={loading} />;
 }
 
 type ChartCardProps = {
@@ -259,28 +261,10 @@ type ChartCardProps = {
 };
 
 function ChartCard({ title, subtitle, loading, children, hasData }: ChartCardProps) {
-  if (loading) {
-    return (
-      <div className="rounded-lg border border-slate-200/80 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-        <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{title}</p>
-        <div className="mt-3 h-40 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
-      </div>
-    );
-  }
   return (
-    <div className="rounded-lg border border-slate-200/80 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-      <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{title}</p>
-      {subtitle && <p className="ui-caption text-slate-500 dark:text-slate-400">{subtitle}</p>}
-      {hasData ? <div className="mt-3">{children}</div> : <EmptyState />}
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center ui-caption text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-      No usable measurements yet for this time window.
-    </div>
+    <MetricsChartPanel title={title} description={subtitle} loading={loading} hasData={hasData} emptyMessage="No usable measurements yet for this time window.">
+      {children}
+    </MetricsChartPanel>
   );
 }
 
@@ -316,17 +300,17 @@ function BucketRanking({ rankings, loading }: BucketRankingProps) {
     >
       <ul className="space-y-3">
         {rankings.map((entry) => (
-          <li key={entry.bucket} className="space-y-2 rounded-xl border border-slate-100 p-3 dark:border-slate-800">
+          <li key={entry.bucket} className="space-y-2 border-b border-[color:var(--ui-border-soft)] pb-3 last:border-b-0 last:pb-0">
             <div className="flex items-center justify-between ui-body">
-              <div>
-                <p className="font-semibold text-slate-700 dark:text-slate-200">{entry.bucket}</p>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-[var(--ui-text)]" title={entry.bucket}>{entry.bucket}</p>
+                <p className="ui-caption text-[var(--ui-text-muted)]">
                   {`${formatCompactNumber(entry.ops)} ops · success ${
                     entry.success_ratio != null ? formatPercentage(entry.success_ratio * 100) : "n/a"
                   }`}
                 </p>
               </div>
-              <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">{formatBytes(entry.bytes_total)}</p>
+              <p className="shrink-0 ui-caption font-semibold text-[var(--ui-text-muted)]">{formatBytes(entry.bytes_total)}</p>
             </div>
             <div className="space-y-1">
               <BucketBar label="In" color="#0EA5E9" value={entry.bytes_in ?? 0} max={safeMaxComponent} />
@@ -371,12 +355,12 @@ function CategoryChart({ categories, loading }: CategoryChartProps) {
 function BucketBar({ label, color, value, max }: { label: string; color: string; value: number; max: number }) {
   const width = Math.max((value / max) * 100, value > 0 ? 2 : 0);
   return (
-    <div className="flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
-      <span className="w-8 text-right font-semibold text-slate-600 dark:text-slate-300">{label}</span>
-      <div className="h-2 flex-1 rounded-full bg-slate-200 dark:bg-slate-800">
+    <div className="flex items-center gap-2 ui-caption text-[var(--ui-text-muted)]">
+      <span className="w-8 text-right font-semibold text-[var(--ui-text)]">{label}</span>
+      <div className="h-2 flex-1 rounded-full bg-[var(--ui-surface)]">
         <div className="h-2 rounded-full" style={{ width: `${width}%`, backgroundColor: color }} />
       </div>
-      <span className="w-20 text-right ui-caption text-slate-500 dark:text-slate-400">{formatBytes(value)}</span>
+      <span className="w-20 text-right ui-caption text-[var(--ui-text-muted)]">{formatBytes(value)}</span>
     </div>
   );
 }

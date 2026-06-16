@@ -206,6 +206,68 @@ async function expectPrimarySurfacesUsePlainTheme(page: Page) {
   expect(offenders).toEqual([]);
 }
 
+async function expectManagerKpiQuotaMeters(page: Page) {
+  const meters = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("main [role='meter']")).map((element) => ({
+      label: element.getAttribute("aria-label"),
+      value: Number(element.getAttribute("aria-valuenow") ?? "0"),
+    }))
+  );
+  const expectedLabels = ["Storage used quota usage", "Buckets quota usage", "Objects quota usage"];
+  const quotaMeters = meters.filter((meter) => meter.label && expectedLabels.includes(meter.label));
+
+  expect(quotaMeters.map((meter) => meter.label)).toEqual(expect.arrayContaining(expectedLabels));
+  expect(quotaMeters).toHaveLength(expectedLabels.length);
+  for (const meter of quotaMeters) {
+    expect(meter.value).toBeGreaterThan(0);
+  }
+}
+
+async function expectManagerKpiValuesAligned(page: Page) {
+  const valueRows = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("main [data-kpi-card]")).map((card) => {
+      const cardRect = card.getBoundingClientRect();
+      const value = card.querySelector("[data-kpi-value]");
+      const valueRect = value?.getBoundingClientRect();
+      return {
+        label: card.getAttribute("data-kpi-card"),
+        cardTop: Math.round(cardRect.top),
+        valueTop: valueRect ? Math.round(valueRect.top) : null,
+      };
+    })
+  );
+  expect(valueRows).toHaveLength(4);
+
+  const rows = new Map<number, number[]>();
+  for (const item of valueRows) {
+    if (item.valueTop == null) continue;
+    rows.set(item.cardTop, [...(rows.get(item.cardTop) ?? []), item.valueTop]);
+  }
+
+  for (const rowValues of rows.values()) {
+    if (rowValues.length <= 1) continue;
+    const minTop = Math.min(...rowValues);
+    const maxTop = Math.max(...rowValues);
+    expect(maxTop - minTop).toBeLessThanOrEqual(2);
+  }
+}
+
+async function expectManagerQuotaStatusRows(page: Page) {
+  const rows = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("main [data-quota-status-row]")).map((element) => ({
+      label: element.getAttribute("data-quota-status-row"),
+      text: element.textContent?.replace(/\s+/g, " ").trim() ?? "",
+    }))
+  );
+
+  expect(rows.map((row) => row.label)).toEqual(["Storage", "Buckets", "Objects", "Users", "Roles", "Groups"]);
+  expect(rows.some((row) => row.text.includes("Bandwidth (month)"))).toBe(false);
+  expect(rows.find((row) => row.label === "Buckets")?.text).toContain(" / ");
+  expect(rows.find((row) => row.label === "Users")?.text).toContain(" / ");
+  expect(rows.find((row) => row.label === "Roles")?.text).toContain(" / ");
+  expect(rows.find((row) => row.label === "Groups")?.text).toContain(" / ");
+}
+
 test.describe("Workspace visual QA", () => {
   for (const routeCase of ROUTE_CASES) {
     const scenario = scenarioById(routeCase.scenarioId);
@@ -228,6 +290,11 @@ test.describe("Workspace visual QA", () => {
           await expectKeyboardFocus(page);
           await expectCriticalButtonTextFits(page);
           await expectPrimarySurfacesUsePlainTheme(page);
+          if (routeCase.workspace === "manager") {
+            await expectManagerKpiQuotaMeters(page);
+            await expectManagerKpiValuesAligned(page);
+            await expectManagerQuotaStatusRows(page);
+          }
 
           mockRegistry.assertNoUnmatched();
         });

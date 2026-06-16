@@ -13,6 +13,7 @@ const updateS3AccountMock = vi.fn();
 
 const listMinimalS3UsersMock = vi.fn();
 const listMinimalS3ConnectionsMock = vi.fn();
+const listMinimalGroupsMock = vi.fn();
 const generalSettingsState = {
   manager_enabled: true,
   ceph_admin_enabled: false,
@@ -48,8 +49,8 @@ vi.mock("../../api/users", () => ({
   listUsers: (params?: unknown) => listUsersMock(params),
   createUser: (payload: unknown) => createUserMock(payload),
   updateUser: (userId: number, payload: unknown) => updateUserMock(userId, payload),
-  assignUserToS3Account: (userId: number, accountId: number, accountAdmin?: boolean) =>
-    assignUserToS3AccountMock(userId, accountId, accountAdmin),
+  assignUserToS3Account: (userId: number, accountId: number, accountAdmin?: boolean, accountRole?: string) =>
+    assignUserToS3AccountMock(userId, accountId, accountAdmin, accountRole),
   deleteUser: (userId: number) => deleteUserMock(userId),
 }));
 
@@ -64,6 +65,10 @@ vi.mock("../../api/s3Users", () => ({
 
 vi.mock("../../api/s3ConnectionsAdmin", () => ({
   listMinimalS3Connections: () => listMinimalS3ConnectionsMock(),
+}));
+
+vi.mock("../../api/groups", () => ({
+  listMinimalGroups: () => listMinimalGroupsMock(),
 }));
 
 describe("UsersPage modal tabs", () => {
@@ -106,11 +111,61 @@ describe("UsersPage modal tabs", () => {
       },
     ]);
 
+    listMinimalGroupsMock.mockResolvedValue([
+      {
+        id: 31,
+        name: "storage-operators",
+        description: "Storage operators",
+      },
+      {
+        id: 32,
+        name: "portal-readers",
+        description: "Portal readers",
+      },
+    ]);
+
     createUserMock.mockResolvedValue({ id: 100 });
     updateUserMock.mockResolvedValue({ id: 100 });
     assignUserToS3AccountMock.mockResolvedValue(undefined);
     deleteUserMock.mockResolvedValue(undefined);
     updateS3AccountMock.mockResolvedValue(undefined);
+  });
+
+  it("renders associations with the shared sectioned summary", async () => {
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 12,
+          email: "assoc.summary@example.com",
+          role: "ui_user",
+          accounts: [1],
+          account_links: [{ account_id: 1, account_admin: true, account_role: "portal_user" }],
+          s3_users: [11],
+          s3_user_details: [{ id: 11, name: "s3-user-1" }],
+          s3_connections: [21],
+          s3_connection_details: [{ id: 21, name: "conn-1" }],
+          group_ids: [31],
+          group_details: [{ id: 31, name: "storage-operators" }],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+
+    expect(await screen.findByText("acc-1")).toBeInTheDocument();
+    expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Portal user")).toBeInTheDocument();
+    expect(screen.getByText("Accounts")).toBeInTheDocument();
+    expect(screen.getByText("Users")).toBeInTheDocument();
+    expect(screen.getByText("Connections")).toBeInTheDocument();
+    expect(screen.getByText("Groups")).toBeInTheDocument();
+    expect(screen.getByText("s3-user-1")).toBeInTheDocument();
+    expect(screen.getByText("conn-1")).toBeInTheDocument();
+    expect(screen.getByText("storage-operators")).toBeInTheDocument();
   });
 
   it("keeps associations when switching General/Associations and submits linked payload", async () => {
@@ -148,7 +203,7 @@ describe("UsersPage modal tabs", () => {
       expect(createUserMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, false);
+    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, false, "portal_none");
     expect(updateUserMock).toHaveBeenCalledWith(
       100,
       expect.objectContaining({
@@ -229,6 +284,7 @@ describe("UsersPage modal tabs", () => {
     expect(screen.getByRole("button", { name: "General" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Associations" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Workspaces" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Browser" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Access" })).not.toBeInTheDocument();
     expect(screen.queryByText("Ceph Admin access")).not.toBeInTheDocument();
     expect(screen.queryByText("Storage Ops access")).not.toBeInTheDocument();
@@ -237,6 +293,68 @@ describe("UsersPage modal tabs", () => {
     expect(screen.getByText("Mass management workspaces")).toBeInTheDocument();
     expect(screen.getByText("Ceph Admin access")).toBeInTheDocument();
     expect(screen.getByText("Storage Ops access")).toBeInTheDocument();
+  });
+
+  it("shows Groups tab in create modal and sends group_ids in create payload", async () => {
+    render(<UsersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+    fireEvent.change(screen.getByPlaceholderText("jane.doe@example.com"), { target: { value: "grouped@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("•••••••"), { target: { value: "secret-123" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Groups" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: /storage-operators/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createUserMock).toHaveBeenCalled();
+    });
+    expect(createUserMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        group_ids: [31],
+      })
+    );
+  });
+
+  it("shows Groups tab in edit modal and sends updated group_ids", async () => {
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 12,
+          email: "edit.groups@example.com",
+          role: "ui_user",
+          accounts: [],
+          account_links: [],
+          s3_users: [],
+          s3_connections: [],
+          group_ids: [31],
+          group_details: [{ id: 31, name: "storage-operators" }],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Groups" }));
+
+    const selectedGroup = await screen.findByRole("checkbox", { name: /storage-operators/i });
+    expect(selectedGroup).toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: /portal-readers/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateUserMock).toHaveBeenCalled();
+    });
+    expect(updateUserMock).toHaveBeenCalledWith(
+      12,
+      expect.objectContaining({
+        group_ids: [31, 32],
+      })
+    );
   });
 
   it("shows Workspaces tab and keeps workspace toggles out of General in edit modal", async () => {
@@ -287,6 +405,8 @@ describe("UsersPage modal tabs", () => {
             bucket_compare: false,
             bucket_integrity_check: true,
             bucket_migration: true,
+            feature_rules: false,
+            bucket_quota: false,
             ceph_s3_user_keys: false,
           },
           accounts: [],
@@ -310,7 +430,7 @@ describe("UsersPage modal tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Manager tools" }));
 
     expect(screen.getByText("Bucket tools")).toBeInTheDocument();
-    expect(screen.getByText("Ceph tools")).toBeInTheDocument();
+    expect(screen.getByText("Privileged Ceph access")).toBeInTheDocument();
     const bucketToolsGroup = screen.getByText("Bucket tools").closest("div");
     expect(bucketToolsGroup).not.toBeNull();
     expect(within(bucketToolsGroup as HTMLElement).getByText("Bucket compare")).toBeInTheDocument();
@@ -336,6 +456,8 @@ describe("UsersPage modal tabs", () => {
           bucket_compare: true,
           bucket_integrity_check: true,
           bucket_migration: true,
+          feature_rules: false,
+          bucket_quota: false,
           ceph_s3_user_keys: false,
         },
       })
@@ -415,6 +537,30 @@ describe("UsersPage modal tabs", () => {
     );
   });
 
+  it("shows Browser options in create modal and sends advanced Browser access", async () => {
+    render(<UsersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+    fireEvent.change(screen.getByPlaceholderText("jane.doe@example.com"), { target: { value: "browser@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("•••••••"), { target: { value: "secret-123" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Browser" }));
+    expect(screen.getByText("Browser options for this UI user. Groups can also grant these options.")).toBeInTheDocument();
+    const advancedToggle = screen.getByRole("checkbox", { name: "Enable advanced Browser features" });
+    expect(advancedToggle).not.toBeChecked();
+    fireEvent.click(advancedToggle);
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createUserMock).toHaveBeenCalled();
+    });
+    expect(createUserMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        browser_advanced_features_enabled: true,
+      })
+    );
+  });
+
   it("allows enabling account admin when linking an account", async () => {
     render(<UsersPage />);
 
@@ -438,6 +584,6 @@ describe("UsersPage modal tabs", () => {
     await waitFor(() => {
       expect(assignUserToS3AccountMock).toHaveBeenCalled();
     });
-    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, true);
+    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, true, "portal_none");
   });
 });

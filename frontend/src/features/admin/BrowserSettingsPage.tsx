@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
   PortalSettingsItem,
@@ -82,6 +83,7 @@ export default function BrowserSettingsPage() {
     field:
       | "browser_root_enabled"
       | "browser_manager_enabled"
+      | "browser_portal_enabled"
       | "browser_ceph_admin_enabled",
     checked: boolean
   ) => {
@@ -135,6 +137,7 @@ export default function BrowserSettingsPage() {
               ...prev.general,
               browser_root_enabled: defaults.general.browser_root_enabled,
               browser_manager_enabled: defaults.general.browser_manager_enabled,
+              browser_portal_enabled: defaults.general.browser_portal_enabled,
               browser_ceph_admin_enabled: defaults.general.browser_ceph_admin_enabled,
             },
           }
@@ -153,11 +156,7 @@ export default function BrowserSettingsPage() {
       <PageHeader
         title="Browser settings"
         description="Configure upload concurrency for the browser."
-        breadcrumbs={[
-          { label: "Admin" },
-          { label: "Browser" },
-          { label: "Settings" },
-        ]}
+        breadcrumbs={adminBreadcrumbs({ label: "Browser" }, { label: "Settings" })}
         actions={[
           {
             label: resetting ? "Resetting..." : "Reset to defaults",
@@ -210,6 +209,17 @@ export default function BrowserSettingsPage() {
                     <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{BROWSER_MANAGER_WARNING_MESSAGE}</p>
                   )}
                 </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="/portal/storage-spaces/:spaceId"
+                  description="Minimal locked Browser inside Portal Storage Spaces."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={settings.general.browser_portal_enabled}
+                      onChange={(value) => handleWorkspaceToggle("browser_portal_enabled", value)}
+                      ariaLabel="Enable Browser in Portal Storage Spaces"
+                    />
+                  }
+                />
                 <PortalSettingsItem
                   title="/ceph-admin/browser"
                   description="Browser tab inside the Ceph Admin workspace."

@@ -131,6 +131,75 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(true);
   });
 
+  it("prefers effective_access for inherited account, portal, and Storage Ops access", () => {
+    const user: SessionUser = {
+      id: 13,
+      email: "grouped-user@example.com",
+      role: "ui_user",
+      can_access_storage_ops: false,
+      account_links: [],
+      effective_access: {
+        can_access_ceph_admin: false,
+        can_access_storage_ops: true,
+        manager_tool_access: {
+          bucket_compare: false,
+          bucket_integrity_check: false,
+          bucket_migration: false,
+          feature_rules: false,
+          bucket_quota: false,
+          ceph_s3_user_keys: false,
+        },
+        accounts: [42],
+        account_links: [{ account_id: 42, account_admin: true, account_role: "portal_manager" }],
+        s3_users: [],
+        s3_user_details: [],
+        s3_connections: [],
+        s3_connection_details: [],
+      },
+    };
+
+    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+      ...baseSettings,
+      portal_enabled: true,
+      storage_ops_enabled: true,
+    });
+
+    expect(workspaces.some((workspace) => workspace.id === "manager")).toBe(true);
+    expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(true);
+    expect(workspaces.some((workspace) => workspace.id === "storage-ops")).toBe(true);
+  });
+
+  it("prefers effective_access for inherited Browser access through shared connections", () => {
+    const user: SessionUser = {
+      id: 14,
+      email: "grouped-browser@example.com",
+      role: "ui_user",
+      s3_connections: [],
+      effective_access: {
+        can_access_ceph_admin: false,
+        can_access_storage_ops: false,
+        manager_tool_access: {
+          bucket_compare: false,
+          bucket_integrity_check: false,
+          bucket_migration: false,
+          feature_rules: false,
+          bucket_quota: false,
+          ceph_s3_user_keys: false,
+        },
+        accounts: [],
+        account_links: [],
+        s3_users: [],
+        s3_user_details: [],
+        s3_connections: [55],
+        s3_connection_details: [{ id: 55, name: "shared-browser", access_browser: true }],
+      },
+    };
+
+    const workspaces = resolveAvailableWorkspacesWithFlags(user, baseSettings);
+
+    expect(workspaces.some((workspace) => workspace.id === "browser")).toBe(true);
+  });
+
   it("exposes Portal for portal managers when feature is enabled", () => {
     const user: SessionUser = {
       id: 9,

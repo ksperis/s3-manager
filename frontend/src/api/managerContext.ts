@@ -13,6 +13,7 @@ export type ManagerContext = {
   manager_stats_enabled: boolean;
   manager_stats_message?: string | null;
   manager_browser_enabled?: boolean;
+  manager_bucket_quota_enabled?: boolean;
   manager_ceph_keys_enabled?: boolean;
 };
 

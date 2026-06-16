@@ -19,6 +19,6 @@ def run_quota_monitor(
 ) -> dict:
     service = QuotaMonitoringService(db)
     try:
-        return service.run_monitor()
+        return service.run_monitor(include_usage_history=False)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

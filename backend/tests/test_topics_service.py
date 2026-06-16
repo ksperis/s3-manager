@@ -2,15 +2,25 @@
 # Licensed under the Apache License, Version 2.0
 import json
 
-from app.db import S3Account
+from app.db import S3Account, StorageEndpoint, StorageProvider
 from app.services import sns_client
 from app.services.topics_service import TopicsService
 
 
-def _account() -> S3Account:
+def _account(provider: str | None = None) -> S3Account:
     account = S3Account(rgw_access_key="AKIA_TEST", rgw_secret_key="SECRET_TEST")
     account.storage_endpoint_url = "https://ceph-sns.example.test"
+    if provider:
+        account.storage_endpoint = StorageEndpoint(
+            name=f"{provider}-sns",
+            endpoint_url="https://ceph-sns.example.test",
+            provider=provider,
+        )
     return account
+
+
+def _ceph_account() -> S3Account:
+    return _account(StorageProvider.CEPH.value)
 
 
 def test_set_topic_configuration_skips_noop(monkeypatch):
@@ -170,3 +180,110 @@ def test_set_topic_configuration_only_sends_changes(monkeypatch):
 
     assert sent == {"topic_arn": arn, "attrs": {"push-endpoint": "https://new.example.com"}}
     assert result == {"push-endpoint": "https://new.example.com", "verify-ssl": False}
+
+
+def test_list_topics_reconstructs_ceph_topics_and_subscriptions(monkeypatch):
+    service = TopicsService()
+    arn = "arn:aws:sns:default:tenant:topic-generic_test_unistra_preprod2"
+    monkeypatch.setattr(
+        sns_client,
+        "list_topics_raw",
+        lambda *_, **__: [
+            {"TopicArn": arn, "Name": "topic-generic_test_unistra_preprod2"},
+            {"TopicArn": arn, "Name": "topic-generic_test_unistra_preprod2"},
+            {
+                "TopicArn": arn,
+                "Name": "notif.bucket-one_topic-generic_test_unistra_preprod2",
+                "EndpointAddress": "https://notify.example.test/hooks/topic",
+                "EndpointTopic": "endpoint-topic",
+                "EndpointArgs": "persistent=true&verify-ssl=false&time_to_live=60",
+                "Persistent": "true",
+                "OpaqueData": "trace=lab",
+            },
+        ],
+    )
+    monkeypatch.setattr(sns_client, "list_topics", lambda *_, **__: (_ for _ in ()).throw(AssertionError("unused")))
+    attributes_calls: list[str] = []
+
+    def fake_get_topic_attributes(topic_arn, *_, **__):
+        attributes_calls.append(topic_arn)
+        return {"TopicArn": topic_arn, "Owner": "tenant", "SubscriptionsConfirmed": "2"}
+
+    monkeypatch.setattr(sns_client, "get_topic_attributes", fake_get_topic_attributes)
+
+    topics = service.list_topics(_ceph_account())
+
+    assert len(topics) == 1
+    topic = topics[0]
+    assert topic.name == "topic-generic_test_unistra_preprod2"
+    assert topic.arn == arn
+    assert topic.is_ceph is True
+    assert topic.subscriptions_confirmed == 2
+    assert attributes_calls == [arn]
+    assert len(topic.subscriptions) == 1
+    subscription = topic.subscriptions[0]
+    assert subscription.name == "notif.bucket-one_topic-generic_test_unistra_preprod2"
+    assert subscription.bucket == "bucket-one"
+    assert subscription.endpoint_address == "https://notify.example.test/hooks/topic"
+    assert subscription.endpoint_topic == "endpoint-topic"
+    assert subscription.endpoint_args == {"persistent": True, "verify-ssl": False, "time_to_live": 60}
+    assert subscription.persistent is True
+    assert subscription.metadata == {"OpaqueData": "trace=lab"}
+
+
+def test_list_topics_treats_ceph_notif_entries_as_bindings(monkeypatch):
+    service = TopicsService()
+    arn = "arn:aws:sns:default:tenant:topic-from-arn"
+    monkeypatch.setattr(
+        sns_client,
+        "list_topics_raw",
+        lambda *_, **__: [
+            {
+                "TopicArn": arn,
+                "Name": "notif.bucket_topic-from-arn",
+                "EndPoint": json.dumps(
+                    {
+                        "EndpointAddress": "https://notify.example.test/hooks/current",
+                        "EndpointTopic": "topic-from-arn",
+                        "EndpointArgs": "persistent=false&verify-ssl=true",
+                    }
+                ),
+            },
+        ],
+    )
+    monkeypatch.setattr(sns_client, "get_topic_attributes", lambda topic_arn, *_, **__: {"TopicArn": topic_arn})
+
+    topics = service.list_topics(_ceph_account())
+
+    assert len(topics) == 1
+    assert topics[0].is_ceph is True
+    assert topics[0].name == "topic-from-arn"
+    assert topics[0].subscriptions[0].name == "notif.bucket_topic-from-arn"
+    assert topics[0].subscriptions[0].endpoint_address == "https://notify.example.test/hooks/current"
+    assert topics[0].subscriptions[0].endpoint_args == {"persistent": False, "verify-ssl": True}
+
+
+def test_list_topics_keeps_standard_sns_behavior(monkeypatch):
+    service = TopicsService()
+    arn = "arn:aws:sns:us-east-1:123456789012:standard-topic"
+    monkeypatch.setattr(sns_client, "list_topics_raw", lambda *_, **__: (_ for _ in ()).throw(AssertionError("unused")))
+    monkeypatch.setattr(sns_client, "list_topics", lambda *_, **__: [{"TopicArn": arn}])
+    monkeypatch.setattr(
+        sns_client,
+        "get_topic_attributes",
+        lambda topic_arn, *_, **__: {
+            "TopicArn": topic_arn,
+            "Owner": "123456789012",
+            "SubscriptionsConfirmed": "1",
+            "SubscriptionsPending": "0",
+        },
+    )
+
+    topics = service.list_topics(_account(StorageProvider.AWS.value))
+
+    assert len(topics) == 1
+    assert topics[0].name == "standard-topic"
+    assert topics[0].is_ceph is False
+    assert topics[0].subscriptions == []
+    assert topics[0].subscriptions_confirmed == 1
+    assert topics[0].subscriptions_pending == 0

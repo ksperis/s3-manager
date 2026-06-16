@@ -55,6 +55,8 @@ function makeEndpoint(overrides?: Partial<Record<string, unknown>>) {
     is_editable: true,
     force_path_style: false,
     verify_tls: true,
+    latitude: null,
+    longitude: null,
     tags: [makeTag(801, "prod")],
     capabilities: {
       admin: true,
@@ -90,6 +92,66 @@ describe("StorageEndpointsPage tags", () => {
 
   afterEach(() => {
     localStorage.clear();
+  });
+
+  it("renders storage endpoints as a compact table listing", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
+    listStorageEndpointsMock.mockResolvedValue([
+      makeEndpoint({
+        force_path_style: true,
+        latitude: 43.6047,
+        longitude: 1.4442,
+        admin_access_key: "admin-key",
+        has_admin_secret: true,
+        supervision_access_key: "supervision-key",
+        has_supervision_secret: true,
+        ceph_admin_access_key: "ceph-admin-key",
+        has_ceph_admin_secret: true,
+        features: {
+          admin: { enabled: true, endpoint: "https://admin.ceph.example.test" },
+          account: { enabled: true },
+          usage: { enabled: true },
+          metrics: { enabled: true },
+          sns: { enabled: false },
+          sts: { enabled: false },
+          static_website: { enabled: false },
+          iam: { enabled: true },
+          sse: { enabled: false },
+          replication: { enabled: false },
+          healthcheck: { enabled: true, mode: "s3", url: "https://health.ceph.example.test" },
+        },
+      }),
+    ]);
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+
+    const table = screen.getByRole("table");
+    ["Endpoint", "Provider", "Connectivity", "Features", "Credentials", "Actions"].forEach((name) => {
+      expect(within(table).getByRole("columnheader", { name })).toBeInTheDocument();
+    });
+
+    const row = screen.getByText("Ceph Endpoint").closest("tr");
+    expect(row).not.toBeNull();
+    const endpointRow = within(row as HTMLElement);
+
+    expect(endpointRow.getByText("https://ceph.example.test")).toBeInTheDocument();
+    expect(endpointRow.getByText("https://admin.ceph.example.test")).toBeInTheDocument();
+    expect(endpointRow.getAllByText("Default")).toHaveLength(2);
+    expect(endpointRow.getByText("prod")).toBeInTheDocument();
+    expect(endpointRow.getByText("Ceph")).toBeInTheDocument();
+    expect(endpointRow.getByText("Forced")).toBeInTheDocument();
+    expect(endpointRow.getByText("43.6047, 1.4442")).toBeInTheDocument();
+    expect(endpointRow.getByText("S3")).toBeInTheDocument();
+    expect(endpointRow.getByText("https://health.ceph.example.test")).toBeInTheDocument();
+    expect(endpointRow.getByText("Admin on")).toBeInTheDocument();
+    expect(endpointRow.getByText("SNS off")).toBeInTheDocument();
+    expect(endpointRow.getByText("admin-key")).toBeInTheDocument();
+    expect(endpointRow.getByText("supervision-key")).toBeInTheDocument();
+    expect(endpointRow.getByText("ceph-admin-key")).toBeInTheDocument();
+    expect(endpointRow.getAllByText("(secret stored)")).toHaveLength(3);
+    expect(endpointRow.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(endpointRow.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 
   it("lets superadmin edit endpoint tags even when endpoints are env-managed", async () => {
@@ -182,6 +244,8 @@ describe("StorageEndpointsPage tags", () => {
 
     expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.us-east-1.amazonaws.com");
     expect(screen.getByLabelText("Region (optional)")).toHaveValue("us-east-1");
+    expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(39.0438);
+    expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(-77.4874);
     expect(screen.queryByText("Management")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
@@ -195,6 +259,8 @@ describe("StorageEndpointsPage tags", () => {
           provider: "aws",
           force_path_style: false,
           verify_tls: true,
+          latitude: 39.0438,
+          longitude: -77.4874,
         })
       );
     });
@@ -221,6 +287,8 @@ describe("StorageEndpointsPage tags", () => {
     expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
     expect(screen.getByLabelText("STS endpoint")).toHaveValue("https://sts.eu-west-3.amazonaws.com");
     expect(screen.getByLabelText("IAM endpoint")).toHaveValue("https://iam.amazonaws.com");
+    expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(48.8566);
+    expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(2.3522);
   });
 
   it("keeps AWS endpoint fields read-only and submits computed values", async () => {
@@ -249,6 +317,8 @@ describe("StorageEndpointsPage tags", () => {
     expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
     expect(screen.getByLabelText("STS endpoint")).toHaveValue("https://sts.eu-west-3.amazonaws.com");
     expect(screen.getByLabelText("IAM endpoint")).toHaveValue("https://iam.amazonaws.com");
+    expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(48.8566);
+    expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(2.3522);
 
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
@@ -260,12 +330,60 @@ describe("StorageEndpointsPage tags", () => {
           region: "eu-west-3",
           provider: "aws",
           force_path_style: false,
+          latitude: 48.8566,
+          longitude: 2.3522,
         })
       );
     });
     const payload = createStorageEndpointMock.mock.calls[0][0] as { features_config?: string };
     expect(payload.features_config).toContain("endpoint: https://sts.eu-west-3.amazonaws.com");
     expect(payload.features_config).toContain("endpoint: https://iam.amazonaws.com");
+  });
+
+  it("clears AWS coordinates when the region is unknown", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+
+    fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
+    await waitFor(() => expect(listAdminTagDefinitionsMock).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "AWS Unknown" } });
+    fireEvent.click(screen.getByLabelText("AWS"));
+    fireEvent.change(screen.getByLabelText("Region (optional)"), { target: { value: "moon-west-1" } });
+
+    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.moon-west-1.amazonaws.com");
+    expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(null);
+    expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(null);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createStorageEndpointMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "AWS Unknown",
+          region: "moon-west-1",
+          latitude: null,
+          longitude: null,
+        })
+      );
+    });
+  });
+
+  it("does not auto-fill coordinates for non-AWS providers", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+
+    fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
+    await waitFor(() => expect(listAdminTagDefinitionsMock).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("Latitude (optional)"), { target: { value: "12.34" } });
+    fireEvent.change(screen.getByLabelText("Longitude (optional)"), { target: { value: "56.78" } });
+    fireEvent.click(screen.getByLabelText("Other"));
+
+    expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(12.34);
+    expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(56.78);
   });
 
   it("submits force path style when creating an endpoint", async () => {
@@ -291,6 +409,31 @@ describe("StorageEndpointsPage tags", () => {
     });
   });
 
+  it("submits GPS coordinates when creating an endpoint", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+
+    fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
+    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "Geo Endpoint" } });
+    fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://geo.example.test" } });
+    fireEvent.change(screen.getByLabelText("Latitude (optional)"), { target: { value: "48.8566" } });
+    fireEvent.change(screen.getByLabelText("Longitude (optional)"), { target: { value: "2.3522" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createStorageEndpointMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Geo Endpoint",
+          endpoint_url: "https://geo.example.test",
+          latitude: 48.8566,
+          longitude: 2.3522,
+        })
+      );
+    });
+  });
+
   it("preloads and updates force path style when editing an endpoint", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 7, role: "ui_superadmin" }));
     listStorageEndpointsMock.mockResolvedValue([makeEndpoint({ force_path_style: true })]);
@@ -309,6 +452,34 @@ describe("StorageEndpointsPage tags", () => {
         7,
         expect.objectContaining({
           force_path_style: false,
+        })
+      );
+    });
+  });
+
+  it("preloads and clears GPS coordinates when editing an endpoint", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 8, role: "ui_superadmin" }));
+    listStorageEndpointsMock.mockResolvedValue([
+      makeEndpoint({ latitude: 43.6047, longitude: 1.4442 }),
+    ]);
+
+    render(<StorageEndpointsPage />);
+    await screen.findByText("Ceph Endpoint");
+    expect(screen.getByText("43.6047, 1.4442")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(43.6047);
+    expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(1.4442);
+    fireEvent.change(screen.getByLabelText("Latitude (optional)"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Longitude (optional)"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => {
+      expect(updateStorageEndpointMock).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({
+          latitude: null,
+          longitude: null,
         })
       );
     });

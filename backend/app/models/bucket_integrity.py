@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field, model_validator
 
 
 BucketIntegrityStatus = Literal["passed", "completed_with_errors", "failed", "canceled"]
-BucketIntegrityFailureStage = Literal["list", "get"]
+BucketIntegrityCheckMode = Literal["head", "get"]
+BucketIntegrityFailureStage = Literal["list", "head", "get"]
 
 
 class BucketIntegrityTarget(BaseModel):
@@ -32,6 +33,7 @@ class BucketIntegrityCheckRequest(BaseModel):
     targets: list[BucketIntegrityTarget] = Field(default_factory=list, max_length=200)
     parallelism: int = Field(default=10, ge=1, le=64)
     all_versions: bool = False
+    check_mode: BucketIntegrityCheckMode = "head"
     since: Optional[datetime] = None
     max_mb_per_object: Optional[float] = Field(default=None, gt=0, le=10240)
 

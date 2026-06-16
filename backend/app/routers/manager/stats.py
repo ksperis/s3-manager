@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 import logging
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,8 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.db import S3Account
+from app.db import QuotaUsageDaily, S3Account
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
+from app.models.manager_stats import ManagerUsageTrendsResponse
+from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
 from app.routers.dependencies import (
     get_account_context,
     require_metrics_capable_manager,
@@ -23,6 +24,8 @@ from app.services.healthcheck_service import HealthCheckService
 from app.services.rgw_admin import RGWAdminError
 from app.services.rgw_iam import get_iam_service
 from app.services.traffic_service import TrafficService, TrafficWindow
+from app.services.usage_trends_service import account_usage_trend_filters, build_account_usage_trends
+from app.services.usage_history_service import UsageHistoryService
 from app.utils.s3_endpoint import resolve_iam_client_options
 
 router = APIRouter(prefix="/manager/stats", tags=["manager-stats"])
@@ -30,13 +33,15 @@ router = APIRouter(prefix="/manager/stats", tags=["manager-stats"])
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-
 def _safe_list(operation: str, func):
     try:
         return func()
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.warning("Unable to fetch IAM %s stats: %s", operation, exc)
         return []
+
+def _usage_history_trend_filters(account: S3Account, model) -> list | None:
+    return account_usage_trend_filters(account, model)
 
 
 @router.get("/overview")
@@ -117,6 +122,43 @@ def account_stats(
         "bucket_usage": bucket_usage,
         "bucket_overview": bucket_overview,
     }
+
+
+@router.get("/usage-trends", response_model=ManagerUsageTrendsResponse, response_model_exclude_none=True)
+def account_usage_trends(
+    account: S3Account = Depends(get_account_context),
+    _: dict = Depends(require_usage_capable_manager),
+    db: Session = Depends(get_db),
+) -> ManagerUsageTrendsResponse:
+    if not load_app_settings().general.usage_history_enabled:
+        return ManagerUsageTrendsResponse()
+    return build_account_usage_trends(db, account, reference_date=utcnow().date())
+
+
+@router.get("/usage-history-trends", response_model=UsageHistoryTrendResponse)
+def account_usage_history_trends(
+    window: UsageHistoryTrendWindow = Query("month"),
+    account: S3Account = Depends(get_account_context),
+    _: dict = Depends(require_usage_capable_manager),
+    db: Session = Depends(get_db),
+) -> UsageHistoryTrendResponse:
+    service = UsageHistoryService(db)
+    if not load_app_settings().general.usage_history_enabled:
+        return service.empty_trends(window=window, unavailable_reason="Usage history is disabled.")
+    if getattr(account, "s3_connection_id", None) is not None:
+        return service.empty_trends(
+            window=window,
+            unavailable_reason=(
+                "Usage history trends are unavailable for private connection contexts because snapshots are stored "
+                "for RGW accounts and legacy S3 users."
+            ),
+        )
+    if _usage_history_trend_filters(account, QuotaUsageDaily) is None:
+        return service.empty_trends(window=window, unavailable_reason="Usage history trends are unavailable for this context.")
+    return service.aggregate_trends(
+        window=window,
+        extra_filter_builder=lambda model: _usage_history_trend_filters(account, model) or [],
+    )
 
 
 @router.get("/traffic")

@@ -2,9 +2,8 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
 import { useS3AccountContext } from "./S3AccountContext";
 import { S3AccountSelector } from "../../api/accountParams";
 import {
@@ -29,14 +28,18 @@ import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import { extractApiError } from "../../utils/apiError";
 import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
+import { compareByNullableField, type SortableField } from "../../utils/sortValues";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
 import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
 
+const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
+
 export default function ManagerUsersPage() {
-  type SortField = keyof IAMUser;
+  type SortField = SortableField<IAMUser>;
 
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode, accounts } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
@@ -90,18 +93,7 @@ export default function ManagerUsersPage() {
     { label: "Actions", field: null, align: "right" },
   ];
 
-  const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
-  };
-
-  const load = async (accountId: S3AccountSelector) => {
+  const load = useCallback(async (accountId: S3AccountSelector) => {
     setLoading(true);
     setError(null);
     try {
@@ -112,25 +104,25 @@ export default function ManagerUsersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadGroups = async (accountId: S3AccountSelector) => {
+  const loadGroups = useCallback(async (accountId: S3AccountSelector) => {
     try {
       const data = await listIamGroups(accountId);
       setGroups(data);
     } catch (err) {
       setError(extractError(err));
     }
-  };
+  }, []);
 
-  const loadPolicies = async (accountId: S3AccountSelector) => {
+  const loadPolicies = useCallback(async (accountId: S3AccountSelector) => {
     try {
       const data = await listIamPolicies(accountId);
       setPolicies(data);
     } catch (err) {
       setError(extractError(err));
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (needsS3AccountSelection) {
@@ -154,7 +146,7 @@ export default function ManagerUsersPage() {
     setInlinePolicyText("");
     setInlineDraftMode("create");
     setShowInlinePolicyOptions(false);
-  }, [accountIdForApi, needsS3AccountSelection, accessMode]);
+  }, [accountIdForApi, accessMode, load, loadGroups, loadPolicies, needsS3AccountSelection]);
 
   useEffect(() => {
     setSelectedPolicies((prev) => prev.filter((arn) => policies.some((p) => p.arn === arn)));
@@ -178,16 +170,7 @@ export default function ManagerUsersPage() {
       ? users.filter((u) => u.name.toLowerCase().includes(query) || (u.arn ?? "").toLowerCase().includes(query))
       : users;
     const sorted = [...items].sort((a, b) => {
-      const aVal = (a as any)[sort.field];
-      const bVal = (b as any)[sort.field];
-      if (aVal == null && bVal == null) return 0;
-      if (aVal == null) return sort.direction === "asc" ? 1 : -1;
-      if (bVal == null) return sort.direction === "asc" ? -1 : 1;
-      if (typeof aVal === "string" && typeof bVal === "string") {
-        return sort.direction === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      }
-      const diff = Number(aVal) - Number(bVal);
-      return sort.direction === "asc" ? diff : -diff;
+      return compareByNullableField(a, b, sort.field, sort.direction);
     });
     return sorted;
   }, [users, filter, sort]);
@@ -511,6 +494,7 @@ export default function ManagerUsersPage() {
           <ListToolbar
             title="Users"
             description="User inventory with group, key, and policy shortcuts."
+            showHeading={false}
             countLabel={`${filteredUsers.length} result(s)`}
             search={
               <input
@@ -533,7 +517,7 @@ export default function ManagerUsersPage() {
                     activeField={sort.field}
                     direction={sort.direction}
                     align={col.align ?? (col.label === "Actions" ? "right" : "left")}
-                    onSort={col.field ? (field) => toggleSort(field as SortField) : undefined}
+                    onSort={col.field ? (field) => toggleSort(field) : undefined}
                   />
                 ))}
               </tr>

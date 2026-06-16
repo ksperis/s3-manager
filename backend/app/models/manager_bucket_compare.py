@@ -21,7 +21,6 @@ class ManagerBucketCompareRequest(BaseModel):
     include_content: bool = True
     include_config: bool = False
     config_features: Optional[list[BucketCompareConfigFeature]] = None
-    diff_sample_limit: int = Field(default=1000, ge=1, le=2000)
     ignore_modified_after: Optional[datetime] = None
 
     @model_validator(mode="after")
@@ -59,17 +58,25 @@ class ManagerBucketCompareActionRequest(BaseModel):
     source_bucket: str
     target_bucket: str
     action: ManagerBucketCompareAction
+    object_keys: list[str] = Field(..., min_length=1)
     parallelism: int = Field(default=4, ge=1, le=32)
-    object_key: Optional[str] = None
-    ignore_modified_after: Optional[datetime] = None
 
     @model_validator(mode="after")
     def validate_names(self):
         self.target_context_id = (self.target_context_id or "").strip()
         self.source_bucket = (self.source_bucket or "").strip()
         self.target_bucket = (self.target_bucket or "").strip()
-        if self.object_key is not None:
-            self.object_key = self.object_key.strip() or None
+        normalized_keys: list[str] = []
+        seen_keys: set[str] = set()
+        for raw_key in self.object_keys:
+            key = (raw_key or "").strip()
+            if not key:
+                raise ValueError("object_keys cannot contain blank keys.")
+            if key in seen_keys:
+                raise ValueError("object_keys cannot contain duplicate keys.")
+            seen_keys.add(key)
+            normalized_keys.append(key)
+        self.object_keys = normalized_keys
         if not self.target_context_id:
             raise ValueError("target_context_id is required.")
         if not self.source_bucket:

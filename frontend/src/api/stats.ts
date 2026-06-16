@@ -131,6 +131,24 @@ export type ManagerTrafficStats = {
 
 export type TrafficWindow = "hour" | "day" | "week" | "month";
 
+export type ManagerUsageTrendWindow = "month" | "week" | "day";
+
+export type ManagerUsageTrendBaseline = {
+  window: ManagerUsageTrendWindow;
+  label: string;
+  period_start: string;
+  used_bytes?: number | null;
+  used_objects?: number | null;
+  bucket_count?: number | null;
+  collected_at?: string | null;
+};
+
+export type ManagerUsageTrendsResponse = {
+  storage?: ManagerUsageTrendBaseline | null;
+  objects?: ManagerUsageTrendBaseline | null;
+  buckets?: ManagerUsageTrendBaseline | null;
+};
+
 export type StorageTotals = {
   used_bytes?: number | null;
   object_count?: number | null;
@@ -184,6 +202,13 @@ export async function fetchAdminTraffic(window: TrafficWindow = "week", endpoint
 
 export async function fetchManagerStats(accountId?: S3AccountSelector): Promise<ManagerStats> {
   const { data } = await client.get<ManagerStats>("/manager/stats/overview", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function fetchManagerUsageTrends(accountId?: S3AccountSelector): Promise<ManagerUsageTrendsResponse> {
+  const { data } = await client.get<ManagerUsageTrendsResponse>("/manager/stats/usage-trends", {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;

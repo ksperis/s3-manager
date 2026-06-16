@@ -1,8 +1,8 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-import asyncio
 import json
-from datetime import datetime, timedelta, timezone
+import uuid
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -13,18 +13,22 @@ from app.db import (
     AccountRole,
     PortalPublicLink,
     PortalStorageSpaceMetadata,
+    QuotaUsageDaily,
     S3Account,
     StorageEndpoint,
     User,
     UserS3Account,
 )
-from app.models.app_settings import PortalSettings
+from app.models.app_settings import AppSettings, PortalSettings, PortalSettingsOverride
 from app.models.bucket import Bucket
+from app.models.iam import AccessKey as IAMAccessKey, IAMUser
 from app.models.portal import (
     PortalAccessKey,
+    PortalAccessKeyStatusChange,
     PortalAlert,
     PortalIAMUser,
     PortalState,
+    PortalStorageSpace,
     PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
     PortalUsage,
@@ -32,8 +36,14 @@ from app.models.portal import (
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import s3_client
-from app.services.portal_service import PortalAccessKeyLimitExceeded, PortalService
-from app.models.iam import AccessKey as IAMAccessKey, IAMUser
+from app.services.portal_service import (
+    PortalAccessKeyLimitExceeded,
+    PortalAccessKeyManagementDisabled,
+    PortalAccessKeyProtected,
+    PortalService,
+)
+from app.services.traffic_service import TrafficWindow
+from app.utils.time import utcnow
 
 
 def _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False):
@@ -50,6 +60,12 @@ def _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage
             using_root_key=False,
         ),
     )
+
+
+def _usage_history_settings(enabled: bool) -> AppSettings:
+    settings = AppSettings()
+    settings.general.usage_history_enabled = enabled
+    return settings
 
 
 def test_portal_bucket_creation_updates_user_policy(monkeypatch, db_session):
@@ -319,6 +335,131 @@ def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
     assert state.just_created is False
 
 
+def test_get_state_exposes_portal_bucket_quota_limit(monkeypatch, db_session):
+    account = S3Account(
+        name="portal-account-with-bucket-limit",
+        rgw_account_id="tenant-a",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    user = User(email="portal-limit@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+    service = PortalService(db_session)
+
+    class FakeQuotaAdmin:
+        def get_account(self, account_id, allow_not_found=False, allow_not_implemented=False):
+            assert account_id == "tenant-a"
+            assert allow_not_found is True
+            assert allow_not_implemented is True
+            return {
+                "quota": {"enabled": True, "max_size": 2048, "max_objects": 12},
+                "limits": {"max_buckets": "4"},
+            }
+
+    monkeypatch.setattr(service, "_quota_admin_for_account", lambda acc: FakeQuotaAdmin())
+    monkeypatch.setattr(service, "_get_iam_service", lambda *_args, **_kwargs: pytest.fail("IAM should not initialize without a portal link"))
+
+    state = service.get_state(user, access)
+
+    assert state.quota_max_size_bytes == 2048
+    assert state.quota_max_objects == 12
+    assert state.max_buckets == 4
+
+
+def test_get_state_keeps_bucket_quota_null_when_limit_is_absent(monkeypatch, db_session):
+    account = S3Account(
+        name="portal-account-without-bucket-limit",
+        rgw_account_id="tenant-no-limit",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    user = User(email="portal-no-limit@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user)
+    service = PortalService(db_session)
+
+    class FakeQuotaAdmin:
+        def get_account(self, account_id, allow_not_found=False, allow_not_implemented=False):
+            return {"quota": {"enabled": True, "max_size": 2048, "max_objects": 12}}
+
+    monkeypatch.setattr(service, "_quota_admin_for_account", lambda acc: FakeQuotaAdmin())
+
+    state = service.get_state(user, access)
+
+    assert state.max_buckets is None
+
+
+def test_portal_traffic_aggregates_visible_buckets_for_portal_user(monkeypatch, db_session):
+    account = S3Account(name="portal-traffic-scope", rgw_account_id="tenant-traffic")
+    user = User(email="portal-traffic@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user)
+    service = PortalService(db_session)
+    captured: dict = {}
+
+    monkeypatch.setattr(
+        service,
+        "list_existing_user_bucket_access",
+        lambda actor, scoped_account, role: ["bucket-a", "bucket-b"],  # noqa: ARG005
+    )
+
+    class FakeTrafficService:
+        def __init__(self, scoped_account):
+            captured["account"] = scoped_account
+
+        def get_traffic(self, *, window, bucket=None, bucket_filters=None):
+            captured["window"] = window
+            captured["bucket"] = bucket
+            captured["bucket_filters"] = bucket_filters
+            return {
+                "window": window.value,
+                "start": "2026-06-10T00:00:00+00:00",
+                "end": "2026-06-11T00:00:00+00:00",
+                "resolution": "hourly",
+                "bucket_filter": None,
+                "data_points": 1,
+                "series": [{"timestamp": "2026-06-10T00:00:00+00:00", "bytes_in": 2, "bytes_out": 3, "ops": 1, "success_ops": 1}],
+                "totals": {"bytes_in": 2, "bytes_out": 3, "ops": 1, "success_ops": 1, "success_rate": 1},
+                "bucket_rankings": [],
+                "user_rankings": [],
+                "request_breakdown": [],
+                "category_breakdown": [],
+            }
+
+    monkeypatch.setattr(portal_router, "TrafficService", FakeTrafficService)
+
+    result = portal_router.portal_traffic(
+        window=TrafficWindow.DAY,
+        bucket=None,
+        access=access,
+        portal_service=service,
+    )
+
+    assert result["totals"]["bytes_in"] == 2
+    assert captured["account"] == account
+    assert captured["bucket"] is None
+    assert captured["bucket_filters"] == {"bucket-a", "bucket-b"}
+
+
 def test_list_access_keys_without_bootstrap_returns_empty(monkeypatch, db_session):
     account = S3Account(name="portal-account-no-keys", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-nokeys@example.com", hashed_password="x", role="ui_user")
@@ -455,6 +596,52 @@ def test_get_state_hides_portal_key_for_portal_user_even_when_setting_enabled(mo
 
     assert state.iam_provisioned is True
     assert [key.access_key_id for key in state.access_keys] == ["AK-USER"]
+    assert all(not key.is_portal for key in state.access_keys)
+
+
+def test_access_keys_state_hides_portal_key_and_exposes_policy(monkeypatch, db_session):
+    account = S3Account(name="portal-account-keys-state", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-keys-state@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    link = AccountIAMUser(
+        user_id=user.id,
+        account_id=account.id,
+        iam_user_id="iam-uid",
+        iam_username="portal-user-iam",
+        active_access_key="AK-PORTAL",
+        active_secret_key="SK-PORTAL",
+    )
+    db_session.add(link)
+    db_session.commit()
+
+    service = PortalService(db_session)
+
+    class _FakeIAMService:
+        def get_user(self, iam_username):
+            return IAMUser(name=iam_username, arn=f"arn:aws:iam:::user/{iam_username}")
+
+        def list_access_keys(self, iam_username):  # noqa: ARG002
+            return [
+                PortalAccessKey(access_key_id="AK-PORTAL", status="Active", created_at="2026-01-01T00:00:00Z"),
+                PortalAccessKey(access_key_id="AK-USER", status="Inactive", created_at="2026-01-02T00:00:00Z"),
+            ]
+
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
+    monkeypatch.setattr(
+        service,
+        "_effective_portal_settings",
+        lambda acc: PortalSettings(allow_portal_user_access_key_create=True, max_portal_user_access_keys=3),
+    )
+
+    state = service.get_access_keys_state(user, _portal_access(account, user))
+
+    assert state.iam_user.iam_username == "portal-user-iam"
+    assert state.can_manage_access_keys is True
+    assert state.max_access_keys == 3
+    assert [key.access_key_id for key in state.access_keys] == ["AK-USER"]
+    assert state.access_keys[0].secret_access_key is None
     assert all(not key.is_portal for key in state.access_keys)
 
 
@@ -785,6 +972,292 @@ def test_get_storage_space_keeps_bucket_scope_and_returns_none_when_hidden(monke
     assert hidden is None
 
 
+def test_create_storage_space_generic_uses_uuid_bucket_and_editable_name(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-generic", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-generic@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    created_buckets = []
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        service,
+        "create_bucket",
+        lambda _user, _access, bucket_name, **kwargs: created_buckets.append((bucket_name, kwargs.get("portal_settings"))),
+    )
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name="Research Data",
+            role="Owner",
+            internal_bucket_name=bucket_name,
+            origin="portal_generic",
+            name_editable=True,
+        ),
+    )
+
+    storage_space = service.create_storage_space(user, access, name="Research Data", description="Lab files")
+
+    assert len(created_buckets) == 1
+    bucket_name = created_buckets[0][0]
+    assert str(uuid.UUID(bucket_name)) == bucket_name
+    metadata = (
+        db_session.query(PortalStorageSpaceMetadata)
+        .filter_by(account_id=account.id, bucket_name=bucket_name)
+        .one()
+    )
+    assert metadata.display_name == "Research Data"
+    assert metadata.description == "Lab files"
+    assert metadata.origin == "portal_generic"
+    assert metadata.name_editable is True
+    assert storage_space.id == bucket_name
+
+
+def test_create_storage_space_named_bucket_uses_legacy_slug_and_locks_name(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-named", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-named@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    portal_settings = PortalSettings()
+    portal_settings.allow_portal_named_bucket_create = True
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    created_buckets = []
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="research-data",
+                name="Research Data",
+                role="Owner",
+                internal_bucket_name="research-data",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        service,
+        "create_bucket",
+        lambda _user, _access, bucket_name, **_kwargs: created_buckets.append(bucket_name),
+    )
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name="Research Data",
+            role="Owner",
+            internal_bucket_name=bucket_name,
+            origin="portal_named",
+            name_editable=False,
+        ),
+    )
+
+    storage_space = service.create_storage_space(user, access, name="Research Data", naming_mode="named_bucket")
+
+    assert created_buckets == ["research-data-2"]
+    metadata = (
+        db_session.query(PortalStorageSpaceMetadata)
+        .filter_by(account_id=account.id, bucket_name="research-data-2")
+        .one()
+    )
+    assert metadata.display_name == "Research Data"
+    assert metadata.origin == "portal_named"
+    assert metadata.name_editable is False
+    assert storage_space.id == "research-data-2"
+
+
+def test_create_storage_space_named_bucket_requires_effective_setting(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-named-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-named-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        service,
+        "create_bucket",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Bucket should not be created")),
+    )
+
+    with pytest.raises(RuntimeError, match="Named bucket Storage Space creation is not allowed"):
+        service.create_storage_space(user, access, name="Research Data", naming_mode="named_bucket")
+
+
+def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-import", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-import@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    link = AccountIAMUser(user_id=user.id, account_id=account.id, iam_user_id="iam-uid", iam_username="portal-iam")
+    policy_calls = []
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **_kwargs: [{"name": "existing-bucket"}])
+    monkeypatch.setattr(service, "_get_iam_service", lambda _account: object())
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "_ensure_portal_user", lambda *_args, **_kwargs: (link, IAMUser(name="portal-iam"), False))
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_ensure_policy_and_key", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "_ensure_user_bucket_policy",
+        lambda _iam_service, iam_username, bucket_name, **_kwargs: policy_calls.append((iam_username, bucket_name)),
+    )
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name=bucket_name,
+            role="Owner",
+            internal_bucket_name=bucket_name,
+            origin="imported",
+            name_editable=False,
+        ),
+    )
+
+    storage_space = service.import_storage_space(user, access, bucket_name=" existing-bucket ", description="Imported bucket")
+
+    assert storage_space.id == "existing-bucket"
+    assert policy_calls == [("portal-iam", "existing-bucket")]
+    metadata = (
+        db_session.query(PortalStorageSpaceMetadata)
+        .filter_by(account_id=account.id, bucket_name="existing-bucket")
+        .one()
+    )
+    assert metadata.display_name == "existing-bucket"
+    assert metadata.description == "Imported bucket"
+    assert metadata.origin == "imported"
+    assert metadata.name_editable is False
+
+
+@pytest.mark.parametrize("origin", ["legacy", "imported"])
+def test_update_storage_space_locked_names_reject_rename_but_accept_description(origin, monkeypatch, db_session):
+    account = S3Account(name=f"portal-storage-update-{origin}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email=f"portal-storage-update-{origin}@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name=f"{origin}-bucket",
+        display_name=f"{origin.title()} Bucket",
+        description="Initial",
+        origin=origin,
+        name_editable=False,
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: f"{origin}-bucket")
+    monkeypatch.setattr(service, "_require_storage_space_owner", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name=metadata.display_name or bucket_name,
+            role="Owner",
+            description=metadata.description,
+            internal_bucket_name=bucket_name,
+            origin=origin,
+            name_editable=False,
+        ),
+    )
+
+    updated = service.update_storage_space(user, access, f"{origin}-bucket", description="Updated description")
+
+    assert updated.description == "Updated description"
+    assert metadata.description == "Updated description"
+    with pytest.raises(RuntimeError, match="cannot be changed"):
+        service.update_storage_space(user, access, f"{origin}-bucket", name="Renamed")
+
+
+def test_update_storage_space_allows_rename_when_name_is_editable(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-update-editable", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-update-editable@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="uuid-bucket",
+        display_name="Original Name",
+        origin="portal_generic",
+        name_editable=True,
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: "uuid-bucket")
+    monkeypatch.setattr(service, "_require_storage_space_owner", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name=metadata.display_name or bucket_name,
+            role="Owner",
+            internal_bucket_name=bucket_name,
+            origin="portal_generic",
+            name_editable=True,
+        ),
+    )
+
+    updated = service.update_storage_space(user, access, "uuid-bucket", name="Renamed Space")
+
+    assert updated.name == "Renamed Space"
+    assert metadata.display_name == "Renamed Space"
+
+
+def test_portal_named_bucket_account_override_requires_global_policy(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-override", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    db_session.add(account)
+    db_session.commit()
+
+    base = PortalSettings()
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_portal_settings", lambda: base)
+
+    with pytest.raises(RuntimeError, match="Override non autorise"):
+        service.update_portal_manager_override(
+            account,
+            PortalSettingsOverride(allow_portal_named_bucket_create=True),
+        )
+
+    base.override_policy.allow_portal_named_bucket_create = True
+    updated = service.update_portal_manager_override(
+        account,
+        PortalSettingsOverride(allow_portal_named_bucket_create=True),
+    )
+    assert updated.effective.allow_portal_named_bucket_create is True
+
+    service.update_admin_portal_settings_override(
+        account,
+        PortalSettingsOverride(allow_portal_named_bucket_create=False),
+    )
+    with pytest.raises(RuntimeError, match="Override verrouille"):
+        service.update_portal_manager_override(
+            account,
+            PortalSettingsOverride(allow_portal_named_bucket_create=True),
+        )
+    assert service.get_effective_portal_settings(account).allow_portal_named_bucket_create is False
+
+
 def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_session):
     account = S3Account(name="portal-object-credentials", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-object-credentials@example.com", hashed_password="x", role="ui_user")
@@ -829,143 +1302,6 @@ def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_s
             "verify_tls": False,
         },
     }
-
-
-def test_list_storage_space_objects_maps_common_prefixes_and_objects(monkeypatch, db_session):
-    account = S3Account(name="portal-object-list", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-object-list@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
-    service = PortalService(db_session)
-    monkeypatch.setattr(
-        service,
-        "list_storage_spaces",
-        lambda *_args, **_kwargs: [
-            PortalStorageSpaceSummary(
-                id="research-data",
-                name="Research Data",
-                role="Editor",
-                internal_bucket_name="bucket-research-data",
-            )
-        ],
-    )
-
-    class FakeClient:
-        def __init__(self):
-            self.calls = []
-
-        def list_objects_v2(self, **kwargs):
-            self.calls.append(kwargs)
-            return {
-                "Contents": [
-                    {"Key": "raw-data/2024/03/", "Size": 0},
-                    {
-                        "Key": "raw-data/2024/03/sample_001.fastq.gz",
-                        "Size": 2048,
-                        "LastModified": datetime(2026, 5, 27, 8, 15, tzinfo=timezone.utc),
-                    },
-                ],
-                "CommonPrefixes": [{"Prefix": "raw-data/2024/03/01-fastq/"}],
-                "IsTruncated": True,
-                "NextContinuationToken": "next-token",
-            }
-
-    fake_client = FakeClient()
-    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: fake_client)
-
-    listing = service.list_storage_space_objects(
-        user,
-        access,
-        "research-data",
-        prefix="/raw-data/2024/03/",
-        continuation_token="token",
-        max_keys=2000,
-    )
-
-    assert fake_client.calls == [
-        {
-            "Bucket": "bucket-research-data",
-            "Prefix": "raw-data/2024/03/",
-            "Delimiter": "/",
-            "MaxKeys": 1000,
-            "ContinuationToken": "token",
-        }
-    ]
-    assert listing.prefix == "raw-data/2024/03/"
-    assert listing.prefixes == ["raw-data/2024/03/01-fastq/"]
-    assert listing.is_truncated is True
-    assert listing.next_continuation_token == "next-token"
-    assert len(listing.objects) == 1
-    assert listing.objects[0].key == "raw-data/2024/03/sample_001.fastq.gz"
-    assert listing.objects[0].name == "sample_001.fastq.gz"
-    assert listing.objects[0].size == 2048
-
-
-def test_upload_storage_space_object_allows_editor_and_rejects_viewer(monkeypatch, db_session):
-    account = S3Account(name="portal-object-upload", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-object-upload@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    service = PortalService(db_session)
-    monkeypatch.setattr(
-        service,
-        "list_storage_spaces",
-        lambda *_args, **_kwargs: [
-            PortalStorageSpaceSummary(
-                id="research-data",
-                name="Research Data",
-                role="Editor",
-                internal_bucket_name="bucket-research-data",
-            )
-        ],
-    )
-
-    class FakeClient:
-        def __init__(self):
-            self.uploads = []
-
-        def upload_fileobj(self, stream, bucket_name, key, ExtraArgs=None):
-            self.uploads.append(
-                {
-                    "body": stream.read(),
-                    "bucket": bucket_name,
-                    "key": key,
-                    "extra_args": ExtraArgs,
-                }
-    )
-
-    fake_client = FakeClient()
-    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: fake_client)
-    role_map = {"bucket-research-data": "Editor"}
-    monkeypatch.setattr(service, "list_existing_user_storage_space_access", lambda *_args, **_kwargs: role_map)
-
-    editor_access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
-    uploaded_key = service.upload_storage_space_object(
-        user,
-        editor_access,
-        "research-data",
-        "/raw-data/report.csv",
-        b"sample",
-        content_type="text/csv",
-    )
-
-    assert uploaded_key == "raw-data/report.csv"
-    assert fake_client.uploads == [
-        {
-            "body": b"sample",
-            "bucket": "bucket-research-data",
-            "key": "raw-data/report.csv",
-            "extra_args": {"ContentType": "text/csv"},
-        }
-    ]
-
-    role_map["bucket-research-data"] = "Viewer"
-    viewer_access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
-    with pytest.raises(RuntimeError, match="Upload not allowed"):
-        service.upload_storage_space_object(user, viewer_access, "research-data", "raw-data/denied.csv", b"sample")
 
 
 def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypatch, db_session):
@@ -1062,23 +1398,15 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     def assert_file_capabilities(role, *, can_write: bool, can_share: bool):
         role_map["bucket-research-data"] = role
 
-        listing = service.list_storage_space_objects(actor, access, "research-data")
         stream, content_type, filename = service.download_storage_space_object(actor, access, "research-data", "raw-data/file.txt")
 
-        assert listing.objects == []
         assert list(stream) == [b"content"]
         assert content_type == "text/plain"
         assert filename == "file.txt"
 
         if can_write:
-            service.upload_storage_space_object(actor, access, "research-data", "raw-data/file.txt", b"content")
-            service.create_storage_space_folder(actor, access, "research-data", "raw-data", "reports")
             service.delete_storage_space_object(actor, access, "research-data", "raw-data/file.txt")
         else:
-            with pytest.raises(RuntimeError, match="Upload not allowed"):
-                service.upload_storage_space_object(actor, access, "research-data", "raw-data/file.txt", b"content")
-            with pytest.raises(RuntimeError, match="Folder creation not allowed"):
-                service.create_storage_space_folder(actor, access, "research-data", "raw-data", "reports")
             with pytest.raises(RuntimeError, match="Delete not allowed"):
                 service.delete_storage_space_object(actor, access, "research-data", "raw-data/file.txt")
 
@@ -1100,7 +1428,7 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     }
 
 
-def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(monkeypatch, db_session):
+def test_object_detail_and_delete_use_safe_portal_operations(monkeypatch, db_session):
     account = S3Account(name="portal-object-detail", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-object-detail@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -1127,7 +1455,6 @@ def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(mon
 
     class FakeClient:
         def __init__(self):
-            self.puts = []
             self.deletes = []
 
         def head_object(self, **kwargs):
@@ -1148,9 +1475,6 @@ def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(mon
             }
             return {"Body": FakeBody()}
 
-        def put_object(self, **kwargs):
-            self.puts.append(kwargs)
-
         def delete_object(self, **kwargs):
             self.deletes.append(kwargs)
 
@@ -1159,7 +1483,6 @@ def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(mon
     monkeypatch.setattr(service, "list_existing_user_storage_space_access", lambda *_args, **_kwargs: {"bucket-research-data": "Editor"})
 
     detail = service.get_storage_space_object_detail(user, access, "research-data", "/raw-data/readme.txt")
-    folder_key = service.create_storage_space_folder(user, access, "research-data", "raw-data", "reports")
     deleted_key = service.delete_storage_space_object(user, access, "research-data", "/raw-data/old.txt")
 
     assert detail.content_type == "text/plain"
@@ -1167,15 +1490,6 @@ def test_object_detail_folder_creation_and_delete_use_safe_portal_operations(mon
     assert detail.encryption == "AES256"
     assert detail.preview_type == "text"
     assert detail.preview_text == "hello preview"
-    assert folder_key == "raw-data/reports/"
-    assert fake_client.puts == [
-        {
-            "Bucket": "bucket-research-data",
-            "Key": "raw-data/reports/",
-            "Body": b"",
-            "ContentType": "application/x-directory",
-        }
-    ]
     assert deleted_key == "raw-data/old.txt"
     assert fake_client.deletes == [{"Bucket": "bucket-research-data", "Key": "raw-data/old.txt"}]
 
@@ -1311,7 +1625,7 @@ def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session
         "research-data",
         object_key="/raw-data/report.csv",
         label="Report",
-        expires_at=datetime(2026, 6, 10, 10, 0, tzinfo=timezone.utc),
+        expires_at=utcnow() + timedelta(days=1),
     )
     links = service.list_storage_space_public_links(owner, access, "research-data")
     revoked = service.revoke_storage_space_public_link(owner, access, "research-data", link.id)
@@ -1421,6 +1735,130 @@ def test_portal_usage_exposes_quota_and_real_storage_space_breakdown(monkeypatch
         ("research-data", 700, 70),
         ("archive", 200, 20),
     ]
+
+
+def test_portal_usage_trends_exposes_scoped_account_baselines(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(True))
+    monkeypatch.setattr(portal_router, "utcnow", lambda: datetime(2026, 6, 9, 12, 0, 0))
+    endpoint = StorageEndpoint(
+        name="portal-trends-endpoint",
+        endpoint_url="https://portal-trends.example.test",
+        provider="ceph",
+        features_config=(
+            "features:\n"
+            "  metrics:\n"
+            "    enabled: true\n"
+        ),
+    )
+    account = S3Account(
+        name="portal-trends",
+        rgw_account_id="portal-trends",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        storage_endpoint=endpoint,
+    )
+    other_account = S3Account(
+        name="portal-trends-other",
+        rgw_account_id="portal-trends-other",
+        rgw_access_key="OTHER-AK",
+        rgw_secret_key="OTHER-SK",
+        storage_endpoint=endpoint,
+    )
+    user = User(email="usage-trends@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([endpoint, account, other_account, user])
+    db_session.commit()
+    db_session.refresh(account)
+    db_session.refresh(other_account)
+
+    db_session.add_all(
+        [
+            QuotaUsageDaily(
+                day=date(2026, 5, 10),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                last_used_bytes=100,
+                last_used_objects=10,
+                bucket_count=1,
+                updated_at=datetime(2026, 5, 10, 12, 0, 0),
+            ),
+            QuotaUsageDaily(
+                day=date(2026, 5, 10),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=other_account.id,
+                last_used_bytes=999,
+                last_used_objects=99,
+                bucket_count=9,
+                updated_at=datetime(2026, 5, 10, 12, 0, 0),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = portal_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
+
+    assert payload.storage is not None
+    assert payload.storage.window == "month"
+    assert payload.storage.used_bytes == 100
+    assert payload.objects is not None
+    assert payload.objects.used_objects == 10
+    assert payload.buckets is not None
+    assert payload.buckets.bucket_count == 1
+
+
+def test_portal_usage_trends_return_empty_when_history_disabled(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(False))
+    endpoint = StorageEndpoint(
+        name="portal-trends-disabled-endpoint",
+        endpoint_url="https://portal-trends-disabled.example.test",
+        provider="ceph",
+        features_config=(
+            "features:\n"
+            "  metrics:\n"
+            "    enabled: true\n"
+        ),
+    )
+    account = S3Account(
+        name="portal-trends-disabled",
+        rgw_account_id="portal-trends-disabled",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        storage_endpoint=endpoint,
+    )
+    user = User(email="usage-trends-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([endpoint, account, user])
+    db_session.commit()
+
+    payload = portal_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
+
+    assert payload.model_dump(exclude_none=True) == {}
+
+
+def test_portal_usage_trends_return_empty_without_baseline(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(True))
+    endpoint = StorageEndpoint(
+        name="portal-trends-empty-endpoint",
+        endpoint_url="https://portal-trends-empty.example.test",
+        provider="ceph",
+        features_config=(
+            "features:\n"
+            "  metrics:\n"
+            "    enabled: true\n"
+        ),
+    )
+    account = S3Account(
+        name="portal-trends-empty",
+        rgw_account_id="portal-trends-empty",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        storage_endpoint=endpoint,
+    )
+    user = User(email="usage-trends-empty@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([endpoint, account, user])
+    db_session.commit()
+
+    payload = portal_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
+
+    assert payload.model_dump(exclude_none=True) == {}
 
 
 def test_portal_alerts_are_derived_from_quota_public_spaces_and_transfer_errors(monkeypatch, db_session):
@@ -1635,62 +2073,7 @@ def test_portal_object_access_rejects_hidden_storage_space(monkeypatch, db_sessi
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
 
     with pytest.raises(RuntimeError, match="Storage space not found"):
-        service.list_storage_space_objects(user, access, "hidden-space")
-
-
-def test_portal_object_upload_route_audits_scope_portal(db_session):
-    account = S3Account(name="portal-object-upload-route", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-object-upload-route@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
-
-    class FakeUpload:
-        filename = "report.csv"
-        content_type = "text/csv"
-
-        async def read(self):
-            return b"sample"
-
-    class FakeService:
-        def upload_storage_space_object(self, user_obj, access_obj, space_id, key, file_obj, content_type=None):
-            assert user_obj == user
-            assert access_obj == access
-            assert space_id == "research-data"
-            assert key == "raw-data/report.csv"
-            assert file_obj == b"sample"
-            assert content_type == "text/csv"
-            return key
-
-    class FakeAuditService:
-        def __init__(self):
-            self.actions = []
-
-        def record_action(self, **kwargs):
-            self.actions.append(kwargs)
-
-    audit_service = FakeAuditService()
-
-    response = asyncio.run(
-        portal_router.portal_upload_storage_space_object(
-            "research-data",
-            file=FakeUpload(),
-            prefix="raw-data",
-            key=None,
-            access=access,
-            audit_service=audit_service,
-            service=FakeService(),
-        )
-    )
-
-    assert response.key == "raw-data/report.csv"
-    assert audit_service.actions[0]["scope"] == "portal"
-    assert audit_service.actions[0]["action"] == "upload_object"
-    assert audit_service.actions[0]["metadata"] == {
-        "storage_space_id": "research-data",
-        "content_type": "text/csv",
-        "size_bytes": 6,
-    }
+        service.get_storage_space_object_detail(user, access, "hidden-space", "raw-data/file.txt")
 
 
 def test_portal_object_download_route_audits_scope_portal(db_session):
@@ -1730,6 +2113,49 @@ def test_portal_object_download_route_audits_scope_portal(db_session):
     assert audit_service.actions[0]["scope"] == "portal"
     assert audit_service.actions[0]["action"] == "download_object"
     assert audit_service.actions[0]["metadata"] == {"storage_space_id": "research-data"}
+
+
+def test_create_access_key_rejects_when_management_disabled(monkeypatch, db_session):
+    account = S3Account(name="portal-account-key-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-key-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(allow_portal_user_access_key_create=False))
+    monkeypatch.setattr(service, "_ensure_portal_user", lambda *args, **kwargs: pytest.fail("portal user should not be provisioned"))
+
+    with pytest.raises(PortalAccessKeyManagementDisabled):
+        service.create_access_key(user, _portal_access(account, user))
+
+
+def test_access_key_mutations_reject_portal_key(monkeypatch, db_session):
+    account = S3Account(name="portal-account-key-protected", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-key-protected@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    service = PortalService(db_session)
+    link = AccountIAMUser(
+        user_id=user.id,
+        account_id=account.id,
+        iam_user_id="iam-uid",
+        iam_username="portal-iam",
+        active_access_key="AK-PORTAL",
+        active_secret_key="SK-PORTAL",
+    )
+    fake_iam_user = IAMUser(name="portal-iam", arn="arn:aws:iam:::user/portal-iam")
+
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(allow_portal_user_access_key_create=True))
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: object())
+    monkeypatch.setattr(service, "_ensure_portal_user", lambda *args, **kwargs: (link, fake_iam_user, False))
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *args, **kwargs: None)
+
+    access = _portal_access(account, user)
+    with pytest.raises(PortalAccessKeyProtected, match="Cannot update"):
+        service.update_access_key_status(user, access, "AK-PORTAL", True)
+    with pytest.raises(PortalAccessKeyProtected, match="Cannot delete"):
+        service.delete_access_key(user, access, "AK-PORTAL")
 
 
 def test_create_access_key_rejects_when_limit_reached(monkeypatch, db_session):
@@ -1845,6 +2271,91 @@ def test_create_access_key_allows_when_below_limit(monkeypatch, db_session):
     assert iam_service.create_calls == 1
 
 
+def test_portal_access_key_routes_record_audit(db_session):
+    account = S3Account(name="portal-account-key-routes", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-key-routes@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    access = _portal_access(account, user)
+
+    class FakeService:
+        def create_access_key(self, user_obj, access_obj):
+            assert user_obj == user
+            assert access_obj == access
+            return PortalAccessKey(access_key_id="AK-NEW", secret_access_key="SK-NEW", is_portal=False)
+
+        def update_access_key_status(self, user_obj, access_obj, access_key_id, active):
+            assert user_obj == user
+            assert access_obj == access
+            assert access_key_id == "AK-NEW"
+            assert active is False
+            return PortalAccessKey(access_key_id="AK-NEW", status="Inactive", is_active=False, is_portal=False)
+
+        def delete_access_key(self, user_obj, access_obj, access_key_id):
+            assert user_obj == user
+            assert access_obj == access
+            assert access_key_id == "AK-NEW"
+
+    class FakeAuditService:
+        def __init__(self):
+            self.actions = []
+
+        def record_action(self, **kwargs):
+            self.actions.append(kwargs)
+
+    audit_service = FakeAuditService()
+    service = FakeService()
+
+    created = portal_router.create_portal_access_key(access=access, audit_service=audit_service, service=service)
+    updated = portal_router.update_portal_access_key_status(
+        "AK-NEW",
+        PortalAccessKeyStatusChange(active=False),
+        access=access,
+        audit_service=audit_service,
+        service=service,
+    )
+    deleted = portal_router.delete_portal_access_key("AK-NEW", access=access, audit_service=audit_service, service=service)
+
+    assert created.access_key_id == "AK-NEW"
+    assert created.secret_access_key == "SK-NEW"
+    assert updated.is_active is False
+    assert deleted.status_code == 204
+    assert [entry["action"] for entry in audit_service.actions] == [
+        "create_portal_access_key",
+        "update_portal_access_key_status",
+        "delete_portal_access_key",
+    ]
+    assert all(entry["scope"] == "portal" for entry in audit_service.actions)
+    assert all(entry["entity_type"] == "portal_access_key" for entry in audit_service.actions)
+    assert audit_service.actions[0]["metadata"] == {"access_key_id": "AK-NEW"}
+    assert audit_service.actions[1]["metadata"] == {"access_key_id": "AK-NEW", "active": False}
+    assert audit_service.actions[2]["metadata"] == {"access_key_id": "AK-NEW"}
+
+
+def test_portal_access_key_routes_translate_disabled_management(db_session):
+    account = S3Account(name="portal-account-key-route-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-key-route-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    class FakeService:
+        def create_access_key(self, user_obj, access_obj):  # noqa: ARG002
+            raise PortalAccessKeyManagementDisabled("Portal access-key management is disabled for this account.")
+
+    class FakeAuditService:
+        def record_action(self, **kwargs):  # noqa: ANN003
+            pytest.fail("disabled access-key creation should not be audited")
+
+    with pytest.raises(HTTPException) as exc:
+        portal_router.create_portal_access_key(
+            access=_portal_access(account, user),
+            audit_service=FakeAuditService(),
+            service=FakeService(),
+        )
+
+    assert exc.value.status_code == 403
+
+
 def test_portal_router_no_longer_exposes_legacy_backend_surfaces():
     route_keys = {
         (method, route.path)
@@ -1859,11 +2370,7 @@ def test_portal_router_no_longer_exposes_legacy_backend_surfaces():
         ("GET", "/portal/buckets/{bucket_name}/stats"),
         ("POST", "/portal/buckets"),
         ("DELETE", "/portal/buckets/{bucket_name}"),
-        ("GET", "/portal/access-keys"),
-        ("POST", "/portal/access-keys"),
         ("POST", "/portal/access-keys/portal/rotate"),
-        ("PUT", "/portal/access-keys/{access_key_id}/status"),
-        ("DELETE", "/portal/access-keys/{access_key_id}"),
         ("GET", "/portal/account-settings"),
         ("PUT", "/portal/account-settings"),
         ("GET", "/portal/iam-compliance"),
@@ -1879,3 +2386,10 @@ def test_portal_router_no_longer_exposes_legacy_backend_surfaces():
     }
 
     assert removed_routes.isdisjoint(route_keys)
+    expected_routes = {
+        ("GET", "/portal/access-keys"),
+        ("POST", "/portal/access-keys"),
+        ("PUT", "/portal/access-keys/{access_key_id}/status"),
+        ("DELETE", "/portal/access-keys/{access_key_id}"),
+    }
+    assert expected_routes.issubset(route_keys)

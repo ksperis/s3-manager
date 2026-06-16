@@ -190,7 +190,7 @@ def stream_listing_response(
                         "error",
                         {
                             "request_id": request_id,
-                            "detail": str(exc),
+                            "detail": failure_message,
                         },
                     )
                 )

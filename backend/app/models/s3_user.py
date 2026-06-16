@@ -22,6 +22,8 @@ class S3User(BaseModel):
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_url: Optional[str] = None
     bucket_count: Optional[int] = None
+    allow_manager_bucket_quota: bool = False
+    allow_manager_ceph_s3_user_keys: bool = False
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 
@@ -57,6 +59,8 @@ class S3UserUpdate(BaseModel):
     quota_max_objects: Optional[int] = None
     storage_endpoint_id: Optional[int] = None
     tags: Optional[list[TagDefinitionInput]] = None
+    allow_manager_bucket_quota: Optional[bool] = None
+    allow_manager_ceph_s3_user_keys: Optional[bool] = None
 
     @field_validator("tags", mode="before")
     @classmethod
@@ -89,6 +93,8 @@ class S3UserSummary(BaseModel):
     storage_endpoint_id: Optional[int] = None
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_url: Optional[str] = None
+    allow_manager_bucket_quota: bool = False
+    allow_manager_ceph_s3_user_keys: bool = False
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 

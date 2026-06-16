@@ -15,7 +15,11 @@ export default function CephAdminBrowserPage() {
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
   const [acceptedRisk, setAcceptedRisk] = useState(false);
   const [showRiskModal, setShowRiskModal] = useState(true);
+  const [selectedBrowserBucketName, setSelectedBrowserBucketName] = useState("");
   const browserSelector = acceptedRisk && selectedEndpointId ? `ceph-admin-${selectedEndpointId}` : null;
+  const breadcrumbs = selectedBrowserBucketName
+    ? [{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Browser" }, { label: selectedBrowserBucketName }]
+    : [{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Browser" }];
 
   const handleCloseModal = () => {
     setShowRiskModal(false);
@@ -29,7 +33,11 @@ export default function CephAdminBrowserPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
-      <PageHeader title="Browser" description="Endpoint-wide object browser for Ceph admin workflows." />
+      <PageHeader
+        title="Browser"
+        description="Endpoint-wide object browser for Ceph admin workflows."
+        breadcrumbs={breadcrumbs}
+      />
       <div className="min-h-0 flex-1">
         {!selectedEndpointId ? (
           <PageEmptyState
@@ -45,6 +53,7 @@ export default function CephAdminBrowserPage() {
             hasContext={Boolean(browserSelector)}
             storageEndpointCapabilities={selectedEndpoint?.capabilities ?? null}
             endpointProvider="ceph"
+            onSelectedBucketNameChange={setSelectedBrowserBucketName}
           />
         )}
       </div>

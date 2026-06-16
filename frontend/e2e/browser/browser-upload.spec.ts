@@ -24,7 +24,7 @@ test("creates a folder and uploads a file through the browser flow", async ({ pa
   await fileChooser.setFiles(E2E_UPLOAD_FIXTURE_PATH);
 
   await expect(page.getByRole("button", { name: "upload-smoke.txt", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Operations" }).click();
+  await page.getByRole("button", { name: "Operations overview" }).click();
   const operationsDialog = page.getByRole("dialog", { name: "Operations overview" });
   await operationsDialog.getByRole("button", { name: "Show files" }).click();
   await expect(operationsDialog).toContainText("upload-smoke.txt");

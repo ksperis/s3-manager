@@ -8,6 +8,7 @@ export function prefetchWorkspaceBranch(pathname: string): void {
       import("../features/admin/AdminDashboard"),
       import("../features/admin/AccountsPage"),
       import("../features/admin/UsersPage"),
+      import("../features/admin/UsageHistoryPage"),
     ]);
     return;
   }
@@ -16,6 +17,7 @@ export function prefetchWorkspaceBranch(pathname: string): void {
       import("../features/manager/ManagerLayout"),
       import("../features/manager/ManagerDashboard"),
       import("../features/manager/BucketsPage"),
+      import("../features/manager/ManagerFeatureRulesPage"),
       import("../features/manager/ManagerMetricsPage"),
     ]);
     return;
@@ -24,6 +26,7 @@ export function prefetchWorkspaceBranch(pathname: string): void {
     void Promise.allSettled([
       import("../features/portal/PortalLayout"),
       import("../features/portal/PortalDashboard"),
+      import("../features/portal/PortalAccessKeysPage"),
       import("../features/portal/PortalStorageSpacesPage"),
       import("../features/portal/PortalObjectDetailPage"),
     ]);

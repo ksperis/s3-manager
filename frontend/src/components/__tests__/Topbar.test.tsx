@@ -149,7 +149,7 @@ describe("Topbar account menu", () => {
     const switcher = screen.getByRole("button", { name: "Switch workspace" });
     expect(switcher).toHaveTextContent("Workspace");
     expect(switcher).toHaveTextContent("Browser");
-    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
 
     await user.click(switcher);
     await user.click(await screen.findByRole("option", { name: "Manager" }));
@@ -200,7 +200,7 @@ describe("Topbar account menu", () => {
       expect(within(topbar as HTMLElement).getByRole("button", { name: "Select context account" })).toHaveTextContent(
         "Lab account"
       );
-      expect(within(topbar as HTMLElement).getByRole("button", { name: "Search" })).toBeInTheDocument();
+      expect(within(topbar as HTMLElement).queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
     } finally {
       Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: originalWidth });
     }

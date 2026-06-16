@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import User as DbUser
 from app.db import UserRole, is_superadmin_ui_role
-from app.models.user import PaginatedUsersResponse, UserAssignS3Account, UserCreate, UserOut, UserSummary, UserUpdate
+from app.models.user import (
+    ManagerToolAccess,
+    PaginatedUsersResponse,
+    UserAssignS3Account,
+    UserCreate,
+    UserOut,
+    UserSummary,
+    UserUpdate,
+)
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.users_service import UsersService, get_users_service
@@ -31,13 +39,41 @@ def _normalize_role(value: Optional[str]) -> Optional[str]:
     return value
 
 
-def _require_superadmin_for_privileged_change(current_user: DbUser, *, role: Optional[str], can_access_ceph_admin: Optional[bool]) -> None:
+def _manager_access_grants_bucket_quota(manager_tool_access: Optional[ManagerToolAccess]) -> bool:
+    return bool(manager_tool_access and manager_tool_access.bucket_quota is True)
+
+
+def _require_superadmin_for_privileged_change(
+    current_user: DbUser,
+    *,
+    role: Optional[str],
+    can_access_ceph_admin: Optional[bool],
+    manager_tool_access: Optional[ManagerToolAccess],
+) -> None:
     wants_superadmin = role == UserRole.UI_SUPERADMIN.value
     wants_ceph_admin_grant = can_access_ceph_admin is True
-    if (wants_superadmin or wants_ceph_admin_grant) and not is_superadmin_ui_role(current_user.role):
+    wants_bucket_quota_grant = _manager_access_grants_bucket_quota(manager_tool_access)
+    if (wants_superadmin or wants_ceph_admin_grant or wants_bucket_quota_grant) and not is_superadmin_ui_role(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only superadmin users can promote superadmins or grant ceph_admin access",
+            detail="Only superadmin users can promote superadmins or grant privileged Ceph access",
+        )
+
+
+def _require_superadmin_for_group_privileges(
+    current_user: DbUser,
+    users_service: UsersService,
+    *,
+    group_ids: Optional[list[int]],
+) -> None:
+    if group_ids is None:
+        return
+    grants_ceph_admin = users_service.groups_grant_ceph_admin(group_ids)
+    grants_bucket_quota = users_service.groups_grant_bucket_quota(group_ids)
+    if (grants_ceph_admin or grants_bucket_quota) and not is_superadmin_ui_role(current_user.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only superadmin users can assign groups that grant privileged Ceph access",
         )
 
 
@@ -82,7 +118,9 @@ def create_user(
         current_user,
         role=payload.role,
         can_access_ceph_admin=payload.can_access_ceph_admin,
+        manager_tool_access=payload.manager_tool_access,
     )
+    _require_superadmin_for_group_privileges(current_user, users_service, group_ids=payload.group_ids)
     try:
         user = users_service.create_user(payload)
         audit_service.record_action(
@@ -91,7 +129,11 @@ def create_user(
             action="create_ui_user",
             entity_type="ui_user",
             entity_id=str(user.id),
-            metadata={"email": user.email, "role": user.role},
+            metadata={
+                "email": user.email,
+                "role": user.role,
+                "group_ids": payload.group_ids,
+            },
         )
         return users_service.user_to_out(user)
     except ValueError as exc:
@@ -111,7 +153,9 @@ def update_user(
         current_user,
         role=payload.role,
         can_access_ceph_admin=payload.can_access_ceph_admin,
+        manager_tool_access=payload.manager_tool_access,
     )
+    _require_superadmin_for_group_privileges(current_user, users_service, group_ids=payload.group_ids)
     try:
         user = users_service.update_user(user_id, payload)
         audit_service.record_action(

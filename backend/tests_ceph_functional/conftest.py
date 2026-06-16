@@ -260,7 +260,9 @@ def _provision_account(
             "manager_tool_access": {
                 "bucket_compare": True,
                 "bucket_integrity_check": True,
+                "bucket_usage_stats": True,
                 "bucket_migration": True,
+                "feature_rules": True,
                 "ceph_s3_user_keys": True,
             },
         },

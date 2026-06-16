@@ -25,18 +25,13 @@ Use this guide when you need to compare bucket states before migration or remedi
 ## Expected result
 
 You get an actionable diff view to support controlled bucket alignment. Manager
-remediation buttons re-run the comparison before acting; object-row actions
-apply the same safeguard to a single key.
+remediation actions apply only the exact object keys present in the current
+content diff section or object row.
 
 ## Limits / feature flags
 
 !!! note
     Tool visibility depends on the global feature flag, per-user Manager tool access, and context requirements.
-
-!!! note
-    Object rows shown in content diff sections are samples of up to 1000 objects
-    per diff section, not guaranteed exhaustive lists. Section counters remain
-    the source of truth for totals.
 
 ## Related pages
 

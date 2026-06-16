@@ -89,5 +89,14 @@ quotaMonitorCronJob:
   internalToken: ""
   extraEnv: []
 
+usageHistoryCronJob:
+  enabled: false
+  schedule: "0 3 * * *"
+  backoffLimit: 1
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  internalToken: ""
+  extraEnv: []
+
 nameOverride: ""
 fullnameOverride: ""

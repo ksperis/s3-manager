@@ -52,6 +52,7 @@ from app.utils.rgw import (
     resolve_account_scope,
     resolve_admin_uid,
     get_supervision_credentials,
+    is_rgw_account_id,
 )
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -62,13 +63,6 @@ logger = logging.getLogger(__name__)
 
 
 BucketCompareRemediationAction = Literal["sync_source_only", "sync_different", "delete_target_only"]
-
-
-@dataclass(frozen=True)
-class BucketCompareContentKeySets:
-    only_source_keys: list[str]
-    different_keys: list[str]
-    only_target_keys: list[str]
 
 
 @dataclass(frozen=True)
@@ -106,6 +100,31 @@ class BucketsService:
             )
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to initialize admin client: {exc}") from exc
+
+    def _rgw_bucket_quota_admin_for_account(self, account: S3Account):
+        endpoint = getattr(account, "storage_endpoint", None)
+        if endpoint is None:
+            raise RuntimeError("Storage endpoint is not configured for this context")
+        flags = resolve_feature_flags(endpoint)
+        if not flags.admin_enabled:
+            raise RuntimeError("Admin API is disabled for this endpoint")
+        access_key = (getattr(endpoint, "admin_access_key", None) or "").strip()
+        secret_key = (getattr(endpoint, "admin_secret_key", None) or "").strip()
+        if not access_key or not secret_key:
+            raise RuntimeError("Endpoint admin credentials are not configured for this endpoint")
+        try:
+            admin_endpoint = resolve_admin_endpoint(endpoint)
+            if not admin_endpoint:
+                raise RuntimeError("Admin endpoint is not configured for this endpoint")
+            return get_rgw_admin_client(
+                access_key=access_key,
+                secret_key=secret_key,
+                endpoint=admin_endpoint,
+                region=endpoint.region,
+                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+            )
+        except RGWAdminError as exc:
+            raise RuntimeError(f"Unable to initialize bucket quota admin client: {exc}") from exc
 
     def _admin_bucket_list(self, account: S3Account, with_stats: bool = True) -> list[dict]:
         uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
@@ -155,6 +174,57 @@ class BucketsService:
             except (TypeError, ValueError):
                 quota_objects = None
         return quota_size, quota_objects
+
+    def _split_tenant_uid(self, value: str) -> tuple[str | None, str]:
+        tenant, sep, uid = value.partition("$")
+        if sep:
+            return tenant or None, uid
+        return None, value
+
+    def _resolve_bucket_owner_identity(self, entry: dict) -> tuple[str | None, str | None]:
+        if not isinstance(entry, dict):
+            return None, None
+        tenant = str(entry.get("tenant") or "").strip() or None
+        owner = str(entry.get("owner") or "").strip() or None
+        if owner and "$" in owner:
+            split_tenant, split_uid = self._split_tenant_uid(owner)
+            if split_tenant:
+                tenant = split_tenant
+            owner = split_uid or None
+        if not owner:
+            return None, None
+        if is_rgw_account_id(owner):
+            return owner, None
+        if tenant:
+            return None, f"{tenant}${owner}"
+        return None, owner
+
+    def _resolve_bucket_quota_scope(
+        self,
+        name: str,
+        account: S3Account,
+        client: RGWAdminClient,
+    ) -> tuple[Optional[str], Optional[str], str]:
+        account_id, tenant = resolve_account_scope(account.rgw_account_id)
+        root_identifier = account_id or tenant
+        root_uid = resolve_admin_uid(root_identifier, account.rgw_user_uid)
+        if root_uid:
+            return account_id, tenant, root_uid
+
+        try:
+            bucket_info = client.get_bucket_info(name, stats=False, allow_not_found=True)
+        except RGWAdminError as exc:
+            raise RuntimeError(f"Unable to resolve bucket owner for quota update: {exc}") from exc
+        if not bucket_info:
+            raise RuntimeError("Unable to set bucket quota: bucket not found")
+
+        owner_account_id, owner_uid = self._resolve_bucket_owner_identity(bucket_info)
+        account_id, tenant = resolve_account_scope(owner_account_id)
+        root_identifier = account_id or tenant
+        root_uid = resolve_admin_uid(root_identifier, owner_uid)
+        if not root_uid:
+            raise RuntimeError("Unable to set bucket quota: bucket owner uid is missing")
+        return account_id, tenant, root_uid
 
     def list_buckets(
         self,
@@ -806,7 +876,6 @@ class BucketsService:
         target_bucket: str,
         target_account: S3Account,
         *,
-        diff_sample_limit: int = 1000,
         ignore_modified_after: Optional[datetime] = None,
     ) -> CephAdminBucketContentDiff:
         source_objects_raw = self._list_bucket_objects_for_compare(source_bucket, source_account)
@@ -836,8 +905,6 @@ class BucketsService:
                 continue
 
             different_count += 1
-            if len(different_sample) >= diff_sample_limit:
-                continue
             different_sample.append(
                 CephAdminBucketObjectDiffEntry(
                     key=key,
@@ -861,8 +928,6 @@ class BucketsService:
                 )
             )
 
-        only_source_sample = only_source[:diff_sample_limit]
-        only_target_sample = only_target[:diff_sample_limit]
         return CephAdminBucketContentDiff(
             source_count=len(source_keys),
             target_count=len(target_keys),
@@ -871,55 +936,12 @@ class BucketsService:
             only_source_count=len(only_source),
             only_target_count=len(only_target),
             ignored_after_cutoff_count=ignored_after_cutoff_count,
-            only_source_sample=only_source_sample,
-            only_target_sample=only_target_sample,
-            only_source_details=[self._compare_object_detail(key, source_objects[key]) for key in only_source_sample],
-            only_target_details=[self._compare_object_detail(key, target_objects[key]) for key in only_target_sample],
+            only_source_sample=only_source,
+            only_target_sample=only_target,
+            only_source_details=[self._compare_object_detail(key, source_objects[key]) for key in only_source],
+            only_target_details=[self._compare_object_detail(key, target_objects[key]) for key in only_target],
             different_sample=different_sample,
         )
-
-    def _build_compare_content_key_sets(
-        self,
-        source_objects: dict[str, dict[str, Any]],
-        target_objects: dict[str, dict[str, Any]],
-    ) -> BucketCompareContentKeySets:
-        source_keys = set(source_objects.keys())
-        target_keys = set(target_objects.keys())
-        only_source = sorted(source_keys - target_keys)
-        only_target = sorted(target_keys - source_keys)
-        common_keys = sorted(source_keys & target_keys)
-
-        different_keys: list[str] = []
-        for key in common_keys:
-            source_entry = source_objects[key]
-            target_entry = target_objects[key]
-            comparison = compare_object_entries(source_entry, target_entry, md5_resolver=self._etag_md5)
-            if not comparison.equal:
-                different_keys.append(key)
-
-        return BucketCompareContentKeySets(
-            only_source_keys=only_source,
-            different_keys=different_keys,
-            only_target_keys=only_target,
-        )
-
-    def get_compare_content_key_sets(
-        self,
-        source_bucket: str,
-        source_account: S3Account,
-        target_bucket: str,
-        target_account: S3Account,
-        *,
-        ignore_modified_after: Optional[datetime] = None,
-    ) -> BucketCompareContentKeySets:
-        source_objects_raw = self._list_bucket_objects_for_compare(source_bucket, source_account)
-        target_objects_raw = self._list_bucket_objects_for_compare(target_bucket, target_account)
-        source_objects, target_objects, _ignored_after_cutoff_count = self._filter_compare_objects_by_cutoff(
-            source_objects_raw,
-            target_objects_raw,
-            ignore_modified_after=ignore_modified_after,
-        )
-        return self._build_compare_content_key_sets(source_objects, target_objects)
 
     def _account_client(self, account: S3Account):
         access_key, secret_key = self._account_credentials(account)
@@ -1042,26 +1064,11 @@ class BucketsService:
         target_account: S3Account,
         *,
         action: BucketCompareRemediationAction,
+        object_keys: list[str],
         parallelism: int = 4,
         failed_keys_sample_limit: int = 50,
-        object_key: Optional[str] = None,
-        ignore_modified_after: Optional[datetime] = None,
     ) -> BucketCompareRemediationResult:
-        key_sets = self.get_compare_content_key_sets(
-            source_bucket,
-            source_account,
-            target_bucket,
-            target_account,
-            ignore_modified_after=ignore_modified_after,
-        )
-        keys_by_action: dict[BucketCompareRemediationAction, list[str]] = {
-            "sync_source_only": key_sets.only_source_keys,
-            "sync_different": key_sets.different_keys,
-            "delete_target_only": key_sets.only_target_keys,
-        }
-        selected_keys = keys_by_action[action]
-        if object_key is not None:
-            selected_keys = [object_key] if object_key in set(selected_keys) else []
+        selected_keys = list(object_keys)
         planned_count = len(selected_keys)
         if planned_count == 0:
             return BucketCompareRemediationResult(
@@ -1299,12 +1306,8 @@ class BucketsService:
         payload: BucketQuotaUpdate,
         rgw_admin: Optional[RGWAdminClient] = None,
     ) -> None:
-        account_id, tenant = resolve_account_scope(account.rgw_account_id)
-        root_identifier = account_id or tenant
-        root_uid = resolve_admin_uid(root_identifier, account.rgw_user_uid)
-        if not root_uid:
-            raise RuntimeError("Unable to set bucket quota: bucket owner uid is missing")
-        client = rgw_admin or self._rgw_admin_for_account(account)
+        client = rgw_admin or self._rgw_bucket_quota_admin_for_account(account)
+        _account_id, tenant, root_uid = self._resolve_bucket_quota_scope(name, account, client)
         max_size_bytes = None
         if payload.max_size_gb is not None:
             try:

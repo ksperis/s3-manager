@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppSettings } from "../../api/appSettings";
@@ -36,8 +36,9 @@ function buildSettings(): AppSettings {
       usage_history_enabled: false,
       bucket_migration_enabled: true,
       bucket_compare_enabled: true,
+      bucket_integrity_check_enabled: true,
+      bucket_usage_stats_enabled: true,
       manager_ceph_s3_user_keys_enabled: true,
-      allow_ui_user_bucket_migration: false,
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
       allow_login_custom_endpoint: false,
@@ -46,6 +47,7 @@ function buildSettings(): AppSettings {
     portal: {
       allow_portal_key: false,
       allow_portal_user_bucket_create: true,
+      allow_portal_named_bucket_create: false,
       allow_portal_user_access_key_create: true,
       max_portal_user_access_keys: 2,
       iam_group_manager_policy: {
@@ -69,6 +71,7 @@ function buildSettings(): AppSettings {
       override_policy: {
         allow_portal_key: false,
         allow_portal_user_bucket_create: false,
+        allow_portal_named_bucket_create: false,
         allow_portal_user_access_key_create: false,
         iam_group_manager_policy: { actions: false, advanced_policy: false },
         iam_group_user_policy: { actions: false, advanced_policy: false },
@@ -138,5 +141,23 @@ describe("PortalSettingsPage", () => {
     });
     const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
     expect(payload.portal.max_portal_user_access_keys).toBe(5);
+  });
+
+  it("saves named bucket creation setting and override policy", async () => {
+    render(<PortalSettingsPage />);
+
+    fireEvent.click(await screen.findByLabelText("Portal named bucket creation"));
+    const namedBucketCard = screen.getByText("Named bucket creation").closest("div")?.parentElement?.parentElement;
+    expect(namedBucketCard).not.toBeNull();
+    fireEvent.click(within(namedBucketCard as HTMLElement).getByRole("checkbox", { name: "Allow override" }));
+
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
+    expect(payload.portal.allow_portal_named_bucket_create).toBe(true);
+    expect(payload.portal.override_policy.allow_portal_named_bucket_create).toBe(true);
   });
 });

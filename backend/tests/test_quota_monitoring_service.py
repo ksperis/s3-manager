@@ -152,7 +152,7 @@ def test_run_monitor_skips_when_both_features_disabled(db_session, monkeypatch):
     result = service.run_monitor()
 
     assert result["status"] == "skipped"
-    assert result["reason"] == "Both quota_alerts_enabled and usage_history_enabled are disabled."
+    assert result["reason"] == "Both quota alerts and usage history collection are disabled for this run."
     assert result["retention"] == {"retention": "ok"}
 
 
@@ -180,9 +180,80 @@ def test_usage_history_hourly_and_daily_upserts(db_session, monkeypatch):
     assert db_session.query(QuotaUsageHourly).count() == 1
     assert db_session.query(QuotaUsageDaily).count() == 1
     daily = db_session.query(QuotaUsageDaily).first()
+    hourly = db_session.query(QuotaUsageHourly).first()
+    assert hourly is not None
+    assert int(hourly.bucket_count) == 1
     assert daily is not None
     assert daily.samples_count == 2
     assert int(daily.last_used_bytes) == 50
+    assert int(daily.bucket_count) == 1
+
+
+def test_quota_monitor_mode_does_not_persist_usage_history(db_session, monkeypatch):
+    endpoint = _seed_endpoint(db_session)
+    _seed_account(db_session, endpoint)
+
+    fake_admin = _FakeAdminClient(usage_bytes=90, usage_objects=9, quota_bytes=100, quota_objects=10)
+
+    monkeypatch.setattr(quota_monitoring_service, "load_app_settings", lambda: _settings(quota_alerts_enabled=True, usage_history_enabled=True))
+    monkeypatch.setattr(quota_monitoring_service.DataRetentionService, "purge_all", lambda self: {})
+    monkeypatch.setattr(QuotaMonitoringService, "_resolve_admin_client", lambda self, endpoint, cache: fake_admin)
+    monkeypatch.setattr(QuotaMonitoringService, "_build_mailer", lambda self, notification_settings: (_FakeMailer(), None))
+
+    service = QuotaMonitoringService(db_session)
+    result = service.run_monitor(include_usage_history=False)
+
+    assert result["subjects_processed"] == 1
+    assert result["quota_alerts_enabled"] is True
+    assert result["usage_history_enabled"] is True
+    assert result["usage_history_collection_enabled"] is False
+    assert result["history_hourly_upserts"] == 0
+    assert result["history_daily_upserts"] == 0
+    assert db_session.query(QuotaUsageHourly).count() == 0
+    assert db_session.query(QuotaUsageDaily).count() == 0
+
+
+def test_usage_history_prefers_supervision_client_and_keeps_quota_optional(db_session, monkeypatch):
+    endpoint = _seed_endpoint(db_session)
+    account = _seed_account(db_session, endpoint)
+
+    fake_supervision = _FakeAdminClient(usage_bytes=75, usage_objects=7, quota_bytes=0, quota_objects=0)
+    fixed_now = datetime(2026, 1, 10, 11, 5, 0)
+    seen: dict[str, int] = {}
+
+    def resolve_supervision(endpoint_arg):
+        seen["endpoint_id"] = endpoint_arg.id
+        return fake_supervision
+
+    monkeypatch.setattr(quota_monitoring_service, "utcnow", lambda: fixed_now)
+    monkeypatch.setattr(quota_monitoring_service, "load_app_settings", lambda: _settings(quota_alerts_enabled=False, usage_history_enabled=True))
+    monkeypatch.setattr(quota_monitoring_service.DataRetentionService, "purge_all", lambda self: {})
+    monkeypatch.setattr(quota_monitoring_service, "get_supervision_rgw_client", resolve_supervision)
+    monkeypatch.setattr(QuotaMonitoringService, "_resolve_admin_client", lambda self, endpoint, cache: None)
+
+    service = QuotaMonitoringService(db_session)
+    result = service.run_monitor()
+
+    assert seen["endpoint_id"] == endpoint.id
+    assert result["subjects_processed"] == 1
+    assert result["history_hourly_upserts"] == 1
+    assert result["history_daily_upserts"] == 1
+    assert result["errors"] == []
+    assert result["warnings"] == [
+        {
+            "subject_type": "account",
+            "subject_id": account.id,
+            "warning": "Quota client unavailable for endpoint 'quota-endpoint'.",
+        }
+    ]
+
+    hourly = db_session.query(QuotaUsageHourly).first()
+    assert hourly is not None
+    assert int(hourly.used_bytes) == 75
+    assert int(hourly.used_objects) == 7
+    assert int(hourly.bucket_count) == 1
+    assert hourly.quota_size_bytes is None
+    assert hourly.usage_ratio_pct is None
 
 
 def test_alert_crossing_first_run_no_duplicate_and_reset(db_session, monkeypatch):

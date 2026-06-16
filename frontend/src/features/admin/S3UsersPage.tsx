@@ -13,11 +13,13 @@ import {
   importS3Users,
   listS3Users,
   updateS3User,
+  type UpdateS3UserPayload,
 } from "../../api/s3Users";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
+import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
@@ -33,11 +35,12 @@ import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
+import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
 type TextMatchMode = "contains" | "exact";
 type SortField = "name" | "uid";
-type EditTab = "general" | "users";
+type EditTab = "general" | "users" | "privileged";
 
 export default function S3UsersPage() {
   const resolveQuotaForEdit = (quotaGb?: number | null) => {
@@ -105,6 +108,8 @@ export default function S3UsersPage() {
     quota_max_size_unit: "GiB",
     quota_max_objects: "",
     storage_endpoint_id: "",
+    allow_manager_bucket_quota: false,
+    allow_manager_ceph_s3_user_keys: false,
   });
   const [editInitialSignature, setEditInitialSignature] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
@@ -161,6 +166,9 @@ export default function S3UsersPage() {
   } = useAdminS3UserStats(editingUserId, Boolean(editingUserId));
   const showEditGeneralTab = editTab === "general";
   const showEditUsersTab = editTab === "users";
+  const currentUser = useMemo(() => readStoredUser(), []);
+  const canManagePrivilegedTargets = isAdminLikeRole(currentUser?.role);
+  const showEditPrivilegedTab = canManagePrivilegedTargets && editTab === "privileged";
   const {
     catalog: adminTagCatalog,
     loading: adminTagCatalogLoading,
@@ -396,6 +404,8 @@ export default function S3UsersPage() {
       quota_max_size_unit: quota.unit,
       quota_max_objects: user.quota_max_objects != null ? String(user.quota_max_objects) : "",
       storage_endpoint_id: user.storage_endpoint_id ? String(user.storage_endpoint_id) : "",
+      allow_manager_bucket_quota: Boolean(user.allow_manager_bucket_quota),
+      allow_manager_ceph_s3_user_keys: Boolean(user.allow_manager_ceph_s3_user_keys),
     };
     setEditingUser(user);
     setEditForm(nextEditForm);
@@ -420,19 +430,16 @@ export default function S3UsersPage() {
     setEditBusy(true);
     setEditError(null);
     try {
-      const payload: {
-        name?: string;
-        email?: string;
-        user_ids?: number[];
-        quota_max_size_gb?: number | null;
-        quota_max_size_unit?: string | null;
-        quota_max_objects?: number | null;
-      } = {
+      const payload: UpdateS3UserPayload = {
         name: editForm.name || undefined,
         email: editForm.email || undefined,
         tags: normalizeUiTags(editForm.tags),
         user_ids: editForm.user_ids,
       };
+      if (canManagePrivilegedTargets) {
+        payload.allow_manager_bucket_quota = editForm.allow_manager_bucket_quota;
+        payload.allow_manager_ceph_s3_user_keys = editForm.allow_manager_ceph_s3_user_keys;
+      }
       if (allowUserQuotaUpdates) {
         payload.quota_max_size_gb = editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null;
         payload.quota_max_size_unit = editForm.quota_max_size_gb !== "" ? editForm.quota_max_size_unit : null;
@@ -650,7 +657,7 @@ export default function S3UsersPage() {
       <PageHeader
         title="Users"
         description="Persist RGW standalone users for direct manager access (no IAM)."
-        breadcrumbs={[{ label: "Admin" }, { label: "Users" }]}
+        breadcrumbs={adminBreadcrumbs({ label: "Users" })}
         actions={[
           {
             label: "Import",
@@ -679,6 +686,7 @@ export default function S3UsersPage() {
         <ListToolbar
           title="Users"
           description="Search matches all records."
+          showHeading={false}
           countLabel={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"}`}
           search={
             <div className="flex items-center gap-2">
@@ -1100,6 +1108,19 @@ export default function S3UsersPage() {
               >
                 Linked UI users
               </button>
+              {canManagePrivilegedTargets && (
+                <button
+                  type="button"
+                  onClick={() => setEditTab("privileged")}
+                  className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                    editTab === "privileged"
+                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                  }`}
+                >
+                  Privileged access
+                </button>
+              )}
             </div>
 
             {showEditGeneralTab && (
@@ -1359,6 +1380,47 @@ export default function S3UsersPage() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {showEditPrivilegedTab && (
+              <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <label className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    checked={editForm.allow_manager_bucket_quota}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        allow_manager_bucket_quota: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>
+                    <span className="block ui-body font-medium text-slate-800 dark:text-slate-100">
+                      Bucket quota management
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    checked={editForm.allow_manager_ceph_s3_user_keys}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        allow_manager_ceph_s3_user_keys: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>
+                    <span className="block ui-body font-medium text-slate-800 dark:text-slate-100">
+                      Ceph S3 User keys
+                    </span>
+                  </span>
+                </label>
               </div>
             )}
 

@@ -123,7 +123,7 @@ describe("CephAdminLayout", () => {
       </MemoryRouter>
     );
 
-    for (const label of ["Metrics", "RGW Accounts", "RGW Users", "Buckets", "Browser"]) {
+    for (const label of ["Usage & Metrics", "RGW Accounts", "RGW Users", "Buckets", "Browser"]) {
       const link = getNavLink(label);
       expect(link?.disabled).toBe(true);
       expect(link?.disabledHint).toBe("Select a Ceph endpoint first.");
@@ -140,14 +140,31 @@ describe("CephAdminLayout", () => {
       </MemoryRouter>
     );
 
-    for (const label of ["Metrics", "RGW Accounts", "RGW Users", "Buckets", "Browser"]) {
+    for (const label of ["Usage & Metrics", "RGW Accounts", "RGW Users", "Buckets", "Browser"]) {
       const link = getNavLink(label);
       expect(link?.disabled).toBe(true);
       expect(link?.disabledHint).toBe("Endpoint access is loading.");
     }
   });
 
-  it("shows metrics permission hint when metrics access is not granted", () => {
+  it("shows metrics permission hint when neither metrics nor admin access is granted", () => {
+    useCephAdminEndpointMock.mockReturnValue(
+      buildEndpointContext({ selectedEndpointAccess: { can_admin: false, can_metrics: false, can_accounts: true } })
+    );
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/ceph-admin"]}>
+        <CephAdminLayout />
+      </MemoryRouter>
+    );
+
+    const metricsLink = getNavLink("Usage & Metrics");
+    expect(metricsLink?.disabled).toBe(true);
+    expect(metricsLink?.disabledHint).toBe("Metrics access is not granted for this endpoint.");
+  });
+
+  it("keeps Usage & Metrics enabled for endpoint admins even when live metrics access is not granted", () => {
     useCephAdminEndpointMock.mockReturnValue(
       buildEndpointContext({ selectedEndpointAccess: { can_admin: true, can_metrics: false, can_accounts: true } })
     );
@@ -159,14 +176,17 @@ describe("CephAdminLayout", () => {
       </MemoryRouter>
     );
 
-    const metricsLink = getNavLink("Metrics");
-    expect(metricsLink?.disabled).toBe(true);
-    expect(metricsLink?.disabledHint).toBe("Metrics access is not granted for this endpoint.");
+    const metricsLink = getNavLink("Usage & Metrics");
+    expect(metricsLink?.disabled).toBe(false);
+    expect(metricsLink?.disabledHint).toBeUndefined();
   });
 
   it("shows endpoint capabilities hint when metrics capabilities are unavailable", () => {
     useCephAdminEndpointMock.mockReturnValue(
-      buildEndpointContext({ selectedEndpoint: { id: 7, capabilities: { metrics: false, usage: false } } })
+      buildEndpointContext({
+        selectedEndpoint: { id: 7, capabilities: { metrics: false, usage: false } },
+        selectedEndpointAccess: { can_admin: false, can_metrics: true, can_accounts: true },
+      })
     );
     useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
@@ -176,7 +196,7 @@ describe("CephAdminLayout", () => {
       </MemoryRouter>
     );
 
-    const metricsLink = getNavLink("Metrics");
+    const metricsLink = getNavLink("Usage & Metrics");
     expect(metricsLink?.disabled).toBe(true);
     expect(metricsLink?.disabledHint).toBe("Metrics are unavailable for this endpoint capabilities.");
   });

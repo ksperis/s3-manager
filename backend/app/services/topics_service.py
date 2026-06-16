@@ -7,8 +7,8 @@ import logging
 from typing import Any, Optional
 from urllib.parse import parse_qsl
 
-from app.db import S3Account
-from app.models.topic import Topic
+from app.db import S3Account, StorageProvider
+from app.models.topic import Topic, TopicSubscription
 from app.services import sns_client
 from app.utils.s3_endpoint import resolve_s3_client_options
 
@@ -36,6 +36,19 @@ class TopicsService:
         "EffectiveDeliveryPolicy",
         "HasStoredSecret",
     }
+    _SUBSCRIPTION_DIRECT_KEYS = {
+        "TopicArn",
+        "Arn",
+        "topic_arn",
+        "Name",
+        "TopicName",
+        "EndPoint",
+        "EndpointAddress",
+        "EndpointArgs",
+        "EndpointTopic",
+        "Persistent",
+        "persistent",
+    }
 
     def __init__(self) -> None:
         pass
@@ -60,6 +73,12 @@ class TopicsService:
         if ":" in arn:
             return arn.split(":")[-1]
         return arn
+
+    def _is_ceph_endpoint(self, account: S3Account) -> bool:
+        endpoint = getattr(account, "storage_endpoint", None)
+        provider = getattr(endpoint, "provider", None)
+        provider_value = getattr(provider, "value", provider)
+        return str(provider_value or "").strip().lower() == StorageProvider.CEPH.value
 
     def _parse_configurable_attributes(self, attributes: dict) -> Optional[dict]:
         configuration: dict[str, Any] = {}
@@ -130,38 +149,186 @@ class TopicsService:
                 return value
         return value
 
-    def _topic_from_attributes(self, arn: str, attributes: dict) -> Topic:
-        def _to_int(value: Optional[str]) -> Optional[int]:
-            if value is None or value == "":
-                return None
-            try:
-                return int(value)
-            except (TypeError, ValueError):
-                return None
+    def _to_int(self, value: Any) -> Optional[int]:
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
+    def _to_bool(self, value: Any) -> Optional[bool]:
+        parsed = self._coerce_attribute_value(value)
+        if isinstance(parsed, bool):
+            return parsed
+        if isinstance(parsed, (int, float)):
+            return bool(parsed)
+        if isinstance(parsed, str):
+            normalized = parsed.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                return True
+            if normalized in {"false", "0", "no", "off"}:
+                return False
+        return None
+
+    def _topic_from_attributes(
+        self,
+        arn: str,
+        attributes: dict,
+        *,
+        name: Optional[str] = None,
+        subscriptions: Optional[list[TopicSubscription]] = None,
+        is_ceph: bool = False,
+    ) -> Topic:
         return Topic(
-            name=self._topic_name_from_arn(arn),
+            name=name or self._topic_name_from_arn(arn),
             arn=arn,
             owner=attributes.get("Owner"),
-            subscriptions_confirmed=_to_int(attributes.get("SubscriptionsConfirmed")),
-            subscriptions_pending=_to_int(attributes.get("SubscriptionsPending")),
+            is_ceph=is_ceph,
+            subscriptions_confirmed=self._to_int(attributes.get("SubscriptionsConfirmed")),
+            subscriptions_pending=self._to_int(attributes.get("SubscriptionsPending")),
+            subscriptions=subscriptions or [],
             configuration=self._parse_configurable_attributes(attributes),
         )
 
-    def list_topics(self, account: S3Account) -> list[Topic]:
-        access_key, secret_key = self._account_credentials(account)
-        raw_topics = sns_client.list_topics(access_key=access_key, secret_key=secret_key, **self._client_kwargs(account))
+    def _entry_arn(self, entry: dict[str, Any]) -> Optional[str]:
+        arn = entry.get("TopicArn") or entry.get("Arn") or entry.get("topic_arn")
+        return str(arn) if arn else None
+
+    def _entry_name(self, entry: dict[str, Any], arn: str) -> str:
+        name = entry.get("Name") or entry.get("TopicName")
+        if name:
+            return str(name)
+        return self._topic_name_from_arn(arn)
+
+    def _is_ceph_notification_entry(self, entry: dict[str, Any], arn: str) -> bool:
+        return self._entry_name(entry, arn).startswith("notif.")
+
+    def _bucket_from_notification_name(self, name: str) -> Optional[str]:
+        if not name.startswith("notif."):
+            return None
+        suffix = name.removeprefix("notif.")
+        bucket, _, _topic = suffix.partition("_")
+        return bucket or None
+
+    def _is_sensitive_metadata_key(self, key: str) -> bool:
+        normalized = key.replace("-", "_").lower()
+        if normalized == "hasstoredsecret":
+            return True
+        return any(token in normalized for token in ("password", "secret", "token", "access_key"))
+
+    def _clean_subscription_dict(self, values: dict[str, Any]) -> dict[str, Any]:
+        cleaned: dict[str, Any] = {}
+        for key, value in values.items():
+            if not isinstance(key, str) or not key:
+                continue
+            if self._is_sensitive_metadata_key(key):
+                continue
+            parsed = self._coerce_attribute_value(value)
+            if parsed is None or parsed == "":
+                continue
+            cleaned[key] = parsed
+        return cleaned
+
+    def _string_or_none(self, value: Any) -> Optional[str]:
+        parsed = self._coerce_attribute_value(value)
+        if parsed is None or parsed == "":
+            return None
+        return str(parsed)
+
+    def _subscription_from_ceph_entry(self, entry: dict[str, Any], arn: str) -> TopicSubscription:
+        name = self._entry_name(entry, arn)
+        endpoint = self._coerce_attribute_value(entry.get("EndPoint"))
+        endpoint_map = endpoint if isinstance(endpoint, dict) else {}
+        endpoint_args = self._clean_subscription_dict(
+            self._parse_endpoint_args(entry.get("EndpointArgs") or endpoint_map.get("EndpointArgs"))
+        )
+        endpoint_address = self._string_or_none(entry.get("EndpointAddress") or endpoint_map.get("EndpointAddress"))
+        endpoint_topic = self._string_or_none(entry.get("EndpointTopic") or endpoint_map.get("EndpointTopic"))
+        persistent = self._to_bool(
+            entry.get("Persistent")
+            if entry.get("Persistent") is not None
+            else entry.get("persistent", endpoint_args.get("persistent"))
+        )
+        metadata = self._clean_subscription_dict(
+            {
+                key: value
+                for key, value in entry.items()
+                if isinstance(key, str) and key not in self._SUBSCRIPTION_DIRECT_KEYS
+            }
+        )
+        metadata.update(
+            self._clean_subscription_dict(
+                {
+                    key: value
+                    for key, value in endpoint_map.items()
+                    if isinstance(key, str) and key not in {"EndpointAddress", "EndpointArgs", "EndpointTopic"}
+                }
+            )
+        )
+        return TopicSubscription(
+            name=name,
+            bucket=self._bucket_from_notification_name(name),
+            endpoint_address=endpoint_address,
+            endpoint_topic=endpoint_topic,
+            endpoint_args=endpoint_args,
+            persistent=persistent,
+            metadata=metadata,
+        )
+
+    def _list_standard_topics(self, access_key: str, secret_key: str, client_kwargs: dict) -> list[Topic]:
+        raw_topics = sns_client.list_topics(access_key=access_key, secret_key=secret_key, **client_kwargs)
         items: list[Topic] = []
         for entry in raw_topics:
-            arn = entry.get("TopicArn") or entry.get("Arn") or entry.get("topic_arn")
+            arn = self._entry_arn(entry)
             if not arn:
                 logger.debug("Skipping malformed SNS topic entry: %s", entry)
                 continue
             attrs = sns_client.get_topic_attributes(
-                arn, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+                arn, access_key=access_key, secret_key=secret_key, **client_kwargs
             )
             items.append(self._topic_from_attributes(arn, attrs))
         return items
+
+    def _list_ceph_topics(self, access_key: str, secret_key: str, client_kwargs: dict) -> list[Topic]:
+        raw_topics = sns_client.list_topics_raw(access_key=access_key, secret_key=secret_key, **client_kwargs)
+        ordered_arns: list[str] = []
+        topic_names: dict[str, str] = {}
+        subscriptions_by_arn: dict[str, list[TopicSubscription]] = {}
+        for entry in raw_topics:
+            arn = self._entry_arn(entry)
+            if not arn:
+                logger.debug("Skipping malformed Ceph SNS topic entry: %s", entry)
+                continue
+            if arn not in ordered_arns:
+                ordered_arns.append(arn)
+            if self._is_ceph_notification_entry(entry, arn):
+                subscriptions_by_arn.setdefault(arn, []).append(self._subscription_from_ceph_entry(entry, arn))
+                continue
+            topic_names.setdefault(arn, self._entry_name(entry, arn))
+
+        items: list[Topic] = []
+        for arn in ordered_arns:
+            attrs = sns_client.get_topic_attributes(
+                arn, access_key=access_key, secret_key=secret_key, **client_kwargs
+            )
+            items.append(
+                self._topic_from_attributes(
+                    arn,
+                    attrs,
+                    name=topic_names.get(arn),
+                    subscriptions=subscriptions_by_arn.get(arn, []),
+                    is_ceph=True,
+                )
+            )
+        return items
+
+    def list_topics(self, account: S3Account) -> list[Topic]:
+        access_key, secret_key = self._account_credentials(account)
+        client_kwargs = self._client_kwargs(account)
+        if self._is_ceph_endpoint(account):
+            return self._list_ceph_topics(access_key, secret_key, client_kwargs)
+        return self._list_standard_topics(access_key, secret_key, client_kwargs)
 
     def _serialize_configuration(self, configuration: Optional[dict]) -> dict[str, str]:
         serialized: dict[str, str] = {}

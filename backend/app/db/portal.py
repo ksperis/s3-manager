@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -24,6 +24,8 @@ class PortalStorageSpaceMetadata(Base):
     space_type = Column(String, nullable=True)
     project_key = Column(String, nullable=True)
     dataset_label = Column(String, nullable=True)
+    origin = Column(String, nullable=False, default="legacy")
+    name_editable = Column(Boolean, nullable=False, default=False)
     archived_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)

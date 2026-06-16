@@ -42,14 +42,35 @@ describe("bucketAdvancedFilter", () => {
       lifecycleAbortDays: "7",
       objectLockMode: "GOVERNANCE",
       objectLockRetentionDays: "30",
+      objectLockRetentionYearsOp: "=",
+      objectLockRetentionYears: "1",
       bpaBlockPublicAcls: "true",
       corsMethodMode: "has",
       corsMethodValue: "GET",
       loggingEnabled: "true",
+      loggingTargetPrefix: "logs/",
       websiteIndexPresent: "true",
+      websiteIndexDocument: "index.html",
+      websiteErrorDocument: "error.html",
+      websiteRedirectHost: "example.test",
+      websiteRoutingRuleCountOp: ">=",
+      websiteRoutingRuleCount: "1",
       policyStatementOp: ">=",
       policyStatementCount: "2",
       policyHasConditions: "true",
+      notificationRuleId: "topic-created",
+      notificationRuleTypeMode: "has",
+      notificationRuleTypeValue: "topic",
+      notificationTopicName: "bucket-events",
+      notificationEventMode: "has",
+      notificationEventValue: "s3:ObjectCreated:*",
+      notificationFilterPrefixMode: "has",
+      notificationFilterPrefixValue: "incoming/",
+      notificationFilterSuffixMode: "has_not",
+      notificationFilterSuffixValue: ".tmp",
+      notificationEventBridgePresent: "true",
+      sseAlgorithm: "aws:kms",
+      sseKmsKeyId: "audit-key",
     });
 
     expect(rules).toEqual(
@@ -61,12 +82,27 @@ describe("bucketAdvancedFilter", () => {
         { feature: "lifecycle_rules", param: "lifecycle_abort_multipart_days", op: "gte", value: 7 },
         { feature: "object_lock", param: "object_lock_mode", op: "eq", value: "GOVERNANCE" },
         { feature: "object_lock", param: "object_lock_retention_days", op: "gte", value: 30 },
+        { feature: "object_lock", param: "object_lock_retention_years", op: "eq", value: 1 },
         { feature: "block_public_access", param: "bpa_block_public_acls", op: "eq", value: true },
         { feature: "cors", param: "cors_allowed_method", op: "has", value: "GET" },
         { feature: "access_logging", param: "logging_enabled", op: "eq", value: true },
+        { feature: "access_logging", param: "logging_target_prefix", op: "contains", value: "logs/" },
         { feature: "static_website", param: "website_index_present", op: "eq", value: true },
+        { feature: "static_website", param: "website_index_document", op: "contains", value: "index.html" },
+        { feature: "static_website", param: "website_error_document", op: "contains", value: "error.html" },
+        { feature: "static_website", param: "website_redirect_host", op: "contains", value: "example.test" },
+        { feature: "static_website", param: "website_routing_rule_count", op: "gte", value: 1 },
         { feature: "bucket_policy", param: "policy_statement_count", op: "gte", value: 2 },
         { feature: "bucket_policy", param: "policy_has_conditions", op: "eq", value: true },
+        { feature: "notifications", param: "notification_rule_id", op: "contains", value: "topic-created" },
+        { feature: "notifications", param: "notification_rule_type", op: "has", value: "topic" },
+        { feature: "notifications", param: "notification_topic_name", op: "contains", value: "bucket-events" },
+        { feature: "notifications", param: "notification_event", op: "has", value: "s3:ObjectCreated:*" },
+        { feature: "notifications", param: "notification_filter_prefix", op: "has", value: "incoming/" },
+        { feature: "notifications", param: "notification_filter_suffix", op: "has_not", value: ".tmp" },
+        { feature: "notifications", param: "notification_eventbridge_present", op: "eq", value: true },
+        { feature: "server_side_encryption", param: "sse_algorithm", op: "contains", value: "aws:kms" },
+        { feature: "server_side_encryption", param: "sse_kms_key_id", op: "contains", value: "audit-key" },
       ])
     );
   });
@@ -89,9 +125,18 @@ describe("bucketAdvancedFilter", () => {
       lifecycleRuleTypeValue: "transition",
       lifecycleExpirationDaysOp: "??",
       lifecycleExpirationDays: 10,
+      objectLockRetentionYearsOp: "??",
+      objectLockRetentionYears: 1,
       bpaBlockPublicAcls: "true",
+      websiteRoutingRuleCountOp: "??",
+      websiteRoutingRuleCount: 2,
       policyStatementOp: "??",
       policyStatementCount: 8,
+      notificationRuleTypeMode: "bad",
+      notificationRuleTypeValue: "topic",
+      notificationEventMode: "has_not",
+      notificationFilterPrefixMode: "wrong",
+      notificationEventBridgePresent: "false",
     });
 
     expect(sanitized.lifecycleRuleNameMode).toBe("any");
@@ -100,9 +145,18 @@ describe("bucketAdvancedFilter", () => {
     expect(sanitized.lifecycleRuleTypeValue).toBe("transition");
     expect(sanitized.lifecycleExpirationDaysOp).toBe("=");
     expect(sanitized.lifecycleExpirationDays).toBe("");
+    expect(sanitized.objectLockRetentionYearsOp).toBe(">=");
+    expect(sanitized.objectLockRetentionYears).toBe("");
     expect(sanitized.bpaBlockPublicAcls).toBe("true");
+    expect(sanitized.websiteRoutingRuleCountOp).toBe(">=");
+    expect(sanitized.websiteRoutingRuleCount).toBe("");
     expect(sanitized.policyStatementOp).toBe(">=");
     expect(sanitized.policyStatementCount).toBe("");
+    expect(sanitized.notificationRuleTypeMode).toBe("any");
+    expect(sanitized.notificationRuleTypeValue).toBe("topic");
+    expect(sanitized.notificationEventMode).toBe("has_not");
+    expect(sanitized.notificationFilterPrefixMode).toBe("any");
+    expect(sanitized.notificationEventBridgePresent).toBe("false");
   });
 
   it("returns readable summary labels", () => {
@@ -115,8 +169,16 @@ describe("bucketAdvancedFilter", () => {
       lifecycleExpirationDaysOp: ">=",
       lifecycleExpirationDays: "30",
       loggingEnabled: "false",
+      loggingTargetPrefix: "logs/",
+      websiteIndexDocument: "index.html",
+      websiteRoutingRuleCount: "1",
       policyStatementCount: "3",
       policyStatementOp: ">=",
+      notificationTopicName: "archive-topic",
+      notificationEventMode: "has",
+      notificationEventValue: "s3:ObjectRestore:*",
+      notificationEventBridgePresent: "true",
+      sseAlgorithm: "aws:kms",
     });
 
     expect(labels).toEqual(
@@ -125,7 +187,14 @@ describe("bucketAdvancedFilter", () => {
         "Lifecycle rule type has_not: Abort incomplete multipart uploads",
         "Lifecycle expiration days >= 30",
         "Logging enabled: false",
+        "Logging target prefix contains: logs/",
+        "Website index document contains: index.html",
+        "Website routing rules >= 1",
         "Policy statements >= 3",
+        "Notification topic contains: archive-topic",
+        "Notification event has: s3:ObjectRestore:*",
+        "Notification EventBridge present: true",
+        "SSE algorithm contains: aws:kms",
       ])
     );
   });
@@ -145,5 +214,65 @@ describe("bucketAdvancedFilter", () => {
         value: "transition",
       },
     ]);
+  });
+
+  it("omits notification detail rules when notifications are unsupported", () => {
+    const rules = buildFeatureDetailRules(
+      {
+        ...defaultFeatureDetailFilters,
+        notificationTopicName: "archive-topic",
+        notificationEventBridgePresent: "true",
+        lifecycleRuleStatus: "Disabled",
+      },
+      { notifications: false }
+    );
+
+    expect(rules).toEqual([
+      {
+        feature: "lifecycle_rules",
+        param: "lifecycle_rule_status",
+        op: "eq",
+        value: "Disabled",
+      },
+    ]);
+    expect(
+      hasFeatureDetailFilters(
+        {
+          ...defaultFeatureDetailFilters,
+          notificationTopicName: "archive-topic",
+        },
+        { notifications: false }
+      )
+    ).toBe(false);
+  });
+
+  it("omits SSE detail rules when server-side encryption is unsupported", () => {
+    const rules = buildFeatureDetailRules(
+      {
+        ...defaultFeatureDetailFilters,
+        sseAlgorithm: "aws:kms",
+        sseKmsKeyId: "audit-key",
+        lifecycleRuleStatus: "Disabled",
+      },
+      { server_side_encryption: false }
+    );
+
+    expect(rules).toEqual([
+      {
+        feature: "lifecycle_rules",
+        param: "lifecycle_rule_status",
+        op: "eq",
+        value: "Disabled",
+      },
+    ]);
+    expect(
+      hasFeatureDetailFilters(
+        {
+          ...defaultFeatureDetailFilters,
+          sseAlgorithm: "aws:kms",
+        },
+        { server_side_encryption: false }
+      )
+    ).toBe(false);
   });
 });

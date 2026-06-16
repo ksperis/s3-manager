@@ -54,9 +54,9 @@ import {
   putBucketLifecycle,
   setBucketVersioning,
   updateBucketAcl,
-  updateBucketQuota,
   updateBucketObjectLock,
   updateBucketPublicAccessBlock,
+  updateBucketQuota,
 } from "../../api/buckets";
 import {
   deleteCephAdminBucketCors,
@@ -101,15 +101,24 @@ import {
   listObjects,
   S3Object,
 } from "../../api/objects";
+import {
+  getCephAdminBucketUsageStats,
+  getManagerBucketUsageStats,
+  streamCephAdminBucketUsageStatsForBucket,
+  streamManagerBucketUsageStatsForBucket,
+  type BucketUsageStatsSnapshot,
+} from "../../api/bucketUsageStats";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
 import SplitView from "../../components/SplitView";
+import { MetricsCard } from "../../components/MetricsCard";
 import UsageTile from "../../components/UsageTile";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { formatCompactNumber } from "../../utils/format";
-import { isAdminLikeRole } from "../../utils/workspaces";
+import { getManagerToolAccess, isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import { useS3AccountContext } from "./S3AccountContext";
 import TrafficAnalytics from "./TrafficAnalytics";
+import BucketUsageStatsPanel from "../shared/BucketUsageStatsPanel";
 import PropertySummaryChip, { PropertySummaryTone } from "../../components/PropertySummaryChip";
 import { PortalSettingsSwitch } from "../../components/PortalSettingsLayout";
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
@@ -143,15 +152,7 @@ import {
 import { extractApiError, isApiFeatureNotImplemented } from "../../utils/apiError";
 
 function getUserRole(): string | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as { role?: string | null };
-    return parsed.role ?? null;
-  } catch {
-    return null;
-  }
+  return readStoredUser()?.role ?? null;
 }
 
 function formatBytes(value?: number | null) {
@@ -316,6 +317,7 @@ type BucketDetailPageProps = {
   mode?: BucketDetailMode;
   bucketNameOverride?: string;
   accountIdOverride?: string | null;
+  quotaAvailableOverride?: boolean | null;
   embedded?: boolean;
   hideObjectsTab?: boolean;
 };
@@ -324,13 +326,21 @@ export default function BucketDetailPage({
   mode = "manager",
   bucketNameOverride,
   accountIdOverride = null,
+  quotaAvailableOverride = null,
   embedded = false,
   hideObjectsTab = false,
 }: BucketDetailPageProps) {
   const params = useParams<{ bucketName: string }>();
   const bucketName = bucketNameOverride ?? params.bucketName;
   const isCephAdmin = mode === "ceph-admin";
-  const { accounts, selectedS3AccountId, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
+  const {
+    accounts,
+    selectedS3AccountId,
+    accountIdForApi,
+    requiresS3AccountSelection,
+    accessMode,
+    managerBucketQuotaEnabled,
+  } = useS3AccountContext();
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
   const [bucket, setBucket] = useState<Bucket | null>(null);
   const [loadingBucket, setLoadingBucket] = useState(false);
@@ -449,6 +459,10 @@ export default function BucketDetailPage({
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [objectsError, setObjectsError] = useState<string | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
+  const [usageStatsSnapshot, setUsageStatsSnapshot] = useState<BucketUsageStatsSnapshot | null>(null);
+  const [usageStatsLoading, setUsageStatsLoading] = useState(false);
+  const [usageStatsError, setUsageStatsError] = useState<string | null>(null);
+  const [usageStatsRecalculating, setUsageStatsRecalculating] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
   const [showPolicyExample, setShowPolicyExample] = useState(false);
@@ -487,16 +501,33 @@ export default function BucketDetailPage({
     return null;
   }, [accountIdOverride, accounts, isCephAdmin, requiresS3AccountSelection, selectedS3AccountId]);
   const isCephEndpoint = isCephAdmin || selectedS3Account?.endpoint_provider === "ceph";
+  const accountId = accountIdOverride ?? accountIdForApi ?? null;
+  const hasAccountContext = !requiresS3AccountSelection || accountId !== null;
+  const endpointId = selectedEndpointId ?? null;
+  const hasCephContext = Boolean(endpointId);
+  const hasContext = isCephAdmin ? hasCephContext : hasAccountContext;
+  const storedUser = useMemo(() => readStoredUser(), []);
+  const managerBucketQuotaAccess = Boolean(getManagerToolAccess(storedUser)?.bucket_quota);
+  const hasQuotaOverride = quotaAvailableOverride !== null;
+  const quotaTargetAllows = hasQuotaOverride ? quotaAvailableOverride !== false : Boolean(managerBucketQuotaEnabled);
+  const quotaFeatureEnabled = isCephAdmin
+    ? isCephEndpoint
+    : Boolean((isCephEndpoint || hasQuotaOverride) && quotaTargetAllows);
+  const showQuotaTab = isCephAdmin || Boolean(quotaFeatureEnabled && managerBucketQuotaAccess && hasAccountContext);
   const showObjectsTab = !isCephAdmin && !hideObjectsTab;
   const availableTabs = useMemo(() => {
     if (isCephAdmin) {
-      return ["overview", "ceph", "properties", "permissions", "advanced", "metrics"];
+      return ["overview", "ceph", "usage-stats", "properties", "permissions", "advanced", "metrics"];
     }
-    if (showObjectsTab) {
-      return ["overview", "objects", "properties", "permissions", "advanced", "metrics"];
+    const baseTabs = showObjectsTab
+      ? ["overview", "objects", "usage-stats", "properties", "permissions", "advanced", "metrics"]
+      : ["overview", "usage-stats", "properties", "permissions", "advanced", "metrics"];
+    if (showQuotaTab) {
+      const insertAt = Math.max(1, baseTabs.indexOf("usage-stats"));
+      return [...baseTabs.slice(0, insertAt), "ceph", ...baseTabs.slice(insertAt)];
     }
-    return ["overview", "properties", "permissions", "advanced", "metrics"];
-  }, [isCephAdmin, showObjectsTab]);
+    return baseTabs;
+  }, [isCephAdmin, showObjectsTab, showQuotaTab]);
 
   useEffect(() => {
     if (!availableTabs.includes(activeTab)) {
@@ -528,7 +559,6 @@ export default function BucketDetailPage({
     }
     return selectedS3Account?.storage_endpoint_capabilities?.replication === true;
   }, [isCephAdmin, isCephEndpoint, selectedEndpoint, selectedS3Account]);
-  const quotaFeatureEnabled = isCephEndpoint;
   const usageFeatureEnabled = useMemo(() => {
     if (isCephAdmin) {
       return selectedEndpoint?.capabilities?.metrics ?? true;
@@ -536,11 +566,6 @@ export default function BucketDetailPage({
     return selectedS3Account?.storage_endpoint_capabilities?.metrics ?? true;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
   const canViewBucketMetrics = Boolean(isCephEndpoint && usageFeatureEnabled);
-  const accountId = accountIdOverride ?? accountIdForApi ?? null;
-  const hasAccountContext = !requiresS3AccountSelection || accountId !== null;
-  const endpointId = selectedEndpointId ?? null;
-  const hasCephContext = Boolean(endpointId);
-  const hasContext = isCephAdmin ? hasCephContext : hasAccountContext;
   const staticWebsiteBlocked = !staticWebsiteEnabled;
   const exampleS3AccountId = selectedS3Account?.rgw_account_id || "ACCOUNT00000000000000001";
 
@@ -567,7 +592,9 @@ export default function BucketDetailPage({
 }`;
   const userRole = getUserRole();
   const isAdmin = isAdminLikeRole(userRole);
-  const canEditQuota = quotaFeatureEnabled && isCephAdmin && isAdmin && hasCephContext;
+  const canEditQuota =
+    quotaFeatureEnabled &&
+    ((isCephAdmin && isAdmin && hasCephContext) || (!isCephAdmin && managerBucketQuotaAccess && hasAccountContext));
   const quotaSectionRestricted = quotaFeatureEnabled && !canEditQuota;
   const objectLockPersistentlyEnabled = (objectLockConfig?.enabled ?? null) === true;
   const objectLockActive = (objectLockEnabled ?? null) === true || objectLockPersistentlyEnabled;
@@ -1146,6 +1173,48 @@ export default function BucketDetailPage({
     [accountId, bucketName, hasAccountContext, isCephAdmin]
   );
 
+  const loadUsageStats = useCallback(async () => {
+    if (!bucketName || !hasContext) {
+      setUsageStatsSnapshot(null);
+      setUsageStatsError(null);
+      return;
+    }
+    setUsageStatsLoading(true);
+    setUsageStatsError(null);
+    try {
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketUsageStats(endpointId, bucketName)
+          : { snapshot: null }
+        : await getManagerBucketUsageStats(accountId, bucketName);
+      setUsageStatsSnapshot(data.snapshot ?? null);
+    } catch (err) {
+      setUsageStatsSnapshot(null);
+      setUsageStatsError(extractApiError(err, "Unable to load bucket usage stats."));
+    } finally {
+      setUsageStatsLoading(false);
+    }
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
+
+  const recalculateUsageStats = useCallback(async () => {
+    if (!bucketName || !hasContext || usageStatsRecalculating) return;
+    setUsageStatsRecalculating(true);
+    setUsageStatsError(null);
+    try {
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await streamCephAdminBucketUsageStatsForBucket(endpointId, bucketName);
+      } else {
+        await streamManagerBucketUsageStatsForBucket(accountId, bucketName);
+      }
+      await loadUsageStats();
+    } catch (err) {
+      setUsageStatsError(extractApiError(err, "Unable to calculate bucket usage stats."));
+    } finally {
+      setUsageStatsRecalculating(false);
+    }
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, loadUsageStats, usageStatsRecalculating]);
+
   useEffect(() => {
     if (isCephAdmin) return;
     loadObjects(currentPrefix);
@@ -1169,6 +1238,12 @@ export default function BucketDetailPage({
       loadBucketTags();
     }
   }, [activeTab, loadBucketTags, loadLifecycle]);
+
+  useEffect(() => {
+    if (activeTab === "usage-stats") {
+      loadUsageStats();
+    }
+  }, [activeTab, loadUsageStats]);
 
   useEffect(() => {
     loadLifecycle();
@@ -1221,6 +1296,10 @@ export default function BucketDetailPage({
       }
       return;
     }
+    if (activeTab === "usage-stats") {
+      await loadUsageStats();
+      return;
+    }
     if (activeTab === "properties") {
       await Promise.all([loadVersioning(), loadObjectLock(), loadLifecycle(), loadBucketTags(), loadEncryption()]);
       return;
@@ -1247,6 +1326,7 @@ export default function BucketDetailPage({
     loadCors,
     loadEncryption,
     loadLifecycle,
+    loadUsageStats,
     loadNotifications,
     loadObjectLock,
     loadObjects,
@@ -1284,6 +1364,9 @@ export default function BucketDetailPage({
     if (activeTab === "objects") {
       return objectsLoading;
     }
+    if (activeTab === "usage-stats") {
+      return usageStatsLoading || usageStatsRecalculating;
+    }
     if (activeTab === "properties") {
       return versioningLoading || objectLockLoading || lifecycleLoading || bucketTagsLoading || encryptionLoading;
     }
@@ -1312,6 +1395,8 @@ export default function BucketDetailPage({
     policyLoading,
     publicAccessLoading,
     replicationLoading,
+    usageStatsLoading,
+    usageStatsRecalculating,
     versioningLoading,
     websiteLoading,
   ]);
@@ -2743,6 +2828,7 @@ export default function BucketDetailPage({
         if (!endpointId) return;
         await updateCephAdminBucketQuota(endpointId, bucketName, payload);
       } else {
+        if (!accountId) return;
         await updateBucketQuota(accountId, bucketName, payload);
       }
       setQuotaStatus("Quota updated");
@@ -2869,9 +2955,8 @@ export default function BucketDetailPage({
             id: "overview",
             label: "Overview",
             content: (
-              <section className="space-y-4 ui-surface-card p-5">
+              <section className="space-y-4 px-1 py-2">
                 <header className="space-y-1">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Overview</p>
                   <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
                     {bucketName ? `Bucket ${bucketName}` : "Bucket overview"}
                   </h3>
@@ -2900,13 +2985,8 @@ export default function BucketDetailPage({
                     emptyHint="No object quota configured."
                   />
                 </div>
-                <div className={cx(uiCardMutedClass, "px-4 py-3")}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Bucket properties</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">Summary of enabled features.</p>
-                    </div>
-                  </div>
+                <div className="border-t border-[color:var(--ui-border-soft)] pt-4">
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Bucket properties</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {propertySummary.map((item) => (
                       <PropertySummaryChip key={item.label} label={item.label} state={item.state} tone={item.tone} />
@@ -3471,7 +3551,7 @@ export default function BucketDetailPage({
                                 Quickly add one of the preconfigured rules below (appended to the existing configuration).
                               </p>
                               <div className="space-y-3">
-                                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                <div className={cx(uiCardMutedClass, "px-3 py-2")}>
                                   <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">
                                     Rule 1: noncurrent 90d + multipart 30d + delete markers (explicit)
                                   </p>
@@ -3498,7 +3578,7 @@ export default function BucketDetailPage({
                                   </div>
                                 </div>
 
-                                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                <div className={cx(uiCardMutedClass, "px-3 py-2")}>
                                   <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">Rule 2: current/noncurrent transitions</p>
                                   <div className="mt-2 flex flex-wrap items-end gap-3 ui-caption">
                                     <label className="flex flex-col gap-1">
@@ -3572,7 +3652,7 @@ export default function BucketDetailPage({
                                   </div>
                                 </div>
 
-                                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                <div className={cx(uiCardMutedClass, "px-3 py-2")}>
                                   <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">Rule 3: current/noncurrent expiration</p>
                                   <div className="mt-2 flex flex-wrap items-end gap-3 ui-caption">
                                     <label className="flex flex-col gap-1">
@@ -4148,7 +4228,7 @@ export default function BucketDetailPage({
                           spellCheck={false}
                           disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         />
-                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+                        <div className="ui-caption">
                           <BucketFeatureJsonExample
                             show={showWebsiteRulesExample}
                             onToggle={() => setShowWebsiteRulesExample((prev) => !prev)}
@@ -4273,7 +4353,7 @@ export default function BucketDetailPage({
                           {replicationRules.map((rule, index) => (
                             <div
                               key={`replication-rule-${index}-${rule.id || "new"}`}
-                              className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                              className={cx(uiCardMutedClass, "space-y-3 p-3")}
                             >
                               <div className="flex items-center justify-between">
                                 <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Rule {index + 1}</p>
@@ -4568,19 +4648,29 @@ export default function BucketDetailPage({
             ),
           },
           {
+            id: "usage-stats",
+            label: "Usage stats",
+            content: (
+              <BucketUsageStatsPanel
+                snapshot={usageStatsSnapshot}
+                loading={usageStatsLoading}
+                error={usageStatsError}
+                recalculating={usageStatsRecalculating}
+                onRefresh={loadUsageStats}
+                onRecalculate={recalculateUsageStats}
+              />
+            ),
+          },
+          {
             id: "metrics",
             label: "Metrics",
             disabled: !canViewBucketMetrics,
             content: (
               <div className="space-y-4">
-                <section className="space-y-4 ui-surface-card p-5">
-                  <header className="space-y-1">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Usage Stats</p>
-                    <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Current Usage and Quota</h3>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Live usage, quotas, and traffic sourced from backend metrics.
-                    </p>
-                  </header>
+                <MetricsCard
+                  title="Current usage and quota"
+                  description="Live usage, quotas, and traffic sourced from backend metrics."
+                >
                   <div className="grid gap-3 md:grid-cols-2">
                     <UsageTile
                       label="Storage"
@@ -4602,7 +4692,7 @@ export default function BucketDetailPage({
                       emptyHint="No object quota defined."
                     />
                   </div>
-                </section>
+                </MetricsCard>
                 {canViewBucketMetrics &&
                   (isCephAdmin ? (
                     endpointId && bucketName ? (
@@ -4622,11 +4712,11 @@ export default function BucketDetailPage({
               </div>
             ),
           },
-          ...(isCephAdmin
+          ...(showQuotaTab
             ? [
                 {
                   id: "ceph",
-                  label: "Ceph Admin",
+                  label: isCephAdmin ? "Ceph Admin" : "Privileged Ceph",
                   content: (
                     <div className="space-y-3">
                       <BucketFeatureCard
@@ -4646,7 +4736,13 @@ export default function BucketDetailPage({
                               form={quotaFormId}
                               disabled={updatingQuota || !canEditQuota}
                               className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                              title={!quotaFeatureEnabled ? "Unavailable on this endpoint" : !canEditQuota ? "Admins only" : undefined}
+                              title={
+                                !quotaFeatureEnabled
+                                  ? "Unavailable on this endpoint"
+                                  : !canEditQuota
+                                    ? "Privileged Ceph access required"
+                                    : undefined
+                              }
                             >
                               {updatingQuota ? "Saving..." : "Save"}
                             </button>
@@ -4708,7 +4804,7 @@ export default function BucketDetailPage({
                   </form>
                   <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                     {quotaFeatureEnabled
-                      ? `Leave empty to remove the quota. ${canEditQuota ? "" : "(Read-only for this role.)"}`
+                      ? `Leave empty to remove the quota. ${canEditQuota ? "" : "(Privileged Ceph access required.)"}`
                       : "Quota management is unavailable on this endpoint."}
                   </p>
                       </BucketFeatureCard>

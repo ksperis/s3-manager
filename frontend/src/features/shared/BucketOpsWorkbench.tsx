@@ -5,12 +5,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import ActiveFiltersBar from "../../components/ActiveFiltersBar";
+import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import {
+  toolbarCompactButtonClasses,
+  toolbarCompactInputClasses,
+  toolbarCompactSelectClasses,
+} from "../../components/toolbarControlClasses";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
@@ -24,7 +31,6 @@ import {
   cx,
   uiButtonBaseClass,
   uiButtonVariants,
-  uiCardMutedClass,
   uiCheckboxClass,
   uiFeatureStateHighlightFieldClasses,
   uiFeatureStateHighlightLabelClasses,
@@ -67,6 +73,7 @@ import {
 import {
   STORAGE_OPS_SCOPE_ID,
   decodeStorageOpsBucketRef,
+  type StorageOpsBucket,
   deleteStorageOpsBucketCors,
   deleteStorageOpsBucketLifecycle,
   deleteStorageOpsBucketLogging,
@@ -95,7 +102,7 @@ import {
   updateStorageOpsBucketQuota,
 } from "../../api/storageOps";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
-import { RefreshIcon } from "../browser/browserIcons";
+import { ChevronDownIcon, RefreshIcon } from "../browser/browserIcons";
 import {
   deleteNotificationConfigurations,
   isNotificationConfigurationEmpty,
@@ -114,12 +121,15 @@ import {
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
-import { normalizeNotificationConfiguration } from "../manager/bucketDetail";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
 import type { BucketIntegrityUiTarget } from "./BucketIntegrityCheckModal";
+import BucketUsageStatsRunModal from "./BucketUsageStatsRunModal";
+import type { BucketUsageStatsUiTarget } from "./BucketUsageStatsRunModal";
 import BucketConfigBackupModal from "./BucketConfigBackupModal";
 import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal";
+import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureSummaryTooltip";
+import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
 import BucketOpsBulkUpdateModal from "./BucketOpsBulkUpdateModal";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
@@ -127,6 +137,19 @@ import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
 import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
 import { buildUiTagItems, extractUiTagLabels, filterSelectorVisibleUiTags } from "../../utils/uiTags";
+import { getManagerToolAccess, readStoredUser } from "../../utils/workspaces";
+import {
+  buildBucketPolicySummaryLines,
+  buildBucketTagSummaryLines,
+  buildCorsRuleSummaryLines,
+  buildEncryptionSummaryLines,
+  buildLifecycleRuleSummaryLines,
+  buildLoggingSummaryLines,
+  buildNotificationSummaryLines,
+  buildObjectLockSummaryLines,
+  buildVersioningSummaryLines,
+  buildWebsiteSummaryLines,
+} from "./bucketFeatureSummaries";
 import {
   buildFeatureDetailRules,
   clearFeatureDetailField,
@@ -134,11 +157,24 @@ import {
   featureDetailSummary,
   featureDetailSummaryItems,
   hasFeatureDetailFilters,
+  notificationFeatureDetailFilterKeys,
   sanitizeFeatureDetailFilters,
+  sseFeatureDetailFilterKeys,
   type FeatureDetailFilterKey,
   type FeatureDetailFilters,
   type NumericComparisonOpUi,
 } from "../cephAdmin/filtering/bucketAdvancedFilter";
+import {
+  advancedFilterAccordionClass,
+  advancedFilterBackdropClass,
+  advancedFilterBodyClass,
+  advancedFilterDrawerClass,
+  advancedFilterFooterClass,
+  advancedFilterHeaderClass,
+  advancedFilterRootClass,
+  advancedFilterSectionClass,
+  advancedFilterSummaryClass,
+} from "../cephAdmin/filtering/advancedFilterShared";
 import { extractApiError } from "../../utils/apiError";
 
 const extractError = (err: unknown): string => {
@@ -1000,10 +1036,30 @@ type ColumnId =
   | "access_logging"
   | "notifications"
   | "server_side_encryption"
+  | "object_lock_mode"
+  | "object_lock_retention_days"
+  | "object_lock_retention_years"
+  | "bpa_block_public_acls"
+  | "bpa_ignore_public_acls"
+  | "bpa_block_public_policy"
+  | "bpa_restrict_public_buckets"
+  | "cors_allowed_methods"
+  | "cors_allowed_origins"
+  | "logging_target_bucket"
+  | "logging_target_prefix"
+  | "website_index_document"
+  | "website_error_document"
+  | "website_redirect_host"
+  | "website_routing_rule_count"
+  | "policy_statement_count"
+  | "policy_has_conditions"
   | "lifecycle_expiration_days"
   | "lifecycle_noncurrent_expiration_days"
   | "lifecycle_transition_days"
   | "lifecycle_abort_multipart_days"
+  | "notification_topic_names"
+  | "sse_algorithms"
+  | "sse_kms_key_ids"
   | "quota_status";
 
 type SortField = "name" | "tenant" | "owner" | "used_bytes" | "object_count";
@@ -1067,11 +1123,9 @@ type ActiveFilterSummaryItem = {
   remove: ActiveFilterRemoveAction;
 };
 type FilterCostLevel = "none" | "low" | "medium" | "high";
+type AdvancedFilterSecondarySectionId = "metrics" | "featureStates" | "featureDetails";
+type AdvancedFilterSecondarySectionState = Record<AdvancedFilterSecondarySectionId, boolean>;
 
-type FeatureTooltipState =
-  | { status: "loading" }
-  | { status: "ready"; lines: string[] }
-  | { status: "error"; message: string };
 type OwnerTooltipState =
   | { status: "loading" }
   | { status: "ready"; ownerName: string | null }
@@ -1213,6 +1267,48 @@ type FeatureDetailColumnOption = {
 };
 const FEATURE_DETAIL_COLUMN_OPTIONS: FeatureDetailColumnOption[] = [
   {
+    id: "object_lock_mode",
+    label: "Object Lock mode",
+    feature: "object_lock",
+    include: "object_lock_mode",
+  },
+  {
+    id: "object_lock_retention_days",
+    label: "Object Lock retention days",
+    feature: "object_lock",
+    include: "object_lock_retention_days",
+  },
+  {
+    id: "object_lock_retention_years",
+    label: "Object Lock retention years",
+    feature: "object_lock",
+    include: "object_lock_retention_years",
+  },
+  {
+    id: "bpa_block_public_acls",
+    label: "BPA block public ACLs",
+    feature: "block_public_access",
+    include: "bpa_block_public_acls",
+  },
+  {
+    id: "bpa_ignore_public_acls",
+    label: "BPA ignore public ACLs",
+    feature: "block_public_access",
+    include: "bpa_ignore_public_acls",
+  },
+  {
+    id: "bpa_block_public_policy",
+    label: "BPA block public policy",
+    feature: "block_public_access",
+    include: "bpa_block_public_policy",
+  },
+  {
+    id: "bpa_restrict_public_buckets",
+    label: "BPA restrict public buckets",
+    feature: "block_public_access",
+    include: "bpa_restrict_public_buckets",
+  },
+  {
     id: "lifecycle_expiration_days",
     label: "Lifecycle expiration days",
     feature: "lifecycle_rules",
@@ -1235,6 +1331,84 @@ const FEATURE_DETAIL_COLUMN_OPTIONS: FeatureDetailColumnOption[] = [
     label: "Lifecycle abort multipart days",
     feature: "lifecycle_rules",
     include: "lifecycle_abort_multipart_days",
+  },
+  {
+    id: "cors_allowed_methods",
+    label: "CORS allowed methods",
+    feature: "cors",
+    include: "cors_allowed_methods",
+  },
+  {
+    id: "cors_allowed_origins",
+    label: "CORS allowed origins",
+    feature: "cors",
+    include: "cors_allowed_origins",
+  },
+  {
+    id: "website_index_document",
+    label: "Website index document",
+    feature: "static_website",
+    include: "website_index_document",
+  },
+  {
+    id: "website_error_document",
+    label: "Website error document",
+    feature: "static_website",
+    include: "website_error_document",
+  },
+  {
+    id: "website_redirect_host",
+    label: "Website redirect host",
+    feature: "static_website",
+    include: "website_redirect_host",
+  },
+  {
+    id: "website_routing_rule_count",
+    label: "Website routing rules",
+    feature: "static_website",
+    include: "website_routing_rule_count",
+  },
+  {
+    id: "policy_statement_count",
+    label: "Policy statements",
+    feature: "bucket_policy",
+    include: "policy_statement_count",
+  },
+  {
+    id: "policy_has_conditions",
+    label: "Policy has conditions",
+    feature: "bucket_policy",
+    include: "policy_has_conditions",
+  },
+  {
+    id: "logging_target_bucket",
+    label: "Logging target bucket",
+    feature: "access_logging",
+    include: "logging_target_bucket",
+  },
+  {
+    id: "logging_target_prefix",
+    label: "Logging target prefix",
+    feature: "access_logging",
+    include: "logging_target_prefix",
+  },
+  {
+    id: "notification_topic_names",
+    label: "Notification topic names",
+    feature: "notifications",
+    include: "notification_topic_names",
+  },
+  {
+    id: "sse_algorithms",
+    label: "SSE algorithms",
+    feature: "server_side_encryption",
+    include: "sse_algorithms",
+  },
+  {
+    id: "sse_kms_key_ids",
+    label: "SSE KMS key IDs",
+    feature: "server_side_encryption",
+    include: "sse_kms_key_ids",
   },
 ];
 const BOOLEAN_FILTER_OPTIONS: Array<{ value: BooleanFilterState; label: string }> = [
@@ -1269,6 +1443,14 @@ const FILTER_COST_DOT_CLASS: Record<Exclude<FilterCostLevel, "none">, string> = 
   medium: "bg-amber-500 dark:bg-amber-300",
   high: "bg-rose-500 dark:bg-rose-300",
 };
+
+const buildAdvancedFilterSecondarySectionState = (
+  activeCounts: Partial<Record<AdvancedFilterSecondarySectionId, number>> = {}
+): AdvancedFilterSecondarySectionState => ({
+  metrics: Boolean(activeCounts.metrics),
+  featureStates: Boolean(activeCounts.featureStates),
+  featureDetails: Boolean(activeCounts.featureDetails),
+});
 
 const renderFilterCostIndicator = (level: FilterCostLevel, tooltip: string) => {
   const enabledDots = FILTER_COST_ENABLED_DOTS[level];
@@ -1520,7 +1702,7 @@ export const buildAdvancedFilterPayload = (
       if (state === "any") return;
       rules.push({ feature: key, state });
     });
-    rules.push(...buildFeatureDetailRules(advanced.featureDetails));
+    rules.push(...buildFeatureDetailRules(advanced.featureDetails, featureSupport));
   }
 
   if (taggedBuckets) {
@@ -1599,7 +1781,7 @@ export const hasAdvancedFilters = (
   ) {
     return true;
   }
-  return hasFeatureDetailFilters(advanced.featureDetails);
+  return hasFeatureDetailFilters(advanced.featureDetails, featureSupport);
 };
 
 const CEPH_COLUMNS_STORAGE_KEY = "ceph-admin.bucket_list.columns.v2";
@@ -1697,10 +1879,30 @@ const loadVisibleColumns = (
       "access_logging",
       "notifications",
       "server_side_encryption",
+      "object_lock_mode",
+      "object_lock_retention_days",
+      "object_lock_retention_years",
+      "bpa_block_public_acls",
+      "bpa_ignore_public_acls",
+      "bpa_block_public_policy",
+      "bpa_restrict_public_buckets",
+      "cors_allowed_methods",
+      "cors_allowed_origins",
+      "logging_target_bucket",
+      "logging_target_prefix",
+      "website_index_document",
+      "website_error_document",
+      "website_redirect_host",
+      "website_routing_rule_count",
+      "policy_statement_count",
+      "policy_has_conditions",
       "lifecycle_expiration_days",
       "lifecycle_noncurrent_expiration_days",
       "lifecycle_transition_days",
       "lifecycle_abort_multipart_days",
+      "notification_topic_names",
+      "sse_algorithms",
+      "sse_kms_key_ids",
       "quota_status",
     ]);
     const cleaned = parsed.filter((v) => typeof v === "string" && allowed.has(v as ColumnId)) as ColumnId[];
@@ -2031,8 +2233,23 @@ const stripUnsupportedAdvancedFeatureFilters = (
     nextFeatures[feature] = "any";
     changed = true;
   });
+  let nextFeatureDetails = value.featureDetails;
+  if (featureSupport.notifications === false) {
+    notificationFeatureDetailFilterKeys.forEach((key) => {
+      if (nextFeatureDetails[key] === defaultFeatureDetailFilters[key]) return;
+      nextFeatureDetails = clearFeatureDetailField(nextFeatureDetails, key);
+      changed = true;
+    });
+  }
+  if (featureSupport.server_side_encryption === false) {
+    sseFeatureDetailFilterKeys.forEach((key) => {
+      if (nextFeatureDetails[key] === defaultFeatureDetailFilters[key]) return;
+      nextFeatureDetails = clearFeatureDetailField(nextFeatureDetails, key);
+      changed = true;
+    });
+  }
   if (!changed) return value;
-  return { ...value, features: nextFeatures };
+  return { ...value, features: nextFeatures, featureDetails: nextFeatureDetails };
 };
 
 const sanitizeSort = (value: unknown): { field: SortField; direction: "asc" | "desc" } => {
@@ -2184,6 +2401,7 @@ type BucketOpsWorkbenchProps = {
 type StorageOpsEditingBucket = {
   bucketName: string;
   contextId: string;
+  bucketQuotaAvailable: boolean;
 };
 
 export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchProps) {
@@ -2223,6 +2441,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const staticWebsiteFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.static_website === true;
   const snsFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.sns === true;
   const sseFeatureEnabled = isStorageOps ? true : selectedEndpoint?.capabilities?.sse !== false;
+  const storedUser = useMemo(() => readStoredUser(), []);
+  const canManageBucketQuota = !isStorageOps || Boolean(getManagerToolAccess(storedUser)?.bucket_quota);
+  const quotaOperationDisabledReason = !usageFeatureEnabled
+    ? "bucket stats unavailable"
+    : !canManageBucketQuota
+      ? "privileged Ceph access required"
+      : null;
 
   const listBuckets = isStorageOps ? listStorageOpsBuckets : listCephAdminBuckets;
   const streamBuckets = isStorageOps ? streamStorageOpsBuckets : streamCephAdminBuckets;
@@ -2304,6 +2529,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
+  const [advancedFilterSecondarySections, setAdvancedFilterSecondarySections] =
+    useState<AdvancedFilterSecondarySectionState>(() => buildAdvancedFilterSecondarySectionState());
+  const advancedFilterWasOpenRef = useRef(false);
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(defaultAdvancedFilter);
   const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(null);
   const [storageOpsContexts, setStorageOpsContexts] = useState<ExecutionContext[]>([]);
@@ -2326,6 +2554,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showIntegrityModal, setShowIntegrityModal] = useState(false);
+  const [showUsageStatsModal, setShowUsageStatsModal] = useState(false);
   const [showConfigBackupModal, setShowConfigBackupModal] = useState(false);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
   const [bulkConfigClipboard, setBulkConfigClipboard] = useState<BulkConfigClipboard | null>(() =>
@@ -2410,9 +2639,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const ownerTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
   const ownerNameCacheRef = useRef<Record<string, string | null>>({});
   const [activeFeatureTooltipKey, setActiveFeatureTooltipKey] = useState<string | null>(null);
-  const featureTooltipAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, FeatureTooltipState>>({});
+  const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, BucketFeatureTooltipState>>({});
   const featureTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
+  const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
   const [activeActionMenuKey, setActiveActionMenuKey] = useState<string | null>(null);
   const actionMenuAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const actionMenuSurfaceRef = useRef<HTMLDivElement | null>(null);
@@ -2676,6 +2905,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         if (column === "static_website") return staticWebsiteFeatureEnabled;
         if (column === "notifications") return snsFeatureEnabled;
         if (column === "server_side_encryption") return sseFeatureEnabled;
+        const detail = FEATURE_DETAIL_COLUMN_OPTIONS.find((option) => option.id === column);
+        if (detail?.feature === "static_website") return staticWebsiteFeatureEnabled;
+        if (detail?.feature === "notifications") return snsFeatureEnabled;
+        if (detail?.feature === "server_side_encryption") return sseFeatureEnabled;
         return true;
       });
       return next.length === prev.length ? prev : next;
@@ -2717,6 +2950,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     setActiveFeatureTooltipKey(null);
     setFeatureTooltipState({});
     featureTooltipInflightRef.current = {};
+    setActiveTagsTooltipKey(null);
     bucketPropertiesCacheRef.current = {};
     bucketPropertiesInflightRef.current = {};
     const stored = loadBucketListState(bucketsStateStorageKey, selectedEndpointId);
@@ -3121,6 +3355,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     featureTooltipInflightRef.current = {};
     setFeatureTooltipState({});
     setActiveFeatureTooltipKey(null);
+    setActiveTagsTooltipKey(null);
     bucketPropertiesCacheRef.current = {};
     bucketPropertiesInflightRef.current = {};
     setAllFilteredBucketNames(null);
@@ -3560,6 +3795,17 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     });
     return next;
   }, [items]);
+  const storageOpsQuotaUnavailableSelectedBuckets = useMemo(() => {
+    const unavailable = new Set<string>();
+    if (!isStorageOps) return unavailable;
+    selectedBucketList.forEach((bucketName) => {
+      const bucket = selectedBucketItemByName.get(bucketName) as StorageOpsBucket | undefined;
+      if (bucket && bucket.bucket_quota_available === false) {
+        unavailable.add(bucketName);
+      }
+    });
+    return unavailable;
+  }, [isStorageOps, selectedBucketItemByName, selectedBucketList]);
   const selectedIntegrityTargets = useMemo<BucketIntegrityUiTarget[]>(() => {
     if (!isStorageOps) {
       return selectedBucketList.map((bucketName) => ({ bucketName }));
@@ -3582,6 +3828,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       })
       .filter((target) => target.bucketName.trim().length > 0);
   }, [isStorageOps, selectedBucketItemByName, selectedBucketList]);
+  const selectedUsageStatsTargets = useMemo<BucketUsageStatsUiTarget[]>(
+    () => selectedIntegrityTargets.map((target) => ({ ...target })),
+    [selectedIntegrityTargets]
+  );
   const selectedUiTagSuggestions = useMemo(() => {
     if (selectedBucketList.length === 0) return [];
     const selectedNames = new Set(selectedBucketList.map(normalizeBucketName));
@@ -4093,35 +4343,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         });
         return;
       }
-      if (col === "lifecycle_expiration_days") {
+      const detailColumn = FEATURE_DETAIL_COLUMN_OPTIONS.find((option) => option.id === col);
+      if (detailColumn) {
         exportColumns.push({
           id: col,
-          label: "Lifecycle expiration days",
-          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_expiration_days"),
-        });
-        return;
-      }
-      if (col === "lifecycle_noncurrent_expiration_days") {
-        exportColumns.push({
-          id: col,
-          label: "Lifecycle noncurrent expiration days",
-          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_noncurrent_expiration_days"),
-        });
-        return;
-      }
-      if (col === "lifecycle_transition_days") {
-        exportColumns.push({
-          id: col,
-          label: "Lifecycle transition days",
-          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_transition_days"),
-        });
-        return;
-      }
-      if (col === "lifecycle_abort_multipart_days") {
-        exportColumns.push({
-          id: col,
-          label: "Lifecycle abort multipart days",
-          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_abort_multipart_days"),
+          label: detailColumn.label,
+          getValue: (bucket) => formatColumnDetail(bucket, detailColumn.id),
         });
         return;
       }
@@ -4299,13 +4526,13 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   ]);
 
   useEffect(() => {
-    if (!usageFeatureEnabled && bulkOperation === "set_quota") {
+    if ((quotaOperationDisabledReason || !usageFeatureEnabled) && bulkOperation === "set_quota") {
       setBulkOperation("");
     }
     if (!snsFeatureEnabled && (bulkOperation === "add_notifications" || bulkOperation === "delete_notifications")) {
       setBulkOperation("");
     }
-  }, [bulkOperation, snsFeatureEnabled, usageFeatureEnabled]);
+  }, [bulkOperation, quotaOperationDisabledReason, snsFeatureEnabled, usageFeatureEnabled]);
 
   const openBulkUpdateModal = () => {
     bulkCopyRunTokenRef.current += 1;
@@ -4463,6 +4690,15 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     payload: ParsedQuotaInput,
     skipConfigured: boolean
   ): Promise<BulkPreviewItem> => {
+    if (storageOpsQuotaUnavailableSelectedBuckets.has(bucketName)) {
+      return {
+        bucket: bucketName,
+        changed: false,
+        before: [{ text: "Bucket quota management unavailable." }],
+        after: [{ text: "Skipped." }],
+        error: "Bucket quota management is not available for this context.",
+      };
+    }
     const currentQuota = await fetchBucketQuota(bucketName);
     if (skipConfigured && hasConfiguredQuota(currentQuota)) {
       return {
@@ -5148,6 +5384,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setBulkPreviewError("Use 'Copy selected configs' for this operation.");
       return;
     }
+    if (bulkOperation === "set_quota" && quotaOperationDisabledReason) {
+      setBulkPreviewError(`Set bucket quota is unavailable: ${quotaOperationDisabledReason}.`);
+      return;
+    }
     if (bulkOperation === "paste_configs") {
       if (bulkPastePlan.error) {
         setBulkPreviewError(bulkPastePlan.error);
@@ -5442,6 +5682,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
     if (bulkOperation === "copy_configs") {
       setBulkApplyError("Use 'Copy selected configs' for this operation.");
+      return;
+    }
+    if (bulkOperation === "set_quota" && quotaOperationDisabledReason) {
+      setBulkApplyError(`Set bucket quota is unavailable: ${quotaOperationDisabledReason}.`);
       return;
     }
     if (bulkOperation === "paste_configs") {
@@ -5779,6 +6023,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       BULK_CONCURRENCY_LIMIT,
       async (bucketName) => {
         if (bulkOperation === "set_quota" && parsedQuota) {
+          if (storageOpsQuotaUnavailableSelectedBuckets.has(bucketName)) {
+            throw new Error("Bucket quota management is not available for this context.");
+          }
           const currentQuota = await fetchBucketQuota(bucketName);
           if (bulkQuotaSkipConfigured && hasConfiguredQuota(currentQuota)) {
             return { changed: false };
@@ -6163,6 +6410,64 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
     return "rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
   };
+  const toggleAdvancedFilterSecondarySection = (sectionId: AdvancedFilterSecondarySectionId) => {
+    setAdvancedFilterSecondarySections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  };
+  const renderAdvancedFilterSecondarySection = ({
+    id,
+    title,
+    costLevel,
+    costTooltip,
+    activeCount,
+    badge,
+    children,
+  }: {
+    id: AdvancedFilterSecondarySectionId;
+    title: string;
+    costLevel: FilterCostLevel;
+    costTooltip: string;
+    activeCount: number;
+    badge?: ReactNode;
+    children: ReactNode;
+  }) => {
+    const open = advancedFilterSecondarySections[id];
+    const contentId = `advanced-filter-${id}-content`;
+    return (
+      <section className={advancedFilterAccordionClass}>
+        <button
+          type="button"
+          onClick={() => toggleAdvancedFilterSecondarySection(id)}
+          aria-expanded={open}
+          aria-controls={contentId}
+          className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-primary/30 dark:hover:bg-neutral-800/70"
+        >
+          <span className="inline-flex min-w-0 items-center gap-2">
+            <ChevronDownIcon
+              className={cx(
+                "h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform dark:text-slate-400",
+                open ? "" : "-rotate-90"
+              )}
+            />
+            <span className="inline-flex min-w-0 items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <span className="truncate">{title}</span>
+              {renderFilterCostIndicator(costLevel, costTooltip)}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            {badge}
+            <span className="ui-caption text-slate-500 dark:text-slate-400">
+              {activeCount} active
+            </span>
+          </span>
+        </button>
+        {open && (
+          <div id={contentId} className="px-3 pb-3">
+            {children}
+          </div>
+        )}
+      </section>
+    );
+  };
   const fieldTone = (isApplied: boolean, isPending: boolean): UiFeatureStateTone => {
     if (isPending) return "unsaved";
     if (isApplied) return "configured";
@@ -6330,6 +6635,18 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const advancedDraftFeatureDetailCount = featureDetailDraftLabels.length;
   const advancedDraftActiveCount =
     advancedDraftIdentityCount + advancedDraftRangeCount + advancedDraftFeatureCount + advancedDraftTagCount + advancedDraftFeatureDetailCount;
+  useEffect(() => {
+    if (showAdvancedFilter && !advancedFilterWasOpenRef.current) {
+      setAdvancedFilterSecondarySections(
+        buildAdvancedFilterSecondarySectionState({
+          metrics: advancedDraftRangeCount,
+          featureStates: advancedDraftFeatureCount,
+          featureDetails: advancedDraftFeatureDetailCount,
+        })
+      );
+    }
+    advancedFilterWasOpenRef.current = showAdvancedFilter;
+  }, [showAdvancedFilter, advancedDraftRangeCount, advancedDraftFeatureCount, advancedDraftFeatureDetailCount]);
   const multipleFeatureFiltersActive = advancedDraftFeatureCount > 1;
   const featureCostReducedByPrefilter =
     advancedDraftFeatureCount === 1 && ownerPrefilterActive && !ownerNameLookupActive && !s3TagsLookupActive;
@@ -7097,34 +7414,45 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const quotaConfigured = (bucket: CephAdminBucket) =>
     Boolean((bucket.quota_max_size_bytes ?? 0) > 0 || (bucket.quota_max_objects ?? 0) > 0);
 
-  const renderTagList = (tags?: CephAdminBucket["tags"]) => {
+  const renderTagList = (tags: CephAdminBucket["tags"] | undefined, bucket: CephAdminBucket) => {
     const safeTags = Array.isArray(tags) ? tags.filter((t) => (t.key ?? "").trim()) : [];
     if (safeTags.length === 0) return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
     const maxShown = 3;
     const shown = safeTags.slice(0, maxShown);
     const remaining = safeTags.length - shown.length;
-    const title = safeTags.map((t) => `${t.key}=${t.value}`).join("\n");
+    const tooltipKey = `${bucket.tenant ?? ""}:${bucket.name}:tags`;
+    const tooltip: BucketFeatureTooltipState = { status: "ready", lines: buildBucketTagSummaryLines(safeTags) };
     return (
-      <div className="flex flex-wrap gap-1.5" title={title}>
-        {shown.map((t) => {
-          const label = `${t.key}=${t.value}`;
-          const colors = getTagColors(label);
-          return (
-            <span
-              key={`${t.key}:${t.value}`}
-              className="rounded-full border px-2 py-0.5 ui-caption font-semibold"
-              style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
-            >
-              {label}
+      <BucketSummaryTooltip
+        label="S3 tags"
+        tooltip={tooltip}
+        open={activeTagsTooltipKey === tooltipKey}
+        onOpen={() => setActiveTagsTooltipKey(tooltipKey)}
+        onClose={() => setActiveTagsTooltipKey((prev) => (prev === tooltipKey ? null : prev))}
+        cacheKey={tooltipKey}
+        buttonClassName="inline-flex max-w-full cursor-default text-left"
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {shown.map((t) => {
+            const label = `${t.key}=${t.value}`;
+            const colors = getTagColors(label);
+            return (
+              <span
+                key={`${t.key}:${t.value}`}
+                className="rounded-full border px-2 py-0.5 ui-caption font-semibold"
+                style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
+              >
+                {label}
+              </span>
+            );
+          })}
+          {remaining > 0 && (
+            <span className="rounded-full border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
+              +{remaining}
             </span>
-          );
-        })}
-        {remaining > 0 && (
-          <span className="rounded-full border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
-            +{remaining}
-          </span>
-        )}
-      </div>
+          )}
+        </div>
+      </BucketSummaryTooltip>
     );
   };
 
@@ -7302,19 +7630,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
     if (featureKey === "versioning") {
       const props = await getBucketPropertiesCached(bucket);
-      const status = (props.versioning_status || "Disabled").trim() || "Disabled";
-      return [`Versioning: ${status}`];
+      return buildVersioningSummaryLines(props.versioning_status);
     }
 
     if (featureKey === "object_lock") {
       const props = await getBucketPropertiesCached(bucket);
-      const objectLock = props.object_lock;
-      const enabled = Boolean(props.object_lock_enabled ?? objectLock?.enabled);
-      const lines = [`Enabled: ${enabled ? "Yes" : "No"}`];
-      if (objectLock?.mode) lines.push(`Mode: ${objectLock.mode}`);
-      if (objectLock?.days != null) lines.push(`Default retention: ${objectLock.days} day(s)`);
-      if (objectLock?.years != null) lines.push(`Default retention: ${objectLock.years} year(s)`);
-      return lines;
+      return buildObjectLockSummaryLines(props.object_lock_enabled, props.object_lock);
     }
 
     if (featureKey === "block_public_access") {
@@ -7329,122 +7650,38 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
     if (featureKey === "lifecycle_rules") {
       const props = await getBucketPropertiesCached(bucket);
-      const rules = Array.isArray(props.lifecycle_rules) ? props.lifecycle_rules : [];
-      if (rules.length === 0) {
-        return ["Rules: 0 (disabled)"];
-      }
-      const lines = [`Rules: ${rules.length}`];
-      rules.slice(0, 3).forEach((rule, idx) => {
-        const id = (rule.id || "").trim() || `Rule ${idx + 1}`;
-        const status = (rule.status || "Unknown").trim() || "Unknown";
-        const prefix = (rule.prefix || "/").trim() || "/";
-        lines.push(`${id}: ${status} · prefix ${prefix}`);
-      });
-      if (rules.length > 3) {
-        lines.push(`+${rules.length - 3} more rule(s)`);
-      }
-      return lines;
+      return buildLifecycleRuleSummaryLines(props.lifecycle_rules as unknown[]);
     }
 
     if (featureKey === "cors") {
       const props = await getBucketPropertiesCached(bucket);
       const rules = Array.isArray(props.cors_rules) ? props.cors_rules : [];
-      if (rules.length === 0) {
-        return ["Rules: 0 (not configured)"];
-      }
-      const lines = [`Rules: ${rules.length}`];
-      const firstRule = rules[0] as Record<string, unknown>;
-      const methods = Array.isArray(firstRule?.AllowedMethods)
-        ? firstRule.AllowedMethods.map((item) => String(item)).filter(Boolean)
-        : [];
-      const origins = Array.isArray(firstRule?.AllowedOrigins)
-        ? firstRule.AllowedOrigins.map((item) => String(item)).filter(Boolean)
-        : [];
-      if (methods.length > 0) lines.push(`Methods: ${methods.slice(0, 4).join(", ")}`);
-      if (origins.length > 0) lines.push(`Origins: ${origins.slice(0, 3).join(", ")}`);
-      if (rules.length > 1) lines.push(`+${rules.length - 1} additional rule(s)`);
-      return lines;
+      return buildCorsRuleSummaryLines(rules);
     }
 
     if (featureKey === "static_website") {
       const website = await getBucketWebsite(selectedEndpointId, bucket.name);
-      const routingRules = Array.isArray(website.routing_rules) ? website.routing_rules : [];
-      const redirectHost = (website.redirect_all_requests_to?.host_name || "").trim();
-      const indexDocument = (website.index_document || "").trim();
-      const errorDocument = (website.error_document || "").trim();
-      const enabled = Boolean(redirectHost || indexDocument || routingRules.length > 0);
-      const lines = [`Enabled: ${enabled ? "Yes" : "No"}`];
-      if (indexDocument) lines.push(`Index document: ${indexDocument}`);
-      if (errorDocument) lines.push(`Error document: ${errorDocument}`);
-      if (redirectHost) lines.push(`Redirect host: ${redirectHost}`);
-      if (routingRules.length > 0) lines.push(`Routing rules: ${routingRules.length}`);
-      return lines;
+      return buildWebsiteSummaryLines(website as Record<string, unknown>);
     }
 
     if (featureKey === "bucket_policy") {
       const payload = await getBucketPolicy(selectedEndpointId, bucket.name);
-      const policy = payload.policy;
-      if (!policy || typeof policy !== "object") {
-        return ["Policy: Not set"];
-      }
-      const doc = policy as Record<string, unknown>;
-      const rawStatements = doc.Statement;
-      const statements = Array.isArray(rawStatements) ? rawStatements : rawStatements ? [rawStatements] : [];
-      const lines = ["Policy: Configured", `Statements: ${statements.length}`];
-      if (typeof doc.Version === "string" && doc.Version.trim()) {
-        lines.push(`Version: ${doc.Version}`);
-      }
-      const hasConditions = statements.some(
-        (statement) =>
-          statement &&
-          typeof statement === "object" &&
-          Object.keys((statement as Record<string, unknown>).Condition || {}).length > 0
-      );
-      lines.push(`Has conditions: ${hasConditions ? "Yes" : "No"}`);
-      return lines;
+      return buildBucketPolicySummaryLines(payload.policy);
     }
 
     if (featureKey === "access_logging") {
       const logging = await getBucketLogging(selectedEndpointId, bucket.name);
-      const targetBucket = (logging.target_bucket || "").trim();
-      const targetPrefix = (logging.target_prefix || "").trim();
-      const enabled = Boolean(logging.enabled && targetBucket);
-      const lines = [`Enabled: ${enabled ? "Yes" : "No"}`];
-      if (targetBucket) lines.push(`Target bucket: ${targetBucket}`);
-      if (targetPrefix) lines.push(`Target prefix: ${targetPrefix}`);
-      return lines;
+      return buildLoggingSummaryLines(logging as Record<string, unknown>);
     }
 
     if (featureKey === "notifications") {
       const notifications = await getBucketNotifications(selectedEndpointId, bucket.name);
-      const config = normalizeNotificationConfiguration(notifications.configuration ?? {});
-      const configured = Object.keys(config).length > 0;
-      const topicConfigs = config["TopicConfigurations"];
-      const queueConfigs = config["QueueConfigurations"];
-      const lambdaConfigs = config["LambdaFunctionConfigurations"];
-      const eventBridgeConfig = config["EventBridgeConfiguration"];
-      const lines = [`Configured: ${configured ? "Yes" : "No"}`];
-      if (Array.isArray(topicConfigs)) lines.push(`Topic configurations: ${topicConfigs.length}`);
-      if (Array.isArray(queueConfigs)) lines.push(`Queue configurations: ${queueConfigs.length}`);
-      if (Array.isArray(lambdaConfigs)) lines.push(`Lambda configurations: ${lambdaConfigs.length}`);
-      if (eventBridgeConfig && typeof eventBridgeConfig === "object") lines.push("EventBridge: Configured");
-      return lines;
+      return buildNotificationSummaryLines(notifications.configuration);
     }
 
     if (featureKey === "server_side_encryption") {
       const encryption = await getBucketEncryption(selectedEndpointId, bucket.name);
-      const rules = Array.isArray(encryption.rules) ? encryption.rules : [];
-      if (rules.length === 0) {
-        return ["Enabled: No"];
-      }
-      const lines = [`Enabled: Yes`, `Rules: ${rules.length}`];
-      const firstRule = rules[0] as Record<string, unknown>;
-      const defaultSse = firstRule.ApplyServerSideEncryptionByDefault as Record<string, unknown> | undefined;
-      const algorithm = typeof defaultSse?.SSEAlgorithm === "string" ? defaultSse.SSEAlgorithm.trim() : "";
-      const kmsKeyId = typeof defaultSse?.KMSMasterKeyID === "string" ? defaultSse.KMSMasterKeyID.trim() : "";
-      if (algorithm) lines.push(`Algorithm: ${algorithm}`);
-      if (kmsKeyId) lines.push(`KMS key: ${kmsKeyId}`);
-      return lines;
+      return buildEncryptionSummaryLines(encryption.rules);
     }
 
     return ["No additional details available."];
@@ -7546,86 +7783,44 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     const tooltip = featureTooltipState[tooltipKey];
     const isTooltipVisible = activeFeatureTooltipKey === tooltipKey;
     return (
-      <div
-        className="relative inline-flex"
-        onMouseEnter={() => {
+      <BucketFeatureSummaryChip
+        label={FEATURE_LABELS[featureKey]}
+        state={status.state}
+        tone={status.tone}
+        tooltip={tooltip}
+        open={isTooltipVisible}
+        onOpen={() => {
           setActiveFeatureTooltipKey(tooltipKey);
           loadFeatureTooltip(bucket, featureKey);
         }}
-        onMouseLeave={() => {
-          setActiveFeatureTooltipKey((prev) => (prev === tooltipKey ? null : prev));
-        }}
-      >
-        <button
-          ref={(node) => {
-            featureTooltipAnchorRefs.current[tooltipKey] = node;
-          }}
-          type="button"
-          className="inline-flex cursor-default"
-          onFocus={() => {
-            setActiveFeatureTooltipKey(tooltipKey);
-            loadFeatureTooltip(bucket, featureKey);
-          }}
-          onBlur={() => {
-            setActiveFeatureTooltipKey((prev) => (prev === tooltipKey ? null : prev));
-          }}
-          aria-label={`${FEATURE_LABELS[featureKey]} details`}
-        >
-          <PropertySummaryChip compact state={status.state} tone={status.tone} />
-        </button>
-        <AnchoredPortalMenu
-          open={isTooltipVisible}
-          anchorRef={toAnchorRef(featureTooltipAnchorRefs.current[tooltipKey])}
-          placement="bottom-start"
-          offset={4}
-          minWidth={288}
-          className="pointer-events-none w-72 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div>
-            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">{FEATURE_LABELS[featureKey]}</p>
-            {(!tooltip || tooltip.status === "loading") && (
-              <div className="mt-1.5 inline-flex items-center gap-1.5 ui-caption text-slate-500 dark:text-slate-300">
-                <SpinnerIcon />
-                Loading configuration...
-              </div>
-            )}
-            {tooltip?.status === "error" && (
-              <p className="mt-1.5 ui-caption text-rose-600 dark:text-rose-300">{tooltip.message}</p>
-            )}
-            {tooltip?.status === "ready" && (
-              <div className="mt-1.5 space-y-1">
-                {tooltip.lines.map((line, idx) => (
-                  <p key={`${tooltipKey}:${idx}`} className="ui-caption text-slate-600 dark:text-slate-300">
-                    {line}
-                  </p>
-                ))}
-              </div>
-            )}
-          </div>
-        </AnchoredPortalMenu>
-      </div>
+        onClose={() => setActiveFeatureTooltipKey((prev) => (prev === tooltipKey ? null : prev))}
+        cacheKey={tooltipKey}
+      />
     );
   };
 
-  const formatLifecycleDayDetail = (
-    bucket: CephAdminBucket,
-    detailKey:
-      | "lifecycle_expiration_days"
-      | "lifecycle_noncurrent_expiration_days"
-      | "lifecycle_transition_days"
-      | "lifecycle_abort_multipart_days"
-  ): string => {
+  const formatColumnDetail = (bucket: CephAdminBucket, detailKey: ColumnId): string => {
     const details = bucket.column_details as Record<string, unknown> | null | undefined;
     const raw = details?.[detailKey];
     if (raw === null || raw === undefined) return "-";
-    if (!Array.isArray(raw)) return "-";
-    const values = raw
-      .map((item) => Number(item))
-      .filter((item) => Number.isFinite(item))
-      .map((item) => Math.trunc(item))
-      .sort((a, b) => a - b);
-    if (values.length === 0) return "None";
-    return Array.from(new Set(values)).join(", ");
+    if (Array.isArray(raw)) {
+      if (raw.length === 0) return "None";
+      const numericValues = raw
+        .map((item) => Number(item))
+        .filter((item) => Number.isFinite(item))
+        .map((item) => Math.trunc(item))
+        .sort((a, b) => a - b);
+      if (numericValues.length === raw.length) {
+        return Array.from(new Set(numericValues)).join(", ");
+      }
+      const textValues = raw.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean);
+      if (textValues.length === 0) return "None";
+      return Array.from(new Set(textValues)).join(", ");
+    }
+    if (typeof raw === "boolean") return raw ? "Yes" : "No";
+    if (typeof raw === "number") return formatNumber(raw);
+    if (typeof raw === "string") return raw.trim() || "-";
+    return "-";
   };
 
   const bucketTableColumns: ColumnDef[] = (() => {
@@ -7895,7 +8090,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         expensive: true,
         headerClassName: "min-w-[12rem] max-w-[24rem]",
         cellClassName: "min-w-[12rem] max-w-[24rem]",
-        render: (bucket) => renderTagList(bucket.tags),
+        render: (bucket) => renderTagList(bucket.tags, bucket),
       });
     }
 
@@ -7911,46 +8106,25 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       });
     });
 
-    if (visible.has("lifecycle_expiration_days")) {
+    FEATURE_DETAIL_COLUMN_OPTIONS.forEach((detail) => {
+      if (!visible.has(detail.id)) return;
       cols.push({
-        id: "lifecycle_expiration_days",
-        label: "LC Expiration d",
+        id: detail.id,
+        label: detail.label,
         field: null,
         expensive: true,
-        headerClassName: "w-36",
-        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_expiration_days"),
+        headerClassName: "min-w-[10rem] max-w-[18rem]",
+        cellClassName: "min-w-[10rem] max-w-[20rem]",
+        render: (bucket) => {
+          const value = formatColumnDetail(bucket, detail.id);
+          return (
+            <span className="block truncate" title={value}>
+              {value}
+            </span>
+          );
+        },
       });
-    }
-    if (visible.has("lifecycle_noncurrent_expiration_days")) {
-      cols.push({
-        id: "lifecycle_noncurrent_expiration_days",
-        label: "LC Noncurrent exp d",
-        field: null,
-        expensive: true,
-        headerClassName: "w-44",
-        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_noncurrent_expiration_days"),
-      });
-    }
-    if (visible.has("lifecycle_transition_days")) {
-      cols.push({
-        id: "lifecycle_transition_days",
-        label: "LC Transition d",
-        field: null,
-        expensive: true,
-        headerClassName: "w-36",
-        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_transition_days"),
-      });
-    }
-    if (visible.has("lifecycle_abort_multipart_days")) {
-      cols.push({
-        id: "lifecycle_abort_multipart_days",
-        label: "LC Abort mp d",
-        field: null,
-        expensive: true,
-        headerClassName: "w-36",
-        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_abort_multipart_days"),
-      });
-    }
+    });
 
     if (visible.has("quota_status")) {
       cols.push({
@@ -8001,7 +8175,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                 const contextId = getStorageOpsContextId(currentBucket);
                 const bucketName = getStorageOpsBucketName(currentBucket);
                 if (!contextId || !bucketName) return;
-                setEditingStorageOpsBucket({ bucketName, contextId });
+                setEditingStorageOpsBucket({
+                  bucketName,
+                  contextId,
+                  bucketQuotaAvailable: Boolean((currentBucket as StorageOpsBucket).bucket_quota_available),
+                });
                 return;
               }
               setEditingBucketName(currentBucket.name);
@@ -8101,211 +8279,209 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
       {!selectedEndpointId && shell.emptyState ? <PageEmptyState {...shell.emptyState} /> : null}
       <div className="ui-surface-card space-y-4">
-          <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Buckets</p>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">{total} result(s)</p>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <ListToolbar
+          title="Buckets"
+          description={shell.pageDescription}
+          showHeading={false}
+          countLabel={`${total} result(s)`}
+          search={
+            <div className="relative w-full min-w-[16rem] sm:w-72">
+              <textarea
+                aria-label="Quick filter"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                onKeyDown={(event) => event.stopPropagation()}
+                placeholder="Bucket name(s)"
+                rows={1}
+                className={cx(
+                  toolbarCompactInputClasses,
+                  "min-h-[2rem] w-full resize-y pr-9",
+                  quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
+                )}
+              />
+              <button
+                type="button"
+                onClick={toggleQuickFilterMode}
+                disabled={quickFilterDraftForcesExact}
+                className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
+                title={
+                  quickFilterDraftForcesExact
+                    ? "Quick filter mode: exact (locked by list input)"
+                    : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
+                }
+                aria-label="Toggle quick filter match mode"
+              >
+                {quickFilterModeForDisplay === "contains" ? "~" : "="}
+              </button>
+            </div>
+          }
+          filters={
+            <>
+              {showTagFilterBar ? (
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    {tagFilters.map((tag) => {
+                      const colors = getTagColors(tag);
+                      return (
+                        <span
+                          key={`filter:${tag}`}
+                          className="flex max-w-full items-center gap-1 rounded-full border px-2 py-1 ui-caption font-semibold"
+                          style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
+                        >
+                          <span className="min-w-0 truncate">{tag}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeTagFilter(tag)}
+                            className="opacity-70 hover:opacity-100"
+                            title="Remove tag filter"
+                            aria-label={`Remove ${tag}`}
+                          >
+                            x
+                          </button>
+                        </span>
+                      );
+                    })}
+                    {availableTagFilters.map((tag) => (
+                      <button
+                        type="button"
+                        key={`available:${tag}`}
+                        onClick={() => addTagFilter(tag)}
+                        className="rounded-full border border-slate-200 bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                  <select
+                    value={tagFilterMode}
+                    onChange={(e) => {
+                      setTagFilterMode(e.target.value as "any" | "all");
+                      setPage(1);
+                    }}
+                    className={cx(toolbarCompactSelectClasses, "w-auto px-2 py-1")}
+                  >
+                    <option value="any">OR</option>
+                    <option value="all">AND</option>
+                  </select>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFilter(true)}
+                className={cx(
+                  toolbarCompactButtonClasses,
+                  showAdvancedFilter || advancedFiltersApplied
+                    ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
+                    : ""
+                )}
+              >
+                Advanced filter{advancedFiltersApplied ? " · Active" : ""}
+              </button>
+            </>
+          }
+          columns={
+            <>
+              <div className="relative" ref={columnPickerRef}>
                 <button
                   type="button"
-                  onClick={() => void refreshBucketListing()}
-                  disabled={
-                    !selectedEndpointId ||
-                    cacheRefreshLoading ||
-                    loading ||
-                    loadingDetails ||
-                    advancedProgress.active
-                  }
-                  className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 ui-caption")}
-                  title="Flush cached bucket listings and reload"
+                  onClick={() => setShowColumnPicker((prev) => !prev)}
+                  className={toolbarCompactButtonClasses}
                 >
-                  <RefreshIcon className={`h-3.5 w-3.5 ${cacheRefreshLoading ? "animate-spin" : ""}`} />
-                  Refresh
+                  Columns
                 </button>
-                <div className="relative" ref={columnPickerRef}>
-                  <button
-                    type="button"
-                    onClick={() => setShowColumnPicker((prev) => !prev)}
-                    className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "rounded-md px-2.5 py-1.5 ui-caption")}
-                  >
-                    Columns
-                  </button>
-                  {showColumnPicker && (
-                    <div className={cx(uiMenuClass, "absolute right-0 z-30 mt-2 w-96 max-w-[calc(100vw-2rem)] p-3")}>
-                      <ColumnVisibilityPicker
-                        selectedCount={visibleColumns.length}
-                        onReset={resetColumns}
-                        coreGroups={[
-                          {
-                            id: "core",
-                            label: "Core",
-                            options: BUCKET_CORE_COLUMN_OPTIONS.filter((option) =>
-                              isStorageOps
-                                ? true
-                                : option.id !== "context_name" && option.id !== "context_kind" && option.id !== "endpoint_name"
-                            ).map((option) => ({
-                              id: option.id,
-                              label: option.label,
-                              checked: visibleColumns.includes(option.id),
-                              onToggle: () => toggleColumn(option.id),
-                            })),
-                          },
-                        ]}
-                        detailGroups={BUCKET_QUOTA_COLUMN_GROUPS.map((group) => ({
-                          id: group.id,
-                          label: group.label,
-                          details: group.options.map((option) => ({
+                {showColumnPicker && (
+                  <div className={cx(uiMenuClass, "absolute right-0 z-30 mt-2 w-96 max-w-[calc(100vw-2rem)] p-3")}>
+                    <ColumnVisibilityPicker
+                      selectedCount={visibleColumns.length}
+                      onReset={resetColumns}
+                      coreGroups={[
+                        {
+                          id: "core",
+                          label: "Core",
+                          options: BUCKET_CORE_COLUMN_OPTIONS.filter((option) =>
+                            isStorageOps
+                              ? true
+                              : option.id !== "context_name" && option.id !== "context_kind" && option.id !== "endpoint_name"
+                          ).map((option) => ({
                             id: option.id,
                             label: option.label,
                             checked: visibleColumns.includes(option.id),
                             onToggle: () => toggleColumn(option.id),
                           })),
-                        }))}
-                        featureGroups={featureColumnOptions.map((option) => ({
+                        },
+                      ]}
+                      detailGroups={BUCKET_QUOTA_COLUMN_GROUPS.map((group) => ({
+                        id: group.id,
+                        label: group.label,
+                        details: group.options.map((option) => ({
                           id: option.id,
                           label: option.label,
                           checked: visibleColumns.includes(option.id),
                           onToggle: () => toggleColumn(option.id),
-                          details: (featureDetailColumnsByFeature[option.id] ?? []).map((detail) => ({
-                            id: detail.id,
-                            label: detail.label,
-                            checked: visibleColumns.includes(detail.id),
-                            onToggle: () => toggleColumn(detail.id),
-                          })),
-                        }))}
-                        footerNote="Feature checks and detail values are loaded only for enabled columns."
-                      />
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={resetColumns}
-                  disabled={!columnsCustomized}
-                  className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                    columnsCustomized
-                      ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-                      : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
-                  }`}
-                >
-                  Reset Columns
-                </button>
+                        })),
+                      }))}
+                      featureGroups={featureColumnOptions.map((option) => ({
+                        id: option.id,
+                        label: option.label,
+                        checked: visibleColumns.includes(option.id),
+                        onToggle: () => toggleColumn(option.id),
+                        details: (featureDetailColumnsByFeature[option.id] ?? []).map((detail) => ({
+                          id: detail.id,
+                          label: detail.label,
+                          checked: visibleColumns.includes(detail.id),
+                          onToggle: () => toggleColumn(detail.id),
+                        })),
+                      }))}
+                      footerNote="Feature checks and detail values are loaded only for enabled columns."
+                    />
+                  </div>
+                )}
               </div>
-            </div>
-          </div>
-          <div className="border-t border-[color:var(--ui-border-soft)] bg-[var(--ui-surface-muted)] px-4 py-4">
-            <div className="space-y-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filters</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowAdvancedFilter(true)}
-                      className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                        showAdvancedFilter || advancedFiltersApplied
-                          ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
-                          : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                      }`}
-                    >
-                      Advanced filter{advancedFiltersApplied ? " · Active" : ""}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <div>
-                    <div className="relative">
-                      <textarea
-                        aria-label="Quick filter"
-                        value={filter}
-                        onChange={(e) => setFilter(e.target.value)}
-                        onKeyDown={(event) => event.stopPropagation()}
-                        placeholder="Bucket name(s)"
-                        rows={1}
-                        className={`w-full resize-y rounded-md border bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
-                          quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={toggleQuickFilterMode}
-                        disabled={quickFilterDraftForcesExact}
-                        className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
-                        title={
-                          quickFilterDraftForcesExact
-                            ? "Quick filter mode: exact (locked by list input)"
-                            : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
-                        }
-                        aria-label="Toggle quick filter match mode"
-                      >
-                        {quickFilterModeForDisplay === "contains" ? "~" : "="}
-                      </button>
-                    </div>
-                  </div>
-                  {showTagFilterBar && (
-                    <div className="space-y-1 sm:col-span-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {tagFilters.map((tag) => {
-                            const colors = getTagColors(tag);
-                            return (
-                              <span
-                                key={`filter:${tag}`}
-                                className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 ui-caption font-semibold"
-                                style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
-                              >
-                                {tag}
-                                <button
-                                  type="button"
-                                  onClick={() => removeTagFilter(tag)}
-                                  className="opacity-70 hover:opacity-100"
-                                  title="Remove tag filter"
-                                >
-                                  ×
-                                </button>
-                              </span>
-                            );
-                          })}
-                          {availableTagFilters.map((tag) => (
-                            <button
-                              type="button"
-                              key={`available:${tag}`}
-                              onClick={() => addTagFilter(tag)}
-                              className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 ui-caption font-semibold text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-                            >
-                              {tag}
-                            </button>
-                          ))}
-                        </div>
-                        <select
-                          value={tagFilterMode}
-                          onChange={(e) => {
-                            setTagFilterMode(e.target.value as "any" | "all");
-                            setPage(1);
-                          }}
-                          className="rounded-md border border-slate-200 px-1.5 py-0.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        >
-                          <option value="any">OR</option>
-                          <option value="all">AND</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              <button
+                type="button"
+                onClick={resetColumns}
+                disabled={!columnsCustomized}
+                className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
+                  columnsCustomized
+                    ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+                    : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                }`}
+              >
+                Reset Columns
+              </button>
+            </>
+          }
+          actions={
+            <button
+              type="button"
+              onClick={() => void refreshBucketListing()}
+              disabled={
+                !selectedEndpointId ||
+                cacheRefreshLoading ||
+                loading ||
+                loadingDetails ||
+                advancedProgress.active
+              }
+              className={cx(toolbarCompactButtonClasses, "inline-flex items-center gap-2")}
+              title="Flush cached bucket listings and reload"
+            >
+              <RefreshIcon className={`h-3.5 w-3.5 ${cacheRefreshLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          }
+          secondaryContent={
+            showAdvancedFilter || showActiveFiltersCard ? (
+            <>
               {showAdvancedFilter && (
-                <div className="fixed inset-x-0 bottom-0 top-14 z-[46]">
+                <div className={advancedFilterRootClass}>
                   <button
                     type="button"
                     onClick={advancedFilterCloseGuard.requestClose}
-                    className="absolute inset-0 bg-slate-950/45"
+                    className={advancedFilterBackdropClass}
                     aria-label="Close advanced filter drawer"
                   />
-                  <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-[color:var(--ui-border)] bg-[var(--ui-surface)] shadow-[var(--shell-menu-shadow)]">
-                    <div className="border-b border-[color:var(--ui-border-soft)] px-4 py-3">
+                  <div className={advancedFilterDrawerClass}>
+                    <div className={advancedFilterHeaderClass}>
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Advanced filter</p>
@@ -8342,9 +8518,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                       </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto px-4 py-4">
+                    <div className={advancedFilterBodyClass}>
                       <div className="space-y-4">
-                        <section className={cx(uiCardMutedClass, "p-3")}>
+                        <section className={advancedFilterSummaryClass}>
                           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Draft summary
                           </p>
@@ -8366,7 +8542,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           )}
                         </section>
 
-                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
+                        <section className={advancedFilterSectionClass}>
                           <div className="mb-3 flex items-center justify-between">
                             <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               <span>Identity and tags</span>
@@ -8777,23 +8953,20 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           </div>
                         </section>
 
-                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              <span>Storage Metrics and Quota</span>
-                              {renderFilterCostIndicator(
-                                "medium",
-                                "Medium cost: owner quota filters require owner metadata lookups; usage and percentage filters also require bucket stats."
-                              )}
-                            </p>
-                            {!usageFeatureEnabled && (
-                              <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200">
-                                {usageUnavailableBadge}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="space-y-3">
+                        {renderAdvancedFilterSecondarySection({
+                          id: "metrics",
+                          title: "Storage Metrics and Quota",
+                          costLevel: "medium",
+                          costTooltip:
+                            "Medium cost: owner quota filters require owner metadata lookups; usage and percentage filters also require bucket stats.",
+                          activeCount: advancedDraftRangeCount,
+                          badge: !usageFeatureEnabled ? (
+                            <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200">
+                              {usageUnavailableBadge}
+                            </span>
+                          ) : null,
+                          children: (
+                            <div className="space-y-3">
                             {!usageFeatureEnabled && (
                               <p className="ui-caption text-slate-500 dark:text-slate-400">
                                 {usageUnavailableDescription}
@@ -8923,84 +9096,79 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               ))}
                             </div>
                           </div>
-                        </section>
+                          ),
+                        })}
 
-                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              <span>Feature states</span>
-                              {renderFilterCostIndicator("high", "High cost: feature-state filters may trigger extra checks.")}
-                            </p>
-                            <span className="ui-caption text-slate-500 dark:text-slate-400">
-                              {advancedDraftFeatureCount} active
-                            </span>
-                          </div>
-                          {featureStateOptions.some((feature) => !feature.supported) && (
-                            <p className="mb-3 ui-caption text-slate-500 dark:text-slate-400">
-                              Some features are disabled on this endpoint and cannot be filtered.
-                            </p>
-                          )}
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            {featureStateOptions.map((feature) => {
-                              const disabled = !feature.supported;
-                              const appliedValue = advancedApplied?.features[feature.id] ?? "any";
-                              const draftValue = advancedDraft.features[feature.id];
-                              const state = disabled
-                                ? { labelClass: "", fieldClass: "" }
-                                : fieldHighlight(appliedValue !== "any", draftValue !== appliedValue);
-                              return (
-                                <div
-                                  key={feature.id}
-                                  className={`rounded-lg border border-slate-200 p-2.5 dark:border-slate-700 ${disabled ? "opacity-60" : ""}`}
-                                >
-                                  <label className={`ui-caption font-medium text-slate-700 dark:text-slate-200 ${state.labelClass}`}>{feature.label}</label>
-                                  <select
-                                    value={advancedDraft.features[feature.id]}
-                                    onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
-                                    className={`mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${state.fieldClass}`}
-                                    disabled={disabled}
-                                  >
-                                    {feature.id === "versioning" ? (
-                                      <>
-                                        <option value="any">Any</option>
-                                        <option value="enabled">Enabled</option>
-                                        <option value="disabled">Disabled</option>
-                                        <option value="suspended">Suspended</option>
-                                        <option value="disabled_or_suspended">Disabled or Suspended</option>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <option value="any">Any</option>
-                                        <option value="enabled">Enabled</option>
-                                        <option value="disabled">Disabled</option>
-                                      </>
-                                    )}
-                                  </select>
-                                  {disabled && (
-                                    <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                                      {feature.label} is disabled on this endpoint.
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </section>
-
-                        <section className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              <span>Feature details</span>
-                              {renderFilterCostIndicator(
-                                "high",
-                                "High cost: feature-detail filters may trigger additional per-bucket data retrieval."
+                        {renderAdvancedFilterSecondarySection({
+                          id: "featureStates",
+                          title: "Feature states",
+                          costLevel: "high",
+                          costTooltip: "High cost: feature-state filters may trigger extra checks.",
+                          activeCount: advancedDraftFeatureCount,
+                          children: (
+                            <>
+                              {featureStateOptions.some((feature) => !feature.supported) && (
+                                <p className="mb-3 ui-caption text-slate-500 dark:text-slate-400">
+                                  Some features are disabled on this endpoint and cannot be filtered.
+                                </p>
                               )}
-                            </p>
-                            <span className="ui-caption text-slate-500 dark:text-slate-400">
-                              {featureDetailDraftLabels.length} active
-                            </span>
-                          </div>
-                          <div className="grid gap-3 lg:grid-cols-2">
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                {featureStateOptions.map((feature) => {
+                                  const disabled = !feature.supported;
+                                  const appliedValue = advancedApplied?.features[feature.id] ?? "any";
+                                  const draftValue = advancedDraft.features[feature.id];
+                                  const state = disabled
+                                    ? { labelClass: "", fieldClass: "" }
+                                    : fieldHighlight(appliedValue !== "any", draftValue !== appliedValue);
+                                  return (
+                                    <div
+                                      key={feature.id}
+                                      className={`rounded-lg border border-slate-200 p-2.5 dark:border-slate-700 ${disabled ? "opacity-60" : ""}`}
+                                    >
+                                      <label className={`ui-caption font-medium text-slate-700 dark:text-slate-200 ${state.labelClass}`}>{feature.label}</label>
+                                      <select
+                                        value={advancedDraft.features[feature.id]}
+                                        onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
+                                        className={`mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${state.fieldClass}`}
+                                        disabled={disabled}
+                                      >
+                                        {feature.id === "versioning" ? (
+                                          <>
+                                            <option value="any">Any</option>
+                                            <option value="enabled">Enabled</option>
+                                            <option value="disabled">Disabled</option>
+                                            <option value="suspended">Suspended</option>
+                                            <option value="disabled_or_suspended">Disabled or Suspended</option>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <option value="any">Any</option>
+                                            <option value="enabled">Enabled</option>
+                                            <option value="disabled">Disabled</option>
+                                          </>
+                                        )}
+                                      </select>
+                                      {disabled && (
+                                        <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                          {feature.label} is disabled on this endpoint.
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          ),
+                        })}
+
+                        {renderAdvancedFilterSecondarySection({
+                          id: "featureDetails",
+                          title: "Feature details",
+                          costLevel: "high",
+                          costTooltip: "High cost: feature-detail filters may trigger additional per-bucket data retrieval.",
+                          activeCount: advancedDraftFeatureDetailCount,
+                          children: (
+                            <div className="grid gap-3 lg:grid-cols-2">
                             <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 Lifecycle
@@ -9212,6 +9380,140 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
                             <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Notifications
+                              </p>
+                              <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                Rule ID, type, topic, events and key filters are evaluated on the same notification rule.
+                              </p>
+                              <div className="mt-2 space-y-2">
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule ID</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.notificationRuleId}
+                                    onChange={(e) => updateFeatureDetailFilter("notificationRuleId", e.target.value)}
+                                    placeholder="rule-id"
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule type</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.notificationRuleTypeMode}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "notificationRuleTypeMode",
+                                          e.target.value as FeatureDetailFilters["notificationRuleTypeMode"]
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      <option value="any">Any</option>
+                                      <option value="has">Has</option>
+                                      <option value="has_not">Has not</option>
+                                    </select>
+                                    <select
+                                      value={advancedDraft.featureDetails.notificationRuleTypeValue}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "notificationRuleTypeValue",
+                                          e.target.value as FeatureDetailFilters["notificationRuleTypeValue"]
+                                        )
+                                      }
+                                      disabled={advancedDraft.featureDetails.notificationRuleTypeMode === "any"}
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      <option value="">Select type</option>
+                                      {NOTIFICATION_TYPE_OPTIONS.filter((option) => option.key !== "eventbridge").map((option) => (
+                                        <option key={option.key} value={option.key}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Topic name or ARN</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.notificationTopicName}
+                                    onChange={(e) => updateFeatureDetailFilter("notificationTopicName", e.target.value)}
+                                    placeholder="bucket-events"
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  />
+                                </div>
+                                {[
+                                  {
+                                    modeKey: "notificationEventMode" as const,
+                                    valueKey: "notificationEventValue" as const,
+                                    label: "Event",
+                                    placeholder: "s3:ObjectCreated:*",
+                                  },
+                                  {
+                                    modeKey: "notificationFilterPrefixMode" as const,
+                                    valueKey: "notificationFilterPrefixValue" as const,
+                                    label: "Filter prefix",
+                                    placeholder: "incoming/",
+                                  },
+                                  {
+                                    modeKey: "notificationFilterSuffixMode" as const,
+                                    valueKey: "notificationFilterSuffixValue" as const,
+                                    label: "Filter suffix",
+                                    placeholder: ".csv",
+                                  },
+                                ].map((entry) => (
+                                  <div key={entry.valueKey}>
+                                    <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">{entry.label}</label>
+                                    <div className="mt-1 grid grid-cols-5 gap-2">
+                                      <select
+                                        value={advancedDraft.featureDetails[entry.modeKey]}
+                                        onChange={(e) =>
+                                          updateFeatureDetailFilter(
+                                            entry.modeKey,
+                                            e.target.value as FeatureDetailFilters[typeof entry.modeKey]
+                                          )
+                                        }
+                                        className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                      >
+                                        <option value="any">Any</option>
+                                        <option value="has">Has</option>
+                                        <option value="has_not">Has not</option>
+                                      </select>
+                                      <input
+                                        type="text"
+                                        value={advancedDraft.featureDetails[entry.valueKey]}
+                                        onChange={(e) => updateFeatureDetailFilter(entry.valueKey, e.target.value)}
+                                        placeholder={entry.placeholder}
+                                        className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">EventBridge present</label>
+                                  <select
+                                    value={advancedDraft.featureDetails.notificationEventBridgePresent}
+                                    onChange={(e) =>
+                                      updateFeatureDetailFilter(
+                                        "notificationEventBridgePresent",
+                                        e.target.value as FeatureDetailFilters["notificationEventBridgePresent"]
+                                      )
+                                    }
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  >
+                                    {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 Object Lock and BPA
                               </p>
                               <div className="mt-2 space-y-2">
@@ -9257,6 +9559,35 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                       value={advancedDraft.featureDetails.objectLockRetentionDays}
                                       onChange={(e) => updateFeatureDetailFilter("objectLockRetentionDays", e.target.value)}
                                       placeholder="days"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Object Lock retention years</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.objectLockRetentionYearsOp}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "objectLockRetentionYearsOp",
+                                          e.target.value as NumericComparisonOpUi
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {NUMERIC_FILTER_OPTIONS.map((op) => (
+                                        <option key={op} value={op}>
+                                          {op}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={advancedDraft.featureDetails.objectLockRetentionYears}
+                                      onChange={(e) => updateFeatureDetailFilter("objectLockRetentionYears", e.target.value)}
+                                      placeholder="years"
                                       className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                     />
                                   </div>
@@ -9378,6 +9709,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                   />
                                 </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Logging target prefix</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.loggingTargetPrefix}
+                                    onChange={(e) => updateFeatureDetailFilter("loggingTargetPrefix", e.target.value)}
+                                    placeholder="logs/"
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  />
+                                </div>
                               </div>
                             </div>
 
@@ -9424,6 +9765,67 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                         </option>
                                       ))}
                                     </select>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website index document</label>
+                                    <input
+                                      type="text"
+                                      value={advancedDraft.featureDetails.websiteIndexDocument}
+                                      onChange={(e) => updateFeatureDetailFilter("websiteIndexDocument", e.target.value)}
+                                      placeholder="index.html"
+                                      className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website error document</label>
+                                    <input
+                                      type="text"
+                                      value={advancedDraft.featureDetails.websiteErrorDocument}
+                                      onChange={(e) => updateFeatureDetailFilter("websiteErrorDocument", e.target.value)}
+                                      placeholder="error.html"
+                                      className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website redirect host</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.websiteRedirectHost}
+                                    onChange={(e) => updateFeatureDetailFilter("websiteRedirectHost", e.target.value)}
+                                    placeholder="www.example.test"
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website routing rules</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.websiteRoutingRuleCountOp}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "websiteRoutingRuleCountOp",
+                                          e.target.value as NumericComparisonOpUi
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {NUMERIC_FILTER_OPTIONS.map((op) => (
+                                        <option key={op} value={op}>
+                                          {op}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={advancedDraft.featureDetails.websiteRoutingRuleCount}
+                                      onChange={(e) => updateFeatureDetailFilter("websiteRoutingRuleCount", e.target.value)}
+                                      placeholder="count"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
                                   </div>
                                 </div>
                                 <div>
@@ -9476,12 +9878,48 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        </section>
+
+                            <div className={`rounded-lg border border-slate-200 p-3 dark:border-slate-700 ${sseFeatureEnabled ? "" : "opacity-60"}`}>
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Server-side encryption
+                              </p>
+                              {!sseFeatureEnabled && (
+                                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                  Server-side encryption is disabled on this endpoint.
+                                </p>
+                              )}
+                              <div className="mt-2 space-y-2">
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">SSE algorithm</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.sseAlgorithm}
+                                    onChange={(e) => updateFeatureDetailFilter("sseAlgorithm", e.target.value)}
+                                    placeholder="AES256"
+                                    disabled={!sseFeatureEnabled}
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">SSE KMS key ID</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.sseKmsKeyId}
+                                    onChange={(e) => updateFeatureDetailFilter("sseKmsKeyId", e.target.value)}
+                                    placeholder="key-id or ARN"
+                                    disabled={!sseFeatureEnabled}
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            </div>
+                          ),
+                        })}
                       </div>
                     </div>
 
-                    <div className="border-t border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)] px-4 py-3">
+                    <div className={advancedFilterFooterClass}>
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <p className="ui-caption text-slate-500 dark:text-slate-400">
                           {hasPendingAdvancedChanges
@@ -9529,39 +9967,23 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                 </div>
               )}
 
-              {showActiveFiltersCard && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-200">ACTIVE FILTERS</p>
-                    {activeFilterSummaryItems.map((item) => (
-                      <span
-                        key={item.id}
-                        className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
-                      >
-                        {item.label}
-                        <button
-                          type="button"
-                          onClick={() => removeActiveFilterItem(item.remove)}
-                          className="rounded-full px-1 leading-none opacity-75 transition hover:bg-primary/20 hover:opacity-100 dark:hover:bg-primary-400/20"
-                          title={`Remove ${item.label}`}
-                          aria-label={`Remove ${item.label}`}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={resetAllFilters}
-                      className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-                    >
-                      Clear all
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+              <ActiveFiltersBar
+                items={
+                  showActiveFiltersCard
+                    ? activeFilterSummaryItems.map((item) => ({
+                        id: item.id,
+                        label: item.label,
+                        onRemove: () => removeActiveFilterItem(item.remove),
+                        removeLabel: `Remove ${item.label}`,
+                      }))
+                    : []
+                }
+                onClearAll={resetAllFilters}
+              />
+            </>
+            ) : null
+          }
+        />
           <BucketSelectionActionsBar
             selectedCount={selectedCount}
             hiddenSelectedCount={hiddenSelectedCount}
@@ -9580,6 +10002,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             onShowConfigBackupModal={!isStorageOps ? () => setShowConfigBackupModal(true) : undefined}
             onShowCompareModal={() => setShowCompareModal(true)}
             onShowIntegrityModal={() => setShowIntegrityModal(true)}
+            onShowUsageStatsModal={() => setShowUsageStatsModal(true)}
             openBulkUpdateModal={openBulkUpdateModal}
           />
 
@@ -9742,6 +10165,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             mode="manager"
             bucketNameOverride={editingStorageOpsBucket.bucketName}
             accountIdOverride={editingStorageOpsBucket.contextId}
+            quotaAvailableOverride={editingStorageOpsBucket.bucketQuotaAvailable}
             embedded
             hideObjectsTab
           />
@@ -9770,6 +10194,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           mode="storage-ops"
           targets={selectedIntegrityTargets}
           onClose={() => setShowIntegrityModal(false)}
+        />
+      )}
+      {!isStorageOps && showUsageStatsModal && selectedEndpointId && selectedUsageStatsTargets.length > 0 && (
+        <BucketUsageStatsRunModal
+          mode="ceph-admin"
+          endpointId={selectedEndpointId}
+          endpointName={selectedEndpoint?.name}
+          targets={selectedUsageStatsTargets}
+          onClose={() => setShowUsageStatsModal(false)}
+        />
+      )}
+      {isStorageOps && showUsageStatsModal && selectedUsageStatsTargets.length > 0 && (
+        <BucketUsageStatsRunModal
+          mode="storage-ops"
+          targets={selectedUsageStatsTargets}
+          onClose={() => setShowUsageStatsModal(false)}
         />
       )}
       {!isStorageOps && showConfigBackupModal && selectedEndpointId && selectedBucketList.length > 0 && (
@@ -9804,8 +10244,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                   <option value="paste_configs" disabled={!bulkConfigClipboard}>
                     {bulkConfigClipboard ? "Paste copied configs" : "Paste copied configs (nothing copied)"}
                   </option>
-                  <option value="set_quota" disabled={!usageFeatureEnabled}>
-                    {usageFeatureEnabled ? "Set bucket quota" : "Set bucket quota (bucket stats unavailable)"}
+                  <option value="set_quota" disabled={Boolean(quotaOperationDisabledReason)}>
+                    {quotaOperationDisabledReason
+                      ? `Set bucket quota (${quotaOperationDisabledReason})`
+                      : "Set bucket quota"}
                   </option>
                   <option value="add_public_access_block">Add block public access</option>
                   <option value="remove_public_access_block">Remove block public access</option>
@@ -10421,6 +10863,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                       (bulkOperation === "delete_cors" && !hasCorsDeleteCriteria) ||
                       (bulkOperation === "add_policy" && !bulkPolicyText.trim()) ||
                       (bulkOperation === "delete_policy" && !hasPolicyDeleteCriteria) ||
+                      (bulkOperation === "set_quota" && Boolean(quotaOperationDisabledReason)) ||
                       (bulkOperation === "paste_configs" && Boolean(bulkPastePlan.error))
                     }
                     className="rounded-md bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
@@ -10527,7 +10970,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                   type="button"
                   className="rounded-full bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={applyBulkUpdate}
-                  disabled={!bulkPreviewReady || bulkApplyLoading}
+                  disabled={!bulkPreviewReady || bulkApplyLoading || (bulkOperation === "set_quota" && Boolean(quotaOperationDisabledReason))}
                 >
                   {bulkApplyLoading ? "Applying..." : "Apply changes"}
                 </button>

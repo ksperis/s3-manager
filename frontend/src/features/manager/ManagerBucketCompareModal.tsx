@@ -23,7 +23,6 @@ import {
 import type { ExecutionContext } from "../../api/executionContexts";
 import {
   BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS,
-  CompareObjectSampleNotice,
   CompareVisibleKeysCopyFeedback,
   copyCompareObjectKeysToClipboard,
   extractCompareError,
@@ -72,8 +71,7 @@ type RemediationSectionKey = "source_only" | "different" | "target_only";
 type PendingRemediationAction = {
   itemIndex: number;
   action: ManagerBucketCompareAction;
-  objectCount: number;
-  objectKey?: string | null;
+  objectKeys: string[];
 };
 
 type ManagerBucketCompareModalProps = {
@@ -86,7 +84,6 @@ type ManagerBucketCompareModalProps = {
 };
 
 const extractError = extractCompareError;
-const DIFF_SAMPLE_LIMIT = 1000;
 
 const downloadFilenameFromKey = (key: string) => {
   const filename = key.split("/").filter(Boolean).pop();
@@ -106,15 +103,15 @@ const feedbackToneClass: Record<UiTone, string> = {
 };
 
 const remediationActionLabel: Record<ManagerBucketCompareAction, string> = {
-  sync_source_only: "Re-run and sync all missing",
-  sync_different: "Re-run and sync all different",
-  delete_target_only: "Re-run and delete all extra",
+  sync_source_only: "Sync all missing",
+  sync_different: "Sync all different",
+  delete_target_only: "Delete all extra",
 };
 
 const remediationActionTitle: Record<ManagerBucketCompareAction, string> = {
-  sync_source_only: "Confirm re-run and sync missing objects",
-  sync_different: "Confirm re-run and sync different objects",
-  delete_target_only: "Confirm re-run and delete extra objects",
+  sync_source_only: "Confirm sync missing objects",
+  sync_different: "Confirm sync different objects",
+  delete_target_only: "Confirm delete extra objects",
 };
 
 const remediationSingleActionLabel: Record<ManagerBucketCompareAction, string> = {
@@ -543,7 +540,6 @@ export default function ManagerBucketCompareModal({
                 include_content: snapshot.includeContent,
                 include_config: snapshot.includeConfig,
                 config_features: snapshot.includeConfig ? snapshot.configFeatures : undefined,
-                diff_sample_limit: DIFF_SAMPLE_LIMIT,
                 ignore_modified_after: snapshot.ignoreModifiedAfterIso,
               },
               { signal: controller.signal }
@@ -772,9 +768,8 @@ export default function ManagerBucketCompareModal({
           source_bucket: currentItem.sourceBucket,
           target_bucket: currentItem.targetBucket,
           action: pending.action,
+          object_keys: pending.objectKeys,
           parallelism: safeActionParallelism,
-          object_key: pending.objectKey ?? null,
-          ignore_modified_after: lastRunOptions?.ignoreModifiedAfterIso ?? ignoreModifiedAfterIso,
         });
       } catch (err) {
         const error = extractError(err);
@@ -827,7 +822,6 @@ export default function ManagerBucketCompareModal({
           include_content: refreshOptions.includeContent,
           include_config: refreshOptions.includeConfig,
           config_features: refreshOptions.includeConfig ? refreshOptions.configFeatures : undefined,
-          diff_sample_limit: DIFF_SAMPLE_LIMIT,
           ignore_modified_after: refreshOptions.ignoreModifiedAfterIso,
         });
         setItems((prev) =>
@@ -863,17 +857,16 @@ export default function ManagerBucketCompareModal({
   );
 
   const openRemediationConfirm = useCallback(
-    (itemIndex: number, sectionKey: RemediationSectionKey, objectCount: number, objectKey?: string | null) => {
+    (itemIndex: number, sectionKey: RemediationSectionKey, objectKeys: string[]) => {
       const item = items[itemIndex];
       if (!item) return;
       if (item.status !== "success") return;
       if (running || item.actionRunning) return;
-      if (objectCount <= 0) return;
+      if (objectKeys.length <= 0) return;
       setPendingAction({
         itemIndex,
         action: remediationSectionActionMap[sectionKey],
-        objectCount: objectKey ? 1 : objectCount,
-        objectKey: objectKey ?? null,
+        objectKeys: [...objectKeys],
       });
     },
     [items, running]
@@ -893,13 +886,13 @@ export default function ManagerBucketCompareModal({
       setCopyFeedback({
         id,
         tone: "success",
-        message: `Copied ${keys.length} visible key${keys.length === 1 ? "" : "s"} to clipboard.`,
+        message: `Copied ${keys.length} key${keys.length === 1 ? "" : "s"} to clipboard.`,
       });
     } catch {
       setCopyFeedback({
         id,
         tone: "danger",
-        message: "Unable to copy visible keys to clipboard.",
+        message: "Unable to copy keys to clipboard.",
       });
     }
   }, []);
@@ -1351,7 +1344,7 @@ export default function ManagerBucketCompareModal({
                 <UiDetails
                   key={`${item.sourceBucket}->${item.targetBucket}:${item.status}:${bucketHasDifferences ? "diff" : "same"}`}
                   defaultOpen={false}
-                  className="rounded-lg border border-slate-200 dark:border-slate-800"
+                  className="border-t border-[color:var(--ui-border-soft)] first:border-t-0"
                 >
                   <summary className="cursor-pointer list-none px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1373,7 +1366,7 @@ export default function ManagerBucketCompareModal({
                       <div className="h-full bg-primary-500 transition-[width] duration-200" style={{ width: `${progressValue}%` }} />
                     </div>
                   </summary>
-                  <div className="space-y-3 border-t border-slate-200 px-3 py-3 dark:border-slate-800">
+                  <div className="space-y-3 px-3 pb-3">
                     {item.error && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{item.error}</p>}
                     {item.actionFeedback && (
                       <p
@@ -1385,9 +1378,9 @@ export default function ManagerBucketCompareModal({
                     {content && (
                       <UiDetails
                         defaultOpen={false}
-                        className="rounded-md border border-slate-200 dark:border-slate-800"
+                        className="border-t border-[color:var(--ui-border-soft)] pt-3"
                       >
-                        <summary className="cursor-pointer list-none px-2.5 py-2">
+                        <summary className="cursor-pointer list-none py-1.5">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
                               Content diff (md5 or size)
@@ -1397,7 +1390,7 @@ export default function ManagerBucketCompareModal({
                             </UiBadge>
                           </div>
                         </summary>
-                        <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
+                        <div className="mt-2 space-y-3">
                           {contentSections.map((section) => {
                             const sectionFeedbackId = `${item.sourceBucket}:${item.targetBucket}:content:${section.key}`;
                             const sectionCopyFeedback = copyFeedback?.id === sectionFeedbackId ? copyFeedback : null;
@@ -1443,7 +1436,7 @@ export default function ManagerBucketCompareModal({
                                       onClick={(event) => {
                                         event.preventDefault();
                                         event.stopPropagation();
-                                        openRemediationConfirm(itemIndex, section.key, 1, detail.key);
+                                        openRemediationConfirm(itemIndex, section.key, [detail.key]);
                                       }}
                                     >
                                       {item.actionRunning === section.action.type
@@ -1458,9 +1451,9 @@ export default function ManagerBucketCompareModal({
                               <UiDetails
                                 key={sectionFeedbackId}
                                 defaultOpen={false}
-                                className="rounded-md border border-slate-200 dark:border-slate-800"
+                                className="border-t border-[color:var(--ui-border-soft)] pt-2 first:border-t-0 first:pt-0"
                               >
-                                <summary className="cursor-pointer list-none px-2 py-1.5">
+                                <summary className="cursor-pointer list-none py-1.5">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
@@ -1479,7 +1472,7 @@ export default function ManagerBucketCompareModal({
                                             void copyVisibleKeys(sectionFeedbackId, section.copyKeys);
                                           }}
                                         >
-                                          Copy visible keys
+                                          Copy keys
                                         </UiButton>
                                       )}
                                       {section.action && (
@@ -1489,6 +1482,7 @@ export default function ManagerBucketCompareModal({
                                             running ||
                                             item.status !== "success" ||
                                             !content ||
+                                            section.copyKeys.length === 0 ||
                                             Boolean(item.actionRunning) ||
                                             item.actionRunning === section.action.type
                                           }
@@ -1496,7 +1490,7 @@ export default function ManagerBucketCompareModal({
                                           onClick={(event) => {
                                             event.preventDefault();
                                             event.stopPropagation();
-                                            openRemediationConfirm(itemIndex, section.key, section.objectCount);
+                                            openRemediationConfirm(itemIndex, section.key, section.copyKeys);
                                           }}
                                         >
                                           {item.actionRunning === section.action.type ? "Running..." : section.action.label}
@@ -1505,11 +1499,7 @@ export default function ManagerBucketCompareModal({
                                     </div>
                                   </div>
                                 </summary>
-                                <div className="space-y-2 border-t border-slate-200 px-2 py-2 dark:border-slate-800">
-                                  <CompareObjectSampleNotice
-                                    visibleCount={section.copyKeys.length}
-                                    totalCount={section.objectCount}
-                                  />
+                                <div className="mt-1 space-y-2 pb-2">
                                   {sectionCopyFeedback && (
                                     <p
                                       className={`rounded-md border px-2 py-1 ui-caption font-semibold ${feedbackToneClass[sectionCopyFeedback.tone]}`}
@@ -1582,9 +1572,9 @@ export default function ManagerBucketCompareModal({
                     {item.result?.config_diff && (
                       <UiDetails
                         defaultOpen={false}
-                        className="rounded-md border border-slate-200 dark:border-slate-800"
+                        className="border-t border-[color:var(--ui-border-soft)] pt-3"
                       >
-                        <summary className="cursor-pointer list-none px-2.5 py-2">
+                        <summary className="cursor-pointer list-none py-1.5">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Config diff</span>
                             <UiBadge tone={getChangedTone(configHasDifferences)} className="px-2 text-[10px]">
@@ -1592,14 +1582,14 @@ export default function ManagerBucketCompareModal({
                             </UiBadge>
                           </div>
                         </summary>
-                        <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
+                        <div className="mt-2 space-y-3">
                           {configSections.map((section) => (
                             <UiDetails
                               key={`${item.sourceBucket}:${item.targetBucket}:config:${section.key}`}
                               defaultOpen={false}
-                              className="rounded-md border border-slate-200 dark:border-slate-800"
+                              className="border-t border-[color:var(--ui-border-soft)] pt-2 first:border-t-0 first:pt-0"
                             >
-                              <summary className="cursor-pointer list-none px-2 py-1.5">
+                              <summary className="cursor-pointer list-none py-1.5">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
                                   <UiBadge tone={getChangedTone(section.changed)} className="px-2 text-[10px]">
@@ -1607,7 +1597,7 @@ export default function ManagerBucketCompareModal({
                                   </UiBadge>
                                 </div>
                               </summary>
-                              <div className="grid gap-2 border-t border-slate-200 px-2 py-2 lg:grid-cols-2 dark:border-slate-800">
+                              <div className="mt-1 grid gap-2 pb-2 lg:grid-cols-2">
                                 <div className="space-y-1">
                                   <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     Source
@@ -1650,11 +1640,11 @@ export default function ManagerBucketCompareModal({
             <p className="ui-body text-slate-700 dark:text-slate-200">
               This will run{" "}
               <span className="font-semibold">
-                {pendingAction.objectKey
+                {pendingAction.objectKeys.length === 1
                   ? remediationSingleActionLabel[pendingAction.action]
                   : remediationActionLabel[pendingAction.action]}
               </span>{" "}
-              after re-comparing this pair.
+              for the exact object keys from the current diff.
             </p>
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
               <p className="ui-caption text-slate-700 dark:text-slate-200">
@@ -1670,19 +1660,21 @@ export default function ManagerBucketCompareModal({
                 Target bucket: <span className="font-semibold">{pendingActionItem.targetBucket}</span>
               </p>
               <p className="ui-caption text-slate-700 dark:text-slate-200">
-                Estimated objects impacted: <span className="font-semibold">{pendingAction.objectCount}</span>
+                Objects impacted: <span className="font-semibold">{pendingAction.objectKeys.length}</span>
               </p>
-              {pendingAction.objectKey && (
-                <p className="ui-caption text-slate-700 dark:text-slate-200">
-                  Object key: <span className="break-all font-mono font-semibold">{pendingAction.objectKey}</span>
-                </p>
-              )}
               {(lastRunOptions?.ignoreModifiedAfterIso ?? ignoreModifiedAfterIso) && (
                 <p className="ui-caption text-slate-700 dark:text-slate-200">
                   Cutoff:{" "}
                   <span className="font-semibold">{lastRunOptions?.ignoreModifiedAfterIso ?? ignoreModifiedAfterIso}</span>
                 </p>
               )}
+              <div className="mt-2 max-h-48 overflow-auto rounded-md border border-slate-200 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950">
+                {pendingAction.objectKeys.map((key) => (
+                  <p key={key} className="break-all font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-100">
+                    {key}
+                  </p>
+                ))}
+              </div>
             </div>
             {pendingAction.action === "delete_target_only" && (
               <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">

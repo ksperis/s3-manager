@@ -10,6 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
 import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
 import { BROWSER_ROOT_UI_STATE_STORAGE_KEY } from "./browserRootUiState";
@@ -159,6 +160,10 @@ function renderPage({
   allowInspectorPanel = true,
   allowFoldersPanel = true,
   accountIdForApi,
+  workspaceSurface,
+  actionProfile,
+  lockedBucketName,
+  lockedBucketLabel,
 }: {
   defaultShowInspector?: boolean;
   defaultShowFolders?: boolean;
@@ -166,6 +171,10 @@ function renderPage({
   allowInspectorPanel?: boolean;
   allowFoldersPanel?: boolean;
   accountIdForApi?: string;
+  workspaceSurface?: ComponentProps<typeof BrowserPage>["workspaceSurface"];
+  actionProfile?: ComponentProps<typeof BrowserPage>["actionProfile"];
+  lockedBucketName?: string;
+  lockedBucketLabel?: string;
 } = {}) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
@@ -175,6 +184,10 @@ function renderPage({
         defaultShowFolders={defaultShowFolders}
         allowInspectorPanel={allowInspectorPanel}
         allowFoldersPanel={allowFoldersPanel}
+        workspaceSurface={workspaceSurface}
+        actionProfile={actionProfile}
+        lockedBucketName={lockedBucketName}
+        lockedBucketLabel={lockedBucketLabel}
       />
     </MemoryRouter>,
   );
@@ -364,11 +377,17 @@ async function pasteFromCurrentPath(user: ReturnType<typeof userEvent.setup>) {
   await user.click(within(menu).getByRole("menuitem", { name: /^Paste/ }));
 }
 
-async function openOperationsModal(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(
-    within(getContextToolbar()).getByRole("button", { name: "Operations" }),
-  );
-  return await screen.findByRole("dialog", { name: "Operations overview" });
+async function openOperationsPanel(user: ReturnType<typeof userEvent.setup>) {
+  const panel = await screen.findByRole("complementary", {
+    name: "Operations",
+  });
+  const expandButton = within(panel).queryByRole("button", {
+    name: "Expand operations",
+  });
+  if (expandButton) {
+    await user.click(expandButton);
+  }
+  return panel;
 }
 
 function createAbortablePromise(signal?: AbortSignal) {
@@ -380,6 +399,16 @@ function createAbortablePromise(signal?: AbortSignal) {
     }
     signal?.addEventListener("abort", abort, { once: true });
   });
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
 }
 
 async function copyOrCutSelection(
@@ -660,10 +689,95 @@ describe("BrowserPage interactions", () => {
     expect(screen.queryByText("Compact view")).not.toBeInTheDocument();
   });
 
+  it("uses manager-equivalent chrome on /browser when advanced Browser access is disabled", async () => {
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        id: 42,
+        role: "ui_user",
+        effective_access: { browser_advanced_features_enabled: false },
+      }),
+    );
+    seedBrowserRootUiState({
+      layout: { showFolders: true, showInspector: true, showActionBar: true },
+    });
+
+    renderPage({ initialEntry: "/browser" });
+    await findRowByLabel("a.txt");
+
+    const mainMenu = openHeaderConfigMenu();
+    expect(within(mainMenu).queryByText("Reset columns")).not.toBeInTheDocument();
+    expect(within(mainMenu).queryByText("Compact view")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create bucket" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tablist", { name: "Inspector tabs" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("uses compact mode by default on /manager/browser", async () => {
     renderPage({ initialEntry: "/manager/browser" });
     const rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-9");
+  });
+
+  it("runs portal-basic as a locked minimal browser profile", async () => {
+    const user = userEvent.setup();
+    renderPage({
+      initialEntry: "/portal/storage-spaces/research-data",
+      accountIdForApi: "acc-portal",
+      workspaceSurface: "portal",
+      actionProfile: "portal-basic",
+      lockedBucketName: "portal-bucket",
+      lockedBucketLabel: "Research Data",
+    });
+
+    const rowA = await findRowByLabel("a.txt");
+    expect(rowA).toHaveClass("h-9");
+    expect(screen.getByRole("button", { name: "Selected storage space" })).toHaveTextContent("Research Data");
+    expect(searchBrowserBucketsMock).not.toHaveBeenCalled();
+    expect(fetchBrowserSettingsMock).toHaveBeenCalledWith("acc-portal", { workspaceSurface: "portal" });
+    expect(listBrowserObjectsMock).toHaveBeenCalledWith(
+      "acc-portal",
+      "portal-bucket",
+      expect.objectContaining({ workspaceSurface: "portal" }),
+    );
+    expect(getBucketVersioningMock).not.toHaveBeenCalled();
+
+    expect(screen.queryByRole("button", { name: "Search options" })).not.toBeInTheDocument();
+    expect(within(rowA).queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
+    expect(within(rowA).getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(within(rowA).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+
+    fireEvent.contextMenu(rowA, { clientX: 40, clientY: 40 });
+    const nativeContextMenu = await screen.findByRole("menu");
+    expect(
+      within(nativeContextMenu).getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).getByRole("button", { name: "Delete" }),
+    ).toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).queryByRole("button", { name: "Preview" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).queryByRole("button", { name: "Properties" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).queryByRole("button", { name: "Copy" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).queryByRole("button", { name: "Cut" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).queryByRole("button", { name: "Bulk attributes" }),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+
+    const moreMenu = await openContextMoreMenu(user);
+    expect(within(moreMenu).queryByRole("menuitem", { name: /^Columns/i })).not.toBeInTheDocument();
+    expect(within(moreMenu).queryByRole("menuitem", { name: /Versions/i })).not.toBeInTheDocument();
+    expect(within(moreMenu).queryByRole("menuitem", { name: /Restore/i })).not.toBeInTheDocument();
   });
 
   it("uses minimal visible columns by default", async () => {
@@ -1282,9 +1396,6 @@ describe("BrowserPage interactions", () => {
     const moreButton = within(contextToolbar).getByRole("button", {
       name: "More",
     });
-    const operationsButton = within(contextToolbar).getByRole("button", {
-      name: "Operations",
-    });
 
     expect(screen.getAllByRole("toolbar")).toHaveLength(1);
     expect(
@@ -1293,20 +1404,27 @@ describe("BrowserPage interactions", () => {
     expect(
       screen.queryByRole("toolbar", { name: "Browser actions bar" }),
     ).not.toBeInTheDocument();
+    expect(contextToolbar).not.toHaveClass("rounded-lg", "p-2");
+    expect(screen.getByTestId("browser-layout").parentElement).toHaveClass(
+      "pb-3",
+    );
+    expect(screen.getByTestId("browser-layout").parentElement).not.toHaveClass(
+      "px-3",
+    );
+    expect(screen.getByTestId("browser-layout").parentElement).not.toHaveClass(
+      "p-3",
+    );
     expect(
       within(contextToolbar).queryByRole("button", { name: "Download" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(contextToolbar).queryByRole("button", { name: "Operations" }),
     ).not.toBeInTheDocument();
     expect(uploadButton).toHaveClass("h-7", "w-7", "rounded-md");
     expect(uploadButton).not.toHaveClass("h-9", "w-9", "rounded-xl");
     expect(newFolderButton).toHaveClass("h-7", "w-7", "rounded-md");
     expect(refreshButton).toHaveClass("h-7", "w-7", "rounded-md");
     expect(moreButton).toHaveClass("h-7", "w-7", "rounded-md");
-    expect(
-      Boolean(
-        operationsButton.compareDocumentPosition(uploadButton) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      ),
-    ).toBe(true);
     expect(
       Boolean(
         uploadButton.compareDocumentPosition(newFolderButton) &
@@ -1336,6 +1454,9 @@ describe("BrowserPage interactions", () => {
     ).toBeInTheDocument();
 
     const menu = await openContextMoreMenu(user);
+    expect(
+      within(menu).queryByRole("menuitem", { name: "Operations overview" }),
+    ).not.toBeInTheDocument();
     expect(within(menu).getByText("Compact view")).toBeInTheDocument();
     expect(within(menu).getByText("Transfers")).toBeInTheDocument();
     expect(within(menu).getByText("Current path")).toBeInTheDocument();
@@ -1512,8 +1633,11 @@ describe("BrowserPage interactions", () => {
       within(contextToolbar).getByRole("button", { name: "Select bucket" }),
     ).toBeInTheDocument();
     expect(
-      within(contextToolbar).getByRole("button", { name: "Operations" }),
-    ).toBeInTheDocument();
+      within(contextToolbar).queryByRole("button", { name: "Operations" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: "Operations" }),
+    ).not.toBeInTheDocument();
     expect(
       within(contextToolbar).getByRole("button", { name: "Upload" }),
     ).toBeInTheDocument();
@@ -1523,6 +1647,20 @@ describe("BrowserPage interactions", () => {
     expect(
       screen.queryByRole("toolbar", { name: "Browser actions bar" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("aligns the embedded browser chrome with its page header", async () => {
+    renderEmbeddedPage({ initialEntry: "/manager/browser" });
+    await findRowByLabel("a.txt");
+
+    const contextToolbar = getContextToolbar();
+    const browserLayoutParent = screen.getByTestId("browser-layout")
+      .parentElement;
+
+    expect(contextToolbar).not.toHaveClass("rounded-lg", "p-2");
+    expect(browserLayoutParent).toHaveClass("pb-3");
+    expect(browserLayoutParent).not.toHaveClass("px-3");
+    expect(browserLayoutParent).not.toHaveClass("p-3");
   });
 
   it("restores folders, inspector, and action bar on /browser after remount", async () => {
@@ -2626,8 +2764,11 @@ describe("BrowserPage interactions", () => {
 
     expect(screen.getAllByRole("toolbar")).toHaveLength(1);
     expect(
-      within(getContextToolbar()).getByRole("button", { name: "Operations" }),
-    ).toBeInTheDocument();
+      within(getContextToolbar()).queryByRole("button", { name: "Operations" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: "Operations" }),
+    ).not.toBeInTheDocument();
     expect(
       within(getContextToolbar()).getByRole("button", { name: "Upload" }),
     ).toBeInTheDocument();
@@ -3146,6 +3287,7 @@ describe("BrowserPage interactions", () => {
           response_content_disposition: expect.stringContaining("inline;"),
         }),
         null,
+        undefined,
       );
     });
     await waitFor(() => {
@@ -3442,6 +3584,7 @@ describe("BrowserPage interactions", () => {
           operation: "get_object",
         }),
         null,
+        undefined,
       );
       expect(presignObjectMock).toHaveBeenCalledWith(
         "acc-2",
@@ -3451,6 +3594,7 @@ describe("BrowserPage interactions", () => {
           operation: "put_object",
         }),
         null,
+        undefined,
       );
     });
   });
@@ -3618,9 +3762,38 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("readme.txt");
     await pasteFromCurrentPath(user);
 
-    const dialog = await screen.findByRole("dialog", {
+    const dialog = await screen.findByRole("complementary", {
+      name: "Operations",
+    });
+    expect(dialog).toHaveClass("fixed", "inset-x-3", "bottom-4");
+    expect(
+      within(dialog).getByRole("button", { name: "Expand operations" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Dismiss operations panel" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Stop all" }),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Active")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Queue")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Show files" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Download details (JSON)" }),
+    ).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Operations overview" }));
+    let detailsDialog = await screen.findByRole("dialog", {
       name: "Operations overview",
     });
+    expect(within(detailsDialog).getByText("Active")).toBeInTheDocument();
+    expect(
+      within(detailsDialog).getByRole("button", { name: "Show files" }),
+    ).toBeInTheDocument();
+    await user.click(within(detailsDialog).getByRole("button", { name: "Close modal" }));
+
+    await user.click(within(dialog).getByRole("button", { name: "Expand operations" }));
     const stopAllButton = await within(dialog).findByRole("button", {
       name: "Stop all",
     });
@@ -3645,9 +3818,116 @@ describe("BrowserPage interactions", () => {
       true,
     );
 
-    await user.click(within(dialog).getByRole("button", { name: "Show files" }));
+    expect(
+      await within(dialog).findByRole("button", { name: "Dismiss operations panel" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Show files" }),
+    ).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Operations overview" }));
+    detailsDialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
+    });
+    await user.click(
+      within(detailsDialog).getByRole("button", { name: "Show files" }),
+    );
     await waitFor(() => {
-      expect(within(dialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+      expect(
+        within(detailsDialog).getAllByText(/Cancelled/).length,
+      ).toBeGreaterThanOrEqual(2);
+    });
+    expect(
+      within(detailsDialog).getByRole("button", {
+        name: "Download details (JSON)",
+      }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(detailsDialog).getByRole("button", { name: "Close modal" }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Dismiss operations panel" }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("complementary", { name: "Operations" }),
+      ).not.toBeInTheDocument();
+    });
+
+    const menu = await openContextMoreMenu(user);
+    await user.click(
+      within(menu).getByRole("menuitem", { name: "Operations overview" }),
+    );
+    detailsDialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
+    });
+    expect(
+      within(detailsDialog).getByRole("button", {
+        name: "Download details (JSON)",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the operations panel expanded while queued uploads start", async () => {
+    const user = userEvent.setup();
+    fetchBrowserSettingsMock.mockResolvedValue({
+      allow_proxy_transfers: true,
+      direct_upload_parallelism: 3,
+      proxy_upload_parallelism: 1,
+      direct_download_parallelism: 3,
+      proxy_download_parallelism: 2,
+      other_operations_parallelism: 2,
+      streaming_zip_threshold_mb: 200,
+    });
+    getBucketCorsStatusMock.mockResolvedValue({ enabled: false, rules: [] });
+    const firstUpload = createDeferred<void>();
+    const secondUpload = createDeferred<void>();
+    let uploadCallCount = 0;
+    proxyUploadMock.mockImplementation(() => {
+      uploadCallCount += 1;
+      if (uploadCallCount === 1) return firstUpload.promise;
+      if (uploadCallCount === 2) return secondUpload.promise;
+      return Promise.resolve();
+    });
+
+    renderPage({ accountIdForApi: "acc-1" });
+    await findRowByLabel("a.txt");
+    const menu = await openContextMoreMenu(user);
+    expect(await within(menu).findByText("Proxy")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    const fileInput = document.querySelector(
+      'input[type="file"]:not([directory])',
+    ) as HTMLInputElement | null;
+    expect(fileInput).not.toBeNull();
+    fireEvent.change(fileInput as HTMLInputElement, {
+      target: {
+        files: [
+          new File(["first"], "first.txt", { type: "text/plain" }),
+          new File(["second"], "second.txt", { type: "text/plain" }),
+        ],
+      },
+    });
+
+    await waitFor(() => expect(proxyUploadMock).toHaveBeenCalledTimes(1));
+    const panel = await openOperationsPanel(user);
+    expect(
+      within(panel).getByRole("button", { name: "Collapse operations" }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      firstUpload.resolve();
+    });
+    await waitFor(() => expect(proxyUploadMock).toHaveBeenCalledTimes(2));
+
+    expect(
+      within(panel).getByRole("button", { name: "Collapse operations" }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("button", { name: "Expand operations" }),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      secondUpload.resolve();
     });
   });
 
@@ -3716,9 +3996,7 @@ describe("BrowserPage interactions", () => {
     await findRowByLabel("readme.txt");
     await pasteFromCurrentPath(user);
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Operations overview",
-    });
+    const dialog = await openOperationsPanel(user);
     await user.click(
       await within(dialog).findByRole("button", { name: "Stop all" }),
     );
@@ -3735,12 +4013,26 @@ describe("BrowserPage interactions", () => {
       );
     });
 
-    await user.click(within(dialog).getByRole("button", { name: "Show files" }));
-    await waitFor(() => {
-      expect(within(dialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    await user.click(within(dialog).getByRole("button", { name: "Operations overview" }));
+    const detailsDialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
     });
+    await user.click(within(detailsDialog).getByRole("button", { name: "Show files" }));
+    await waitFor(() => {
+      expect(within(detailsDialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    });
+    await user.click(within(detailsDialog).getByRole("button", { name: "Close modal" }));
 
-    await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
+    await user.click(within(dialog).getByRole("button", { name: "Collapse operations" }));
+    expect(
+      within(dialog).getByRole("button", { name: "Expand operations" }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Expand operations" }),
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Collapse operations" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Context" }));
     const panel = screen.getByRole("tabpanel", { name: "Context" });
     expect(within(panel).getByRole("button", { name: /^Paste/ })).toBeEnabled();
@@ -3794,9 +4086,13 @@ describe("BrowserPage interactions", () => {
     await pasteFromCurrentPath(user);
 
     await waitFor(() => {
-      expect(deleteObjectsMock).toHaveBeenCalledWith("acc-1", "bucket-1", [
-        { key: "a.txt" },
-      ]);
+      expect(deleteObjectsMock).toHaveBeenCalledWith(
+        "acc-1",
+        "bucket-1",
+        [{ key: "a.txt" }],
+        undefined,
+        undefined,
+      );
     });
     expect(callOrder.indexOf("dest-meta")).toBeGreaterThan(
       callOrder.indexOf("acc-2:put_object"),
@@ -3888,6 +4184,7 @@ describe("BrowserPage interactions", () => {
           operation: "get_object",
         }),
         null,
+        undefined,
       );
     });
   });
@@ -3924,6 +4221,7 @@ describe("BrowserPage interactions", () => {
         "a.txt",
         expect.any(AbortSignal),
         null,
+        undefined,
       );
       expect(proxyUploadMock).toHaveBeenCalledWith(
         "acc-2",
@@ -3934,6 +4232,7 @@ describe("BrowserPage interactions", () => {
         expect.any(AbortSignal),
         null,
         "a.txt",
+        undefined,
       );
     });
     expect(copyObjectMock).not.toHaveBeenCalled();
@@ -3977,9 +4276,7 @@ describe("BrowserPage interactions", () => {
     });
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Operations overview",
-    });
+    const dialog = await openOperationsPanel(user);
     await user.click(
       await within(dialog).findByRole("button", { name: "Stop all" }),
     );
@@ -3995,10 +4292,15 @@ describe("BrowserPage interactions", () => {
       true,
     );
 
-    await user.click(within(dialog).getByRole("button", { name: "Show files" }));
-    await waitFor(() => {
-      expect(within(dialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    await user.click(within(dialog).getByRole("button", { name: "Operations overview" }));
+    const detailsDialog = await screen.findByRole("dialog", {
+      name: "Operations overview",
     });
+    await user.click(within(detailsDialog).getByRole("button", { name: "Show files" }));
+    await waitFor(() => {
+      expect(within(detailsDialog).getAllByText(/Cancelled/).length).toBeGreaterThanOrEqual(2);
+    });
+    await user.click(within(detailsDialog).getByRole("button", { name: "Close modal" }));
   });
 
   it("supports Stop for bulk attributes and leaves queued items cancelled", async () => {
@@ -4041,9 +4343,7 @@ describe("BrowserPage interactions", () => {
     await user.type(within(modal).getByPlaceholderText("Content-Type"), "text/plain");
     await user.click(within(modal).getByRole("button", { name: "Apply changes" }));
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Operations overview",
-    });
+    const dialog = await openOperationsPanel(user);
     await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
 
     await waitFor(() => {
@@ -4142,9 +4442,7 @@ describe("BrowserPage interactions", () => {
     });
     await user.click(within(modal).getByRole("button", { name: "Run restore" }));
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Operations overview",
-    });
+    const dialog = await openOperationsPanel(user);
     await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
 
     await waitFor(() => {
@@ -4185,9 +4483,7 @@ describe("BrowserPage interactions", () => {
     await user.type(within(modal).getByPlaceholderText("e.g. 3"), "1");
     await user.click(within(modal).getByRole("button", { name: "Run cleanup" }));
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Operations overview",
-    });
+    const dialog = await openOperationsPanel(user);
     await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
 
     await waitFor(() => {
@@ -4259,7 +4555,7 @@ describe("BrowserPage interactions", () => {
     await within(detailsDialog).findByRole("button", { name: "Restore" });
 
     await user.click(within(detailsDialog).getByRole("button", { name: "Restore" }));
-    let dialog = await openOperationsModal(user);
+    let dialog = await openOperationsPanel(user);
     await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
 
     await waitFor(() => {
@@ -4270,7 +4566,7 @@ describe("BrowserPage interactions", () => {
       true,
     );
 
-    await user.click(within(dialog).getByRole("button", { name: "Close modal" }));
+    await user.click(within(dialog).getByRole("button", { name: "Collapse operations" }));
 
     await user.click(
       within(detailsDialog).getByRole("button", { name: "Delete version" }),
@@ -4278,7 +4574,7 @@ describe("BrowserPage interactions", () => {
     const confirm = await screen.findByRole("dialog", { name: "Delete version" });
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
 
-    dialog = await openOperationsModal(user);
+    dialog = await openOperationsPanel(user);
     await user.click(await within(dialog).findByRole("button", { name: "Stop" }));
 
     await waitFor(() => {
@@ -4322,7 +4618,7 @@ describe("BrowserPage interactions", () => {
       expect(screen.getByText("Copied 2 of 2 item(s).")).toBeInTheDocument();
     });
 
-    const dialog = await openOperationsModal(user);
+    const dialog = await openOperationsPanel(user);
     const copyCardTitle = within(dialog).getByText("Copying items");
     const deleteCardTitle = within(dialog).getByText("Deleting 2 objects");
 
@@ -4332,6 +4628,15 @@ describe("BrowserPage interactions", () => {
           Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Clear completed/failed" }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("complementary", { name: "Operations" }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("renders CORS warning with inline info action and moves CORS button into popover", async () => {

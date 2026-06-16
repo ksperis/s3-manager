@@ -13,7 +13,7 @@ Key areas:
 - CORS: `CORS_ORIGINS`.
 - Feature force-locks: `FEATURE_MANAGER_ENABLED`, `FEATURE_PORTAL_ENABLED`, `FEATURE_BROWSER_ENABLED`, `FEATURE_CEPH_ADMIN_ENABLED`, `FEATURE_STORAGE_OPS_ENABLED`, `FEATURE_BILLING_ENABLED`, `FEATURE_ENDPOINT_STATUS_ENABLED`.
 - Internal scheduler auth: `INTERNAL_CRON_TOKEN`.
-- Billing, quota monitoring, and healthcheck behavior.
+- Billing, quota monitoring, usage history collection, and healthcheck behavior.
 - Shared history retention: `BILLING_DAILY_RETENTION_DAYS`, `QUOTA_HISTORY_HOURLY_RETENTION_DAYS`, `QUOTA_HISTORY_DAILY_RETENTION_DAYS`.
 - Quota SMTP secret: `SMTP_PASSWORD`.
 
@@ -46,6 +46,14 @@ Managed from Admin UI:
 - Portal settings (`portal`): IAM key policy, portal user bucket creation, portal user access-key creation, max portal user keys, IAM group policies, bucket access policy, bucket defaults, and account override policy.
 - Migration/compare flags and manager behavior.
 - Quota notification policy (`quota_notifications`: threshold, SMTP non-secret fields, contact-email option).
+
+On a fresh deployment with no persisted `app_settings.json`, `Endpoint Status`
+and `Usage history` are enabled by default. `Quota alerts` remains disabled
+until explicitly enabled and configured.
+
+The Browser workspace is enabled on root `/browser` and in Portal storage spaces
+(`/portal/storage-spaces/:spaceId`) by default. Manager and Ceph Admin Browser
+integrations remain disabled until explicitly enabled.
 
 `FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. When Portal is enabled, account access remains explicit: admins assign `portal_user` or `portal_manager` on each UI user/account link, while existing links stay `portal_none` until changed.
 

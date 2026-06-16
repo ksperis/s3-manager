@@ -8,7 +8,10 @@ import {
   streamCephAdminBucketIntegrityCheck,
   streamManagerBucketIntegrityCheck,
   streamStorageOpsBucketIntegrityCheck,
+  type BucketIntegrityBucketResult,
+  type BucketIntegrityCheckMode,
   type BucketIntegrityCheckPayload,
+  type BucketIntegrityFailure,
   type BucketIntegrityProgress,
   type BucketIntegrityResult,
 } from "../../api/bucketIntegrity";
@@ -132,6 +135,7 @@ function isAbortError(err: unknown): boolean {
 export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckModalProps) {
   const [parallelism, setParallelism] = useState(10);
   const [allVersions, setAllVersions] = useState(false);
+  const [checkMode, setCheckMode] = useState<BucketIntegrityCheckMode>("head");
   const [since, setSince] = useState("");
   const [maxMb, setMaxMb] = useState("");
   const [progress, setProgress] = useState<BucketIntegrityProgress | null>(null);
@@ -162,13 +166,14 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
   }, [errorFilter, result, resultSearch, statusFilter]);
 
   const buildPayload = (): BucketIntegrityCheckPayload => {
-    const maxMbPerObject = parseOptionalMaxMb(maxMb);
+    const maxMbPerObject = checkMode === "get" ? parseOptionalMaxMb(maxMb) : null;
     const sinceIso = parseOptionalSince(since);
     const basePayload: BucketIntegrityCheckPayload = {
       parallelism: Math.max(1, Math.min(64, Math.trunc(parallelism || 10))),
       all_versions: allVersions,
+      check_mode: checkMode,
       since: sinceIso || undefined,
-      max_mb_per_object: maxMbPerObject || undefined,
+      max_mb_per_object: checkMode === "get" ? maxMbPerObject || undefined : undefined,
     };
     if (props.mode === "storage-ops") {
       const targets = props.targets.map((target) => {
@@ -279,7 +284,40 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+          <div className="space-y-1 ui-caption">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Mode</span>
+            <div
+              className="grid grid-cols-2 overflow-hidden rounded-md border border-slate-300 dark:border-slate-700"
+              role="group"
+              aria-label="Bucket integrity check mode"
+            >
+              {(
+                [
+                  { value: "head", label: "HEAD only" },
+                  { value: "get", label: "GET body" },
+                ] as Array<{ value: BucketIntegrityCheckMode; label: string }>
+              ).map((option) => {
+                const active = checkMode === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={active}
+                    disabled={running}
+                    onClick={() => setCheckMode(option.value)}
+                    className={`px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      active
+                        ? "bg-primary text-white"
+                        : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <label className="space-y-1 ui-caption">
             <span className="font-semibold text-slate-700 dark:text-slate-200">Parallelism</span>
             <input
@@ -309,9 +347,9 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
               min={0}
               step="0.1"
               value={maxMb}
-              disabled={running}
+              disabled={running || checkMode === "head"}
               onChange={(event) => setMaxMb(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-900/50 dark:disabled:text-slate-500"
             />
           </label>
           <label className="flex items-center gap-2 self-end rounded-md border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">

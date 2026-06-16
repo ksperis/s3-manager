@@ -33,7 +33,7 @@ from app.models.app_settings import QuotaNotificationSettings
 from app.services.app_settings_service import load_app_settings
 from app.services.data_retention_service import DataRetentionService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
-from app.utils.rgw import extract_bucket_list, resolve_admin_uid
+from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
 from app.utils.usage_stats import extract_usage_stats
 
@@ -122,9 +122,16 @@ class QuotaMonitoringService:
         self._mail_error_reason: Optional[str] = None
         self._mailer: Optional[SMTPMailer] = None
 
-    def run_monitor(self) -> dict[str, Any]:
+    def run_monitor(
+        self,
+        *,
+        include_quota_alerts: bool = True,
+        include_usage_history: bool = True,
+    ) -> dict[str, Any]:
         app_settings = load_app_settings()
         now = utcnow()
+        quota_alerts_enabled = bool(app_settings.general.quota_alerts_enabled and include_quota_alerts)
+        usage_history_collection_enabled = bool(app_settings.general.usage_history_enabled and include_usage_history)
         summary: dict[str, Any] = {
             "started_at": now.isoformat(),
             "subjects_total": 0,
@@ -136,14 +143,16 @@ class QuotaMonitoringService:
             "email_errors": 0,
             "errors": [],
             "warnings": [],
-            "quota_alerts_enabled": bool(app_settings.general.quota_alerts_enabled),
+            "quota_alerts_enabled": quota_alerts_enabled,
+            "quota_alerts_configured": bool(app_settings.general.quota_alerts_enabled),
             "usage_history_enabled": bool(app_settings.general.usage_history_enabled),
+            "usage_history_collection_enabled": usage_history_collection_enabled,
             "threshold_percent": int(app_settings.quota_notifications.threshold_percent),
         }
 
-        if not app_settings.general.quota_alerts_enabled and not app_settings.general.usage_history_enabled:
+        if not quota_alerts_enabled and not usage_history_collection_enabled:
             summary["status"] = "skipped"
-            summary["reason"] = "Both quota_alerts_enabled and usage_history_enabled are disabled."
+            summary["reason"] = "Both quota alerts and usage history collection are disabled for this run."
             summary["retention"] = DataRetentionService(self.db).purge_all()
             summary["finished_at"] = utcnow().isoformat()
             return summary
@@ -164,9 +173,10 @@ class QuotaMonitoringService:
         s3_user_recipients = self._load_s3_user_recipients()
         global_watch_recipients = self._load_global_watch_recipients()
         states = self._load_alert_states()
+        usage_clients: dict[int, Optional[RGWAdminClient]] = {}
         admin_clients: dict[int, Optional[RGWAdminClient]] = {}
 
-        if app_settings.general.quota_alerts_enabled:
+        if quota_alerts_enabled:
             self._mailer, self._mail_error_reason = self._build_mailer(app_settings.quota_notifications)
             if not self._mailer and self._mail_error_reason:
                 summary["warnings"].append(self._mail_error_reason)
@@ -183,19 +193,19 @@ class QuotaMonitoringService:
                 )
                 continue
 
-            admin_client = self._resolve_admin_client(endpoint, admin_clients)
-            if not admin_client:
+            usage_client = self._resolve_usage_client(endpoint, usage_clients, admin_clients)
+            if not usage_client:
                 summary["errors"].append(
                     {
                         "subject_type": subject.subject_type,
                         "subject_id": subject.subject_id,
-                        "error": f"Admin client unavailable for endpoint '{subject.endpoint_name}'.",
+                        "error": f"Usage client unavailable for endpoint '{subject.endpoint_name}'.",
                     }
                 )
                 continue
 
             try:
-                usage_bytes, usage_objects = self._collect_usage(admin_client, subject.usage_uid)
+                usage_bytes, usage_objects, bucket_count = self._collect_usage(usage_client, subject.usage_uid)
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning("Quota monitor usage collection failed for %s:%s: %s", subject.subject_type, subject.subject_id, exc)
                 summary["errors"].append(
@@ -209,17 +219,27 @@ class QuotaMonitoringService:
 
             quota_size_bytes = None
             quota_objects = None
-            try:
-                quota_size_bytes, quota_objects = self._collect_quota(admin_client, subject)
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.warning("Quota monitor quota collection failed for %s:%s: %s", subject.subject_type, subject.subject_id, exc)
-                summary["errors"].append(
+            admin_client = self._resolve_admin_client(endpoint, admin_clients)
+            if not admin_client:
+                summary["warnings"].append(
                     {
                         "subject_type": subject.subject_type,
                         "subject_id": subject.subject_id,
-                        "error": f"Quota collection failed: {exc}",
+                        "warning": f"Quota client unavailable for endpoint '{subject.endpoint_name}'.",
                     }
                 )
+            else:
+                try:
+                    quota_size_bytes, quota_objects = self._collect_quota(admin_client, subject)
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.warning("Quota monitor quota collection failed for %s:%s: %s", subject.subject_type, subject.subject_id, exc)
+                    summary["warnings"].append(
+                        {
+                            "subject_type": subject.subject_type,
+                            "subject_id": subject.subject_id,
+                            "warning": f"Quota collection failed: {exc}",
+                        }
+                    )
 
             ratio_pct = self._compute_usage_ratio(
                 used_bytes=usage_bytes,
@@ -228,13 +248,13 @@ class QuotaMonitoringService:
                 quota_objects=quota_objects,
             )
 
-            if app_settings.general.usage_history_enabled:
-                self._upsert_hourly(subject, usage_bytes, usage_objects, quota_size_bytes, quota_objects, ratio_pct, now)
+            if usage_history_collection_enabled:
+                self._upsert_hourly(subject, usage_bytes, usage_objects, bucket_count, quota_size_bytes, quota_objects, ratio_pct, now)
                 summary["history_hourly_upserts"] += 1
-                self._upsert_daily(subject, usage_bytes, usage_objects, ratio_pct, now)
+                self._upsert_daily(subject, usage_bytes, usage_objects, bucket_count, ratio_pct, now)
                 summary["history_daily_upserts"] += 1
 
-            if app_settings.general.quota_alerts_enabled:
+            if quota_alerts_enabled:
                 should_alert, next_level = self._update_state_and_check_alert(
                     subject=subject,
                     states=states,
@@ -402,20 +422,41 @@ class QuotaMonitoringService:
         cache[endpoint.id] = client
         return client
 
-    def _collect_usage(self, admin: RGWAdminClient, usage_uid: Optional[str]) -> tuple[int, int]:
+    def _resolve_usage_client(
+        self,
+        endpoint: StorageEndpoint,
+        cache: dict[int, Optional[RGWAdminClient]],
+        admin_cache: dict[int, Optional[RGWAdminClient]],
+    ) -> Optional[RGWAdminClient]:
+        cached = cache.get(endpoint.id)
+        if endpoint.id in cache:
+            return cached
+        provider = str(endpoint.provider or "").strip().lower()
+        if provider != StorageProvider.CEPH.value:
+            cache[endpoint.id] = None
+            return None
+        try:
+            client = get_supervision_rgw_client(endpoint)
+        except Exception:
+            client = self._resolve_admin_client(endpoint, admin_cache)
+        cache[endpoint.id] = client
+        return client
+
+    def _collect_usage(self, admin: RGWAdminClient, usage_uid: Optional[str]) -> tuple[int, int, int]:
         if not usage_uid:
-            return 0, 0
+            return 0, 0, 0
         payload = admin.get_all_buckets(uid=usage_uid, with_stats=True)
         buckets = extract_bucket_list(payload)
         total_bytes = 0
         total_objects = 0
+        bucket_count = len(buckets)
         for bucket in buckets:
             if not isinstance(bucket, dict):
                 continue
             used_bytes, used_objects = extract_usage_stats(bucket.get("usage"))
             total_bytes += int(used_bytes or 0)
             total_objects += int(used_objects or 0)
-        return total_bytes, total_objects
+        return total_bytes, total_objects, bucket_count
 
     def _collect_quota(
         self,
@@ -455,6 +496,7 @@ class QuotaMonitoringService:
         subject: SubjectContext,
         used_bytes: int,
         used_objects: int,
+        bucket_count: int,
         quota_size_bytes: Optional[int],
         quota_objects: Optional[int],
         ratio_pct: Optional[float],
@@ -474,6 +516,7 @@ class QuotaMonitoringService:
         if existing:
             existing.used_bytes = int(used_bytes)
             existing.used_objects = int(used_objects)
+            existing.bucket_count = int(bucket_count)
             existing.quota_size_bytes = quota_size_bytes
             existing.quota_objects = quota_objects
             existing.usage_ratio_pct = ratio_pct
@@ -487,6 +530,7 @@ class QuotaMonitoringService:
                 s3_user_id=subject.subject_id if subject.subject_type == "s3_user" else None,
                 used_bytes=int(used_bytes),
                 used_objects=int(used_objects),
+                bucket_count=int(bucket_count),
                 quota_size_bytes=quota_size_bytes,
                 quota_objects=quota_objects,
                 usage_ratio_pct=ratio_pct,
@@ -499,6 +543,7 @@ class QuotaMonitoringService:
         subject: SubjectContext,
         used_bytes: int,
         used_objects: int,
+        bucket_count: int,
         ratio_pct: Optional[float],
         now: datetime,
     ) -> None:
@@ -516,6 +561,7 @@ class QuotaMonitoringService:
         if existing:
             existing.last_used_bytes = int(used_bytes)
             existing.last_used_objects = int(used_objects)
+            existing.bucket_count = int(bucket_count)
             if ratio_pct is not None:
                 if existing.max_ratio_pct is None:
                     existing.max_ratio_pct = ratio_pct
@@ -532,6 +578,7 @@ class QuotaMonitoringService:
                 s3_user_id=subject.subject_id if subject.subject_type == "s3_user" else None,
                 last_used_bytes=int(used_bytes),
                 last_used_objects=int(used_objects),
+                bucket_count=int(bucket_count),
                 max_ratio_pct=ratio_pct,
                 samples_count=1,
                 updated_at=now,

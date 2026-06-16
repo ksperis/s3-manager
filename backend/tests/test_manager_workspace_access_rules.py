@@ -16,10 +16,11 @@ from app.routers.manager import context as manager_context_router
 from app.services.connection_identity_service import ConnectionIdentityResolution
 
 
-def _request(path: str, headers: dict | None = None):
+def _request(path: str, headers: dict | None = None, method: str = "GET"):
     return SimpleNamespace(
         url=SimpleNamespace(path=path),
         headers=headers or {},
+        method=method,
     )
 
 
@@ -90,6 +91,7 @@ def _build_linked_s3_user_context(
         rgw_access_key="AK-S3U",
         rgw_secret_key="SK-S3U",
         storage_endpoint=endpoint,
+        allow_manager_ceph_s3_user_keys=ceph_keys_access,
     )
     db_session.add_all([user, endpoint, s3_user])
     db_session.commit()
@@ -220,6 +222,58 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
     assert caps is not None
     assert caps.using_root_key is False
     assert caps.can_manage_iam is False
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/api/browser/settings"),
+        ("GET", "/api/browser/buckets/search"),
+        ("GET", "/api/browser/buckets/research/objects"),
+        ("GET", "/api/browser/buckets/research/cors"),
+        ("GET", "/api/browser/buckets/research/download"),
+        ("POST", "/api/browser/buckets/research/presign"),
+        ("POST", "/api/browser/buckets/research/delete"),
+        ("POST", "/api/browser/buckets/research/folders"),
+        ("POST", "/api/browser/buckets/research/proxy-upload"),
+        ("POST", "/api/browser/buckets/research/multipart/initiate"),
+        ("POST", "/api/browser/buckets/research/multipart/upload-123/presign"),
+        ("POST", "/api/browser/buckets/research/multipart/upload-123/complete"),
+        ("DELETE", "/api/browser/buckets/research/multipart/upload-123"),
+    ],
+)
+def test_portal_browser_basic_route_guard_allows_file_profile_routes(method, path):
+    dependencies.require_portal_browser_basic_route(
+        _request(path, headers={"X-S3-Workspace": "portal"}, method=method)
+    )
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/api/browser/buckets/research/versioning"),
+        ("POST", "/api/browser/buckets/research/objects/columns"),
+        ("GET", "/api/browser/buckets/research/object-tags"),
+        ("PUT", "/api/browser/buckets/research/object-meta"),
+        ("POST", "/api/browser/buckets/research/cors/ensure"),
+        ("GET", "/api/browser/sts"),
+        ("POST", "/api/browser/buckets/research/copy"),
+        ("GET", "/api/browser/buckets/research/multipart"),
+        ("POST", "/api/browser/buckets/research/versions/cleanup"),
+    ],
+)
+def test_portal_browser_basic_route_guard_blocks_advanced_routes(method, path):
+    with pytest.raises(HTTPException) as exc:
+        dependencies.require_portal_browser_basic_route(
+            _request(path, headers={"X-S3-Workspace": "portal"}, method=method)
+        )
+    assert exc.value.status_code == 403
+
+
+def test_portal_browser_basic_route_guard_ignores_regular_browser_requests():
+    dependencies.require_portal_browser_basic_route(
+        _request("/api/browser/buckets/research/object-tags", method="GET")
+    )
 
 
 def test_manager_membership_account_admin_uses_root_key_capabilities():
@@ -674,6 +728,30 @@ def test_manager_context_s3_user_enables_ceph_keys_when_management_possible(db_s
     payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
     assert payload.access_mode == "s3_user"
     assert payload.manager_ceph_keys_enabled is True
+
+
+def test_manager_context_s3_user_disables_ceph_keys_without_target_grant(db_session, monkeypatch):
+    settings = AppSettings()
+    settings.general.manager_ceph_s3_user_keys_enabled = True
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
+
+    endpoint = _ceph_s3_user_management_endpoint(name="ceph-s3u-keys-no-target-grant")
+    user, account = _build_linked_s3_user_context(
+        db_session,
+        endpoint=endpoint,
+        email="manager-ceph-keys-no-target-grant@example.com",
+        ceph_keys_access=True,
+    )
+    s3_user = db_session.query(S3User).filter(S3User.id == getattr(account, "s3_user_id")).first()
+    assert s3_user is not None
+    s3_user.allow_manager_ceph_s3_user_keys = False
+    db_session.add(s3_user)
+    db_session.commit()
+
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.access_mode == "s3_user"
+    assert payload.manager_ceph_keys_enabled is False
 
 
 def test_manager_context_s3_user_disables_ceph_keys_without_user_tool_access(db_session, monkeypatch):

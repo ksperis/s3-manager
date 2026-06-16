@@ -110,12 +110,14 @@ vi.mock("../../cephAdmin/CephAdminEndpointContext", () => ({
 describe("BucketDetailPage replication state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     useS3AccountContextMock.mockReturnValue({
       accounts: [],
       selectedS3AccountId: null,
       accountIdForApi: null,
       requiresS3AccountSelection: false,
       accessMode: "admin",
+      managerBucketQuotaEnabled: false,
     });
     useCephAdminEndpointMock.mockReturnValue({
       selectedEndpointId: 1,
@@ -206,6 +208,110 @@ describe("BucketDetailPage replication state", () => {
       request_breakdown: [],
       category_breakdown: [],
     });
+  });
+
+  it("renders the bucket overview without a redundant eyebrow or nested card shell", async () => {
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    const bucketTitle = await screen.findByRole("heading", { name: "Bucket demo-bucket" });
+    const overviewSection = bucketTitle.closest("section");
+
+    expect(overviewSection).not.toBeNull();
+    expect(overviewSection).not.toHaveClass("ui-surface-card");
+    expect(within(overviewSection as HTMLElement).queryByText("Overview")).not.toBeInTheDocument();
+    expect(within(overviewSection as HTMLElement).queryByText("Summary of enabled features.")).not.toBeInTheDocument();
+
+    const propertiesGroup = within(overviewSection as HTMLElement).getByText("Bucket properties").parentElement;
+    expect(propertiesGroup).not.toHaveClass("ui-surface-muted");
+  });
+
+  it("hides Manager quota tab without bucket quota access", async () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [{ id: "ceph-account", name: "Ceph account", endpoint_provider: "ceph" }],
+      selectedS3AccountId: "ceph-account",
+      accountIdForApi: "ceph-account",
+      requiresS3AccountSelection: true,
+      accessMode: "admin",
+      managerBucketQuotaEnabled: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage bucketNameOverride="demo-bucket" embedded hideObjectsTab />
+      </MemoryRouter>
+    );
+
+    await screen.findByRole("heading", { name: "Bucket demo-bucket" });
+    expect(screen.queryByRole("button", { name: "Privileged Ceph" })).not.toBeInTheDocument();
+  });
+
+  it("shows Manager quota tab with bucket quota access", async () => {
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_user",
+        manager_tool_access: {
+          bucket_compare: false,
+          bucket_integrity_check: false,
+          bucket_migration: false,
+          feature_rules: false,
+          bucket_quota: true,
+          ceph_s3_user_keys: false,
+        },
+      })
+    );
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [{ id: "ceph-account", name: "Ceph account", endpoint_provider: "ceph" }],
+      selectedS3AccountId: "ceph-account",
+      accountIdForApi: "ceph-account",
+      requiresS3AccountSelection: true,
+      accessMode: "admin",
+      managerBucketQuotaEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage bucketNameOverride="demo-bucket" embedded hideObjectsTab />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("button", { name: "Privileged Ceph" })).toBeInTheDocument();
+  });
+
+  it("hides Storage Ops quota tab when the context is not quota eligible", async () => {
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_user",
+        manager_tool_access: {
+          bucket_compare: false,
+          bucket_integrity_check: false,
+          bucket_migration: false,
+          feature_rules: false,
+          bucket_quota: true,
+          ceph_s3_user_keys: false,
+        },
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage
+          bucketNameOverride="demo-bucket"
+          accountIdOverride="conn-aws"
+          quotaAvailableOverride={false}
+          embedded
+          hideObjectsTab
+        />
+      </MemoryRouter>
+    );
+
+    await screen.findByRole("heading", { name: "Bucket demo-bucket" });
+    expect(screen.queryByRole("button", { name: "Privileged Ceph" })).not.toBeInTheDocument();
   });
 
   it("treats replication payload with empty role and no rules as not configured", async () => {
@@ -591,6 +697,7 @@ describe("BucketDetailPage replication state", () => {
       accountIdForApi: "conn-aws",
       requiresS3AccountSelection: true,
       accessMode: "connection",
+      managerBucketQuotaEnabled: false,
     });
 
     render(
@@ -608,8 +715,8 @@ describe("BucketDetailPage replication state", () => {
 
     await user.click(metricsTab);
 
-    expect(screen.queryByText("Current Usage and Quota")).not.toBeInTheDocument();
-    expect(screen.queryByText("Traffic visualization")).not.toBeInTheDocument();
+    expect(screen.queryByText("Current usage and quota")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Traffic" })).not.toBeInTheDocument();
     expect(screen.queryByText("Metrics are unavailable: this connection endpoint is not a Ceph provider.")).not.toBeInTheDocument();
   });
 
@@ -626,9 +733,9 @@ describe("BucketDetailPage replication state", () => {
 
     await user.click(metricsTab);
 
-    expect(await screen.findByText("Current Usage and Quota")).toBeInTheDocument();
-    const trafficTitle = screen.getByRole("heading", { name: "Traffic visualization" });
-    expect(trafficTitle).toHaveClass("ui-subtitle");
+    expect(await screen.findByText("Current usage and quota")).toBeInTheDocument();
+    const trafficTitle = screen.getByRole("heading", { name: "Traffic" });
+    expect(trafficTitle).toHaveClass("ui-section");
     expect(screen.queryByText("Bucket: demo-bucket")).not.toBeInTheDocument();
   });
 

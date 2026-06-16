@@ -183,6 +183,79 @@ describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
     expect(hasAdvancedFilters(advanced, false, true)).toBe(true);
   });
 
+  it("serializes notification feature-detail filters only when notifications are supported", () => {
+    const advanced: AdvancedFilterState = {
+      ...baseAdvancedFilter(),
+      featureDetails: {
+        ...baseAdvancedFilter().featureDetails,
+        notificationTopicName: "bucket-events",
+        notificationEventMode: "has",
+        notificationEventValue: "s3:ObjectCreated:*",
+        notificationEventBridgePresent: "true",
+      },
+    };
+
+    const rawPayload = buildAdvancedFilterPayload("", "contains", advanced, null, false, true, {
+      notifications: true,
+    });
+    expect(rawPayload).toBeTruthy();
+    const payload = JSON.parse(rawPayload ?? "{}") as { rules?: Array<Record<string, unknown>> };
+
+    expect(payload.rules).toEqual(
+      expect.arrayContaining([
+        { feature: "notifications", param: "notification_topic_name", op: "contains", value: "bucket-events" },
+        { feature: "notifications", param: "notification_event", op: "has", value: "s3:ObjectCreated:*" },
+        { feature: "notifications", param: "notification_eventbridge_present", op: "eq", value: true },
+      ])
+    );
+    expect(hasAdvancedFilters(advanced, false, true, { notifications: true })).toBe(true);
+    expect(buildAdvancedFilterPayload("", "contains", advanced, null, false, true, { notifications: false })).toBeUndefined();
+    expect(hasAdvancedFilters(advanced, false, true, { notifications: false })).toBe(false);
+  });
+
+  it("serializes audit feature-detail filters with server-side encryption support", () => {
+    const advanced: AdvancedFilterState = {
+      ...baseAdvancedFilter(),
+      featureDetails: {
+        ...baseAdvancedFilter().featureDetails,
+        objectLockRetentionYears: "1",
+        loggingTargetPrefix: "logs/",
+        websiteIndexDocument: "index.html",
+        websiteErrorDocument: "error.html",
+        websiteRedirectHost: "example.test",
+        websiteRoutingRuleCount: "2",
+        sseAlgorithm: "aws:kms",
+        sseKmsKeyId: "audit-key",
+      },
+    };
+
+    const rawPayload = buildAdvancedFilterPayload("", "contains", advanced, null, false, true, {
+      server_side_encryption: true,
+    });
+    expect(rawPayload).toBeTruthy();
+    const payload = JSON.parse(rawPayload ?? "{}") as { rules?: Array<Record<string, unknown>> };
+
+    expect(payload.rules).toEqual(
+      expect.arrayContaining([
+        { feature: "object_lock", param: "object_lock_retention_years", op: "gte", value: 1 },
+        { feature: "access_logging", param: "logging_target_prefix", op: "contains", value: "logs/" },
+        { feature: "static_website", param: "website_index_document", op: "contains", value: "index.html" },
+        { feature: "static_website", param: "website_error_document", op: "contains", value: "error.html" },
+        { feature: "static_website", param: "website_redirect_host", op: "contains", value: "example.test" },
+        { feature: "static_website", param: "website_routing_rule_count", op: "gte", value: 2 },
+        { feature: "server_side_encryption", param: "sse_algorithm", op: "contains", value: "aws:kms" },
+        { feature: "server_side_encryption", param: "sse_kms_key_id", op: "contains", value: "audit-key" },
+      ])
+    );
+    expect(hasAdvancedFilters(advanced, false, true, { server_side_encryption: true })).toBe(true);
+    expect(buildAdvancedFilterPayload("", "contains", advanced, null, false, true, { server_side_encryption: false })).toBeTruthy();
+    expect(
+      JSON.parse(
+        buildAdvancedFilterPayload("", "contains", advanced, null, false, true, { server_side_encryption: false }) ?? "{}"
+      ).rules
+    ).not.toEqual(expect.arrayContaining([{ feature: "server_side_encryption", param: "sse_algorithm", op: "contains", value: "aws:kms" }]));
+  });
+
   it("sanitizes persisted owner quota fields", () => {
     const sanitized = sanitizeAdvancedFilter({
       minQuotaUsageSizePercent: "71",
