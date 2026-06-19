@@ -439,7 +439,7 @@ export default function PortalSettingsPage() {
                     onChange={(e) => handleManagerActionsChange(e.target.value)}
                     className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                     rows={6}
-                    placeholder="iam:*"
+                    placeholder="s3:ListAllMyBuckets"
                     disabled={!settings}
                   />
                 </div>

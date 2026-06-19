@@ -95,6 +95,13 @@ hidden and cannot be disabled or deleted from the Access keys page. Admins can
 disable Portal user key creation and set the maximum number of user-managed
 keys from Portal settings.
 
+By default, the `portal-manager` IAM group is not an S3 administrator policy.
+It only grants the account-level actions needed to list buckets for Portal
+state and create a bucket for a new Storage Space. Per-Storage Space file
+access is granted through the Portal user's storage-space policy, while bucket
+defaults, IAM group synchronization, sharing, and public-link orchestration stay
+server-side workflows.
+
 ### Sharing and roles
 
 Portal exposes collaboration through simple roles:

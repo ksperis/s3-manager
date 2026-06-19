@@ -57,6 +57,11 @@ integrations remain disabled until explicitly enabled.
 
 `FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. When Portal is enabled, account access remains explicit: admins assign `portal_user` or `portal_manager` on each UI user/account link, while existing links stay `portal_none` until changed.
 
+The default `portal-manager` IAM group policy grants only
+`s3:ListAllMyBuckets` and `s3:CreateBucket`. Storage Space object access is
+kept in per-user Storage Space policies, and Portal bucket defaults are applied
+by backend orchestration with account credentials.
+
 ## Frontend runtime settings
 
 - `VITE_API_URL` for API base URL in frontend build/runtime.

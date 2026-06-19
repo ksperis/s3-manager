@@ -32,7 +32,7 @@ const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
     allow_portal_named_bucket_create: false,
     allow_portal_user_access_key_create: true,
     max_portal_user_access_keys: 2,
-    iam_group_manager_policy: { actions: ["s3:*"], advanced_policy: null },
+    iam_group_manager_policy: { actions: ["s3:ListAllMyBuckets", "s3:CreateBucket"], advanced_policy: null },
     iam_group_user_policy: { actions: ["s3:ListAllMyBuckets"], advanced_policy: null },
     bucket_access_policy: { actions: ["s3:GetObject"], advanced_policy: null },
     bucket_defaults: {

@@ -3507,7 +3507,7 @@ class PortalService:
         apply_bucket_defaults = bool(access.capabilities.can_manage_buckets or is_portal_user_creation)
         defaults_access_key = active_key_id
         defaults_secret = active_secret
-        if apply_bucket_defaults and not access.capabilities.can_manage_buckets:
+        if apply_bucket_defaults:
             defaults_access_key, defaults_secret = self._account_credentials(account)
         if versioning_flag and apply_bucket_defaults:
             s3_client.set_bucket_versioning(

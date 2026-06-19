@@ -84,6 +84,11 @@ save.
   `Sid` statements such as `PortalStorageSpacePrivate` and
   `PortalStorageSpaceArchived`. They must preserve unrelated bucket policy
   statements.
+- The default `portal-manager` IAM group policy must stay limited to global
+  Portal bootstrap actions such as `s3:ListAllMyBuckets` and
+  `s3:CreateBucket`. Do not reintroduce `iam:*`, `s3:*`, `sts:*`, or
+  bucket-configuration actions there to compensate for missing service
+  orchestration.
 - Keep storage permissions backed by the existing storage-side permissions. UI
   roles such as `Viewer`, `Editor`, and `Owner` are presentation and workflow
   terms, not a parallel permission model.
@@ -171,8 +176,11 @@ The current backend flow is:
 5. Execute file and sharing operations with the Portal execution identity.
    The locked Browser embed must send `X-S3-Workspace: portal` so `/browser`
    routes resolve Portal credentials and enforce the minimal file profile.
-6. Record mutating Portal actions through audit logging.
-7. Return user-facing shapes without policy JSON, principals, ARNs, or
+6. Apply platform-owned bucket defaults and IAM/share synchronization through
+   backend orchestration with the account credentials, not by widening the
+   `portal-manager` group policy.
+7. Record mutating Portal actions through audit logging.
+8. Return user-facing shapes without policy JSON, principals, ARNs, or
    advanced S3 diagnostics.
 
 Storage Space remains an API/UI abstraction. In v1 it maps to a bucket, but the

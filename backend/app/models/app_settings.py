@@ -17,7 +17,10 @@ def _default_portal_cors_origins() -> list[str]:
 
 
 def _default_portal_manager_actions() -> list[str]:
-    return ["iam:*", "s3:*", "sts:*"]
+    return [
+        "s3:ListAllMyBuckets",
+        "s3:CreateBucket",
+    ]
 
 
 def _default_portal_user_actions() -> list[str]:

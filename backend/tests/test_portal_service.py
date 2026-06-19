@@ -119,7 +119,9 @@ def test_portal_bucket_creation_updates_user_policy(monkeypatch, db_session):
     monkeypatch.setattr(
         s3_client,
         "set_bucket_versioning",
-        lambda name, enabled=True, access_key=None, secret_key=None, **kwargs: versioning_calls.append((name, enabled)),
+        lambda name, enabled=True, access_key=None, secret_key=None, **kwargs: versioning_calls.append(
+            (name, enabled, access_key, secret_key)
+        ),
     )
     monkeypatch.setattr(
         s3_client,
@@ -150,9 +152,13 @@ def test_portal_bucket_creation_updates_user_policy(monkeypatch, db_session):
 
     assert bucket.name == "user-bucket"
     assert created_buckets == [("user-bucket", "AK-PORTAL", "SK-PORTAL")]
-    assert versioning_calls == [("user-bucket", True)]
+    assert versioning_calls == [("user-bucket", True, "ROOT-AK", "ROOT-SK")]
     assert len(lifecycle_calls) == 1
+    assert lifecycle_calls[0][1]["access_key"] == "ROOT-AK"
+    assert lifecycle_calls[0][1]["secret_key"] == "ROOT-SK"
     assert len(cors_calls) == 1
+    assert cors_calls[0][1]["access_key"] == "ROOT-AK"
+    assert cors_calls[0][1]["secret_key"] == "ROOT-SK"
     cors_rules = cors_calls[0][1]["rules"]
     assert isinstance(cors_rules, list) and len(cors_rules) == 1
     assert "Authorization" in (cors_rules[0].get("AllowedHeaders") or [])
@@ -297,6 +303,22 @@ def test_portal_user_group_policy_adds_create_bucket_without_delete_bucket(db_se
     actions = statements[0].get("Action") or []
     assert "s3:CreateBucket" in actions
     assert "s3:DeleteBucket" not in actions
+
+
+def test_portal_manager_group_policy_defaults_to_minimal_global_actions(db_session):
+    service = PortalService(db_session)
+    policy = service._resolve_group_policy(PortalSettings(), "manager")
+
+    assert isinstance(policy, dict)
+    statements = policy.get("Statement") or []
+    assert isinstance(statements, list) and statements
+    actions = statements[0].get("Action") or []
+
+    assert actions == ["s3:ListAllMyBuckets", "s3:CreateBucket"]
+    assert "iam:*" not in actions
+    assert "s3:*" not in actions
+    assert "sts:*" not in actions
+    assert not any(action.startswith("iam:") or action.startswith("sts:") for action in actions)
 
 
 def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
