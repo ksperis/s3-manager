@@ -21,6 +21,12 @@ import {
 } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
+function visibleStatus(space: { status: string; visibility: PortalStorageSpaceVisibility }) {
+  const visibilityLabel = portalVisibilityLabel(space.visibility);
+  if (space.status === visibilityLabel || space.status === "Active") return null;
+  return space.status;
+}
+
 export default function PortalStorageSpacesPage() {
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi, state } = usePortalWorkspaceData();
   const navigate = useNavigate();
@@ -206,11 +212,11 @@ export default function PortalStorageSpacesPage() {
             <option value="Viewer">Viewer</option>
           </select>
           <select className="ui-control h-9 py-1.5 text-xs" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="all">All statuses</option>
+            <option value="all">All states</option>
             <option value="Active">Active</option>
-            <option value="Attention">Attention</option>
             <option value="Private">Private</option>
             <option value="Shared">Shared</option>
+            <option value="Attention">Attention</option>
             <option value="Archived">Archived</option>
           </select>
           <select className="ui-control h-9 py-1.5 text-xs" value={sort} onChange={(event) => setSort(event.target.value)}>
@@ -230,29 +236,43 @@ export default function PortalStorageSpacesPage() {
                 <th>Size</th>
                 <th>Created</th>
                 <th>Region</th>
-                <th>Status</th>
                 <th className="text-right">Action</th>
               </tr>
             </thead>
             <tbody>
-              {filteredSpaces.map((space) => (
-                <tr key={space.id}>
-                  <td>
-                    <div className={cx("font-bold", uiTitleTextClass)}>{space.name}</div>
-                    <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>{space.description}</div>
-                  </td>
-                  <td><UiBadge tone={portalVisibilityTone(space.visibility)}>{portalVisibilityLabel(space.visibility)}</UiBadge></td>
-                  <td>{formatCompactNumber(space.objectCount)}</td>
-                  <td>{formatBytes(space.usedBytes)}</td>
-                  <td>{space.createdLabel}</td>
-                  <td>{space.region}</td>
-                  <td><UiBadge tone={portalStorageSpaceStatusTone(space)}>{space.status}</UiBadge></td>
-                  <td className="text-right"><Link to={storageSpacePath(space)}>Open</Link></td>
-                </tr>
-              ))}
+              {filteredSpaces.map((space) => {
+                const status = visibleStatus(space);
+                return (
+                  <tr key={space.id}>
+                    <td>
+                      <Link
+                        to={storageSpacePath(space)}
+                        className={cx(
+                          "font-bold hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                          uiTitleTextClass,
+                        )}
+                      >
+                        {space.name}
+                      </Link>
+                      <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>{space.description}</div>
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <UiBadge tone={portalVisibilityTone(space.visibility)}>{portalVisibilityLabel(space.visibility)}</UiBadge>
+                        {status ? <UiBadge tone={portalStorageSpaceStatusTone(space)}>{status}</UiBadge> : null}
+                      </div>
+                    </td>
+                    <td>{formatCompactNumber(space.objectCount)}</td>
+                    <td>{formatBytes(space.usedBytes)}</td>
+                    <td>{space.createdLabel}</td>
+                    <td>{space.region}</td>
+                    <td className="text-right"><Link to={storageSpacePath(space)}>Open</Link></td>
+                  </tr>
+                );
+              })}
               {filteredSpaces.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
+                  <td colSpan={7} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
                     No Storage Spaces to display.
                   </td>
                 </tr>

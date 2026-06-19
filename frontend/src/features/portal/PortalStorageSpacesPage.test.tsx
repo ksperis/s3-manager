@@ -54,6 +54,28 @@ vi.mock("./usePortalWorkspaceData", () => ({
 describe("PortalStorageSpacesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.hookResult.workspace.spaces = [
+      {
+        id: "research-data",
+        name: "Research Data",
+        internalName: "research-data",
+        description: "Research Data shared storage",
+        role: "Owner",
+        status: "Active",
+        access: "Shared",
+        ownerUserId: 7,
+        visibility: "shared",
+        region: "eu-west-3",
+        createdLabel: "May 10, 2023",
+        usedBytes: 512,
+        quotaBytes: 1024,
+        objectCount: 12,
+        createdAt: "2026-03-10T10:00:00Z",
+        shareCount: 3,
+        origin: "portal_generic",
+        nameEditable: true,
+      },
+    ];
     mocks.hookResult.state = {
       can_manage_buckets: true,
       can_create_storage_spaces: true,
@@ -73,7 +95,12 @@ describe("PortalStorageSpacesPage", () => {
     const researchRow = screen.getByText("Research Data").closest("tr");
     expect(researchRow).not.toBeNull();
     expect(within(researchRow!).getByText("Shared")).toBeInTheDocument();
-    expect(within(researchRow!).getByText("Active")).toBeInTheDocument();
+    expect(within(researchRow!).queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Status" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Research Data" })).toHaveAttribute(
+      "href",
+      "/portal/storage-spaces/research-data"
+    );
     expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute(
       "href",
       "/portal/storage-spaces/research-data"
@@ -81,6 +108,29 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.getByRole("button", { name: "Create storage space" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import bucket" })).toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
+  });
+
+  it("shows distinct states inside the visibility column", () => {
+    mocks.hookResult.workspace.spaces = [
+      {
+        ...mocks.hookResult.workspace.spaces[0],
+        id: "archived-data",
+        name: "Archived Data",
+        visibility: "private",
+        status: "Archived",
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    const archivedRow = screen.getByText("Archived Data").closest("tr");
+    expect(archivedRow).not.toBeNull();
+    expect(within(archivedRow!).getByText("Private")).toBeInTheDocument();
+    expect(within(archivedRow!).getByText("Archived")).toBeInTheDocument();
   });
 
   it("shows the named bucket creation mode only when allowed by portal state", () => {

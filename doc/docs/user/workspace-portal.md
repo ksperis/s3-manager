@@ -26,7 +26,7 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 6. Use **Shares** to review items shared with you, items shared by you, and
    public links when enabled.
 7. Use **Activity**, **Transfers**, and **Usage & Analytics** for collaboration
-   history and consumption tracking.
+   history, usage composition, usage history, and consumption tracking.
 8. Use **Settings** for simple account and preference changes.
 
 ## Portal V3 workflows
@@ -165,6 +165,12 @@ backend.
 - **Usage by Storage Space** is based on real per-space usage returned by the
   Portal usage API. When the backend cannot report per-space values, the chart
   is hidden behind an unavailable state.
+- **Usage composition** reuses the latest calculated usage snapshots for the
+  Storage Spaces visible in the selected Portal account. It is read-only in
+  Portal; platform collection or Manager workflows produce the snapshots.
+- **Usage history** shows stored quota history for the selected Portal account.
+  It is account-scoped, so it may include the account-level consumption trend
+  even when a user normally works from a subset of Storage Spaces.
 - **Traffic and requests** come from traffic metrics for the selected account.
   If traffic collection is disabled or temporarily unavailable, Portal shows the
   last billing-derived values when available, otherwise an unavailable state.

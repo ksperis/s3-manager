@@ -25,6 +25,9 @@ type BucketUsageStatsAggregateCardProps = {
   recalculateLabel: string;
   onRecalculate?: () => void;
   className?: string;
+  coverageItemLabel?: string;
+  emptyDescription?: string;
+  emptyTitle?: string;
 };
 
 export default function BucketUsageStatsAggregateCard({
@@ -37,9 +40,14 @@ export default function BucketUsageStatsAggregateCard({
   recalculateLabel,
   onRecalculate,
   className,
+  coverageItemLabel = "buckets",
+  emptyDescription,
+  emptyTitle = "No usage stats calculated yet.",
 }: BucketUsageStatsAggregateCardProps) {
   const hasSnapshot = Boolean(aggregate && aggregate.buckets_with_snapshot > 0);
-  const coverageLabel = aggregate ? `${aggregate.buckets_with_snapshot} / ${aggregate.bucket_count} buckets covered` : "";
+  const coverageLabel = aggregate
+    ? `${aggregate.buckets_with_snapshot} / ${aggregate.bucket_count} ${coverageItemLabel} covered`
+    : "";
   const lastCalculated = aggregate?.newest_snapshot_at ? `Latest ${formatUsageStatsDate(aggregate.newest_snapshot_at)}` : undefined;
   const accountCoverage =
     aggregate?.managed_account_count != null
@@ -76,9 +84,12 @@ export default function BucketUsageStatsAggregateCard({
         </div>
       ) : !aggregate || !hasSnapshot ? (
         <MetricsEmptyState>
-          <span className={cx("block font-semibold", uiTitleTextClass)}>No usage stats calculated yet.</span>
+          <span className={cx("block font-semibold", uiTitleTextClass)}>{emptyTitle}</span>
           <span className={cx("block ui-caption", uiMutedTextClass)}>
-            {aggregate?.bucket_count ? `0 / ${aggregate.bucket_count} buckets covered.` : "Run a calculation to create the first snapshot."}
+            {emptyDescription ??
+              (aggregate?.bucket_count
+                ? `0 / ${aggregate.bucket_count} ${coverageItemLabel} covered.`
+                : "Run a calculation to create the first snapshot.")}
           </span>
         </MetricsEmptyState>
       ) : (

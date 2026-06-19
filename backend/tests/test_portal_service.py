@@ -21,6 +21,7 @@ from app.db import (
 )
 from app.models.app_settings import AppSettings, PortalSettings, PortalSettingsOverride
 from app.models.bucket import Bucket
+from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, BucketUsageStatsSnapshot
 from app.models.iam import AccessKey as IAMAccessKey, IAMUser
 from app.models.portal import (
     PortalAccessKey,
@@ -42,6 +43,7 @@ from app.services.portal_service import (
     PortalAccessKeyProtected,
     PortalService,
 )
+from app.services.bucket_usage_stats_service import BucketUsageStatsService
 from app.services.traffic_service import TrafficWindow
 from app.utils.time import utcnow
 
@@ -66,6 +68,64 @@ def _usage_history_settings(enabled: bool) -> AppSettings:
     settings = AppSettings()
     settings.general.usage_history_enabled = enabled
     return settings
+
+
+def _bucket_usage_settings(enabled: bool) -> AppSettings:
+    settings = AppSettings()
+    settings.general.bucket_usage_stats_enabled = enabled
+    return settings
+
+
+def _bucket_usage_snapshot(bucket_name: str, *, scope_id: str, bytes_value: int) -> BucketUsageStatsSnapshot:
+    return BucketUsageStatsSnapshot(
+        scope_kind="manager",
+        scope_id=scope_id,
+        scope_name="Portal source",
+        bucket_name=bucket_name,
+        scan_mode="versions",
+        version_listing_available=True,
+        object_version_count=1,
+        current_version_count=1,
+        noncurrent_version_count=0,
+        delete_marker_count=0,
+        total_bytes=bytes_value,
+        current_bytes=bytes_value,
+        noncurrent_bytes=0,
+        data_type_distribution=[
+            BucketUsageStatsDistributionEntry(
+                key="documents",
+                label="Documents",
+                count=1,
+                bytes=bytes_value,
+                ratio_count=1,
+                ratio_bytes=1,
+            )
+        ],
+        storage_class_distribution=[
+            BucketUsageStatsDistributionEntry(
+                key="STANDARD",
+                label="STANDARD",
+                count=1,
+                bytes=bytes_value,
+                ratio_count=1,
+                ratio_bytes=1,
+            )
+        ],
+        size_distribution=[],
+        age_distribution=[],
+        current_vs_noncurrent=[
+            BucketUsageStatsDistributionEntry(
+                key="current",
+                label="Current versions",
+                count=1,
+                bytes=bytes_value,
+                ratio_count=1,
+                ratio_bytes=1,
+            )
+        ],
+        warnings=[],
+        calculated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
 
 
 def test_portal_bucket_creation_updates_user_policy(monkeypatch, db_session):
@@ -2190,6 +2250,154 @@ def test_portal_usage_trends_return_empty_without_baseline(monkeypatch, db_sessi
     payload = portal_router.portal_usage_trends(access=_portal_access(account, user), db=db_session)
 
     assert payload.model_dump(exclude_none=True) == {}
+
+
+def test_portal_usage_stats_latest_filters_to_visible_storage_spaces(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
+    account = S3Account(name="portal-usage-stats", rgw_account_id="portal-usage-stats")
+    user = User(email="usage-stats@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    db_session.refresh(account)
+
+    BucketUsageStatsService().upsert_snapshot(
+        db_session,
+        _bucket_usage_snapshot("visible-space", scope_id=str(account.id), bytes_value=100),
+    )
+    BucketUsageStatsService().upsert_snapshot(
+        db_session,
+        _bucket_usage_snapshot("hidden-space", scope_id=str(account.id), bytes_value=900),
+    )
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="visible-space",
+                name="Visible",
+                role="Viewer",
+                internal_bucket_name="visible-space",
+            ),
+            PortalStorageSpaceSummary(
+                id="missing-space",
+                name="Missing",
+                role="Viewer",
+                internal_bucket_name="missing-space",
+            ),
+        ],
+    )
+
+    payload = portal_router.portal_usage_stats_latest(
+        access=_portal_access(account, user),
+        portal_service=service,
+        db=db_session,
+    )
+
+    aggregate = payload.aggregate
+    assert aggregate.scope_kind == "portal"
+    assert aggregate.scope_id == str(account.id)
+    assert aggregate.bucket_count == 2
+    assert aggregate.buckets_with_snapshot == 1
+    assert aggregate.missing_bucket_count == 1
+    assert aggregate.total_bytes == 100
+    assert next(entry for entry in aggregate.data_type_distribution if entry.key == "documents").bytes == 100
+
+
+def test_portal_usage_stats_latest_respects_feature_flag(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(False))
+    account = S3Account(name="portal-usage-stats-disabled", rgw_account_id="portal-usage-stats-disabled")
+    user = User(email="usage-stats-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as excinfo:
+        portal_router.portal_usage_stats_latest(
+            access=_portal_access(account, user),
+            portal_service=PortalService(db_session),
+            db=db_session,
+        )
+
+    assert excinfo.value.status_code == 403
+    assert excinfo.value.detail == "Bucket usage stats feature is disabled"
+
+
+def test_portal_usage_history_trends_exposes_account_history(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(True))
+    endpoint = StorageEndpoint(
+        name="portal-history-endpoint",
+        endpoint_url="https://portal-history.example.test",
+        provider="ceph",
+    )
+    account = S3Account(
+        name="portal-history",
+        rgw_account_id="portal-history",
+        storage_endpoint=endpoint,
+    )
+    other_account = S3Account(
+        name="portal-history-other",
+        rgw_account_id="portal-history-other",
+        storage_endpoint=endpoint,
+    )
+    user = User(email="usage-history@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([endpoint, account, other_account, user])
+    db_session.commit()
+    db_session.refresh(account)
+    db_session.refresh(other_account)
+    today = utcnow().date()
+
+    db_session.add_all(
+        [
+            QuotaUsageDaily(
+                day=today,
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                last_used_bytes=100,
+                last_used_objects=10,
+                bucket_count=1,
+                updated_at=datetime.combine(today, datetime.min.time()),
+            ),
+            QuotaUsageDaily(
+                day=today,
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=other_account.id,
+                last_used_bytes=999,
+                last_used_objects=99,
+                bucket_count=9,
+                updated_at=datetime.combine(today, datetime.min.time()),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = portal_router.portal_usage_history_trends(
+        window="month",
+        access=_portal_access(account, user),
+        db=db_session,
+    )
+
+    assert payload.available is True
+    assert len(payload.points) == 1
+    assert payload.points[0].used_bytes == 100
+    assert payload.points[0].used_objects == 10
+    assert payload.summary.latest_bucket_count == 1
+
+
+def test_portal_usage_history_trends_return_unavailable_when_disabled(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(False))
+    account = S3Account(name="portal-history-disabled", rgw_account_id="portal-history-disabled")
+    user = User(email="usage-history-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    payload = portal_router.portal_usage_history_trends(
+        window="month",
+        access=_portal_access(account, user),
+        db=db_session,
+    )
+
+    assert payload.available is False
+    assert payload.unavailable_reason == "Usage history is disabled."
 
 
 def test_portal_alerts_are_derived_from_quota_public_spaces_and_transfer_errors(monkeypatch, db_session):

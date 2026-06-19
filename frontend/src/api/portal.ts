@@ -7,7 +7,9 @@ import { Bucket } from "./buckets";
 import { S3Account } from "./accounts";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { PortalSettings, PortalSettingsOverride, PortalSettingsOverridePolicy } from "./appSettings";
+import type { BucketUsageStatsAggregateResponse } from "./bucketUsageStats";
 import type { ManagerUsageTrendsResponse } from "./stats";
+import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "./usageHistory";
 
 export type PortalAccessKey = {
   access_key_id: string;
@@ -267,6 +269,27 @@ export async function fetchPortalUsage(accountId: S3AccountSelector): Promise<Po
 
 export async function fetchPortalUsageTrends(accountId: S3AccountSelector): Promise<ManagerUsageTrendsResponse> {
   const { data } = await client.get<ManagerUsageTrendsResponse>("/portal/usage-trends", { params: withS3AccountParam(undefined, accountId) });
+  return data;
+}
+
+export async function getPortalUsageStatsAggregate(
+  accountId: S3AccountSelector
+): Promise<BucketUsageStatsAggregateResponse> {
+  const { data } = await client.get<BucketUsageStatsAggregateResponse>(
+    "/portal/usage-stats/latest",
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function fetchPortalUsageHistoryTrends(
+  accountId: S3AccountSelector,
+  window: UsageHistoryTrendWindow
+): Promise<UsageHistoryTrendResponse> {
+  const { data } = await client.get<UsageHistoryTrendResponse>(
+    "/portal/usage-history-trends",
+    { params: withS3AccountParam({ window }, accountId) }
+  );
   return data;
 }
 

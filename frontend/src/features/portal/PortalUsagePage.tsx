@@ -4,7 +4,11 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { getPortalBillingMe, type BillingSubjectDetail } from "../../api/billing";
+import type { BucketUsageStatsAggregate } from "../../api/bucketUsageStats";
+import { fetchPortalUsageHistoryTrends, getPortalUsageStatsAggregate } from "../../api/portal";
 import type { TrafficWindow } from "../../api/stats";
+import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "../../api/usageHistory";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { MetricsCard, MetricsEmptyState } from "../../components/MetricsCard";
 import MetricsTrafficOverview, { MetricsSnapshotCard, MetricsSummaryCard } from "../../components/MetricsTrafficOverview";
 import PageBanner from "../../components/PageBanner";
@@ -12,19 +16,15 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
 import UsageBreakdown from "../../components/UsageBreakdown";
+import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
 import { cx, uiCardMutedClass, uiDividerClass, uiInputClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
+import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
 import { PortalPageState } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
-type PortalUsageTab = "storage" | "storage-spaces" | "traffic" | "billing";
-
-const tabs: { id: PortalUsageTab; label: string }[] = [
-  { id: "storage", label: "Storage" },
-  { id: "storage-spaces", label: "Storage Spaces" },
-  { id: "traffic", label: "Traffic" },
-  { id: "billing", label: "Billing" },
-];
+type PortalUsageTab = "storage" | "storage-spaces" | "usage-composition" | "usage-history" | "traffic" | "billing";
 
 function currentMonth(): string {
   const now = new Date();
@@ -52,12 +52,20 @@ function formatCurrency(value?: number | null, currency?: string | null): string
 }
 
 export default function PortalUsagePage() {
+  const { generalSettings } = useGeneralSettings();
   const [month, setMonth] = useState(currentMonth());
   const [activeTab, setActiveTab] = useState<PortalUsageTab>("storage");
   const [trafficWindow, setTrafficWindow] = useState<TrafficWindow>("week");
+  const [usageHistoryWindow, setUsageHistoryWindow] = useState<UsageHistoryTrendWindow>("month");
   const [billing, setBilling] = useState<BillingSubjectDetail | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingUnavailable, setBillingUnavailable] = useState(false);
+  const [usageStatsAggregate, setUsageStatsAggregate] = useState<BucketUsageStatsAggregate | null>(null);
+  const [usageStatsLoading, setUsageStatsLoading] = useState(false);
+  const [usageStatsError, setUsageStatsError] = useState<string | null>(null);
+  const [usageHistoryTrends, setUsageHistoryTrends] = useState<UsageHistoryTrendResponse | null>(null);
+  const [usageHistoryLoading, setUsageHistoryLoading] = useState(false);
+  const [usageHistoryError, setUsageHistoryError] = useState<string | null>(null);
   const {
     workspace,
     storageSpaces,
@@ -75,6 +83,85 @@ export default function PortalUsagePage() {
     accountIdForApi,
     state,
   } = usePortalWorkspaceData({ includeTraffic: true, trafficWindow });
+
+  const tabs = useMemo(
+    () =>
+      [
+        { id: "storage" as const, label: "Storage" },
+        { id: "storage-spaces" as const, label: "Storage Spaces" },
+        ...(generalSettings.bucket_usage_stats_enabled ? [{ id: "usage-composition" as const, label: "Usage composition" }] : []),
+        ...(generalSettings.usage_history_enabled ? [{ id: "usage-history" as const, label: "Usage history" }] : []),
+        { id: "traffic" as const, label: "Traffic" },
+        { id: "billing" as const, label: "Billing" },
+      ],
+    [generalSettings.bucket_usage_stats_enabled, generalSettings.usage_history_enabled]
+  );
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(tabs[0]?.id ?? "storage");
+    }
+  }, [activeTab, tabs]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!generalSettings.bucket_usage_stats_enabled || !hasAccountContext || !accountIdForApi) {
+      setUsageStatsAggregate(null);
+      setUsageStatsLoading(false);
+      setUsageStatsError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setUsageStatsLoading(true);
+    setUsageStatsError(null);
+    getPortalUsageStatsAggregate(accountIdForApi)
+      .then((data) => {
+        if (!cancelled) setUsageStatsAggregate(data.aggregate);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setUsageStatsAggregate(null);
+          setUsageStatsError(extractApiError(err, "Unable to load usage composition."));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setUsageStatsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, generalSettings.bucket_usage_stats_enabled, hasAccountContext]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!generalSettings.usage_history_enabled || !hasAccountContext || !accountIdForApi) {
+      setUsageHistoryTrends(null);
+      setUsageHistoryLoading(false);
+      setUsageHistoryError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setUsageHistoryLoading(true);
+    setUsageHistoryError(null);
+    fetchPortalUsageHistoryTrends(accountIdForApi, usageHistoryWindow)
+      .then((data) => {
+        if (!cancelled) setUsageHistoryTrends(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setUsageHistoryTrends(null);
+          setUsageHistoryError(extractApiError(err, "Unable to load usage history trends."));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setUsageHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, generalSettings.usage_history_enabled, hasAccountContext, usageHistoryWindow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -276,6 +363,31 @@ export default function PortalUsagePage() {
             />
           </div>
         </MetricsCard>
+      ) : null}
+
+      {activeTab === "usage-composition" ? (
+        <BucketUsageStatsAggregateCard
+          title="Usage composition"
+          description="Latest calculated usage composition for the Storage Spaces visible in this portal account."
+          aggregate={usageStatsAggregate}
+          loading={usageStatsLoading}
+          error={usageStatsError}
+          recalculateLabel="Recalculate"
+          coverageItemLabel="Storage Spaces"
+          emptyTitle="No usage composition snapshots yet."
+          emptyDescription="Snapshots are produced by the platform usage collection; no portal action is required."
+        />
+      ) : null}
+
+      {activeTab === "usage-history" ? (
+        <UsageHistoryTrendsSection
+          trends={usageHistoryTrends}
+          window={usageHistoryWindow}
+          onWindowChange={setUsageHistoryWindow}
+          loading={usageHistoryLoading}
+          error={usageHistoryError}
+          description="Stored usage snapshots for the selected portal account."
+        />
       ) : null}
 
       {activeTab === "traffic" ? (

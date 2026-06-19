@@ -17,8 +17,8 @@ const portalNavSections: SidebarSection[] = [
     links: [
       { to: "/portal", label: "Dashboard", end: true, icon: <HomeIcon /> },
       { to: "/portal/storage-spaces", label: "Storage Spaces", icon: <StorageIcon /> },
-      { to: "/portal/access-keys", label: "Access keys", icon: <KeyIcon /> },
       { to: "/portal/shares", label: "Shares", icon: <ShareIcon /> },
+      { to: "/portal/access-keys", label: "Access keys", icon: <KeyIcon /> },
       { to: "/portal/activity", label: "Activity", icon: <ActivityIcon /> },
       { to: "/portal/transfers", label: "Transfers", icon: <TransferIcon /> },
       { to: "/portal/usage", label: "Usage & Analytics", icon: <ChartIcon /> },

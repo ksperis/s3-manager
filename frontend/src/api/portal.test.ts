@@ -25,8 +25,10 @@ import {
   downloadPortalStorageSpaceObject,
   fetchPortalStorageSpaceObjectDetail,
   fetchPortalStorageSpace,
+  fetchPortalUsageHistoryTrends,
   fetchPortalTransfers,
   fetchPortalUsageTrends,
+  getPortalUsageStatsAggregate,
   importPortalStorageSpace,
   listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
@@ -240,6 +242,18 @@ describe("portal storage spaces api", () => {
 
     expect(clientMock.get).toHaveBeenCalledWith("/portal/usage-trends", {
       params: { account_id: "101" },
+    });
+  });
+
+  it("fetches portal usage composition and history through portal endpoints", async () => {
+    await getPortalUsageStatsAggregate("101");
+    await fetchPortalUsageHistoryTrends("101", "month");
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/usage-stats/latest", {
+      params: { account_id: "101" },
+    });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/usage-history-trends", {
+      params: { account_id: "101", window: "month" },
     });
   });
 });
