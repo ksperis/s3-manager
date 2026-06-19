@@ -626,6 +626,10 @@ def has_non_local_cors_origins(origins: list[str]) -> bool:
     return any(not is_local_origin(origin) for origin in (origins or []))
 
 
+def has_wildcard_cors_origin(origins: list[str]) -> bool:
+    return any(str(origin or "").strip() == "*" for origin in (origins or []))
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

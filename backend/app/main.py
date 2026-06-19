@@ -11,9 +11,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from botocore.exceptions import ClientError
 from sqlalchemy.exc import DatabaseError
 
-from app.core.config import collect_secret_warnings, get_settings, has_non_local_cors_origins
+from app.core.config import collect_secret_warnings, get_settings, has_non_local_cors_origins, has_wildcard_cors_origin
 from app.core.database import SessionLocal, engine, is_sqlite_malformed_database_error, is_sqlite_url
 from app.core.db_init import init_db
+from app.routers.http_errors import sanitize_error_detail, sanitized_error_log_detail
 from app.routers import auth, users, settings as public_settings, browser as user_browser
 from app.routers import portal
 from app.routers import execution_contexts
@@ -93,6 +94,10 @@ def _startup_security_warnings() -> list[str]:
         warnings.append(
             "REFRESH_TOKEN_COOKIE_SECURE=false while non-local CORS origins are configured. "
             "Production deployments should enable secure refresh cookies."
+        )
+    if has_wildcard_cors_origin(settings.cors_origins):
+        warnings.append(
+            "CORS_ORIGINS includes '*'. Authenticated deployments should use explicit trusted origins only."
         )
     if is_sqlite_url(settings.database_url) and settings.bucket_migration_worker_enabled:
         warnings.append(
@@ -273,6 +278,7 @@ app.include_router(
 
 @app.exception_handler(StarletteHTTPException)
 async def log_http_exceptions(request: Request, exc: StarletteHTTPException):
+    response_detail = sanitize_error_detail(exc.detail) if exc.status_code >= 500 else exc.detail
     if exc.status_code >= 500:
         cause = exc.__cause__
         while cause and not isinstance(cause, ClientError):
@@ -286,17 +292,19 @@ async def log_http_exceptions(request: Request, exc: StarletteHTTPException):
                 request.method,
                 request.url.path,
                 exc.status_code,
-                exc.detail,
+                sanitized_error_log_detail(response_detail),
             )
         else:
             logger.error(
-                "Request %s %s responded with %s: %s",
+                "Request %s %s responded with %s: %s (cause=%s)",
                 request.method,
                 request.url.path,
                 exc.status_code,
-                exc.detail,
-                exc_info=exc.__cause__ or exc,
+                sanitized_error_log_detail(response_detail),
+                type(exc.__cause__ or exc).__name__,
             )
+    if response_detail != exc.detail:
+        exc = StarletteHTTPException(status_code=exc.status_code, detail=response_detail, headers=exc.headers)
     return await fastapi_http_exception_handler(request, exc)
 
 

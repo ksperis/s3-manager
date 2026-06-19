@@ -39,6 +39,18 @@ def test_startup_security_warnings_do_not_include_cookie_notice_for_local_origin
     assert not any("REFRESH_TOKEN_COOKIE_SECURE=false" in item for item in warnings)
 
 
+def test_startup_security_warnings_include_wildcard_cors_notice(monkeypatch):
+    monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
+    monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])
+    monkeypatch.setattr(main.settings, "seed_super_admin_password", "very-strong-password")
+    monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", True)
+    monkeypatch.setattr(main.settings, "cors_origins", ["*"])
+
+    warnings = main._startup_security_warnings()
+
+    assert any("CORS_ORIGINS includes '*'" in item for item in warnings)
+
+
 def test_startup_security_warnings_include_sqlite_bucket_migration_notice(monkeypatch):
     monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
     monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])

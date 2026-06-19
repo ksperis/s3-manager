@@ -98,9 +98,10 @@ JWT signing uses the first key in `JWT_KEYS` and validates against the full list
 
 Security notes:
 - Production environments should set strong non-default values for `FERNET_KEY`/`JWT_KEYS` and `CREDENTIAL_KEY`/`CREDENTIAL_KEYS` (>=32 chars, high entropy).
-- Production environments should set `REFRESH_TOKEN_COOKIE_SECURE=true` when using non-local origins.
+- Production environments should set `REFRESH_TOKEN_COOKIE_SECURE=true` when using non-local origins, and `CORS_ORIGINS` should list explicit trusted origins rather than `*`.
 - Keep `SEED_SUPER_ADMIN_PASSWORD` as a bootstrap credential only and rotate it immediately.
 - Prefer `SEED_SUPER_ADMIN_MODE=if_empty` (default) or `disabled` in production to avoid accidental super-admin reseeding on restart.
+- HTTP 5xx responses redact URLs, authorization headers, tokens, signatures, and access-key material before details are returned to clients or written through the HTTP exception logger.
 
 ### Credential key rotation (manual)
 

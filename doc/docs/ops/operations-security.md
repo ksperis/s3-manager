@@ -17,6 +17,7 @@
 ## Transport and network
 
 - Enforce TLS at ingress/reverse proxy.
+- Configure `CORS_ORIGINS` with explicit trusted UI origins. Avoid `*` for authenticated deployments, and enable `REFRESH_TOKEN_COOKIE_SECURE=true` for non-local origins.
 - Keep internal endpoints protected with `INTERNAL_CRON_TOKEN` and private network exposure.
 - End-user custom S3 endpoints are restricted to public `https://` targets. Only admin-managed endpoint flows may keep `http://` endpoints when an internal deployment explicitly requires them.
 
@@ -25,6 +26,7 @@
 - Retain audit trail centrally.
 - Correlate UI actions with backend logs and executor identity.
 - LDAP login success, failure, rate-limit, and provider configuration failures are audited without recording submitted passwords.
+- Backend HTTP 5xx details are sanitized before being returned or logged by the HTTP exception handler. Do not bypass the shared error helpers when exposing upstream S3/RGW/IAM failures.
 
 ## CI security gates
 
