@@ -339,7 +339,8 @@ describe("AccountsPage modal tabs", () => {
 
     expect(fetchAccountPortalSettingsMock).toHaveBeenCalledWith(1);
     expect(await screen.findByText("Portal manager overrides are active for this account.")).toBeInTheDocument();
-    expect(screen.getByText("Bucket management")).toBeInTheDocument();
+    expect(screen.getByText("Portal user Storage Space creation")).toBeInTheDocument();
+    expect(screen.queryByText("Bucket management")).not.toBeInTheDocument();
   });
 
   it("hides portal overrides tab when the portal feature is disabled", async () => {
@@ -365,13 +366,17 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
-    await screen.findByText("Bucket management");
+    await screen.findByText("Portal user Storage Space creation");
 
-    const bucketManagement = screen.getByText("Bucket management").closest("div")?.parentElement?.parentElement;
+    const storageSpaceCreation = screen
+      .getByText("Portal user Storage Space creation")
+      .closest("div")?.parentElement?.parentElement;
     const namedBucketCreation = screen.getByText("Named bucket creation").closest("div")?.parentElement?.parentElement;
-    expect(bucketManagement).not.toBeNull();
+    expect(storageSpaceCreation).not.toBeNull();
     expect(namedBucketCreation).not.toBeNull();
-    fireEvent.change(within(bucketManagement as HTMLElement).getByRole("combobox"), { target: { value: "disabled" } });
+    fireEvent.change(within(storageSpaceCreation as HTMLElement).getByRole("combobox"), {
+      target: { value: "disabled" },
+    });
     fireEvent.change(within(namedBucketCreation as HTMLElement).getByRole("combobox"), { target: { value: "enabled" } });
     fireEvent.click(screen.getByRole("button", { name: "Save overrides" }));
 
@@ -391,7 +396,7 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
-    await screen.findByText("Bucket management");
+    await screen.findByText("Portal user Storage Space creation");
 
     fireEvent.click(screen.getByRole("button", { name: "Reset overrides" }));
 

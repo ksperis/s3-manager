@@ -3202,6 +3202,13 @@ class PortalService:
         total_buckets = len(buckets)
         quota_max_size_bytes, quota_max_objects, max_buckets = self._account_limits(account)
         portal_settings = self._effective_portal_settings(account)
+        can_create_storage_spaces = bool(
+            access.capabilities.can_manage_buckets
+            or (
+                access.role == AccountRole.PORTAL_USER.value
+                and portal_settings.allow_portal_user_bucket_create
+            )
+        )
         return PortalState(
             account_id=account.id,
             iam_user=PortalIAMUser(
@@ -3223,6 +3230,7 @@ class PortalService:
             just_created=False,
             account_role=access.role,
             can_manage_buckets=access.capabilities.can_manage_buckets,
+            can_create_storage_spaces=can_create_storage_spaces,
             can_manage_portal_users=access.capabilities.can_manage_portal_users,
             allow_named_bucket_create=portal_settings.allow_portal_named_bucket_create,
         )

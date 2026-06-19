@@ -49,6 +49,7 @@ class PortalState(BaseModel):
     just_created: bool = False
     account_role: Optional[str] = None
     can_manage_buckets: bool = False
+    can_create_storage_spaces: bool = False
     can_manage_portal_users: bool = False
     allow_named_bucket_create: bool = False
 

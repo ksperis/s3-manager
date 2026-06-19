@@ -44,6 +44,7 @@ export type PortalState = {
   just_created?: boolean;
   account_role?: string | null;
   can_manage_buckets?: boolean;
+  can_create_storage_spaces?: boolean;
   can_manage_portal_users?: boolean;
   allow_named_bucket_create?: boolean;
 };

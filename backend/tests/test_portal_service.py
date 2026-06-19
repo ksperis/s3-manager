@@ -795,6 +795,27 @@ def test_get_state_scopes_buckets_for_portal_user(monkeypatch, db_session):
     assert [bucket.name for bucket in state.buckets] == ["bucket-user"]
     assert state.total_buckets == 1
     assert state.can_manage_buckets is False
+    assert state.can_create_storage_spaces is True
+
+
+def test_get_state_disables_storage_space_creation_for_portal_user_when_setting_is_disabled(
+    monkeypatch,
+    db_session,
+):
+    account = S3Account(name="portal-account-user-create-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-create-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    service = PortalService(db_session)
+    portal_settings = PortalSettings(allow_portal_user_bucket_create=False)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
+
+    state = service.get_state(user, access)
+
+    assert state.can_manage_buckets is False
+    assert state.can_create_storage_spaces is False
 
 
 def test_get_state_returns_no_buckets_when_scope_is_empty(monkeypatch, db_session):
@@ -1138,6 +1159,60 @@ def test_create_storage_space_generic_uses_uuid_bucket_and_editable_name(monkeyp
     assert metadata.origin == "portal_generic"
     assert metadata.name_editable is True
     assert storage_space.id == bucket_name
+
+
+def test_portal_user_can_create_storage_space_when_setting_is_enabled(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-user-create", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-user-create@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    service = PortalService(db_session)
+    portal_settings = PortalSettings(allow_portal_user_bucket_create=True)
+    created_buckets = []
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
+    monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        service,
+        "create_bucket",
+        lambda _user, _access, bucket_name, **kwargs: created_buckets.append((bucket_name, kwargs.get("portal_settings"))),
+    )
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name="Research Data",
+            role="Owner",
+            internal_bucket_name=bucket_name,
+            origin="portal_generic",
+            name_editable=True,
+        ),
+    )
+
+    storage_space = service.create_storage_space(user, access, name="Research Data")
+
+    assert storage_space.name == "Research Data"
+    assert len(created_buckets) == 1
+    bucket_name, applied_settings = created_buckets[0]
+    assert str(uuid.UUID(bucket_name)) == bucket_name
+    assert applied_settings is portal_settings
+
+
+def test_portal_user_cannot_create_storage_space_when_setting_is_disabled(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-user-create-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-user-create-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    service = PortalService(db_session)
+    portal_settings = PortalSettings(allow_portal_user_bucket_create=False)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
+
+    with pytest.raises(RuntimeError, match="Storage Space creation not allowed"):
+        service.create_storage_space(user, access, name="Research Data")
 
 
 def test_create_storage_space_named_bucket_uses_legacy_slug_and_locks_name(monkeypatch, db_session):

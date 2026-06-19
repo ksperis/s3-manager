@@ -38,7 +38,7 @@ const mocks = vi.hoisted(() => ({
       transfers: [],
       alerts: [],
     },
-    state: { can_manage_buckets: true, allow_named_bucket_create: false },
+    state: { can_manage_buckets: true, can_create_storage_spaces: true, allow_named_bucket_create: false },
     loading: false,
     accountLoading: false,
     error: null,
@@ -54,7 +54,11 @@ vi.mock("./usePortalWorkspaceData", () => ({
 describe("PortalStorageSpacesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.hookResult.state = { can_manage_buckets: true, allow_named_bucket_create: false };
+    mocks.hookResult.state = {
+      can_manage_buckets: true,
+      can_create_storage_spaces: true,
+      allow_named_bucket_create: false,
+    };
   });
 
   it("lists storage spaces and opens the detail route", () => {
@@ -80,7 +84,11 @@ describe("PortalStorageSpacesPage", () => {
   });
 
   it("shows the named bucket creation mode only when allowed by portal state", () => {
-    mocks.hookResult.state = { can_manage_buckets: true, allow_named_bucket_create: true };
+    mocks.hookResult.state = {
+      can_manage_buckets: true,
+      can_create_storage_spaces: true,
+      allow_named_bucket_create: true,
+    };
 
     render(
       <MemoryRouter>
@@ -107,5 +115,39 @@ describe("PortalStorageSpacesPage", () => {
     const namingMode = screen.getByLabelText("Storage Space naming mode");
     expect(within(namingMode).getByRole("option", { name: "Generic storage" })).toBeInTheDocument();
     expect(within(namingMode).queryByRole("option", { name: "Named bucket" })).not.toBeInTheDocument();
+  });
+
+  it("allows portal users to create Storage Spaces without showing bucket import", () => {
+    mocks.hookResult.state = {
+      can_manage_buckets: false,
+      can_create_storage_spaces: true,
+      allow_named_bucket_create: false,
+    };
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("button", { name: "Create storage space" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Import bucket" })).not.toBeInTheDocument();
+  });
+
+  it("hides Storage Space creation when the portal user setting is disabled", () => {
+    mocks.hookResult.state = {
+      can_manage_buckets: false,
+      can_create_storage_spaces: false,
+      allow_named_bucket_create: false,
+    };
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole("button", { name: "Create storage space" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Import bucket" })).not.toBeInTheDocument();
   });
 });

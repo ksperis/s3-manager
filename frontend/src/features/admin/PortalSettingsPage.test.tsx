@@ -160,4 +160,12 @@ describe("PortalSettingsPage", () => {
     expect(payload.portal.allow_portal_named_bucket_create).toBe(true);
     expect(payload.portal.override_policy.allow_portal_named_bucket_create).toBe(true);
   });
+
+  it("labels portal user Storage Space creation without bucket management wording", async () => {
+    render(<PortalSettingsPage />);
+
+    expect(await screen.findByText("Portal user Storage Space creation")).toBeInTheDocument();
+    expect(screen.queryByText("Bucket management")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Portal user Storage Space creation")).toBeInTheDocument();
+  });
 });

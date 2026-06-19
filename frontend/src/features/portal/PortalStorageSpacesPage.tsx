@@ -62,7 +62,8 @@ export default function PortalStorageSpacesPage() {
     });
   }, [normalizedQuery, roleFilter, sort, statusFilter, workspace.spaces]);
 
-  const canCreate = Boolean(state?.can_manage_buckets);
+  const canCreate = Boolean(state?.can_create_storage_spaces ?? state?.can_manage_buckets);
+  const canImport = Boolean(state?.can_manage_buckets);
   const canUseNamedBucket = Boolean(state?.allow_named_bucket_create);
 
   const handleCreate = async () => {
@@ -114,6 +115,12 @@ export default function PortalStorageSpacesPage() {
     noAccountMessage: "Select an account to view storage spaces.",
   });
   if (pageState) return pageState;
+  const headerActions = [
+    ...(canCreate ? [{ label: "Create storage space", onClick: () => setShowCreate((value) => !value) }] : []),
+    ...(canImport
+      ? [{ label: "Import bucket", onClick: () => setShowImport((value) => !value), variant: "secondary" as const }]
+      : []),
+  ];
 
   return (
     <div className="space-y-4">
@@ -121,14 +128,7 @@ export default function PortalStorageSpacesPage() {
         title="Storage Spaces"
         description="Manage your storage spaces and their configuration."
         breadcrumbs={[{ label: "Portal" }, { label: "Storage Spaces" }]}
-        actions={
-          canCreate
-            ? [
-                { label: "Create storage space", onClick: () => setShowCreate((value) => !value) },
-                { label: "Import bucket", onClick: () => setShowImport((value) => !value), variant: "secondary" },
-              ]
-            : []
-        }
+        actions={headerActions}
       />
 
       {showCreate ? (

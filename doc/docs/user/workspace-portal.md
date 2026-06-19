@@ -53,6 +53,11 @@ A Storage Space can also be **Archived**. Archived spaces stay registered for
 future restoration, but Portal file browsing, sharing, and public links are
 suspended while the archive status is active.
 
+When Portal user Storage Space creation is enabled for the account, portal-user
+members can create their own Storage Spaces from the Storage Spaces page. Portal
+managers can still import existing buckets as Storage Spaces; regular
+portal-users only see the create flow.
+
 From a Storage Space, users can:
 
 - browse folders and files;

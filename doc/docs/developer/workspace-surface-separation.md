@@ -76,6 +76,10 @@ save.
   Portal UI text.
 - Do not reintroduce a Storage Space `Type` field. Use `visibility` for
   `private` or `shared`, and `archived_at`/`status` for archived state.
+- Portal user Storage Space creation is exposed through the dedicated
+  `can_create_storage_spaces` Portal state flag. Do not reuse
+  `can_manage_buckets` for portal-user creation UI, because bucket management
+  remains a broader portal-manager/operator capability.
 - Private Storage Spaces are visible only to their owner and Portal managers.
   Shared Storage Spaces use the existing Viewer, Editor, and Owner grants.
   Archived Storage Spaces suspend Portal access and public links without

@@ -1855,7 +1855,7 @@ export default function S3AccountsPage() {
                       <div className="space-y-4">
                         <PortalSettingsSection title="UI" layout="grid">
                           <PortalSettingsItem
-                            title="Bucket management"
+                            title="Portal user Storage Space creation"
                             description={`Effective for portal users: ${
                               effectivePortalSettings.allow_portal_user_bucket_create ? "enabled" : "disabled"
                             }`}

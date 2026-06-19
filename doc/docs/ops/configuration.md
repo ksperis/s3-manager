@@ -43,7 +43,7 @@ Managed from Admin UI:
 - General feature toggles (`manager_enabled`, `portal_enabled`, `browser_enabled`, `ceph_admin_enabled`, `storage_ops_enabled`, `billing_enabled`, `endpoint_status_enabled`).
 - Quota supervision toggles (`quota_alerts_enabled`, `usage_history_enabled`).
 - Browser sub-flags (`browser_root_enabled`, `browser_manager_enabled`, `browser_portal_enabled`, `browser_ceph_admin_enabled`).
-- Portal settings (`portal`): IAM key policy, portal user bucket creation, portal user access-key creation, max portal user keys, IAM group policies, bucket access policy, bucket defaults, and account override policy.
+- Portal settings (`portal`): IAM key policy, portal user Storage Space creation, portal user access-key creation, max portal user keys, IAM group policies, bucket access policy, bucket defaults, and account override policy.
 - Migration/compare flags and manager behavior.
 - Quota notification policy (`quota_notifications`: threshold, SMTP non-secret fields, contact-email option).
 
