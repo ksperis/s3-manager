@@ -148,6 +148,11 @@ flows unless the pathway is explicit, authorized, and audited.
 
 - Respect the architecture: thin routers, then services, then clients.
 - Avoid broad refactors when a smaller coherent change is sufficient.
+- For frontend product work, use
+  [Product design guidelines](product-design-guidelines.md),
+  [Workspace surface separation](workspace-surface-separation.md), and
+  [UI theme guidelines](ui-theme-guidelines.md) together before introducing new
+  page structure, vocabulary, or visual patterns.
 - Update relevant documentation alongside behavior changes.
 - Add targeted tests or a documented reproducible scenario for changes related
   to keys, quotas, or permissions.

@@ -8,6 +8,7 @@ This section documents architecture and design intent at high level.
 - Backend/frontend/database structure.
 - Local development tooling.
 - Core principles and identity/execution model.
+- Product design direction for workspace UI decisions.
 - AI assistant and contribution guardrails.
 - Documentation maintenance contract.
 - Frontend UI theme tokens and primitive usage.
@@ -19,6 +20,7 @@ This section documents architecture and design intent at high level.
 3. [AI assistant guidelines](ai-assistant-guidelines.md)
 4. [Identity and execution model](identity-and-execution-model.md)
 5. [Workspace surface separation](workspace-surface-separation.md)
-6. [Local development](local-development.md)
-7. [UI theme guidelines](ui-theme-guidelines.md)
-8. [Docs maintenance](docs-maintenance.md)
+6. [Product design guidelines](product-design-guidelines.md)
+7. [Local development](local-development.md)
+8. [UI theme guidelines](ui-theme-guidelines.md)
+9. [Docs maintenance](docs-maintenance.md)

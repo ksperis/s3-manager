@@ -112,6 +112,7 @@ nav:
       - "Architecture: frontend": developer/architecture-frontend.md
       - "Architecture: database": developer/architecture-database.md
       - Principles: developer/principles.md
+      - Product design guidelines: developer/product-design-guidelines.md
       - UI theme guidelines: developer/ui-theme-guidelines.md
       - AI assistant guidelines: developer/ai-assistant-guidelines.md
       - Identity and execution model: developer/identity-and-execution-model.md
