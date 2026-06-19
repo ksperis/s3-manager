@@ -1421,8 +1421,11 @@ class BrowserService:
         recursive: bool = False,
         sort_by: BrowserObjectSortBy = "name",
         sort_dir: BrowserObjectSortDir = "asc",
+        force_refresh: bool = False,
     ) -> ListBrowserObjectsResponse:
         normalized_max_keys = max(1, min(1000, int(max_keys or 1000)))
+        if force_refresh:
+            self.invalidate_object_list_cache_for_account(account, bucket_name)
         if sort_by == "name" and sort_dir == "asc":
             return self._list_objects_default_order(
                 bucket_name,

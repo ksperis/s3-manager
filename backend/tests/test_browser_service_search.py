@@ -54,6 +54,48 @@ def test_list_objects_recursive_folder_filter_builds_prefixes(monkeypatch):
     assert "Delimiter" not in captured["kwargs"]
 
 
+def test_list_objects_force_refresh_invalidates_cached_listing(monkeypatch):
+    calls: list[dict] = []
+
+    class FakeClient:
+        def list_objects_v2(self, **kwargs):  # noqa: ANN001
+            calls.append(kwargs)
+            if len(calls) == 1:
+                return {
+                    "Contents": [{"Key": "uploads/old.txt", "Size": 10}],
+                    "IsTruncated": False,
+                    "NextContinuationToken": None,
+                }
+            return {
+                "Contents": [
+                    {"Key": "uploads/old.txt", "Size": 10},
+                    {"Key": "uploads/new.txt", "Size": 20},
+                ],
+                "IsTruncated": False,
+                "NextContinuationToken": None,
+            }
+
+    service = BrowserService()
+    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+
+    first = service.list_objects("bucket-a", _account(), prefix="uploads/")
+    cached = service.list_objects("bucket-a", _account(), prefix="uploads/")
+    refreshed = service.list_objects(
+        "bucket-a",
+        _account(),
+        prefix="uploads/",
+        force_refresh=True,
+    )
+
+    assert [obj.key for obj in first.objects] == ["uploads/old.txt"]
+    assert [obj.key for obj in cached.objects] == ["uploads/old.txt"]
+    assert [obj.key for obj in refreshed.objects] == [
+        "uploads/old.txt",
+        "uploads/new.txt",
+    ]
+    assert len(calls) == 2
+
+
 def test_list_objects_recursive_skips_folder_markers_in_object_results(monkeypatch):
     class FakeClient:
         def list_objects_v2(self, **_kwargs):  # noqa: ANN001

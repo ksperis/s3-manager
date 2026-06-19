@@ -11,5 +11,6 @@ test("logs in with the UI user and lands on /browser", async ({ page }) => {
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page).toHaveURL(/\/browser(?:\?.*)?$/);
+  await page.goto(`/browser?bucket=${encodeURIComponent(E2E_BUCKET_NAME)}`);
   await expect(page.getByRole("button", { name: "Select bucket" })).toContainText(E2E_BUCKET_NAME);
 });

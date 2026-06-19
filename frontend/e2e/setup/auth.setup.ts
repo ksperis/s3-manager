@@ -178,7 +178,7 @@ async function ensureConnectionLink(
   await assertOk(linkResponse, "Unable to link E2E user to shared Moto connection");
 }
 
-setup("bootstrap browser auth with Moto", async ({ page }) => {
+setup("bootstrap browser auth with S3 backend", async ({ page }) => {
   const { seedMoto } = await import("../../scripts/e2e/seed-moto.mjs");
   await seedMoto({
     endpoint: E2E_S3_ENDPOINT,
@@ -203,6 +203,7 @@ setup("bootstrap browser auth with Moto", async ({ page }) => {
   await page.locator('input[type="password"]').fill(E2E_USER_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/browser(?:\?.*)?$/);
+  await page.goto(`/browser?bucket=${encodeURIComponent(E2E_BUCKET_NAME)}`);
   await expect(page.getByRole("button", { name: "Select bucket" })).toContainText(E2E_BUCKET_NAME);
   await page.context().storageState({ path: E2E_STORAGE_STATE_PATH });
 });

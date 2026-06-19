@@ -477,7 +477,7 @@ export async function fetchBrowserSettings(
 export async function listBrowserObjects(
   accountId: S3AccountSelector,
   bucketName: string,
-  options?: { prefix?: string; continuationToken?: string | null; maxKeys?: number; signal?: AbortSignal } & BrowserObjectsQuery & BrowserRequestOptions
+  options?: { prefix?: string; continuationToken?: string | null; maxKeys?: number; signal?: AbortSignal; forceRefresh?: boolean } & BrowserObjectsQuery & BrowserRequestOptions
 ): Promise<ListBrowserObjectsResponse> {
   const params = withS3AccountParam(
     {
@@ -490,6 +490,7 @@ export async function listBrowserObjects(
       item_type: options?.type && options.type !== "all" ? options.type : undefined,
       storage_class: options?.storageClass && options.storageClass !== "all" ? options.storageClass : undefined,
       recursive: options?.recursive ? true : undefined,
+      force_refresh: options?.forceRefresh ? true : undefined,
       sort_by:
         options?.sortBy && !(options.sortBy === "name" && (options?.sortDir ?? "asc") === "asc")
           ? options.sortBy

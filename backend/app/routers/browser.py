@@ -1185,6 +1185,7 @@ def list_objects(
     recursive: bool = Query(default=False),
     sort_by: BrowserObjectSortBy = Query(default="name"),
     sort_dir: BrowserObjectSortDir = Query(default="asc"),
+    force_refresh: bool = Query(default=False),
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1204,6 +1205,7 @@ def list_objects(
             recursive=recursive,
             sort_by=sort_by,
             sort_dir=sort_dir,
+            force_refresh=force_refresh,
         )
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)

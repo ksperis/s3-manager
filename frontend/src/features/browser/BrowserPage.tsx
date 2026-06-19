@@ -3404,6 +3404,7 @@ export default function BrowserPage({
       prefixOverride?: string;
       silent?: boolean;
       loadDeletedOnly?: boolean;
+      forceRefresh?: boolean;
     }) => {
       if (!bucketName || !hasS3AccountContext) return;
       const targetPrefix = normalizePrefix(opts?.prefixOverride ?? prefix);
@@ -3451,6 +3452,7 @@ export default function BrowserPage({
             sortBy: backendSortBy,
             sortDir: sortDirection,
             signal: controller.signal,
+            forceRefresh: opts?.forceRefresh,
             ...browserRequestOptions,
           });
           if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
@@ -6954,7 +6956,7 @@ export default function BrowserPage({
       void refreshBucketList();
       return;
     }
-    loadObjects({ prefixOverride: prefix });
+    loadObjects({ prefixOverride: prefix, forceRefresh: true });
     if (showPrefixVersions) {
       loadPrefixVersions({
         append: false,
@@ -7282,7 +7284,7 @@ export default function BrowserPage({
 
   const refreshObjectsNow = useCallback(
     async (prefixOverride: string) => {
-      await loadObjects({ prefixOverride, silent: true });
+      await loadObjects({ prefixOverride, silent: true, forceRefresh: true });
       loadTreeChildren(prefixOverride, { expand: false });
     },
     [loadObjects, loadTreeChildren],
@@ -7326,7 +7328,11 @@ export default function BrowserPage({
       );
       pendingUploadedKeysByBucketRef.current.clear();
       if (!shouldRefreshCurrentPath) return;
-      void loadObjects({ prefixOverride: currentPrefixValue, silent: true });
+      void loadObjects({
+        prefixOverride: currentPrefixValue,
+        silent: true,
+        forceRefresh: true,
+      });
       loadTreeChildren(currentPrefixValue, { expand: false });
     }, 300);
   };
@@ -10726,7 +10732,7 @@ export default function BrowserPage({
   ]);
 
   const refreshObjectListing = async (_targetKey: string) => {
-    await loadObjects({ prefixOverride: prefix });
+    await loadObjects({ prefixOverride: prefix, forceRefresh: true });
     if (showPrefixVersions) {
       await loadPrefixVersions({
         append: false,
