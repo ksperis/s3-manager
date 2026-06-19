@@ -25,6 +25,10 @@ import UiCard from "../../components/ui/UiCard";
 import { cx, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import type { PortalWorkspaceRole } from "./portalWorkspaceModel";
+import {
+  portalRoleTone,
+  resolvePortalWorkspacePageState,
+} from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 const tabs = [
@@ -45,12 +49,6 @@ type ShareRow = {
   access: PortalWorkspaceRole;
   activityLabel: string;
 };
-
-function roleTone(role: PortalWorkspaceRole) {
-  if (role === "Owner") return "primary";
-  if (role === "Editor") return "success";
-  return "neutral";
-}
 
 function fromApiShare(share: PortalStorageSpaceShare): ShareRow {
   return {
@@ -108,7 +106,7 @@ function SharesTable({
                     ))}
                   </select>
                 ) : (
-                  <UiBadge tone={roleTone(share.access)}>{share.access}</UiBadge>
+                  <UiBadge tone={portalRoleTone(share.access)}>{share.access}</UiBadge>
                 )}
               </td>
               <td>{share.activityLabel}</td>
@@ -346,13 +344,16 @@ export default function PortalSharesPage() {
   const shares = rows[activeTab];
   const displayedCount = activeTab === "links" ? publicLinks.length : shares.length;
 
-  if (accountLoading || loading) {
-    return <div className="space-y-4"><PageBanner tone="info">Loading shares...</PageBanner></div>;
-  }
-
-  if (accountError || error || !hasAccountContext) {
-    return <div className="space-y-4"><PageBanner tone={accountError || error ? "error" : "info"}>{accountError ?? error ?? "Select an account."}</PageBanner></div>;
-  }
+  const pageState = resolvePortalWorkspacePageState({
+    accountLoading,
+    loading,
+    accountError,
+    error,
+    hasAccountContext,
+    loadingMessage: "Loading shares...",
+    noAccountMessage: "Select an account to manage shares.",
+  });
+  if (pageState) return pageState;
 
   return (
     <div className="space-y-4">

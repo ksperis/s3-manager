@@ -17,8 +17,13 @@ import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import BrowserEmbed from "../browser/BrowserEmbed";
 import type { BrowserActionId } from "../browser/browserActions";
-import { storageSpaceObjectPath, type PortalWorkspaceSpace } from "./portalWorkspaceModel";
+import { storageSpaceObjectPath } from "./portalWorkspaceModel";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
+import {
+  PortalPageState,
+  portalStorageSpaceStatusTone,
+  resolvePortalWorkspacePageState,
+} from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 function decodeRouteValue(value?: string): string {
@@ -62,14 +67,6 @@ function ObjectMetricCard({
   );
 }
 
-function statusTone(space: PortalWorkspaceSpace) {
-  if (space.status === "Archived") return "neutral";
-  if (space.status === "Attention") return "warning";
-  if (space.status === "Shared") return "primary";
-  if (space.status === "Private") return "neutral";
-  return "success";
-}
-
 export default function PortalStorageSpaceDetailPage() {
   const { spaceId } = useParams();
   const navigate = useNavigate();
@@ -109,10 +106,10 @@ export default function PortalStorageSpaceDetailPage() {
         description: metadataDescription.trim() || null,
         visibility: metadataVisibility,
       });
-      setMessage("Storage Space mis à jour.");
+      setMessage("Storage Space updated.");
     } catch (err) {
       console.error(err);
-      setMessage(extractApiError(err, "Mise à jour impossible pour cet espace."));
+      setMessage(extractApiError(err, "Unable to update this Storage Space."));
     } finally {
       setMetadataBusy(false);
     }
@@ -120,7 +117,7 @@ export default function PortalStorageSpaceDetailPage() {
 
   const handleArchive = async () => {
     if (!space || !accountIdForApi) return;
-    if (!window.confirm(`Archiver ${space.name} ? Les objets ne seront pas supprimés.`)) return;
+    if (!window.confirm(`Archive ${space.name}? Objects will not be deleted.`)) return;
     setMetadataBusy(true);
     setMessage(null);
     try {
@@ -128,7 +125,7 @@ export default function PortalStorageSpaceDetailPage() {
       navigate("/portal/storage-spaces");
     } catch (err) {
       console.error(err);
-      setMessage(extractApiError(err, "Archivage impossible pour cet espace."));
+      setMessage(extractApiError(err, "Unable to archive this Storage Space."));
       setMetadataBusy(false);
     }
   };
@@ -139,37 +136,28 @@ export default function PortalStorageSpaceDetailPage() {
     setMessage(null);
     try {
       await updatePortalStorageSpace(accountIdForApi, space.id, { archived: false });
-      setMessage("Storage Space restauré.");
+      setMessage("Storage Space restored.");
     } catch (err) {
       console.error(err);
-      setMessage(extractApiError(err, "Restauration impossible pour cet espace."));
+      setMessage(extractApiError(err, "Unable to restore this Storage Space."));
     } finally {
       setMetadataBusy(false);
     }
   };
 
-  if (accountLoading || loading) {
-    return (
-      <div className="space-y-4">
-        <PageBanner tone="info">Loading storage space...</PageBanner>
-      </div>
-    );
-  }
+  const pageState = resolvePortalWorkspacePageState({
+    accountLoading,
+    loading,
+    accountError,
+    error,
+    hasAccountContext,
+    loadingMessage: "Loading storage space...",
+    noAccountMessage: "Select an account to view this Storage Space.",
+  });
+  if (pageState) return pageState;
 
-  if (accountError || error) {
-    return (
-      <div className="space-y-4">
-        <PageBanner tone="error">{accountError ?? error}</PageBanner>
-      </div>
-    );
-  }
-
-  if (!hasAccountContext || !space || !accountIdForApi) {
-    return (
-      <div className="space-y-4">
-        <PageBanner tone="info">Storage space not available.</PageBanner>
-      </div>
-    );
+  if (!space || !accountIdForApi) {
+    return <PortalPageState>Storage Space not available.</PortalPageState>;
   }
 
   const browserAvailable =
@@ -194,8 +182,8 @@ export default function PortalStorageSpaceDetailPage() {
         title={space.name}
         description={`${space.description} Created ${space.createdLabel}. Region: ${space.region ?? "-"}.`}
         breadcrumbs={[{ label: "Portal" }, { label: "Storage Spaces", to: "/portal/storage-spaces" }, { label: space.name }]}
-        inlineContent={<UiBadge tone={statusTone(space)}>{space.status}</UiBadge>}
-        actions={!isArchived && space.visibility === "shared" ? [{ label: "Partager", to: "/portal/shares", variant: "secondary" }] : []}
+        inlineContent={<UiBadge tone={portalStorageSpaceStatusTone(space)}>{space.status}</UiBadge>}
+        actions={!isArchived && space.visibility === "shared" ? [{ label: "Share", to: "/portal/shares", variant: "secondary" }] : []}
       />
 
       {message ? <PageBanner tone="info">{message}</PageBanner> : null}
@@ -242,17 +230,17 @@ export default function PortalStorageSpaceDetailPage() {
         <ObjectMetricCard
           label="Utilisation"
           value={formatBytes(space.usedBytes)}
-          detail={quotaPercent == null ? "Quota indisponible" : `sur ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)}%)`}
+          detail={quotaPercent == null ? "Quota unavailable" : `of ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)}%)`}
           progress={quotaPercent ?? undefined}
         />
-        <ObjectMetricCard label="Objets" value={formatCompactNumber(space.objectCount)} detail={space.objectCount == null ? "Indisponible" : "Suivi"} />
-        <ObjectMetricCard label="Taille moyenne" value={formatBytes(averageFileSize)} detail="par objet" />
-        <ObjectMetricCard label="Dernière activité" value={lastActivity === "-" ? "-" : "Récente"} detail={lastActivity === "-" ? "Aucune activité disponible" : `Par ${lastActivity}`} />
+        <ObjectMetricCard label="Objects" value={formatCompactNumber(space.objectCount)} detail={space.objectCount == null ? "Unavailable" : "Tracked"} />
+        <ObjectMetricCard label="Average size" value={formatBytes(averageFileSize)} detail="per object" />
+        <ObjectMetricCard label="Last activity" value={lastActivity === "-" ? "-" : "Recent"} detail={lastActivity === "-" ? "No activity available" : `By ${lastActivity}`} />
       </section>
 
       {isArchived ? (
         <PageBanner tone="warning">
-          Ce Storage Space est archivé. Les fichiers et liens publics sont suspendus jusqu'à restauration.
+          This Storage Space is archived. Files and public links are suspended until it is restored.
         </PageBanner>
       ) : browserAvailable ? (
         <div className="min-h-[520px] h-[min(72vh,760px)]">
@@ -290,7 +278,7 @@ export default function PortalStorageSpaceDetailPage() {
         </div>
       ) : (
         <PageBanner tone="warning">
-          Le Browser Portal est désactivé. Activez Browser puis Browser for Portal dans les réglages pour parcourir les fichiers de ce Storage Space.
+          Portal Browser is disabled. Enable Browser and Browser for Portal in settings to browse files in this Storage Space.
         </PageBanner>
       )}
     </div>

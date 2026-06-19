@@ -3,10 +3,10 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useMemo, useState } from "react";
-import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { resolvePortalWorkspacePageState } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 export default function PortalActivityPage() {
@@ -27,13 +27,16 @@ export default function PortalActivityPage() {
     [actionFilter, spaceFilter, workspace.activity]
   );
 
-  if (accountLoading || loading) {
-    return <div className="space-y-4"><PageBanner tone="info">Loading activity...</PageBanner></div>;
-  }
-
-  if (accountError || error || !hasAccountContext) {
-    return <div className="space-y-4"><PageBanner tone={accountError || error ? "error" : "info"}>{accountError ?? error ?? "Select an account."}</PageBanner></div>;
-  }
+  const pageState = resolvePortalWorkspacePageState({
+    accountLoading,
+    loading,
+    accountError,
+    error,
+    hasAccountContext,
+    loadingMessage: "Loading activity...",
+    noAccountMessage: "Select an account to view activity.",
+  });
+  if (pageState) return pageState;
 
   return (
     <div className="space-y-4">

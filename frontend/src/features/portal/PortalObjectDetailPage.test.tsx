@@ -95,24 +95,24 @@ describe("PortalObjectDetailPage", () => {
     );
 
     expect(screen.getByRole("heading", { name: "sample_001.fastq.gz" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Aperçu" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Détails" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Événements" })).toBeInTheDocument();
-    expect(screen.getByText("Actions rapides")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Details" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Events" })).toBeInTheDocument();
+    expect(screen.getByText("Quick actions")).toBeInTheDocument();
     expect(await screen.findByText("hello content")).toBeInTheDocument();
-    expect(screen.getByText("Liens publics")).toBeInTheDocument();
-    expect(screen.queryByText("Informations générales")).not.toBeInTheDocument();
+    expect(screen.getByText("Public links")).toBeInTheDocument();
+    expect(screen.queryByText("General information")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Détails" }));
+    await user.click(screen.getByRole("button", { name: "Details" }));
     expect(await screen.findByText("512 B")).toBeInTheDocument();
     expect(screen.getByText("STANDARD")).toBeInTheDocument();
     expect(screen.getByText("AES256")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Événements" }));
-    expect(screen.getByText("Aucun événement objet disponible.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Events" }));
+    expect(screen.getByText("No object events available.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Versions" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Métadonnées" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Metadata" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/mock|mocked/i)).not.toBeInTheDocument();
   });
 });

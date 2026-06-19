@@ -69,7 +69,7 @@ describe("PortalStorageSpacesPage", () => {
     const researchRow = screen.getByText("Research Data").closest("tr");
     expect(researchRow).not.toBeNull();
     expect(within(researchRow!).getByText("Shared")).toBeInTheDocument();
-    expect(screen.getByText("Enabled")).toBeInTheDocument();
+    expect(within(researchRow!).getByText("Active")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute(
       "href",
       "/portal/storage-spaces/research-data"

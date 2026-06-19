@@ -24,14 +24,15 @@ import UiCard from "../../components/ui/UiCard";
 import { cx, uiCardMutedClass, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
+import { storageSpacePath } from "./portalWorkspaceModel";
 import {
-  storageSpacePath,
-  type PortalWorkspaceSpace,
-} from "./portalWorkspaceModel";
+  PortalPageState,
+  resolvePortalWorkspacePageState,
+} from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 
-const tabs = ["Aperçu", "Détails", "Événements"];
+const tabs = ["Preview", "Details", "Events"];
 
 function decodeRouteValue(value?: string): string {
   if (!value) return "";
@@ -126,7 +127,7 @@ function QuickAction({
 
 export default function PortalObjectDetailPage() {
   const params = useParams();
-  const [activeTab, setActiveTab] = useState("Aperçu");
+  const [activeTab, setActiveTab] = useState("Preview");
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [objectDetail, setObjectDetail] = useState<PortalStorageObjectDetail | null>(null);
@@ -170,7 +171,7 @@ export default function PortalObjectDetailPage() {
         if (!cancelled) {
           setObjectDetail(null);
           setPublicLinks([]);
-          setObjectError(extractApiError(err, "Impossible de charger les métadonnées de cet objet."));
+          setObjectError(extractApiError(err, "Unable to load object metadata."));
         }
       })
       .finally(() => {
@@ -197,16 +198,19 @@ export default function PortalObjectDetailPage() {
     [objectDetail, objectPath]
   );
 
-  if (accountLoading || loading) {
-    return <div className="space-y-4"><PageBanner tone="info">Loading object...</PageBanner></div>;
-  }
+  const pageState = resolvePortalWorkspacePageState({
+    accountLoading,
+    loading,
+    accountError,
+    error,
+    hasAccountContext,
+    loadingMessage: "Loading object...",
+    noAccountMessage: "Select an account to view this object.",
+  });
+  if (pageState) return pageState;
 
-  if (accountError || error) {
-    return <div className="space-y-4"><PageBanner tone="error">{accountError ?? error}</PageBanner></div>;
-  }
-
-  if (!hasAccountContext || !space || !objectPath) {
-    return <div className="space-y-4"><PageBanner tone="info">Object not available.</PageBanner></div>;
+  if (!space || !objectPath) {
+    return <PortalPageState>Object not available.</PortalPageState>;
   }
 
   const displayPath = object.path;
@@ -215,14 +219,14 @@ export default function PortalObjectDetailPage() {
   const objectEvents = workspace.activity.filter((item) => item.target === object.name || item.target === object.path);
   const copyPath = async () => {
     if (!navigator.clipboard) {
-      setDownloadMessage("Copie indisponible dans ce navigateur.");
+      setDownloadMessage("Clipboard is unavailable in this browser.");
       return;
     }
     try {
       await navigator.clipboard.writeText(object.path);
-      setDownloadMessage("Chemin copié.");
+      setDownloadMessage("Path copied.");
     } catch {
-      setDownloadMessage("Copie indisponible dans ce navigateur.");
+      setDownloadMessage("Clipboard is unavailable in this browser.");
     }
   };
   const handleCreatePublicLink = async () => {
@@ -236,26 +240,26 @@ export default function PortalObjectDetailPage() {
         expires_at: linkExpiration ? new Date(linkExpiration).toISOString() : null,
       });
       setPublicLinks((current) => [link, ...current.filter((item) => item.id !== link.id)]);
-      setDownloadMessage("Lien public créé.");
+      setDownloadMessage("Public link created.");
     } catch (err) {
       console.error(err);
-      setDownloadMessage(extractApiError(err, "Création du lien public impossible."));
+      setDownloadMessage(extractApiError(err, "Unable to create public link."));
     } finally {
       setLinkBusy(false);
     }
   };
   const handleRevokePublicLink = async (link: PortalPublicLink) => {
     if (!accountIdForApi || !space || linkBusy) return;
-    if (!window.confirm(`Révoquer le lien public pour ${link.object_name} ?`)) return;
+    if (!window.confirm(`Revoke the public link for ${link.object_name}?`)) return;
     setLinkBusy(true);
     setDownloadMessage(null);
     try {
       const links = await revokePortalStorageSpacePublicLink(accountIdForApi, space.id, link.id);
       setPublicLinks(links);
-      setDownloadMessage("Lien public révoqué.");
+      setDownloadMessage("Public link revoked.");
     } catch (err) {
       console.error(err);
-      setDownloadMessage(extractApiError(err, "Révocation du lien public impossible."));
+      setDownloadMessage(extractApiError(err, "Unable to revoke public link."));
     } finally {
       setLinkBusy(false);
     }
@@ -283,10 +287,10 @@ export default function PortalObjectDetailPage() {
       link.click();
       link.remove();
       URL.revokeObjectURL(href);
-      setDownloadMessage(`${result.filename} téléchargé.`);
+      setDownloadMessage(`${result.filename} downloaded.`);
     } catch (err) {
       console.error(err);
-      const message = extractApiError(err, "Téléchargement impossible pour cet objet.");
+      const message = extractApiError(err, "Unable to download this object.");
       failPortalTransfer(transferId, message);
       setDownloadMessage(message);
     } finally {
@@ -295,18 +299,18 @@ export default function PortalObjectDetailPage() {
   };
   const handleDelete = async () => {
     if (!accountIdForApi || !space || deleteBusy) return;
-    if (!window.confirm(`Supprimer ${object.name} ? Cette action est définitive.`)) return;
+    if (!window.confirm(`Delete ${object.name}? This action is permanent.`)) return;
     setDeleteBusy(true);
     setDownloadMessage(null);
     try {
       await deletePortalStorageSpaceObject(accountIdForApi, space.id, object.path);
-      setDownloadMessage(`${object.name} supprimé.`);
+      setDownloadMessage(`${object.name} deleted.`);
       window.setTimeout(() => {
         window.location.href = `${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPath ? `${parentPath}/` : "")}`;
       }, 250);
     } catch (err) {
       console.error(err);
-      setDownloadMessage(extractApiError(err, "Suppression impossible pour cet objet."));
+      setDownloadMessage(extractApiError(err, "Unable to delete this object."));
       setDeleteBusy(false);
     }
   };
@@ -323,8 +327,8 @@ export default function PortalObjectDetailPage() {
           { label: object.name || objectName(object.path) },
         ]}
         actions={[
-          { label: downloading ? "Téléchargement..." : "Télécharger", onClick: handleDownload, variant: "secondary", disabled: !accountIdForApi || downloading },
-          { label: linkBusy ? "Partage..." : "Partager", onClick: handleCreatePublicLink, variant: "secondary", disabled: !accountIdForApi || !canCreatePublicLink || linkBusy },
+          { label: downloading ? "Downloading..." : "Download", onClick: handleDownload, variant: "secondary", disabled: !accountIdForApi || downloading },
+          { label: linkBusy ? "Sharing..." : "Share", onClick: handleCreatePublicLink, variant: "secondary", disabled: !accountIdForApi || !canCreatePublicLink || linkBusy },
         ]}
       />
 
@@ -335,7 +339,7 @@ export default function PortalObjectDetailPage() {
             <p className={cx("ui-body font-semibold", uiTitleTextClass)}>{object.name || objectName(object.path)}</p>
             <div className={cx(uiCardMutedClass, "mt-3 flex max-w-2xl items-center gap-2 px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>
               <span className="min-w-0 flex-1 truncate">{displayPath}</span>
-              <button type="button" onClick={copyPath} className="shrink-0 text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100">Copier</button>
+              <button type="button" onClick={copyPath} className="shrink-0 text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100">Copy</button>
             </div>
           </div>
         </div>
@@ -348,10 +352,10 @@ export default function PortalObjectDetailPage() {
         <PageTabs tabs={tabs.map((tab) => ({ id: tab, label: tab }))} activeTab={activeTab} onChange={setActiveTab} variant="bar" />
       </div>
 
-      {activeTab === "Aperçu" ? (
+      {activeTab === "Preview" ? (
         <div className="space-y-4">
           <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
-            <UiCard title="Aperçu rapide">
+            <UiCard title="Quick preview">
               {object.previewType === "text" && object.previewText ? (
                 <pre className="max-h-72 overflow-auto rounded-md border border-[color:var(--ui-border)] bg-slate-950 p-3 text-xs leading-5 text-slate-50">{object.previewText}</pre>
               ) : (
@@ -361,43 +365,43 @@ export default function PortalObjectDetailPage() {
               )}
               <div className="mt-3 text-right text-xs font-bold">
                 <Link to={`${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPath ? `${parentPath}/` : "")}`}>
-                  Ouvrir dans la liste
+                  Open in file list
                 </Link>
               </div>
             </UiCard>
 
-            <UiCard title="Actions rapides">
+            <UiCard title="Quick actions">
               <div className="grid gap-4">
-                <QuickAction label="Télécharger" onClick={handleDownload} />
-                <QuickAction label="Créer un lien public" onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} />
-                <QuickAction label="Copier le chemin" onClick={copyPath} />
-                <QuickAction label={deleteBusy ? "Suppression..." : "Supprimer l'objet"} tone="rose" onClick={handleDelete} disabled={space.role === "Viewer" || deleteBusy} />
+                <QuickAction label="Download" onClick={handleDownload} />
+                <QuickAction label="Create public link" onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} />
+                <QuickAction label="Copy path" onClick={copyPath} />
+                <QuickAction label={deleteBusy ? "Deleting..." : "Delete object"} tone="rose" onClick={handleDelete} disabled={space.role === "Viewer" || deleteBusy} />
               </div>
             </UiCard>
           </section>
 
           {space.role === "Owner" ? (
-            <UiCard title="Liens publics">
+            <UiCard title="Public links">
               <div className="mb-3 grid gap-2 sm:grid-cols-[220px_auto]">
                 <input
                   type="datetime-local"
                   className="ui-control h-9 text-xs"
                   value={linkExpiration}
                   onChange={(event) => setLinkExpiration(event.target.value)}
-                  aria-label="Expiration du lien public"
+                  aria-label="Public link expiration"
                 />
                 <UiButton onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} className="h-9 px-3 py-1.5">
-                  {linkBusy ? "Création..." : "Créer un lien"}
+                  {linkBusy ? "Creating..." : "Create link"}
                 </UiButton>
               </div>
               <div className="overflow-x-auto">
                 <table className="ui-data-table min-w-[760px]">
                   <thead>
                     <tr>
-                      <th>Objet</th>
-                      <th>Statut</th>
+                      <th>Object</th>
+                      <th>Status</th>
                       <th>Expiration</th>
-                      <th>Lien</th>
+                      <th>Link</th>
                       <th className="text-right">Action</th>
                     </tr>
                   </thead>
@@ -420,7 +424,7 @@ export default function PortalObjectDetailPage() {
                     {publicLinks.length === 0 ? (
                       <tr>
                         <td colSpan={5} className={cx("py-5 text-center text-xs font-semibold", uiMutedTextClass)}>
-                          Aucun lien public pour cet objet.
+                          No public links for this object.
                         </td>
                       </tr>
                     ) : null}
@@ -432,22 +436,22 @@ export default function PortalObjectDetailPage() {
         </div>
       ) : null}
 
-      {activeTab === "Détails" ? (
-        <UiCard title="Informations générales">
+      {activeTab === "Details" ? (
+        <UiCard title="General information">
           <dl className="grid gap-4">
-            <DetailRow label="Taille" value={formatBytes(object.sizeBytes)} />
-            <DetailRow label="Type de contenu" value={object.type} />
-            <DetailRow label="Dernière modification" value={object.lastModified} />
+            <DetailRow label="Size" value={formatBytes(object.sizeBytes)} />
+            <DetailRow label="Content type" value={object.type} />
+            <DetailRow label="Last modified" value={object.lastModified} />
             <DetailRow label="Storage class" value={object.storageClass} />
-            <DetailRow label="Chiffrement" value={object.encryption} />
-            <DetailRow label="Chemin" value={object.path} />
+            <DetailRow label="Encryption" value={object.encryption} />
+            <DetailRow label="Path" value={object.path} />
           </dl>
-          {objectLoading ? <div className={cx("mt-4 text-[11px] font-semibold", uiMutedTextClass)}>Chargement des métadonnées...</div> : null}
+          {objectLoading ? <div className={cx("mt-4 text-[11px] font-semibold", uiMutedTextClass)}>Loading metadata...</div> : null}
         </UiCard>
       ) : null}
 
-      {activeTab === "Événements" ? (
-        <UiCard title="Événements récents">
+      {activeTab === "Events" ? (
+        <UiCard title="Recent events">
           <div className="grid gap-2">
             {objectEvents.slice(0, 12).map((item) => (
               <div key={item.id} className={cx(uiCardMutedClass, "px-3 py-2 text-xs")}>
@@ -457,7 +461,7 @@ export default function PortalObjectDetailPage() {
             ))}
             {objectEvents.length === 0 ? (
               <div className={cx(uiCardMutedClass, "px-3 py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
-                Aucun événement objet disponible.
+                No object events available.
               </div>
             ) : null}
           </div>

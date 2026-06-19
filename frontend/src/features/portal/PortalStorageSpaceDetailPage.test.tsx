@@ -162,7 +162,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     renderPage();
 
-    expect(screen.getByText(/Le Browser Portal est désactivé/i)).toBeInTheDocument();
+    expect(screen.getByText(/Portal Browser is disabled/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
   });
 
@@ -192,7 +192,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     renderPage();
 
-    expect(screen.getByText(/Ce Storage Space est archivé/i)).toBeInTheDocument();
+    expect(screen.getByText(/This Storage Space is archived/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
   });
 });

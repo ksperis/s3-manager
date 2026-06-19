@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useMemo, useState } from "react";
-import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
 import UiBadge from "../../components/ui/UiBadge";
@@ -11,16 +10,13 @@ import UiCard from "../../components/ui/UiCard";
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import { cx, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
-import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
+import {
+  portalTransferStatusTone,
+  resolvePortalWorkspacePageState,
+} from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 const tabs = ["All", "Uploads", "Downloads"];
-
-function statusTone(status: PortalWorkspaceTransfer["status"]) {
-  if (status === "Failed") return "danger";
-  if (status === "Uploading" || status === "Queued") return "primary";
-  return "neutral";
-}
 
 export default function PortalTransfersPage() {
   const [activeTab, setActiveTab] = useState("All");
@@ -31,13 +27,16 @@ export default function PortalTransfersPage() {
     return workspace.transfers;
   }, [activeTab, workspace.transfers]);
 
-  if (accountLoading || loading) {
-    return <div className="space-y-4"><PageBanner tone="info">Loading transfers...</PageBanner></div>;
-  }
-
-  if (accountError || error || !hasAccountContext) {
-    return <div className="space-y-4"><PageBanner tone={accountError || error ? "error" : "info"}>{accountError ?? error ?? "Select an account."}</PageBanner></div>;
-  }
+  const pageState = resolvePortalWorkspacePageState({
+    accountLoading,
+    loading,
+    accountError,
+    error,
+    hasAccountContext,
+    loadingMessage: "Loading transfers...",
+    noAccountMessage: "Select an account to view transfers.",
+  });
+  if (pageState) return pageState;
 
   return (
     <div className="space-y-4">
@@ -74,7 +73,7 @@ export default function PortalTransfersPage() {
                 <tr key={transfer.id}>
                   <td className={cx("font-bold", uiTitleTextClass)}>{transfer.name}</td>
                   <td>{transfer.direction}</td>
-                  <td><UiBadge tone={statusTone(transfer.status)}>{transfer.status}</UiBadge></td>
+                  <td><UiBadge tone={portalTransferStatusTone(transfer.status)}>{transfer.status}</UiBadge></td>
                   <td>
                     <div className="flex items-center gap-2">
                       <div className="w-28"><UiProgressBar value={transfer.progress} /></div>

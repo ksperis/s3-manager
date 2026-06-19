@@ -5,7 +5,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createPortalStorageSpace, importPortalStorageSpace, type PortalStorageSpaceRole, type PortalStorageSpaceVisibility } from "../../api/portal";
-import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
@@ -13,24 +12,14 @@ import UiCard from "../../components/ui/UiCard";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
-import { storageSpacePath, type PortalWorkspaceSpace } from "./portalWorkspaceModel";
+import { storageSpacePath } from "./portalWorkspaceModel";
+import {
+  portalStorageSpaceStatusTone,
+  portalVisibilityLabel,
+  portalVisibilityTone,
+  resolvePortalWorkspacePageState,
+} from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
-
-function statusTone(space: PortalWorkspaceSpace) {
-  if (space.status === "Archived") return "neutral";
-  if (space.status === "Attention") return "warning";
-  if (space.status === "Shared") return "primary";
-  if (space.status === "Private") return "neutral";
-  return "success";
-}
-
-function visibilityTone(visibility: PortalStorageSpaceVisibility) {
-  return visibility === "shared" ? "primary" : "neutral";
-}
-
-function visibilityLabel(visibility: PortalStorageSpaceVisibility) {
-  return visibility === "shared" ? "Shared" : "Private";
-}
 
 export default function PortalStorageSpacesPage() {
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi, state } = usePortalWorkspaceData();
@@ -115,17 +104,16 @@ export default function PortalStorageSpacesPage() {
     }
   };
 
-  if (accountLoading || loading) {
-    return <div className="space-y-4"><PageBanner tone="info">Loading storage spaces...</PageBanner></div>;
-  }
-
-  if (accountError || error) {
-    return <div className="space-y-4"><PageBanner tone="error">{accountError ?? error}</PageBanner></div>;
-  }
-
-  if (!hasAccountContext) {
-    return <div className="space-y-4"><PageBanner tone="info">Select an account to view storage spaces.</PageBanner></div>;
-  }
+  const pageState = resolvePortalWorkspacePageState({
+    accountLoading,
+    loading,
+    accountError,
+    error,
+    hasAccountContext,
+    loadingMessage: "Loading storage spaces...",
+    noAccountMessage: "Select an account to view storage spaces.",
+  });
+  if (pageState) return pageState;
 
   return (
     <div className="space-y-4">
@@ -253,12 +241,12 @@ export default function PortalStorageSpacesPage() {
                     <div className={cx("font-bold", uiTitleTextClass)}>{space.name}</div>
                     <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>{space.description}</div>
                   </td>
-                  <td><UiBadge tone={visibilityTone(space.visibility)}>{visibilityLabel(space.visibility)}</UiBadge></td>
+                  <td><UiBadge tone={portalVisibilityTone(space.visibility)}>{portalVisibilityLabel(space.visibility)}</UiBadge></td>
                   <td>{formatCompactNumber(space.objectCount)}</td>
                   <td>{formatBytes(space.usedBytes)}</td>
                   <td>{space.createdLabel}</td>
                   <td>{space.region}</td>
-                  <td><UiBadge tone={statusTone(space)}>{space.status === "Active" ? "Enabled" : space.status}</UiBadge></td>
+                  <td><UiBadge tone={portalStorageSpaceStatusTone(space)}>{space.status}</UiBadge></td>
                   <td className="text-right"><Link to={storageSpacePath(space)}>Open</Link></td>
                 </tr>
               ))}

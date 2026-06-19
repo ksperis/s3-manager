@@ -5,7 +5,6 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { HealthCheckStatus } from "../../api/healthchecks";
-import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import {
   buildWorkspaceStorageEvolutionPoints,
@@ -38,6 +37,12 @@ import {
   UploadIcon,
 } from "../browser/browserIcons";
 import { storageSpacePath, type PortalWorkspaceSpace } from "./portalWorkspaceModel";
+import {
+  portalRoleTone,
+  portalStorageSpaceStatusTone,
+  portalTransferStatusTone,
+  resolvePortalWorkspacePageState,
+} from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 type StorageSpaceRow = {
@@ -86,30 +91,10 @@ function formatDashboardNumber(value?: number | null): string {
     .replace(/B$/, " B");
 }
 
-function statusTone(space: PortalWorkspaceSpace) {
-  if (space.status === "Archived") return "neutral";
-  if (space.status === "Attention") return "warning";
-  if (space.status === "Shared") return "primary";
-  return "success";
-}
-
-function roleTone(role: PortalWorkspaceSpace["role"]) {
-  if (role === "Owner") return "success";
-  if (role === "Editor") return "primary";
-  return "neutral";
-}
-
 function alertTone(tone: string) {
   if (tone === "danger") return "danger";
   if (tone === "warning") return "warning";
   if (tone === "info") return "primary";
-  return "neutral";
-}
-
-function transferTone(status: string): TransferRow["tone"] {
-  if (status === "Failed") return "danger";
-  if (status === "Completed") return "success";
-  if (status === "Uploading" || status === "Queued") return "primary";
   return "neutral";
 }
 
@@ -165,7 +150,7 @@ function buildTransferRows(workspaceTransfers: ReturnType<typeof usePortalWorksp
     detail: `${transfer.direction} - ${transfer.spaceName} - ${transfer.startedLabel}`,
     status: transfer.status,
     progress: transfer.progress,
-    tone: transferTone(transfer.status),
+    tone: portalTransferStatusTone(transfer.status),
   }));
 }
 
@@ -263,11 +248,11 @@ function TopStorageSpacesCard({ rows }: { rows: StorageSpaceRow[] }) {
                   </Link>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1.5 pl-9">
-                  <UiBadge tone={roleTone(space.role)} className="rounded-md px-2 py-0 text-[11px] leading-5">
+                  <UiBadge tone={portalRoleTone(space.role)} className="rounded-md px-2 py-0 text-[11px] leading-5">
                     {space.role}
                   </UiBadge>
-                  <UiBadge tone={statusTone(space)} className="rounded-md px-2 py-0 text-[11px] leading-5">
-                    {space.status === "Active" ? "Enabled" : space.status}
+                  <UiBadge tone={portalStorageSpaceStatusTone(space)} className="rounded-md px-2 py-0 text-[11px] leading-5">
+                    {space.status}
                   </UiBadge>
                 </div>
               </div>
@@ -531,29 +516,16 @@ export default function PortalDashboard() {
     },
   ];
 
-  if (accountLoading || loading) {
-    return (
-      <div className="space-y-4">
-        <PageBanner tone="info">Loading dashboard...</PageBanner>
-      </div>
-    );
-  }
-
-  if (accountError || error) {
-    return (
-      <div className="space-y-4">
-        <PageBanner tone="error">{accountError ?? error}</PageBanner>
-      </div>
-    );
-  }
-
-  if (!hasAccountContext) {
-    return (
-      <div className="space-y-4">
-        <PageBanner tone="info">Select an account to open the dashboard.</PageBanner>
-      </div>
-    );
-  }
+  const pageState = resolvePortalWorkspacePageState({
+    accountLoading,
+    loading,
+    accountError,
+    error,
+    hasAccountContext,
+    loadingMessage: "Loading dashboard...",
+    noAccountMessage: "Select an account to open the dashboard.",
+  });
+  if (pageState) return pageState;
 
   return (
     <div className="space-y-3" data-testid="portal-dashboard">

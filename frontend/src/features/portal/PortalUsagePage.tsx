@@ -14,6 +14,7 @@ import PageTabs from "../../components/PageTabs";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import { cx, uiCardMutedClass, uiDividerClass, uiInputClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
+import { PortalPageState } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 type PortalUsageTab = "storage" | "storage-spaces" | "traffic" | "billing";
@@ -177,11 +178,11 @@ export default function PortalUsagePage() {
   );
 
   if (accountLoading || loading) {
-    return <div className="space-y-4"><PageBanner tone="info">Loading analytics...</PageBanner></div>;
+    return <PortalPageState>Loading analytics...</PortalPageState>;
   }
 
   if (accountError || error) {
-    return <div className="space-y-4"><PageBanner tone="error">{accountError ?? error}</PageBanner></div>;
+    return <PortalPageState tone="error">{accountError ?? error}</PortalPageState>;
   }
 
   if (!hasAccountContext) {
