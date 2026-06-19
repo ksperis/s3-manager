@@ -81,6 +81,7 @@ class PortalUsage(BaseModel):
 PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner"]
 PortalStorageSpaceOrigin = Literal["legacy", "portal_generic", "portal_named", "imported"]
 PortalStorageSpaceNamingMode = Literal["generic_uuid", "named_bucket"]
+PortalStorageSpaceVisibility = Literal["private", "shared"]
 PortalStorageSpaceShareDirection = Literal["with_me", "by_me"]
 PortalTransferDirection = Literal["Upload", "Download"]
 PortalTransferStatus = Literal["Completed", "Uploading", "Queued", "Failed"]
@@ -95,7 +96,8 @@ class PortalStorageSpaceSummary(BaseModel):
     status: str = "Active"
     description: Optional[str] = None
     owner_label: Optional[str] = None
-    space_type: Optional[str] = None
+    owner_user_id: Optional[int] = None
+    visibility: PortalStorageSpaceVisibility = "private"
     project_key: Optional[str] = None
     dataset_label: Optional[str] = None
     region: Optional[str] = None
@@ -119,7 +121,7 @@ class PortalStorageSpaceCreate(BaseModel):
     naming_mode: PortalStorageSpaceNamingMode = "generic_uuid"
     description: Optional[str] = Field(default=None, max_length=2000)
     owner_label: Optional[str] = Field(default=None, max_length=120)
-    space_type: Optional[str] = Field(default=None, max_length=80)
+    visibility: PortalStorageSpaceVisibility = "private"
     project_key: Optional[str] = Field(default=None, max_length=80)
     dataset_label: Optional[str] = Field(default=None, max_length=120)
 
@@ -136,7 +138,7 @@ class PortalStorageSpaceImport(BaseModel):
     bucket_name: str = Field(min_length=1, max_length=63)
     description: Optional[str] = Field(default=None, max_length=2000)
     owner_label: Optional[str] = Field(default=None, max_length=120)
-    space_type: Optional[str] = Field(default=None, max_length=80)
+    visibility: PortalStorageSpaceVisibility = "private"
     project_key: Optional[str] = Field(default=None, max_length=80)
     dataset_label: Optional[str] = Field(default=None, max_length=120)
 
@@ -153,7 +155,7 @@ class PortalStorageSpaceUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     description: Optional[str] = Field(default=None, max_length=2000)
     owner_label: Optional[str] = Field(default=None, max_length=120)
-    space_type: Optional[str] = Field(default=None, max_length=80)
+    visibility: Optional[PortalStorageSpaceVisibility] = None
     project_key: Optional[str] = Field(default=None, max_length=80)
     dataset_label: Optional[str] = Field(default=None, max_length=120)
     archived: Optional[bool] = None

@@ -209,6 +209,10 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
         "app.services.portal_service.PortalService.get_portal_credentials",
         lambda self, user_arg, account_arg, account_role: ("AK-PORTAL", "SK-PORTAL"),
     )
+    monkeypatch.setattr(
+        "app.services.portal_service.PortalService.list_storage_spaces",
+        lambda self, user_arg, access_arg: [],
+    )
 
     account_ctx = dependencies.get_account_context(
         request=_request("/api/browser/buckets", headers={"X-S3-Workspace": "portal"}),
@@ -222,6 +226,68 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
     assert caps is not None
     assert caps.using_root_key is False
     assert caps.can_manage_iam is False
+    assert getattr(account_ctx, "_portal_allowed_buckets") == set()
+
+
+def test_portal_browser_context_rejects_unavailable_storage_space_bucket(db_session, monkeypatch):
+    endpoint = StorageEndpoint(
+        name="portal-browser-archive",
+        endpoint_url="https://portal-browser-archive.example.com",
+        provider="ceph",
+        features_config="features:\n  iam:\n    enabled: true\n",
+    )
+    user = User(
+        email="portal-browser-archive@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    account = S3Account(
+        name="portal-browser-archive-account",
+        rgw_account_id="RGWPORTALBROWSERARCHIVE",
+        rgw_access_key="AK-ROOT",
+        rgw_secret_key="SK-ROOT",
+        storage_endpoint=endpoint,
+    )
+    db_session.add_all([endpoint, user, account])
+    db_session.commit()
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            account_role=AccountRole.PORTAL_USER.value,
+        )
+    )
+    db_session.commit()
+    monkeypatch.setattr(
+        dependencies,
+        "load_app_settings",
+        lambda: AppSettings(
+            general=GeneralSettings(
+                portal_enabled=True,
+                browser_enabled=True,
+                browser_portal_enabled=True,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.portal_service.PortalService.get_portal_credentials",
+        lambda self, user_arg, account_arg, account_role: ("AK-PORTAL", "SK-PORTAL"),
+    )
+    monkeypatch.setattr(
+        "app.services.portal_service.PortalService.list_storage_spaces",
+        lambda self, user_arg, access_arg: [],
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies.get_account_context(
+            request=_request("/api/browser/buckets/archived-data/objects", headers={"X-S3-Workspace": "portal"}),
+            account_ref=str(account.id),
+            actor=user,
+            db=db_session,
+        )
+
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.parametrize(

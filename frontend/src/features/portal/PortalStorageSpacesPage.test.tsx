@@ -20,7 +20,9 @@ const mocks = vi.hoisted(() => ({
           description: "Research Data shared storage",
           role: "Owner",
           status: "Active",
-          access: "Private",
+          access: "Shared",
+          ownerUserId: 7,
+          visibility: "shared",
           region: "eu-west-3",
           createdLabel: "May 10, 2023",
           usedBytes: 512,
@@ -64,6 +66,9 @@ describe("PortalStorageSpacesPage", () => {
 
     expect(screen.getByRole("heading", { name: "Storage Spaces" })).toBeInTheDocument();
     expect(screen.getByText("Research Data")).toBeInTheDocument();
+    const researchRow = screen.getByText("Research Data").closest("tr");
+    expect(researchRow).not.toBeNull();
+    expect(within(researchRow!).getByText("Shared")).toBeInTheDocument();
     expect(screen.getByText("Enabled")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute(
       "href",

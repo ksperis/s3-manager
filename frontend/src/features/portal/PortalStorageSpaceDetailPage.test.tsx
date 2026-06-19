@@ -36,13 +36,16 @@ const mocks = vi.hoisted(() => ({
           description: "Research Data shared storage",
           role: "Owner",
           status: "Active",
-          access: "Private",
+          access: "Shared",
+          ownerUserId: 7,
+          visibility: "shared",
           region: "eu-west-3",
           createdLabel: "12 mars 2024",
           usedBytes: 512,
           quotaBytes: 1024,
           objectCount: 12,
           createdAt: "2026-03-10T10:00:00Z",
+          archivedAt: null,
           shareCount: 3,
           origin: "portal_generic",
           nameEditable: true,
@@ -106,6 +109,10 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.generalSettings.browser_portal_enabled = true;
     mocks.hookResult.workspace.spaces[0].nameEditable = true;
     mocks.hookResult.workspace.spaces[0].origin = "portal_generic";
+    mocks.hookResult.workspace.spaces[0].status = "Active";
+    mocks.hookResult.workspace.spaces[0].access = "Shared";
+    mocks.hookResult.workspace.spaces[0].visibility = "shared";
+    mocks.hookResult.workspace.spaces[0].archivedAt = null;
   });
 
   it("embeds the main Browser in locked portal-basic mode for the storage space", () => {
@@ -152,7 +159,18 @@ describe("PortalStorageSpaceDetailPage", () => {
     await waitFor(() => {
       expect(mocks.updateStorageSpaceMock).toHaveBeenCalledWith("101", "research-data", {
         description: "Updated description",
+        visibility: "shared",
       });
     });
+  });
+
+  it("hides the embedded Browser when the storage space is archived", () => {
+    mocks.hookResult.workspace.spaces[0].status = "Archived";
+    mocks.hookResult.workspace.spaces[0].archivedAt = "2026-06-01T10:00:00Z";
+
+    renderPage();
+
+    expect(screen.getByText(/Ce Storage Space est archivé/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
   });
 });

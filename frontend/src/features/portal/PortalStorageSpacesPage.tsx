@@ -4,7 +4,7 @@
  */
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { createPortalStorageSpace, importPortalStorageSpace, type PortalStorageSpaceRole } from "../../api/portal";
+import { createPortalStorageSpace, importPortalStorageSpace, type PortalStorageSpaceRole, type PortalStorageSpaceVisibility } from "../../api/portal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
@@ -13,20 +13,23 @@ import UiCard from "../../components/ui/UiCard";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
-import { storageSpacePath, type PortalWorkspaceAccess, type PortalWorkspaceSpace } from "./portalWorkspaceModel";
+import { storageSpacePath, type PortalWorkspaceSpace } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 function statusTone(space: PortalWorkspaceSpace) {
   if (space.status === "Archived") return "neutral";
   if (space.status === "Attention") return "warning";
   if (space.status === "Shared") return "primary";
+  if (space.status === "Private") return "neutral";
   return "success";
 }
 
-function accessTone(access: PortalWorkspaceAccess) {
-  if (access === "Public") return "danger";
-  if (access === "Public Read") return "warning";
-  return "neutral";
+function visibilityTone(visibility: PortalStorageSpaceVisibility) {
+  return visibility === "shared" ? "primary" : "neutral";
+}
+
+function visibilityLabel(visibility: PortalStorageSpaceVisibility) {
+  return visibility === "shared" ? "Shared" : "Private";
 }
 
 export default function PortalStorageSpacesPage() {
@@ -40,12 +43,13 @@ export default function PortalStorageSpacesPage() {
   const [showImport, setShowImport] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
-  const [newSpaceType, setNewSpaceType] = useState("Project");
+  const [newVisibility, setNewVisibility] = useState<PortalStorageSpaceVisibility>("private");
   const [newNamingMode, setNewNamingMode] = useState<"generic_uuid" | "named_bucket">("generic_uuid");
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [importBucketName, setImportBucketName] = useState("");
   const [importDescription, setImportDescription] = useState("");
+  const [importVisibility, setImportVisibility] = useState<PortalStorageSpaceVisibility>("private");
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
@@ -54,7 +58,7 @@ export default function PortalStorageSpacesPage() {
       if (roleFilter !== "all" && space.role !== roleFilter) return false;
       if (statusFilter !== "all" && space.status !== statusFilter) return false;
       if (!normalizedQuery) return true;
-      return [space.name, space.description, space.ownerLabel, space.spaceType, space.projectKey, space.datasetLabel]
+      return [space.name, space.description, space.ownerLabel, space.visibility, space.projectKey, space.datasetLabel]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(normalizedQuery));
     });
@@ -81,7 +85,7 @@ export default function PortalStorageSpacesPage() {
         name: newName.trim(),
         naming_mode: canUseNamedBucket ? newNamingMode : "generic_uuid",
         description: newDescription.trim() || null,
-        space_type: newSpaceType.trim() || null,
+        visibility: newVisibility,
       });
       navigate(storageSpacePath({ id: created.id }));
     } catch (err) {
@@ -100,6 +104,7 @@ export default function PortalStorageSpacesPage() {
       const imported = await importPortalStorageSpace(accountIdForApi, {
         bucket_name: importBucketName.trim(),
         description: importDescription.trim() || null,
+        visibility: importVisibility,
       });
       navigate(storageSpacePath({ id: imported.id }));
     } catch (err) {
@@ -140,7 +145,7 @@ export default function PortalStorageSpacesPage() {
 
       {showCreate ? (
         <UiCard title="Create Storage Space">
-          <div className="grid gap-3 lg:grid-cols-[180px_1fr_1.5fr_180px_auto]">
+          <div className="grid gap-3 lg:grid-cols-[180px_1fr_1.5fr_160px_auto]">
             <select
               className="ui-control h-9 py-1.5 text-xs"
               value={newNamingMode}
@@ -158,11 +163,9 @@ export default function PortalStorageSpacesPage() {
               placeholder={newNamingMode === "named_bucket" ? "Storage Space and bucket name" : "Storage Space name"}
             />
             <input className="ui-control h-9 text-xs" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder="Description" />
-            <select className="ui-control h-9 py-1.5 text-xs" value={newSpaceType} onChange={(event) => setNewSpaceType(event.target.value)}>
-              <option value="Project">Project</option>
-              <option value="Dataset">Dataset</option>
-              <option value="Team">Team</option>
-              <option value="Workspace">Workspace</option>
+            <select className="ui-control h-9 py-1.5 text-xs" value={newVisibility} onChange={(event) => setNewVisibility(event.target.value as PortalStorageSpaceVisibility)} aria-label="Storage Space visibility">
+              <option value="private">Private</option>
+              <option value="shared">Shared</option>
             </select>
             <UiButton disabled={!newName.trim() || createBusy} onClick={handleCreate} className="h-9 px-3 py-1.5">
               {createBusy ? "Creating..." : "Create"}
@@ -174,7 +177,7 @@ export default function PortalStorageSpacesPage() {
 
       {showImport ? (
         <UiCard title="Import bucket">
-          <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_160px_auto]">
             <input
               className="ui-control h-9 text-xs"
               value={importBucketName}
@@ -187,6 +190,10 @@ export default function PortalStorageSpacesPage() {
               onChange={(event) => setImportDescription(event.target.value)}
               placeholder="Description"
             />
+            <select className="ui-control h-9 py-1.5 text-xs" value={importVisibility} onChange={(event) => setImportVisibility(event.target.value as PortalStorageSpaceVisibility)} aria-label="Imported Storage Space visibility">
+              <option value="private">Private</option>
+              <option value="shared">Shared</option>
+            </select>
             <UiButton disabled={!importBucketName.trim() || importBusy} onClick={handleImport} className="h-9 px-3 py-1.5">
               {importBusy ? "Importing..." : "Import"}
             </UiButton>
@@ -214,6 +221,7 @@ export default function PortalStorageSpacesPage() {
             <option value="all">All statuses</option>
             <option value="Active">Active</option>
             <option value="Attention">Attention</option>
+            <option value="Private">Private</option>
             <option value="Shared">Shared</option>
             <option value="Archived">Archived</option>
           </select>
@@ -229,13 +237,12 @@ export default function PortalStorageSpacesPage() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Type</th>
+                <th>Visibility</th>
                 <th>Objects</th>
                 <th>Size</th>
                 <th>Created</th>
                 <th>Region</th>
                 <th>Status</th>
-                <th>Access</th>
                 <th className="text-right">Action</th>
               </tr>
             </thead>
@@ -246,19 +253,18 @@ export default function PortalStorageSpacesPage() {
                     <div className={cx("font-bold", uiTitleTextClass)}>{space.name}</div>
                     <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>{space.description}</div>
                   </td>
-                  <td>{space.spaceType ?? "-"}</td>
+                  <td><UiBadge tone={visibilityTone(space.visibility)}>{visibilityLabel(space.visibility)}</UiBadge></td>
                   <td>{formatCompactNumber(space.objectCount)}</td>
                   <td>{formatBytes(space.usedBytes)}</td>
                   <td>{space.createdLabel}</td>
                   <td>{space.region}</td>
                   <td><UiBadge tone={statusTone(space)}>{space.status === "Active" ? "Enabled" : space.status}</UiBadge></td>
-                  <td><UiBadge tone={accessTone(space.access)}>{space.access}</UiBadge></td>
                   <td className="text-right"><Link to={storageSpacePath(space)}>Open</Link></td>
                 </tr>
               ))}
               {filteredSpaces.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
+                  <td colSpan={8} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
                     No Storage Spaces to display.
                   </td>
                 </tr>

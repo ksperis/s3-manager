@@ -58,6 +58,7 @@ from app.models.portal import (
     PortalStorageSpaceRole,
     PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
+    PortalStorageSpaceVisibility,
     PortalUsage,
     PortalUsageStorageSpace,
 )
@@ -128,6 +129,8 @@ class PortalService:
         self._bucket_access_policy_name = "portal-user-buckets"
         self._bucket_access_sid = "PortalUserBuckets"
         self._storage_space_share_sid_prefix = "PortalStorageSpace"
+        self._storage_space_private_sid = "PortalStorageSpacePrivate"
+        self._storage_space_archived_sid = "PortalStorageSpaceArchived"
         self._bucket_access_default_actions = PortalSettings().bucket_access_policy.actions
 
     def _portal_settings(self) -> PortalSettings:
@@ -605,6 +608,216 @@ class PortalService:
 
     def _bucket_arns(self, bucket_name: str) -> list[str]:
         return [f"arn:aws:s3:::{bucket_name}", f"arn:aws:s3:::{bucket_name}/*"]
+
+    def _storage_space_policy_actions(self) -> list[str]:
+        return [
+            "s3:GetBucketLocation",
+            "s3:ListBucket",
+            "s3:GetObject",
+            "s3:PutObject",
+            "s3:DeleteObject",
+            "s3:AbortMultipartUpload",
+            "s3:ListBucketMultipartUploads",
+            "s3:ListMultipartUploadParts",
+        ]
+
+    def _metadata_visibility(
+        self,
+        metadata: PortalStorageSpaceMetadata | None,
+    ) -> PortalStorageSpaceVisibility:
+        if metadata and metadata.visibility in {"private", "shared"}:
+            return metadata.visibility  # type: ignore[return-value]
+        return "shared" if metadata is None else "private"
+
+    def _is_portal_manager_access(self, access: "AccountAccess") -> bool:
+        return access.role == AccountRole.PORTAL_MANAGER.value or access.capabilities.can_manage_portal_users
+
+    def _storage_space_owner_label(
+        self,
+        account: S3Account,
+        metadata: PortalStorageSpaceMetadata | None,
+    ) -> str:
+        if metadata and metadata.owner_label:
+            return metadata.owner_label
+        if metadata and metadata.owner_user_id:
+            owner = self.db.query(User).filter(User.id == metadata.owner_user_id).first()
+            if owner and owner.email:
+                return owner.email
+        return account.name
+
+    def _storage_space_visible_to_user(
+        self,
+        user: User,
+        access: "AccountAccess",
+        metadata: PortalStorageSpaceMetadata | None,
+        *,
+        include_archived: bool = False,
+    ) -> bool:
+        if metadata and metadata.archived_at and not include_archived:
+            return False
+        if self._metadata_visibility(metadata) == "shared":
+            return True
+        if self._is_portal_manager_access(access):
+            return True
+        return bool(metadata and metadata.owner_user_id == user.id)
+
+    def _storage_space_effective_role(
+        self,
+        user: User,
+        access: "AccountAccess",
+        metadata: PortalStorageSpaceMetadata | None,
+        role: Optional[PortalStorageSpaceRole],
+        *,
+        include_archived: bool = False,
+    ) -> Optional[PortalStorageSpaceRole]:
+        if not self._storage_space_visible_to_user(user, access, metadata, include_archived=include_archived):
+            return None
+        if self._is_portal_manager_access(access):
+            return "Owner"
+        if self._metadata_visibility(metadata) == "private":
+            return "Owner"
+        return role or self._storage_space_role(access)
+
+    def _portal_policy_usernames_for_space(
+        self,
+        account: S3Account,
+        owner_user_id: Optional[int],
+    ) -> list[str]:
+        allowed_user_ids: set[int] = set()
+        if owner_user_id is not None:
+            allowed_user_ids.add(owner_user_id)
+        manager_rows = (
+            self.db.query(UserS3Account.user_id)
+            .filter(
+                UserS3Account.account_id == account.id,
+                UserS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
+            )
+            .all()
+        )
+        allowed_user_ids.update(user_id for (user_id,) in manager_rows if user_id is not None)
+        if not allowed_user_ids:
+            return []
+        rows = (
+            self.db.query(AccountIAMUser.iam_username)
+            .filter(
+                AccountIAMUser.account_id == account.id,
+                AccountIAMUser.user_id.in_(allowed_user_ids),
+                AccountIAMUser.iam_username.isnot(None),
+            )
+            .all()
+        )
+        return sorted({username for (username,) in rows if username})
+
+    def _without_storage_space_policy_statements(self, policy: Optional[dict]) -> Optional[dict]:
+        if not isinstance(policy, dict):
+            return None
+        statements = policy.get("Statement") or []
+        if not isinstance(statements, list):
+            statements = [statements]
+        managed_sids = {self._storage_space_private_sid, self._storage_space_archived_sid}
+        filtered = [stmt for stmt in statements if not (isinstance(stmt, dict) and stmt.get("Sid") in managed_sids)]
+        if not filtered:
+            return None
+        cleaned = copy.deepcopy(policy)
+        cleaned["Statement"] = filtered
+        if "Version" not in cleaned:
+            cleaned["Version"] = "2012-10-17"
+        return cleaned
+
+    def _storage_space_bucket_policy(
+        self,
+        account: S3Account,
+        bucket_name: str,
+        metadata: PortalStorageSpaceMetadata,
+        existing_policy: Optional[dict],
+    ) -> Optional[dict]:
+        policy = self._without_storage_space_policy_statements(existing_policy) or {
+            "Version": "2012-10-17",
+            "Statement": [],
+        }
+        statements = policy.get("Statement") or []
+        if not isinstance(statements, list):
+            statements = [statements]
+        resources = self._bucket_arns(bucket_name)
+        actions = self._storage_space_policy_actions()
+        if metadata.archived_at:
+            statements.append(
+                {
+                    "Sid": self._storage_space_archived_sid,
+                    "Effect": "Deny",
+                    "Principal": "*",
+                    "Action": actions,
+                    "Resource": resources,
+                }
+            )
+        elif self._metadata_visibility(metadata) == "private":
+            allowed_usernames = self._portal_policy_usernames_for_space(account, metadata.owner_user_id)
+            condition: dict[str, Any]
+            if allowed_usernames:
+                condition = {"StringNotEquals": {"aws:username": allowed_usernames}}
+            else:
+                condition = {"StringLike": {"aws:username": "*"}}
+            statements.append(
+                {
+                    "Sid": self._storage_space_private_sid,
+                    "Effect": "Deny",
+                    "Principal": "*",
+                    "Action": actions,
+                    "Resource": resources,
+                    "Condition": condition,
+                }
+            )
+        if not statements:
+            return None
+        policy["Statement"] = statements
+        if "Version" not in policy:
+            policy["Version"] = "2012-10-17"
+        return policy
+
+    def _sync_storage_space_bucket_policy(
+        self,
+        account: S3Account,
+        bucket_name: str,
+        metadata: PortalStorageSpaceMetadata,
+    ) -> None:
+        if not getattr(account, "storage_endpoint", None) and not getattr(account, "storage_endpoint_url", None):
+            logger.debug("Skipping Portal Storage Space bucket policy sync without S3 endpoint: %s", bucket_name)
+            return
+        access_key, secret_key = self._account_credentials(account)
+        kwargs = self._s3_client_kwargs(account)
+        existing_policy = s3_client.get_bucket_policy(
+            bucket_name,
+            access_key=access_key,
+            secret_key=secret_key,
+            **kwargs,
+        )
+        policy = self._storage_space_bucket_policy(account, bucket_name, metadata, existing_policy)
+        if policy is not None:
+            s3_client.put_bucket_policy(
+                bucket_name,
+                policy=policy,
+                access_key=access_key,
+                secret_key=secret_key,
+                **kwargs,
+            )
+            return
+        if self._without_storage_space_policy_statements(existing_policy) is None and isinstance(existing_policy, dict):
+            s3_client.delete_bucket_policy(
+                bucket_name,
+                access_key=access_key,
+                secret_key=secret_key,
+                **kwargs,
+            )
+        elif isinstance(existing_policy, dict):
+            cleaned = self._without_storage_space_policy_statements(existing_policy)
+            if cleaned is not None:
+                s3_client.put_bucket_policy(
+                    bucket_name,
+                    policy=cleaned,
+                    access_key=access_key,
+                    secret_key=secret_key,
+                    **kwargs,
+                )
 
     def _bucket_names_from_resources(self, resources: Any) -> set[str]:
         if not isinstance(resources, list):
@@ -1681,8 +1894,6 @@ class PortalService:
     def _default_storage_space_description(self, name: str, metadata: PortalStorageSpaceMetadata | None = None) -> str:
         if metadata and metadata.description:
             return metadata.description
-        if metadata and metadata.space_type:
-            return f"{name} {metadata.space_type} workspace"
         return f"{name} storage space"
 
     def _normalize_storage_space_datetime(self, value: datetime | None) -> datetime | None:
@@ -1730,7 +1941,18 @@ class PortalService:
             return "Editor"
         return "Viewer"
 
-    def _storage_space_status(self, bucket: Bucket, role: PortalStorageSpaceRole) -> str:
+    def _storage_space_status(
+        self,
+        bucket: Bucket,
+        role: PortalStorageSpaceRole,
+        metadata: PortalStorageSpaceMetadata | None = None,
+    ) -> str:
+        if metadata and metadata.archived_at:
+            return "Archived"
+        if metadata and self._metadata_visibility(metadata) == "private":
+            return "Private"
+        if metadata and self._metadata_visibility(metadata) == "shared":
+            return "Shared"
         if role != "Owner":
             return "Shared"
         used = bucket.used_bytes
@@ -1754,10 +1976,11 @@ class PortalService:
             id=bucket.name,
             name=name,
             role=role,
-            status="Archived" if metadata and metadata.archived_at else self._storage_space_status(bucket, role),
+            status=self._storage_space_status(bucket, role, metadata),
             description=self._default_storage_space_description(name, metadata),
-            owner_label=(metadata.owner_label if metadata and metadata.owner_label else access.account.name),
-            space_type=metadata.space_type if metadata else None,
+            owner_label=self._storage_space_owner_label(access.account, metadata),
+            owner_user_id=metadata.owner_user_id if metadata else None,
+            visibility=self._metadata_visibility(metadata),
             project_key=metadata.project_key if metadata else None,
             dataset_label=metadata.dataset_label if metadata else None,
             region=region,
@@ -1785,17 +2008,26 @@ class PortalService:
         state = self.get_state(user, access)
         role_by_bucket = self.list_existing_user_storage_space_access(user, access.account, access.role)
         metadata_by_bucket = self._storage_space_metadata_map(access.account)
-        spaces = [
-            self._bucket_to_storage_space_summary(
-                bucket,
+        spaces: list[PortalStorageSpaceSummary] = []
+        for bucket in state.buckets:
+            metadata = metadata_by_bucket.get(bucket.name)
+            role_for_bucket = self._storage_space_effective_role(
+                user,
                 access,
-                role=role_by_bucket.get(bucket.name),
-                metadata=metadata_by_bucket.get(bucket.name),
+                metadata,
+                role_by_bucket.get(bucket.name),
+                include_archived=include_archived,
             )
-            for bucket in state.buckets
-        ]
-        if not include_archived:
-            spaces = [space for space in spaces if not space.archived_at]
+            if role_for_bucket is None:
+                continue
+            spaces.append(
+                self._bucket_to_storage_space_summary(
+                    bucket,
+                    access,
+                    role=role_for_bucket,
+                    metadata=metadata,
+                )
+            )
         if search:
             term = search.strip().lower()
             if term:
@@ -1806,7 +2038,7 @@ class PortalService:
                     or term in space.id.lower()
                     or term in (space.description or "").lower()
                     or term in (space.owner_label or "").lower()
-                    or term in (space.space_type or "").lower()
+                    or term in (space.visibility or "").lower()
                     or term in (space.project_key or "").lower()
                     or term in (space.dataset_label or "").lower()
                     or term in (space.internal_bucket_name or "").lower()
@@ -1883,7 +2115,7 @@ class PortalService:
         naming_mode: PortalStorageSpaceNamingMode = "generic_uuid",
         description: Optional[str] = None,
         owner_label: Optional[str] = None,
-        space_type: Optional[str] = None,
+        visibility: PortalStorageSpaceVisibility = "private",
         project_key: Optional[str] = None,
         dataset_label: Optional[str] = None,
     ) -> PortalStorageSpace:
@@ -1909,14 +2141,17 @@ class PortalService:
             bucket_name=bucket_name,
             display_name=name,
             description=description,
-            owner_label=owner_label or access.account.name,
-            space_type=space_type,
+            owner_label=owner_label or user.email,
+            owner_user_id=user.id,
+            visibility=visibility,
             project_key=project_key,
             dataset_label=dataset_label,
             origin=origin,
             name_editable=name_editable,
         )
         self.db.add(metadata)
+        self.db.flush()
+        self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
         self.db.commit()
         storage_space = self.get_storage_space(user, access, bucket_name)
         if storage_space is None:
@@ -1931,7 +2166,7 @@ class PortalService:
         bucket_name: str,
         description: Optional[str] = None,
         owner_label: Optional[str] = None,
-        space_type: Optional[str] = None,
+        visibility: PortalStorageSpaceVisibility = "private",
         project_key: Optional[str] = None,
         dataset_label: Optional[str] = None,
     ) -> PortalStorageSpace:
@@ -1959,14 +2194,14 @@ class PortalService:
             metadata = PortalStorageSpaceMetadata(account_id=access.account.id, bucket_name=cleaned_bucket_name)
             self.db.add(metadata)
         metadata.display_name = cleaned_bucket_name
+        metadata.owner_user_id = metadata.owner_user_id or user.id
+        metadata.visibility = visibility
         if description is not None:
             metadata.description = description
         if owner_label is not None:
             metadata.owner_label = owner_label
         elif not metadata.owner_label:
-            metadata.owner_label = access.account.name
-        if space_type is not None:
-            metadata.space_type = space_type
+            metadata.owner_label = user.email
         if project_key is not None:
             metadata.project_key = project_key
         if dataset_label is not None:
@@ -1975,6 +2210,8 @@ class PortalService:
         metadata.name_editable = False
         metadata.updated_at = utcnow()
         self.db.add(metadata)
+        self.db.flush()
+        self._sync_storage_space_bucket_policy(access.account, cleaned_bucket_name, metadata)
         self.db.commit()
         storage_space = self.get_storage_space(user, access, cleaned_bucket_name)
         if storage_space is None:
@@ -1990,7 +2227,7 @@ class PortalService:
         name: Optional[str] = None,
         description: Optional[str] = None,
         owner_label: Optional[str] = None,
-        space_type: Optional[str] = None,
+        visibility: Optional[PortalStorageSpaceVisibility] = None,
         project_key: Optional[str] = None,
         dataset_label: Optional[str] = None,
         archived: Optional[bool] = None,
@@ -1998,11 +2235,18 @@ class PortalService:
         bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id, include_archived=True)
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
-        self._require_storage_space_owner(user, access, bucket_name)
+        self._require_storage_space_owner(user, access, bucket_name, include_archived=True)
         metadata = self._storage_space_metadata(access.account, bucket_name)
         if metadata is None:
-            metadata = PortalStorageSpaceMetadata(account_id=access.account.id, bucket_name=bucket_name)
+            metadata = PortalStorageSpaceMetadata(
+                account_id=access.account.id,
+                bucket_name=bucket_name,
+                owner_user_id=user.id,
+                owner_label=user.email,
+            )
             self.db.add(metadata)
+        elif metadata.owner_user_id is None:
+            metadata.owner_user_id = user.id
         if name is not None:
             current_name = self._display_storage_space_name(bucket_name, metadata)
             if not metadata.name_editable and name != current_name:
@@ -2013,8 +2257,8 @@ class PortalService:
             metadata.description = description
         if owner_label is not None:
             metadata.owner_label = owner_label
-        if space_type is not None:
-            metadata.space_type = space_type
+        if visibility is not None:
+            metadata.visibility = visibility
         if project_key is not None:
             metadata.project_key = project_key
         if dataset_label is not None:
@@ -2023,6 +2267,8 @@ class PortalService:
             metadata.archived_at = utcnow() if archived else None
         metadata.updated_at = utcnow()
         self.db.add(metadata)
+        self.db.flush()
+        self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
         self.db.commit()
         storage_space = self.get_storage_space(user, access, bucket_name)
         if storage_space is None:
@@ -2054,9 +2300,16 @@ class PortalService:
         user: User,
         access: "AccountAccess",
         bucket_name: str,
+        *,
+        include_archived: bool = False,
     ) -> Optional[PortalStorageSpaceRole]:
-        if access.role == AccountRole.PORTAL_MANAGER.value or access.capabilities.can_manage_portal_users:
+        metadata = self._storage_space_metadata(access.account, bucket_name)
+        if metadata and metadata.archived_at and not include_archived:
+            return None
+        if self._is_portal_manager_access(access):
             return "Owner"
+        if self._metadata_visibility(metadata) == "private":
+            return "Owner" if metadata and metadata.owner_user_id == user.id else None
         role_by_bucket = self.list_existing_user_storage_space_access(user, access.account, access.role)
         return role_by_bucket.get(bucket_name)
 
@@ -2225,9 +2478,23 @@ class PortalService:
         user: User,
         access: "AccountAccess",
         bucket_name: str,
+        *,
+        include_archived: bool = False,
     ) -> None:
-        if self._user_storage_space_role(user, access, bucket_name) != "Owner":
+        if self._user_storage_space_role(user, access, bucket_name, include_archived=include_archived) != "Owner":
             raise RuntimeError("Owner role required for this storage space.")
+
+    def _require_storage_space_active(self, account: S3Account, bucket_name: str) -> PortalStorageSpaceMetadata | None:
+        metadata = self._storage_space_metadata(account, bucket_name)
+        if metadata and metadata.archived_at:
+            raise RuntimeError("Storage space is archived.")
+        return metadata
+
+    def _require_storage_space_shared(self, account: S3Account, bucket_name: str) -> PortalStorageSpaceMetadata | None:
+        metadata = self._require_storage_space_active(account, bucket_name)
+        if self._metadata_visibility(metadata) == "private":
+            raise RuntimeError("Private storage spaces cannot be shared.")
+        return metadata
 
     def list_storage_space_shares(
         self,
@@ -2238,6 +2505,7 @@ class PortalService:
         bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
+        self._require_storage_space_active(access.account, bucket_name)
         storage_space = next(
             (
                 item
@@ -2278,6 +2546,7 @@ class PortalService:
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
         self._require_storage_space_owner(user, access, bucket_name)
+        self._require_storage_space_shared(access.account, bucket_name)
         if is_admin_ui_role(target.role):
             raise RuntimeError("Cannot share a storage space with this user.")
         link = (
@@ -2326,6 +2595,7 @@ class PortalService:
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
         self._require_storage_space_owner(user, access, bucket_name)
+        self._require_storage_space_active(access.account, bucket_name)
         link = (
             self.db.query(AccountIAMUser)
             .filter(AccountIAMUser.user_id == target.id, AccountIAMUser.account_id == access.account.id)
@@ -2343,6 +2613,12 @@ class PortalService:
             return "Revoked"
         if expires_at is not None and expires_at <= now:
             return "Expired"
+        account = self.db.query(S3Account).filter(S3Account.id == link.account_id).first()
+        metadata = self._storage_space_metadata(account, link.bucket_name) if account is not None else None
+        if metadata and metadata.archived_at:
+            return "Archived"
+        if self._metadata_visibility(metadata) == "private":
+            return "Suspended"
         return "Active"
 
     def _public_link_url(self, token: str) -> str:
@@ -2380,6 +2656,7 @@ class PortalService:
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
         self._require_storage_space_owner(user, access, bucket_name)
+        self._require_storage_space_active(access.account, bucket_name)
         storage_space = next(
             (
                 item
@@ -2418,6 +2695,7 @@ class PortalService:
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
         self._require_storage_space_owner(user, access, bucket_name)
+        self._require_storage_space_shared(access.account, bucket_name)
         storage_space = next(
             (
                 item
@@ -2458,6 +2736,7 @@ class PortalService:
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
         self._require_storage_space_owner(user, access, bucket_name)
+        self._require_storage_space_active(access.account, bucket_name)
         link = (
             self.db.query(DBPortalPublicLink)
             .filter(
@@ -2478,11 +2757,17 @@ class PortalService:
         link = self.db.query(DBPortalPublicLink).filter(DBPortalPublicLink.token == token).first()
         if link is None:
             raise RuntimeError("Public link not found.")
-        if self._public_link_status(link) != "Active":
-            raise RuntimeError("Public link is expired or revoked.")
+        link_status = self._public_link_status(link)
+        if link_status != "Active":
+            raise RuntimeError(f"Public link is {link_status.lower()}.")
         account = self.db.query(S3Account).filter(S3Account.id == link.account_id).first()
         if account is None:
             raise RuntimeError("Public link account not found.")
+        metadata = self._storage_space_metadata(account, link.bucket_name)
+        if metadata and metadata.archived_at:
+            raise RuntimeError("Public link is archived.")
+        if self._metadata_visibility(metadata) == "private":
+            raise RuntimeError("Public link is suspended for this private storage space.")
         access_key, secret_key = self._account_credentials(account)
         endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
         client = get_s3_client(
@@ -2565,6 +2850,7 @@ class PortalService:
             "create_storage_space": "Created storage space",
             "update_storage_space": "Updated storage space",
             "archive_storage_space": "Archived storage space",
+            "restore_storage_space": "Restored storage space",
             "create_public_link": "Created public link",
             "revoke_public_link": "Revoked public link",
         }

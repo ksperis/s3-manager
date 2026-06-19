@@ -901,10 +901,13 @@ class BrowserService:
         return stream, content_type, filename
 
     def list_buckets(self, account: S3Account) -> list[BrowserBucket]:
+        allowed_portal_buckets = getattr(account, "_portal_allowed_buckets", None)
         account_key = self._account_cache_key(account)
         cached = _BUCKET_LIST_CACHE.get(account_key)
         if cached is not None:
             logger.debug("Browser bucket cache hit: account=%s count=%s", account_key, len(cached))
+            if allowed_portal_buckets is not None:
+                return [bucket for bucket in cached if bucket.name in allowed_portal_buckets]
             return list(cached)
         client = self._client(account)
         try:
@@ -920,6 +923,8 @@ class BrowserService:
         buckets.sort(key=lambda bucket: bucket.name)
         _BUCKET_LIST_CACHE.set(account_key, buckets)
         logger.debug("Browser bucket cache miss: account=%s count=%s", account_key, len(buckets))
+        if allowed_portal_buckets is not None:
+            return [bucket for bucket in buckets if bucket.name in allowed_portal_buckets]
         return list(buckets)
 
     def search_buckets(

@@ -20,7 +20,7 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 3. Use **Home** for the dashboard, quota, usage by Storage Space, recent
    activity, shared spaces, transfers, and simple alerts.
 4. Use **Storage Spaces** to open an assigned space, browse files, upload,
-   download, and share with collaborators.
+   download, and share with collaborators when the space is shared.
 5. Use **Access keys** to generate S3 credentials for external tools. The
    Portal runtime key is not shown in this list.
 6. Use **Shares** to review items shared with you, items shared by you, and
@@ -44,6 +44,15 @@ bucket or advanced object browser.
 In v1, a Storage Space can still map to a bucket internally, but Portal labels
 and navigation stay user-oriented.
 
+A Storage Space has a visibility:
+
+- **Private**: visible to its owner and Portal managers only.
+- **Shared**: visible through the existing Viewer, Editor, and Owner grants.
+
+A Storage Space can also be **Archived**. Archived spaces stay registered for
+future restoration, but Portal file browsing, sharing, and public links are
+suspended while the archive status is active.
+
 From a Storage Space, users can:
 
 - browse folders and files;
@@ -56,6 +65,7 @@ From a Storage Space, users can:
 The file browser shown inside a Storage Space is the main Browser in a locked,
 minimal Portal profile. It opens only the selected Storage Space, keeps the
 Storage Space label in the UI, and uses the Portal execution identity.
+Archived Storage Spaces do not show the embedded file browser.
 
 Advanced object features such as versions, tags, raw metadata headers, object
 lock, diagnostics, and batch operations belong in Browser or Manager, not in
@@ -83,6 +93,11 @@ Portal exposes collaboration through simple roles:
 
 These roles are translated by the backend into storage-side permissions. They
 do not create a separate permission source.
+
+Only shared, active Storage Spaces can receive new shares or public links.
+Private spaces keep access limited to the owner and Portal managers. Archived
+spaces keep their stored grants and links so they can be restored later, but
+those grants and links are inactive while archived.
 
 ### Empty and unavailable states
 

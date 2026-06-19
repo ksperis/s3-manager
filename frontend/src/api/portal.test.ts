@@ -72,23 +72,24 @@ describe("portal storage spaces api", () => {
       name: "Research Data",
       naming_mode: "named_bucket",
       description: "Lab files",
+      visibility: "shared",
     });
-    await importPortalStorageSpace("101", { bucket_name: "existing-bucket", description: "Imported" });
-    await updatePortalStorageSpace("101", "research data", { description: "Updated", archived: true });
+    await importPortalStorageSpace("101", { bucket_name: "existing-bucket", description: "Imported", visibility: "private" });
+    await updatePortalStorageSpace("101", "research data", { description: "Updated", visibility: "private", archived: true });
 
     expect(clientMock.post).toHaveBeenCalledWith(
       "/portal/storage-spaces",
-      { name: "Research Data", naming_mode: "named_bucket", description: "Lab files" },
+      { name: "Research Data", naming_mode: "named_bucket", description: "Lab files", visibility: "shared" },
       { params: { account_id: "101" } }
     );
     expect(clientMock.post).toHaveBeenCalledWith(
       "/portal/storage-spaces/import",
-      { bucket_name: "existing-bucket", description: "Imported" },
+      { bucket_name: "existing-bucket", description: "Imported", visibility: "private" },
       { params: { account_id: "101" } }
     );
     expect(clientMock.patch).toHaveBeenCalledWith(
       "/portal/storage-spaces/research%20data",
-      { description: "Updated", archived: true },
+      { description: "Updated", visibility: "private", archived: true },
       { params: { account_id: "101" } }
     );
   });

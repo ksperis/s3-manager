@@ -7,6 +7,7 @@ from app.utils.time import utcnow
 from dataclasses import dataclass, field
 import logging
 from typing import Literal, Optional, Union
+from urllib.parse import unquote
 
 from fastapi import Depends, HTTPException, Query, Request, status, Header
 from fastapi.security import OAuth2PasswordBearer
@@ -605,7 +606,7 @@ def get_account_context(
             return _resolve_s3_user_context(db, actor, s3_user_id)
         account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
         if _is_portal_browser_request(request, surface):
-            return _resolve_portal_browser_context(db, actor, account, link)
+            return _resolve_portal_browser_context(db, actor, account, link, request=request)
         capabilities = _manager_membership_capabilities(link)
         if not capabilities.can_manage_buckets:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
@@ -755,6 +756,13 @@ def _is_portal_browser_basic_route_allowed(request: Request) -> bool:
     return False
 
 
+def _portal_browser_target_bucket(request: Request) -> Optional[str]:
+    segments = _portal_browser_relative_segments(request)
+    if len(segments) >= 2 and segments[0] == "buckets" and segments[1] != "search":
+        return unquote(segments[1])
+    return None
+
+
 def require_portal_browser_basic_route(request: Request) -> None:
     if not _is_portal_browser_request(request, _resolve_workspace_surface(request)):
         return
@@ -771,6 +779,8 @@ def _resolve_portal_browser_context(
     user: User,
     account: S3Account,
     link: UserS3Account,
+    *,
+    request: Request,
 ) -> S3Account:
     app_settings = load_app_settings()
     if not app_settings.general.portal_enabled:
@@ -785,8 +795,10 @@ def _resolve_portal_browser_context(
 
     from app.services.portal_service import PortalService
 
+    portal_service = PortalService(db)
+    portal_access = AccountAccess(account=account, actor=user, membership=link, capabilities=portal_capabilities, role=role)
     try:
-        access_key, secret_key = PortalService(db).get_portal_credentials(user, account, role)
+        access_key, secret_key = portal_service.get_portal_credentials(user, account, role)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     if not access_key or not secret_key:
@@ -794,6 +806,19 @@ def _resolve_portal_browser_context(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Portal credentials are not configured for this account",
         )
+
+    try:
+        visible_spaces = portal_service.list_storage_spaces(user, portal_access)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    allowed_buckets = {
+        space.internal_bucket_name or space.id
+        for space in visible_spaces
+        if (space.internal_bucket_name or space.id)
+    }
+    target_bucket = _portal_browser_target_bucket(request)
+    if target_bucket and target_bucket not in allowed_buckets:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage Space is not available in Portal")
 
     account.set_session_credentials(access_key, secret_key)
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
@@ -804,6 +829,7 @@ def _resolve_portal_browser_context(
         using_root_key=False,
     )
     account._portal_browser_role = role  # type: ignore[attr-defined]
+    account._portal_allowed_buckets = allowed_buckets  # type: ignore[attr-defined]
     return account
 
 

@@ -157,14 +157,25 @@ export default function PortalSharesPage() {
   const [publicLinkExpiration, setPublicLinkExpiration] = useState("");
   const [busyShareId, setBusyShareId] = useState<string | null>(null);
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
+  const activeSharedSpaces = useMemo(
+    () => workspace.spaces.filter((space) => space.status !== "Archived" && space.visibility === "shared"),
+    [workspace.spaces]
+  );
+  const activeSharedOwnerSpaces = useMemo(
+    () => activeSharedSpaces.filter((space) => space.role === "Owner"),
+    [activeSharedSpaces]
+  );
 
   const spaceIds = useMemo(() => workspace.spaces.map((space) => space.id).join("|"), [workspace.spaces]);
 
   useEffect(() => {
-    if (!selectedSpaceId && workspace.spaces[0]) {
-      setSelectedSpaceId(workspace.spaces[0].id);
+    if (!selectedSpaceId && activeSharedSpaces[0]) {
+      setSelectedSpaceId(activeSharedSpaces[0].id);
     }
-  }, [selectedSpaceId, workspace.spaces]);
+    if (selectedSpaceId && !activeSharedSpaces.some((space) => space.id === selectedSpaceId)) {
+      setSelectedSpaceId(activeSharedSpaces[0]?.id ?? "");
+    }
+  }, [activeSharedSpaces, selectedSpaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,7 +218,7 @@ export default function PortalSharesPage() {
     }
     Promise.all(
       workspace.spaces
-        .filter((space) => space.role === "Owner")
+        .filter((space) => space.role === "Owner" && space.status !== "Archived" && space.visibility === "shared")
         .map((space) => listPortalStorageSpacePublicLinks(accountIdForApi, space.id, { includeRevoked: true }))
     )
       .then((results) => {
@@ -419,7 +430,7 @@ export default function PortalSharesPage() {
         <UiCard title="Create a new share">
           <div className="grid gap-3 md:grid-cols-[1fr_180px_160px_auto]">
             <select className="ui-control h-8 py-1.5 text-xs" value={selectedSpaceId} onChange={(event) => setSelectedSpaceId(event.target.value)}>
-              {workspace.spaces.map((space) => (
+              {activeSharedSpaces.map((space) => (
                 <option key={space.id} value={space.id}>{space.name}</option>
               ))}
             </select>
@@ -436,7 +447,7 @@ export default function PortalSharesPage() {
             </select>
             <button
               type="button"
-              disabled={!accountIdForApi || !selectedSpaceId || !email.trim() || busyShareId === "new"}
+              disabled={!accountIdForApi || !selectedSpaceId || !email.trim() || busyShareId === "new" || activeSharedSpaces.length === 0}
               onClick={handleCreateShare}
               className={tableActionButtonClasses}
             >
@@ -448,14 +459,14 @@ export default function PortalSharesPage() {
         <UiCard title="Create a public link">
           <div className="grid gap-3 md:grid-cols-[180px_1fr_220px_auto]">
             <select className="ui-control h-8 py-1.5 text-xs" value={selectedSpaceId} onChange={(event) => setSelectedSpaceId(event.target.value)}>
-              {workspace.spaces.filter((space) => space.role === "Owner").map((space) => (
+              {activeSharedOwnerSpaces.map((space) => (
                 <option key={space.id} value={space.id}>{space.name}</option>
               ))}
             </select>
             <input className="ui-control h-8 text-xs" value={publicObjectKey} onChange={(event) => setPublicObjectKey(event.target.value)} placeholder="path/to/object.ext" />
             <input type="datetime-local" className="ui-control h-8 text-xs" value={publicLinkExpiration} onChange={(event) => setPublicLinkExpiration(event.target.value)} aria-label="Public link expiration" />
             <UiButton
-              disabled={!accountIdForApi || !selectedSpaceId || !publicObjectKey.trim() || busyShareId === "public-link"}
+              disabled={!accountIdForApi || !selectedSpaceId || !publicObjectKey.trim() || busyShareId === "public-link" || activeSharedOwnerSpaces.length === 0}
               onClick={handleCreatePublicLink}
               className="h-8 px-3 py-1.5"
             >

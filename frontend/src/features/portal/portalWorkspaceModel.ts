@@ -3,11 +3,11 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { S3Account } from "../../api/accounts";
-import type { PortalState, PortalStorageSpaceSummary, PortalUsage } from "../../api/portal";
+import type { PortalState, PortalStorageSpaceSummary, PortalStorageSpaceVisibility, PortalUsage } from "../../api/portal";
 
 export type PortalWorkspaceRole = "Viewer" | "Editor" | "Owner";
-export type PortalWorkspaceStatus = "Active" | "Attention" | "Shared";
-export type PortalWorkspaceAccess = "Private" | "Public" | "Public Read" | "Unavailable";
+export type PortalWorkspaceStatus = "Active" | "Attention" | "Private" | "Shared";
+export type PortalWorkspaceAccess = "Private" | "Shared" | "Public" | "Public Read" | "Unavailable";
 export type PortalWorkspaceAlertTone = "info" | "warning" | "danger";
 
 export type PortalWorkspaceFile = {
@@ -30,7 +30,8 @@ export type PortalWorkspaceSpace = {
   nameEditable: boolean;
   description: string;
   ownerLabel: string | null;
-  spaceType: string | null;
+  ownerUserId: number | null;
+  visibility: PortalStorageSpaceVisibility;
   projectKey: string | null;
   datasetLabel: string | null;
   role: PortalWorkspaceRole;
@@ -122,7 +123,7 @@ function roleFromStorageSpace(space: PortalStorageSpaceSummary): PortalWorkspace
 }
 
 function statusFromStorageSpace(space: PortalStorageSpaceSummary, role: PortalWorkspaceRole): PortalWorkspaceStatus {
-  if (space.status === "Active" || space.status === "Attention" || space.status === "Shared") {
+  if (space.status === "Active" || space.status === "Attention" || space.status === "Private" || space.status === "Shared") {
     return space.status;
   }
   if (typeof space.status === "string" && ["attention", "warning", "degraded"].includes(space.status.toLowerCase())) {
@@ -176,6 +177,7 @@ export function buildPortalWorkspaceModel({
     const usageSpace = usageBySpace.get(storageSpace.id);
     const role = roleFromStorageSpace(storageSpace);
     const name = storageSpace.name || prettyName(storageSpace.id);
+    const visibility = storageSpace.visibility === "shared" ? "shared" : "private";
     return {
       id: storageSpace.id,
       name: usageSpace?.name ?? name,
@@ -184,12 +186,13 @@ export function buildPortalWorkspaceModel({
       nameEditable: Boolean(storageSpace.name_editable),
       description: storageSpace.description ?? `${name} storage space`,
       ownerLabel: storageSpace.owner_label ?? null,
-      spaceType: storageSpace.space_type ?? null,
+      ownerUserId: storageSpace.owner_user_id ?? null,
+      visibility,
       projectKey: storageSpace.project_key ?? null,
       datasetLabel: storageSpace.dataset_label ?? null,
       role,
       status: storageSpace.archived_at ? "Archived" : statusFromStorageSpace(storageSpace, role),
-      access: "Unavailable" as const,
+      access: visibility === "shared" ? "Shared" : "Private",
       region: storageSpace.region ?? null,
       createdLabel: createdLabel(storageSpace.created_at),
       usedBytes: usageSpace?.used_bytes ?? storageSpace.used_bytes ?? null,

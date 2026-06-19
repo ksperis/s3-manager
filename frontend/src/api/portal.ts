@@ -74,6 +74,7 @@ export type PortalUsageStorageSpace = {
 };
 
 export type PortalStorageSpaceRole = "Viewer" | "Editor" | "Owner";
+export type PortalStorageSpaceVisibility = "private" | "shared";
 
 export type PortalStorageSpaceSummary = {
   id: string;
@@ -82,7 +83,8 @@ export type PortalStorageSpaceSummary = {
   status?: string | null;
   description?: string | null;
   owner_label?: string | null;
-  space_type?: string | null;
+  owner_user_id?: number | null;
+  visibility?: PortalStorageSpaceVisibility;
   project_key?: string | null;
   dataset_label?: string | null;
   region?: string | null;
@@ -104,7 +106,7 @@ export type PortalStorageSpaceCreate = {
   naming_mode?: "generic_uuid" | "named_bucket";
   description?: string | null;
   owner_label?: string | null;
-  space_type?: string | null;
+  visibility?: PortalStorageSpaceVisibility;
   project_key?: string | null;
   dataset_label?: string | null;
 };
@@ -113,7 +115,7 @@ export type PortalStorageSpaceImport = {
   bucket_name: string;
   description?: string | null;
   owner_label?: string | null;
-  space_type?: string | null;
+  visibility?: PortalStorageSpaceVisibility;
   project_key?: string | null;
   dataset_label?: string | null;
 };

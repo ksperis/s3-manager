@@ -497,7 +497,7 @@ def create_portal_storage_space(
             naming_mode=payload.naming_mode,
             description=payload.description,
             owner_label=payload.owner_label,
-            space_type=payload.space_type,
+            visibility=payload.visibility,
             project_key=payload.project_key,
             dataset_label=payload.dataset_label,
         )
@@ -508,7 +508,11 @@ def create_portal_storage_space(
             entity_type="storage_space",
             entity_id=storage_space.id,
             account=access.account,
-            metadata={"storage_space_id": storage_space.id},
+            metadata={
+                "storage_space_id": storage_space.id,
+                "visibility": storage_space.visibility,
+                "owner_user_id": storage_space.owner_user_id,
+            },
         )
         return storage_space
     except RuntimeError as exc:
@@ -532,7 +536,7 @@ def import_portal_storage_space(
             bucket_name=payload.bucket_name,
             description=payload.description,
             owner_label=payload.owner_label,
-            space_type=payload.space_type,
+            visibility=payload.visibility,
             project_key=payload.project_key,
             dataset_label=payload.dataset_label,
         )
@@ -543,7 +547,11 @@ def import_portal_storage_space(
             entity_type="storage_space",
             entity_id=storage_space.id,
             account=access.account,
-            metadata={"storage_space_id": storage_space.id},
+            metadata={
+                "storage_space_id": storage_space.id,
+                "visibility": storage_space.visibility,
+                "owner_user_id": storage_space.owner_user_id,
+            },
         )
         return storage_space
     except RuntimeError as exc:
@@ -569,12 +577,18 @@ def update_portal_storage_space(
             name=payload.name,
             description=payload.description,
             owner_label=payload.owner_label,
-            space_type=payload.space_type,
+            visibility=payload.visibility,
             project_key=payload.project_key,
             dataset_label=payload.dataset_label,
             archived=payload.archived,
         )
-        action = "archive_storage_space" if payload.archived else "update_storage_space"
+        action = (
+            "archive_storage_space"
+            if payload.archived is True
+            else "restore_storage_space"
+            if payload.archived is False
+            else "update_storage_space"
+        )
         audit_service.record_action(
             user=actor,
             scope="portal",
@@ -582,7 +596,12 @@ def update_portal_storage_space(
             entity_type="storage_space",
             entity_id=storage_space.id,
             account=access.account,
-            metadata={"storage_space_id": storage_space.id},
+            metadata={
+                "storage_space_id": storage_space.id,
+                "visibility": storage_space.visibility,
+                "owner_user_id": storage_space.owner_user_id,
+                "archived": storage_space.archived_at is not None,
+            },
         )
         return storage_space
     except RuntimeError as exc:
@@ -784,7 +803,7 @@ def download_portal_public_link(
         lowered = detail.lower()
         if "not found" in lowered:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
-        if "expired" in lowered or "revoked" in lowered:
+        if "expired" in lowered or "revoked" in lowered or "archived" in lowered or "suspended" in lowered:
             raise HTTPException(status_code=status.HTTP_410_GONE, detail=detail) from exc
         raise_bad_gateway_from_runtime(exc)
     headers = {"Content-Disposition": _build_attachment_content_disposition(filename)}

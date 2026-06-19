@@ -21,7 +21,8 @@ class PortalStorageSpaceMetadata(Base):
     display_name = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     owner_label = Column(String, nullable=True)
-    space_type = Column(String, nullable=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    visibility = Column(String, nullable=False, default="private")
     project_key = Column(String, nullable=True)
     dataset_label = Column(String, nullable=True)
     origin = Column(String, nullable=False, default="legacy")
@@ -31,6 +32,7 @@ class PortalStorageSpaceMetadata(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     account = relationship("S3Account")
+    owner_user = relationship("User")
 
 
 class PortalPublicLink(Base):

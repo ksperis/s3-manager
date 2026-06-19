@@ -35,7 +35,7 @@ focused on its job.
 | --- | --- | --- | --- | --- |
 | `/browser` standalone | Selected Browser context: S3 account, S3 connection, legacy S3 user, or session context. | `browser_enabled` and `browser_root_enabled`; user or group `browser_advanced_features_enabled` controls advanced chrome on the root route. | Root Browser is enabled by default. When advanced Browser access is false, `/browser` uses Manager-equivalent compact chrome: no folder panel, no inspector panel, no action bar toggle, no root-only column/layout controls, and no bucket creation shortcut. | Good default for technical users. Consider disabling advanced access for day-to-day users who only need compact object operations. |
 | `/manager/browser` embedded Browser | Active Manager execution context. | `browser_enabled`, `browser_manager_enabled`, and the selected S3 connection `access_browser` flag when the context is a connection. | Disabled by default. Even when enabled, it uses embedded compact chrome: no folders panel, no inspector panel, no panel toggles, and no Browser-owned bucket management shortcut. | Useful only when object navigation must stay close to Manager context. Keep disabled when Manager should remain a configuration surface only. |
-| `/portal/storage-spaces/:spaceId` locked Browser | Portal IAM credentials resolved for the selected account and Storage Space. | `browser_enabled`, `browser_portal_enabled`, `portal_enabled`, Portal account role, `X-S3-Workspace: portal`, and the `portal-basic` profile. | Enabled by default but locked to one Storage Space. Bucket switching and bucket search are hidden. Backend allows only the basic Portal route subset: settings, bucket search, object list/download/CORS, presign/delete/folders/proxy upload, and multipart upload lifecycle calls. UI action allowlist keeps upload files, upload folder, new folder, copy path, download, delete, and opening a single folder. | This is the current minimal end-user file profile. Future Portal role-aware UI can hide mutating actions for Viewer, but backend storage permissions must remain the real enforcement. |
+| `/portal/storage-spaces/:spaceId` locked Browser | Portal IAM credentials resolved for the selected account and Storage Space. | `browser_enabled`, `browser_portal_enabled`, `portal_enabled`, Portal account role, `X-S3-Workspace: portal`, active Storage Space visibility, and the `portal-basic` profile. | Enabled by default but locked to one active Storage Space. Bucket switching and bucket search are hidden and backend bucket lists are filtered to visible non-archived Storage Spaces. Backend allows only the basic Portal route subset: settings, bucket search, object list/download/CORS, presign/delete/folders/proxy upload, and multipart upload lifecycle calls. UI action allowlist keeps upload files, upload folder, new folder, copy path, download, delete, and opening a single folder. | This is the current minimal end-user file profile. Archived Storage Spaces must be blocked even if older Portal credentials still have storage-side access. Future Portal role-aware UI can hide mutating actions for Viewer, but backend storage permissions must remain the real enforcement. |
 | `/ceph-admin/browser` embedded Browser | Endpoint-wide Ceph Admin credentials for the selected Ceph endpoint. | `browser_enabled`, `browser_ceph_admin_enabled`, `ceph_admin_enabled`, admin UI role, endpoint admin access, Ceph provider check, and an explicit risk acknowledgement dialog. | Disabled by default. It uses embedded compact chrome and requires endpoint admin access. The UI warns that operations may execute with an owner identity different from the tenant owner. | Keep disabled for regular object work. Prefer S3 Connections with the expected owner when tenant ownership matters. |
 
 ### Feature Families To Evaluate
@@ -67,6 +67,16 @@ focused on its job.
 - Do not expose policy documents, principals, ARNs, advanced ACLs, object
   diagnostics, bucket defaults, lifecycle, CORS, replication, or versioning in
   Portal UI text.
+- Do not reintroduce a Storage Space `Type` field. Use `visibility` for
+  `private` or `shared`, and `archived_at`/`status` for archived state.
+- Private Storage Spaces are visible only to their owner and Portal managers.
+  Shared Storage Spaces use the existing Viewer, Editor, and Owner grants.
+  Archived Storage Spaces suspend Portal access and public links without
+  deleting stored grants or links.
+- Portal-managed bucket policies must only add, replace, or remove dedicated
+  `Sid` statements such as `PortalStorageSpacePrivate` and
+  `PortalStorageSpaceArchived`. They must preserve unrelated bucket policy
+  statements.
 - Keep storage permissions backed by the existing storage-side permissions. UI
   roles such as `Viewer`, `Editor`, and `Owner` are presentation and workflow
   terms, not a parallel permission model.
@@ -145,13 +155,16 @@ keeps business logic in `PortalService`. The frontend API client is
 The current backend flow is:
 
 1. Resolve the authenticated UI user and Portal account binding.
-2. Resolve visible Storage Spaces from the existing storage-side permissions.
+2. Resolve visible Storage Spaces from owner, Portal manager, visibility, and
+   existing storage-side grants.
 3. Map Storage Spaces to a user-facing role: `Viewer`, `Editor`, or `Owner`.
-4. Execute file and sharing operations with the Portal execution identity.
+4. Block archived Storage Spaces from Portal object routes, embedded Browser
+   bucket targets, sharing, and public-link downloads.
+5. Execute file and sharing operations with the Portal execution identity.
    The locked Browser embed must send `X-S3-Workspace: portal` so `/browser`
    routes resolve Portal credentials and enforce the minimal file profile.
-5. Record mutating Portal actions through audit logging.
-6. Return user-facing shapes without policy JSON, principals, ARNs, or
+6. Record mutating Portal actions through audit logging.
+7. Return user-facing shapes without policy JSON, principals, ARNs, or
    advanced S3 diagnostics.
 
 Storage Space remains an API/UI abstraction. In v1 it maps to a bucket, but the
@@ -169,9 +182,9 @@ Use focused Portal validation before broader suites:
 - Frontend dead-code check, from `frontend/`:
   `rtk npm run deadcode:check`
 - Backend Portal service and route-contract checks:
-  `rtk env PYTHONPATH=backend backend/.venv/bin/pytest backend/tests/test_portal_service.py -q`
+  `rtk env PYTHONPATH=backend backend/.venv/bin/pytest backend/tests/test_portal_service.py backend/tests/test_manager_workspace_access_rules.py -q`
 - Diff hygiene:
-  `git diff --check`
+  `rtk git diff --check`
 
 The Portal backend tests include permission regressions for `Viewer`, `Editor`,
 and `Owner` across object detail/download/delete, sharing, and removed advanced

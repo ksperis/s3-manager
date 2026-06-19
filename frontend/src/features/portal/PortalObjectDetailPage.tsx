@@ -155,7 +155,7 @@ export default function PortalObjectDetailPage() {
     setObjectError(null);
     Promise.all([
       fetchPortalStorageSpaceObjectDetail(accountIdForApi, space.id, objectPath),
-      space.role === "Owner"
+      space.role === "Owner" && space.visibility === "shared" && space.status !== "Archived"
         ? listPortalStorageSpacePublicLinks(accountIdForApi, space.id, { objectKey: objectPath, includeRevoked: true })
         : Promise.resolve([] as PortalPublicLink[]),
     ])
@@ -211,6 +211,7 @@ export default function PortalObjectDetailPage() {
 
   const displayPath = object.path;
   const parentPath = object.path.split("/").slice(0, -1).join("/");
+  const canCreatePublicLink = space.role === "Owner" && space.visibility === "shared" && space.status !== "Archived";
   const copyPath = async () => {
     if (!navigator.clipboard) {
       setDownloadMessage("Copie indisponible dans ce navigateur.");
@@ -224,7 +225,7 @@ export default function PortalObjectDetailPage() {
     }
   };
   const handleCreatePublicLink = async () => {
-    if (!accountIdForApi || !space || linkBusy) return;
+    if (!accountIdForApi || !space || linkBusy || !canCreatePublicLink) return;
     setLinkBusy(true);
     setDownloadMessage(null);
     try {
@@ -322,7 +323,7 @@ export default function PortalObjectDetailPage() {
         ]}
         actions={[
           { label: downloading ? "Téléchargement..." : "Télécharger", onClick: handleDownload, variant: "secondary", disabled: !accountIdForApi || downloading },
-          { label: linkBusy ? "Partage..." : "Partager", onClick: handleCreatePublicLink, variant: "secondary", disabled: !accountIdForApi || space.role !== "Owner" || linkBusy },
+          { label: linkBusy ? "Partage..." : "Partager", onClick: handleCreatePublicLink, variant: "secondary", disabled: !accountIdForApi || !canCreatePublicLink || linkBusy },
         ]}
       />
 
@@ -362,9 +363,9 @@ export default function PortalObjectDetailPage() {
         <UiCard title="Actions rapides">
           <div className="grid gap-4">
             <QuickAction label="Télécharger" onClick={handleDownload} />
-            <QuickAction label="Obtenir le lien public" onClick={handleCreatePublicLink} disabled={space.role !== "Owner" || linkBusy} />
+            <QuickAction label="Obtenir le lien public" onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} />
             <QuickAction label="Copier le chemin" onClick={copyPath} />
-            <QuickAction label="Partager cet objet" onClick={handleCreatePublicLink} disabled={space.role !== "Owner" || linkBusy} />
+            <QuickAction label="Partager cet objet" onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} />
             <QuickAction label={deleteBusy ? "Suppression..." : "Supprimer l'objet"} tone="rose" onClick={handleDelete} disabled={space.role === "Viewer" || deleteBusy} />
           </div>
         </UiCard>
@@ -380,7 +381,7 @@ export default function PortalObjectDetailPage() {
               onChange={(event) => setLinkExpiration(event.target.value)}
               aria-label="Expiration du lien public"
             />
-            <UiButton onClick={handleCreatePublicLink} disabled={linkBusy} className="h-9 px-3 py-1.5">
+            <UiButton onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} className="h-9 px-3 py-1.5">
               {linkBusy ? "Création..." : "Créer un lien"}
             </UiButton>
           </div>
