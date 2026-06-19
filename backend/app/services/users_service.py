@@ -2,12 +2,14 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 import hashlib
+import json
 from typing import Optional
 import logging
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.exc import DetachedInstanceError
+from pydantic import ValidationError
 
 from app.core.security import get_password_hash, verify_password
 from app.db import (
@@ -36,6 +38,7 @@ from app.models.user import (
     LinkedS3User,
     LinkedUiGroup,
     ManagerToolAccess,
+    UiPreferences,
     UserCreate,
     UserOut,
     UserSummary,
@@ -52,6 +55,25 @@ MANAGER_TOOL_ROLES = {
     UserRole.UI_USER.value,
 }
 ACCOUNT_ROLE_VALUES = {entry.value for entry in AccountRole}
+
+
+def _parse_ui_preferences(raw: object) -> UiPreferences:
+    if not raw:
+        return UiPreferences()
+    try:
+        payload = json.loads(str(raw))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return UiPreferences()
+    if not isinstance(payload, dict):
+        return UiPreferences()
+    try:
+        return UiPreferences.model_validate(payload)
+    except ValidationError:
+        return UiPreferences()
+
+
+def _dump_ui_preferences(preferences: UiPreferences) -> str:
+    return json.dumps(preferences.model_dump(exclude_none=True), ensure_ascii=True, sort_keys=True)
 
 
 class UsersService:
@@ -230,6 +252,8 @@ class UsersService:
         update_quota_alerts_enabled: bool = False,
         quota_alerts_global_watch: Optional[bool] = None,
         update_quota_alerts_global_watch: bool = False,
+        ui_preferences: Optional[UiPreferences] = None,
+        update_ui_preferences: bool = False,
         current_password: Optional[str] = None,
         new_password: Optional[str] = None,
     ) -> User:
@@ -245,6 +269,8 @@ class UsersService:
             if not is_admin_ui_role(user.role) and bool(quota_alerts_global_watch):
                 raise ValueError("Global quota watch requires admin role")
             user.quota_alerts_global_watch = bool(quota_alerts_global_watch) if is_admin_ui_role(user.role) else False
+        if update_ui_preferences:
+            user.ui_preferences_json = _dump_ui_preferences(ui_preferences or UiPreferences())
 
         if current_password is not None or new_password is not None:
             if not current_password or not new_password:
@@ -677,6 +703,7 @@ class UsersService:
             ui_language=user.ui_language,
             quota_alerts_enabled=bool(user.quota_alerts_enabled),
             quota_alerts_global_watch=bool(user.quota_alerts_global_watch),
+            ui_preferences=_parse_ui_preferences(user.ui_preferences_json),
             accounts=account_ids,
             account_links=account_links,
             group_ids=group_ids,

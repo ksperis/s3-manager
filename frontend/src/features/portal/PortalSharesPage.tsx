@@ -43,7 +43,6 @@ type ShareRow = {
   spaceName: string;
   person: string;
   access: PortalWorkspaceRole;
-  expiresLabel?: string;
   activityLabel: string;
 };
 
@@ -86,7 +85,6 @@ function SharesTable({
             <th>Name</th>
             <th>{editable ? "Shared with" : "Shared by"}</th>
             <th>Access</th>
-            <th>Expires</th>
             <th>Activity</th>
             {editable ? <th className="w-28 text-right">Action</th> : null}
           </tr>
@@ -113,7 +111,6 @@ function SharesTable({
                   <UiBadge tone={roleTone(share.access)}>{share.access}</UiBadge>
                 )}
               </td>
-              <td>{share.expiresLabel ?? "-"}</td>
               <td>{share.activityLabel}</td>
               {editable ? (
                 <td className="text-right">
@@ -133,7 +130,7 @@ function SharesTable({
           ))}
           {shares.length === 0 ? (
             <tr>
-              <td colSpan={editable ? 6 : 5} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
+              <td colSpan={editable ? 5 : 4} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
                 No shares to display.
               </td>
             </tr>
@@ -169,13 +166,14 @@ export default function PortalSharesPage() {
   const spaceIds = useMemo(() => workspace.spaces.map((space) => space.id).join("|"), [workspace.spaces]);
 
   useEffect(() => {
-    if (!selectedSpaceId && activeSharedSpaces[0]) {
-      setSelectedSpaceId(activeSharedSpaces[0].id);
+    const selectableSpaces = activeTab === "with" ? activeSharedSpaces : activeSharedOwnerSpaces;
+    if (!selectedSpaceId && selectableSpaces[0]) {
+      setSelectedSpaceId(selectableSpaces[0].id);
     }
-    if (selectedSpaceId && !activeSharedSpaces.some((space) => space.id === selectedSpaceId)) {
-      setSelectedSpaceId(activeSharedSpaces[0]?.id ?? "");
+    if (selectedSpaceId && !selectableSpaces.some((space) => space.id === selectedSpaceId)) {
+      setSelectedSpaceId(selectableSpaces[0]?.id ?? "");
     }
-  }, [activeSharedSpaces, selectedSpaceId]);
+  }, [activeSharedOwnerSpaces, activeSharedSpaces, activeTab, selectedSpaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -252,6 +250,7 @@ export default function PortalSharesPage() {
 
   const handleCreateShare = async () => {
     if (!accountIdForApi || !selectedSpaceId || !email.trim()) return;
+    if (!activeSharedOwnerSpaces.some((space) => space.id === selectedSpaceId)) return;
     setBusyShareId("new");
     setSharesError(null);
     try {
@@ -345,6 +344,7 @@ export default function PortalSharesPage() {
   };
 
   const shares = rows[activeTab];
+  const displayedCount = activeTab === "links" ? publicLinks.length : shares.length;
 
   if (accountLoading || loading) {
     return <div className="space-y-4"><PageBanner tone="info">Loading shares...</PageBanner></div>;
@@ -422,15 +422,15 @@ export default function PortalSharesPage() {
           />
         )}
         <div className={cx("mt-4 flex items-center justify-between text-[11px] font-semibold", uiMutedTextClass)}>
-          <span>{shares.length} of {shares.length}</span>
+          <span>{displayedCount} of {displayedCount}</span>
         </div>
       </UiCard>
 
-      {activeTab !== "links" ? (
+      {activeTab === "by" ? (
         <UiCard title="Create a new share">
           <div className="grid gap-3 md:grid-cols-[1fr_180px_160px_auto]">
             <select className="ui-control h-8 py-1.5 text-xs" value={selectedSpaceId} onChange={(event) => setSelectedSpaceId(event.target.value)}>
-              {activeSharedSpaces.map((space) => (
+              {activeSharedOwnerSpaces.map((space) => (
                 <option key={space.id} value={space.id}>{space.name}</option>
               ))}
             </select>
@@ -447,7 +447,7 @@ export default function PortalSharesPage() {
             </select>
             <button
               type="button"
-              disabled={!accountIdForApi || !selectedSpaceId || !email.trim() || busyShareId === "new" || activeSharedSpaces.length === 0}
+              disabled={!accountIdForApi || !selectedSpaceId || !email.trim() || busyShareId === "new" || activeSharedOwnerSpaces.length === 0}
               onClick={handleCreateShare}
               className={tableActionButtonClasses}
             >
@@ -455,7 +455,7 @@ export default function PortalSharesPage() {
             </button>
           </div>
         </UiCard>
-      ) : (
+      ) : activeTab === "links" ? (
         <UiCard title="Create a public link">
           <div className="grid gap-3 md:grid-cols-[180px_1fr_220px_auto]">
             <select className="ui-control h-8 py-1.5 text-xs" value={selectedSpaceId} onChange={(event) => setSelectedSpaceId(event.target.value)}>
@@ -474,7 +474,7 @@ export default function PortalSharesPage() {
             </UiButton>
           </div>
         </UiCard>
-      )}
+      ) : null}
     </div>
   );
 }

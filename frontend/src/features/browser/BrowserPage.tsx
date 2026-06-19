@@ -113,6 +113,8 @@ import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import {
   applyBrowserActionProfile,
+  hideBrowserActions,
+  type BrowserActionId,
   type BrowserActionProfile,
   type BrowserActionState,
   getVisibleBrowserActions,
@@ -315,7 +317,28 @@ type BrowserPageProps = {
   showPanelToggles?: boolean;
   defaultShowFolders?: boolean;
   defaultShowInspector?: boolean;
+  hiddenActionIds?: readonly BrowserActionId[];
   onSelectedBucketNameChange?: (bucketName: string) => void;
+  onOpenObjectDetailsRoute?: (target: BrowserObjectDetailsRouteTarget) => void;
+  transferReporter?: BrowserTransferReporter;
+};
+
+export type BrowserObjectDetailsRouteTarget = {
+  bucketName: string;
+  key: string;
+  name: string;
+};
+
+export type BrowserTransferReporter = {
+  start: (transfer: {
+    direction: "Upload" | "Download";
+    bucketName: string;
+    key: string;
+    name: string;
+    sizeBytes?: number | null;
+  }) => string | null | undefined;
+  complete: (id: string, name?: string) => void;
+  fail: (id: string, message: string) => void;
 };
 
 type ObjectDetailsTarget = {
@@ -1079,7 +1102,10 @@ export default function BrowserPage({
   showPanelToggles = true,
   defaultShowFolders = false,
   defaultShowInspector = false,
+  hiddenActionIds = [],
   onSelectedBucketNameChange,
+  onOpenObjectDetailsRoute,
+  transferReporter,
 }: BrowserPageProps = {}) {
   const browserContext = useBrowserContext();
   const accountIdForApi = accountIdOverride ?? browserContext.selectorForApi;
@@ -1088,6 +1114,7 @@ export default function BrowserPage({
   const normalizedPath = location.pathname.replace(/\/+$/, "");
   const isPortalBrowserSurface = workspaceSurface === "portal";
   const isPortalBasicProfile = actionProfile === "portal-basic";
+  const canOpenRoutedObjectDetails = Boolean(onOpenObjectDetailsRoute);
   const resolvedLockedBucketName = lockedBucketName?.trim() ?? "";
   const browserRequestOptions = useMemo<BrowserRequestOptions | undefined>(
     () =>
@@ -5062,19 +5089,22 @@ export default function BrowserPage({
   const copyUrlDisabledReason = "Copy URL is disabled in SSE-C mode.";
   const pathActionStates = useMemo(
     () =>
-      applyBrowserActionProfile(
-        resolveBrowserActions({
-          scope: "path",
-          bucketName,
-          hasS3AccountContext,
-          versioningEnabled: isVersioningEnabled,
-          canPaste,
-          clipboardMode: clipboard?.mode ?? null,
-          currentPath,
-          showFolderItems,
-          showDeletedObjects,
-        }),
-        actionProfile,
+      hideBrowserActions(
+        applyBrowserActionProfile(
+          resolveBrowserActions({
+            scope: "path",
+            bucketName,
+            hasS3AccountContext,
+            versioningEnabled: isVersioningEnabled,
+            canPaste,
+            clipboardMode: clipboard?.mode ?? null,
+            currentPath,
+            showFolderItems,
+            showDeletedObjects,
+          }),
+          actionProfile,
+        ),
+        hiddenActionIds,
       ),
     [
       actionProfile,
@@ -5083,6 +5113,7 @@ export default function BrowserPage({
       clipboard?.mode,
       currentPath,
       hasS3AccountContext,
+      hiddenActionIds,
       isVersioningEnabled,
       showDeletedObjects,
       showFolderItems,
@@ -5090,20 +5121,23 @@ export default function BrowserPage({
   );
   const selectionActionStates = useMemo(
     () =>
-      applyBrowserActionProfile(
-        resolveBrowserActions({
-          scope: "selection",
-          items: selectionItems,
-          bucketName,
-          hasS3AccountContext,
-          versioningEnabled: isVersioningEnabled,
-          canPaste,
-          clipboardMode: clipboard?.mode ?? null,
-          copyUrlDisabled: sseActive,
-          copyUrlDisabledReason,
-        }),
-        actionProfile,
-        selectionItems,
+      hideBrowserActions(
+        applyBrowserActionProfile(
+          resolveBrowserActions({
+            scope: "selection",
+            items: selectionItems,
+            bucketName,
+            hasS3AccountContext,
+            versioningEnabled: isVersioningEnabled,
+            canPaste,
+            clipboardMode: clipboard?.mode ?? null,
+            copyUrlDisabled: sseActive,
+            copyUrlDisabledReason,
+          }),
+          actionProfile,
+          selectionItems,
+        ),
+        hiddenActionIds,
       ),
     [
       actionProfile,
@@ -5112,6 +5146,7 @@ export default function BrowserPage({
       clipboard?.mode,
       copyUrlDisabledReason,
       hasS3AccountContext,
+      hiddenActionIds,
       isVersioningEnabled,
       selectionItems,
       sseActive,
@@ -5121,30 +5156,35 @@ export default function BrowserPage({
     if (!selectionIsSingle || !selectionPrimary) {
       return null;
     }
-    return applyBrowserActionProfile(
-      resolveBrowserActions({
-        scope: "item",
-        items: [selectionPrimary],
-        bucketName,
-        hasS3AccountContext,
-        versioningEnabled: isVersioningEnabled,
-        canPaste,
-        clipboardMode: clipboard?.mode ?? null,
-        copyUrlDisabled: sseActive,
-        copyUrlDisabledReason,
-        inspectorAvailable: canUseInspectorPanel,
-      }),
-      actionProfile,
-      [selectionPrimary],
+    return hideBrowserActions(
+      applyBrowserActionProfile(
+        resolveBrowserActions({
+          scope: "item",
+          items: [selectionPrimary],
+          bucketName,
+          hasS3AccountContext,
+          versioningEnabled: isVersioningEnabled,
+          canPaste,
+          clipboardMode: clipboard?.mode ?? null,
+          copyUrlDisabled: sseActive,
+          copyUrlDisabledReason,
+          inspectorAvailable: canUseInspectorPanel || canOpenRoutedObjectDetails,
+        }),
+        actionProfile,
+        [selectionPrimary],
+      ),
+      hiddenActionIds,
     ).preview;
   }, [
     actionProfile,
     bucketName,
     canPaste,
+    canOpenRoutedObjectDetails,
     canUseInspectorPanel,
     clipboard?.mode,
     copyUrlDisabledReason,
     hasS3AccountContext,
+    hiddenActionIds,
     isVersioningEnabled,
     selectionIsSingle,
     selectionPrimary,
@@ -5201,6 +5241,14 @@ export default function BrowserPage({
     requestedTab: ObjectDetailsTabId,
   ) => {
     if (item.type !== "file") return;
+    if (onOpenObjectDetailsRoute && !item.isDeleted) {
+      onOpenObjectDetailsRoute({
+        bucketName,
+        key: item.key,
+        name: item.name || item.key,
+      });
+      return;
+    }
     let initialTab = requestedTab;
     if (item.isDeleted) {
       setWarningMessage(
@@ -5226,6 +5274,14 @@ export default function BrowserPage({
       if (isVersioningEnabled) {
         openObjectDetails(item, "versions");
       }
+      return;
+    }
+    if (onOpenObjectDetailsRoute) {
+      onOpenObjectDetailsRoute({
+        bucketName,
+        key: item.key,
+        name: item.name || item.key,
+      });
       return;
     }
     openObjectDetails(item, "preview");
@@ -5278,6 +5334,14 @@ export default function BrowserPage({
   }, []);
 
   const openItemDetails = (item: BrowserItem) => {
+    if (onOpenObjectDetailsRoute && item.type === "file" && !item.isDeleted) {
+      onOpenObjectDetailsRoute({
+        bucketName,
+        key: item.key,
+        name: item.name || item.key,
+      });
+      return;
+    }
     if (!canUseInspectorPanel) return;
     setSelectedIds([item.id]);
     setSelectionAnchorId(item.id);
@@ -7891,6 +7955,13 @@ export default function BrowserPage({
       },
     );
     const controller = createOperationController(operationId);
+    const reportedTransferId = startReportedTransfer({
+      direction: "Upload",
+      bucketName: bucket,
+      key,
+      name: itemLabel || relativePath || file.name,
+      sizeBytes: file.size,
+    });
     try {
       if (!useProxyTransfers && file.size >= MULTIPART_THRESHOLD) {
         await uploadMultipart(
@@ -7921,11 +7992,13 @@ export default function BrowserPage({
         );
       }
       completeOperation(operationId, "done");
+      completeReportedTransfer(reportedTransferId, itemLabel || relativePath || file.name);
       setStatusMessage(`Uploaded ${relativePath}`);
       recordUploadedKey(bucket, key);
     } catch (err) {
       if (isAbortError(err)) {
         completeOperation(operationId, "cancelled");
+        failReportedTransfer(reportedTransferId, `Upload cancelled for ${relativePath}`);
         setStatusMessage(`Upload cancelled for ${relativePath}`);
       } else {
         const completionError = formatOperationError(
@@ -7934,6 +8007,7 @@ export default function BrowserPage({
           `Upload failed for ${relativePath}`,
         );
         completeOperation(operationId, "failed", completionError);
+        failReportedTransfer(reportedTransferId, completionError);
         setStatusMessage(completionError);
         if (!useProxyTransfers && isLikelyCorsError(err)) {
           setWarningMessage(
@@ -8005,6 +8079,22 @@ export default function BrowserPage({
       return;
     }
     handleUploadFiles(files);
+  };
+
+  const startReportedTransfer = (input: {
+    direction: "Upload" | "Download";
+    bucketName: string;
+    key: string;
+    name: string;
+    sizeBytes?: number | null;
+  }) => transferReporter?.start(input) ?? null;
+
+  const completeReportedTransfer = (id: string | null | undefined, name?: string) => {
+    if (id) transferReporter?.complete(id, name);
+  };
+
+  const failReportedTransfer = (id: string | null | undefined, message: string) => {
+    if (id) transferReporter?.fail(id, message);
   };
 
   async function downloadObjectBlob(key: string, signal?: AbortSignal) {
@@ -9318,6 +9408,13 @@ export default function BrowserPage({
           const target = queue.shift();
           if (!target) return;
           updateDownloadDetail(operationId, target.detailId, "downloading");
+          const reportedTransferId = startReportedTransfer({
+            direction: "Download",
+            bucketName,
+            key: target.item.key,
+            name: target.item.name || target.item.key,
+            sizeBytes: target.item.sizeBytes,
+          });
           try {
             const blob = await downloadObjectBlob(
               target.item.key,
@@ -9332,20 +9429,24 @@ export default function BrowserPage({
             link.remove();
             window.URL.revokeObjectURL(url);
             updateDownloadDetail(operationId, target.detailId, "done");
+            completeReportedTransfer(reportedTransferId, target.item.name || "download");
           } catch (err) {
             if (isAbortError(err) || controller.signal.aborted) {
               updateDownloadDetail(operationId, target.detailId, "cancelled");
+              failReportedTransfer(reportedTransferId, "Download cancelled.");
               aborted = true;
               controller.abort();
               return;
             }
             console.error(err);
+            const errorMessage = formatOperationError(err, "Download failed.");
             updateDownloadDetail(
               operationId,
               target.detailId,
               "failed",
-              formatOperationError(err, "Download failed."),
+              errorMessage,
             );
+            failReportedTransfer(reportedTransferId, errorMessage);
             failedCount += 1;
           } finally {
             completed += 1;
@@ -9418,26 +9519,26 @@ export default function BrowserPage({
     }
     try {
       for (const item of files) {
+        const reportsControlledDownload = useProxyTransfers || sseActive;
+        const reportedTransferId = reportsControlledDownload
+          ? startReportedTransfer({
+              direction: "Download",
+              bucketName,
+              key: item.key,
+              name: item.name || item.key,
+              sizeBytes: item.sizeBytes,
+            })
+          : null;
         if (useProxyTransfers) {
-          const blob = await proxyDownload(
-            accountIdForApi,
-            bucketName,
-            item.key,
-            undefined,
-            sseCustomerKeyBase64,
-            browserRequestOptions,
-          );
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = item.name || "download";
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          window.URL.revokeObjectURL(url);
-        } else {
-          if (sseActive) {
-            const blob = await downloadObjectBlob(item.key);
+          try {
+            const blob = await proxyDownload(
+              accountIdForApi,
+              bucketName,
+              item.key,
+              undefined,
+              sseCustomerKeyBase64,
+              browserRequestOptions,
+            );
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
@@ -9446,6 +9547,28 @@ export default function BrowserPage({
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
+            completeReportedTransfer(reportedTransferId, item.name || "download");
+          } catch (err) {
+            failReportedTransfer(reportedTransferId, formatOperationError(err, "Unable to download object."));
+            throw err;
+          }
+        } else {
+          if (sseActive) {
+            try {
+              const blob = await downloadObjectBlob(item.key);
+              const url = window.URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = item.name || "download";
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              window.URL.revokeObjectURL(url);
+              completeReportedTransfer(reportedTransferId, item.name || "download");
+            } catch (err) {
+              failReportedTransfer(reportedTransferId, formatOperationError(err, "Unable to download object."));
+              throw err;
+            }
           } else {
             const presign = await presignObjectRequest(bucketName, {
               key: item.key,
@@ -11026,21 +11149,24 @@ export default function BrowserPage({
   };
 
   const resolveItemActionStates = (item: BrowserItem) =>
-    applyBrowserActionProfile(
-      resolveBrowserActions({
-        scope: "item",
-        items: [item],
-        bucketName,
-        hasS3AccountContext,
-        versioningEnabled: isVersioningEnabled,
-        canPaste,
-        clipboardMode: clipboard?.mode ?? null,
-        copyUrlDisabled: sseActive,
-        copyUrlDisabledReason,
-        inspectorAvailable: canUseInspectorPanel,
-      }),
-      actionProfile,
-      [item],
+    hideBrowserActions(
+      applyBrowserActionProfile(
+        resolveBrowserActions({
+          scope: "item",
+          items: [item],
+          bucketName,
+          hasS3AccountContext,
+          versioningEnabled: isVersioningEnabled,
+          canPaste,
+          clipboardMode: clipboard?.mode ?? null,
+          copyUrlDisabled: sseActive,
+          copyUrlDisabledReason,
+          inspectorAvailable: canUseInspectorPanel || canOpenRoutedObjectDetails,
+        }),
+        actionProfile,
+        [item],
+      ),
+      hiddenActionIds,
     );
 
   const activeOperations = useMemo(
@@ -14802,11 +14928,12 @@ export default function BrowserPage({
         versioningEnabled={isVersioningEnabled}
         showFolderItems={showFolderItems}
         showDeletedObjects={showDeletedObjects}
-        allowInspectorPanel={canUseInspectorPanel}
+        allowInspectorPanel={canUseInspectorPanel || canOpenRoutedObjectDetails}
         canPaste={canPaste}
         copyUrlDisabled={sseActive}
         copyUrlDisabledReason={copyUrlDisabledReason}
         actionProfile={actionProfile}
+        hiddenActionIds={hiddenActionIds}
         clipboard={clipboard}
         fileInputRef={fileInputRef}
         folderInputRef={folderInputRef}

@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 type Theme = "light" | "dark";
 type ThemeSource = "system" | "user";
@@ -21,6 +21,18 @@ function getPreferredTheme(): { theme: Theme; source: ThemeSource } {
   const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
   if (stored === "light" || stored === "dark") {
     return { theme: stored, source: "user" };
+  }
+  const rawUser = localStorage.getItem("user");
+  if (rawUser) {
+    try {
+      const parsed = JSON.parse(rawUser) as { ui_preferences?: { theme?: string | null } | null };
+      const preferred = parsed.ui_preferences?.theme;
+      if (preferred === "light" || preferred === "dark") {
+        return { theme: preferred, source: "user" };
+      }
+    } catch {
+      // Ignore malformed session storage and fall back to the browser preference.
+    }
   }
   const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
   return { theme: prefersDark ? "dark" : "light", source: "system" };
@@ -64,16 +76,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => media.removeListener(handleChange);
   }, [themeSource]);
 
-  const setTheme = (next: Theme) => {
+  const setTheme = useCallback((next: Theme) => {
     setThemeSource("user");
     setThemeState(next);
-  };
-  const toggle = () => {
+  }, []);
+  const toggle = useCallback(() => {
     setThemeSource("user");
     setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
-  };
+  }, []);
 
-  const value = useMemo(() => ({ theme, setTheme, toggle }), [theme]);
+  const value = useMemo(() => ({ theme, setTheme, toggle }), [theme, setTheme, toggle]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

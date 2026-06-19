@@ -107,6 +107,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     vi.clearAllMocks();
     mocks.generalSettings.browser_enabled = true;
     mocks.generalSettings.browser_portal_enabled = true;
+    mocks.hookResult.workspace.spaces[0].role = "Owner";
     mocks.hookResult.workspace.spaces[0].nameEditable = true;
     mocks.hookResult.workspace.spaces[0].origin = "portal_generic";
     mocks.hookResult.workspace.spaces[0].status = "Active";
@@ -133,6 +134,27 @@ describe("PortalStorageSpaceDetailPage", () => {
       quotaMaxObjects: 1000,
     });
     expect(embedProps.storageEndpointCapabilities).toEqual({ sse: true, sts: true });
+    expect(embedProps.onOpenObjectDetailsRoute).toEqual(expect.any(Function));
+    expect(embedProps.transferReporter).toMatchObject({
+      start: expect.any(Function),
+      complete: expect.any(Function),
+      fail: expect.any(Function),
+    });
+    expect(embedProps.hiddenActionIds).toBeUndefined();
+  });
+
+  it("hides write Browser actions for read-only Viewer storage spaces", () => {
+    mocks.hookResult.workspace.spaces[0].role = "Viewer";
+
+    renderPage();
+
+    const embedProps = vi.mocked(BrowserEmbed).mock.calls[0][0] as ComponentProps<typeof BrowserEmbed>;
+    expect(embedProps.hiddenActionIds).toEqual([
+      "uploadFiles",
+      "uploadFolder",
+      "newFolder",
+      "delete",
+    ]);
   });
 
   it("shows a disabled state when the Portal Browser kill switch is off", () => {

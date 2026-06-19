@@ -17,6 +17,7 @@ import {
 import { fetchGeneralSettings, fetchLoginSettings, type GeneralSettings, type LoginSettings } from "../../api/appSettings";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
+import { useTheme } from "../../components/theme";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
 
@@ -26,6 +27,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { setGeneralSettings } = useGeneralSettings();
   const { setLanguagePreference } = useLanguage();
+  const { setTheme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [ldapUsername, setLdapUsername] = useState("");
@@ -147,6 +149,9 @@ export default function LoginPage() {
       const sessionUser: SessionUser = { ...res.user, authType: "password" };
       localStorage.setItem("user", JSON.stringify(sessionUser));
       setLanguagePreference(res.user.ui_language ?? "auto");
+      if (res.user.ui_preferences?.theme === "light" || res.user.ui_preferences?.theme === "dark") {
+        setTheme(res.user.ui_preferences.theme);
+      }
       localStorage.removeItem("s3SessionEndpoint");
       const settings = await loadGeneralSettings();
       const destination = resolvePostLoginPath(sessionUser, settings);
@@ -176,6 +181,9 @@ export default function LoginPage() {
       const sessionUser: SessionUser = { ...res.user, authType: "ldap" };
       localStorage.setItem("user", JSON.stringify(sessionUser));
       setLanguagePreference(res.user.ui_language ?? "auto");
+      if (res.user.ui_preferences?.theme === "light" || res.user.ui_preferences?.theme === "dark") {
+        setTheme(res.user.ui_preferences.theme);
+      }
       localStorage.removeItem("s3SessionEndpoint");
       const settings = await loadGeneralSettings();
       const destination = resolvePostLoginPath(sessionUser, settings);

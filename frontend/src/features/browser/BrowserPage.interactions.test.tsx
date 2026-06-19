@@ -164,6 +164,7 @@ function renderPage({
   actionProfile,
   lockedBucketName,
   lockedBucketLabel,
+  onOpenObjectDetailsRoute,
 }: {
   defaultShowInspector?: boolean;
   defaultShowFolders?: boolean;
@@ -175,6 +176,7 @@ function renderPage({
   actionProfile?: ComponentProps<typeof BrowserPage>["actionProfile"];
   lockedBucketName?: string;
   lockedBucketLabel?: string;
+  onOpenObjectDetailsRoute?: ComponentProps<typeof BrowserPage>["onOpenObjectDetailsRoute"];
 } = {}) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
@@ -188,6 +190,7 @@ function renderPage({
         actionProfile={actionProfile}
         lockedBucketName={lockedBucketName}
         lockedBucketLabel={lockedBucketLabel}
+        onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
       />
     </MemoryRouter>,
   );
@@ -722,6 +725,7 @@ describe("BrowserPage interactions", () => {
 
   it("runs portal-basic as a locked minimal browser profile", async () => {
     const user = userEvent.setup();
+    const openObjectDetailsRoute = vi.fn();
     renderPage({
       initialEntry: "/portal/storage-spaces/research-data",
       accountIdForApi: "acc-portal",
@@ -729,6 +733,7 @@ describe("BrowserPage interactions", () => {
       actionProfile: "portal-basic",
       lockedBucketName: "portal-bucket",
       lockedBucketLabel: "Research Data",
+      onOpenObjectDetailsRoute: openObjectDetailsRoute,
     });
 
     const rowA = await findRowByLabel("a.txt");
@@ -751,6 +756,9 @@ describe("BrowserPage interactions", () => {
     fireEvent.contextMenu(rowA, { clientX: 40, clientY: 40 });
     const nativeContextMenu = await screen.findByRole("menu");
     expect(
+      within(nativeContextMenu).getByRole("button", { name: "Details" }),
+    ).toBeInTheDocument();
+    expect(
       within(nativeContextMenu).getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
     expect(
@@ -771,6 +779,14 @@ describe("BrowserPage interactions", () => {
     expect(
       within(nativeContextMenu).queryByRole("button", { name: "Bulk attributes" }),
     ).not.toBeInTheDocument();
+    await user.click(within(nativeContextMenu).getByRole("button", { name: "Details" }));
+    expect(openObjectDetailsRoute).toHaveBeenCalledWith({
+      bucketName: "portal-bucket",
+      key: "a.txt",
+      name: "a.txt",
+    });
+    fireEvent.contextMenu(rowA, { clientX: 40, clientY: 40 });
+    await screen.findByRole("menu");
     fireEvent.keyDown(document.body, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
 

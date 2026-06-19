@@ -212,6 +212,7 @@ export default function PortalObjectDetailPage() {
   const displayPath = object.path;
   const parentPath = object.path.split("/").slice(0, -1).join("/");
   const canCreatePublicLink = space.role === "Owner" && space.visibility === "shared" && space.status !== "Archived";
+  const objectEvents = workspace.activity.filter((item) => item.target === object.name || item.target === object.path);
   const copyPath = async () => {
     if (!navigator.clipboard) {
       setDownloadMessage("Copie indisponible dans ce navigateur.");
@@ -347,7 +348,91 @@ export default function PortalObjectDetailPage() {
         <PageTabs tabs={tabs.map((tab) => ({ id: tab, label: tab }))} activeTab={activeTab} onChange={setActiveTab} variant="bar" />
       </div>
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
+      {activeTab === "Aperçu" ? (
+        <div className="space-y-4">
+          <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
+            <UiCard title="Aperçu rapide">
+              {object.previewType === "text" && object.previewText ? (
+                <pre className="max-h-72 overflow-auto rounded-md border border-[color:var(--ui-border)] bg-slate-950 p-3 text-xs leading-5 text-slate-50">{object.previewText}</pre>
+              ) : (
+                <div className={cx(uiCardMutedClass, "min-h-28 p-3 text-xs font-semibold leading-5", uiMutedTextClass)}>
+                  {object.previewUnavailableReason}
+                </div>
+              )}
+              <div className="mt-3 text-right text-xs font-bold">
+                <Link to={`${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPath ? `${parentPath}/` : "")}`}>
+                  Ouvrir dans la liste
+                </Link>
+              </div>
+            </UiCard>
+
+            <UiCard title="Actions rapides">
+              <div className="grid gap-4">
+                <QuickAction label="Télécharger" onClick={handleDownload} />
+                <QuickAction label="Créer un lien public" onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} />
+                <QuickAction label="Copier le chemin" onClick={copyPath} />
+                <QuickAction label={deleteBusy ? "Suppression..." : "Supprimer l'objet"} tone="rose" onClick={handleDelete} disabled={space.role === "Viewer" || deleteBusy} />
+              </div>
+            </UiCard>
+          </section>
+
+          {space.role === "Owner" ? (
+            <UiCard title="Liens publics">
+              <div className="mb-3 grid gap-2 sm:grid-cols-[220px_auto]">
+                <input
+                  type="datetime-local"
+                  className="ui-control h-9 text-xs"
+                  value={linkExpiration}
+                  onChange={(event) => setLinkExpiration(event.target.value)}
+                  aria-label="Expiration du lien public"
+                />
+                <UiButton onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} className="h-9 px-3 py-1.5">
+                  {linkBusy ? "Création..." : "Créer un lien"}
+                </UiButton>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="ui-data-table min-w-[760px]">
+                  <thead>
+                    <tr>
+                      <th>Objet</th>
+                      <th>Statut</th>
+                      <th>Expiration</th>
+                      <th>Lien</th>
+                      <th className="text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {publicLinks.map((link) => (
+                      <tr key={link.id}>
+                        <td className={cx("font-bold", uiTitleTextClass)}>{link.object_name}</td>
+                        <td><UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{link.status}</UiBadge></td>
+                        <td>{link.expires_at ? formatObjectDate(link.expires_at) : "-"}</td>
+                        <td className="max-w-[260px] truncate text-primary dark:text-primary-200">{link.url}</td>
+                        <td className="text-right">
+                          {link.status === "Active" ? (
+                            <button type="button" onClick={() => handleRevokePublicLink(link)} className={tableDeleteActionClasses}>
+                              Revoke
+                            </button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                    {publicLinks.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className={cx("py-5 text-center text-xs font-semibold", uiMutedTextClass)}>
+                          Aucun lien public pour cet objet.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </UiCard>
+          ) : null}
+        </div>
+      ) : null}
+
+      {activeTab === "Détails" ? (
         <UiCard title="Informations générales">
           <dl className="grid gap-4">
             <DetailRow label="Taille" value={formatBytes(object.sizeBytes)} />
@@ -359,104 +444,25 @@ export default function PortalObjectDetailPage() {
           </dl>
           {objectLoading ? <div className={cx("mt-4 text-[11px] font-semibold", uiMutedTextClass)}>Chargement des métadonnées...</div> : null}
         </UiCard>
-
-        <UiCard title="Actions rapides">
-          <div className="grid gap-4">
-            <QuickAction label="Télécharger" onClick={handleDownload} />
-            <QuickAction label="Obtenir le lien public" onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} />
-            <QuickAction label="Copier le chemin" onClick={copyPath} />
-            <QuickAction label="Partager cet objet" onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} />
-            <QuickAction label={deleteBusy ? "Suppression..." : "Supprimer l'objet"} tone="rose" onClick={handleDelete} disabled={space.role === "Viewer" || deleteBusy} />
-          </div>
-        </UiCard>
-      </section>
-
-      {space.role === "Owner" ? (
-        <UiCard title="Liens publics">
-          <div className="mb-3 grid gap-2 sm:grid-cols-[220px_auto]">
-            <input
-              type="datetime-local"
-              className="ui-control h-9 text-xs"
-              value={linkExpiration}
-              onChange={(event) => setLinkExpiration(event.target.value)}
-              aria-label="Expiration du lien public"
-            />
-            <UiButton onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} className="h-9 px-3 py-1.5">
-              {linkBusy ? "Création..." : "Créer un lien"}
-            </UiButton>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="ui-data-table min-w-[760px]">
-              <thead>
-                <tr>
-                  <th>Objet</th>
-                  <th>Statut</th>
-                  <th>Expiration</th>
-                  <th>Lien</th>
-                  <th className="text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {publicLinks.map((link) => (
-                  <tr key={link.id}>
-                    <td className={cx("font-bold", uiTitleTextClass)}>{link.object_name}</td>
-                    <td><UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{link.status}</UiBadge></td>
-                    <td>{link.expires_at ? formatObjectDate(link.expires_at) : "-"}</td>
-                    <td className="max-w-[260px] truncate text-primary dark:text-primary-200">{link.url}</td>
-                    <td className="text-right">
-                      {link.status === "Active" ? (
-                        <button type="button" onClick={() => handleRevokePublicLink(link)} className={tableDeleteActionClasses}>
-                          Revoke
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-                {publicLinks.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className={cx("py-5 text-center text-xs font-semibold", uiMutedTextClass)}>
-                      Aucun lien public pour cet objet.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </UiCard>
       ) : null}
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
-        <UiCard title="Aperçu rapide">
-          {object.previewType === "text" && object.previewText ? (
-            <pre className="max-h-72 overflow-auto rounded-md border border-[color:var(--ui-border)] bg-slate-950 p-3 text-xs leading-5 text-slate-50">{object.previewText}</pre>
-          ) : (
-            <div className={cx(uiCardMutedClass, "min-h-28 p-3 text-xs font-semibold leading-5", uiMutedTextClass)}>
-              {object.previewUnavailableReason}
-            </div>
-          )}
-          <div className="mt-3 text-right text-xs font-bold">
-            <Link to={`${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPath ? `${parentPath}/` : "")}`}>
-              Ouvrir dans la liste
-            </Link>
-          </div>
-        </UiCard>
-
+      {activeTab === "Événements" ? (
         <UiCard title="Événements récents">
           <div className="grid gap-2">
-            {workspace.activity.filter((item) => item.target === object.name || item.target === object.path).slice(0, 4).map((item) => (
+            {objectEvents.slice(0, 12).map((item) => (
               <div key={item.id} className={cx(uiCardMutedClass, "px-3 py-2 text-xs")}>
                 <div className={cx("font-bold", uiTitleTextClass)}>{item.action}</div>
                 <div className={cx("mt-1", uiMutedTextClass)}>{item.actor} · {item.timeLabel}</div>
               </div>
             ))}
-            {workspace.activity.filter((item) => item.target === object.name || item.target === object.path).length === 0 ? (
+            {objectEvents.length === 0 ? (
               <div className={cx(uiCardMutedClass, "px-3 py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
                 Aucun événement objet disponible.
               </div>
             ) : null}
           </div>
         </UiCard>
-      </section>
+      ) : null}
     </div>
   );
 }

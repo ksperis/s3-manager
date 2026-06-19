@@ -37,6 +37,8 @@ def update_users_me(
             update_quota_alerts_enabled="quota_alerts_enabled" in update_fields,
             quota_alerts_global_watch=payload.quota_alerts_global_watch,
             update_quota_alerts_global_watch="quota_alerts_global_watch" in update_fields,
+            ui_preferences=payload.ui_preferences,
+            update_ui_preferences="ui_preferences" in update_fields,
             current_password=payload.current_password,
             new_password=payload.new_password,
         )

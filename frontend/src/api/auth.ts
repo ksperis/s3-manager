@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
-import type { EffectiveUserAccess, ManagerToolAccess } from "./users";
+import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences } from "./users";
 
 export type LoginResponse = {
   access_token: string;
@@ -22,6 +22,7 @@ export type LoginResponse = {
     manager_tool_access?: ManagerToolAccess | null;
     browser_advanced_features_enabled?: boolean;
     ui_language?: "en" | "fr" | "de" | null;
+    ui_preferences?: UiPreferences | null;
     accounts?: number[];
     account_links?: {
       account_id: number;

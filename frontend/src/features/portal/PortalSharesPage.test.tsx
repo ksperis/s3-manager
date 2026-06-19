@@ -87,8 +87,11 @@ describe("PortalSharesPage", () => {
     render(<PortalSharesPage />);
 
     expect(screen.getByRole("heading", { name: "Shares" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Create a new share" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Shared by me" }));
     expect(await screen.findByText("viewer@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create a new share" })).toBeInTheDocument();
+    expect(screen.queryByText("Expires")).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Access for viewer@example.com" })).toHaveValue("Viewer");
     await waitFor(() => {
       expect(mocks.listSharesMock).toHaveBeenCalledWith("101", "research-data");

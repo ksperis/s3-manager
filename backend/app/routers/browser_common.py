@@ -58,6 +58,8 @@ def record_browser_action(
     entity_id: Optional[str] = None,
     account: Optional[S3Account] = None,
     metadata: Optional[dict[str, Any]] = None,
+    status: str = "success",
+    message: Optional[str] = None,
 ) -> None:
     if isinstance(actor, User):
         audit_service.record_action(
@@ -68,6 +70,8 @@ def record_browser_action(
             entity_id=entity_id,
             account=account,
             metadata=metadata,
+            status=status,
+            message=message,
         )
         return
     user_email, user_role = actor.audit_fallbacks()
@@ -81,4 +85,6 @@ def record_browser_action(
         entity_id=entity_id,
         account=account,
         metadata=metadata,
+        status=status,
+        message=message,
     )

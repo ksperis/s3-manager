@@ -223,6 +223,7 @@ const PORTAL_BASIC_PATH_ACTION_IDS = new Set<BrowserActionId>([
 ]);
 
 const PORTAL_BASIC_SELECTION_ACTION_IDS = new Set<BrowserActionId>([
+  "details",
   "download",
   "delete",
 ]);
@@ -246,6 +247,25 @@ export function applyBrowserActionProfile(
       return [
         actionId,
         allowed ? action : { ...action, visible: false, enabled: false },
+      ];
+    }),
+  ) as BrowserActionMap;
+}
+
+export function hideBrowserActions(
+  actions: BrowserActionMap,
+  hiddenIds: readonly BrowserActionId[] = [],
+): BrowserActionMap {
+  if (hiddenIds.length === 0) {
+    return actions;
+  }
+  const hidden = new Set(hiddenIds);
+  return Object.fromEntries(
+    Object.entries(actions).map(([id, action]) => {
+      const actionId = id as BrowserActionId;
+      return [
+        actionId,
+        hidden.has(actionId) ? { ...action, visible: false, enabled: false } : action,
       ];
     }),
   ) as BrowserActionMap;

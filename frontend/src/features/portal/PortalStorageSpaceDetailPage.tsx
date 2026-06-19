@@ -16,7 +16,9 @@ import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styl
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import BrowserEmbed from "../browser/BrowserEmbed";
-import { type PortalWorkspaceSpace } from "./portalWorkspaceModel";
+import type { BrowserActionId } from "../browser/browserActions";
+import { storageSpaceObjectPath, type PortalWorkspaceSpace } from "./portalWorkspaceModel";
+import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 function decodeRouteValue(value?: string): string {
@@ -27,6 +29,13 @@ function decodeRouteValue(value?: string): string {
     return value;
   }
 }
+
+const VIEWER_HIDDEN_BROWSER_ACTION_IDS: readonly BrowserActionId[] = [
+  "uploadFiles",
+  "uploadFolder",
+  "newFolder",
+  "delete",
+];
 
 function ObjectMetricCard({
   label,
@@ -167,6 +176,7 @@ export default function PortalStorageSpaceDetailPage() {
     Boolean(generalSettings.browser_enabled) && Boolean(generalSettings.browser_portal_enabled);
   const isArchived = space.status === "Archived";
   const canRename = space.role === "Owner" && space.nameEditable;
+  const canModifyObjects = space.role === "Owner" || space.role === "Editor";
   const lockedBucketName = space.internalName ?? space.id;
   const quotaPercent =
     space.quotaBytes && space.usedBytes
@@ -251,11 +261,31 @@ export default function PortalStorageSpaceDetailPage() {
             hasContext={hasAccountContext}
             workspaceSurface="portal"
             actionProfile="portal-basic"
+            hiddenActionIds={canModifyObjects ? undefined : VIEWER_HIDDEN_BROWSER_ACTION_IDS}
             lockedBucketName={lockedBucketName}
             lockedBucketLabel={space.name}
             storageEndpointCapabilities={selectedAccount?.storage_endpoint_capabilities ?? null}
             quotaMaxSizeGb={selectedAccount?.quota_max_size_gb ?? null}
             quotaMaxObjects={selectedAccount?.quota_max_objects ?? null}
+            onOpenObjectDetailsRoute={(target) => {
+              if (target.bucketName !== lockedBucketName) return;
+              navigate(storageSpaceObjectPath(space, target.key));
+            }}
+            transferReporter={{
+              start: (transfer) => {
+                if (transfer.bucketName !== lockedBucketName) return null;
+                return startPortalTransfer({
+                  accountId: String(accountIdForApi),
+                  spaceId: space.id,
+                  spaceName: space.name,
+                  name: transfer.name,
+                  direction: transfer.direction,
+                  sizeBytes: transfer.sizeBytes,
+                });
+              },
+              complete: completePortalTransfer,
+              fail: failPortalTransfer,
+            }}
           />
         </div>
       ) : (

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveBrowserActions } from "./browserActions";
+import {
+  applyBrowserActionProfile,
+  hideBrowserActions,
+  resolveBrowserActions,
+} from "./browserActions";
 import type { BrowserItem } from "./browserTypes";
 
 const fileItem: BrowserItem = {
@@ -157,5 +161,48 @@ describe("resolveBrowserActions", () => {
     expect(actions.open.enabled).toBe(true);
     expect(actions.copyUrl.visible).toBe(false);
     expect(actions.advanced.visible).toBe(false);
+  });
+
+  it("can hide portal-basic write actions for read-only embedded contexts", () => {
+    const pathActions = hideBrowserActions(
+      applyBrowserActionProfile(
+        resolveBrowserActions({
+          scope: "path",
+          bucketName: "bucket-1",
+          hasS3AccountContext: true,
+          versioningEnabled: false,
+          canPaste: false,
+          currentPath: "bucket-1",
+          showFolderItems: true,
+          showDeletedObjects: false,
+        }),
+        "portal-basic",
+      ),
+      ["uploadFiles", "uploadFolder", "newFolder", "delete"],
+    );
+    const itemActions = hideBrowserActions(
+      applyBrowserActionProfile(
+        resolveBrowserActions({
+          scope: "item",
+          items: [fileItem],
+          bucketName: "bucket-1",
+          hasS3AccountContext: true,
+          versioningEnabled: false,
+          canPaste: false,
+          inspectorAvailable: true,
+        }),
+        "portal-basic",
+        [fileItem],
+      ),
+      ["uploadFiles", "uploadFolder", "newFolder", "delete"],
+    );
+
+    expect(pathActions.uploadFiles.visible).toBe(false);
+    expect(pathActions.uploadFolder.visible).toBe(false);
+    expect(pathActions.newFolder.visible).toBe(false);
+    expect(pathActions.copyPath.visible).toBe(true);
+    expect(itemActions.details.visible).toBe(true);
+    expect(itemActions.download.visible).toBe(true);
+    expect(itemActions.delete.visible).toBe(false);
   });
 });

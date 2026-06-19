@@ -8,6 +8,7 @@ import { completeOidcLogin } from "../../api/auth";
 import { fetchGeneralSettings } from "../../api/appSettings";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
+import { useTheme } from "../../components/theme";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
 
@@ -17,6 +18,7 @@ export default function OidcCallbackPage() {
   const navigate = useNavigate();
   const { setGeneralSettings } = useGeneralSettings();
   const { setLanguagePreference } = useLanguage();
+  const { setTheme } = useTheme();
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(true);
 
@@ -45,6 +47,9 @@ export default function OidcCallbackPage() {
         const sessionUser: SessionUser = { ...res.user, authType: "oidc" };
         localStorage.setItem("user", JSON.stringify({ ...sessionUser, authProvider: provider }));
         setLanguagePreference(res.user.ui_language ?? "auto");
+        if (res.user.ui_preferences?.theme === "light" || res.user.ui_preferences?.theme === "dark") {
+          setTheme(res.user.ui_preferences.theme);
+        }
         let settings = DEFAULT_GENERAL_SETTINGS;
         try {
           settings = await fetchGeneralSettings();
@@ -69,7 +74,7 @@ export default function OidcCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, provider, searchParams, setGeneralSettings, setLanguagePreference]);
+  }, [navigate, provider, searchParams, setGeneralSettings, setLanguagePreference, setTheme]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">

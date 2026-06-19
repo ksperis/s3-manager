@@ -20,6 +20,11 @@ export type ManagerToolAccess = {
   ceph_s3_user_keys: boolean;
 };
 
+export type UiPreferences = {
+  theme?: "light" | "dark" | null;
+  selected_portal_account_id?: string | null;
+};
+
 export type EffectiveUserAccess = {
   can_access_ceph_admin: boolean;
   can_access_storage_ops: boolean;
@@ -52,6 +57,7 @@ export type User = {
   ui_language?: "en" | "fr" | "de" | null;
   quota_alerts_enabled?: boolean;
   quota_alerts_global_watch?: boolean;
+  ui_preferences?: UiPreferences | null;
   accounts?: number[];
   account_links?: AccountMembership[];
   group_ids?: number[];
@@ -107,6 +113,7 @@ export type UpdateCurrentUserPayload = {
   ui_language?: "en" | "fr" | "de" | null;
   quota_alerts_enabled?: boolean;
   quota_alerts_global_watch?: boolean;
+  ui_preferences?: UiPreferences | null;
   current_password?: string;
   new_password?: string;
 };

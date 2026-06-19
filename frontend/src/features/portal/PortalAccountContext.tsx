@@ -8,6 +8,7 @@ import { S3Account } from "../../api/accounts";
 import { useI18n } from "../../i18n";
 import { listPortalAccounts } from "../../api/portal";
 import { extractApiError } from "../../utils/apiError";
+import { readStoredUser } from "../../utils/workspaces";
 
 const DEV_FALLBACK_ACCOUNT: S3Account = {
   id: "dev-account",
@@ -61,8 +62,11 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
           return;
         }
         const stored = localStorage.getItem("selectedPortalAccountId");
-        if (stored && data.some((a) => a.id === stored)) {
-          setSelectedAccountId(stored);
+        const preferred = readStoredUser()?.ui_preferences?.selected_portal_account_id ?? null;
+        const candidate = [stored, preferred].find((id) => id && data.some((account) => account.id === id));
+        if (candidate) {
+          setSelectedAccountId(candidate);
+          localStorage.setItem("selectedPortalAccountId", candidate);
           return;
         }
         const defaultId = String(data[0].id);

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import PortalObjectDetailPage from "./PortalObjectDetailPage";
@@ -84,6 +85,7 @@ describe("PortalObjectDetailPage", () => {
   });
 
   it("renders object detail tabs, simple actions, and unavailable advanced states", async () => {
+    const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={["/portal/storage-spaces/research-data/objects/raw-data/2024/03/sample_001.fastq.gz"]}>
         <Routes>
@@ -96,13 +98,17 @@ describe("PortalObjectDetailPage", () => {
     expect(screen.getByRole("button", { name: "Aperçu" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Détails" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Événements" })).toBeInTheDocument();
-    expect(screen.getByText("Informations générales")).toBeInTheDocument();
     expect(screen.getByText("Actions rapides")).toBeInTheDocument();
+    expect(await screen.findByText("hello content")).toBeInTheDocument();
+    expect(screen.getByText("Liens publics")).toBeInTheDocument();
+    expect(screen.queryByText("Informations générales")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Détails" }));
     expect(await screen.findByText("512 B")).toBeInTheDocument();
-    expect(screen.getByText("hello content")).toBeInTheDocument();
     expect(screen.getByText("STANDARD")).toBeInTheDocument();
     expect(screen.getByText("AES256")).toBeInTheDocument();
-    expect(screen.getByText("Liens publics")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Événements" }));
     expect(screen.getByText("Aucun événement objet disponible.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Versions" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Métadonnées" })).not.toBeInTheDocument();

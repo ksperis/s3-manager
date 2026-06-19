@@ -66,10 +66,23 @@ The file browser shown inside a Storage Space is the main Browser in a locked,
 minimal Portal profile. It opens only the selected Storage Space, keeps the
 Storage Space label in the UI, and uses the Portal execution identity.
 Archived Storage Spaces do not show the embedded file browser.
+For Viewer spaces, upload, folder creation, and delete actions are hidden from
+the embedded browser. Storage-side IAM/S3 permissions remain the enforcement
+source for every operation.
+
+Use **Details** on a file to open the Portal object detail page. This page
+keeps the safe preview, public-link workflow, basic metadata, and recent object
+events separate from the advanced Browser object-inspection tools.
 
 Advanced object features such as versions, tags, raw metadata headers, object
 lock, diagnostics, and batch operations belong in Browser or Manager, not in
 Portal.
+
+Uploads and backend-observed downloads are shown in **Transfers** immediately.
+Direct downloads opened through a presigned browser URL may appear in Activity
+when the backend issues the URL or serves the object, but Portal does not mark
+the browser's final file-save completion because the application cannot observe
+that event.
 
 ### Access keys for external tools
 
@@ -98,6 +111,13 @@ Only shared, active Storage Spaces can receive new shares or public links.
 Private spaces keep access limited to the owner and Portal managers. Archived
 spaces keep their stored grants and links so they can be restored later, but
 those grants and links are inactive while archived.
+
+### Settings
+
+Portal settings are personal. Users can update their display name, password
+when their sign-in provider allows it, UI language, theme, quota-alert email
+preference, and default Portal account. These preferences are stored on the UI
+user profile and do not grant access to accounts that are not already assigned.
 
 ### Empty and unavailable states
 

@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import json
 from app.core.security import get_password_hash, verify_password
 from app.db import User, UserRole
 from app.main import app
@@ -78,6 +79,41 @@ def test_update_users_me_updates_quota_alert_toggle(client, db_session):
 
     db_session.refresh(user)
     assert user.quota_alerts_enabled is False
+
+
+def test_users_me_returns_empty_ui_preferences_for_malformed_storage(client, db_session):
+    user = _seed_user(db_session, hashed_password=get_password_hash("old-password"))
+    user.ui_preferences_json = "not-json"
+    db_session.add(user)
+    db_session.commit()
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
+
+    response = client.get("/api/users/me")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["ui_preferences"] == {"theme": None, "selected_portal_account_id": None}
+
+
+def test_update_users_me_updates_ui_preferences(client, db_session):
+    user = _seed_user(db_session, hashed_password=get_password_hash("old-password"))
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
+
+    response = client.put(
+        "/api/users/me",
+        json={
+            "ui_preferences": {
+                "theme": "dark",
+                "selected_portal_account_id": "101",
+            }
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["ui_preferences"] == {"theme": "dark", "selected_portal_account_id": "101"}
+
+    db_session.refresh(user)
+    assert json.loads(user.ui_preferences_json) == {"selected_portal_account_id": "101", "theme": "dark"}
 
 
 def test_update_users_me_updates_global_watch_for_admin(client, db_session):

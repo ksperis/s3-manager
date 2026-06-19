@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { GeneralSettings } from "../api/appSettings";
-import type { EffectiveUserAccess, ManagerToolAccess } from "../api/users";
+import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences } from "../api/users";
 
 export const WORKSPACE_STORAGE_KEY = "selectedWorkspace";
 
@@ -24,6 +24,7 @@ export type SessionUser = {
   email?: string | null;
   role?: string | null;
   ui_language?: "en" | "fr" | "de" | null;
+  ui_preferences?: UiPreferences | null;
   can_access_ceph_admin?: boolean | null;
   can_access_storage_ops?: boolean | null;
   manager_tool_access?: ManagerToolAccess | null;

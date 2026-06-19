@@ -4,7 +4,8 @@
  */
 import type { S3AccountSelector } from "../../api/accountParams";
 import type { BrowserWorkspaceSurface } from "../../api/browser";
-import BrowserPage from "./BrowserPage";
+import type { BrowserActionId } from "./browserActions";
+import BrowserPage, { type BrowserObjectDetailsRouteTarget, type BrowserTransferReporter } from "./BrowserPage";
 
 type BrowserEmbedProps = {
   accountIdForApi: S3AccountSelector;
@@ -17,7 +18,10 @@ type BrowserEmbedProps = {
   endpointProvider?: "ceph" | "aws" | "other" | null;
   quotaMaxSizeGb?: number | null;
   quotaMaxObjects?: number | null;
+  hiddenActionIds?: readonly BrowserActionId[];
   onSelectedBucketNameChange?: (bucketName: string) => void;
+  onOpenObjectDetailsRoute?: (target: BrowserObjectDetailsRouteTarget) => void;
+  transferReporter?: BrowserTransferReporter;
 };
 
 export default function BrowserEmbed({
@@ -31,7 +35,10 @@ export default function BrowserEmbed({
   endpointProvider,
   quotaMaxSizeGb,
   quotaMaxObjects,
+  hiddenActionIds,
   onSelectedBucketNameChange,
+  onOpenObjectDetailsRoute,
+  transferReporter,
 }: BrowserEmbedProps) {
   return (
     <BrowserPage
@@ -45,10 +52,13 @@ export default function BrowserEmbed({
       contextEndpointProvider={endpointProvider}
       contextQuotaMaxSizeGb={quotaMaxSizeGb}
       contextQuotaMaxObjects={quotaMaxObjects}
+      hiddenActionIds={hiddenActionIds}
       allowFoldersPanel={false}
       allowInspectorPanel={false}
       showPanelToggles={false}
       onSelectedBucketNameChange={onSelectedBucketNameChange}
+      onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
+      transferReporter={transferReporter}
     />
   );
 }

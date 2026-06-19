@@ -3,10 +3,11 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from app.models.pagination import PaginatedResponse
 
 UiLanguage = Literal["en", "fr", "de"]
+UiThemePreference = Literal["light", "dark"]
 MIN_PASSWORD_LENGTH = 12
 PASSWORD_POLICY_ERROR = f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"
 
@@ -49,6 +50,19 @@ class ManagerToolAccess(BaseModel):
     ceph_s3_user_keys: bool = False
 
 
+class UiPreferences(BaseModel):
+    theme: Optional[UiThemePreference] = None
+    selected_portal_account_id: Optional[str] = None
+
+    @field_validator("selected_portal_account_id")
+    @classmethod
+    def normalize_selected_portal_account_id(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None
+
+
 class UserSummary(BaseModel):
     id: int
     email: EmailStr
@@ -72,6 +86,7 @@ class User(BaseModel):
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False
+    ui_preferences: UiPreferences = Field(default_factory=UiPreferences)
     auth_provider: Optional[str] = None
     last_login_at: Optional[datetime] = None
 
@@ -109,6 +124,7 @@ class UserSelfUpdate(BaseModel):
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: Optional[bool] = None
     quota_alerts_global_watch: Optional[bool] = None
+    ui_preferences: Optional[UiPreferences] = None
     current_password: Optional[str] = None
     new_password: Optional[str] = None
 
@@ -150,6 +166,7 @@ class UserOut(BaseModel):
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False
+    ui_preferences: UiPreferences = Field(default_factory=UiPreferences)
     accounts: list[int] = []
     account_links: list[AccountMembership] = []
     group_ids: list[int] = []

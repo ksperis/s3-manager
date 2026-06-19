@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -42,6 +42,7 @@ class User(Base):
     ui_language = Column(String, nullable=True)
     quota_alerts_enabled = Column(Boolean, default=True, nullable=False, server_default="1")
     quota_alerts_global_watch = Column(Boolean, default=False, nullable=False, server_default="0")
+    ui_preferences_json = Column(Text, nullable=False, default="{}", server_default="{}")
 
     accounts = relationship(
         "S3Account",

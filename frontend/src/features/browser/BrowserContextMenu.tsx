@@ -35,7 +35,9 @@ import {
   CONTEXT_MENU_PATH_LAYOUT_ACTION_IDS,
   CONTEXT_MENU_SELECTION_ACTION_IDS,
   getVisibleBrowserActions,
+  hideBrowserActions,
   resolveBrowserActions,
+  type BrowserActionId,
   type BrowserActionProfile,
 } from "./browserActions";
 import type { BrowserItem, ClipboardState, ContextMenuState } from "./browserTypes";
@@ -59,6 +61,7 @@ type BrowserContextMenuProps = {
   copyUrlDisabled?: boolean;
   copyUrlDisabledReason?: string;
   actionProfile?: BrowserActionProfile;
+  hiddenActionIds?: readonly BrowserActionId[];
   clipboard: ClipboardState | null;
   fileInputRef: RefObject<HTMLInputElement>;
   folderInputRef: RefObject<HTMLInputElement>;
@@ -108,6 +111,7 @@ export default function BrowserContextMenu({
   copyUrlDisabled = false,
   copyUrlDisabledReason,
   actionProfile = "full",
+  hiddenActionIds = [],
   clipboard,
   fileInputRef,
   folderInputRef,
@@ -145,54 +149,63 @@ export default function BrowserContextMenu({
   if (!contextMenu) return null;
 
   const contextItem = contextMenu.kind === "item" ? contextMenu.item ?? null : null;
-  const pathActionStates = applyBrowserActionProfile(
-    resolveBrowserActions({
-      scope: "path",
-      bucketName,
-      hasS3AccountContext,
-      versioningEnabled,
-      canPaste,
-      clipboardMode: clipboard?.mode ?? null,
-      currentPath,
-      showFolderItems,
-      showDeletedObjects,
-    }),
-    actionProfile,
-  );
-  const itemActionStates = contextItem
-    ? applyBrowserActionProfile(
+  const pathActionStates = hideBrowserActions(
+    applyBrowserActionProfile(
       resolveBrowserActions({
-        scope: "item",
-        items: [contextItem],
+        scope: "path",
         bucketName,
         hasS3AccountContext,
         versioningEnabled,
         canPaste,
         clipboardMode: clipboard?.mode ?? null,
-        copyUrlDisabled,
-        copyUrlDisabledReason,
-        inspectorAvailable: allowInspectorPanel,
+        currentPath,
+        showFolderItems,
+        showDeletedObjects,
       }),
       actionProfile,
-      [contextItem],
+    ),
+    hiddenActionIds,
+  );
+  const itemActionStates = contextItem
+    ? hideBrowserActions(
+      applyBrowserActionProfile(
+        resolveBrowserActions({
+          scope: "item",
+          items: [contextItem],
+          bucketName,
+          hasS3AccountContext,
+          versioningEnabled,
+          canPaste,
+          clipboardMode: clipboard?.mode ?? null,
+          copyUrlDisabled,
+          copyUrlDisabledReason,
+          inspectorAvailable: allowInspectorPanel,
+        }),
+        actionProfile,
+        [contextItem],
+      ),
+      hiddenActionIds,
     )
     : null;
   const selectionItems = contextMenu.kind === "selection" ? contextMenu.items ?? [] : [];
   const selectionActionStates = contextMenu.kind === "selection"
-    ? applyBrowserActionProfile(
-      resolveBrowserActions({
-        scope: "selection",
-        items: selectionItems,
-        bucketName,
-        hasS3AccountContext,
-        versioningEnabled,
-        canPaste,
-        clipboardMode: clipboard?.mode ?? null,
-        copyUrlDisabled,
-        copyUrlDisabledReason,
-      }),
-      actionProfile,
-      selectionItems,
+    ? hideBrowserActions(
+      applyBrowserActionProfile(
+        resolveBrowserActions({
+          scope: "selection",
+          items: selectionItems,
+          bucketName,
+          hasS3AccountContext,
+          versioningEnabled,
+          canPaste,
+          clipboardMode: clipboard?.mode ?? null,
+          copyUrlDisabled,
+          copyUrlDisabledReason,
+        }),
+        actionProfile,
+        selectionItems,
+      ),
+      hiddenActionIds,
     )
     : null;
   const visiblePathActions = getVisibleBrowserActions(pathActionStates, CONTEXT_MENU_PATH_ACTION_IDS);
