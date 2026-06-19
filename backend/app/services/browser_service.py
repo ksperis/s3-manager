@@ -84,6 +84,18 @@ OBJECT_LAZY_COLUMN_CACHE_TTL_SECONDS = 15
 OBJECT_LAZY_COLUMN_CACHE_MAX_ENTRIES = 2048
 OBJECT_LIST_SCAN_PAGE_BUDGET = 20
 OBJECT_LIST_SCAN_TIME_BUDGET_MS = 1200
+MISSING_OBJECT_LOCK_CONFIGURATION_CODES = {
+    "nosuchobjectlockconfiguration",
+    "objectlockconfigurationnotfounderror",
+}
+
+
+def _client_error_code(exc: ClientError) -> str:
+    return str(exc.response.get("Error", {}).get("Code") or "").strip().lower()
+
+
+def _is_missing_object_lock_configuration(exc: ClientError) -> bool:
+    return _client_error_code(exc) in MISSING_OBJECT_LOCK_CONFIGURATION_CODES
 
 
 @dataclass(frozen=True)
@@ -2140,7 +2152,11 @@ class BrowserService:
             kwargs["VersionId"] = version_id
         try:
             resp = client.get_object_legal_hold(**kwargs)
-        except (ClientError, BotoCoreError) as exc:
+        except ClientError as exc:
+            if _is_missing_object_lock_configuration(exc):
+                return ObjectLegalHold(key=key, status=None, version_id=version_id)
+            raise RuntimeError(f"Unable to fetch legal hold for '{key}': {exc}") from exc
+        except BotoCoreError as exc:
             raise RuntimeError(f"Unable to fetch legal hold for '{key}': {exc}") from exc
         status = (resp.get("LegalHold") or {}).get("Status")
         return ObjectLegalHold(key=key, status=status, version_id=version_id)
@@ -2181,7 +2197,11 @@ class BrowserService:
             kwargs["VersionId"] = version_id
         try:
             resp = client.get_object_retention(**kwargs)
-        except (ClientError, BotoCoreError) as exc:
+        except ClientError as exc:
+            if _is_missing_object_lock_configuration(exc):
+                return ObjectRetention(key=key, mode=None, retain_until=None, version_id=version_id)
+            raise RuntimeError(f"Unable to fetch retention for '{key}': {exc}") from exc
+        except BotoCoreError as exc:
             raise RuntimeError(f"Unable to fetch retention for '{key}': {exc}") from exc
         retention = resp.get("Retention") or {}
         return ObjectRetention(
