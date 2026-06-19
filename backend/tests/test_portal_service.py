@@ -1085,7 +1085,12 @@ def test_private_storage_space_is_visible_only_to_owner_and_portal_managers(monk
 
 
 def test_storage_space_bucket_policy_preserves_external_statements(db_session):
-    account = S3Account(name="portal-policy-space", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = S3Account(
+        name="portal-policy-space",
+        rgw_account_id="rgw-policy-account",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
     owner = User(email="owner-policy@example.com", hashed_password="x", role="ui_user")
     manager = User(email="manager-policy@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, manager])
@@ -1118,7 +1123,13 @@ def test_storage_space_bucket_policy_preserves_external_statements(db_session):
     assert private_policy is not None
     assert [stmt["Sid"] for stmt in private_policy["Statement"]] == ["ExternalRule", service._storage_space_private_sid]
     private_statement = private_policy["Statement"][1]
-    assert private_statement["Condition"]["StringNotEquals"]["aws:username"] == ["manager-iam", "owner-iam"]
+    allowed_principals = private_statement["NotPrincipal"]["AWS"]
+    assert "Principal" not in private_statement
+    assert "Condition" not in private_statement
+    assert "arn:aws:iam:::user/manager-iam" in allowed_principals
+    assert "arn:aws:iam:::user/owner-iam" in allowed_principals
+    assert "arn:aws:iam::rgw-policy-account:user/manager-iam" in allowed_principals
+    assert "arn:aws:iam::rgw-policy-account:user/owner-iam" in allowed_principals
 
     metadata.archived_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
     archived_policy = service._storage_space_bucket_policy(account, "research-data", metadata, private_policy)

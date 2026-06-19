@@ -678,7 +678,21 @@ class PortalService:
             return "Owner"
         return role or self._storage_space_role(access)
 
-    def _portal_policy_usernames_for_space(
+    @staticmethod
+    def _portal_iam_principal_arns(account: S3Account, iam_username: str, iam_user_id: Optional[str]) -> list[str]:
+        username = (iam_username or "").strip()
+        if not username:
+            return []
+        arns: list[str] = []
+        if iam_user_id and str(iam_user_id).startswith("arn:"):
+            arns.append(str(iam_user_id))
+        arns.append(f"arn:aws:iam:::user/{username}")
+        rgw_account_id = str(getattr(account, "rgw_account_id", "") or "").strip()
+        if rgw_account_id:
+            arns.append(f"arn:aws:iam::{rgw_account_id}:user/{username}")
+        return sorted(set(arns))
+
+    def _portal_policy_principals_for_space(
         self,
         account: S3Account,
         owner_user_id: Optional[int],
@@ -698,7 +712,7 @@ class PortalService:
         if not allowed_user_ids:
             return []
         rows = (
-            self.db.query(AccountIAMUser.iam_username)
+            self.db.query(AccountIAMUser.iam_username, AccountIAMUser.iam_user_id)
             .filter(
                 AccountIAMUser.account_id == account.id,
                 AccountIAMUser.user_id.in_(allowed_user_ids),
@@ -706,7 +720,10 @@ class PortalService:
             )
             .all()
         )
-        return sorted({username for (username,) in rows if username})
+        principals: set[str] = set()
+        for iam_username, iam_user_id in rows:
+            principals.update(self._portal_iam_principal_arns(account, iam_username, iam_user_id))
+        return sorted(principals)
 
     def _without_storage_space_policy_statements(self, policy: Optional[dict]) -> Optional[dict]:
         if not isinstance(policy, dict):
@@ -751,22 +768,18 @@ class PortalService:
                 }
             )
         elif self._metadata_visibility(metadata) == "private":
-            allowed_usernames = self._portal_policy_usernames_for_space(account, metadata.owner_user_id)
-            condition: dict[str, Any]
-            if allowed_usernames:
-                condition = {"StringNotEquals": {"aws:username": allowed_usernames}}
+            allowed_principals = self._portal_policy_principals_for_space(account, metadata.owner_user_id)
+            statement: dict[str, Any] = {
+                "Sid": self._storage_space_private_sid,
+                "Effect": "Deny",
+                "Action": actions,
+                "Resource": resources,
+            }
+            if allowed_principals:
+                statement["NotPrincipal"] = {"AWS": allowed_principals}
             else:
-                condition = {"StringLike": {"aws:username": "*"}}
-            statements.append(
-                {
-                    "Sid": self._storage_space_private_sid,
-                    "Effect": "Deny",
-                    "Principal": "*",
-                    "Action": actions,
-                    "Resource": resources,
-                    "Condition": condition,
-                }
-            )
+                statement["Principal"] = "*"
+            statements.append(statement)
         if not statements:
             return None
         policy["Statement"] = statements
