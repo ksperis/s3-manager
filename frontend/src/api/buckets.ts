@@ -245,6 +245,10 @@ export type ManagerBucketContentDiff = {
   only_source_count: number;
   only_target_count: number;
   ignored_after_cutoff_count?: number;
+  display_limit?: number;
+  only_source_hidden_count?: number;
+  only_target_hidden_count?: number;
+  different_hidden_count?: number;
   only_source_sample: string[];
   only_target_sample: string[];
   only_source_details?: ManagerBucketObjectDetail[];

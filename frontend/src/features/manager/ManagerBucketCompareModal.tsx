@@ -26,8 +26,10 @@ import {
   CompareVisibleKeysCopyFeedback,
   copyCompareObjectKeysToClipboard,
   extractCompareError,
+  formatCompareDisplayLimitMessage,
   formatUnknown,
   getChangedTone,
+  getCompareHiddenCount,
   getObjectParentPrefix,
   getRunStatusLabel,
   getRunStatusTone,
@@ -72,6 +74,7 @@ type PendingRemediationAction = {
   itemIndex: number;
   action: ManagerBucketCompareAction;
   objectKeys: string[];
+  visibleOnly?: boolean;
 };
 
 type ManagerBucketCompareModalProps = {
@@ -106,6 +109,12 @@ const remediationActionLabel: Record<ManagerBucketCompareAction, string> = {
   sync_source_only: "Sync all missing",
   sync_different: "Sync all different",
   delete_target_only: "Delete all extra",
+};
+
+const remediationVisibleActionLabel: Record<ManagerBucketCompareAction, string> = {
+  sync_source_only: "Sync visible missing",
+  sync_different: "Sync visible different",
+  delete_target_only: "Delete visible extra",
 };
 
 const remediationActionTitle: Record<ManagerBucketCompareAction, string> = {
@@ -857,7 +866,7 @@ export default function ManagerBucketCompareModal({
   );
 
   const openRemediationConfirm = useCallback(
-    (itemIndex: number, sectionKey: RemediationSectionKey, objectKeys: string[]) => {
+    (itemIndex: number, sectionKey: RemediationSectionKey, objectKeys: string[], visibleOnly = false) => {
       const item = items[itemIndex];
       if (!item) return;
       if (item.status !== "success") return;
@@ -867,6 +876,7 @@ export default function ManagerBucketCompareModal({
         itemIndex,
         action: remediationSectionActionMap[sectionKey],
         objectKeys: [...objectKeys],
+        visibleOnly,
       });
     },
     [items, running]
@@ -1277,18 +1287,38 @@ export default function ManagerBucketCompareModal({
                       content.different_count > 0 ? content.different_sample.map((diff) => sourceDetailFromDifferent(diff)) : [];
                     const differentTargetDetails =
                       content.different_count > 0 ? content.different_sample.map((diff) => targetDetailFromDifferent(diff)) : [];
+                    const onlySourceHiddenCount = getCompareHiddenCount(
+                      content.only_source_count,
+                      onlySourceDetails.length,
+                      content.only_source_hidden_count
+                    );
+                    const onlyTargetHiddenCount = getCompareHiddenCount(
+                      content.only_target_count,
+                      onlyTargetDetails.length,
+                      content.only_target_hidden_count
+                    );
+                    const differentHiddenCount = getCompareHiddenCount(
+                      content.different_count,
+                      differentSourceDetails.length,
+                      content.different_hidden_count
+                    );
                     return [
                       {
                         key: "source_only" as const,
                         label: `Source only (${content.only_source_count})`,
                         changed: content.only_source_count > 0,
                         objectCount: content.only_source_count,
+                        visibleCount: onlySourceDetails.length,
+                        hiddenCount: onlySourceHiddenCount,
                         copyKeys: getVisibleCompareObjectKeys(onlySourceDetails),
                         action:
                           content.only_source_count > 0
                             ? {
                                 type: "sync_source_only" as const,
-                                label: remediationActionLabel.sync_source_only,
+                                label:
+                                  onlySourceHiddenCount > 0
+                                    ? remediationVisibleActionLabel.sync_source_only
+                                    : remediationActionLabel.sync_source_only,
                               }
                             : null,
                         sourceDetails: onlySourceDetails,
@@ -1299,12 +1329,17 @@ export default function ManagerBucketCompareModal({
                         label: `Target only (${content.only_target_count})`,
                         changed: content.only_target_count > 0,
                         objectCount: content.only_target_count,
+                        visibleCount: onlyTargetDetails.length,
+                        hiddenCount: onlyTargetHiddenCount,
                         copyKeys: getVisibleCompareObjectKeys(onlyTargetDetails),
                         action:
                           content.only_target_count > 0
                             ? {
                                 type: "delete_target_only" as const,
-                                label: remediationActionLabel.delete_target_only,
+                                label:
+                                  onlyTargetHiddenCount > 0
+                                    ? remediationVisibleActionLabel.delete_target_only
+                                    : remediationActionLabel.delete_target_only,
                               }
                             : null,
                         sourceDetails: [],
@@ -1315,12 +1350,17 @@ export default function ManagerBucketCompareModal({
                         label: `Different objects (${content.different_count})`,
                         changed: content.different_count > 0,
                         objectCount: content.different_count,
+                        visibleCount: differentSourceDetails.length,
+                        hiddenCount: differentHiddenCount,
                         copyKeys: getVisibleCompareObjectKeys(differentSourceDetails),
                         action:
                           content.different_count > 0
                             ? {
                                 type: "sync_different" as const,
-                                label: remediationActionLabel.sync_different,
+                                label:
+                                  differentHiddenCount > 0
+                                    ? remediationVisibleActionLabel.sync_different
+                                    : remediationActionLabel.sync_different,
                               }
                             : null,
                         sourceDetails: differentSourceDetails,
@@ -1396,6 +1436,11 @@ export default function ManagerBucketCompareModal({
                             const sectionCopyFeedback = copyFeedback?.id === sectionFeedbackId ? copyFeedback : null;
                             const sectionDownloadFeedback =
                               downloadFeedback?.id === sectionFeedbackId ? downloadFeedback : null;
+                            const displayLimitMessage = formatCompareDisplayLimitMessage(
+                              section.objectCount,
+                              section.visibleCount,
+                              section.hiddenCount
+                            );
                             const sourceContextForRow = item.result?.source_context_id ?? sourceContextId;
                             const targetContextForRow =
                               item.result?.target_context_id || lastRunOptions?.targetContextId || targetContextId || "";
@@ -1460,6 +1505,11 @@ export default function ManagerBucketCompareModal({
                                       <UiBadge tone={getChangedTone(section.changed)} className="px-2 text-[10px]">
                                         {section.changed ? "Different" : "Identical"}
                                       </UiBadge>
+                                      {displayLimitMessage && (
+                                        <UiBadge tone="warning" className="px-2 text-[10px]">
+                                          Showing {section.visibleCount} of {section.objectCount}
+                                        </UiBadge>
+                                      )}
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
                                       {section.changed && section.copyKeys.length > 0 && (
@@ -1490,7 +1540,12 @@ export default function ManagerBucketCompareModal({
                                           onClick={(event) => {
                                             event.preventDefault();
                                             event.stopPropagation();
-                                            openRemediationConfirm(itemIndex, section.key, section.copyKeys);
+                                            openRemediationConfirm(
+                                              itemIndex,
+                                              section.key,
+                                              section.copyKeys,
+                                              section.hiddenCount > 0
+                                            );
                                           }}
                                         >
                                           {item.actionRunning === section.action.type ? "Running..." : section.action.label}
@@ -1512,6 +1567,11 @@ export default function ManagerBucketCompareModal({
                                       className={`rounded-md border px-2 py-1 ui-caption font-semibold ${feedbackToneClass[sectionDownloadFeedback.tone]}`}
                                     >
                                       {sectionDownloadFeedback.message}
+                                    </p>
+                                  )}
+                                  {displayLimitMessage && (
+                                    <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">
+                                      {displayLimitMessage}
                                     </p>
                                   )}
                                   <div className="grid gap-2 lg:grid-cols-2">
@@ -1642,10 +1702,17 @@ export default function ManagerBucketCompareModal({
               <span className="font-semibold">
                 {pendingAction.objectKeys.length === 1
                   ? remediationSingleActionLabel[pendingAction.action]
+                  : pendingAction.visibleOnly
+                    ? remediationVisibleActionLabel[pendingAction.action]
                   : remediationActionLabel[pendingAction.action]}
               </span>{" "}
               for the exact object keys from the current diff.
             </p>
+            {pendingAction.visibleOnly && (
+              <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">
+                This diff section is truncated; only displayed keys will be remediated.
+              </p>
+            )}
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
               <p className="ui-caption text-slate-700 dark:text-slate-200">
                 Source context: <span className="font-semibold">{pendingActionSourceContextName}</span>

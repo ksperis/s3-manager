@@ -558,6 +558,10 @@ class CephAdminBucketContentDiff(BaseModel):
     only_source_count: int = 0
     only_target_count: int = 0
     ignored_after_cutoff_count: int = 0
+    display_limit: int = 0
+    only_source_hidden_count: int = 0
+    only_target_hidden_count: int = 0
+    different_hidden_count: int = 0
     only_source_sample: list[str] = Field(default_factory=list)
     only_target_sample: list[str] = Field(default_factory=list)
     only_source_details: list[CephAdminBucketObjectDetail] = Field(default_factory=list)

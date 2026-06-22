@@ -21,8 +21,10 @@ import {
   CompareVisibleKeysCopyFeedback,
   copyCompareObjectKeysToClipboard,
   extractCompareError,
+  formatCompareDisplayLimitMessage,
   formatUnknown,
   getChangedTone,
+  getCompareHiddenCount,
   getObjectParentPrefix,
   getRunStatusLabel,
   getRunStatusTone,
@@ -1006,12 +1008,29 @@ export default function CephAdminBucketCompareModal({
                       content.different_count > 0 ? content.different_sample.map((diff) => sourceDetailFromDifferent(diff)) : [];
                     const differentTargetDetails =
                       content.different_count > 0 ? content.different_sample.map((diff) => targetDetailFromDifferent(diff)) : [];
+                    const onlySourceHiddenCount = getCompareHiddenCount(
+                      content.only_source_count,
+                      onlySourceDetails.length,
+                      content.only_source_hidden_count
+                    );
+                    const onlyTargetHiddenCount = getCompareHiddenCount(
+                      content.only_target_count,
+                      onlyTargetDetails.length,
+                      content.only_target_hidden_count
+                    );
+                    const differentHiddenCount = getCompareHiddenCount(
+                      content.different_count,
+                      differentSourceDetails.length,
+                      content.different_hidden_count
+                    );
                     return [
                       {
                         key: "source_only",
                         label: `Source only (${content.only_source_count})`,
                         changed: content.only_source_count > 0,
                         objectCount: content.only_source_count,
+                        visibleCount: onlySourceDetails.length,
+                        hiddenCount: onlySourceHiddenCount,
                         copyKeys: getVisibleCompareObjectKeys(onlySourceDetails),
                         sourceDetails: onlySourceDetails,
                         targetDetails: [],
@@ -1021,6 +1040,8 @@ export default function CephAdminBucketCompareModal({
                         label: `Target only (${content.only_target_count})`,
                         changed: content.only_target_count > 0,
                         objectCount: content.only_target_count,
+                        visibleCount: onlyTargetDetails.length,
+                        hiddenCount: onlyTargetHiddenCount,
                         copyKeys: getVisibleCompareObjectKeys(onlyTargetDetails),
                         sourceDetails: [],
                         targetDetails: onlyTargetDetails,
@@ -1030,6 +1051,8 @@ export default function CephAdminBucketCompareModal({
                         label: `Different objects (${content.different_count})`,
                         changed: content.different_count > 0,
                         objectCount: content.different_count,
+                        visibleCount: differentSourceDetails.length,
+                        hiddenCount: differentHiddenCount,
                         copyKeys: getVisibleCompareObjectKeys(differentSourceDetails),
                         sourceDetails: differentSourceDetails,
                         targetDetails: differentTargetDetails,
@@ -1095,6 +1118,11 @@ export default function CephAdminBucketCompareModal({
                           {contentSections.map((section) => {
                             const sectionFeedbackId = `${item.sourceBucket}:${item.targetBucket}:content:${section.key}`;
                             const sectionCopyFeedback = copyFeedback?.id === sectionFeedbackId ? copyFeedback : null;
+                            const displayLimitMessage = formatCompareDisplayLimitMessage(
+                              section.objectCount,
+                              section.visibleCount,
+                              section.hiddenCount
+                            );
                             return (
                               <UiDetails
                                 key={sectionFeedbackId}
@@ -1108,6 +1136,11 @@ export default function CephAdminBucketCompareModal({
                                       <UiBadge tone={getChangedTone(section.changed)} className="px-2 text-[10px]">
                                         {section.changed ? "Different" : "Identical"}
                                       </UiBadge>
+                                      {displayLimitMessage && (
+                                        <UiBadge tone="warning" className="px-2 text-[10px]">
+                                          Showing {section.visibleCount} of {section.objectCount}
+                                        </UiBadge>
+                                      )}
                                     </div>
                                     {section.changed && section.copyKeys.length > 0 && (
                                       <UiButton
@@ -1130,6 +1163,11 @@ export default function CephAdminBucketCompareModal({
                                       className={`rounded-md border px-2 py-1 ui-caption font-semibold ${copyFeedbackToneClass[sectionCopyFeedback.tone]}`}
                                     >
                                       {sectionCopyFeedback.message}
+                                    </p>
+                                  )}
+                                  {displayLimitMessage && (
+                                    <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">
+                                      {displayLimitMessage}
                                     </p>
                                   )}
                                   <div className="grid gap-2 lg:grid-cols-2">

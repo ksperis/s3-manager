@@ -39,12 +39,14 @@ function buildCompareResult(): CephAdminBucketCompareResult {
     target_bucket: "bucket-a",
     has_differences: true,
     content_diff: {
-      source_count: 2,
+      source_count: 4,
       target_count: 1,
       matched_count: 1,
       different_count: 0,
-      only_source_count: 1,
+      only_source_count: 3,
       only_target_count: 0,
+      display_limit: 1,
+      only_source_hidden_count: 2,
       only_source_sample: ["source-only-1"],
       only_target_sample: [],
       only_source_details: [{ key: "source-only-1", size: 1024 }],
@@ -85,7 +87,7 @@ describe("CephAdminBucketCompareModal", () => {
     compareCephAdminBucketPairMock.mockResolvedValue(buildCompareResult());
   });
 
-  it("runs comparison without a diff limit and exposes complete section keys", async () => {
+  it("runs comparison with a display-limited diff and exposes visible section keys", async () => {
     const user = userEvent.setup();
     render(
       <CephAdminBucketCompareModal
@@ -123,8 +125,9 @@ describe("CephAdminBucketCompareModal", () => {
 
     await openDetailsByLabel(user, /bucket-a\s*→\s*bucket-a/i);
     await openDetailsByLabel(user, "Content diff (md5 or size)");
-    const sourceOnlyDetails = await openDetailsByLabel(user, "Source only (1)");
+    const sourceOnlyDetails = await openDetailsByLabel(user, "Source only (3)");
 
+    expect(within(sourceOnlyDetails).getAllByText(/Showing 1 of 3/i).length).toBeGreaterThan(0);
     expect(within(sourceOnlyDetails).getByRole("button", { name: "Copy keys" })).toBeInTheDocument();
     expect(within(sourceOnlyDetails).getByText("source-only-1")).toBeInTheDocument();
     expect(within(sourceOnlyDetails).queryByText("1.0 KB")).not.toBeInTheDocument();

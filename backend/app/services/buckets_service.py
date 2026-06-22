@@ -64,6 +64,8 @@ logger = logging.getLogger(__name__)
 
 BucketCompareRemediationAction = Literal["sync_source_only", "sync_different", "delete_target_only"]
 
+BUCKET_COMPARE_DISPLAY_LIMIT = 200
+
 
 @dataclass(frozen=True)
 class BucketCompareRemediationResult:
@@ -905,28 +907,32 @@ class BucketsService:
                 continue
 
             different_count += 1
-            different_sample.append(
-                CephAdminBucketObjectDiffEntry(
-                    key=key,
-                    source_size=comparison.source_size,
-                    target_size=comparison.target_size,
-                    source_etag=comparison.source_etag,
-                    target_etag=comparison.target_etag,
-                    source_last_modified=source_entry.get("last_modified")
-                    if isinstance(source_entry.get("last_modified"), datetime)
-                    else None,
-                    target_last_modified=target_entry.get("last_modified")
-                    if isinstance(target_entry.get("last_modified"), datetime)
-                    else None,
-                    source_storage_class=source_entry.get("storage_class")
-                    if isinstance(source_entry.get("storage_class"), str)
-                    else None,
-                    target_storage_class=target_entry.get("storage_class")
-                    if isinstance(target_entry.get("storage_class"), str)
-                    else None,
-                    compare_by=comparison.compare_by,
+            if len(different_sample) < BUCKET_COMPARE_DISPLAY_LIMIT:
+                different_sample.append(
+                    CephAdminBucketObjectDiffEntry(
+                        key=key,
+                        source_size=comparison.source_size,
+                        target_size=comparison.target_size,
+                        source_etag=comparison.source_etag,
+                        target_etag=comparison.target_etag,
+                        source_last_modified=source_entry.get("last_modified")
+                        if isinstance(source_entry.get("last_modified"), datetime)
+                        else None,
+                        target_last_modified=target_entry.get("last_modified")
+                        if isinstance(target_entry.get("last_modified"), datetime)
+                        else None,
+                        source_storage_class=source_entry.get("storage_class")
+                        if isinstance(source_entry.get("storage_class"), str)
+                        else None,
+                        target_storage_class=target_entry.get("storage_class")
+                        if isinstance(target_entry.get("storage_class"), str)
+                        else None,
+                        compare_by=comparison.compare_by,
+                    )
                 )
-            )
+
+        only_source_visible = only_source[:BUCKET_COMPARE_DISPLAY_LIMIT]
+        only_target_visible = only_target[:BUCKET_COMPARE_DISPLAY_LIMIT]
 
         return CephAdminBucketContentDiff(
             source_count=len(source_keys),
@@ -936,10 +942,14 @@ class BucketsService:
             only_source_count=len(only_source),
             only_target_count=len(only_target),
             ignored_after_cutoff_count=ignored_after_cutoff_count,
-            only_source_sample=only_source,
-            only_target_sample=only_target,
-            only_source_details=[self._compare_object_detail(key, source_objects[key]) for key in only_source],
-            only_target_details=[self._compare_object_detail(key, target_objects[key]) for key in only_target],
+            display_limit=BUCKET_COMPARE_DISPLAY_LIMIT,
+            only_source_hidden_count=max(0, len(only_source) - len(only_source_visible)),
+            only_target_hidden_count=max(0, len(only_target) - len(only_target_visible)),
+            different_hidden_count=max(0, different_count - len(different_sample)),
+            only_source_sample=only_source_visible,
+            only_target_sample=only_target_visible,
+            only_source_details=[self._compare_object_detail(key, source_objects[key]) for key in only_source_visible],
+            only_target_details=[self._compare_object_detail(key, target_objects[key]) for key in only_target_visible],
             different_sample=different_sample,
         )
 

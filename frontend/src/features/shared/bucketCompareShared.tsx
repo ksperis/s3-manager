@@ -134,6 +134,21 @@ export const getVisibleCompareObjectKeys = (rows: CompareObjectDetailLike[]): st
   return keys;
 };
 
+export const getCompareHiddenCount = (totalCount: number, visibleCount: number, hiddenCount?: number | null): number => {
+  const reportedHiddenCount = typeof hiddenCount === "number" && Number.isFinite(hiddenCount) ? hiddenCount : totalCount - visibleCount;
+  return Math.max(0, reportedHiddenCount);
+};
+
+export const formatCompareDisplayLimitMessage = (
+  totalCount: number,
+  visibleCount: number,
+  hiddenCount?: number | null
+): string | null => {
+  const hidden = getCompareHiddenCount(totalCount, visibleCount, hiddenCount);
+  if (hidden <= 0) return null;
+  return `Showing ${visibleCount} of ${totalCount} objects. ${hidden} not displayed.`;
+};
+
 export const copyCompareObjectKeysToClipboard = async (keys: string[]): Promise<void> => {
   const clipboard =
     typeof window !== "undefined"

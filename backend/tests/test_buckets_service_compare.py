@@ -146,7 +146,7 @@ def test_compare_bucket_content_reports_different_sample(monkeypatch):
     assert diff.different_sample[0].target_storage_class == "STANDARD_IA"
 
 
-def test_compare_bucket_content_returns_complete_diff(monkeypatch):
+def test_compare_bucket_content_limits_display_rows_but_keeps_totals(monkeypatch):
     service = BucketsService()
     source = _build_account("source")
     target = _build_account("target")
@@ -171,11 +171,18 @@ def test_compare_bucket_content_returns_complete_diff(monkeypatch):
     assert diff.only_source_count == 1005
     assert diff.only_target_count == 1003
     assert diff.different_count == 1007
-    assert len(diff.only_source_sample) == 1005
-    assert len(diff.only_target_sample) == 1003
-    assert len(diff.only_source_details) == 1005
-    assert len(diff.only_target_details) == 1003
-    assert len(diff.different_sample) == 1007
+    assert diff.display_limit == 200
+    assert diff.only_source_hidden_count == 805
+    assert diff.only_target_hidden_count == 803
+    assert diff.different_hidden_count == 807
+    assert len(diff.only_source_sample) == 200
+    assert len(diff.only_target_sample) == 200
+    assert len(diff.only_source_details) == 200
+    assert len(diff.only_target_details) == 200
+    assert len(diff.different_sample) == 200
+    assert diff.only_source_sample[0] == "source-only-0000"
+    assert diff.only_source_sample[-1] == "source-only-0199"
+    assert diff.different_sample[-1].key == "different-0199"
 
 
 def test_compare_bucket_content_excludes_entire_key_after_cutoff(monkeypatch):

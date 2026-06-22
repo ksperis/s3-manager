@@ -418,7 +418,7 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     const user = await runInitialComparison();
     const sourceOnlyDetails = await openSourceOnlyDetails(user);
 
-    expect(screen.queryByText(/Only \d+ of \d+ objects are visible in this section/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Showing \d+ of \d+ objects/i)).not.toBeInTheDocument();
     expect(await screen.findByText("source-only-1")).toBeInTheDocument();
     expect(within(sourceOnlyDetails).queryByText("1.0 KB")).not.toBeInTheDocument();
 
@@ -454,22 +454,41 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     expect(await screen.findByText("Download started for source-only-1.")).toBeInTheDocument();
   });
 
-  it("does not show sample warnings for content sections", async () => {
+  it("shows truncated sections and remediates only displayed keys", async () => {
     compareManagerBucketPairMock.mockResolvedValueOnce(
       buildCompareResult({
         content_diff: {
           ...buildCompareResult().content_diff!,
           source_count: 11,
           only_source_count: 3,
+          display_limit: 2,
+          only_source_hidden_count: 1,
         },
       })
     );
 
     const user = await runInitialComparison();
     await openContentDetails(user);
-    await openDetailsByLabel(user, "Source only (3)");
+    const sourceOnlyDetails = await openDetailsByLabel(user, "Source only (3)");
 
-    expect(screen.queryByText(/Only 2 of 3 objects are visible/i)).not.toBeInTheDocument();
+    expect(within(sourceOnlyDetails).getAllByText(/Showing 2 of 3/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Sync visible missing" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sync all missing" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sync visible missing" }));
+    expect(await screen.findByText(/only displayed keys will be remediated/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => {
+      expect(runManagerBucketCompareActionMock).toHaveBeenCalledTimes(1);
+    });
+    expect(runManagerBucketCompareActionMock).toHaveBeenCalledWith(
+      "ctx-source",
+      expect.objectContaining({
+        action: "sync_source_only",
+        object_keys: ["source-only-1", "source-only-2"],
+      })
+    );
   });
 
   it("copies object keys from a content section", async () => {
