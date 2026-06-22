@@ -35,7 +35,13 @@ export function AssociationChips({ items }: { items: AssociationChipItem[] }) {
   );
 }
 
-export function AccountAssociationChips({ accounts }: { accounts: AssociationAccountItem[] }) {
+export function AccountAssociationChips({
+  accounts,
+  showPortalRole = true,
+}: {
+  accounts: AssociationAccountItem[];
+  showPortalRole?: boolean;
+}) {
   if (accounts.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-2">
@@ -52,7 +58,7 @@ export function AccountAssociationChips({ accounts }: { accounts: AssociationAcc
                 Admin
               </span>
             )}
-            {portalRole !== "portal_none" && (
+            {showPortalRole && portalRole !== "portal_none" && (
               <span className="rounded-full bg-sky-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
                 {portalRole === "portal_manager" ? "Portal manager" : "Portal user"}
               </span>

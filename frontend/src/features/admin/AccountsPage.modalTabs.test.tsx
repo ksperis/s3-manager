@@ -245,6 +245,9 @@ describe("AccountsPage modal tabs", () => {
 
     fireEvent.click(usersTab);
 
+    expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
+    expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
+
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "ui7@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
@@ -263,8 +266,81 @@ describe("AccountsPage modal tabs", () => {
         user_links: expect.arrayContaining([
           expect.objectContaining({
             user_id: 7,
+            account_role: "portal_none",
           }),
         ]),
+      })
+    );
+  });
+
+  it("hides portal roles when portal is disabled without clearing existing account roles", async () => {
+    listS3AccountsMock.mockResolvedValueOnce({
+      items: [
+        {
+          id: "RGW000000000000001",
+          db_id: 1,
+          name: "acc-1",
+          tags: [makeTag(501, "gold", "amber")],
+          rgw_account_id: "RGW000000000000001",
+          storage_endpoint_id: 10,
+          storage_endpoint_name: "ceph-main",
+          storage_endpoint_url: "https://ceph.example.test",
+          user_ids: [7],
+          user_links: [{ user_id: 7, user_email: "ui7@example.com", account_admin: true, account_role: "portal_manager" }],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+    getS3AccountMock.mockResolvedValueOnce({
+      id: "RGW000000000000001",
+      db_id: 1,
+      name: "acc-1",
+      tags: [makeTag(501, "gold", "amber")],
+      rgw_account_id: "RGW000000000000001",
+      storage_endpoint_id: 10,
+      storage_endpoint_name: "ceph-main",
+      storage_endpoint_url: "https://ceph.example.test",
+      storage_endpoint_capabilities: {
+        account: true,
+        admin: true,
+        usage: true,
+      },
+      quota_max_size_gb: null,
+      quota_max_objects: null,
+      user_ids: [7],
+      user_links: [{ user_id: 7, user_email: "ui7@example.com", account_admin: true, account_role: "portal_manager" }],
+    });
+
+    render(<AccountsPage />);
+
+    expect(await screen.findByText("ui7@example.com")).toBeInTheDocument();
+    expect(screen.queryByText("Portal manager")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Linked UI users" }));
+
+    expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
+    expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateS3AccountMock).toHaveBeenCalled();
+    });
+
+    const lastCall = updateS3AccountMock.mock.calls.at(-1);
+    expect(lastCall?.[1]).toEqual(
+      expect.objectContaining({
+        user_links: [
+          expect.objectContaining({
+            user_id: 7,
+            account_admin: true,
+            account_role: "portal_manager",
+          }),
+        ],
       })
     );
   });

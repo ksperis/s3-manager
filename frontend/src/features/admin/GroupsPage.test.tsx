@@ -18,7 +18,9 @@ const generalSettingsState = {
   browser_enabled: true,
   browser_root_enabled: true,
   browser_manager_enabled: false,
+  browser_portal_enabled: true,
   browser_ceph_admin_enabled: true,
+  portal_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: false,
   quota_alerts_enabled: false,
@@ -68,6 +70,7 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
 describe("GroupsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    generalSettingsState.portal_enabled = false;
 
     listGroupsMock.mockResolvedValue({
       items: [],
@@ -94,6 +97,7 @@ describe("GroupsPage", () => {
   });
 
   it("renders association names from group details without waiting for modal resources", async () => {
+    generalSettingsState.portal_enabled = true;
     listGroupsMock.mockResolvedValue({
       items: [
         {
@@ -147,6 +151,61 @@ describe("GroupsPage", () => {
     expect(listMinimalS3AccountsMock).not.toHaveBeenCalled();
     expect(listMinimalS3UsersMock).not.toHaveBeenCalled();
     expect(listMinimalS3ConnectionsMock).not.toHaveBeenCalled();
+  });
+
+  it("hides portal role labels when portal is disabled and preserves existing group account roles", async () => {
+    listGroupsMock.mockResolvedValue({
+      items: [
+        {
+          id: 50,
+          name: "ops-group",
+          description: null,
+          can_access_ceph_admin: false,
+          can_access_storage_ops: false,
+          manager_tool_access: {
+            bucket_compare: false,
+            bucket_integrity_check: false,
+            bucket_migration: false,
+            feature_rules: false,
+            bucket_quota: false,
+            ceph_s3_user_keys: false,
+          },
+          user_ids: [],
+          user_details: [],
+          accounts: [99],
+          account_links: [{ account_id: 99, account_admin: true, account_role: "portal_manager" }],
+          account_details: [{ id: 99, name: "production-account", rgw_account_id: "RGW-PROD" }],
+          s3_users: [],
+          s3_connections: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<GroupsPage />);
+
+    expect(await screen.findByText("production-account")).toBeInTheDocument();
+    expect(screen.queryByText("Portal manager")).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Associations" }));
+
+    expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateGroupMock).toHaveBeenCalledTimes(1);
+    });
+    expect(updateGroupMock).toHaveBeenCalledWith(
+      50,
+      expect.objectContaining({
+        account_links: [{ account_id: 99, account_admin: true, account_role: "portal_manager" }],
+      })
+    );
   });
 
   it("creates a group with default rights off, members, associations, and Manager tool access", async () => {

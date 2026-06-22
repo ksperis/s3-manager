@@ -21,7 +21,9 @@ const generalSettingsState = {
   browser_enabled: true,
   browser_root_enabled: true,
   browser_manager_enabled: false,
+  browser_portal_enabled: true,
   browser_ceph_admin_enabled: true,
+  portal_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: false,
   quota_alerts_enabled: false,
@@ -75,6 +77,7 @@ describe("UsersPage modal tabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    generalSettingsState.portal_enabled = false;
     localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
 
     listUsersMock.mockResolvedValue({
@@ -132,6 +135,7 @@ describe("UsersPage modal tabs", () => {
   });
 
   it("renders associations with the shared sectioned summary", async () => {
+    generalSettingsState.portal_enabled = true;
     listUsersMock.mockResolvedValue({
       items: [
         {
@@ -166,6 +170,45 @@ describe("UsersPage modal tabs", () => {
     expect(screen.getByText("s3-user-1")).toBeInTheDocument();
     expect(screen.getByText("conn-1")).toBeInTheDocument();
     expect(screen.getByText("storage-operators")).toBeInTheDocument();
+  });
+
+  it("hides portal role labels when the portal feature is disabled", async () => {
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 12,
+          email: "assoc.summary@example.com",
+          role: "ui_user",
+          accounts: [1],
+          account_links: [{ account_id: 1, account_admin: true, account_role: "portal_user" }],
+          s3_users: [],
+          s3_connections: [],
+          group_ids: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+
+    expect(await screen.findByText("acc-1")).toBeInTheDocument();
+    expect(screen.queryByText("Portal user")).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Associations" }));
+
+    expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
+    expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Admin" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(assignUserToS3AccountMock).toHaveBeenCalledWith(12, 1, false, "portal_user");
+    });
   });
 
   it("keeps associations when switching General/Associations and submits linked payload", async () => {

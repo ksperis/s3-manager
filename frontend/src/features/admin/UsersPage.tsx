@@ -161,6 +161,7 @@ type AssociationsTabsProps = {
   activeTab: AssociationTab;
   onTabChange: (tab: AssociationTab) => void;
   maxVisibleOptions: number;
+  showPortalRole: boolean;
   accounts: {
     selected: AccountSelection[];
     setSelected: Dispatch<SetStateAction<AccountSelection[]>>;
@@ -214,6 +215,7 @@ const AssociationsTabs = ({
   activeTab,
   onTabChange,
   maxVisibleOptions,
+  showPortalRole,
   accounts,
   s3Users,
   connections,
@@ -259,9 +261,11 @@ const AssociationsTabs = ({
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Admin
                         </th>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Portal role
-                        </th>
+                        {showPortalRole && (
+                          <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Portal role
+                          </th>
+                        )}
                         <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Actions
                         </th>
@@ -270,7 +274,7 @@ const AssociationsTabs = ({
                     <tbody>
                       {accounts.selected.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={showPortalRole ? 4 : 3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
                             No account linked yet.
                           </td>
                         </tr>
@@ -298,27 +302,29 @@ const AssociationsTabs = ({
                                   Admin
                                 </label>
                               </td>
-                              <td className="px-3 py-2">
-                                <select
-                                  value={normalizePortalRole(entry.account_role)}
-                                  onChange={(e) =>
-                                    accounts.setSelected((prev) =>
-                                      prev.map((item) =>
-                                        item.id === entry.id
-                                          ? { ...item, account_role: normalizePortalRole(e.target.value) }
-                                          : item
+                              {showPortalRole && (
+                                <td className="px-3 py-2">
+                                  <select
+                                    value={normalizePortalRole(entry.account_role)}
+                                    onChange={(e) =>
+                                      accounts.setSelected((prev) =>
+                                        prev.map((item) =>
+                                          item.id === entry.id
+                                            ? { ...item, account_role: normalizePortalRole(e.target.value) }
+                                            : item
+                                        )
                                       )
-                                    )
-                                  }
-                                  className={associationCompactSelectClass}
-                                >
-                                  {PORTAL_ROLE_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </td>
+                                    }
+                                    className={associationCompactSelectClass}
+                                  >
+                                    {PORTAL_ROLE_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                              )}
                               <td className="px-3 py-2 text-right">
                                 <button
                                   type="button"
@@ -748,6 +754,7 @@ export default function UsersPage() {
   const currentIsAdminLike = isAdminLikeRole(currentUser?.role);
   const currentIsSuperAdmin = isSuperAdminRole(currentUser?.role);
   const cephAdminFeatureEnabled = generalSettings.ceph_admin_enabled;
+  const showPortalRole = Boolean(generalSettings.portal_enabled);
   const [users, setUsers] = useState<User[]>([]);
   const [accounts, setS3Accounts] = useState<S3AccountSummary[]>([]);
   const [s3AccountsLoaded, setS3AccountsLoaded] = useState(false);
@@ -1042,7 +1049,7 @@ export default function UsersPage() {
         sections={[
           {
             label: "Accounts",
-            value: <AccountAssociationChips accounts={accountItems} />,
+            value: <AccountAssociationChips accounts={accountItems} showPortalRole={showPortalRole} />,
             visible: accountItems.length > 0,
           },
           { label: "Users", value: <AssociationChips items={s3UserItems} />, visible: s3UserItems.length > 0 },
@@ -1959,6 +1966,7 @@ export default function UsersPage() {
                   }
                 }}
                 maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+                showPortalRole={showPortalRole}
                 accounts={{
                   selected: createSelectedS3Accounts,
                   setSelected: setCreateSelectedS3Accounts,
@@ -2361,6 +2369,7 @@ export default function UsersPage() {
                   }
                 }}
                 maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+                showPortalRole={showPortalRole}
                 accounts={{
                   selected: editSelectedS3Accounts,
                   setSelected: setEditSelectedS3Accounts,
