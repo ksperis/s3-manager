@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../../components/language";
+import { ThemeProvider } from "../../components/theme";
 import LoginPage from "./LoginPage";
 
 const mocks = vi.hoisted(() => ({
@@ -56,9 +57,11 @@ const generalSettings = {
 function renderLoginPage() {
   return render(
     <LanguageProvider>
-      <MemoryRouter>
-        <LoginPage />
-      </MemoryRouter>
+      <ThemeProvider>
+        <MemoryRouter>
+          <LoginPage />
+        </MemoryRouter>
+      </ThemeProvider>
     </LanguageProvider>
   );
 }
