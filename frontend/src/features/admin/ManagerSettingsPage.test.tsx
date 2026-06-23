@@ -36,6 +36,7 @@ function buildSettings(): AppSettings {
       quota_alerts_enabled: false,
       usage_history_enabled: false,
       bucket_migration_enabled: true,
+      bucket_purge_enabled: false,
       bucket_compare_enabled: true,
       bucket_integrity_check_enabled: false,
       bucket_usage_stats_enabled: true,
@@ -127,6 +128,25 @@ describe("ManagerSettingsPage", () => {
     expect(payload.general.bucket_integrity_check_enabled).toBe(true);
   });
 
+  it("renders bucket purge toggle and sends it in save payload", async () => {
+    const user = userEvent.setup();
+    render(<ManagerSettingsPage />);
+
+    const toggle = (await screen.findByLabelText("Bucket purge tool")) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+
+    await user.click(toggle);
+    expect(toggle.checked).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
+    expect(payload.general.bucket_purge_enabled).toBe(true);
+  });
+
   it("resets Ceph S3 User keys toggle from defaults", async () => {
     const user = userEvent.setup();
     const defaults = buildSettings();
@@ -154,6 +174,24 @@ describe("ManagerSettingsPage", () => {
     render(<ManagerSettingsPage />);
 
     const toggle = (await screen.findByLabelText("Bucket integrity check tool")) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
+
+    await waitFor(() => {
+      expect(toggle.checked).toBe(true);
+    });
+  });
+
+  it("resets bucket purge toggle from defaults", async () => {
+    const user = userEvent.setup();
+    const defaults = buildSettings();
+    defaults.general.bucket_purge_enabled = true;
+    fetchDefaultAppSettingsMock.mockResolvedValue(defaults);
+
+    render(<ManagerSettingsPage />);
+
+    const toggle = (await screen.findByLabelText("Bucket purge tool")) as HTMLInputElement;
     expect(toggle.checked).toBe(false);
 
     await user.click(screen.getByRole("button", { name: /reset to defaults/i }));

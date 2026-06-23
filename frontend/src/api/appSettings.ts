@@ -90,6 +90,7 @@ export type GeneralSettings = {
   quota_alerts_enabled: boolean;
   usage_history_enabled: boolean;
   bucket_migration_enabled: boolean;
+  bucket_purge_enabled: boolean;
   bucket_compare_enabled: boolean;
   bucket_integrity_check_enabled: boolean;
   bucket_usage_stats_enabled: boolean;

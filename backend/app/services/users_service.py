@@ -155,6 +155,9 @@ class UsersService:
             can_access_manager_bucket_quota=(
                 bool(manager_tool_access.bucket_quota) if manager_tools_supported else False
             ),
+            can_access_manager_bucket_purge=(
+                bool(manager_tool_access.bucket_purge) if manager_tools_supported else False
+            ),
             can_access_manager_ceph_s3_user_keys=(
                 bool(manager_tool_access.ceph_s3_user_keys) if manager_tools_supported else False
             ),
@@ -210,6 +213,7 @@ class UsersService:
                 user.can_access_manager_bucket_migration = bool(manager_tool_access.bucket_migration)
                 user.can_access_manager_feature_rules = bool(manager_tool_access.feature_rules)
                 user.can_access_manager_bucket_quota = bool(manager_tool_access.bucket_quota)
+                user.can_access_manager_bucket_purge = bool(manager_tool_access.bucket_purge)
                 user.can_access_manager_ceph_s3_user_keys = bool(manager_tool_access.ceph_s3_user_keys)
             else:
                 user.can_access_manager_bucket_compare = False
@@ -217,6 +221,7 @@ class UsersService:
                 user.can_access_manager_bucket_migration = False
                 user.can_access_manager_feature_rules = False
                 user.can_access_manager_bucket_quota = False
+                user.can_access_manager_bucket_purge = False
                 user.can_access_manager_ceph_s3_user_keys = False
         elif next_role not in MANAGER_TOOL_ROLES:
             user.can_access_manager_bucket_compare = False
@@ -224,6 +229,7 @@ class UsersService:
             user.can_access_manager_bucket_migration = False
             user.can_access_manager_feature_rules = False
             user.can_access_manager_bucket_quota = False
+            user.can_access_manager_bucket_purge = False
             user.can_access_manager_ceph_s3_user_keys = False
         if payload.browser_advanced_features_enabled is not None:
             user.browser_advanced_features_enabled = bool(payload.browser_advanced_features_enabled)
@@ -697,6 +703,7 @@ class UsersService:
                 bucket_migration=bool(user.can_access_manager_bucket_migration),
                 feature_rules=bool(user.can_access_manager_feature_rules),
                 bucket_quota=bool(user.can_access_manager_bucket_quota),
+                bucket_purge=bool(user.can_access_manager_bucket_purge),
                 ceph_s3_user_keys=bool(user.can_access_manager_ceph_s3_user_keys),
             ),
             browser_advanced_features_enabled=bool(user.browser_advanced_features_enabled),

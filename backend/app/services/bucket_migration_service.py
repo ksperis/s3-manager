@@ -45,7 +45,7 @@ from app.services.bucket_migration_runtime import (
     BucketMigrationVerifier,
 )
 from app.services.object_diff_common import compare_object_entries
-from app.services.s3_client import _delete_objects_count, get_s3_client
+from app.services.s3_client import _delete_objects_count, get_s3_client, purge_bucket_contents
 from app.utils.rgw import resolve_admin_uid
 from app.utils.network_targets import validate_outbound_url
 from app.utils.s3_connection_endpoint import resolve_connection_endpoint
@@ -4405,63 +4405,22 @@ class BucketMigrationService:
 
     def _purge_target_bucket(self, target_ctx: _ResolvedContext, target_bucket: str) -> tuple[int, int]:
         client = self._context_client(target_ctx)
-        deleted_current = 0
-        continuation_token: Optional[str] = None
-        while True:
-            kwargs: dict[str, Any] = {"Bucket": target_bucket, "MaxKeys": 1000}
-            if continuation_token:
-                kwargs["ContinuationToken"] = continuation_token
-            try:
-                page = client.list_objects_v2(**kwargs)
-            except ClientError as exc:
-                code = str(exc.response.get("Error", {}).get("Code", "")).strip().lower() if hasattr(exc, "response") else ""
-                if code in {"nosuchbucket", "notfound"}:
-                    return deleted_current, 0
-                raise RuntimeError(f"Unable to list target bucket '{target_bucket}' for rollback: {exc}") from exc
-            except BotoCoreError as exc:
-                raise RuntimeError(f"Unable to list target bucket '{target_bucket}' for rollback: {exc}") from exc
-            objects = [{"Key": entry.get("Key")} for entry in (page.get("Contents", []) or []) if entry.get("Key")]
-            deleted_current += self._delete_objects_batch(client, target_bucket, objects)
-            continuation_token = page.get("NextContinuationToken")
-            if not continuation_token:
-                break
-
-        deleted_versions = 0
-        key_marker: Optional[str] = None
-        version_marker: Optional[str] = None
-        while True:
-            list_kwargs: dict[str, Any] = {"Bucket": target_bucket}
-            if key_marker:
-                list_kwargs["KeyMarker"] = key_marker
-            if version_marker:
-                list_kwargs["VersionIdMarker"] = version_marker
-            try:
-                page = client.list_object_versions(**list_kwargs)
-            except ClientError as exc:
-                code = str(exc.response.get("Error", {}).get("Code", "")).strip().lower() if hasattr(exc, "response") else ""
-                if code in {"nosuchbucket", "nosuchversion", "notfound"}:
-                    break
-                raise RuntimeError(f"Unable to list target versions in bucket '{target_bucket}' for rollback: {exc}") from exc
-            except BotoCoreError as exc:
-                raise RuntimeError(f"Unable to list target versions in bucket '{target_bucket}' for rollback: {exc}") from exc
-            version_objects: list[dict[str, str]] = []
-            for entry in page.get("Versions", []) or []:
-                key = entry.get("Key")
-                version_id = entry.get("VersionId")
-                if key and version_id:
-                    version_objects.append({"Key": key, "VersionId": version_id})
-            for entry in page.get("DeleteMarkers", []) or []:
-                key = entry.get("Key")
-                version_id = entry.get("VersionId")
-                if key and version_id:
-                    version_objects.append({"Key": key, "VersionId": version_id})
-            deleted_versions += self._delete_objects_batch(client, target_bucket, version_objects)
-            key_marker = page.get("NextKeyMarker")
-            version_marker = page.get("NextVersionIdMarker")
-            if not key_marker and not version_marker:
-                break
-
-        return deleted_current, deleted_versions
+        try:
+            manager_settings = load_app_settings().manager
+            result = purge_bucket_contents(
+                client,
+                target_bucket,
+                parallelism=max(1, min(int(manager_settings.bucket_migration_parallelism_max or 10), 64)),
+                include_versions=True,
+                tolerate_missing_bucket=True,
+            )
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to purge target bucket '{target_bucket}' for rollback: {exc}") from exc
+        if result.failed_count > 0:
+            sample = ", ".join(failure.message for failure in result.failures_sample[:3])
+            extra = f" (+{result.failed_count - len(result.failures_sample[:3])} more)" if result.failed_count > 3 else ""
+            raise RuntimeError(f"Unable to purge target bucket '{target_bucket}' for rollback: {sample}{extra}")
+        return result.deleted_objects, result.deleted_versions
 
     def _is_bucket_already_exists_error(self, exc: Exception) -> bool:
         text = str(exc).strip().lower()

@@ -29,7 +29,10 @@ Use this guide when creating, updating, or inspecting bucket configuration.
 6. On Ceph Admin and Storage Ops bucket workbenches, use bulk update to preview
    and apply lifecycle or notification configuration changes across selected
    buckets.
-7. Use the **Usage stats** tab in bucket detail pages to review the latest
+7. When the purge tool is enabled, use **Manager > Tools > Purge** or
+   **Purge selected** from Ceph Admin and Storage Ops bucket workbenches to empty
+   selected buckets without deleting bucket configuration.
+8. Use the **Usage stats** tab in bucket detail pages to review the latest
    calculated snapshot, including logical bytes by current and noncurrent object
    versions when version listing is supported.
 
@@ -56,6 +59,7 @@ the latest successful calculation quickly.
 - [Workspace: Ceph Admin](workspace-ceph-admin.md)
 - [How-to: Configure a bucket from Manager](howto-manager-bucket-configuration.md)
 - [Feature: Bucket usage stats](feature-bucket-usage-stats.md)
+- [Feature: Bucket purge](feature-bucket-purge.md)
 - [Feature: Object operations in Browser](feature-objects-browser.md)
 
 ## Visual example

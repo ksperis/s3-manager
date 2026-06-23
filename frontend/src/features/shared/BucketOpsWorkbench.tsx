@@ -124,6 +124,8 @@ import BucketDetailPage from "../manager/BucketDetailPage";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
 import type { BucketIntegrityUiTarget } from "./BucketIntegrityCheckModal";
+import BucketPurgeRunModal from "./BucketPurgeRunModal";
+import type { BucketPurgeUiTarget } from "./BucketPurgeRunModal";
 import BucketUsageStatsRunModal from "./BucketUsageStatsRunModal";
 import type { BucketUsageStatsUiTarget } from "./BucketUsageStatsRunModal";
 import BucketConfigBackupModal from "./BucketConfigBackupModal";
@@ -2554,6 +2556,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showIntegrityModal, setShowIntegrityModal] = useState(false);
+  const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [showUsageStatsModal, setShowUsageStatsModal] = useState(false);
   const [showConfigBackupModal, setShowConfigBackupModal] = useState(false);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
@@ -3829,6 +3832,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       .filter((target) => target.bucketName.trim().length > 0);
   }, [isStorageOps, selectedBucketItemByName, selectedBucketList]);
   const selectedUsageStatsTargets = useMemo<BucketUsageStatsUiTarget[]>(
+    () => selectedIntegrityTargets.map((target) => ({ ...target })),
+    [selectedIntegrityTargets]
+  );
+  const selectedPurgeTargets = useMemo<BucketPurgeUiTarget[]>(
     () => selectedIntegrityTargets.map((target) => ({ ...target })),
     [selectedIntegrityTargets]
   );
@@ -10002,6 +10009,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             onShowConfigBackupModal={!isStorageOps ? () => setShowConfigBackupModal(true) : undefined}
             onShowCompareModal={() => setShowCompareModal(true)}
             onShowIntegrityModal={() => setShowIntegrityModal(true)}
+            onShowPurgeModal={
+              generalSettings.bucket_purge_enabled ? () => setShowPurgeModal(true) : undefined
+            }
             onShowUsageStatsModal={() => setShowUsageStatsModal(true)}
             openBulkUpdateModal={openBulkUpdateModal}
           />
@@ -10194,6 +10204,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           mode="storage-ops"
           targets={selectedIntegrityTargets}
           onClose={() => setShowIntegrityModal(false)}
+        />
+      )}
+      {!isStorageOps && showPurgeModal && selectedEndpointId && selectedPurgeTargets.length > 0 && (
+        <BucketPurgeRunModal
+          mode="ceph-admin"
+          endpointId={selectedEndpointId}
+          endpointName={selectedEndpoint?.name}
+          targets={selectedPurgeTargets}
+          onClose={() => setShowPurgeModal(false)}
+        />
+      )}
+      {isStorageOps && showPurgeModal && selectedPurgeTargets.length > 0 && (
+        <BucketPurgeRunModal
+          mode="storage-ops"
+          targets={selectedPurgeTargets}
+          onClose={() => setShowPurgeModal(false)}
         />
       )}
       {!isStorageOps && showUsageStatsModal && selectedEndpointId && selectedUsageStatsTargets.length > 0 && (

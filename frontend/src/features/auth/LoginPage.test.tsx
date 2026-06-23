@@ -45,6 +45,7 @@ const generalSettings = {
   quota_alerts_enabled: false,
   usage_history_enabled: false,
   bucket_migration_enabled: false,
+  bucket_purge_enabled: false,
   bucket_compare_enabled: true,
   bucket_integrity_check_enabled: true,
   manager_ceph_s3_user_keys_enabled: true,

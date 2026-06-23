@@ -66,6 +66,7 @@ const loadManagerMigrationDetailPage = () => import("./features/manager/ManagerM
 const loadManagerMigrationWizardPage = () => import("./features/manager/ManagerMigrationWizardPage");
 const loadManagerBucketComparePage = () => import("./features/manager/ManagerBucketComparePage");
 const loadManagerBucketIntegrityPage = () => import("./features/manager/ManagerBucketIntegrityPage");
+const loadManagerBucketPurgePage = () => import("./features/manager/ManagerBucketPurgePage");
 const loadManagerFeatureRulesPage = () => import("./features/manager/ManagerFeatureRulesPage");
 const loadManagerCephKeysPage = () => import("./features/manager/ManagerCephKeysPage");
 const loadPortalLayout = () => import("./features/portal/PortalLayout");
@@ -138,6 +139,7 @@ const ManagerMigrationDetailPage = lazy(loadManagerMigrationDetailPage);
 const ManagerMigrationWizardPage = lazy(loadManagerMigrationWizardPage);
 const ManagerBucketComparePage = lazy(loadManagerBucketComparePage);
 const ManagerBucketIntegrityPage = lazy(loadManagerBucketIntegrityPage);
+const ManagerBucketPurgePage = lazy(loadManagerBucketPurgePage);
 const ManagerFeatureRulesPage = lazy(loadManagerFeatureRulesPage);
 const ManagerCephKeysPage = lazy(loadManagerCephKeysPage);
 const PortalLayout = lazy(loadPortalLayout);
@@ -479,6 +481,16 @@ function canAccessManagerBucketIntegrity(
   return user.capabilities?.can_manage_buckets !== false;
 }
 
+function canAccessManagerBucketPurge(
+  generalSettings: ReturnType<typeof useGeneralSettings>["generalSettings"],
+  user: SessionUser | null
+): boolean {
+  if (!generalSettings.bucket_purge_enabled || !user?.role) return false;
+  if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
+  if (!getManagerToolAccess(user)?.bucket_purge) return false;
+  return user.capabilities?.can_manage_buckets !== false;
+}
+
 function canAccessManagerFeatureRules(user: SessionUser | null): boolean {
   if (!user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
@@ -525,6 +537,22 @@ function RequireManagerBucketIntegrityFeature() {
     return <Navigate to="/unauthorized" replace />;
   }
   if (canAccessManagerBucketIntegrity(generalSettings, user)) {
+    return <Outlet />;
+  }
+  return <Navigate to="/unauthorized" replace />;
+}
+
+function RequireManagerBucketPurgeFeature() {
+  const { generalSettings } = useGeneralSettings();
+  const { requiresS3AccountSelection } = useS3AccountContext();
+  const user = getStoredUser();
+  if (!generalSettings.bucket_purge_enabled) {
+    return <FeatureDisabledPage feature="Bucket Purge" />;
+  }
+  if (!requiresS3AccountSelection) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  if (canAccessManagerBucketPurge(generalSettings, user)) {
     return <Outlet />;
   }
   return <Navigate to="/unauthorized" replace />;
@@ -627,6 +655,9 @@ export function createAppRoutes() {
               </Route>
               <Route element={<RequireManagerBucketIntegrityFeature />}>
                 <Route path="bucket-integrity" element={<ManagerBucketIntegrityPage />} />
+              </Route>
+              <Route element={<RequireManagerBucketPurgeFeature />}>
+                <Route path="bucket-purge" element={<ManagerBucketPurgePage />} />
               </Route>
               <Route element={<RequireManagerFeatureRulesTool />}>
                 <Route path="feature-rules" element={<ManagerFeatureRulesPage />} />

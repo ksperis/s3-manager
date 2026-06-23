@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from botocore.exceptions import ClientError, ParamValidationError
 from botocore.parsers import ResponseParserError
+from concurrent.futures import ThreadPoolExecutor
 
 from app.services import s3_client
 
@@ -249,3 +250,64 @@ def test_delete_objects_fallback_tolerates_missing_version_after_ambiguous_batch
         {"Bucket": "bucket-delete", "Key": "versioned.txt", "VersionId": "gone-version"},
         {"Bucket": "bucket-delete", "Key": "other.txt", "VersionId": "live-version"},
     ]
+
+
+def test_purge_bucket_contents_deletes_current_objects_versions_and_delete_markers_in_parallel_batches(monkeypatch):
+    created_workers: list[int] = []
+
+    class RecordingExecutor(ThreadPoolExecutor):
+        def __init__(self, *args, **kwargs):
+            created_workers.append(kwargs.get("max_workers", args[0] if args else None))
+            super().__init__(*args, **kwargs)
+
+    class PurgeClient:
+        def __init__(self):
+            self.object_pages = [
+                {
+                    "Contents": [{"Key": f"object-{idx:04d}"} for idx in range(1000)],
+                    "NextContinuationToken": "page-2",
+                },
+                {"Contents": [{"Key": "object-1000"}]},
+            ]
+            self.version_pages = [
+                {
+                    "Versions": [{"Key": f"version-{idx:04d}", "VersionId": f"v{idx}"} for idx in range(1001)],
+                    "DeleteMarkers": [{"Key": "marker", "VersionId": "delete-marker"}],
+                }
+            ]
+            self.delete_calls: list[list[dict]] = []
+
+        def list_objects_v2(self, **kwargs):
+            expected_token = None if len(self.object_pages) == 2 else "page-2"
+            assert kwargs.get("ContinuationToken") == expected_token
+            return self.object_pages.pop(0)
+
+        def list_object_versions(self, **kwargs):
+            assert kwargs["Bucket"] == "bucket-purge"
+            return self.version_pages.pop(0)
+
+        def delete_objects(self, **kwargs):
+            objects = list(kwargs["Delete"]["Objects"])
+            self.delete_calls.append(objects)
+            return {"Deleted": objects}
+
+    monkeypatch.setattr(s3_client, "ThreadPoolExecutor", RecordingExecutor)
+    client = PurgeClient()
+    progress_events = []
+
+    result = s3_client.purge_bucket_contents(
+        client,
+        "bucket-purge",
+        parallelism=999,
+        include_versions=True,
+        progress_callback=progress_events.append,
+    )
+
+    assert created_workers == [64]
+    assert result.listed_objects == 1001
+    assert result.deleted_objects == 1001
+    assert result.listed_versions == 1002
+    assert result.deleted_versions == 1002
+    assert result.failed_count == 0
+    assert sorted(len(call) for call in client.delete_calls) == [1, 2, 1000, 1000]
+    assert {event.stage for event in progress_events} >= {"list", "delete", "versions", "completed"}

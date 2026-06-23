@@ -14,6 +14,7 @@ export const DEFAULT_MANAGER_TOOL_ACCESS: ManagerToolAccess = {
   bucket_compare: false,
   bucket_integrity_check: false,
   bucket_migration: false,
+  bucket_purge: false,
   feature_rules: false,
   bucket_quota: false,
   ceph_s3_user_keys: false,
@@ -35,6 +36,7 @@ export function normalizeManagerToolAccess(access?: ManagerToolAccess | null): M
     bucket_compare: Boolean(access?.bucket_compare),
     bucket_integrity_check: Boolean(access?.bucket_integrity_check),
     bucket_migration: Boolean(access?.bucket_migration),
+    bucket_purge: Boolean(access?.bucket_purge),
     feature_rules: Boolean(access?.feature_rules),
     bucket_quota: Boolean(access?.bucket_quota),
     ceph_s3_user_keys: Boolean(access?.ceph_s3_user_keys),
@@ -45,6 +47,7 @@ export function buildManagerToolDefinitions(settings: {
   bucket_compare_enabled?: boolean | null;
   bucket_integrity_check_enabled?: boolean | null;
   bucket_migration_enabled?: boolean | null;
+  bucket_purge_enabled?: boolean | null;
   manager_ceph_s3_user_keys_enabled?: boolean | null;
 }): ManagerToolDefinition[] {
   return [
@@ -65,6 +68,12 @@ export function buildManagerToolDefinitions(settings: {
       title: "Bucket migration",
       description: "Allow access to Manager > Tools > Migration.",
       enabled: Boolean(settings.bucket_migration_enabled),
+    },
+    {
+      key: "bucket_purge",
+      title: "Bucket purge",
+      description: "Allow access to Manager > Tools > Purge.",
+      enabled: Boolean(settings.bucket_purge_enabled),
     },
     {
       key: "feature_rules",

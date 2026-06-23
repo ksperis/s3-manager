@@ -36,6 +36,7 @@ type BucketSelectionActionsBarProps = {
   onShowConfigBackupModal?: () => void;
   onShowCompareModal: () => void;
   onShowIntegrityModal: () => void;
+  onShowPurgeModal?: () => void;
   onShowUsageStatsModal: () => void;
   openBulkUpdateModal: () => void;
 };
@@ -70,6 +71,7 @@ export default function BucketSelectionActionsBar({
   onShowConfigBackupModal,
   onShowCompareModal,
   onShowIntegrityModal,
+  onShowPurgeModal,
   onShowUsageStatsModal,
   openBulkUpdateModal,
 }: BucketSelectionActionsBarProps) {
@@ -237,6 +239,15 @@ export default function BucketSelectionActionsBar({
           >
             Check integrity
           </button>
+          {onShowPurgeModal && (
+            <button
+              type="button"
+              onClick={onShowPurgeModal}
+              className={cx(uiButtonBaseClass, uiButtonVariants.danger, "px-2.5 py-1.5")}
+            >
+              Purge selected
+            </button>
+          )}
           <button
             type="button"
             onClick={onShowUsageStatsModal}

@@ -29,6 +29,7 @@ const generalSettingsState = {
   quota_alerts_enabled: false,
   usage_history_enabled: false,
   bucket_migration_enabled: false,
+  bucket_purge_enabled: false,
   bucket_compare_enabled: true,
   bucket_integrity_check_enabled: true,
   manager_ceph_s3_user_keys_enabled: true,
@@ -484,7 +485,7 @@ describe("UsersPage modal tabs", () => {
     const migrationToggle = screen.getByRole("checkbox", { name: /Bucket migration/i });
     expect(compareToggle).not.toBeChecked();
     expect(migrationToggle).toBeDisabled();
-    expect(screen.getByText("Disabled globally")).toBeInTheDocument();
+    expect(screen.getAllByText("Disabled globally").length).toBeGreaterThanOrEqual(1);
 
     fireEvent.click(compareToggle);
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -499,6 +500,7 @@ describe("UsersPage modal tabs", () => {
           bucket_compare: true,
           bucket_integrity_check: true,
           bucket_migration: true,
+          bucket_purge: false,
           feature_rules: false,
           bucket_quota: false,
           ceph_s3_user_keys: false,

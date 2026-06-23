@@ -47,6 +47,7 @@ class ManagerToolAccess(BaseModel):
     bucket_migration: bool = False
     feature_rules: bool = False
     bucket_quota: bool = False
+    bucket_purge: bool = False
     ceph_s3_user_keys: bool = False
 
 

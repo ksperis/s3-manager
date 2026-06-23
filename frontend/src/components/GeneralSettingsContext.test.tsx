@@ -53,6 +53,7 @@ describe("GeneralSettingsProvider fallbacks", () => {
       quota_alerts_enabled: true,
       usage_history_enabled: true,
       bucket_migration_enabled: true,
+      bucket_purge_enabled: false,
       bucket_compare_enabled: true,
       bucket_integrity_check_enabled: true,
       manager_ceph_s3_user_keys_enabled: true,

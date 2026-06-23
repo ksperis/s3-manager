@@ -230,6 +230,7 @@ export default function GeneralSettingsPage() {
               general: {
                 ...defaults.general,
                 bucket_migration_enabled: prev.general.bucket_migration_enabled,
+                bucket_purge_enabled: prev.general.bucket_purge_enabled,
                 bucket_compare_enabled: prev.general.bucket_compare_enabled,
                 bucket_integrity_check_enabled: prev.general.bucket_integrity_check_enabled,
                 manager_ceph_s3_user_keys_enabled: prev.general.manager_ceph_s3_user_keys_enabled,

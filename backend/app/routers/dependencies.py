@@ -57,6 +57,7 @@ ManagerToolKey = Literal[
     "bucket_migration",
     "feature_rules",
     "bucket_quota",
+    "bucket_purge",
     "ceph_s3_user_keys",
 ]
 
@@ -66,6 +67,7 @@ _MANAGER_TOOL_ACCESS_FIELDS: dict[ManagerToolKey, str] = {
     "bucket_migration": "can_access_manager_bucket_migration",
     "feature_rules": "can_access_manager_feature_rules",
     "bucket_quota": "can_access_manager_bucket_quota",
+    "bucket_purge": "can_access_manager_bucket_purge",
     "ceph_s3_user_keys": "can_access_manager_ceph_s3_user_keys",
 }
 
@@ -73,6 +75,7 @@ _MANAGER_TOOL_GLOBAL_FIELDS: dict[ManagerToolKey, tuple[str, str]] = {
     "bucket_compare": ("bucket_compare_enabled", "Bucket compare feature is disabled"),
     "bucket_integrity_check": ("bucket_integrity_check_enabled", "Bucket integrity check feature is disabled"),
     "bucket_migration": ("bucket_migration_enabled", "Bucket migration feature is disabled"),
+    "bucket_purge": ("bucket_purge_enabled", "Bucket purge feature is disabled"),
     "ceph_s3_user_keys": ("manager_ceph_s3_user_keys_enabled", "Ceph key management feature is disabled"),
 }
 
@@ -1097,6 +1100,17 @@ def require_bucket_compare_enabled(user: User = Depends(get_current_user), db: S
 def require_bucket_integrity_check_enabled(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
     ensure_manager_tool_allowed(user, "bucket_integrity_check", db=db)
     return user
+
+
+def require_bucket_purge_enabled(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    ensure_manager_tool_allowed(user, "bucket_purge", db=db)
+    return user
+
+
+def require_bucket_purge_global_enabled() -> None:
+    app_settings = load_app_settings()
+    if not bool(app_settings.general.bucket_purge_enabled):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket purge feature is disabled")
 
 
 def require_bucket_usage_stats_enabled(user: User = Depends(get_current_user)) -> User:

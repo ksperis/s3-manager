@@ -75,6 +75,7 @@ def _seed_super_admin_if_needed(db: Session) -> bool:
         can_access_manager_bucket_migration=True,
         can_access_manager_feature_rules=True,
         can_access_manager_bucket_quota=True,
+        can_access_manager_bucket_purge=True,
         can_access_manager_ceph_s3_user_keys=True,
     )
     db.add(admin_user)

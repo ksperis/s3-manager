@@ -184,6 +184,7 @@ export default function GroupsPage() {
       generalSettings.bucket_compare_enabled,
       generalSettings.bucket_integrity_check_enabled,
       generalSettings.bucket_migration_enabled,
+      generalSettings.bucket_purge_enabled,
       generalSettings.manager_ceph_s3_user_keys_enabled,
     ]
   );

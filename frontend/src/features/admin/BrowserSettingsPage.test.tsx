@@ -34,6 +34,7 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
       quota_alerts_enabled: false,
       usage_history_enabled: false,
       bucket_migration_enabled: true,
+      bucket_purge_enabled: false,
       bucket_compare_enabled: true,
       bucket_integrity_check_enabled: true,
       bucket_usage_stats_enabled: true,

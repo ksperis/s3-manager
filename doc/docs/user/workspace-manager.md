@@ -30,7 +30,7 @@ Tenant resources are managed in the right scope with explicit context control.
 ## Limits / feature flags
 
 !!! note
-    IAM pages depend on endpoint IAM capability. Tools depend on the Manager tools access configured directly on the UI user or inherited from UI groups. Bucket Compare, Bucket Integrity, Bucket Migration, and Ceph S3 User keys also depend on their matching global Manager settings. Bucket usage stats are available from Usage & Metrics and bucket details when the global bucket usage stats setting is enabled.
+    IAM pages depend on endpoint IAM capability. Tools depend on the Manager tools access configured directly on the UI user or inherited from UI groups. Bucket Compare, Bucket Integrity, Bucket Purge, Bucket Migration, and Ceph S3 User keys also depend on their matching global Manager settings. Bucket usage stats are available from Usage & Metrics and bucket details when the global bucket usage stats setting is enabled.
 
 ## Related pages
 
@@ -41,6 +41,7 @@ Tenant resources are managed in the right scope with explicit context control.
 - [Feature: SNS topics](feature-topics.md)
 - [Feature: Bucket compare](feature-bucket-compare.md)
 - [Feature: Bucket integrity check](feature-bucket-integrity-check.md)
+- [Feature: Bucket purge](feature-bucket-purge.md)
 - [Feature: Bucket usage stats](feature-bucket-usage-stats.md)
 - [Feature: Bucket migration](feature-bucket-migration.md)
 

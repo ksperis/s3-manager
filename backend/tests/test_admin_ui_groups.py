@@ -120,6 +120,7 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
         "bucket_compare": False,
         "bucket_integrity_check": False,
         "bucket_migration": False,
+        "bucket_purge": False,
         "feature_rules": False,
         "bucket_quota": False,
         "ceph_s3_user_keys": False,
@@ -175,6 +176,7 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
                 "bucket_compare": True,
                 "bucket_integrity_check": False,
                 "bucket_migration": True,
+                "bucket_purge": True,
                 "feature_rules": True,
                 "bucket_quota": True,
                 "ceph_s3_user_keys": False,
@@ -202,6 +204,7 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
     assert out.effective_access.browser_advanced_features_enabled is True
     assert out.effective_access.manager_tool_access.bucket_compare is True
     assert out.effective_access.manager_tool_access.bucket_migration is True
+    assert out.effective_access.manager_tool_access.bucket_purge is True
     assert out.effective_access.manager_tool_access.feature_rules is True
     assert out.effective_access.manager_tool_access.bucket_quota is True
     assert out.effective_access.accounts == [account.id]

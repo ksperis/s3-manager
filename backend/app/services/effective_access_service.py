@@ -193,6 +193,11 @@ class EffectiveAccessService:
                 bool(user.can_access_manager_bucket_quota)
                 or any(bool(group.can_access_manager_bucket_quota) for group in groups)
             ),
+            bucket_purge=role_supports_manager_tools
+            and (
+                bool(user.can_access_manager_bucket_purge)
+                or any(bool(group.can_access_manager_bucket_purge) for group in groups)
+            ),
             ceph_s3_user_keys=role_supports_manager_tools
             and (
                 bool(user.can_access_manager_ceph_s3_user_keys)

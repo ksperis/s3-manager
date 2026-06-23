@@ -98,6 +98,7 @@ function buildGeneralSettings(overrides?: Record<string, unknown>) {
     quota_alerts_enabled: false,
     usage_history_enabled: false,
     bucket_migration_enabled: false,
+    bucket_purge_enabled: false,
     bucket_compare_enabled: true,
     bucket_integrity_check_enabled: false,
     bucket_usage_stats_enabled: true,
@@ -119,6 +120,7 @@ function setStoredManagerUser(overrides?: Record<string, unknown>) {
         bucket_compare: true,
         bucket_integrity_check: false,
         bucket_migration: false,
+        bucket_purge: false,
         feature_rules: true,
         bucket_quota: false,
         ceph_s3_user_keys: true,
@@ -179,6 +181,7 @@ describe("ManagerLayout", () => {
         bucket_compare: false,
         bucket_integrity_check: true,
         bucket_migration: false,
+        bucket_purge: false,
         feature_rules: true,
         bucket_quota: false,
         ceph_s3_user_keys: true,
@@ -203,12 +206,43 @@ describe("ManagerLayout", () => {
     expect(toolsSection?.links.map((link) => link.to)).toEqual(["/manager/feature-rules", "/manager/bucket-integrity"]);
   });
 
+  it("shows Bucket purge tool when the flag and manager tool access are enabled", () => {
+    setStoredManagerUser({
+      manager_tool_access: {
+        bucket_compare: false,
+        bucket_integrity_check: false,
+        bucket_migration: false,
+        bucket_purge: true,
+        feature_rules: false,
+        bucket_quota: false,
+        ceph_s3_user_keys: true,
+      },
+    });
+    useS3AccountContextMock.mockReturnValue(buildContext());
+    useGeneralSettingsMock.mockReturnValue({
+      generalSettings: buildGeneralSettings({
+        bucket_purge_enabled: true,
+      }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const toolsSection = capturedNavSections.find((section) => section.label === "Tools");
+    expect(toolsSection?.links.map((link) => link.label)).toEqual(["Purge"]);
+    expect(toolsSection?.links.map((link) => link.to)).toEqual(["/manager/bucket-purge"]);
+  });
+
   it("does not expose a dedicated Usage stats tool link", () => {
     setStoredManagerUser({
       manager_tool_access: {
         bucket_compare: false,
         bucket_integrity_check: false,
         bucket_migration: false,
+        bucket_purge: false,
         feature_rules: false,
         bucket_quota: false,
         ceph_s3_user_keys: true,
@@ -240,6 +274,7 @@ describe("ManagerLayout", () => {
         bucket_compare: false,
         bucket_integrity_check: false,
         bucket_migration: false,
+        bucket_purge: false,
         feature_rules: false,
         bucket_quota: false,
         ceph_s3_user_keys: true,
@@ -263,6 +298,7 @@ describe("ManagerLayout", () => {
         bucket_compare: false,
         bucket_integrity_check: false,
         bucket_migration: false,
+        bucket_purge: false,
         feature_rules: false,
         bucket_quota: false,
         ceph_s3_user_keys: true,
@@ -272,6 +308,7 @@ describe("ManagerLayout", () => {
           bucket_compare: false,
           bucket_integrity_check: false,
           bucket_migration: false,
+          bucket_purge: false,
           feature_rules: true,
           bucket_quota: false,
           ceph_s3_user_keys: true,

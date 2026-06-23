@@ -50,6 +50,20 @@ export default function ManagerSettingsPage() {
     });
   };
 
+  const handleToggleBucketPurgeTool = (value: boolean) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            general: {
+              ...prev.general,
+              bucket_purge_enabled: value,
+            },
+          }
+        : prev
+    );
+  };
+
   const handleToggleBucketCompareTool = (value: boolean) => {
     setSettings((prev) =>
       prev
@@ -189,6 +203,7 @@ export default function ManagerSettingsPage() {
                   general: {
                     ...prev.general,
                     bucket_migration_enabled: defaults.general.bucket_migration_enabled,
+                    bucket_purge_enabled: defaults.general.bucket_purge_enabled,
                     bucket_compare_enabled: defaults.general.bucket_compare_enabled,
                     bucket_integrity_check_enabled: defaults.general.bucket_integrity_check_enabled,
                     bucket_usage_stats_enabled: defaults.general.bucket_usage_stats_enabled,
@@ -265,6 +280,17 @@ export default function ManagerSettingsPage() {
                       onChange={(value) => handleToggleBucketMigrationTool(value)}
                       ariaLabel="Bucket migration tool"
                       badge={{ visible: true, label: "Experimental", tone: "warning" }}
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Bucket purge tool"
+                  description="Enables the Manager bucket purge tool and purge actions for Ceph Admin and Storage Ops."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={Boolean(settings.general.bucket_purge_enabled)}
+                      onChange={(value) => handleToggleBucketPurgeTool(value)}
+                      ariaLabel="Bucket purge tool"
                     />
                   }
                 />

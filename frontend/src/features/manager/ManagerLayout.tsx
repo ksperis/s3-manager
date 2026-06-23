@@ -58,6 +58,8 @@ function ManagerShell() {
     canManageBuckets && Boolean(generalSettings.bucket_compare_enabled) && Boolean(requiresS3AccountSelection);
   const canAccessBucketIntegrity =
     canManageBuckets && Boolean(generalSettings.bucket_integrity_check_enabled) && Boolean(requiresS3AccountSelection);
+  const canAccessBucketPurge =
+    canManageBuckets && Boolean(generalSettings.bucket_purge_enabled) && Boolean(requiresS3AccountSelection);
   const userRole = storedUser?.role ?? null;
   const managerToolAccess = getManagerToolAccess(storedUser);
   const canAccessMigration =
@@ -66,9 +68,11 @@ function ManagerShell() {
     (userRole === "ui_admin" || userRole === "ui_superadmin" || userRole === "ui_user");
   const canAccessBucketCompareForUser = Boolean(managerToolAccess?.bucket_compare);
   const canAccessBucketIntegrityForUser = Boolean(managerToolAccess?.bucket_integrity_check);
+  const canAccessBucketPurgeForUser = Boolean(managerToolAccess?.bucket_purge);
   const canAccessFeatureRulesForUser = Boolean(managerToolAccess?.feature_rules);
   const canShowBucketCompare = canAccessBucketCompare && canAccessBucketCompareForUser;
   const canShowBucketIntegrity = canAccessBucketIntegrity && canAccessBucketIntegrityForUser;
+  const canShowBucketPurge = canAccessBucketPurge && canAccessBucketPurgeForUser;
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
   const iamFeatureEnabled = endpointCaps ? endpointCaps.iam !== false : true;
   const canManageIam = !isS3User && capabilities.can_manage_iam !== false && iamFeatureEnabled;
@@ -235,6 +239,9 @@ function ManagerShell() {
     }
     if (canShowBucketIntegrity) {
       toolsLinks.push({ to: "/manager/bucket-integrity", label: "Integrity" });
+    }
+    if (canShowBucketPurge) {
+      toolsLinks.push({ to: "/manager/bucket-purge", label: "Purge" });
     }
     if (canAccessMigration) {
       toolsLinks.push({ to: "/manager/migrations", label: "Migration" });

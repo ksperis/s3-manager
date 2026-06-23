@@ -21,6 +21,7 @@ const baseProps = {
   isStorageOps: false,
   onShowCompareModal: vi.fn(),
   onShowIntegrityModal: vi.fn(),
+  onShowUsageStatsModal: vi.fn(),
   openBulkUpdateModal: vi.fn(),
 };
 
@@ -61,6 +62,13 @@ describe("BucketSelectionActionsBar progress", () => {
     render(<BucketSelectionActionsBar {...baseProps} onShowIntegrityModal={onShowIntegrityModal} />);
     fireEvent.click(screen.getByRole("button", { name: "Check integrity" }));
     expect(onShowIntegrityModal).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the purge action from selection when available", () => {
+    const onShowPurgeModal = vi.fn();
+    render(<BucketSelectionActionsBar {...baseProps} onShowPurgeModal={onShowPurgeModal} />);
+    fireEvent.click(screen.getByRole("button", { name: "Purge selected" }));
+    expect(onShowPurgeModal).toHaveBeenCalledTimes(1);
   });
 
   it("opens the config backup action for ceph-admin selections", () => {
