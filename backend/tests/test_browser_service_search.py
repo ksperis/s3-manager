@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -432,6 +433,49 @@ def test_list_objects_sorted_paginates_prefixes_then_objects_with_cached_snapsho
     assert second_page.is_truncated is False
     assert second_page.next_continuation_token is None
     assert len(calls) == 1
+
+
+def test_sorted_object_snapshot_temp_store_is_closed_on_invalidation(monkeypatch):
+    class FakeClient:
+        def list_objects_v2(self, **_kwargs):  # noqa: ANN001
+            return {
+                "Contents": [
+                    {
+                        "Key": "a.txt",
+                        "Size": 20,
+                        "LastModified": datetime(2026, 3, 2, 12, 0, tzinfo=timezone.utc),
+                        "StorageClass": "STANDARD",
+                        "ETag": '"etag-a"',
+                    }
+                ],
+                "IsTruncated": False,
+                "NextContinuationToken": None,
+            }
+
+    service = BrowserService()
+    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+    account = _account()
+
+    snapshot = service._scan_sorted_object_snapshot(
+        "bucket-a",
+        account,
+        sort_by="size",
+        sort_dir="asc",
+    )
+    snapshot_path = Path(snapshot.store.path)
+    cached = service._scan_sorted_object_snapshot(
+        "bucket-a",
+        account,
+        sort_by="size",
+        sort_dir="asc",
+    )
+
+    assert cached is snapshot
+    assert snapshot_path.exists()
+
+    service.invalidate_object_list_cache_for_account(account, "bucket-a")
+
+    assert not snapshot_path.exists()
 
 
 def test_get_object_columns_reuses_backend_cache_and_invalidates_after_mutation(

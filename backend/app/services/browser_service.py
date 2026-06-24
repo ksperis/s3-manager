@@ -65,6 +65,7 @@ from app.services.s3_client import (
     get_s3_client,
     set_bucket_versioning as s3_set_bucket_versioning,
 )
+from app.services.object_listing_temp_store import TemporarySqliteStore
 from app.services.sts_service import get_session_token
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_sts_endpoint
@@ -126,11 +127,26 @@ class _TtlLruCacheEntry(Generic[_CacheValue]):
 
 
 class _TtlLruCache(Generic[_CacheKey, _CacheValue]):
-    def __init__(self, max_entries: int, ttl_seconds: int) -> None:
+    def __init__(
+        self,
+        max_entries: int,
+        ttl_seconds: int,
+        *,
+        on_evict: Optional[Callable[[_CacheValue], None]] = None,
+    ) -> None:
         self._max_entries = max_entries
         self._ttl_seconds = float(ttl_seconds)
         self._store: OrderedDict[_CacheKey, _TtlLruCacheEntry[_CacheValue]] = OrderedDict()
         self._lock = Lock()
+        self._on_evict = on_evict
+
+    def _evict_entry(self, entry: _TtlLruCacheEntry[_CacheValue]) -> None:
+        if self._on_evict is None:
+            return
+        try:
+            self._on_evict(entry.value)
+        except Exception:  # noqa: BLE001
+            logger.debug("Cache eviction cleanup failed", exc_info=True)
 
     def get(self, key: _CacheKey) -> Optional[_CacheValue]:
         now = monotonic()
@@ -140,6 +156,7 @@ class _TtlLruCache(Generic[_CacheKey, _CacheValue]):
                 return None
             if entry.expires_at <= now:
                 del self._store[key]
+                self._evict_entry(entry)
                 return None
             self._store.move_to_end(key)
             return entry.value
@@ -147,25 +164,95 @@ class _TtlLruCache(Generic[_CacheKey, _CacheValue]):
     def set(self, key: _CacheKey, value: _CacheValue) -> None:
         expires_at = monotonic() + self._ttl_seconds
         with self._lock:
+            previous = self._store.get(key)
+            if previous is not None:
+                self._evict_entry(previous)
             self._store[key] = _TtlLruCacheEntry(value=value, expires_at=expires_at)
             self._store.move_to_end(key)
             while len(self._store) > self._max_entries:
-                self._store.popitem(last=False)
+                _, evicted = self._store.popitem(last=False)
+                self._evict_entry(evicted)
 
     def invalidate_where(self, predicate: Callable[[_CacheKey], bool]) -> int:
         removed = 0
         with self._lock:
             keys_to_remove = [key for key in self._store.keys() if predicate(key)]
             for key in keys_to_remove:
-                self._store.pop(key, None)
+                entry = self._store.pop(key, None)
+                if entry is not None:
+                    self._evict_entry(entry)
                 removed += 1
         return removed
 
 
 @dataclass
 class _SortedObjectSnapshot:
-    prefixes: list[str]
-    objects: list[BrowserObject]
+    store: TemporarySqliteStore
+    sort_by: BrowserObjectSortBy
+    sort_dir: BrowserObjectSortDir
+    prefix_count: int = 0
+    object_count: int = 0
+
+    def close(self) -> None:
+        self.store.close()
+
+    def fetch_prefixes(self, offset: int, limit: int) -> list[str]:
+        if limit <= 0:
+            return []
+        cursor = self.store.connection.execute(
+            """
+            SELECT prefix
+            FROM sorted_prefixes
+            ORDER BY prefix
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+        )
+        return [str(row["prefix"]) for row in cursor]
+
+    def fetch_objects(self, offset: int, limit: int) -> list[BrowserObject]:
+        if limit <= 0:
+            return []
+        order_by = self._object_order_by()
+        cursor = self.store.connection.execute(
+            f"""
+            SELECT key, size, last_modified_iso, storage_class, etag
+            FROM sorted_objects
+            ORDER BY {order_by}
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+        )
+        return [self._object_from_row(row) for row in cursor]
+
+    def _object_order_by(self) -> str:
+        direction = "ASC" if self.sort_dir == "asc" else "DESC"
+        null_direction = "ASC" if self.sort_dir == "asc" else "DESC"
+        if self.sort_by == "name":
+            return f"key {direction}"
+        if self.sort_by == "size":
+            return f"size {direction}, key ASC"
+        if self.sort_by == "modified":
+            return f"last_modified_ts IS NULL {null_direction}, last_modified_ts {direction}, key ASC"
+        if self.sort_by == "storage_class":
+            return f"storage_class IS NULL {null_direction}, storage_class {direction}, key ASC"
+        return f"etag IS NULL {null_direction}, etag {direction}, key ASC"
+
+    def _object_from_row(self, row) -> BrowserObject:
+        last_modified = None
+        raw_last_modified = row["last_modified_iso"]
+        if isinstance(raw_last_modified, str) and raw_last_modified:
+            try:
+                last_modified = datetime.fromisoformat(raw_last_modified)
+            except ValueError:
+                last_modified = None
+        return BrowserObject(
+            key=str(row["key"]),
+            size=int(row["size"] or 0),
+            last_modified=last_modified,
+            storage_class=row["storage_class"] if isinstance(row["storage_class"], str) else None,
+            etag=row["etag"] if isinstance(row["etag"], str) else None,
+        )
 
 
 @dataclass(frozen=True)
@@ -195,6 +282,7 @@ _OBJECT_LIST_CACHE: _TtlLruCache[tuple, ListBrowserObjectsResponse] = _TtlLruCac
 _OBJECT_SORT_SNAPSHOT_CACHE: _TtlLruCache[tuple, _SortedObjectSnapshot] = _TtlLruCache(
     max_entries=OBJECT_SORT_SNAPSHOT_CACHE_MAX_ENTRIES,
     ttl_seconds=OBJECT_LIST_CACHE_TTL_SECONDS,
+    on_evict=lambda snapshot: snapshot.close(),
 )
 _OBJECT_LAZY_HEAD_CACHE: _TtlLruCache[tuple, _ObjectLazyHeadCacheValue] = _TtlLruCache(
     max_entries=OBJECT_LAZY_COLUMN_CACHE_MAX_ENTRIES,
@@ -1281,10 +1369,7 @@ class BrowserService:
         )
         cached = _OBJECT_SORT_SNAPSHOT_CACHE.get(snapshot_cache_key)
         if cached is not None:
-            return _SortedObjectSnapshot(
-                prefixes=list(cached.prefixes),
-                objects=[item.model_copy(deep=True) for item in cached.objects],
-            )
+            return cached
 
         client = self._client(account)
         matches_query = self._build_query_matcher(
@@ -1293,135 +1378,137 @@ class BrowserService:
             query_exact=query_exact,
             query_case_sensitive=query_case_sensitive,
         )
-        objects: list[BrowserObject] = []
-        prefixes: list[str] = []
-        seen_prefixes: set[str] = set()
+        store = TemporarySqliteStore(prefix="s3-manager-browser-sort-")
+        store.connection.execute(
+            """
+            CREATE TABLE sorted_prefixes (
+                prefix TEXT PRIMARY KEY
+            )
+            """
+        )
+        store.connection.execute(
+            """
+            CREATE TABLE sorted_objects (
+                key TEXT PRIMARY KEY,
+                size INTEGER NOT NULL,
+                last_modified_ts REAL,
+                last_modified_iso TEXT,
+                storage_class TEXT,
+                etag TEXT
+            )
+            """
+        )
         scan_token: Optional[str] = None
 
-        while True:
-            kwargs = {
-                "Bucket": bucket_name,
-                "Prefix": normalized_prefix,
-                "MaxKeys": 1000,
-            }
-            if not recursive:
-                kwargs["Delimiter"] = "/"
-            if scan_token:
-                kwargs["ContinuationToken"] = scan_token
-            try:
-                resp = client.list_objects_v2(**kwargs)
-            except (ClientError, BotoCoreError) as exc:
-                raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
+        def datetime_values(value: object) -> tuple[Optional[float], Optional[str]]:
+            normalized = self._normalize_datetime_value(value if isinstance(value, datetime) else None)
+            if normalized is None:
+                return None, None
+            return normalized.timestamp(), normalized.isoformat()
 
-            page_recursive_prefixes: set[str] = set()
-            for obj in resp.get("Contents", []):
-                key = obj.get("Key")
-                if not key:
-                    continue
-                size = int(obj.get("Size") or 0)
-                if prefix and key.rstrip("/") == prefix.rstrip("/") and size == 0:
-                    continue
-                is_folder_marker = key.endswith("/") and size == 0
-
-                if recursive and type_filter != "file":
-                    if is_folder_marker and key != normalized_prefix:
-                        page_recursive_prefixes.add(key)
-                    if normalized_prefix and key.startswith(normalized_prefix):
-                        relative = key[len(normalized_prefix):]
-                    else:
-                        relative = key
-                    segments = [segment for segment in relative.split("/") if segment]
-                    if len(segments) > 1:
-                        running = normalized_prefix
-                        for segment in segments[:-1]:
-                            running = f"{running}{segment}/"
-                            page_recursive_prefixes.add(running)
-
-                if type_filter == "folder":
-                    continue
-                if recursive and is_folder_marker:
-                    continue
-                if not matches_query(key):
-                    continue
-                storage = obj.get("StorageClass")
-                if storage_filter and storage != storage_filter:
-                    continue
-                objects.append(
-                    BrowserObject(
-                        key=key,
-                        size=size,
-                        last_modified=obj.get("LastModified"),
-                        storage_class=storage,
-                        etag=self._clean_etag(obj.get("ETag")),
-                    )
-                )
-
-            if not recursive and type_filter != "file":
-                for entry in resp.get("CommonPrefixes", []) or []:
-                    prefix_value = entry.get("Prefix")
-                    if not prefix_value or prefix_value in seen_prefixes:
-                        continue
-                    if not matches_query(prefix_value):
-                        continue
-                    seen_prefixes.add(prefix_value)
-                    prefixes.append(prefix_value)
+        def insert_object(obj: dict) -> None:
+            key = obj.get("Key")
+            if not isinstance(key, str) or not key:
+                return
+            size = int(obj.get("Size") or 0)
+            if prefix and key.rstrip("/") == prefix.rstrip("/") and size == 0:
+                return
+            is_folder_marker = key.endswith("/") and size == 0
 
             if recursive and type_filter != "file":
-                for prefix_value in sorted(page_recursive_prefixes):
-                    if prefix_value in seen_prefixes:
-                        continue
-                    if not matches_query(prefix_value):
-                        continue
-                    seen_prefixes.add(prefix_value)
-                    prefixes.append(prefix_value)
+                if is_folder_marker and key != normalized_prefix:
+                    if matches_query(key):
+                        store.connection.execute("INSERT OR IGNORE INTO sorted_prefixes(prefix) VALUES (?)", (key,))
+                if normalized_prefix and key.startswith(normalized_prefix):
+                    relative = key[len(normalized_prefix):]
+                else:
+                    relative = key
+                segments = [segment for segment in relative.split("/") if segment]
+                if len(segments) > 1:
+                    running = normalized_prefix
+                    for segment in segments[:-1]:
+                        running = f"{running}{segment}/"
+                        if matches_query(running):
+                            store.connection.execute("INSERT OR IGNORE INTO sorted_prefixes(prefix) VALUES (?)", (running,))
 
-            if not resp.get("IsTruncated"):
-                break
-            scan_token = resp.get("NextContinuationToken")
-            if not scan_token:
-                break
+            if type_filter == "folder":
+                return
+            if recursive and is_folder_marker:
+                return
+            if not matches_query(key):
+                return
+            storage = obj.get("StorageClass")
+            if storage_filter and storage != storage_filter:
+                return
+            last_modified_ts, last_modified_iso = datetime_values(obj.get("LastModified"))
+            store.connection.execute(
+                """
+                INSERT OR REPLACE INTO sorted_objects(
+                    key, size, last_modified_ts, last_modified_iso, storage_class, etag
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    key,
+                    size,
+                    last_modified_ts,
+                    last_modified_iso,
+                    storage if isinstance(storage, str) else None,
+                    self._clean_etag(obj.get("ETag")),
+                ),
+            )
 
-        prefixes.sort()
+        try:
+            while True:
+                kwargs = {
+                    "Bucket": bucket_name,
+                    "Prefix": normalized_prefix,
+                    "MaxKeys": 1000,
+                }
+                if not recursive:
+                    kwargs["Delimiter"] = "/"
+                if scan_token:
+                    kwargs["ContinuationToken"] = scan_token
+                try:
+                    resp = client.list_objects_v2(**kwargs)
+                except (ClientError, BotoCoreError) as exc:
+                    raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
 
-        def compare_values(left: object, right: object) -> int:
-            if left is None and right is None:
-                return 0
-            if left is None:
-                return 1
-            if right is None:
-                return -1
-            if left < right:
-                return -1
-            if left > right:
-                return 1
-            return 0
+                for obj in resp.get("Contents", []):
+                    insert_object(obj)
 
-        def sort_value(item: BrowserObject) -> object:
-            if sort_by == "name":
-                return item.key
-            if sort_by == "size":
-                return item.size
-            if sort_by == "modified":
-                return self._normalize_datetime_value(item.last_modified)
-            if sort_by == "storage_class":
-                return item.storage_class
-            return item.etag
+                if not recursive and type_filter != "file":
+                    for entry in resp.get("CommonPrefixes", []) or []:
+                        prefix_value = entry.get("Prefix")
+                        if not prefix_value or not matches_query(prefix_value):
+                            continue
+                        store.connection.execute("INSERT OR IGNORE INTO sorted_prefixes(prefix) VALUES (?)", (prefix_value,))
 
-        def compare_objects(left: BrowserObject, right: BrowserObject) -> int:
-            primary = compare_values(sort_value(left), sort_value(right))
-            if primary != 0:
-                return primary if sort_dir == "asc" else -primary
-            return compare_values(left.key, right.key)
+                if not resp.get("IsTruncated"):
+                    break
+                scan_token = resp.get("NextContinuationToken")
+                if not scan_token:
+                    break
 
-        from functools import cmp_to_key
-
-        objects.sort(key=cmp_to_key(compare_objects))
-        snapshot = _SortedObjectSnapshot(prefixes=prefixes, objects=objects)
+            store.connection.execute("CREATE INDEX sorted_objects_size_idx ON sorted_objects(size, key)")
+            store.connection.execute("CREATE INDEX sorted_objects_modified_idx ON sorted_objects(last_modified_ts, key)")
+            store.connection.execute("CREATE INDEX sorted_objects_storage_idx ON sorted_objects(storage_class, key)")
+            store.connection.execute("CREATE INDEX sorted_objects_etag_idx ON sorted_objects(etag, key)")
+            store.connection.commit()
+            prefix_count_row = store.connection.execute("SELECT COUNT(*) AS count FROM sorted_prefixes").fetchone()
+            object_count_row = store.connection.execute("SELECT COUNT(*) AS count FROM sorted_objects").fetchone()
+            snapshot = _SortedObjectSnapshot(
+                store=store,
+                sort_by=sort_by,
+                sort_dir=sort_dir,
+                prefix_count=int(prefix_count_row["count"] or 0) if prefix_count_row else 0,
+                object_count=int(object_count_row["count"] or 0) if object_count_row else 0,
+            )
+        except Exception:
+            store.close()
+            raise
         _OBJECT_SORT_SNAPSHOT_CACHE.set(snapshot_cache_key, snapshot)
-        return _SortedObjectSnapshot(
-            prefixes=list(snapshot.prefixes),
-            objects=[item.model_copy(deep=True) for item in snapshot.objects],
-        )
+        return snapshot
 
     def list_objects(
         self,
@@ -1493,19 +1580,15 @@ class BrowserService:
         if cursor_payload and cursor_payload.get("sig") == snapshot_signature:
             prefixes_offset = max(0, int(cursor_payload.get("po") or 0))
             objects_offset = max(0, int(cursor_payload.get("oo") or 0))
-        prefixes_offset = min(prefixes_offset, len(snapshot.prefixes))
-        objects_offset = min(objects_offset, len(snapshot.objects))
+        prefixes_offset = min(prefixes_offset, snapshot.prefix_count)
+        objects_offset = min(objects_offset, snapshot.object_count)
 
-        prefixes = snapshot.prefixes[prefixes_offset : prefixes_offset + normalized_max_keys]
+        prefixes = snapshot.fetch_prefixes(prefixes_offset, normalized_max_keys)
         remaining = normalized_max_keys - len(prefixes)
-        objects = (
-            snapshot.objects[objects_offset : objects_offset + remaining]
-            if remaining > 0
-            else []
-        )
+        objects = snapshot.fetch_objects(objects_offset, remaining)
         next_prefixes_offset = prefixes_offset + len(prefixes)
         next_objects_offset = objects_offset + len(objects)
-        has_more = next_prefixes_offset < len(snapshot.prefixes) or next_objects_offset < len(snapshot.objects)
+        has_more = next_prefixes_offset < snapshot.prefix_count or next_objects_offset < snapshot.object_count
         next_token = None
         if has_more:
             next_token = _encode_sorted_cursor(
@@ -1515,7 +1598,7 @@ class BrowserService:
             )
         return ListBrowserObjectsResponse(
             prefix=prefix,
-            objects=[item.model_copy(deep=True) for item in objects],
+            objects=objects,
             prefixes=list(prefixes),
             is_truncated=has_more,
             next_continuation_token=next_token,
@@ -1623,73 +1706,30 @@ class BrowserService:
             return value.astimezone(timezone.utc)
 
         try:
-            versions_by_key: dict[str, list[dict]] = {}
-            scanned_versions = 0
-            scanned_delete_markers = 0
-            key_marker = None
-            version_marker = None
-            while True:
-                list_kwargs = {"Bucket": bucket_name, "Prefix": prefix}
-                if key_marker:
-                    list_kwargs["KeyMarker"] = key_marker
-                if version_marker:
-                    list_kwargs["VersionIdMarker"] = version_marker
-                resp = client.list_object_versions(**list_kwargs)
-                for version in resp.get("Versions", []) or []:
-                    key = version.get("Key")
-                    version_id = version.get("VersionId")
-                    if not key or not version_id:
-                        continue
-                    scanned_versions += 1
-                    versions_by_key.setdefault(key, []).append(
-                        {
-                            "version_id": version_id,
-                            "last_modified": normalize(version.get("LastModified")),
-                            "is_latest": bool(version.get("IsLatest")),
-                        }
-                    )
-                for marker in resp.get("DeleteMarkers", []) or []:
-                    key = marker.get("Key")
-                    version_id = marker.get("VersionId")
-                    if not key or not version_id:
-                        continue
-                    scanned_delete_markers += 1
-                key_marker = resp.get("NextKeyMarker")
-                version_marker = resp.get("NextVersionIdMarker")
-                if not key_marker and not version_marker:
-                    break
-
-            versions_to_delete: list[dict] = []
-            if payload.keep_last_n or cutoff:
-                for key, versions in versions_by_key.items():
-                    if not versions:
-                        continue
-                    ordered = sorted(
-                        versions,
-                        key=lambda entry: (
-                            1 if entry.get("is_latest") else 0,
-                            entry.get("last_modified") or datetime.min.replace(tzinfo=timezone.utc),
-                        ),
-                        reverse=True,
-                    )
-                    for index, entry in enumerate(ordered):
-                        if entry.get("is_latest"):
-                            continue
-                        delete_for_count = payload.keep_last_n is not None and index >= payload.keep_last_n
-                        last_modified = entry.get("last_modified")
-                        delete_for_age = bool(cutoff and last_modified and last_modified < cutoff)
-                        if delete_for_count or delete_for_age:
-                            versions_to_delete.append({"Key": key, "VersionId": entry["version_id"]})
-
-            deleted_versions = 0
-            if versions_to_delete:
-                _delete_objects(client, bucket_name, versions_to_delete)
-                deleted_versions = len(versions_to_delete)
-
-            deleted_delete_markers = 0
-            if payload.delete_orphan_markers:
-                keys_with_versions: set[str] = set()
-                delete_markers: list[dict] = []
+            with TemporarySqliteStore(prefix="s3-manager-browser-version-cleanup-") as store:
+                conn = store.connection
+                conn.executescript(
+                    """
+                    CREATE TABLE cleanup_versions (
+                        key TEXT NOT NULL,
+                        version_id TEXT NOT NULL,
+                        last_modified_ts REAL,
+                        is_latest INTEGER NOT NULL,
+                        scan_order INTEGER NOT NULL,
+                        PRIMARY KEY (key, version_id)
+                    );
+                    CREATE TABLE cleanup_delete_markers (
+                        key TEXT NOT NULL,
+                        version_id TEXT NOT NULL,
+                        scan_order INTEGER NOT NULL,
+                        PRIMARY KEY (key, version_id)
+                    );
+                    """
+                )
+                scanned_versions = 0
+                scanned_delete_markers = 0
+                version_scan_order = 0
+                marker_scan_order = 0
                 key_marker = None
                 version_marker = None
                 while True:
@@ -1699,25 +1739,161 @@ class BrowserService:
                     if version_marker:
                         list_kwargs["VersionIdMarker"] = version_marker
                     resp = client.list_object_versions(**list_kwargs)
+                    version_rows = []
+                    marker_rows = []
                     for version in resp.get("Versions", []) or []:
                         key = version.get("Key")
-                        if key:
-                            keys_with_versions.add(key)
+                        version_id = version.get("VersionId")
+                        if not key or not version_id:
+                            continue
+                        last_modified = normalize(version.get("LastModified"))
+                        version_rows.append(
+                            (
+                                key,
+                                version_id,
+                                last_modified.timestamp() if last_modified else None,
+                                1 if version.get("IsLatest") else 0,
+                                version_scan_order,
+                            )
+                        )
+                        version_scan_order += 1
+                        scanned_versions += 1
                     for marker in resp.get("DeleteMarkers", []) or []:
                         key = marker.get("Key")
                         version_id = marker.get("VersionId")
                         if not key or not version_id:
                             continue
-                        delete_markers.append({"Key": key, "VersionId": version_id})
+                        marker_rows.append((key, version_id, marker_scan_order))
+                        marker_scan_order += 1
+                        scanned_delete_markers += 1
+                    if version_rows:
+                        conn.executemany(
+                            """
+                            INSERT OR REPLACE INTO cleanup_versions (
+                                key,
+                                version_id,
+                                last_modified_ts,
+                                is_latest,
+                                scan_order
+                            )
+                            VALUES (?, ?, ?, ?, ?)
+                            """,
+                            version_rows,
+                        )
+                    if marker_rows:
+                        conn.executemany(
+                            """
+                            INSERT OR REPLACE INTO cleanup_delete_markers (
+                                key,
+                                version_id,
+                                scan_order
+                            )
+                            VALUES (?, ?, ?)
+                            """,
+                            marker_rows,
+                        )
+                    conn.commit()
                     key_marker = resp.get("NextKeyMarker")
                     version_marker = resp.get("NextVersionIdMarker")
                     if not key_marker and not version_marker:
                         break
 
-                markers_to_delete = [marker for marker in delete_markers if marker["Key"] not in keys_with_versions]
-                if markers_to_delete:
-                    _delete_objects(client, bucket_name, markers_to_delete)
-                    deleted_delete_markers = len(markers_to_delete)
+                conn.executescript(
+                    """
+                    CREATE INDEX cleanup_versions_key_order_idx
+                        ON cleanup_versions (key, is_latest DESC, last_modified_ts DESC, scan_order);
+                    CREATE INDEX cleanup_markers_key_idx
+                        ON cleanup_delete_markers (key, scan_order);
+                    """
+                )
+                logger.info(
+                    "Indexed object versions for cleanup",
+                    extra={
+                        "bucket": bucket_name,
+                        "prefix": prefix or None,
+                        "versions": scanned_versions,
+                        "delete_markers": scanned_delete_markers,
+                    },
+                )
+
+                deleted_versions = 0
+                versions_batch: list[dict[str, str]] = []
+
+                def flush_versions_batch() -> None:
+                    nonlocal deleted_versions
+                    if not versions_batch:
+                        return
+                    batch = list(versions_batch)
+                    _delete_objects(client, bucket_name, batch)
+                    conn.executemany(
+                        "DELETE FROM cleanup_versions WHERE key = ? AND version_id = ?",
+                        [(item["Key"], item["VersionId"]) for item in batch],
+                    )
+                    conn.commit()
+                    deleted_versions += len(batch)
+                    versions_batch.clear()
+
+                if payload.keep_last_n is not None or cutoff:
+                    cutoff_ts = cutoff.timestamp() if cutoff else None
+                    current_key = None
+                    key_index = 0
+                    cursor = conn.execute(
+                        """
+                        SELECT key, version_id, last_modified_ts, is_latest
+                        FROM cleanup_versions
+                        ORDER BY key ASC, is_latest DESC, last_modified_ts DESC, scan_order ASC
+                        """
+                    )
+                    for row in cursor:
+                        key = str(row["key"])
+                        if key != current_key:
+                            current_key = key
+                            key_index = 0
+                        is_latest = bool(row["is_latest"])
+                        delete_for_count = payload.keep_last_n is not None and key_index >= payload.keep_last_n
+                        last_modified_ts = row["last_modified_ts"]
+                        delete_for_age = bool(
+                            cutoff_ts is not None
+                            and last_modified_ts is not None
+                            and float(last_modified_ts) < cutoff_ts
+                        )
+                        if not is_latest and (delete_for_count or delete_for_age):
+                            versions_batch.append({"Key": key, "VersionId": str(row["version_id"])})
+                            if len(versions_batch) >= 1000:
+                                flush_versions_batch()
+                        key_index += 1
+                    flush_versions_batch()
+
+                deleted_delete_markers = 0
+                markers_batch: list[dict[str, str]] = []
+
+                def flush_markers_batch() -> None:
+                    nonlocal deleted_delete_markers
+                    if not markers_batch:
+                        return
+                    batch = list(markers_batch)
+                    _delete_objects(client, bucket_name, batch)
+                    deleted_delete_markers += len(batch)
+                    markers_batch.clear()
+
+                if payload.delete_orphan_markers:
+                    cursor = conn.execute(
+                        """
+                        SELECT marker.key, marker.version_id
+                        FROM cleanup_delete_markers AS marker
+                        WHERE NOT EXISTS (
+                            SELECT 1
+                            FROM cleanup_versions AS version
+                            WHERE version.key = marker.key
+                        )
+                        ORDER BY marker.key ASC, marker.scan_order ASC
+                        """
+                    )
+                    for row in cursor:
+                        markers_batch.append({"Key": str(row["key"]), "VersionId": str(row["version_id"])})
+                        if len(markers_batch) >= 1000:
+                            flush_markers_batch()
+                    flush_markers_batch()
 
             self.invalidate_object_list_cache_for_account(account, bucket_name)
             return CleanupObjectVersionsResponse(

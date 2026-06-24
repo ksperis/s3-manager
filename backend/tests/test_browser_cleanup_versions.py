@@ -111,3 +111,69 @@ def test_cleanup_older_than_never_deletes_current_version(monkeypatch):
     assert result.deleted_versions == 1
     assert {"Key": "docs/archive.zip", "VersionId": "latest-old"} not in captured_deletions
     assert captured_deletions == [{"Key": "docs/archive.zip", "VersionId": "old"}]
+
+
+def test_cleanup_batches_large_version_deletions_and_orphan_markers(monkeypatch):
+    now = datetime.now(tz=timezone.utc)
+    old = now - timedelta(days=90)
+    version_rows = [
+        {
+            "Key": f"docs/file-{index:04d}.txt",
+            "VersionId": f"old-{index:04d}",
+            "LastModified": old,
+            "IsLatest": False,
+        }
+        for index in range(1002)
+    ]
+    version_rows.append(
+        {
+            "Key": "docs/marker-only.txt",
+            "VersionId": "old-marker-source",
+            "LastModified": old,
+            "IsLatest": False,
+        }
+    )
+    pages = [
+        {
+            "Versions": version_rows[:800],
+            "DeleteMarkers": [],
+            "NextKeyMarker": "page-2",
+            "NextVersionIdMarker": "version-page-2",
+        },
+        {
+            "Versions": version_rows[800:],
+            "DeleteMarkers": [{"Key": "docs/marker-only.txt", "VersionId": "delete-marker"}],
+            "NextKeyMarker": None,
+            "NextVersionIdMarker": None,
+        },
+    ]
+    list_calls: list[dict] = []
+    delete_batches: list[list[dict]] = []
+
+    class FakeClient:
+        def list_object_versions(self, **kwargs):  # noqa: ANN001
+            list_calls.append(kwargs)
+            return pages[len(list_calls) - 1]
+
+    def fake_delete_objects(_client, _bucket, items):  # noqa: ANN001
+        delete_batches.append(list(items))
+
+    service = browser_service.BrowserService()
+    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+    monkeypatch.setattr(browser_service, "_delete_objects", fake_delete_objects)
+
+    result = service.cleanup_object_versions(
+        "bucket-a",
+        _account(),
+        CleanupObjectVersionsPayload(prefix="docs/", older_than_days=30, delete_orphan_markers=True),
+    )
+
+    assert result.scanned_versions == 1003
+    assert result.scanned_delete_markers == 1
+    assert result.deleted_versions == 1003
+    assert result.deleted_delete_markers == 1
+    assert [len(batch) for batch in delete_batches] == [1000, 3, 1]
+    assert delete_batches[-1] == [{"Key": "docs/marker-only.txt", "VersionId": "delete-marker"}]
+    assert len(list_calls) == 2
+    assert list_calls[1]["KeyMarker"] == "page-2"
+    assert list_calls[1]["VersionIdMarker"] == "version-page-2"

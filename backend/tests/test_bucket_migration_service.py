@@ -18,9 +18,11 @@ from app.models.bucket_migration import BucketMigrationBucketMapping, BucketMigr
 from app.services.bucket_migration_service import (
     BucketMigrationService,
     BucketMigrationWorker,
+    _BucketVersionEntry,
     _BucketMigrationWebhookDispatcher,
     _DB_ERROR_MESSAGE_MAX_CHARS,
     _DB_EVENT_MESSAGE_MAX_CHARS,
+    _VersionedObjectDetails,
 )
 
 
@@ -189,6 +191,47 @@ def _version_aware_execution_plan(
             "same_endpoint_copy_safe": same_endpoint_copy_safe,
             "blocking_codes": [],
         }
+    )
+
+
+def _version_entry(
+    key: str,
+    version_id: str,
+    *,
+    last_modified: datetime | None = None,
+    is_delete_marker: bool = False,
+    is_latest: bool = True,
+    size: int = 1,
+    order_index: int = 0,
+) -> _BucketVersionEntry:
+    return _BucketVersionEntry(
+        key=key,
+        version_id=version_id,
+        is_delete_marker=is_delete_marker,
+        is_latest=is_latest,
+        last_modified=last_modified or datetime(2026, 1, 1, tzinfo=timezone.utc),
+        size=size,
+        etag=None,
+        storage_class=None,
+        order_index=order_index,
+    )
+
+
+def _version_details(*, size: int = 1, etag: str | None = None) -> _VersionedObjectDetails:
+    return _VersionedObjectDetails(
+        size=size,
+        etag=etag,
+        compare_by="size",
+        checksums={},
+        content_type=None,
+        cache_control=None,
+        content_disposition=None,
+        content_encoding=None,
+        content_language=None,
+        expires=None,
+        storage_class=None,
+        metadata={},
+        tags=(),
     )
 
 
@@ -2534,6 +2577,221 @@ def test_sync_bucket_version_aware_presync_stores_watermark_and_cutover_replays_
     assert deleted_cutover == 0
     assert target_client.upload_bodies == [b"one", b"two", b"three"]
     assert set_versioning_calls == [True, True]
+
+
+def test_compare_versioned_timelines_streams_large_key_sets_and_limits_samples(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace(context_id="src")
+    target_ctx = SimpleNamespace(context_id="target")
+    source_timelines = [
+        (f"common-{index:03d}", [_version_entry(f"common-{index:03d}", f"sv-{index:03d}")])
+        for index in range(5)
+    ]
+    source_timelines.extend(
+        (f"only-source-{index:03d}", [_version_entry(f"only-source-{index:03d}", f"sv-only-{index:03d}")])
+        for index in range(250)
+    )
+    target_timelines = [
+        (f"common-{index:03d}", [_version_entry(f"common-{index:03d}", f"tv-{index:03d}")])
+        for index in range(5)
+    ]
+    target_timelines.extend(
+        (f"only-target-{index:03d}", [_version_entry(f"only-target-{index:03d}", f"tv-only-{index:03d}")])
+        for index in range(205)
+    )
+    source_timelines.sort(key=lambda item: item[0])
+    target_timelines.sort(key=lambda item: item[0])
+    control_checks = {"count": 0}
+
+    service._context_client = lambda _ctx: object()  # type: ignore[method-assign]
+    service._iter_bucket_version_timelines = (  # type: ignore[method-assign]
+        lambda ctx, *_args, **_kwargs: iter(source_timelines if ctx.context_id == "src" else target_timelines)
+    )
+    service._versioned_object_details = lambda *_args, **_kwargs: _version_details(size=1)  # type: ignore[method-assign]
+
+    def control_check() -> str:
+        control_checks["count"] += 1
+        return "run"
+
+    diff = service._compare_versioned_timelines(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        control_check=control_check,
+    )
+
+    assert diff is not None
+    assert diff.source_count == 255
+    assert diff.target_count == 210
+    assert diff.matched_count == 5
+    assert diff.only_source_count == 250
+    assert diff.only_target_count == 205
+    assert len(diff.sample["only_source_sample"]) == 200
+    assert len(diff.sample["only_target_sample"]) == 200
+    assert control_checks["count"] >= 2
+
+
+def test_strong_verify_version_aware_candidates_streams_pairs_in_batches(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace(context_id="src")
+    target_ctx = SimpleNamespace(context_id="target")
+    source_timelines = [
+        (f"common-{index:03d}", [_version_entry(f"common-{index:03d}", f"sv-{index:03d}")])
+        for index in range(5)
+    ]
+    target_timelines = [
+        (f"common-{index:03d}", [_version_entry(f"common-{index:03d}", f"tv-{index:03d}")])
+        for index in range(5)
+    ]
+    verified_pairs: list[tuple[str, str | None, str | None]] = []
+
+    service._context_client = lambda _ctx: object()  # type: ignore[method-assign]
+    service._iter_bucket_version_timelines = (  # type: ignore[method-assign]
+        lambda ctx, *_args, **_kwargs: iter(source_timelines if ctx.context_id == "src" else target_timelines)
+    )
+    service._versioned_object_details = lambda *_args, **_kwargs: _version_details(size=1)  # type: ignore[method-assign]
+    service._compare_versioned_timelines = (  # type: ignore[method-assign]
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("full diff should not be materialized"))
+    )
+
+    def fake_strong_verify(
+        _source_ctx,
+        _target_ctx,
+        _source_bucket,
+        _target_bucket,
+        key,
+        *,
+        source_version_id=None,
+        target_version_id=None,
+        **_kwargs,
+    ):
+        verified_pairs.append((key, source_version_id, target_version_id))
+        return True, "stream_sha256"
+
+    service._strong_verify_single_object = fake_strong_verify  # type: ignore[method-assign]
+
+    size_only_count, verified_count, failed_keys, method_counts = service._strong_verify_version_aware_candidates(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        parallelism_max=2,
+        control_check=lambda: "run",
+    )
+
+    assert size_only_count == 5
+    assert verified_count == 5
+    assert failed_keys == []
+    assert method_counts == {"head_checksum": 0, "stream_sha256": 5}
+    assert sorted(verified_pairs) == [
+        (f"common-{index:03d}", f"sv-{index:03d}", f"tv-{index:03d}")
+        for index in range(5)
+    ]
+
+
+def test_replay_bucket_versions_returns_incremental_watermark(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace(context_id="src")
+    target_ctx = SimpleNamespace(context_id="target")
+    older = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    latest = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    timelines = [
+        (
+            "doc.txt",
+            [
+                _version_entry("doc.txt", "v1", last_modified=older, is_latest=False, order_index=1),
+                _version_entry("doc.txt", "v2", last_modified=latest, is_latest=False, order_index=2),
+                _version_entry(
+                    "doc.txt",
+                    "dm",
+                    last_modified=latest,
+                    is_delete_marker=True,
+                    is_latest=True,
+                    order_index=3,
+                ),
+            ],
+        )
+    ]
+
+    service._context_client = lambda _ctx: object()  # type: ignore[method-assign]
+    service._iter_bucket_version_timelines = lambda *_args, **_kwargs: iter(timelines)  # type: ignore[method-assign]
+    service._copy_single_object_version = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._replay_delete_marker = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._build_version_replay_watermark = (  # type: ignore[method-assign]
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("watermark must be incremental"))
+    )
+
+    copied, watermark = service._replay_bucket_versions(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        same_endpoint_copy=False,
+        watermark=None,
+        control_check=lambda: "run",
+    )
+
+    assert copied == 3
+    assert watermark == {
+        "last_modified": latest.isoformat(),
+        "tie_entries": [
+            {"key": "doc.txt", "version_id": "v2", "is_delete_marker": False},
+            {"key": "doc.txt", "version_id": "dm", "is_delete_marker": True},
+        ],
+    }
+
+
+def test_iter_bucket_version_timelines_keeps_key_buffer_across_pages(db_session):
+    service = BucketMigrationService(db_session)
+    ctx = SimpleNamespace(context_id="src")
+    page_1 = {
+        "Versions": [
+            {
+                "Key": "doc.txt",
+                "VersionId": "v2",
+                "LastModified": datetime(2026, 1, 2, tzinfo=timezone.utc),
+                "IsLatest": True,
+            }
+        ],
+        "DeleteMarkers": [],
+        "NextKeyMarker": "doc.txt",
+        "NextVersionIdMarker": "v2",
+    }
+    page_2 = {
+        "Versions": [
+            {
+                "Key": "doc.txt",
+                "VersionId": "v1",
+                "LastModified": datetime(2026, 1, 1, tzinfo=timezone.utc),
+                "IsLatest": False,
+            },
+            {
+                "Key": "other.txt",
+                "VersionId": "v1",
+                "LastModified": datetime(2026, 1, 1, tzinfo=timezone.utc),
+                "IsLatest": True,
+            },
+        ],
+        "DeleteMarkers": [],
+        "NextKeyMarker": None,
+        "NextVersionIdMarker": None,
+    }
+    calls: list[dict] = []
+
+    class FakeClient:
+        def list_object_versions(self, **kwargs):  # noqa: ANN001
+            calls.append(kwargs)
+            return page_1 if len(calls) == 1 else page_2
+
+    service._context_client = lambda _ctx: FakeClient()  # type: ignore[method-assign]
+
+    timelines = list(service._iter_bucket_version_timelines(ctx, "bucket-a"))
+
+    assert [key for key, _timeline in timelines] == ["doc.txt", "other.txt"]
+    assert [entry.version_id for entry in timelines[0][1]] == ["v1", "v2"]
+    assert calls[1]["KeyMarker"] == "doc.txt"
+    assert calls[1]["VersionIdMarker"] == "v2"
 
 
 def test_finalize_target_versioning_state_suspends_target_for_version_aware_copy_settings(db_session):

@@ -15,7 +15,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import ExitStack, contextmanager
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 from typing import Any, Callable, Optional
@@ -91,6 +91,14 @@ class _WorkerLeaseLostError(RuntimeError):
     """Raised when a worker loses ownership of a migration lease."""
 
 
+class _MigrationControlRequested(RuntimeError):
+    """Raised when a long-running scan must stop for pause/cancel."""
+
+    def __init__(self, state: str) -> None:
+        super().__init__(state)
+        self.state = state
+
+
 @dataclass
 class _ResolvedContext:
     context_id: str
@@ -145,6 +153,12 @@ class _BucketVersionEntry:
     order_index: int
 
 
+@dataclass
+class _VersionReplayWatermarkBuilder:
+    latest_dt: Optional[datetime] = None
+    tie_entries: list[dict[str, Any]] = field(default_factory=list)
+
+
 @dataclass(frozen=True)
 class _VersionedObjectDetails:
     size: int
@@ -192,6 +206,13 @@ class _VersionAwareDiff:
     only_source_count: int
     only_target_count: int
     sample: dict[str, Any]
+    size_only_pairs: tuple[_VersionTimelineDiffKey, ...] = ()
+
+
+@dataclass(frozen=True)
+class _VersionTimelineComparison:
+    equal: bool
+    first_difference: Optional[dict[str, Any]]
     size_only_pairs: tuple[_VersionTimelineDiffKey, ...] = ()
 
 
@@ -3260,7 +3281,7 @@ class BucketMigrationService:
 
         source_profile = _json_loads(item.source_snapshot_json)
         copied = 0
-        replayed_entries: list[_BucketVersionEntry] = []
+        pre_sync_watermark: Optional[dict[str, Any]] = None
 
         with ExitStack() as copy_grant_stack:
             if same_endpoint_copy and bool(migration.auto_grant_source_read_for_copy):
@@ -3280,7 +3301,7 @@ class BucketMigrationService:
                         )
                     )
 
-            copied, replayed_entries = self._replay_bucket_versions(
+            copied, pre_sync_watermark = self._replay_bucket_versions(
                 source_ctx,
                 target_ctx,
                 source_bucket=source_bucket,
@@ -3294,7 +3315,7 @@ class BucketMigrationService:
             return -1, -1, self._new_empty_sync_diff()
 
         if replay_mode == "pre_sync_full":
-            replication_state["pre_sync_watermark"] = self._build_version_replay_watermark(replayed_entries)
+            replication_state["pre_sync_watermark"] = pre_sync_watermark
             replication_state["cutover_attempted"] = False
             self._store_item_replication_state(item, replication_state)
         on_object_progress(force=True)
@@ -3337,11 +3358,11 @@ class BucketMigrationService:
         watermark: Optional[dict[str, Any]],
         control_check: Callable[[], str],
         on_progress: Optional[Callable[..., None]] = None,
-    ) -> tuple[int, list[_BucketVersionEntry]]:
+    ) -> tuple[int, Optional[dict[str, Any]]]:
         source_client = self._context_client(source_ctx)
         target_client = self._context_client(target_ctx)
         copied = 0
-        replayed_entries: list[_BucketVersionEntry] = []
+        watermark_builder = _VersionReplayWatermarkBuilder()
         scan_count_since_control = 0
 
         for _key, timeline in self._iter_bucket_version_timelines(source_ctx, source_bucket, client=source_client):
@@ -3356,7 +3377,7 @@ class BucketMigrationService:
                     if state in {"pause", "cancel"}:
                         if on_progress is not None:
                             on_progress(force=True)
-                        return -1, []
+                        return -1, None
                     scan_count_since_control = 0
 
                 if watermark is not None and not self._entry_is_after_watermark(entry, watermark):
@@ -3377,13 +3398,13 @@ class BucketMigrationService:
                         target_client=target_client,
                     )
                 copied += 1
-                replayed_entries.append(entry)
+                self._add_version_replay_watermark_entry(watermark_builder, entry)
                 if on_progress is not None:
                     on_progress(copied_inc=1)
 
         if on_progress is not None:
             on_progress(force=True)
-        return copied, replayed_entries
+        return copied, self._finish_version_replay_watermark(watermark_builder)
 
     def _replay_delete_marker(self, target_client: Any, target_bucket: str, key: str) -> None:
         try:
@@ -3423,30 +3444,86 @@ class BucketMigrationService:
             },
         )
 
-    def _load_version_timeline_map(
-        self,
-        ctx: _ResolvedContext,
-        bucket_name: str,
-        *,
-        control_check: Callable[[], str],
-        client: Optional[Any] = None,
-    ) -> Optional[dict[str, list[_BucketVersionEntry]]]:
-        resolved_client = client or self._context_client(ctx)
-        timelines: dict[str, list[_BucketVersionEntry]] = {}
-        scanned_keys = 0
-        for key, timeline in self._iter_bucket_version_timelines(ctx, bucket_name, client=resolved_client):
-            scanned_keys += 1
-            if scanned_keys % 200 == 0:
-                state = control_check()
-                if state == "lost_lease":
-                    raise _WorkerLeaseLostError("Worker lease lost while loading version timelines")
-                if state in {"pause", "cancel"}:
-                    return None
-            timelines[key] = list(timeline)
-        return timelines
-
     def _timeline_has_current_object(self, timeline: list[_BucketVersionEntry]) -> bool:
         return bool(timeline) and not bool(timeline[-1].is_delete_marker)
+
+    def _compare_version_timeline_pair(
+        self,
+        source_client: Any,
+        target_client: Any,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        key: str,
+        source_timeline: list[_BucketVersionEntry],
+        target_timeline: list[_BucketVersionEntry],
+    ) -> _VersionTimelineComparison:
+        if len(source_timeline) != len(target_timeline):
+            return _VersionTimelineComparison(
+                equal=False,
+                first_difference={
+                    "key": key,
+                    "reason": "timeline_length_mismatch",
+                    "source_entries": len(source_timeline),
+                    "target_entries": len(target_timeline),
+                },
+            )
+
+        size_only_pairs: list[_VersionTimelineDiffKey] = []
+        for source_entry, target_entry in zip(source_timeline, target_timeline):
+            if bool(source_entry.is_delete_marker) != bool(target_entry.is_delete_marker):
+                return _VersionTimelineComparison(
+                    equal=False,
+                    first_difference={
+                        "key": key,
+                        "reason": "entry_kind_mismatch",
+                        "source_kind": "delete_marker" if source_entry.is_delete_marker else "object",
+                        "target_kind": "delete_marker" if target_entry.is_delete_marker else "object",
+                    },
+                )
+            if source_entry.is_delete_marker:
+                continue
+
+            source_details = self._versioned_object_details(
+                source_client,
+                source_bucket,
+                key,
+                version_id=source_entry.version_id,
+            )
+            target_details = self._versioned_object_details(
+                target_client,
+                target_bucket,
+                key,
+                version_id=target_entry.version_id,
+            )
+            equal, compare_by, reason = self._compare_versioned_object_details(source_details, target_details)
+            if not equal:
+                return _VersionTimelineComparison(
+                    equal=False,
+                    first_difference={
+                        "key": key,
+                        "reason": reason or "object_mismatch",
+                        "compare_by": compare_by,
+                        "source_size": source_details.size,
+                        "target_size": target_details.size,
+                        "source_etag": source_details.etag,
+                        "target_etag": target_details.etag,
+                    },
+                )
+            if compare_by == "size":
+                size_only_pairs.append(
+                    _VersionTimelineDiffKey(
+                        key=key,
+                        source_version_id=source_entry.version_id,
+                        target_version_id=target_entry.version_id,
+                    )
+                )
+
+        return _VersionTimelineComparison(
+            equal=True,
+            first_difference=None,
+            size_only_pairs=tuple(size_only_pairs),
+        )
 
     def _compare_versioned_timelines(
         self,
@@ -3459,136 +3536,93 @@ class BucketMigrationService:
     ) -> Optional[_VersionAwareDiff]:
         source_client = self._context_client(source_ctx)
         target_client = self._context_client(target_ctx)
-        source_timelines = self._load_version_timeline_map(
-            source_ctx,
-            source_bucket,
-            control_check=control_check,
-            client=source_client,
-        )
-        if source_timelines is None:
-            return None
-        target_timelines = self._load_version_timeline_map(
-            target_ctx,
-            target_bucket,
-            control_check=control_check,
-            client=target_client,
-        )
-        if target_timelines is None:
-            return None
+        source_iter = iter(self._iter_bucket_version_timelines(source_ctx, source_bucket, client=source_client))
+        target_iter = iter(self._iter_bucket_version_timelines(target_ctx, target_bucket, client=target_client))
+        source_item = next(source_iter, None)
+        target_item = next(target_iter, None)
 
-        source_count = sum(1 for timeline in source_timelines.values() if self._timeline_has_current_object(timeline))
-        target_count = sum(1 for timeline in target_timelines.values() if self._timeline_has_current_object(timeline))
+        source_count = 0
+        target_count = 0
         matched_count = 0
         different_count = 0
         only_source_count = 0
         only_target_count = 0
-        size_only_pairs: list[_VersionTimelineDiffKey] = []
         sample = {
             "only_source_sample": [],
             "only_target_sample": [],
             "different_sample": [],
         }
-        source_details_cache: dict[tuple[str, str], _VersionedObjectDetails] = {}
-        target_details_cache: dict[tuple[str, str], _VersionedObjectDetails] = {}
+        scanned_keys = 0
 
-        for index, key in enumerate(sorted(set(source_timelines.keys()) | set(target_timelines.keys())), start=1):
-            if index % 200 == 0:
+        while source_item is not None or target_item is not None:
+            scanned_keys += 1
+            if scanned_keys % 200 == 0:
                 state = control_check()
                 if state == "lost_lease":
                     raise _WorkerLeaseLostError("Worker lease lost while comparing version-aware timelines")
                 if state in {"pause", "cancel"}:
                     return None
 
-            source_timeline = source_timelines.get(key)
-            target_timeline = target_timelines.get(key)
-            if source_timeline is None:
+            if source_item is None:
+                target_key, target_timeline = target_item
+                if self._timeline_has_current_object(target_timeline):
+                    target_count += 1
                 only_target_count += 1
                 if len(sample["only_target_sample"]) < 200:
-                    sample["only_target_sample"].append(key)
+                    sample["only_target_sample"].append(target_key)
+                target_item = next(target_iter, None)
                 continue
-            if target_timeline is None:
+
+            if target_item is None:
+                source_key, source_timeline = source_item
+                if self._timeline_has_current_object(source_timeline):
+                    source_count += 1
                 only_source_count += 1
                 if len(sample["only_source_sample"]) < 200:
-                    sample["only_source_sample"].append(key)
+                    sample["only_source_sample"].append(source_key)
+                source_item = next(source_iter, None)
                 continue
 
-            equal_timeline = True
-            first_difference: Optional[dict[str, Any]] = None
-            local_size_only_pairs: list[_VersionTimelineDiffKey] = []
+            source_key, source_timeline = source_item
+            target_key, target_timeline = target_item
+            if source_key < target_key:
+                if self._timeline_has_current_object(source_timeline):
+                    source_count += 1
+                only_source_count += 1
+                if len(sample["only_source_sample"]) < 200:
+                    sample["only_source_sample"].append(source_key)
+                source_item = next(source_iter, None)
+                continue
+            if target_key < source_key:
+                if self._timeline_has_current_object(target_timeline):
+                    target_count += 1
+                only_target_count += 1
+                if len(sample["only_target_sample"]) < 200:
+                    sample["only_target_sample"].append(target_key)
+                target_item = next(target_iter, None)
+                continue
 
-            if len(source_timeline) != len(target_timeline):
-                equal_timeline = False
-                first_difference = {
-                    "key": key,
-                    "reason": "timeline_length_mismatch",
-                    "source_entries": len(source_timeline),
-                    "target_entries": len(target_timeline),
-                }
-            else:
-                for source_entry, target_entry in zip(source_timeline, target_timeline):
-                    if bool(source_entry.is_delete_marker) != bool(target_entry.is_delete_marker):
-                        equal_timeline = False
-                        first_difference = {
-                            "key": key,
-                            "reason": "entry_kind_mismatch",
-                            "source_kind": "delete_marker" if source_entry.is_delete_marker else "object",
-                            "target_kind": "delete_marker" if target_entry.is_delete_marker else "object",
-                        }
-                        break
-                    if source_entry.is_delete_marker:
-                        continue
-
-                    source_cache_key = (key, source_entry.version_id)
-                    target_cache_key = (key, target_entry.version_id)
-                    source_details = source_details_cache.get(source_cache_key)
-                    if source_details is None:
-                        source_details = self._versioned_object_details(
-                            source_client,
-                            source_bucket,
-                            key,
-                            version_id=source_entry.version_id,
-                        )
-                        source_details_cache[source_cache_key] = source_details
-                    target_details = target_details_cache.get(target_cache_key)
-                    if target_details is None:
-                        target_details = self._versioned_object_details(
-                            target_client,
-                            target_bucket,
-                            key,
-                            version_id=target_entry.version_id,
-                        )
-                        target_details_cache[target_cache_key] = target_details
-
-                    equal, compare_by, reason = self._compare_versioned_object_details(source_details, target_details)
-                    if not equal:
-                        equal_timeline = False
-                        first_difference = {
-                            "key": key,
-                            "reason": reason or "object_mismatch",
-                            "compare_by": compare_by,
-                            "source_size": source_details.size,
-                            "target_size": target_details.size,
-                            "source_etag": source_details.etag,
-                            "target_etag": target_details.etag,
-                        }
-                        break
-                    if compare_by == "size":
-                        local_size_only_pairs.append(
-                            _VersionTimelineDiffKey(
-                                key=key,
-                                source_version_id=source_entry.version_id,
-                                target_version_id=target_entry.version_id,
-                            )
-                        )
-
-            if equal_timeline:
+            if self._timeline_has_current_object(source_timeline):
+                source_count += 1
+            if self._timeline_has_current_object(target_timeline):
+                target_count += 1
+            comparison = self._compare_version_timeline_pair(
+                source_client,
+                target_client,
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                key=source_key,
+                source_timeline=source_timeline,
+                target_timeline=target_timeline,
+            )
+            if comparison.equal:
                 matched_count += 1
-                size_only_pairs.extend(local_size_only_pairs)
-                continue
-
-            different_count += 1
-            if first_difference is not None and len(sample["different_sample"]) < 200:
-                sample["different_sample"].append(first_difference)
+            else:
+                different_count += 1
+                if comparison.first_difference is not None and len(sample["different_sample"]) < 200:
+                    sample["different_sample"].append(comparison.first_difference)
+            source_item = next(source_iter, None)
+            target_item = next(target_iter, None)
 
         return _VersionAwareDiff(
             source_count=source_count,
@@ -3598,7 +3632,6 @@ class BucketMigrationService:
             only_source_count=only_source_count,
             only_target_count=only_target_count,
             sample=sample,
-            size_only_pairs=tuple(size_only_pairs),
         )
 
     def _compare_buckets_version_aware(
@@ -3824,6 +3857,64 @@ class BucketMigrationService:
             return -1, 0, [], method_counts
         return size_only_count, verified_count, failed_keys, method_counts
 
+    def _iter_version_aware_size_only_pairs(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        control_check: Callable[[], str],
+    ):
+        source_client = self._context_client(source_ctx)
+        target_client = self._context_client(target_ctx)
+        source_iter = iter(self._iter_bucket_version_timelines(source_ctx, source_bucket, client=source_client))
+        target_iter = iter(self._iter_bucket_version_timelines(target_ctx, target_bucket, client=target_client))
+        source_item = next(source_iter, None)
+        target_item = next(target_iter, None)
+        scanned_keys = 0
+
+        while source_item is not None or target_item is not None:
+            scanned_keys += 1
+            if scanned_keys % 200 == 0:
+                state = control_check()
+                if state == "lost_lease":
+                    raise _WorkerLeaseLostError(
+                        "Worker lease lost while collecting version-aware strong-verification candidates"
+                    )
+                if state in {"pause", "cancel"}:
+                    raise _MigrationControlRequested(state)
+
+            if source_item is None:
+                target_item = next(target_iter, None)
+                continue
+            if target_item is None:
+                source_item = next(source_iter, None)
+                continue
+
+            source_key, source_timeline = source_item
+            target_key, target_timeline = target_item
+            if source_key < target_key:
+                source_item = next(source_iter, None)
+                continue
+            if target_key < source_key:
+                target_item = next(target_iter, None)
+                continue
+
+            comparison = self._compare_version_timeline_pair(
+                source_client,
+                target_client,
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                key=source_key,
+                source_timeline=source_timeline,
+                target_timeline=target_timeline,
+            )
+            if comparison.equal:
+                yield from comparison.size_only_pairs
+            source_item = next(source_iter, None)
+            target_item = next(target_iter, None)
+
     def _strong_verify_version_aware_candidates(
         self,
         source_ctx: _ResolvedContext,
@@ -3834,24 +3925,12 @@ class BucketMigrationService:
         parallelism_max: int,
         control_check: Callable[[], str],
     ) -> tuple[int, int, list[str], dict[str, int]]:
-        compared = self._compare_versioned_timelines(
-            source_ctx,
-            target_ctx,
-            source_bucket=source_bucket,
-            target_bucket=target_bucket,
-            control_check=control_check,
-        )
-        if compared is None:
-            return -1, 0, [], {"head_checksum": 0, "stream_sha256": 0}
-
-        pairs = list(compared.size_only_pairs)
-        if not pairs:
-            return 0, 0, [], {"head_checksum": 0, "stream_sha256": 0}
-
+        size_only_count = 0
         verified_count = 0
         failed_keys: list[str] = []
         method_counts: dict[str, int] = {"head_checksum": 0, "stream_sha256": 0}
-        worker_count = max(1, min(int(parallelism_max), len(pairs)))
+        worker_count = max(1, int(parallelism_max))
+        pair_batch: list[_VersionTimelineDiffKey] = []
         thread_local = threading.local()
 
         def _verify_worker(pair: _VersionTimelineDiffKey) -> tuple[str, bool, str]:
@@ -3876,48 +3955,73 @@ class BucketMigrationService:
             )
             return pair.key, verified, method
 
-        for chunk in _chunked(pairs, worker_count):
+        def flush_pair_batch(executor: ThreadPoolExecutor) -> bool:
+            nonlocal verified_count
+            if not pair_batch:
+                return True
             state = control_check()
             if state == "lost_lease":
                 raise _WorkerLeaseLostError("Worker lease lost while strong-verifying version-aware objects")
             if state in {"pause", "cancel"}:
-                return -1, 0, [], method_counts
+                return False
 
-            with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-version-verify") as executor:
-                futures = {
-                    executor.submit(_verify_worker, pair): pair
-                    for pair in chunk
-                }
-                interrupted_state: Optional[str] = None
-                pending = set(futures)
-                while pending:
-                    done, pending = wait(pending, timeout=1.0)
-                    state = control_check()
-                    if state == "lost_lease":
-                        interrupted_state = "lost_lease"
-                    elif state in {"pause", "cancel"} and interrupted_state is None:
-                        interrupted_state = state
+            batch = list(pair_batch)
+            pair_batch.clear()
+            futures = {executor.submit(_verify_worker, pair): pair for pair in batch}
+            interrupted_state: Optional[str] = None
+            pending = set(futures)
+            while pending:
+                done, pending = wait(pending, timeout=1.0)
+                state = control_check()
+                if state == "lost_lease":
+                    interrupted_state = "lost_lease"
+                elif state in {"pause", "cancel"} and interrupted_state is None:
+                    interrupted_state = state
 
-                    for future in done:
-                        pair = futures[future]
-                        try:
-                            key, verified, method = future.result()
-                        except Exception as exc:  # noqa: BLE001
-                            logger.warning("Version-aware strong verification failed: %s", exc)
-                            failed_keys.append(pair.key)
-                            continue
-                        method_counts[method] = method_counts.get(method, 0) + 1
-                        if verified:
-                            verified_count += 1
-                        else:
-                            failed_keys.append(key)
+                for future in done:
+                    pair = futures[future]
+                    try:
+                        key, verified, method = future.result()
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Version-aware strong verification failed: %s", exc)
+                        failed_keys.append(pair.key)
+                        continue
+                    method_counts[method] = method_counts.get(method, 0) + 1
+                    if verified:
+                        verified_count += 1
+                    else:
+                        failed_keys.append(key)
 
-                if interrupted_state == "lost_lease":
-                    raise _WorkerLeaseLostError("Worker lease lost while strong-verifying version-aware objects")
-                if interrupted_state in {"pause", "cancel"}:
+            if interrupted_state == "lost_lease":
+                raise _WorkerLeaseLostError("Worker lease lost while strong-verifying version-aware objects")
+            if interrupted_state in {"pause", "cancel"}:
+                return False
+            return True
+
+        try:
+            with ThreadPoolExecutor(
+                max_workers=worker_count,
+                thread_name_prefix="bucket-migration-version-verify",
+            ) as executor:
+                for pair in self._iter_version_aware_size_only_pairs(
+                    source_ctx,
+                    target_ctx,
+                    source_bucket=source_bucket,
+                    target_bucket=target_bucket,
+                    control_check=control_check,
+                ):
+                    size_only_count += 1
+                    pair_batch.append(pair)
+                    if len(pair_batch) < worker_count:
+                        continue
+                    if not flush_pair_batch(executor):
+                        return -1, 0, [], method_counts
+                if not flush_pair_batch(executor):
                     return -1, 0, [], method_counts
+        except _MigrationControlRequested:
+            return -1, 0, [], method_counts
 
-        return len(pairs), verified_count, failed_keys, method_counts
+        return size_only_count, verified_count, failed_keys, method_counts
 
     def _iter_bucket_diff_entries(
         self,
@@ -4711,23 +4815,40 @@ class BucketMigrationService:
     def _version_watermark_signature(self, entry: _BucketVersionEntry) -> tuple[str, str, bool]:
         return (entry.key, entry.version_id, bool(entry.is_delete_marker))
 
-    def _build_version_replay_watermark(self, entries: list[_BucketVersionEntry]) -> Optional[dict[str, Any]]:
-        if not entries:
-            return None
-        latest_dt = max(self._normalize_datetime(entry.last_modified) for entry in entries)
-        tie_entries = [
-            {
-                "key": entry.key,
-                "version_id": entry.version_id,
-                "is_delete_marker": bool(entry.is_delete_marker),
-            }
-            for entry in entries
-            if self._normalize_datetime(entry.last_modified) == latest_dt
-        ]
-        return {
-            "last_modified": latest_dt.isoformat(),
-            "tie_entries": tie_entries,
+    def _add_version_replay_watermark_entry(
+        self,
+        builder: _VersionReplayWatermarkBuilder,
+        entry: _BucketVersionEntry,
+    ) -> None:
+        entry_dt = self._normalize_datetime(entry.last_modified)
+        tie_entry = {
+            "key": entry.key,
+            "version_id": entry.version_id,
+            "is_delete_marker": bool(entry.is_delete_marker),
         }
+        if builder.latest_dt is None or entry_dt > builder.latest_dt:
+            builder.latest_dt = entry_dt
+            builder.tie_entries = [tie_entry]
+            return
+        if entry_dt == builder.latest_dt:
+            builder.tie_entries.append(tie_entry)
+
+    def _finish_version_replay_watermark(
+        self,
+        builder: _VersionReplayWatermarkBuilder,
+    ) -> Optional[dict[str, Any]]:
+        if builder.latest_dt is None:
+            return None
+        return {
+            "last_modified": builder.latest_dt.isoformat(),
+            "tie_entries": list(builder.tie_entries),
+        }
+
+    def _build_version_replay_watermark(self, entries: list[_BucketVersionEntry]) -> Optional[dict[str, Any]]:
+        builder = _VersionReplayWatermarkBuilder()
+        for entry in entries:
+            self._add_version_replay_watermark_entry(builder, entry)
+        return self._finish_version_replay_watermark(builder)
 
     def _entry_is_after_watermark(self, entry: _BucketVersionEntry, watermark: Optional[dict[str, Any]]) -> bool:
         if not isinstance(watermark, dict):

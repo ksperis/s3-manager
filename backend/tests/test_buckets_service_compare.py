@@ -15,7 +15,7 @@ from app.models.bucket import (
     BucketPublicAccessBlock,
     LifecycleRule,
 )
-from app.services import buckets_service as buckets_service_module
+from app.services import object_listing_temp_store
 from app.services.buckets_service import BucketsService, _BucketCompareObjectEntry
 
 
@@ -280,15 +280,12 @@ def test_compare_bucket_content_cleans_temp_store_when_listing_fails(monkeypatch
     class RecordingTemporaryDirectory:
         def __init__(self, prefix):
             self.path = tmp_path / f"{prefix}recorded"
-
-        def __enter__(self):
             self.path.mkdir()
             created_paths.append(self.path)
-            return str(self.path)
+            self.name = str(self.path)
 
-        def __exit__(self, _exc_type, _exc, _traceback):
-            shutil.rmtree(self.path)
-            return False
+        def cleanup(self):
+            shutil.rmtree(self.path, ignore_errors=True)
 
     def list_or_fail(bucket_name, _account):
         if bucket_name == "source-bucket":
@@ -296,7 +293,7 @@ def test_compare_bucket_content_cleans_temp_store_when_listing_fails(monkeypatch
             return
         raise RuntimeError("target listing failed")
 
-    monkeypatch.setattr(buckets_service_module.tempfile, "TemporaryDirectory", RecordingTemporaryDirectory)
+    monkeypatch.setattr(object_listing_temp_store.tempfile, "TemporaryDirectory", RecordingTemporaryDirectory)
     monkeypatch.setattr(service, "_list_bucket_objects_for_compare", list_or_fail)
 
     with pytest.raises(RuntimeError, match="target listing failed"):

@@ -8,12 +8,12 @@ import logging
 import json
 import re
 import sqlite3
-import tempfile
 
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.db import S3Account
 from app.services.object_diff_common import compare_object_entries
+from app.services.object_listing_temp_store import TemporarySqliteStore
 from app.services import s3_client
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
@@ -88,11 +88,8 @@ class BucketCompareRemediationResult:
 
 
 class _BucketCompareObjectIndex:
-    def __init__(self, db_path: str) -> None:
-        self._conn = sqlite3.connect(db_path)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA synchronous = OFF")
-        self._conn.execute("PRAGMA journal_mode = OFF")
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
         self._conn.execute(
             """
             CREATE TABLE compare_objects (
@@ -107,9 +104,6 @@ class _BucketCompareObjectIndex:
             )
             """
         )
-
-    def close(self) -> None:
-        self._conn.close()
 
     def add_objects(self, side: Literal["source", "target"], entries: Iterable[_BucketCompareObjectEntry]) -> int:
         count = 0
@@ -1102,32 +1096,29 @@ class BucketsService:
         *,
         ignore_modified_after: Optional[datetime] = None,
     ) -> CephAdminBucketContentDiff:
-        with tempfile.TemporaryDirectory(prefix="s3-manager-bucket-compare-") as temp_dir:
-            index = _BucketCompareObjectIndex(f"{temp_dir}/objects.sqlite3")
-            try:
-                source_indexed_count = index.add_objects(
-                    "source",
-                    self._list_bucket_objects_for_compare(source_bucket, source_account),
-                )
-                target_indexed_count = index.add_objects(
-                    "target",
-                    self._list_bucket_objects_for_compare(target_bucket, target_account),
-                )
-                diff = index.build_content_diff(
-                    md5_resolver=self._etag_md5,
-                    ignore_modified_after=ignore_modified_after,
-                )
-                logger.info(
-                    "Bucket compare indexed object metadata with temporary store: "
-                    "source_indexed_count=%s target_indexed_count=%s source_count=%s target_count=%s",
-                    source_indexed_count,
-                    target_indexed_count,
-                    diff.source_count,
-                    diff.target_count,
-                )
-                return diff
-            finally:
-                index.close()
+        with TemporarySqliteStore(prefix="s3-manager-bucket-compare-") as store:
+            index = _BucketCompareObjectIndex(store.connection)
+            source_indexed_count = index.add_objects(
+                "source",
+                self._list_bucket_objects_for_compare(source_bucket, source_account),
+            )
+            target_indexed_count = index.add_objects(
+                "target",
+                self._list_bucket_objects_for_compare(target_bucket, target_account),
+            )
+            diff = index.build_content_diff(
+                md5_resolver=self._etag_md5,
+                ignore_modified_after=ignore_modified_after,
+            )
+            logger.info(
+                "Bucket compare indexed object metadata with temporary store: "
+                "source_indexed_count=%s target_indexed_count=%s source_count=%s target_count=%s",
+                source_indexed_count,
+                target_indexed_count,
+                diff.source_count,
+                diff.target_count,
+            )
+            return diff
 
     def _account_client(self, account: S3Account):
         access_key, secret_key = self._account_credentials(account)
