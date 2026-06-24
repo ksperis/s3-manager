@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime, timezone
+import shutil
 
 import pytest
 from botocore.exceptions import ClientError
@@ -14,7 +15,8 @@ from app.models.bucket import (
     BucketPublicAccessBlock,
     LifecycleRule,
 )
-from app.services.buckets_service import BucketsService
+from app.services import buckets_service as buckets_service_module
+from app.services.buckets_service import BucketsService, _BucketCompareObjectEntry
 
 
 def _build_account(name: str) -> S3Account:
@@ -24,6 +26,19 @@ def _build_account(name: str) -> S3Account:
         rgw_access_key="AKIA_TEST",
         rgw_secret_key="SECRET_TEST",
     )
+
+
+def _payload_entries(payload: dict[str, dict[str, object]]):
+    for key, entry in payload.items():
+        last_modified = entry.get("last_modified")
+        storage_class = entry.get("storage_class")
+        yield _BucketCompareObjectEntry(
+            key=key,
+            size=int(entry.get("size") or 0),
+            etag=entry.get("etag") if isinstance(entry.get("etag"), str) else None,
+            last_modified=last_modified if isinstance(last_modified, datetime) else None,
+            storage_class=storage_class if isinstance(storage_class, str) else None,
+        )
 
 
 def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
@@ -57,7 +72,7 @@ def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
     monkeypatch.setattr(
         service,
         "_list_bucket_objects_for_compare",
-        lambda bucket_name, _account: payloads[bucket_name],
+        lambda bucket_name, _account: _payload_entries(payloads[bucket_name]),
     )
 
     diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target)
@@ -92,7 +107,7 @@ def test_compare_bucket_content_detects_md5_mismatch(monkeypatch):
     monkeypatch.setattr(
         service,
         "_list_bucket_objects_for_compare",
-        lambda bucket_name, _account: payloads[bucket_name],
+        lambda bucket_name, _account: _payload_entries(payloads[bucket_name]),
     )
 
     diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target)
@@ -131,7 +146,7 @@ def test_compare_bucket_content_reports_different_sample(monkeypatch):
     monkeypatch.setattr(
         service,
         "_list_bucket_objects_for_compare",
-        lambda bucket_name, _account: payloads[bucket_name],
+        lambda bucket_name, _account: _payload_entries(payloads[bucket_name]),
     )
 
     diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target)
@@ -150,20 +165,24 @@ def test_compare_bucket_content_limits_display_rows_but_keeps_totals(monkeypatch
     service = BucketsService()
     source = _build_account("source")
     target = _build_account("target")
-    source_payload = {f"source-only-{index:04d}": {"size": index} for index in range(1005)}
-    target_payload = {f"target-only-{index:04d}": {"size": index} for index in range(1003)}
-    for index in range(1007):
-        key = f"different-{index:04d}"
-        source_payload[key] = {"size": index}
-        target_payload[key] = {"size": index + 1}
-    payloads = {
-        "source-bucket": source_payload,
-        "target-bucket": target_payload,
-    }
+
+    def large_listing(bucket_name, _account):
+        if bucket_name == "source-bucket":
+            for index in range(1005):
+                yield _BucketCompareObjectEntry(key=f"source-only-{index:04d}", size=index)
+            for index in range(1007):
+                yield _BucketCompareObjectEntry(key=f"different-{index:04d}", size=index)
+            return
+
+        for index in range(1003):
+            yield _BucketCompareObjectEntry(key=f"target-only-{index:04d}", size=index)
+        for index in range(1007):
+            yield _BucketCompareObjectEntry(key=f"different-{index:04d}", size=index + 1)
+
     monkeypatch.setattr(
         service,
         "_list_bucket_objects_for_compare",
-        lambda bucket_name, _account: payloads[bucket_name],
+        large_listing,
     )
 
     diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target)
@@ -206,7 +225,7 @@ def test_compare_bucket_content_excludes_entire_key_after_cutoff(monkeypatch):
     monkeypatch.setattr(
         service,
         "_list_bucket_objects_for_compare",
-        lambda bucket_name, _account: payloads[bucket_name],
+        lambda bucket_name, _account: _payload_entries(payloads[bucket_name]),
     )
 
     diff = service.compare_bucket_content(
@@ -250,6 +269,41 @@ def test_compare_bucket_content_wraps_list_objects_client_error(monkeypatch):
     message = str(exc.value)
     assert "Unable to list objects in bucket 'source-bucket'" in message
     assert "ListObjectsV2 failed with AccessDenied" in message
+
+
+def test_compare_bucket_content_cleans_temp_store_when_listing_fails(monkeypatch, tmp_path):
+    service = BucketsService()
+    source = _build_account("source")
+    target = _build_account("target")
+    created_paths = []
+
+    class RecordingTemporaryDirectory:
+        def __init__(self, prefix):
+            self.path = tmp_path / f"{prefix}recorded"
+
+        def __enter__(self):
+            self.path.mkdir()
+            created_paths.append(self.path)
+            return str(self.path)
+
+        def __exit__(self, _exc_type, _exc, _traceback):
+            shutil.rmtree(self.path)
+            return False
+
+    def list_or_fail(bucket_name, _account):
+        if bucket_name == "source-bucket":
+            yield _BucketCompareObjectEntry(key="source-only", size=1)
+            return
+        raise RuntimeError("target listing failed")
+
+    monkeypatch.setattr(buckets_service_module.tempfile, "TemporaryDirectory", RecordingTemporaryDirectory)
+    monkeypatch.setattr(service, "_list_bucket_objects_for_compare", list_or_fail)
+
+    with pytest.raises(RuntimeError, match="target listing failed"):
+        service.compare_bucket_content("source-bucket", source, "target-bucket", target)
+
+    assert created_paths
+    assert all(not path.exists() for path in created_paths)
 
 
 def test_compare_remediation_uses_requested_object_keys(monkeypatch):
