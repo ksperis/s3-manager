@@ -2743,6 +2743,7 @@ def test_ceph_admin_bucket_stream_cancels_work_when_client_disconnects(monkeypat
     payload = [{"name": "bucket-a", "owner": "owner-a"}]
     ctx, _ = _build_ctx(endpoint_id=303, payload=payload)
     cancelled = {"value": False}
+    cleanup_finished = threading.Event()
 
     def fake_compute(
         *,
@@ -2775,6 +2776,8 @@ def test_ceph_admin_bucket_stream_cancels_work_when_client_disconnects(monkeypat
                 time.sleep(0.01)
         except buckets_router._BucketListingCancelled:
             cancelled["value"] = True
+            time.sleep(0.15)
+            cleanup_finished.set()
             raise
 
     monkeypatch.setattr(buckets_router, "_compute_bucket_listing", fake_compute)
@@ -2804,6 +2807,7 @@ def test_ceph_admin_bucket_stream_cancels_work_when_client_disconnects(monkeypat
 
     asyncio.run(_run())
     assert cancelled["value"] is True
+    assert cleanup_finished.is_set()
 
 
 def test_ceph_admin_owner_quota_columns_use_cached_account_listing_across_pages():

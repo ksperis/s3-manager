@@ -7,13 +7,13 @@ import json
 import logging
 import threading
 import uuid
-from contextlib import suppress
 from typing import Callable
 
 from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.models.bucket_integrity import BucketIntegrityCheckProgress, BucketIntegrityCheckResult
+from app.routers.sse_worker import wait_for_cancellable_worker
 from app.services.bucket_integrity_service import BucketIntegrityCheckCancelled
 
 SSE_KEEPALIVE_INTERVAL_SECONDS = 10.0
@@ -105,11 +105,13 @@ def stream_bucket_integrity_check(
                     break
                 yield message
         finally:
-            cancel_event.set()
-            if not worker_task.done():
-                worker_task.cancel()
-            with suppress(asyncio.CancelledError, Exception):
-                await asyncio.wait_for(worker_task, timeout=0.1)
+            await wait_for_cancellable_worker(
+                worker_task,
+                cancel_event,
+                logger=logger,
+                operation="bucket_integrity_check",
+                request_id=request_id,
+            )
 
     return StreamingResponse(
         event_generator(),

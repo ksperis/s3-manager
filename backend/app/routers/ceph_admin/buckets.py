@@ -2,15 +2,11 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import asyncio
 import logging
 import json
-import threading
-import uuid
 from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from contextlib import suppress
 from threading import Lock
 from time import monotonic
 from typing import Any, Callable, Literal
@@ -60,7 +56,12 @@ from app.models.ceph_admin import (
 )
 from app.routers.ceph_admin.dependencies import CephAdminContext, _resolve_storage_endpoint, get_ceph_admin_context
 from app.routers.ceph_admin.listing_common import (
+    ListingCancelled as _BucketListingCancelled,
+    ListingProgressEmitter as _BucketListingProgressEmitter,
+    ListingProgressSnapshot as _BucketListingProgressSnapshot,
     interpolate_progress_percent as _common_interpolate_progress_percent,
+    invoke_cancel_check as _invoke_cancel_check,
+    stream_listing_response as _common_stream_listing_response,
 )
 from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.services.bucket_notification_state import (
@@ -73,7 +74,6 @@ from app.services.bucket_config_backup_service import (
 )
 from app.services.bucket_listing_shared import (
     _filter_requires_stats as _shared_filter_requires_stats,
-    _format_sse_event as _shared_format_sse_event,
     _is_advanced_filter_stream_payload as _shared_is_advanced_filter_stream_payload,
     _parse_filter as _shared_parse_filter,
     parse_includes,
@@ -98,9 +98,6 @@ BUCKET_LIST_CACHE_MAX_ENTRIES = 64
 RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES = 16
 BUCKET_ENRICH_MAX_WORKERS = 6
 BUCKET_OWNER_LOOKUP_MAX_WORKERS = 6
-PROGRESS_EMIT_EVERY_ITEMS = 100
-PROGRESS_EMIT_MIN_INTERVAL_SECONDS = 0.2
-SSE_KEEPALIVE_INTERVAL_SECONDS = 10.0
 
 
 @dataclass(frozen=True)
@@ -142,78 +139,10 @@ class _RgwBucketPayloadCacheEntry:
     entries: list[dict]
 
 
-@dataclass(frozen=True)
-class _BucketListingProgressSnapshot:
-    percent: int
-    stage: str
-    processed: int
-    total: int
-    message: str | None = None
-
-
-class _BucketListingCancelled(RuntimeError):
-    pass
-
-
 _BUCKET_STATS_UNAVAILABLE_WARNING = (
     "Bucket stats are unavailable via Ceph Admin credentials on this endpoint. "
     "Showing owner metadata without usage or quota values."
 )
-
-
-class _BucketListingProgressEmitter:
-    def __init__(self, callback: Callable[[_BucketListingProgressSnapshot], None] | None) -> None:
-        self._callback = callback
-        self._last_emitted_at = 0.0
-        self._last_snapshot: _BucketListingProgressSnapshot | None = None
-
-    def emit(
-        self,
-        *,
-        percent: int,
-        stage: str,
-        processed: int = 0,
-        total: int = 0,
-        message: str | None = None,
-        force: bool = False,
-    ) -> None:
-        if self._callback is None:
-            return
-        clamped_percent = max(0, min(100, int(percent)))
-        if self._last_snapshot is not None:
-            clamped_percent = max(clamped_percent, self._last_snapshot.percent)
-        snapshot = _BucketListingProgressSnapshot(
-            percent=clamped_percent,
-            stage=stage,
-            processed=max(0, int(processed)),
-            total=max(0, int(total)),
-            message=message,
-        )
-        now = monotonic()
-        if not force:
-            is_progress_tick = snapshot.processed > 0 and (snapshot.processed % PROGRESS_EMIT_EVERY_ITEMS == 0)
-            interval_elapsed = (now - self._last_emitted_at) >= PROGRESS_EMIT_MIN_INTERVAL_SECONDS
-            if snapshot == self._last_snapshot:
-                return
-            if not is_progress_tick and not interval_elapsed and snapshot.processed != snapshot.total:
-                return
-        self._last_emitted_at = now
-        self._last_snapshot = snapshot
-        self._callback(snapshot)
-
-
-def _invoke_cancel_check(cancel_check: Callable[[], None] | None) -> None:
-    if cancel_check is None:
-        return
-    cancel_check()
-
-
-def _normalize_http_error_detail(detail: object) -> object:
-    if isinstance(detail, (str, int, float, bool)) or detail is None:
-        return detail
-    if isinstance(detail, (list, dict)):
-        return detail
-    return str(detail)
 
 _BUCKET_LIST_CACHE: OrderedDict[_BucketListCacheKey, _BucketListCacheEntry] = OrderedDict()
 _BUCKET_LIST_CACHE_LOCK = Lock()
@@ -3193,110 +3122,23 @@ async def stream_buckets(
             detail="advanced_filter must be provided as a JSON payload for streaming search",
         )
 
-    request_id = uuid.uuid4().hex
-
-    async def event_generator():
-        loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[str | None] = asyncio.Queue()
-        cancel_event = threading.Event()
-
-        def push_message(payload: str | None) -> None:
-            loop.call_soon_threadsafe(queue.put_nowait, payload)
-
-        def progress_callback(snapshot: _BucketListingProgressSnapshot) -> None:
-            payload: dict[str, object] = {
-                "request_id": request_id,
-                "percent": snapshot.percent,
-                "stage": snapshot.stage,
-                "processed": snapshot.processed,
-                "total": snapshot.total,
-            }
-            if snapshot.message:
-                payload["message"] = snapshot.message
-            push_message(_shared_format_sse_event("progress", payload))
-
-        def cancel_check() -> None:
-            if cancel_event.is_set():
-                raise _BucketListingCancelled()
-
-        def worker() -> None:
-            try:
-                result = _compute_bucket_listing(
-                    page=page,
-                    page_size=page_size,
-                    filter=filter,
-                    advanced_filter=advanced_filter,
-                    sort_by=sort_by,
-                    sort_dir=sort_dir,
-                    include=include,
-                    with_stats=with_stats,
-                    ctx=ctx,
-                    progress_callback=progress_callback,
-                    cancel_check=cancel_check,
-                )
-                payload = result.model_dump(mode="json") if hasattr(result, "model_dump") else result.dict()
-                push_message(_shared_format_sse_event("result", payload))
-                push_message(_shared_format_sse_event("done", {"request_id": request_id}))
-            except _BucketListingCancelled:
-                return
-            except HTTPException as exc:
-                push_message(
-                    _shared_format_sse_event(
-                        "error",
-                        {
-                            "request_id": request_id,
-                            "detail": _normalize_http_error_detail(exc.detail),
-                        },
-                    )
-                )
-                push_message(_shared_format_sse_event("done", {"request_id": request_id}))
-            except Exception as exc:  # pragma: no cover
-                logger.exception("Bucket streaming search failed: %s", exc)
-                push_message(
-                    _shared_format_sse_event(
-                        "error",
-                        {
-                            "request_id": request_id,
-                            "detail": "Bucket streaming search failed",
-                        },
-                    )
-                )
-                push_message(_shared_format_sse_event("done", {"request_id": request_id}))
-            finally:
-                push_message(None)
-
-        worker_task = asyncio.create_task(asyncio.to_thread(worker))
-        try:
-            while True:
-                if await request.is_disconnected():
-                    cancel_event.set()
-                    break
-                try:
-                    message = await asyncio.wait_for(queue.get(), timeout=SSE_KEEPALIVE_INTERVAL_SECONDS)
-                except asyncio.TimeoutError:
-                    if await request.is_disconnected():
-                        cancel_event.set()
-                        break
-                    yield ": keepalive\n\n"
-                    continue
-                if message is None:
-                    break
-                yield message
-        finally:
-            cancel_event.set()
-            if not worker_task.done():
-                worker_task.cancel()
-            with suppress(asyncio.CancelledError, Exception):
-                await asyncio.wait_for(worker_task, timeout=0.1)
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    return _common_stream_listing_response(
+        request,
+        compute=lambda progress_callback, cancel_check: _compute_bucket_listing(
+            page=page,
+            page_size=page_size,
+            filter=filter,
+            advanced_filter=advanced_filter,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            include=include,
+            with_stats=with_stats,
+            ctx=ctx,
+            progress_callback=progress_callback,
+            cancel_check=cancel_check,
+        ),
+        logger=logger,
+        failure_message="Bucket streaming search failed",
     )
 
 

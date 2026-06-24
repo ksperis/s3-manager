@@ -7,12 +7,15 @@ import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
 from botocore.exceptions import ClientError
 
 from app.services.bucket_integrity_service import (
+    BucketIntegrityCheckCancelled,
     BucketIntegrityCheckService,
     BucketIntegrityOptions,
     BucketIntegrityResolvedTarget,
+    _ObjectRef,
 )
 
 
@@ -206,6 +209,32 @@ def test_integrity_service_limits_bytes_read_per_object():
 
     assert result.status == "passed"
     assert result.bytes_read == 1024 * 1024
+
+
+def test_integrity_service_get_mode_checks_cancel_between_read_chunks():
+    payload = b"x" * (9 * 1024 * 1024)
+    client = FakeS3Client(
+        {"list_objects_v2": FakePaginator([])},
+        {("large.bin", None): payload},
+    )
+    service = FakeIntegrityService(client)
+    calls = {"count": 0}
+
+    def cancel_check() -> None:
+        calls["count"] += 1
+        if calls["count"] >= 3:
+            raise BucketIntegrityCheckCancelled()
+
+    with pytest.raises(BucketIntegrityCheckCancelled):
+        service._read_object(
+            client,
+            "bucket-a",
+            _ObjectRef(key="large.bin"),
+            max_bytes=None,
+            cancel_check=cancel_check,
+        )
+
+    assert calls["count"] == 3
 
 
 def test_integrity_service_reports_get_object_errors_as_object_failures():

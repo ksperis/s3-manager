@@ -187,16 +187,21 @@ class BucketIntegrityCheckService:
         obj: _ObjectRef,
         *,
         max_bytes: int | None,
+        cancel_check: CancelCheck | None = None,
     ) -> _ObjectCheckResult:
         body = None
         total_read = 0
         kwargs = _object_request_kwargs(bucket_name, obj)
         try:
+            if cancel_check:
+                cancel_check()
             response = client.get_object(**kwargs)
             body = response.get("Body")
             if body is None:
                 raise RuntimeError("response body is empty")
             while True:
+                if cancel_check:
+                    cancel_check()
                 to_read = _READ_CHUNK_SIZE
                 if max_bytes is not None:
                     remaining = max_bytes - total_read
@@ -207,6 +212,8 @@ class BucketIntegrityCheckService:
                 if not chunk:
                     break
                 total_read += len(chunk)
+        except BucketIntegrityCheckCancelled:
+            raise
         except (ClientError, BotoCoreError, RuntimeError) as exc:
             return _ObjectCheckResult(
                 key=obj.key,
@@ -235,9 +242,15 @@ class BucketIntegrityCheckService:
         client: Any,
         bucket_name: str,
         obj: _ObjectRef,
+        *,
+        cancel_check: CancelCheck | None = None,
     ) -> _ObjectCheckResult:
         try:
+            if cancel_check:
+                cancel_check()
             client.head_object(**_object_request_kwargs(bucket_name, obj))
+        except BucketIntegrityCheckCancelled:
+            raise
         except (ClientError, BotoCoreError, RuntimeError) as exc:
             return _ObjectCheckResult(
                 key=obj.key,
@@ -261,10 +274,13 @@ class BucketIntegrityCheckService:
         *,
         check_mode: BucketIntegrityCheckMode,
         max_bytes: int | None,
+        cancel_check: CancelCheck | None = None,
     ) -> _ObjectCheckResult:
+        if cancel_check:
+            cancel_check()
         if check_mode == "head":
-            return self._head_object(client, bucket_name, obj)
-        return self._read_object(client, bucket_name, obj, max_bytes=max_bytes)
+            return self._head_object(client, bucket_name, obj, cancel_check=cancel_check)
+        return self._read_object(client, bucket_name, obj, max_bytes=max_bytes, cancel_check=cancel_check)
 
     def run(
         self,
@@ -419,6 +435,7 @@ class BucketIntegrityCheckService:
                             obj,
                             check_mode=options.check_mode,
                             max_bytes=max_bytes,
+                            cancel_check=cancel_check,
                         )
                     )
                     if len(pending) >= worker_count * 2:

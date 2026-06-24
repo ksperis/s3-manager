@@ -1442,6 +1442,7 @@ def purge_bucket_contents(
         )
 
     def delete_batch(stage: str, items: list[dict]) -> tuple[str, int, list[dict] | None, Exception | None]:
+        check_cancel()
         try:
             deleted = _delete_objects_count(client, bucket_name, items)
             return stage, deleted, None, None

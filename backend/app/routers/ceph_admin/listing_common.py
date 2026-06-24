@@ -7,7 +7,6 @@ from collections import OrderedDict
 from dataclasses import dataclass
 import json
 import logging
-from contextlib import suppress
 from threading import Lock
 from time import monotonic
 import threading
@@ -22,6 +21,7 @@ from app.services.bucket_listing_shared import (
     _format_sse_event,
     parse_includes as parse_bucket_listing_includes,
 )
+from app.routers.sse_worker import wait_for_cancellable_worker
 
 _K = TypeVar("_K")
 _T = TypeVar("_T")
@@ -216,11 +216,13 @@ def stream_listing_response(
                     break
                 yield message
         finally:
-            cancel_event.set()
-            if not worker_task.done():
-                worker_task.cancel()
-            with suppress(asyncio.CancelledError, Exception):
-                await asyncio.wait_for(worker_task, timeout=0.1)
+            await wait_for_cancellable_worker(
+                worker_task,
+                cancel_event,
+                logger=logger,
+                operation="listing_stream",
+                request_id=request_id,
+            )
 
     return StreamingResponse(
         event_generator(),

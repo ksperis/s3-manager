@@ -2,6 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import asyncio
+import logging
+import threading
+import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -14,11 +18,13 @@ from app.db import StorageEndpoint, User, UserRole
 from app.main import app
 from app.models.app_settings import AppSettings
 from app.models.bucket_integrity import BucketIntegrityCheckProgress, BucketIntegrityCheckRequest, BucketIntegrityCheckResult
+from app.routers.bucket_integrity_stream import stream_bucket_integrity_check
 from app.routers import dependencies as dependencies_router
 from app.routers.ceph_admin import integrity as ceph_integrity
 from app.routers.ceph_admin.dependencies import CephAdminContext
 from app.routers.manager import integrity as manager_integrity
 from app.routers.storage_ops import integrity as storage_ops_integrity
+from app.services.bucket_integrity_service import BucketIntegrityCheckCancelled
 
 
 def _build_request(path: str = "/api/manager/bucket-integrity/stream", query_string: bytes = b"") -> Request:
@@ -155,6 +161,40 @@ def test_manager_integrity_route_returns_403_when_flag_disabled(monkeypatch):
 
     assert response.status_code == 403
     assert "Bucket integrity check feature is disabled" in response.text
+
+
+def test_integrity_stream_waits_for_worker_cleanup_after_disconnect():
+    cleanup_finished = threading.Event()
+
+    def run_check(progress_callback, cancel_check):
+        progress_callback(BucketIntegrityCheckProgress(stage="prepare", total_buckets=1))
+        try:
+            while True:
+                cancel_check()
+                time.sleep(0.01)
+        except BucketIntegrityCheckCancelled:
+            time.sleep(0.15)
+            cleanup_finished.set()
+            raise
+
+    async def _run() -> None:
+        state = {"calls": 0}
+
+        async def is_disconnected() -> bool:
+            state["calls"] += 1
+            return state["calls"] >= 2
+
+        response = stream_bucket_integrity_check(
+            SimpleNamespace(is_disconnected=is_disconnected),
+            run_check=run_check,
+            logger=logging.getLogger("test-integrity-stream"),
+            failure_message="Integrity stream failed",
+        )
+        async for _chunk in response.body_iterator:
+            pass
+
+    asyncio.run(_run())
+    assert cleanup_finished.is_set()
 
 
 def test_ceph_admin_integrity_route_uses_dedicated_endpoint_credentials(monkeypatch):
