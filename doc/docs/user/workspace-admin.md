@@ -15,8 +15,8 @@ Use **Admin** for platform governance and global configuration.
 3. Use **Managed Tenants** to manage RGW accounts and users.
 4. Use **Connections** for S3 connections.
 5. Use **Storage Backends** for endpoints and endpoint status.
-6. Use **Usage & Reporting** for endpoint-scoped usage, metrics, billing, and stored usage-history snapshots.
-7. Use **Governance** for audit trail.
+6. Use **Usage & Metrics** to review endpoint-scoped storage, usage composition, usage history, and traffic from tabbed categories.
+7. Use **Audit & Reporting** for billing, stored usage-history snapshots, and audit trail.
 8. If superadmin, use **Settings** pages for global behavior.
 
 ## Expected result

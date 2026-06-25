@@ -260,7 +260,7 @@ export default function AuditLogsPage() {
       <PageHeader
         title="Audit trail"
         description="Last administrative actions performed through the UI."
-        breadcrumbs={adminBreadcrumbs({ label: "Governance" }, { label: "Audit trail" })}
+        breadcrumbs={adminBreadcrumbs({ label: "Audit & Reporting" }, { label: "Audit trail" })}
         actions={[
           {
             label: loading ? "Refreshing…" : "Refresh",

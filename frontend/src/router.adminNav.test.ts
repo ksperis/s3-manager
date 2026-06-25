@@ -7,9 +7,9 @@ function getSettingsLink(label: string, options: Parameters<typeof buildAdminNav
   return settingsSection?.links.find((link) => link.label === label);
 }
 
-function getUsageReportingLink(label: string, options: Parameters<typeof buildAdminNav>) {
-  const usageReportingSection = buildAdminNav(...options).find((section) => section.label === "Usage & Reporting");
-  return usageReportingSection?.links.find((link) => link.label === label);
+function getAuditReportingLink(label: string, options: Parameters<typeof buildAdminNav>) {
+  const auditReportingSection = buildAdminNav(...options).find((section) => section.label === "Audit & Reporting");
+  return auditReportingSection?.links.find((link) => link.label === label);
 }
 
 describe("buildAdminNav", () => {
@@ -49,23 +49,23 @@ describe("buildAdminNav", () => {
   });
 
   it("exposes Usage History only when usage history is enabled", () => {
-    const enabledLink = getUsageReportingLink("Usage History", [true, true, false, true, false, true]);
-    const disabledLink = getUsageReportingLink("Usage History", [true, true, false, false, false, true]);
+    const enabledLink = getAuditReportingLink("Usage History", [true, true, false, true, false, true]);
+    const disabledLink = getAuditReportingLink("Usage History", [true, true, false, false, false, true]);
 
     expect(enabledLink?.to).toBe("/admin/usage-history");
     expect(disabledLink).toBeUndefined();
   });
 
-  it("groups usage metrics and billing under Usage & Reporting", () => {
+  it("groups metrics in overview and billing with audit reporting", () => {
     const adminNav = buildAdminNav(true, true, true, true, false, true);
     const overview = adminNav.find((section) => section.label === "Overview");
-    const usageReporting = adminNav.find((section) => section.label === "Usage & Reporting");
+    const auditReporting = adminNav.find((section) => section.label === "Audit & Reporting");
 
-    expect(overview?.links.map((link) => link.label)).toEqual(["Dashboard"]);
-    expect(usageReporting?.links.map((link) => link.label)).toEqual([
-      "Usage & Metrics",
+    expect(overview?.links.map((link) => link.label)).toEqual(["Dashboard", "Usage & Metrics"]);
+    expect(auditReporting?.links.map((link) => link.label)).toEqual([
       "Billing",
       "Usage History",
+      "Audit trail",
     ]);
   });
 });

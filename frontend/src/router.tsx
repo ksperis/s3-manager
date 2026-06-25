@@ -222,14 +222,9 @@ export const buildAdminNav = (
   return [
     {
       label: "Overview",
-      links: [{ to: "/admin", label: "Dashboard", end: true }],
-    },
-    {
-      label: "Usage & Reporting",
       links: [
+        { to: "/admin", label: "Dashboard", end: true },
         { to: "/admin/metrics", label: "Usage & Metrics" },
-        ...(billingEnabled ? [{ to: "/admin/billing", label: "Billing" }] : []),
-        ...(usageHistoryEnabled ? [{ to: "/admin/usage-history", label: "Usage History" }] : []),
       ],
     },
     {
@@ -258,8 +253,12 @@ export const buildAdminNav = (
       ],
     },
     {
-      label: "Governance",
-      links: [{ to: "/admin/audit", label: "Audit trail" }],
+      label: "Audit & Reporting",
+      links: [
+        ...(billingEnabled ? [{ to: "/admin/billing", label: "Billing" }] : []),
+        ...(usageHistoryEnabled ? [{ to: "/admin/usage-history", label: "Usage History" }] : []),
+        { to: "/admin/audit", label: "Audit trail" },
+      ],
     },
     ...(isSuperAdmin
       ? [
