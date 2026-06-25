@@ -30,7 +30,7 @@ from app.models.bucket import (
     BucketVersioningUpdate,
     BucketWebsiteConfiguration,
 )
-from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.routers.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
 from app.services.bucket_listing_shared import parse_includes
 from app.services.buckets_service import BucketsService
 from app.services.s3_client import BucketNotEmptyError
@@ -49,7 +49,7 @@ def _map_value_and_runtime_errors(fn: Callable[[], _T]) -> _T:
     try:
         return fn()
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_bad_request_from_value_error(exc)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 

@@ -9,7 +9,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from app import main
-from app.routers.http_errors import raise_bad_gateway_from_runtime, sanitize_error_detail
+from app.routers.http_errors import (
+    raise_bad_gateway_from_exception,
+    raise_bad_gateway_from_runtime,
+    raise_bad_request_from_value_error,
+    sanitize_error_detail,
+)
 
 
 def _request(path: str = "/api/browser/buckets/demo") -> Request:
@@ -35,6 +40,26 @@ def test_raise_bad_gateway_from_runtime_preserves_safe_runtime_message():
     except HTTPException as exc:
         assert exc.status_code == 502
         assert exc.detail == "backend timeout"
+    else:
+        raise AssertionError("Expected HTTPException")
+
+
+def test_raise_bad_gateway_from_exception_redacts_runtime_detail():
+    try:
+        raise_bad_gateway_from_exception(RuntimeError("upstream token=leaked at https://rgw.internal/object"))
+    except HTTPException as exc:
+        assert exc.status_code == 502
+        assert exc.detail == "upstream token=<redacted> at <redacted-url>"
+    else:
+        raise AssertionError("Expected HTTPException")
+
+
+def test_raise_bad_request_from_value_error_redacts_sensitive_user_input():
+    try:
+        raise_bad_request_from_value_error(ValueError("invalid callback secret_access_key=abc123"))
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert exc.detail == "invalid callback secret_access_key=<redacted>"
     else:
         raise AssertionError("Expected HTTPException")
 

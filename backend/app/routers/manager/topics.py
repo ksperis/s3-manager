@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from app.db import S3Account, User
 from app.models.topic import Topic, TopicConfiguration, TopicCreate, TopicPolicy
@@ -10,6 +10,7 @@ from app.routers.dependencies import (
     get_current_account_admin,
     require_sns_capable_manager,
 )
+from app.routers.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
 from app.services.audit_service import AuditService
 from app.services.topics_service import TopicsService, get_topics_service
 
@@ -26,7 +27,7 @@ def list_topics(
     try:
         return service.list_topics(account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.post("", response_model=Topic, status_code=status.HTTP_201_CREATED)
@@ -58,9 +59,9 @@ def create_topic(
         )
         return topic
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_bad_request_from_value_error(exc)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/{topic_arn:path}", status_code=status.HTTP_204_NO_CONTENT)
@@ -83,7 +84,7 @@ def delete_topic(
             account=account,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{topic_arn:path}/policy", response_model=TopicPolicy)
@@ -98,7 +99,7 @@ def get_topic_policy(
         policy = service.get_topic_policy(account, topic_arn)
         return TopicPolicy(policy=policy or {})
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{topic_arn:path}/policy", response_model=TopicPolicy)
@@ -124,9 +125,9 @@ def put_topic_policy(
         )
         return TopicPolicy(policy=updated)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_bad_request_from_value_error(exc)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{topic_arn:path}/configuration", response_model=TopicConfiguration)
@@ -141,7 +142,7 @@ def get_topic_configuration(
         configuration = service.get_topic_configuration(account, topic_arn)
         return TopicConfiguration(configuration=configuration)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{topic_arn:path}/configuration", response_model=TopicConfiguration)
@@ -167,6 +168,6 @@ def put_topic_configuration(
         )
         return TopicConfiguration(configuration=updated)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_bad_request_from_value_error(exc)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)

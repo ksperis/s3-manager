@@ -120,3 +120,17 @@ def raise_bad_gateway_from_runtime(exc: RuntimeError) -> NoReturn:
         status_code=status.HTTP_502_BAD_GATEWAY,
         detail=sanitize_error_detail(str(exc)),
     ) from exc
+
+
+def raise_bad_gateway_from_exception(exc: Exception) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail=sanitize_error_detail(str(exc)),
+    ) from exc
+
+
+def raise_bad_request_from_value_error(exc: ValueError) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=sanitize_error_detail(str(exc)),
+    ) from exc
