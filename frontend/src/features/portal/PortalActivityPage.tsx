@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { resolvePortalWorkspacePageState } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
@@ -43,7 +44,7 @@ export default function PortalActivityPage() {
       <PageHeader
         title="Activity"
         description="Overview of actions in your account."
-        breadcrumbs={[{ label: "Portal" }, { label: "Activity" }]}
+        breadcrumbs={portalBreadcrumbs({ label: "Activity" })}
         right={<div className={cx(uiCardMutedClass, "px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>Current period</div>}
       />
 

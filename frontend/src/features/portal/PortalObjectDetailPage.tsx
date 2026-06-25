@@ -24,6 +24,7 @@ import UiCard from "../../components/ui/UiCard";
 import { cx, uiCardMutedClass, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
+import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import {
   PortalPageState,
@@ -320,12 +321,11 @@ export default function PortalObjectDetailPage() {
       <PageHeader
         title={object.name || objectName(object.path)}
         description={object.path}
-        breadcrumbs={[
-          { label: "Portal" },
+        breadcrumbs={portalBreadcrumbs(
           { label: "Storage Spaces", to: "/portal/storage-spaces" },
           { label: space.name, to: storageSpacePath(space) },
           { label: object.name || objectName(object.path) },
-        ]}
+        )}
         actions={[
           { label: downloading ? "Downloading..." : "Download", onClick: handleDownload, variant: "secondary", disabled: !accountIdForApi || downloading },
           { label: linkBusy ? "Sharing..." : "Share", onClick: handleCreatePublicLink, variant: "secondary", disabled: !accountIdForApi || !canCreatePublicLink || linkBusy },

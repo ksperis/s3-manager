@@ -12,6 +12,7 @@ import UiCard from "../../components/ui/UiCard";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
+import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import {
   portalStorageSpaceStatusTone,
@@ -133,7 +134,7 @@ export default function PortalStorageSpacesPage() {
       <PageHeader
         title="Storage Spaces"
         description="Manage your storage spaces and their configuration."
-        breadcrumbs={[{ label: "Portal" }, { label: "Storage Spaces" }]}
+        breadcrumbs={portalBreadcrumbs({ label: "Storage Spaces" })}
         actions={headerActions}
       />
 

@@ -23,6 +23,7 @@ import {
   selectWorkspaceTrafficTrend,
   workspaceTrafficTotalBytes,
 } from "../../components/workspaceDashboardKpis";
+import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import UiBadge from "../../components/ui/UiBadge";
 import { cx, uiCardClass, uiMutedTextClass } from "../../components/ui/styles";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
@@ -532,7 +533,7 @@ export default function PortalDashboard() {
       <PageHeader
         title="Portal dashboard"
         description={`Workspace overview for ${workspace.accountName}.`}
-        breadcrumbs={[{ label: "Portal" }, { label: "Dashboard" }]}
+        breadcrumbs={portalBreadcrumbs({ label: "Dashboard" })}
         rightContent={
           <div className="flex h-8 items-center gap-2 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 text-xs font-semibold text-[var(--ui-text-muted)]">
             <span>Current period</span>

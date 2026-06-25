@@ -21,7 +21,7 @@ import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import AssociationSummary, {
   AccountAssociationChips,
   AssociationChips,
@@ -1801,7 +1801,7 @@ export default function UsersPage() {
       <PageHeader
         title="UI Users"
         description={usersDescription}
-        breadcrumbs={adminBreadcrumbs({ label: "Interface" }, { label: "UI Users" })}
+        breadcrumbs={adminPageBreadcrumbs("users")}
         actions={[
           {
             label: "Create user",

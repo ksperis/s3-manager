@@ -20,7 +20,7 @@ import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import AssociationSummary, {
   AccountAssociationChips,
   AssociationChips,
@@ -649,7 +649,7 @@ export default function GroupsPage() {
       <PageHeader
         title="UI Groups"
         description="Create reusable UI access groups for workspace, Manager tool, and execution context access."
-        breadcrumbs={adminBreadcrumbs({ label: "Platform" }, { label: "UI Groups" })}
+        breadcrumbs={adminPageBreadcrumbs("groups")}
         actions={[{ label: "Create group", onClick: openCreateModal }]}
       />
       {actionError && <PageBanner tone="error">{actionError}</PageBanner>}

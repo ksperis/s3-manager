@@ -21,6 +21,7 @@ import { cx, uiCardMutedClass, uiDividerClass, uiInputClass, uiMutedTextClass, u
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
+import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { PortalPageState } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
@@ -289,7 +290,7 @@ export default function PortalUsagePage() {
       <PageHeader
         title="Usage & Analytics"
         description="Track storage, traffic, requests and billing for this portal workspace."
-        breadcrumbs={[{ label: "Portal" }, { label: "Usage & Analytics" }]}
+        breadcrumbs={portalBreadcrumbs({ label: "Usage & Analytics" })}
       />
 
       <div className={cx("border-b pb-3", uiDividerClass)}>

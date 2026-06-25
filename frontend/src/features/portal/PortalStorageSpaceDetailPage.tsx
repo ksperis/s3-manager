@@ -17,6 +17,7 @@ import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import BrowserEmbed from "../browser/BrowserEmbed";
 import type { BrowserActionId } from "../browser/browserActions";
+import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { storageSpaceObjectPath } from "./portalWorkspaceModel";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 import {
@@ -181,7 +182,7 @@ export default function PortalStorageSpaceDetailPage() {
       <PageHeader
         title={space.name}
         description={`${space.description} Created ${space.createdLabel}. Region: ${space.region ?? "-"}.`}
-        breadcrumbs={[{ label: "Portal" }, { label: "Storage Spaces", to: "/portal/storage-spaces" }, { label: space.name }]}
+        breadcrumbs={portalBreadcrumbs({ label: "Storage Spaces", to: "/portal/storage-spaces" }, { label: space.name })}
         inlineContent={<UiBadge tone={portalStorageSpaceStatusTone(space)}>{space.status}</UiBadge>}
         actions={!isArchived && space.visibility === "shared" ? [{ label: "Share", to: "/portal/shares", variant: "secondary" }] : []}
       />

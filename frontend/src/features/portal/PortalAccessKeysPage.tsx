@@ -22,6 +22,7 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import { confirmAction } from "../../utils/confirm";
 import { extractApiError } from "../../utils/apiError";
 import { usePortalAccountContext } from "./PortalAccountContext";
+import { portalBreadcrumbs } from "./portalBreadcrumbs";
 
 function isKeyActive(key: PortalAccessKey): boolean {
   if (typeof key.is_active === "boolean") {
@@ -159,7 +160,7 @@ export default function PortalAccessKeysPage() {
       <PageHeader
         title="Access keys"
         description="Generate S3 credentials for external tools connected to this portal account."
-        breadcrumbs={[{ label: "Portal" }, { label: "Access keys" }]}
+        breadcrumbs={portalBreadcrumbs({ label: "Access keys" })}
         actions={[
           {
             label: busy === "create" ? "Creating..." : "New key",

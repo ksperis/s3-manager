@@ -137,6 +137,11 @@ import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
+import {
+  BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY,
+  resolveBucketOpsSurface,
+  type BucketOpsMode,
+} from "./bucketOpsSurface";
 import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
 import { buildUiTagItems, extractUiTagLabels, filterSelectorVisibleUiTags } from "../../utils/uiTags";
 import { getManagerToolAccess, readStoredUser } from "../../utils/workspaces";
@@ -1786,21 +1791,9 @@ export const hasAdvancedFilters = (
   return hasFeatureDetailFilters(advanced.featureDetails, featureSupport);
 };
 
-const CEPH_COLUMNS_STORAGE_KEY = "ceph-admin.bucket_list.columns.v2";
-const STORAGE_OPS_COLUMNS_STORAGE_KEY = "storage-ops.bucket_list.columns.v2";
-const UI_TAGS_STORAGE_KEY = "bucket-workbench.ui_tags.v1";
-const CEPH_UI_TAGS_STORAGE_NAMESPACE = "ceph-admin";
-const STORAGE_OPS_UI_TAGS_STORAGE_NAMESPACE = "storage-ops";
-const LEGACY_CEPH_UI_TAGS_STORAGE_KEY = "ceph-admin.bucket_list.ui_tags.v1";
-const CEPH_BUCKETS_STATE_STORAGE_KEY = "ceph-admin.bucket_list.state.v1";
-const STORAGE_OPS_BUCKETS_STATE_STORAGE_KEY = "storage-ops.bucket_list.state.v1";
-const CEPH_BULK_CONFIG_CLIPBOARD_STORAGE_KEY = "ceph-admin.bucket_list.bulk_config_clipboard.v1";
-const STORAGE_OPS_BULK_CONFIG_CLIPBOARD_STORAGE_KEY = "storage-ops.bucket_list.bulk_config_clipboard.v1";
 const BUCKET_UI_TAG_KEY_SEPARATOR = "\u001f";
 const DEFAULT_PAGE_SIZE = 25;
 const DEFAULT_SORT: { field: SortField; direction: "asc" | "desc" } = { field: "name", direction: "asc" };
-const DEFAULT_VISIBLE_COLUMNS_CEPH: ColumnId[] = ["ui_tags", "owner", "used_bytes", "object_count"];
-const DEFAULT_VISIBLE_COLUMNS_STORAGE_OPS: ColumnId[] = ["context_name", "ui_tags", "used_bytes", "object_count"];
 const BUCKET_CORE_COLUMN_OPTIONS: Array<{ id: ColumnId; label: string }> = [
   { id: "context_name", label: "Context" },
   { id: "context_kind", label: "Kind" },
@@ -2084,7 +2077,7 @@ const loadUiTags = (
   legacyStorageKey?: string
 ): BucketUiTags => {
   if (typeof window === "undefined" || !endpointId) return {};
-  const raw = localStorage.getItem(UI_TAGS_STORAGE_KEY);
+  const raw = localStorage.getItem(BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY);
   const legacyRaw = legacyStorageKey ? localStorage.getItem(legacyStorageKey) : null;
   if (!raw && !legacyRaw) return {};
   try {
@@ -2126,12 +2119,12 @@ const persistUiTags = (
   legacyStorageKey?: string
 ) => {
   if (typeof window === "undefined" || !endpointId) return;
-  const raw = localStorage.getItem(UI_TAGS_STORAGE_KEY);
+  const raw = localStorage.getItem(BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY);
   const store = raw ? (JSON.parse(raw) as Record<string, Record<string, BucketUiTags>>) : {};
   const namespaceStore = store[namespace] ?? {};
   namespaceStore[String(endpointId)] = value;
   store[namespace] = namespaceStore;
-  localStorage.setItem(UI_TAGS_STORAGE_KEY, JSON.stringify(store));
+  localStorage.setItem(BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY, JSON.stringify(store));
   if (legacyStorageKey) {
     localStorage.removeItem(legacyStorageKey);
   }
@@ -2374,8 +2367,6 @@ const getTagColors = (tag: string) => {
   };
 };
 
-export type BucketOpsMode = "ceph-admin" | "storage-ops";
-
 type BucketOpsWorkbenchProps = {
   mode: BucketOpsMode;
   shell: {
@@ -2415,7 +2406,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     selectedEndpoint: cephSelectedEndpoint,
     endpoints,
   } = useCephAdminEndpoint();
-  const isStorageOps = mode === "storage-ops";
+  const surface = useMemo(() => resolveBucketOpsSurface(mode), [mode]);
+  const isStorageOps = surface.mode === "storage-ops";
   const selectedEndpointId = isStorageOps ? STORAGE_OPS_SCOPE_ID : cephSelectedEndpointId;
   const selectedEndpoint = useMemo(
     () =>
@@ -2486,20 +2478,18 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const updateBucketObjectLock = isStorageOps ? updateStorageOpsBucketObjectLock : updateCephAdminBucketObjectLock;
   const updateBucketQuota = isStorageOps ? updateStorageOpsBucketQuota : updateCephAdminBucketQuota;
 
-  const columnsStorageKey = isStorageOps ? STORAGE_OPS_COLUMNS_STORAGE_KEY : CEPH_COLUMNS_STORAGE_KEY;
-  const uiTagsNamespace = isStorageOps ? STORAGE_OPS_UI_TAGS_STORAGE_NAMESPACE : CEPH_UI_TAGS_STORAGE_NAMESPACE;
-  const legacyUiTagsStorageKey = isStorageOps ? undefined : LEGACY_CEPH_UI_TAGS_STORAGE_KEY;
-  const bucketsStateStorageKey = isStorageOps ? STORAGE_OPS_BUCKETS_STATE_STORAGE_KEY : CEPH_BUCKETS_STATE_STORAGE_KEY;
-  const bulkClipboardStorageKey = isStorageOps
-    ? STORAGE_OPS_BULK_CONFIG_CLIPBOARD_STORAGE_KEY
-    : CEPH_BULK_CONFIG_CLIPBOARD_STORAGE_KEY;
-  const defaultVisibleColumns = isStorageOps ? DEFAULT_VISIBLE_COLUMNS_STORAGE_OPS : DEFAULT_VISIBLE_COLUMNS_CEPH;
-  const useExplicitBucketName = isStorageOps;
-  const scopeDisplayName = isStorageOps ? "Scope" : "Endpoint";
-  const exportPrefix = isStorageOps ? "storage-ops" : "ceph-admin";
-  const exportScopeKey = isStorageOps ? "scope" : "endpoint";
-  const missingScopeError = isStorageOps ? "No Storage Ops scope selected." : "No endpoint selected.";
-  const missingScopeHint = isStorageOps ? "Select a scope first." : "Select an endpoint first.";
+  const columnsStorageKey = surface.storageKeys.columns;
+  const uiTagsNamespace = surface.uiTagsNamespace;
+  const legacyUiTagsStorageKey = surface.storageKeys.legacyUiTags;
+  const bucketsStateStorageKey = surface.storageKeys.bucketListState;
+  const bulkClipboardStorageKey = surface.storageKeys.bulkConfigClipboard;
+  const defaultVisibleColumns = useMemo(() => [...surface.defaultVisibleColumns] as ColumnId[], [surface]);
+  const useExplicitBucketName = surface.useExplicitBucketName;
+  const scopeDisplayName = surface.scopeDisplayName;
+  const exportPrefix = surface.exportPrefix;
+  const exportScopeKey = surface.exportScopeKey;
+  const missingScopeError = surface.missingScopeError;
+  const missingScopeHint = surface.missingScopeHint;
 
   const featureSupport = useMemo<Record<FeatureKey, boolean>>(
     () => ({
@@ -8221,7 +8211,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       <PageHeader
         title="Buckets"
         description={shell.pageDescription}
-        breadcrumbs={[{ label: isStorageOps ? "Storage Ops" : "Ceph Admin", to: isStorageOps ? "/storage-ops" : "/ceph-admin" }, { label: "Buckets" }]}
+        breadcrumbs={[surface.breadcrumb, { label: "Buckets" }]}
       />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}

@@ -24,6 +24,7 @@ import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
+import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import type { PortalWorkspaceRole } from "./portalWorkspaceModel";
 import {
   portalRoleTone,
@@ -360,7 +361,7 @@ export default function PortalSharesPage() {
       <PageHeader
         title="Shares"
         description="Manage shared access with Viewer, Editor, and Owner roles."
-        breadcrumbs={[{ label: "Portal" }, { label: "Shares" }]}
+        breadcrumbs={portalBreadcrumbs({ label: "Shares" })}
       />
       {sharesError ? <PageBanner tone="warning">{sharesError}</PageBanner> : null}
       <UiCard>

@@ -149,6 +149,11 @@ import {
   resolveFeatureVisualState,
   stableBucketJsonSignature,
 } from "./bucketDetail";
+import {
+  buildBucketDetailBreadcrumbs,
+  resolveBucketDetailTabs,
+  type BucketDetailMode,
+} from "./bucketDetail/bucketDetailSurface";
 import { extractApiError, isApiFeatureNotImplemented } from "../../utils/apiError";
 
 function getUserRole(): string | null {
@@ -310,8 +315,6 @@ function randomLifecycleId() {
   }
   return `rule-${Math.random().toString(36).slice(2, 10)}`;
 }
-
-type BucketDetailMode = "manager" | "ceph-admin";
 
 type BucketDetailPageProps = {
   mode?: BucketDetailMode;
@@ -516,18 +519,8 @@ export default function BucketDetailPage({
   const showQuotaTab = isCephAdmin || Boolean(quotaFeatureEnabled && managerBucketQuotaAccess && hasAccountContext);
   const showObjectsTab = !isCephAdmin && !hideObjectsTab;
   const availableTabs = useMemo(() => {
-    if (isCephAdmin) {
-      return ["overview", "ceph", "usage-stats", "properties", "permissions", "advanced", "metrics"];
-    }
-    const baseTabs = showObjectsTab
-      ? ["overview", "objects", "usage-stats", "properties", "permissions", "advanced", "metrics"]
-      : ["overview", "usage-stats", "properties", "permissions", "advanced", "metrics"];
-    if (showQuotaTab) {
-      const insertAt = Math.max(1, baseTabs.indexOf("usage-stats"));
-      return [...baseTabs.slice(0, insertAt), "ceph", ...baseTabs.slice(insertAt)];
-    }
-    return baseTabs;
-  }, [isCephAdmin, showObjectsTab, showQuotaTab]);
+    return resolveBucketDetailTabs({ mode, showObjectsTab, showQuotaTab });
+  }, [mode, showObjectsTab, showQuotaTab]);
 
   useEffect(() => {
     if (!availableTabs.includes(activeTab)) {
@@ -2043,14 +2036,7 @@ export default function BucketDetailPage({
     websiteLoading,
   ]);
 
-  const basePath = isCephAdmin ? "/ceph-admin/buckets" : "/manager/buckets";
-  const rootPath = isCephAdmin ? "/ceph-admin" : "/manager";
-  const rootLabel = isCephAdmin ? "Ceph Admin" : "Manager";
-  const breadcrumbs = [
-    { label: rootLabel, to: rootPath },
-    { label: "Buckets", to: basePath },
-    { label: bucketName ?? "" },
-  ];
+  const breadcrumbs = useMemo(() => buildBucketDetailBreadcrumbs(mode, bucketName), [bucketName, mode]);
 
   const handleTogglePublicAccessField = (key: keyof BucketPublicAccessBlock, value: boolean) => {
     setPublicAccessBlock((prev) => ({

@@ -17,6 +17,7 @@ import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../util
 import { formatBytes } from "../../utils/format";
 import { readStoredUser } from "../../utils/workspaces";
 import { usePortalAccountContext } from "./PortalAccountContext";
+import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 type SaveTarget = "profile" | "preferences" | "password" | null;
@@ -209,7 +210,7 @@ export default function PortalSettingsPage() {
       <PageHeader
         title="Settings"
         description="Manage your portal profile, security and personal defaults."
-        breadcrumbs={[{ label: "Portal" }, { label: "Settings" }]}
+        breadcrumbs={portalBreadcrumbs({ label: "Settings" })}
       />
 
       {loading || accountsLoading ? <PageBanner tone="info">Loading settings...</PageBanner> : null}

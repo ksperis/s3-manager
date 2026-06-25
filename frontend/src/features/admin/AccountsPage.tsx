@@ -26,7 +26,7 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import PaginationControls from "../../components/PaginationControls";
 import { PortalSettingsItem, PortalSettingsSection } from "../../components/PortalSettingsLayout";
@@ -1050,7 +1050,7 @@ export default function S3AccountsPage() {
       <PageHeader
         title="Accounts"
         description="Provision Ceph RGW accounts (tenants), quotas, and root users."
-        breadcrumbs={adminBreadcrumbs({ label: "Accounts" })}
+        breadcrumbs={adminPageBreadcrumbs("accounts")}
         actions={
           isSuperAdmin
             ? [

@@ -14,6 +14,7 @@ import {
   portalTransferStatusTone,
   resolvePortalWorkspacePageState,
 } from "./portalUi";
+import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 const tabs = ["All", "Uploads", "Downloads"];
@@ -43,7 +44,7 @@ export default function PortalTransfersPage() {
       <PageHeader
         title="Transfers"
         description="Monitor ongoing and completed transfers."
-        breadcrumbs={[{ label: "Portal" }, { label: "Transfers" }]}
+        breadcrumbs={portalBreadcrumbs({ label: "Transfers" })}
       />
       <UiCard>
         <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
