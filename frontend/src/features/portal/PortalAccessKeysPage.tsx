@@ -12,6 +12,7 @@ import {
   type PortalAccessKey,
   type PortalAccessKeysState,
 } from "../../api/portal";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -19,10 +20,13 @@ import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { confirmAction } from "../../utils/confirm";
 import { extractApiError } from "../../utils/apiError";
 import { usePortalAccountContext } from "./PortalAccountContext";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
+
+type PendingAccessKeyAction =
+  | { type: "disable"; key: PortalAccessKey }
+  | { type: "delete"; key: PortalAccessKey };
 
 function isKeyActive(key: PortalAccessKey): boolean {
   if (typeof key.is_active === "boolean") {
@@ -64,6 +68,7 @@ export default function PortalAccessKeysPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [createdKey, setCreatedKey] = useState<PortalAccessKey | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAccessKeyAction | null>(null);
 
   const loadKeys = useCallback(async () => {
     if (!hasAccountContext || !accountIdForApi) {
@@ -116,38 +121,54 @@ export default function PortalAccessKeysPage() {
     }
   };
 
-  const handleToggleKey = async (key: PortalAccessKey) => {
+  const updateKeyStatus = async (key: PortalAccessKey, active: boolean) => {
     if (!accountIdForApi || !canManageAccessKeys || key.is_portal) return;
-    const active = isKeyActive(key);
-    if (active && !confirmAction(`Disable key ${key.access_key_id}?`)) return;
     setBusy(`toggle:${key.access_key_id}`);
     setError(null);
     setActionMessage(null);
     try {
-      await updatePortalAccessKeyStatus(accountIdForApi, key.access_key_id, !active);
-      setActionMessage(active ? "Access key disabled" : "Access key enabled");
+      await updatePortalAccessKeyStatus(accountIdForApi, key.access_key_id, active);
+      setActionMessage(active ? "Access key enabled" : "Access key disabled");
+      setPendingAction(null);
       await loadKeys();
     } catch (err) {
       console.error(err);
       setError(extractApiError(err, "Unable to update access key."));
+      setPendingAction(null);
     } finally {
       setBusy(null);
     }
   };
 
-  const handleDeleteKey = async (key: PortalAccessKey) => {
+  const handleToggleKey = (key: PortalAccessKey) => {
     if (!accountIdForApi || !canManageAccessKeys || key.is_portal) return;
-    if (!confirmAction(`Delete key ${key.access_key_id}?`)) return;
+    const active = isKeyActive(key);
+    if (active) {
+      setPendingAction({ type: "disable", key });
+      return;
+    }
+    void updateKeyStatus(key, true);
+  };
+
+  const handleDeleteKey = (key: PortalAccessKey) => {
+    if (!accountIdForApi || !canManageAccessKeys || key.is_portal) return;
+    setPendingAction({ type: "delete", key });
+  };
+
+  const confirmDeleteKey = async (key: PortalAccessKey) => {
+    if (!accountIdForApi || !canManageAccessKeys || key.is_portal) return;
     setBusy(`delete:${key.access_key_id}`);
     setError(null);
     setActionMessage(null);
     try {
       await deletePortalAccessKey(accountIdForApi, key.access_key_id);
       setActionMessage("Access key deleted");
+      setPendingAction(null);
       await loadKeys();
     } catch (err) {
       console.error(err);
       setError(extractApiError(err, "Unable to delete access key."));
+      setPendingAction(null);
     } finally {
       setBusy(null);
     }
@@ -159,7 +180,7 @@ export default function PortalAccessKeysPage() {
     <div className="space-y-4">
       <PageHeader
         title="Access keys"
-        description="Generate S3 credentials for external tools connected to this portal account."
+        description="Create S3 access keys for external tools. Use the endpoint shown here; each secret is shown only once."
         breadcrumbs={portalBreadcrumbs({ label: "Access keys" })}
         actions={[
           {
@@ -176,6 +197,11 @@ export default function PortalAccessKeysPage() {
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       {state && !canManageAccessKeys && (
         <PageBanner tone="warning">Access-key management is disabled for this portal account.</PageBanner>
+      )}
+      {state && canManageAccessKeys && (
+        <PageBanner tone="info">
+          Use endpoint {state.s3_endpoint || "the configured storage service"} with these keys. Disabling pauses a key for external tools; deleting removes it permanently.
+        </PageBanner>
       )}
       {state && canManageAccessKeys && maxReached && (
         <PageBanner tone="info">The maximum number of portal user access keys has been reached.</PageBanner>
@@ -229,8 +255,8 @@ export default function PortalAccessKeysPage() {
             title="Keys"
             description={
               state?.s3_endpoint
-                ? `Use these keys with ${state.s3_endpoint}. The portal key is hidden from this list.`
-                : "The portal key is hidden from this list."
+                ? `Use these keys with endpoint ${state.s3_endpoint}. Store secrets when they are created; they cannot be shown again. The portal key is hidden from this list.`
+                : "Store secrets when they are created; they cannot be shown again. The portal key is hidden from this list."
             }
             showHeading={false}
             countLabel={`${visibleKeys.length}/${maxAccessKeys || "-"} key(s)`}
@@ -300,6 +326,46 @@ export default function PortalAccessKeysPage() {
           </table>
         </div>
       )}
+
+      {pendingAction?.type === "disable" ? (
+        <ConfirmActionDialog
+          title="Disable access key"
+          description="Confirm that you want to disable this access key."
+          confirmLabel="Disable key"
+          loading={busy === `toggle:${pendingAction.key.access_key_id}`}
+          details={[
+            { label: "Access key", value: pendingAction.key.access_key_id, mono: true },
+            { label: "Endpoint", value: state?.s3_endpoint ?? "Configured storage service" },
+          ]}
+          impacts={[
+            "External tools using this key stop authenticating until it is re-enabled.",
+            "The secret value cannot be displayed again from the Portal.",
+            "The active Portal runtime key is not affected.",
+          ]}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={() => updateKeyStatus(pendingAction.key, false)}
+        />
+      ) : null}
+
+      {pendingAction?.type === "delete" ? (
+        <ConfirmActionDialog
+          title="Delete access key"
+          description="Confirm that you want to permanently delete this access key."
+          confirmLabel="Delete key"
+          loading={busy === `delete:${pendingAction.key.access_key_id}`}
+          details={[
+            { label: "Access key", value: pendingAction.key.access_key_id, mono: true },
+            { label: "Endpoint", value: state?.s3_endpoint ?? "Configured storage service" },
+          ]}
+          impacts={[
+            "External tools using this key stop working immediately.",
+            "The secret value cannot be recovered or shown again.",
+            "This deletion cannot be undone from the Portal.",
+          ]}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={() => confirmDeleteKey(pendingAction.key)}
+        />
+      ) : null}
     </div>
   );
 }

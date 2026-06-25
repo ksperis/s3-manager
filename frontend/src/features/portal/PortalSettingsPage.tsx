@@ -38,14 +38,14 @@ function persistStoredUser(user: User) {
   );
 }
 
-function resolvePortalRole(user: User | null, selectedAccountId: string | null): string {
-  if (!user || !selectedAccountId) return "-";
+function resolveWorkspaceAccess(user: User | null, selectedAccountId: string | null): string {
+  if (!user || !selectedAccountId) return "Limited access";
   const numericId = Number(selectedAccountId);
   const link = user.account_links?.find((item) => Number(item.account_id) === numericId);
-  if (!link?.account_role || link.account_role === "portal_none") return "-";
-  if (link.account_role === "portal_manager") return "Portal manager";
-  if (link.account_role === "portal_user") return "Portal user";
-  return String(link.account_role);
+  if (!link?.account_role || link.account_role === "portal_none") return "Limited access";
+  if (link.account_role === "portal_manager") return "Manager";
+  if (link.account_role === "portal_user") return "User";
+  return "Limited access";
 }
 
 function normalizeUiPreferences(value?: UiPreferences | null): UiPreferences {
@@ -77,8 +77,8 @@ export default function PortalSettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const selectedPortalRole = useMemo(
-    () => resolvePortalRole(user, selectedAccountId),
+  const selectedWorkspaceAccess = useMemo(
+    () => resolveWorkspaceAccess(user, selectedAccountId),
     [selectedAccountId, user]
   );
   const activeSpaces = workspace.spaces.filter((space) => space.status !== "Archived");
@@ -369,11 +369,11 @@ export default function PortalSettingsPage() {
                 <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{selectedAccount?.name ?? "-"}</dd>
               </div>
               <div>
-                <dt className={labelClasses}>Portal role</dt>
-                <dd className="mt-1"><UiBadge tone="primary">{selectedPortalRole}</UiBadge></dd>
+                <dt className={labelClasses}>Workspace access</dt>
+                <dd className="mt-1"><UiBadge tone="primary">{selectedWorkspaceAccess}</UiBadge></dd>
               </div>
               <div>
-                <dt className={labelClasses}>Endpoint</dt>
+                <dt className={labelClasses}>Storage service</dt>
                 <dd className={cx("mt-1 break-words font-semibold", uiTitleTextClass)}>
                   {selectedAccount?.storage_endpoint_name ?? selectedAccount?.storage_endpoint_url ?? "-"}
                 </dd>

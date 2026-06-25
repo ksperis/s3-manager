@@ -207,6 +207,13 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
     </div>
     <figcaption><strong>Usage.</strong> Usage & Analytics consolidates storage, traffic, requests, and billing source signals in end-user language.</figcaption>
   </figure>
+  <figure data-thumb-label="Access Keys">
+    <div class="docs-themed-shot" data-docs-themed-shot>
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-access-keys.light.png" alt="Portal Access keys page with endpoint guidance, one-time secret warning, and external key actions" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-access-keys.dark.png" alt="Portal Access keys page with endpoint guidance, one-time secret warning, and external key actions" loading="lazy">
+    </div>
+    <figcaption><strong>Access keys.</strong> Portal users can create external S3 keys with clear endpoint guidance and safety copy.</figcaption>
+  </figure>
   <figure data-thumb-label="Settings">
     <div class="docs-themed-shot" data-docs-themed-shot>
       <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-settings.light.png" alt="Portal Settings page with account, security, and preference cards" loading="lazy">

@@ -96,6 +96,7 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/portal/storage-spaces/research-data"]}>
       <Routes>
+        <Route path="/portal/storage-spaces" element={<div>Storage Spaces</div>} />
         <Route path="/portal/storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
       </Routes>
     </MemoryRouter>
@@ -121,6 +122,12 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     expect(screen.getByRole("heading", { name: "Research Data" })).toBeInTheDocument();
     expect(screen.getByTestId("portal-browser-embed")).toBeInTheDocument();
+    expect(screen.getByText("Storage used")).toBeInTheDocument();
+    expect(screen.queryByText("Utilisation")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("portal-browser-embed").compareDocumentPosition(screen.getByRole("heading", { name: "Storage Space settings" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
 
     const embedProps = vi.mocked(BrowserEmbed).mock.calls[0][0] as ComponentProps<typeof BrowserEmbed>;
     expect(embedProps).toMatchObject({
@@ -162,7 +169,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     renderPage();
 
-    expect(screen.getByText(/Portal Browser is disabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/File browsing is unavailable/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
   });
 
@@ -194,5 +201,21 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     expect(screen.getByText(/This Storage Space is archived/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
+  });
+
+  it("confirms archive with explicit target and impacts", async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+
+    expect(screen.getByRole("heading", { name: "Archive Storage Space" })).toBeInTheDocument();
+    expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
+    expect(screen.getByText("Existing objects are kept and are not deleted.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Archive Storage Space" }));
+
+    await waitFor(() => {
+      expect(mocks.updateStorageSpaceMock).toHaveBeenCalledWith("101", "research-data", { archived: true });
+    });
   });
 });

@@ -15,6 +15,7 @@ import {
   type PortalStorageSpaceRole,
   type PortalStorageSpaceShare,
 } from "../../api/portal";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
@@ -41,6 +42,9 @@ const tabs = [
 const roles: PortalStorageSpaceRole[] = ["Viewer", "Editor", "Owner"];
 
 type ShareTab = (typeof tabs)[number]["id"];
+type PendingShareAction =
+  | { type: "revoke-share"; share: ShareRow }
+  | { type: "revoke-public-link"; link: PortalPublicLink };
 type ShareRow = {
   id: string;
   userId?: number | null;
@@ -152,6 +156,7 @@ export default function PortalSharesPage() {
   const [publicObjectKey, setPublicObjectKey] = useState("");
   const [publicLinkExpiration, setPublicLinkExpiration] = useState("");
   const [busyShareId, setBusyShareId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingShareAction | null>(null);
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
   const activeSharedSpaces = useMemo(
     () => workspace.spaces.filter((space) => space.status !== "Archived" && space.visibility === "shared"),
@@ -288,15 +293,21 @@ export default function PortalSharesPage() {
 
   const handleRevoke = async (share: ShareRow) => {
     if (!accountIdForApi || !share.userId) return;
-    if (!window.confirm(`Revoke access for ${share.person} on ${share.spaceName}?`)) return;
+    setPendingAction({ type: "revoke-share", share });
+  };
+
+  const confirmRevoke = async (share: ShareRow) => {
+    if (!accountIdForApi || !share.userId) return;
     setBusyShareId(share.id);
     setSharesError(null);
     try {
       await revokePortalStorageSpaceShare(accountIdForApi, share.spaceId, share.userId);
       await refreshSpaceShares(share.spaceId);
+      setPendingAction(null);
     } catch (err) {
       console.error(err);
       setSharesError(extractApiError(err, "Unable to revoke share."));
+      setPendingAction(null);
     } finally {
       setBusyShareId(null);
     }
@@ -325,7 +336,11 @@ export default function PortalSharesPage() {
 
   const handleRevokePublicLink = async (link: PortalPublicLink) => {
     if (!accountIdForApi) return;
-    if (!window.confirm(`Revoke public link for ${link.object_name}?`)) return;
+    setPendingAction({ type: "revoke-public-link", link });
+  };
+
+  const confirmRevokePublicLink = async (link: PortalPublicLink) => {
+    if (!accountIdForApi) return;
     setBusyShareId(`public-link-${link.id}`);
     setSharesError(null);
     try {
@@ -334,9 +349,11 @@ export default function PortalSharesPage() {
         ...current.filter((item) => item.storage_space_id !== link.storage_space_id),
         ...updated,
       ]);
+      setPendingAction(null);
     } catch (err) {
       console.error(err);
       setSharesError(extractApiError(err, "Unable to revoke public link."));
+      setPendingAction(null);
     } finally {
       setBusyShareId(null);
     }
@@ -476,6 +493,48 @@ export default function PortalSharesPage() {
             </UiButton>
           </div>
         </UiCard>
+      ) : null}
+
+      {pendingAction?.type === "revoke-share" ? (
+        <ConfirmActionDialog
+          title="Revoke access"
+          description="Confirm that you want to remove this person's access."
+          confirmLabel="Revoke access"
+          loading={busyShareId === pendingAction.share.id}
+          details={[
+            { label: "Person", value: pendingAction.share.person },
+            { label: "Storage Space", value: pendingAction.share.spaceName },
+            { label: "Access", value: pendingAction.share.access },
+          ]}
+          impacts={[
+            "This person loses access to the Storage Space immediately.",
+            "Files and objects in the Storage Space are not deleted.",
+            "You can share the Storage Space again later if needed.",
+          ]}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={() => confirmRevoke(pendingAction.share)}
+        />
+      ) : null}
+
+      {pendingAction?.type === "revoke-public-link" ? (
+        <ConfirmActionDialog
+          title="Revoke public link"
+          description="Confirm that you want to revoke this public link."
+          confirmLabel="Revoke link"
+          loading={busyShareId === `public-link-${pendingAction.link.id}`}
+          details={[
+            { label: "Object", value: pendingAction.link.object_name },
+            { label: "Storage Space", value: pendingAction.link.storage_space_name },
+            { label: "Link", value: pendingAction.link.url, mono: true },
+          ]}
+          impacts={[
+            "Anyone using this URL loses access immediately.",
+            "The object remains in the Storage Space.",
+            "You can create a new public link later if sharing is still allowed.",
+          ]}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={() => confirmRevokePublicLink(pendingAction.link)}
+        />
       ) : null}
     </div>
   );

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -81,6 +81,7 @@ describe("PortalAccessKeysPage", () => {
     expect(await screen.findByText("AK-USER")).toBeInTheDocument();
     expect(screen.queryByText("AK-PORTAL")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New key" })).toBeEnabled();
+    expect(screen.getByText(/Use endpoint https:\/\/s3\.example\.test with these keys/i)).toBeInTheDocument();
     expect(mocks.fetchPortalAccessKeysState).toHaveBeenCalledWith("101");
   });
 
@@ -97,19 +98,24 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByText("SK-NEW")).toBeInTheDocument();
   });
 
-  it("updates and deletes external keys after confirmation", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("updates and deletes external keys after structured confirmation", async () => {
     const user = userEvent.setup();
     renderPage();
 
     await screen.findByText("AK-USER");
     await user.click(screen.getByRole("button", { name: "Disable" }));
+    const disableDialog = screen.getByRole("dialog", { name: "Disable access key" });
+    expect(within(disableDialog).getByText("AK-USER")).toBeInTheDocument();
+    expect(within(disableDialog).getByText("External tools using this key stop authenticating until it is re-enabled.")).toBeInTheDocument();
+    await user.click(within(disableDialog).getByRole("button", { name: "Disable key" }));
     await waitFor(() => expect(mocks.updatePortalAccessKeyStatus).toHaveBeenCalledWith("101", "AK-USER", false));
 
     await user.click(screen.getByRole("button", { name: "Delete" }));
+    const deleteDialog = screen.getByRole("dialog", { name: "Delete access key" });
+    expect(within(deleteDialog).getByText("AK-USER")).toBeInTheDocument();
+    expect(within(deleteDialog).getByText("External tools using this key stop working immediately.")).toBeInTheDocument();
+    await user.click(within(deleteDialog).getByRole("button", { name: "Delete key" }));
     await waitFor(() => expect(mocks.deletePortalAccessKey).toHaveBeenCalledWith("101", "AK-USER"));
-    expect(confirmSpy).toHaveBeenCalledWith("Disable key AK-USER?");
-    expect(confirmSpy).toHaveBeenCalledWith("Delete key AK-USER?");
   });
 
   it("disables mutations when access-key management is disabled", async () => {

@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { updatePortalStorageSpace, type PortalStorageSpaceVisibility } from "../../api/portal";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
@@ -77,6 +78,7 @@ export default function PortalStorageSpaceDetailPage() {
   const [metadataDescription, setMetadataDescription] = useState("");
   const [metadataVisibility, setMetadataVisibility] = useState<PortalStorageSpaceVisibility>("private");
   const [metadataBusy, setMetadataBusy] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const {
     workspace,
     loading,
@@ -116,13 +118,18 @@ export default function PortalStorageSpaceDetailPage() {
     }
   };
 
-  const handleArchive = async () => {
+  const handleArchive = () => {
     if (!space || !accountIdForApi) return;
-    if (!window.confirm(`Archive ${space.name}? Objects will not be deleted.`)) return;
+    setArchiveDialogOpen(true);
+  };
+
+  const confirmArchive = async () => {
+    if (!space || !accountIdForApi) return;
     setMetadataBusy(true);
     setMessage(null);
     try {
       await updatePortalStorageSpace(accountIdForApi, space.id, { archived: true });
+      setArchiveDialogOpen(false);
       navigate("/portal/storage-spaces");
     } catch (err) {
       console.error(err);
@@ -189,47 +196,9 @@ export default function PortalStorageSpaceDetailPage() {
 
       {message ? <PageBanner tone="info">{message}</PageBanner> : null}
 
-      {space.role === "Owner" ? (
-        <UiCard title="Storage Space details">
-          <div className="grid gap-3 lg:grid-cols-[220px_1fr_160px_auto_auto]">
-            <input
-              className="ui-control h-9 text-xs disabled:opacity-70"
-              value={metadataName}
-              onChange={(event) => setMetadataName(event.target.value)}
-              aria-label="Storage Space name"
-              disabled={!canRename || metadataBusy}
-              title={canRename ? "Storage Space name" : "Name locked for this Storage Space"}
-            />
-            <input className="ui-control h-9 text-xs" value={metadataDescription} onChange={(event) => setMetadataDescription(event.target.value)} aria-label="Storage Space description" />
-            <select
-              className="ui-control h-9 py-1.5 text-xs"
-              value={metadataVisibility}
-              onChange={(event) => setMetadataVisibility(event.target.value as PortalStorageSpaceVisibility)}
-              aria-label="Storage Space visibility"
-              disabled={metadataBusy || isArchived}
-            >
-              <option value="private">Private</option>
-              <option value="shared">Shared</option>
-            </select>
-            <UiButton disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 px-3 py-1.5">
-              Save
-            </UiButton>
-            {isArchived ? (
-              <UiButton variant="secondary" disabled={metadataBusy} onClick={handleRestore} className="h-9 px-3 py-1.5">
-                Restore
-              </UiButton>
-            ) : (
-              <UiButton variant="warning" disabled={metadataBusy} onClick={handleArchive} className="h-9 px-3 py-1.5">
-                Archive
-              </UiButton>
-            )}
-          </div>
-        </UiCard>
-      ) : null}
-
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <ObjectMetricCard
-          label="Utilisation"
+          label="Storage used"
           value={formatBytes(space.usedBytes)}
           detail={quotaPercent == null ? "Quota unavailable" : `of ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)}%)`}
           progress={quotaPercent ?? undefined}
@@ -279,9 +248,68 @@ export default function PortalStorageSpaceDetailPage() {
         </div>
       ) : (
         <PageBanner tone="warning">
-          Portal Browser is disabled. Enable Browser and Browser for Portal in settings to browse files in this Storage Space.
+          File browsing is unavailable. Ask an administrator to enable file browsing for this workspace.
         </PageBanner>
       )}
+
+      {space.role === "Owner" ? (
+        <UiCard title="Storage Space settings">
+          <div className="grid gap-3 lg:grid-cols-[220px_1fr_160px_auto_auto]">
+            <input
+              className="ui-control h-9 text-xs disabled:opacity-70"
+              value={metadataName}
+              onChange={(event) => setMetadataName(event.target.value)}
+              aria-label="Storage Space name"
+              disabled={!canRename || metadataBusy}
+              title={canRename ? "Storage Space name" : "Name locked for this Storage Space"}
+            />
+            <input className="ui-control h-9 text-xs" value={metadataDescription} onChange={(event) => setMetadataDescription(event.target.value)} aria-label="Storage Space description" />
+            <select
+              className="ui-control h-9 py-1.5 text-xs"
+              value={metadataVisibility}
+              onChange={(event) => setMetadataVisibility(event.target.value as PortalStorageSpaceVisibility)}
+              aria-label="Storage Space visibility"
+              disabled={metadataBusy || isArchived}
+            >
+              <option value="private">Private</option>
+              <option value="shared">Shared</option>
+            </select>
+            <UiButton disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 px-3 py-1.5">
+              Save
+            </UiButton>
+            {isArchived ? (
+              <UiButton variant="secondary" disabled={metadataBusy} onClick={handleRestore} className="h-9 px-3 py-1.5">
+                Restore
+              </UiButton>
+            ) : (
+              <UiButton variant="warning" disabled={metadataBusy} onClick={handleArchive} className="h-9 px-3 py-1.5">
+                Archive
+              </UiButton>
+            )}
+          </div>
+        </UiCard>
+      ) : null}
+
+      {archiveDialogOpen ? (
+        <ConfirmActionDialog
+          title="Archive Storage Space"
+          description="Confirm that you want to archive this Storage Space."
+          confirmLabel="Archive Storage Space"
+          loading={metadataBusy}
+          details={[
+            { label: "Storage Space", value: space.name },
+            { label: "Status", value: "Can be restored later" },
+          ]}
+          impacts={[
+            "The Storage Space is removed from active file work until it is restored.",
+            "Existing objects are kept and are not deleted.",
+            "Public links and file access are suspended while archived.",
+          ]}
+          warning="Archiving is reversible from this settings section."
+          onCancel={() => setArchiveDialogOpen(false)}
+          onConfirm={confirmArchive}
+        />
+      ) : null}
     </div>
   );
 }

@@ -88,8 +88,13 @@ describe("PortalSettingsPage", () => {
     expect(screen.getByDisplayValue("portal@example.com")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Preferences" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Portal account" })).toBeInTheDocument();
-    expect(screen.getByText("Portal user")).toBeInTheDocument();
+    expect(screen.getByText("Workspace access")).toBeInTheDocument();
+    expect(screen.getByText("User")).toBeInTheDocument();
+    expect(screen.getByText("Storage service")).toBeInTheDocument();
     expect(screen.getByText("1 active / 2 total")).toBeInTheDocument();
+    expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
+    expect(screen.queryByText("Portal user")).not.toBeInTheDocument();
+    expect(screen.queryByText("Endpoint")).not.toBeInTheDocument();
     expect(screen.queryByText("acc-123456")).not.toBeInTheDocument();
     expect(screen.queryByText("MFA")).not.toBeInTheDocument();
     expect(screen.queryByText("Session timeout")).not.toBeInTheDocument();

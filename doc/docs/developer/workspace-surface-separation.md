@@ -241,6 +241,7 @@ from `frontend/` and are committed under
 - `portal-object-list`;
 - `portal-object-detail`;
 - `portal-usage`;
+- `portal-access-keys`;
 - `portal-settings`.
 
 `portalVisualQa.spec.ts` also opens these Portal routes in desktop and mobile
@@ -254,6 +255,7 @@ viewports:
 - `/portal/activity`
 - `/portal/transfers`
 - `/portal/usage`
+- `/portal/access-keys`
 - `/portal/settings`
 
 The QA test checks that the main content renders, the page does not expose

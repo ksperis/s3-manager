@@ -69,9 +69,10 @@ export default function PortalStorageSpacesPage() {
     });
   }, [normalizedQuery, roleFilter, sort, statusFilter, workspace.spaces]);
 
-  const canCreate = Boolean(state?.can_create_storage_spaces ?? state?.can_manage_buckets);
-  const canImport = Boolean(state?.can_manage_buckets);
+  const canCreate = Boolean(state?.can_create_storage_spaces);
+  const canImport = state?.account_role === "portal_manager" && Boolean(state?.can_manage_buckets);
   const canUseNamedBucket = Boolean(state?.allow_named_bucket_create);
+  const effectiveNamingMode = canUseNamedBucket ? newNamingMode : "generic_uuid";
 
   const handleCreate = async () => {
     if (!accountIdForApi || !newName.trim()) return;
@@ -80,7 +81,7 @@ export default function PortalStorageSpacesPage() {
     try {
       const created = await createPortalStorageSpace(accountIdForApi, {
         name: newName.trim(),
-        naming_mode: canUseNamedBucket ? newNamingMode : "generic_uuid",
+        naming_mode: effectiveNamingMode,
         description: newDescription.trim() || null,
         visibility: newVisibility,
       });
@@ -106,7 +107,7 @@ export default function PortalStorageSpacesPage() {
       navigate(storageSpacePath({ id: imported.id }));
     } catch (err) {
       console.error(err);
-      setImportError(extractApiError(err, "Unable to import bucket."));
+      setImportError(extractApiError(err, "Unable to add existing storage."));
     } finally {
       setImportBusy(false);
     }
@@ -125,7 +126,7 @@ export default function PortalStorageSpacesPage() {
   const headerActions = [
     ...(canCreate ? [{ label: "Create storage space", onClick: () => setShowCreate((value) => !value) }] : []),
     ...(canImport
-      ? [{ label: "Import bucket", onClick: () => setShowImport((value) => !value), variant: "secondary" as const }]
+      ? [{ label: "Add existing storage", onClick: () => setShowImport((value) => !value), variant: "secondary" as const }]
       : []),
   ];
 
@@ -133,29 +134,30 @@ export default function PortalStorageSpacesPage() {
     <div className="space-y-4">
       <PageHeader
         title="Storage Spaces"
-        description="Manage your storage spaces and their configuration."
+        description="Manage access, files and usage for your Storage Spaces."
         breadcrumbs={portalBreadcrumbs({ label: "Storage Spaces" })}
         actions={headerActions}
       />
 
       {showCreate ? (
         <UiCard title="Create Storage Space">
-          <div className="grid gap-3 lg:grid-cols-[180px_1fr_1.5fr_160px_auto]">
-            <select
-              className="ui-control h-9 py-1.5 text-xs"
-              value={newNamingMode}
-              onChange={(event) => setNewNamingMode(event.target.value as "generic_uuid" | "named_bucket")}
-              disabled={!canUseNamedBucket}
-              aria-label="Storage Space naming mode"
-            >
-              <option value="generic_uuid">Generic storage</option>
-              {canUseNamedBucket ? <option value="named_bucket">Named bucket</option> : null}
-            </select>
+          <div className={cx("grid gap-3", canUseNamedBucket ? "lg:grid-cols-[180px_1fr_1.5fr_160px_auto]" : "lg:grid-cols-[1fr_1.5fr_160px_auto]")}>
+            {canUseNamedBucket ? (
+              <select
+                className="ui-control h-9 py-1.5 text-xs"
+                value={newNamingMode}
+                onChange={(event) => setNewNamingMode(event.target.value as "generic_uuid" | "named_bucket")}
+                aria-label="Storage Space naming mode"
+              >
+                <option value="generic_uuid">Automatic storage</option>
+                <option value="named_bucket">Named storage</option>
+              </select>
+            ) : null}
             <input
               className="ui-control h-9 text-xs"
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
-              placeholder={newNamingMode === "named_bucket" ? "Storage Space and bucket name" : "Storage Space name"}
+              placeholder={effectiveNamingMode === "named_bucket" ? "Storage Space and storage name" : "Storage Space name"}
             />
             <input className="ui-control h-9 text-xs" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder="Description" />
             <select className="ui-control h-9 py-1.5 text-xs" value={newVisibility} onChange={(event) => setNewVisibility(event.target.value as PortalStorageSpaceVisibility)} aria-label="Storage Space visibility">
@@ -171,13 +173,13 @@ export default function PortalStorageSpacesPage() {
       ) : null}
 
       {showImport ? (
-        <UiCard title="Import bucket">
+        <UiCard title="Add existing storage">
           <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_160px_auto]">
             <input
               className="ui-control h-9 text-xs"
               value={importBucketName}
               onChange={(event) => setImportBucketName(event.target.value)}
-              placeholder="Bucket name"
+              placeholder="Existing storage name"
             />
             <input
               className="ui-control h-9 text-xs"
@@ -190,7 +192,7 @@ export default function PortalStorageSpacesPage() {
               <option value="shared">Shared</option>
             </select>
             <UiButton disabled={!importBucketName.trim() || importBusy} onClick={handleImport} className="h-9 px-3 py-1.5">
-              {importBusy ? "Importing..." : "Import"}
+              {importBusy ? "Adding..." : "Add"}
             </UiButton>
           </div>
           {importError ? <div className="mt-3 text-xs font-semibold text-rose-600 dark:text-rose-300">{importError}</div> : null}

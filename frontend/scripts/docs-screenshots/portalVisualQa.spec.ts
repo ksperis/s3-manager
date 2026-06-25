@@ -22,12 +22,13 @@ const portalRoutes = [
   { path: "/portal/storage-spaces/genomics-2026?prefix=raw-data%2F2024%2F03%2F", expected: "sample_001.fastq.gz" },
   {
     path: "/portal/storage-spaces/genomics-2026/objects/raw-data/2024/03/sample_001.fastq.gz",
-    expected: "Informations générales",
+    expected: "Quick preview",
   },
   { path: "/portal/shares", expected: "Shared with me" },
   { path: "/portal/activity", expected: "Activity" },
   { path: "/portal/transfers", expected: "Transfers" },
   { path: "/portal/usage", expected: "Usage & Analytics" },
+  { path: "/portal/access-keys", expected: "Access keys" },
   { path: "/portal/settings", expected: "Settings" },
 ];
 

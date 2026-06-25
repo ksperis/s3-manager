@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
@@ -13,6 +13,7 @@ import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 export default function PortalActivityPage() {
   const [actionFilter, setActionFilter] = useState("All actions");
   const [spaceFilter, setSpaceFilter] = useState("All storage spaces");
+  const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading } = usePortalWorkspaceData();
   const actionOptions = useMemo(
     () => ["All actions", ...Array.from(new Set(workspace.activity.map((item) => item.action))).sort()],
@@ -45,7 +46,7 @@ export default function PortalActivityPage() {
         title="Activity"
         description="Overview of actions in your account."
         breadcrumbs={portalBreadcrumbs({ label: "Activity" })}
-        right={<div className={cx(uiCardMutedClass, "px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>Current period</div>}
+        rightContent={<div className={cx(uiCardMutedClass, "px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>Current period</div>}
       />
 
       <UiCard>
@@ -63,7 +64,7 @@ export default function PortalActivityPage() {
           </select>
         </div>
         <div className="overflow-x-auto">
-          <table className="ui-data-table min-w-[860px]">
+          <table className="ui-data-table min-w-[760px]">
             <thead>
               <tr>
                 <th>Time</th>
@@ -71,20 +72,43 @@ export default function PortalActivityPage() {
                 <th>Action</th>
                 <th>Resource</th>
                 <th>Storage Space</th>
-                <th>IP Address</th>
+                <th className="text-right">Details</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.timeLabel}</td>
-                  <td className={uiTitleTextClass}>{item.actor}</td>
-                  <td>{item.action}</td>
-                  <td>{item.target}</td>
-                  <td>{item.spaceName}</td>
-                  <td>{item.ipAddress}</td>
-                </tr>
-              ))}
+              {rows.map((item) => {
+                const expanded = expandedActivityId === item.id;
+                return (
+                  <Fragment key={item.id}>
+                    <tr>
+                      <td>{item.timeLabel}</td>
+                      <td className={uiTitleTextClass}>{item.actor}</td>
+                      <td>{item.action}</td>
+                      <td>{item.target}</td>
+                      <td>{item.spaceName}</td>
+                      <td className="text-right">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedActivityId(expanded ? null : item.id)}
+                          className="text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
+                        >
+                          {expanded ? "Hide details" : "Show details"}
+                        </button>
+                      </td>
+                    </tr>
+                    {expanded ? (
+                      <tr>
+                        <td colSpan={6}>
+                          <dl className={cx(uiCardMutedClass, "grid gap-2 px-3 py-2 text-xs sm:grid-cols-[140px_1fr]")}>
+                            <dt className={cx("font-semibold", uiMutedTextClass)}>IP address</dt>
+                            <dd className={uiTitleTextClass}>{item.ipAddress || "-"}</dd>
+                          </dl>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>

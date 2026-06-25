@@ -14,6 +14,7 @@ import {
   type PortalPublicLink,
   type PortalStorageObjectDetail,
 } from "../../api/portal";
+import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
@@ -34,6 +35,10 @@ import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 
 const tabs = ["Preview", "Details", "Events"];
+
+type PendingObjectAction =
+  | { type: "delete-object" }
+  | { type: "revoke-public-link"; link: PortalPublicLink };
 
 function decodeRouteValue(value?: string): string {
   if (!value) return "";
@@ -102,27 +107,32 @@ function QuickAction({
   tone = "blue",
   onClick,
   disabled = false,
+  reason,
 }: {
   label: string;
   tone?: "blue" | "rose";
   onClick?: () => void;
   disabled?: boolean;
+  reason?: string | null;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={
-        disabled
-          ? cx("cursor-not-allowed text-left text-xs font-bold", uiMutedTextClass)
-          : tone === "rose"
-            ? "text-left text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-200"
-            : "text-left text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
-      }
-    >
-      {label}
-    </button>
+    <div className="grid gap-1">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className={
+          disabled
+            ? cx("cursor-not-allowed text-left text-xs font-bold", uiMutedTextClass)
+            : tone === "rose"
+              ? "text-left text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-200"
+              : "text-left text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
+        }
+      >
+        {label}
+      </button>
+      {disabled && reason ? <span className={cx("text-[11px] font-medium leading-4", uiMutedTextClass)}>{reason}</span> : null}
+    </div>
   );
 }
 
@@ -136,6 +146,7 @@ export default function PortalObjectDetailPage() {
   const [linkExpiration, setLinkExpiration] = useState("");
   const [linkBusy, setLinkBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingObjectAction | null>(null);
   const [objectLoading, setObjectLoading] = useState(false);
   const [objectError, setObjectError] = useState<string | null>(null);
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
@@ -217,6 +228,20 @@ export default function PortalObjectDetailPage() {
   const displayPath = object.path;
   const parentPath = object.path.split("/").slice(0, -1).join("/");
   const canCreatePublicLink = space.role === "Owner" && space.visibility === "shared" && space.status !== "Archived";
+  const publicLinkUnavailableReason = !accountIdForApi
+    ? "Select a Portal account first."
+    : space.status === "Archived"
+      ? "Archived Storage Spaces cannot create public links."
+      : space.role !== "Owner"
+        ? "Only Owners can create public links."
+        : space.visibility !== "shared"
+          ? "Public links are available only for shared Storage Spaces."
+          : null;
+  const deleteUnavailableReason = !accountIdForApi
+    ? "Select a Portal account first."
+    : space.role === "Viewer"
+      ? "Viewers cannot delete files."
+      : null;
   const objectEvents = workspace.activity.filter((item) => item.target === object.name || item.target === object.path);
   const copyPath = async () => {
     if (!navigator.clipboard) {
@@ -249,18 +274,23 @@ export default function PortalObjectDetailPage() {
       setLinkBusy(false);
     }
   };
-  const handleRevokePublicLink = async (link: PortalPublicLink) => {
+  const handleRevokePublicLink = (link: PortalPublicLink) => {
     if (!accountIdForApi || !space || linkBusy) return;
-    if (!window.confirm(`Revoke the public link for ${link.object_name}?`)) return;
+    setPendingAction({ type: "revoke-public-link", link });
+  };
+  const confirmRevokePublicLink = async (link: PortalPublicLink) => {
+    if (!accountIdForApi || !space || linkBusy) return;
     setLinkBusy(true);
     setDownloadMessage(null);
     try {
       const links = await revokePortalStorageSpacePublicLink(accountIdForApi, space.id, link.id);
       setPublicLinks(links);
       setDownloadMessage("Public link revoked.");
+      setPendingAction(null);
     } catch (err) {
       console.error(err);
       setDownloadMessage(extractApiError(err, "Unable to revoke public link."));
+      setPendingAction(null);
     } finally {
       setLinkBusy(false);
     }
@@ -298,20 +328,25 @@ export default function PortalObjectDetailPage() {
       setDownloading(false);
     }
   };
-  const handleDelete = async () => {
+  const handleDelete = () => {
+    if (!accountIdForApi || !space || deleteBusy || deleteUnavailableReason) return;
+    setPendingAction({ type: "delete-object" });
+  };
+  const confirmDelete = async () => {
     if (!accountIdForApi || !space || deleteBusy) return;
-    if (!window.confirm(`Delete ${object.name}? This action is permanent.`)) return;
     setDeleteBusy(true);
     setDownloadMessage(null);
     try {
       await deletePortalStorageSpaceObject(accountIdForApi, space.id, object.path);
       setDownloadMessage(`${object.name} deleted.`);
+      setPendingAction(null);
       window.setTimeout(() => {
         window.location.href = `${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPath ? `${parentPath}/` : "")}`;
       }, 250);
     } catch (err) {
       console.error(err);
       setDownloadMessage(extractApiError(err, "Unable to delete this object."));
+      setPendingAction(null);
       setDeleteBusy(false);
     }
   };
@@ -328,7 +363,7 @@ export default function PortalObjectDetailPage() {
         )}
         actions={[
           { label: downloading ? "Downloading..." : "Download", onClick: handleDownload, variant: "secondary", disabled: !accountIdForApi || downloading },
-          { label: linkBusy ? "Sharing..." : "Share", onClick: handleCreatePublicLink, variant: "secondary", disabled: !accountIdForApi || !canCreatePublicLink || linkBusy },
+          { label: linkBusy ? "Sharing..." : "Share", onClick: handleCreatePublicLink, variant: "secondary", disabled: Boolean(publicLinkUnavailableReason) || linkBusy },
         ]}
       />
 
@@ -373,9 +408,9 @@ export default function PortalObjectDetailPage() {
             <UiCard title="Quick actions">
               <div className="grid gap-4">
                 <QuickAction label="Download" onClick={handleDownload} />
-                <QuickAction label="Create public link" onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} />
+                <QuickAction label="Create public link" onClick={handleCreatePublicLink} disabled={Boolean(publicLinkUnavailableReason) || linkBusy} reason={publicLinkUnavailableReason} />
                 <QuickAction label="Copy path" onClick={copyPath} />
-                <QuickAction label={deleteBusy ? "Deleting..." : "Delete object"} tone="rose" onClick={handleDelete} disabled={space.role === "Viewer" || deleteBusy} />
+                <QuickAction label={deleteBusy ? "Deleting..." : "Delete object"} tone="rose" onClick={handleDelete} disabled={Boolean(deleteUnavailableReason) || deleteBusy} reason={deleteUnavailableReason} />
               </div>
             </UiCard>
           </section>
@@ -394,6 +429,11 @@ export default function PortalObjectDetailPage() {
                   {linkBusy ? "Creating..." : "Create link"}
                 </UiButton>
               </div>
+              {publicLinkUnavailableReason ? (
+                <div className={cx("mb-3 text-[11px] font-semibold", uiMutedTextClass)}>
+                  Create public link unavailable: {publicLinkUnavailableReason}
+                </div>
+              ) : null}
               <div className="overflow-x-auto">
                 <table className="ui-data-table min-w-[760px]">
                   <thead>
@@ -442,10 +482,15 @@ export default function PortalObjectDetailPage() {
             <DetailRow label="Size" value={formatBytes(object.sizeBytes)} />
             <DetailRow label="Content type" value={object.type} />
             <DetailRow label="Last modified" value={object.lastModified} />
-            <DetailRow label="Storage class" value={object.storageClass} />
-            <DetailRow label="Encryption" value={object.encryption} />
             <DetailRow label="Path" value={object.path} />
           </dl>
+          <details className={cx("mt-4 rounded-md border border-[color:var(--ui-border)] px-3 py-2 text-xs", uiMutedTextClass)}>
+            <summary className={cx("cursor-pointer font-bold", uiTitleTextClass)}>Technical details</summary>
+            <dl className="mt-3 grid gap-4">
+              <DetailRow label="Storage class" value={object.storageClass} />
+              <DetailRow label="Encryption" value={object.encryption} />
+            </dl>
+          </details>
           {objectLoading ? <div className={cx("mt-4 text-[11px] font-semibold", uiMutedTextClass)}>Loading metadata...</div> : null}
         </UiCard>
       ) : null}
@@ -466,6 +511,46 @@ export default function PortalObjectDetailPage() {
             ) : null}
           </div>
         </UiCard>
+      ) : null}
+
+      {pendingAction?.type === "delete-object" ? (
+        <ConfirmActionDialog
+          title="Delete object"
+          description="Confirm that you want to delete this file."
+          confirmLabel="Delete object"
+          loading={deleteBusy}
+          details={[
+            { label: "File", value: object.name || objectName(object.path) },
+            { label: "Path", value: object.path, mono: true },
+          ]}
+          impacts={[
+            "The file is permanently removed from this Storage Space.",
+            "Existing public links for this file will stop working once the object is gone.",
+            "This action cannot be undone from the Portal.",
+          ]}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={confirmDelete}
+        />
+      ) : null}
+
+      {pendingAction?.type === "revoke-public-link" ? (
+        <ConfirmActionDialog
+          title="Revoke public link"
+          description="Confirm that you want to revoke this public link."
+          confirmLabel="Revoke link"
+          loading={linkBusy}
+          details={[
+            { label: "Object", value: pendingAction.link.object_name },
+            { label: "Link", value: pendingAction.link.url, mono: true },
+          ]}
+          impacts={[
+            "Anyone using this URL loses access immediately.",
+            "The object remains in the Storage Space.",
+            "You can create a new public link later if sharing is still allowed.",
+          ]}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={() => confirmRevokePublicLink(pendingAction.link)}
+        />
       ) : null}
     </div>
   );

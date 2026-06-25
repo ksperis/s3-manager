@@ -676,7 +676,19 @@ const PORTAL_STATE = {
   quota_max_objects: 30_000_000,
   account_role: "portal_user",
   can_manage_buckets: true,
+  can_create_storage_spaces: true,
+  allow_named_bucket_create: false,
+  can_manage_access_keys: true,
+  max_access_keys: 2,
   can_manage_portal_users: false,
+};
+
+const PORTAL_ACCESS_KEYS_STATE = {
+  iam_user: PORTAL_STATE.iam_user,
+  s3_endpoint: PORTAL_STATE.s3_endpoint,
+  can_manage_access_keys: PORTAL_STATE.can_manage_access_keys,
+  max_access_keys: PORTAL_STATE.max_access_keys,
+  access_keys: PORTAL_STATE.access_keys,
 };
 
 const PORTAL_SETTINGS = {
@@ -790,6 +802,23 @@ const PORTAL_STORAGE_SPACES = [
     description: "Curated analytics datasets",
   },
 ];
+
+const PORTAL_USAGE_STATS_AGGREGATE = {
+  ...MANAGER_USAGE_STATS_AGGREGATE,
+  scope_kind: "portal_account",
+  scope_id: "101",
+  scope_name: "Helios Retail",
+  bucket_count: PORTAL_STORAGE_SPACES.length,
+  buckets_with_snapshot: PORTAL_STORAGE_SPACES.length,
+  total_bytes: PORTAL_STATE.used_bytes,
+  current_bytes: Math.round(PORTAL_STATE.used_bytes * 0.84),
+  noncurrent_bytes: PORTAL_STATE.used_bytes - Math.round(PORTAL_STATE.used_bytes * 0.84),
+  object_version_count: PORTAL_STATE.used_objects + 120_000,
+  current_version_count: PORTAL_STATE.used_objects,
+  noncurrent_version_count: 120_000,
+  delete_marker_count: 8,
+  newest_snapshot_at: NOW,
+};
 
 const PORTAL_ACTIVITY = [
   {
@@ -1743,6 +1772,18 @@ export function buildBaseRules(): MockRule[] {
           collected_at: "2026-02-08T09:00:00Z",
         },
       },
+    },
+    {
+      id: "portal-usage-stats-aggregate",
+      path: /^\/portal\/usage-stats\/latest$/,
+      body: {
+        aggregate: PORTAL_USAGE_STATS_AGGREGATE,
+      },
+    },
+    {
+      id: "portal-access-keys",
+      path: /^\/portal\/access-keys$/,
+      body: PORTAL_ACCESS_KEYS_STATE,
     },
     {
       id: "portal-endpoint-health",

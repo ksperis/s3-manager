@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PortalSharesPage from "./PortalSharesPage";
@@ -79,6 +79,8 @@ describe("PortalSharesPage", () => {
         expires_at: "2026-06-10T10:00:00Z",
       },
     ]);
+    mocks.revokeShareMock.mockResolvedValue(undefined);
+    mocks.revokePublicLinkMock.mockResolvedValue([]);
   });
 
   it("loads shares from storage space API with simple roles", async () => {
@@ -125,5 +127,35 @@ describe("PortalSharesPage", () => {
     expect(await screen.findByText("No shares to display.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Public links" }));
     expect(await screen.findByText("No public links to display.")).toBeInTheDocument();
+  });
+
+  it("confirms share and public link revocation with target and impacts", async () => {
+    const user = userEvent.setup();
+
+    render(<PortalSharesPage />);
+
+    await user.click(screen.getByRole("button", { name: "Shared by me" }));
+    expect(await screen.findByText("viewer@example.com")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Revoke" }));
+    const shareDialog = screen.getByRole("dialog", { name: "Revoke access" });
+    expect(within(shareDialog).getByText("viewer@example.com")).toBeInTheDocument();
+    expect(within(shareDialog).getByText("This person loses access to the Storage Space immediately.")).toBeInTheDocument();
+    await user.click(within(shareDialog).getByRole("button", { name: "Revoke access" }));
+
+    await waitFor(() => {
+      expect(mocks.revokeShareMock).toHaveBeenCalledWith("101", "research-data", 12);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Public links" }));
+    expect(await screen.findByText("report.csv")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Revoke" }));
+    const linkDialog = screen.getByRole("dialog", { name: "Revoke public link" });
+    expect(within(linkDialog).getByText("report.csv")).toBeInTheDocument();
+    expect(within(linkDialog).getByText("Anyone using this URL loses access immediately.")).toBeInTheDocument();
+    await user.click(within(linkDialog).getByRole("button", { name: "Revoke link" }));
+
+    await waitFor(() => {
+      expect(mocks.revokePublicLinkMock).toHaveBeenCalledWith("101", "research-data", 42);
+    });
   });
 });

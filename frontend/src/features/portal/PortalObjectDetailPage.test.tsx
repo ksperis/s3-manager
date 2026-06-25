@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -68,6 +68,12 @@ vi.mock("../../api/portal", () => ({
 describe("PortalObjectDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.assign(mocks.hookResult.workspace.spaces[0], {
+      role: "Owner",
+      status: "Active",
+      visibility: "shared",
+    });
+    mocks.deleteObjectMock.mockResolvedValue(undefined);
     mocks.downloadObjectMock.mockResolvedValue({ blob: new Blob(["hello"]), filename: "sample_001.fastq.gz" });
     mocks.fetchObjectDetailMock.mockResolvedValue({
       key: "raw-data/2024/03/sample_001.fastq.gz",
@@ -105,6 +111,8 @@ describe("PortalObjectDetailPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Details" }));
     expect(await screen.findByText("512 B")).toBeInTheDocument();
+    expect(screen.getByText("Technical details")).toBeInTheDocument();
+    await user.click(screen.getByText("Technical details"));
     expect(screen.getByText("STANDARD")).toBeInTheDocument();
     expect(screen.getByText("AES256")).toBeInTheDocument();
 
@@ -114,5 +122,71 @@ describe("PortalObjectDetailPage", () => {
     expect(screen.queryByRole("button", { name: "Metadata" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked/i)).not.toBeInTheDocument();
+  });
+
+  it("shows reasons for disabled sharing and delete actions", async () => {
+    mocks.hookResult.workspace.spaces[0].role = "Viewer";
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/portal/storage-spaces/research-data/objects/raw-data/2024/03/sample_001.fastq.gz"]}>
+        <Routes>
+          <Route path="/portal/storage-spaces/:spaceId/objects/*" element={<PortalObjectDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("hello content")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create public link" })).toBeDisabled();
+    expect(screen.getByText("Only Owners can create public links.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete object" })).toBeDisabled();
+    expect(screen.getByText("Viewers cannot delete files.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Delete object" }));
+    expect(mocks.deleteObjectMock).not.toHaveBeenCalled();
+  });
+
+  it("opens structured dialogs for object delete and public link revoke", async () => {
+    mocks.listPublicLinksMock.mockResolvedValue([
+      {
+        id: 42,
+        storage_space_id: "research-data",
+        storage_space_name: "Research Data",
+        object_key: "raw-data/2024/03/sample_001.fastq.gz",
+        object_name: "sample_001.fastq.gz",
+        url: "https://public.example.test/sample_001.fastq.gz",
+        status: "Active",
+        created_at: "2026-06-01T10:00:00Z",
+        expires_at: null,
+      },
+    ]);
+    mocks.revokePublicLinkMock.mockResolvedValue([]);
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/portal/storage-spaces/research-data/objects/raw-data/2024/03/sample_001.fastq.gz"]}>
+        <Routes>
+          <Route path="/portal/storage-spaces/:spaceId/objects/*" element={<PortalObjectDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("hello content")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete object" }));
+    const deleteDialog = screen.getByRole("dialog", { name: "Delete object" });
+    expect(within(deleteDialog).getByText("raw-data/2024/03/sample_001.fastq.gz")).toBeInTheDocument();
+    expect(within(deleteDialog).getByText("This action cannot be undone from the Portal.")).toBeInTheDocument();
+    await user.click(within(deleteDialog).getByRole("button", { name: "Cancel" }));
+
+    await user.click(await screen.findByRole("button", { name: "Revoke" }));
+    const revokeDialog = screen.getByRole("dialog", { name: "Revoke public link" });
+    expect(within(revokeDialog).getByText("sample_001.fastq.gz")).toBeInTheDocument();
+    expect(within(revokeDialog).getByText("Anyone using this URL loses access immediately.")).toBeInTheDocument();
+    await user.click(within(revokeDialog).getByRole("button", { name: "Revoke link" }));
+
+    await waitFor(() => {
+      expect(mocks.revokePublicLinkMock).toHaveBeenCalledWith("101", "research-data", 42);
+    });
   });
 });
