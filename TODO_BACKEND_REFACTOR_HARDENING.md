@@ -58,7 +58,7 @@ rtk python3 backend/scripts/backend_refactor_inventory.py --largest-limit 15
 | BE-HARD-002 | Done | Low | Error handling | Consolidate `RuntimeError`/`ValueError` to HTTPException mapping through `app/routers/http_errors.py`; first slice applied to `manager/topics.py` and the shared bucket config action seam. | `backend/tests/test_http_errors.py`; full backend pytest. |
 | BE-HARD-003 | Done | Medium | Error handling | Continue replacing risky `detail=str(exc)` and `message=str(exc)` exposures in routers, prioritizing Ceph Admin users/accounts, Manager IAM, auth, and migrations. | Per-router tests plus full backend pytest. |
 | BE-HARD-004 | Done | Medium | SSE errors | Re-audit stream handlers and long-running tools so unexpected failures send generic client errors while logs retain sanitized context. | Stream tests for Browser, Ceph Admin, Storage Ops, migration, purge, integrity. |
-| BE-AUDIT-001 | Todo | Medium | Audit | Build and review a mutating-route audit matrix; confirm actor, scope, action, entity, account context, and executor/workflow identifiers where relevant. | Static matrix plus targeted route tests. |
+| BE-AUDIT-001 | Done | Medium | Audit | Build and review a mutating-route audit matrix; confirm actor, scope, action, entity, account context, and executor/workflow identifiers where relevant. | Static matrix plus targeted route tests. |
 | BE-BUCKET-001 | Todo | Medium | Bucket config | Extend the shared bucket config action seam so Manager, Browser, Storage Ops, and Ceph Admin reuse the same error/audit mapping where contracts are identical. | Bucket config tests and route snapshot before/after. |
 | BE-DEPS-001 | Todo | Medium | Dependencies | Split `routers/dependencies.py` into internal modules for auth/session, account context, portal access, feature gates, SSE-C, and Ceph Admin context; keep re-exports stable. | Import compatibility test plus full backend pytest. |
 | BE-SVC-001 | Todo | High | Migration service | Split `bucket_migration_service.py` into planning, execution, progress, rollback, persistence, and worker orchestration modules without changing migration semantics. | `backend/tests/test_bucket_migration_service.py` and functional Ceph runner when lab env is available. |
@@ -91,6 +91,32 @@ Notes:
 - Portal wording and contracts must remain end-user scoped and must not leak
   Manager/Ceph Admin vocabulary.
 
+## Mutating Route Audit Matrix
+
+Generated with:
+
+```bash
+cd /Users/laurent/ksperis/s3-manager
+rtk python3 backend/scripts/backend_audit_matrix.py
+```
+
+- Mutating routes: 262
+- Routes with direct `record_action`: 135
+- Routes with delegated audit/stream signal: 44
+- Routes without static audit signal: 68
+
+Interpretation notes:
+
+- The matrix is a static review aid; a route without a direct signal may still
+  be intentionally unaudited, read-like despite POST semantics, internal-only,
+  or audited in a called service.
+- The largest manual-review clusters are Ceph Admin bucket configuration routes,
+  usage-stat streams, credential validation endpoints, cache refresh endpoints,
+  and legacy Browser tombstone routes.
+- Do not add audit events blindly. For each candidate, first classify whether
+  the route is mutating, operational read/refresh, internal cron, validation
+  probe, delegated stream, or legacy compatibility surface.
+
 ## Validation Checklist For Each Lot
 
 - Run targeted tests for touched files.
@@ -117,3 +143,5 @@ python scripts/check_vulture.py
 - 2026-06-25: BE-HARD-003 full validation `PYTHONPATH=. .venv/bin/pytest tests -q` -> 1123 passed; `python scripts/check_vulture.py` -> passed; `git diff --check` -> passed.
 - 2026-06-25: BE-HARD-004 targeted stream tests `PYTHONPATH=. .venv/bin/pytest tests/test_bucket_integrity_routes.py tests/test_bucket_purge_routes.py tests/test_storage_ops_buckets.py tests/test_ceph_admin_buckets_cache.py tests/test_manager_migrations_stream.py tests/test_http_errors.py -q` -> 137 passed.
 - 2026-06-25: BE-HARD-004 full validation `PYTHONPATH=. .venv/bin/pytest tests -q` -> 1125 passed; `python scripts/check_vulture.py` -> passed; `git diff --check` -> passed.
+- 2026-06-25: BE-AUDIT-001 targeted tests `PYTHONPATH=. .venv/bin/pytest tests/test_backend_audit_matrix.py -q` -> 2 passed.
+- 2026-06-25: BE-AUDIT-001 full validation `PYTHONPATH=. .venv/bin/pytest tests -q` -> 1127 passed; `python scripts/check_vulture.py` -> passed; `git diff --check` -> passed.
