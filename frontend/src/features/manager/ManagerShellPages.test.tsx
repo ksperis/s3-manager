@@ -1174,7 +1174,7 @@ describe("manager shell pages", () => {
     );
 
     expect(await screen.findByText("bucket-a")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Delete..." }));
+    fireEvent.click(screen.getByRole("button", { name: "Purge and Delete" }));
 
     expect(await screen.findByRole("dialog", { name: "Delete bucket" })).toBeInTheDocument();
     expect(screen.getByLabelText("Type DELETE BUCKET bucket-a")).toBeInTheDocument();
@@ -1260,7 +1260,7 @@ describe("manager shell pages", () => {
     );
 
     expect(await screen.findByText("bucket-huge")).toBeInTheDocument();
-    const deleteButton = screen.getByRole("button", { name: "Delete..." });
+    const deleteButton = screen.getByRole("button", { name: "Purge and Delete" });
     expect(deleteButton).toBeEnabled();
     fireEvent.click(deleteButton);
 

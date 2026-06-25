@@ -873,7 +873,7 @@ export default function BucketsPage() {
           containsObjects && !canDeleteBucketWithPurge
             ? "Bucket is not empty. Empty it first, or enable bucket purge access to delete it from Manager."
             : null;
-        const deleteLabel = containsObjects && canDeleteBucketWithPurge ? "Delete..." : "Delete";
+        const deleteLabel = containsObjects && canDeleteBucketWithPurge ? "Purge and Delete" : "Delete";
         const deleteButton = (
           <button
             onClick={() => requestDelete(bucket.name)}
