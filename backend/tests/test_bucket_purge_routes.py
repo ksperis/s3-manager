@@ -190,10 +190,9 @@ def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch
     captured: dict[str, object] = {}
 
     class FakeService:
-        def run_delete_bucket_with_purge(self, target, options, *, entry_limit, progress_callback=None, cancel_check=None):
+        def run_delete_bucket_with_purge(self, target, options, *, progress_callback=None, cancel_check=None):
             captured["target"] = target
             captured["options"] = options
-            captured["entry_limit"] = entry_limit
             if progress_callback:
                 progress_callback(
                     BucketPurgeProgress(
@@ -240,7 +239,7 @@ def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch
     assert target.bucket_name == "bucket-a"
     assert target.context_id == "s3u-1"
     assert captured["options"].parallelism == 4
-    assert captured["entry_limit"] == 10000
+    assert "entry_limit" not in captured
 
 
 def test_ceph_admin_purge_route_uses_dedicated_endpoint_credentials(monkeypatch):

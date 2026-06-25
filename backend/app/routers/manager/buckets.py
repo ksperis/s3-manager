@@ -47,7 +47,6 @@ from app.services.audit_service import AuditService
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services import bucket_config_actions
 from app.services.bucket_purge_service import (
-    BUCKET_DELETE_WITH_PURGE_ENTRY_LIMIT,
     BucketPurgeOptions,
     BucketPurgeResolvedTarget,
     BucketPurgeService,
@@ -1244,7 +1243,6 @@ def stream_delete_bucket_with_purge(
         "context_id": context_id,
         "parallelism": options.parallelism,
         "include_versions": True,
-        "entry_limit": BUCKET_DELETE_WITH_PURGE_ENTRY_LIMIT,
         "confirmation": "matched",
     }
     actor = {
@@ -1315,7 +1313,6 @@ def stream_delete_bucket_with_purge(
         run_purge=lambda progress_callback, cancel_check: service.run_delete_bucket_with_purge(
             target,
             options,
-            entry_limit=BUCKET_DELETE_WITH_PURGE_ENTRY_LIMIT,
             progress_callback=progress_callback,
             cancel_check=cancel_check,
         ),

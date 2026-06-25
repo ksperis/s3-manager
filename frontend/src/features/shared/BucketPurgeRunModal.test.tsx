@@ -237,7 +237,7 @@ describe("BucketPurgeRunModal", () => {
     expect(deleteButton).toBeDisabled();
     expect(
       screen.getByText(
-        "This deletes current objects, historical versions, and delete markers, then removes the bucket and its S3 configuration. The operation stops before deleting anything if more than 10,000 entries are found."
+        "This deletes current objects, historical versions, and delete markers, then removes the bucket and its S3 configuration."
       )
     ).toBeInTheDocument();
     await user.type(screen.getByLabelText("Type DELETE BUCKET bucket-a"), "DELETE BUCKET bucket-a");

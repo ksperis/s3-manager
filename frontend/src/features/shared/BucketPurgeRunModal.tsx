@@ -258,7 +258,7 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
 
           {isDeleteMode ? (
             <PageBanner tone="warning">
-              This deletes current objects, historical versions, and delete markers, then removes the bucket and its S3 configuration. The operation stops before deleting anything if more than 10,000 entries are found.
+              This deletes current objects, historical versions, and delete markers, then removes the bucket and its S3 configuration.
             </PageBanner>
           ) : (
             <PageBanner tone="warning">

@@ -190,7 +190,6 @@ const MANAGER_FEATURE_LABELS: Record<ManagerFeatureKey, string> = {
 const LEGACY_COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.v1";
 const COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.session.v1";
 const defaultVisibleColumns: ColumnId[] = ["used_bytes", "object_count"];
-const BUCKET_DELETE_WITH_PURGE_OBJECT_LIMIT = 10000;
 
 const loadVisibleColumns = (): ColumnId[] => {
   if (typeof window === "undefined") return defaultVisibleColumns;
@@ -719,33 +718,21 @@ export default function BucketsPage() {
     if (needsS3AccountSelection) return;
     const targetBucket = buckets.find((b) => b.name === name);
     const objectCount = targetBucket?.object_count;
-    if (typeof objectCount === "number" && objectCount > BUCKET_DELETE_WITH_PURGE_OBJECT_LIMIT) {
-      setActionMessage(null);
-      setActionError(
-        `Bucket '${name}' contains more than ${BUCKET_DELETE_WITH_PURGE_OBJECT_LIMIT.toLocaleString()} objects. Use Manager > Tools > Purge when available, or an external S3 tool, then delete the empty bucket.`
-      );
-      return;
-    }
-    if ((objectCount ?? 0) > 0 || objectCount === undefined || objectCount === null) {
+    if ((objectCount ?? 0) > 0) {
       if (canDeleteBucketWithPurge) {
         setActionError(null);
         setActionMessage(null);
         setPendingDeleteWithPurgeBucketName(name);
         return;
       }
-      if ((objectCount ?? 0) > 0) {
-        setActionMessage(null);
-        setActionError(
-          `Bucket '${name}' is not empty (${formatObjectCountLabel(objectCount ?? 0)}). Bucket purge access is required to delete it from Manager.`
-        );
-        return;
-      }
-    }
-    if ((objectCount ?? 0) > 0) {
       setActionMessage(null);
-      setActionError(`Bucket '${name}' is not empty (${formatObjectCountLabel(objectCount ?? 0)}). Empty it before deleting.`);
+      setActionError(
+        `Bucket '${name}' is not empty (${formatObjectCountLabel(objectCount ?? 0)}). Empty it before deleting, or enable bucket purge access to delete it from Manager.`
+      );
       return;
     }
+    setActionError(null);
+    setActionMessage(null);
     setPendingDeleteBucketName(name);
   };
 
@@ -882,16 +869,11 @@ export default function BucketsPage() {
       render: (bucket) => {
         const objectCount = bucket.object_count;
         const containsObjects = (objectCount ?? 0) > 0;
-        const objectCountUnknown = objectCount === undefined || objectCount === null;
-        const exceedsDeleteWithPurgeLimit =
-          typeof objectCount === "number" && objectCount > BUCKET_DELETE_WITH_PURGE_OBJECT_LIMIT;
-        const requiresPurgeAccess = containsObjects || objectCountUnknown;
-        const deleteDisabledReason = exceedsDeleteWithPurgeLimit
-          ? `Bucket has more than ${BUCKET_DELETE_WITH_PURGE_OBJECT_LIMIT.toLocaleString()} objects. Use Manager > Tools > Purge or an external S3 tool first.`
-          : requiresPurgeAccess && !canDeleteBucketWithPurge
-            ? "Bucket purge access is required to delete a non-empty bucket from Manager."
+        const deleteDisabledReason =
+          containsObjects && !canDeleteBucketWithPurge
+            ? "Bucket is not empty. Empty it first, or enable bucket purge access to delete it from Manager."
             : null;
-        const deleteLabel = requiresPurgeAccess && canDeleteBucketWithPurge ? "Delete..." : "Delete";
+        const deleteLabel = containsObjects && canDeleteBucketWithPurge ? "Delete..." : "Delete";
         const deleteButton = (
           <button
             onClick={() => requestDelete(bucket.name)}

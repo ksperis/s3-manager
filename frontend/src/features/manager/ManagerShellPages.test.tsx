@@ -186,6 +186,30 @@ function setManagerUser() {
   );
 }
 
+function setSelectedManagerAccountContext() {
+  useS3AccountContextMock.mockReturnValue({
+    accounts: [
+      {
+        id: "account-1",
+        name: "Account Alpha",
+        type: "account",
+        endpoint_provider: "ceph",
+        storage_endpoint_capabilities: { iam: true, metrics: true, usage: true, sns: true },
+      },
+    ],
+    selectedS3AccountId: "account-1",
+    requiresS3AccountSelection: false,
+    sessionS3AccountName: null,
+    selectedS3AccountType: "account",
+    hasS3AccountContext: true,
+    accountIdForApi: "account-1",
+    accessMode: "default",
+    managerStatsEnabled: true,
+    managerStatsMessage: null,
+    managerBrowserEnabled: true,
+  });
+}
+
 function usageStatsAggregate() {
   return {
     scope_kind: "manager",
@@ -1141,27 +1165,7 @@ describe("manager shell pages", () => {
         object_count: 12,
       },
     ]);
-    useS3AccountContextMock.mockReturnValue({
-      accounts: [
-        {
-          id: "account-1",
-          name: "Account Alpha",
-          type: "account",
-          endpoint_provider: "ceph",
-          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true, sns: true },
-        },
-      ],
-      selectedS3AccountId: "account-1",
-      requiresS3AccountSelection: false,
-      sessionS3AccountName: null,
-      selectedS3AccountType: "account",
-      hasS3AccountContext: true,
-      accountIdForApi: "account-1",
-      accessMode: "default",
-      managerStatsEnabled: true,
-      managerStatsMessage: null,
-      managerBrowserEnabled: true,
-    });
+    setSelectedManagerAccountContext();
 
     render(
       <MemoryRouter>
@@ -1176,12 +1180,62 @@ describe("manager shell pages", () => {
     expect(screen.getByLabelText("Type DELETE BUCKET bucket-a")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "This deletes current objects, historical versions, and delete markers, then removes the bucket and its S3 configuration. The operation stops before deleting anything if more than 10,000 entries are found."
+        "This deletes current objects, historical versions, and delete markers, then removes the bucket and its S3 configuration."
       )
     ).toBeInTheDocument();
   });
 
-  it("blocks manager delete-with-purge when the visible object count exceeds 10000", async () => {
+  it("opens the normal delete confirmation for an empty bucket without purge access", async () => {
+    listBucketsMock.mockResolvedValue([
+      {
+        name: "bucket-empty",
+        used_bytes: 0,
+        object_count: 0,
+      },
+    ]);
+    setSelectedManagerAccountContext();
+
+    render(
+      <MemoryRouter>
+        <BucketsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-empty")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByRole("dialog", { name: "Delete bucket" })).toBeInTheDocument();
+    expect(
+      screen.getByText("This permanently removes the bucket after server-side checks confirm it is empty.")
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Type DELETE BUCKET bucket-empty")).not.toBeInTheDocument();
+  });
+
+  it("opens the normal delete confirmation when object count is unknown without purge access", async () => {
+    listBucketsMock.mockResolvedValue([
+      {
+        name: "bucket-unknown",
+      },
+    ]);
+    setSelectedManagerAccountContext();
+
+    render(
+      <MemoryRouter>
+        <BucketsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-unknown")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByRole("dialog", { name: "Delete bucket" })).toBeInTheDocument();
+    expect(
+      screen.getByText("This permanently removes the bucket after server-side checks confirm it is empty.")
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Type DELETE BUCKET bucket-unknown")).not.toBeInTheDocument();
+  });
+
+  it("allows manager delete-with-purge when the visible object count exceeds 10000", async () => {
     bucketPurgeEnabled = true;
     window.localStorage.setItem(
       "user",
@@ -1197,27 +1251,7 @@ describe("manager shell pages", () => {
         object_count: 10001,
       },
     ]);
-    useS3AccountContextMock.mockReturnValue({
-      accounts: [
-        {
-          id: "account-1",
-          name: "Account Alpha",
-          type: "account",
-          endpoint_provider: "ceph",
-          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true, sns: true },
-        },
-      ],
-      selectedS3AccountId: "account-1",
-      requiresS3AccountSelection: false,
-      sessionS3AccountName: null,
-      selectedS3AccountType: "account",
-      hasS3AccountContext: true,
-      accountIdForApi: "account-1",
-      accessMode: "default",
-      managerStatsEnabled: true,
-      managerStatsMessage: null,
-      managerBrowserEnabled: true,
-    });
+    setSelectedManagerAccountContext();
 
     render(
       <MemoryRouter>
@@ -1226,7 +1260,12 @@ describe("manager shell pages", () => {
     );
 
     expect(await screen.findByText("bucket-huge")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete..." })).toBeDisabled();
+    const deleteButton = screen.getByRole("button", { name: "Delete..." });
+    expect(deleteButton).toBeEnabled();
+    fireEvent.click(deleteButton);
+
+    expect(await screen.findByRole("dialog", { name: "Delete bucket" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Type DELETE BUCKET bucket-huge")).toBeInTheDocument();
   });
 
   it("ignores legacy manager bucket column preferences from localStorage", async () => {

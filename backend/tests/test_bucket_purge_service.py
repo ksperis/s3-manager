@@ -54,12 +54,12 @@ def test_delete_bucket_with_purge_deletes_contents_then_bucket(monkeypatch):
     assert sorted(len(call) for call in client.delete_object_calls) == [2, 2]
 
 
-def test_delete_bucket_with_purge_refuses_over_limit_before_deleting(monkeypatch):
-    class OverLimitClient:
+def test_delete_bucket_with_purge_deletes_large_bucket_without_entry_limit(monkeypatch):
+    class LargeBucketClient:
         def __init__(self):
             self.object_list_calls = 0
-            self.delete_object_calls = 0
-            self.delete_bucket_calls = 0
+            self.delete_object_calls: list[list[dict]] = []
+            self.delete_bucket_calls: list[str] = []
 
         def list_objects_v2(self, **kwargs):
             self.object_list_calls += 1
@@ -68,14 +68,18 @@ def test_delete_bucket_with_purge_refuses_over_limit_before_deleting(monkeypatch
                 page["NextContinuationToken"] = f"page-{self.object_list_calls + 1}"
             return page
 
+        def list_object_versions(self, **kwargs):
+            return {}
+
         def delete_objects(self, **kwargs):
-            self.delete_object_calls += 1
-            return {"Deleted": []}
+            objects = list(kwargs["Delete"]["Objects"])
+            self.delete_object_calls.append(objects)
+            return {"Deleted": objects}
 
         def delete_bucket(self, **kwargs):
-            self.delete_bucket_calls += 1
+            self.delete_bucket_calls.append(kwargs["Bucket"])
 
-    client = OverLimitClient()
+    client = LargeBucketClient()
     monkeypatch.setattr(BucketPurgeService, "_build_client", lambda self, account: client)
 
     result = BucketPurgeService().run_delete_bucket_with_purge(
@@ -83,10 +87,10 @@ def test_delete_bucket_with_purge_refuses_over_limit_before_deleting(monkeypatch
         BucketPurgeOptions(parallelism=4, include_versions=True),
     )
 
-    assert result.status == "failed"
-    assert result.bucket_deleted is False
-    assert result.deleted_objects == 0
+    assert result.status == "completed"
+    assert result.bucket_deleted is True
+    assert result.listed_objects == 11000
+    assert result.deleted_objects == 11000
     assert result.deleted_versions == 0
-    assert client.delete_object_calls == 0
-    assert client.delete_bucket_calls == 0
-    assert "more than 10,000 deletable entries" in result.buckets[0].failures_sample[0].message
+    assert sum(len(call) for call in client.delete_object_calls) == 11000
+    assert client.delete_bucket_calls == ["bucket-huge"]

@@ -34,10 +34,10 @@ configuration, including policies, lifecycle rules, CORS, notifications, and
 versioning settings, are kept.
 
 Deleting a bucket is a separate Manager bucket action. From **Manager >
-Buckets**, deleting a non-empty bucket first runs a guarded purge and then
-removes the bucket itself only when no more than 10,000 deletable entries are
-found. That delete flow removes the bucket and its S3 configuration; this purge
-tool does not.
+Buckets**, empty buckets use the normal delete confirmation. Deleting a
+non-empty bucket requires bucket purge access, first runs a guarded purge, and
+then removes the bucket itself. That delete flow removes the bucket and its S3
+configuration; this purge tool does not.
 
 ## Limits / feature flags
 
@@ -46,11 +46,10 @@ tool does not.
     versions, and delete markers cannot be restored by s3-manager.
 
 !!! warning
-    The Manager bucket delete flow is limited to 10,000 deletable entries,
-    counting current objects, historical versions, and delete markers. For
-    larger buckets, use **Manager > Tools > Purge** to empty the bucket first or
-    use an external S3 tool suited to large destructive operations, then delete
-    the empty bucket.
+    The Manager bucket delete flow can remove large non-empty buckets when the
+    user has bucket purge access and types the exact confirmation phrase. Empty
+    bucket deletion uses the normal delete confirmation and does not require
+    bucket purge access.
 
 !!! note
     Tool visibility depends on the global `bucket_purge_enabled` flag. Manager

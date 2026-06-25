@@ -22,7 +22,6 @@ from app.utils.s3_endpoint import resolve_s3_client_options
 
 ProgressCallback = Callable[[BucketPurgeProgress], None]
 CancelCheck = Callable[[], None]
-BUCKET_DELETE_WITH_PURGE_ENTRY_LIMIT = 10000
 
 
 class BucketPurgeCancelled(RuntimeError):
@@ -165,7 +164,6 @@ class BucketPurgeService:
         target: BucketPurgeResolvedTarget,
         options: BucketPurgeOptions,
         *,
-        entry_limit: int = BUCKET_DELETE_WITH_PURGE_ENTRY_LIMIT,
         progress_callback: ProgressCallback | None = None,
         cancel_check: CancelCheck | None = None,
     ) -> BucketPurgeResult:
@@ -189,7 +187,6 @@ class BucketPurgeService:
         bucket_result = self._run_bucket_delete_with_purge(
             target,
             options,
-            entry_limit=entry_limit,
             progress_callback=emit,
             cancel_check=cancel_check,
         )
@@ -312,7 +309,6 @@ class BucketPurgeService:
         target: BucketPurgeResolvedTarget,
         options: BucketPurgeOptions,
         *,
-        entry_limit: int,
         progress_callback: ProgressCallback,
         cancel_check: CancelCheck | None,
     ) -> BucketPurgeBucketResult:
@@ -380,62 +376,44 @@ class BucketPurgeService:
 
         try:
             client = self._build_client(target.account)
-            count_result = s3_client.count_bucket_purge_entries(
+            purge_result = s3_client.purge_bucket_contents(
                 client,
                 target.bucket_name,
+                parallelism=options.parallelism,
                 include_versions=options.include_versions,
-                limit=entry_limit,
                 progress_callback=low_progress,
                 cancel_check=cancel_check,
             )
-            listed_objects = count_result.listed_objects
-            listed_versions = count_result.listed_versions
-            if count_result.exceeded_limit:
-                message = (
-                    f"Bucket '{target.bucket_name}' has more than {entry_limit:,} deletable entries. "
-                    "Use Manager > Tools > Purge or an external S3 tool before deleting the bucket."
-                )
-                return failure_result(stage="list", message=message, failed_count=1)
-
-            if listed_objects + listed_versions > 0:
-                purge_result = s3_client.purge_bucket_contents(
-                    client,
-                    target.bucket_name,
-                    parallelism=options.parallelism,
-                    include_versions=options.include_versions,
-                    progress_callback=low_progress,
-                    cancel_check=cancel_check,
-                )
-                listed_objects = purge_result.listed_objects
-                listed_versions = purge_result.listed_versions
-                deleted_objects = purge_result.deleted_objects
-                deleted_versions = purge_result.deleted_versions
-                if purge_result.failed_count > 0:
-                    failures = [
-                        BucketPurgeFailure(
-                            bucket_name=target.bucket_name,
-                            stage=failure.stage,
-                            message=failure.message,
-                            key=failure.key,
-                            version_id=failure.version_id,
-                            count=failure.count,
-                        )
-                        for failure in purge_result.failures_sample
-                    ]
-                    return BucketPurgeBucketResult(
+            listed_objects = purge_result.listed_objects
+            listed_versions = purge_result.listed_versions
+            deleted_objects = purge_result.deleted_objects
+            deleted_versions = purge_result.deleted_versions
+            if purge_result.failed_count > 0:
+                failures = [
+                    BucketPurgeFailure(
                         bucket_name=target.bucket_name,
-                        context_id=target.context_id,
-                        context_name=target.context_name,
-                        status="failed",
-                        listed_objects=listed_objects,
-                        listed_versions=listed_versions,
-                        deleted_objects=deleted_objects,
-                        deleted_versions=deleted_versions,
-                        failed_count=purge_result.failed_count,
-                        bucket_deleted=False,
-                        duration_seconds=round(monotonic() - started, 3),
-                        failures_sample=failures,
+                        stage=failure.stage,
+                        message=failure.message,
+                        key=failure.key,
+                        version_id=failure.version_id,
+                        count=failure.count,
                     )
+                    for failure in purge_result.failures_sample
+                ]
+                return BucketPurgeBucketResult(
+                    bucket_name=target.bucket_name,
+                    context_id=target.context_id,
+                    context_name=target.context_name,
+                    status="failed",
+                    listed_objects=listed_objects,
+                    listed_versions=listed_versions,
+                    deleted_objects=deleted_objects,
+                    deleted_versions=deleted_versions,
+                    failed_count=purge_result.failed_count,
+                    bucket_deleted=False,
+                    duration_seconds=round(monotonic() - started, 3),
+                    failures_sample=failures,
+                )
 
             progress_callback(
                 BucketPurgeProgress(
