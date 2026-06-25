@@ -64,6 +64,7 @@ from app.routers.ceph_admin.listing_common import (
     stream_listing_response as _common_stream_listing_response,
 )
 from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.services import bucket_config_actions
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
     is_bucket_notification_configuration_configured,
@@ -3259,10 +3260,11 @@ def bucket_properties(
 ) -> BucketProperties:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        return service.get_bucket_properties(bucket_name, account)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_properties_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.get("/{bucket_name}/versioning", response_model=BucketVersioningStatus)
@@ -3272,11 +3274,11 @@ def get_versioning(
 ) -> BucketVersioningStatus:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        status_value = service.get_bucket_versioning_status(bucket_name, account)
-        return BucketVersioningStatus(status=status_value, enabled=status_value == "Enabled")
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_versioning_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/versioning", status_code=status.HTTP_200_OK)
@@ -3287,12 +3289,14 @@ def update_versioning(
 ):
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.set_versioning(bucket_name, account, enabled=payload.enabled)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return {"message": f"Versioning updated for {bucket_name}", "enabled": payload.enabled}
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.update_bucket_versioning_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.put("/{bucket_name}/quota", status_code=status.HTTP_200_OK)
@@ -3336,10 +3340,11 @@ def get_lifecycle(
 ) -> BucketLifecycleConfig:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        return service.get_lifecycle(bucket_name, account)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_lifecycle_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/lifecycle", response_model=BucketLifecycleConfig)
@@ -3350,12 +3355,14 @@ def put_lifecycle(
 ) -> BucketLifecycleConfig:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        response = service.set_lifecycle(bucket_name, account, rules=payload.rules)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return response
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_lifecycle_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.delete("/{bucket_name}/lifecycle", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -3365,12 +3372,13 @@ def delete_lifecycle(
 ) -> Response:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.delete_lifecycle(bucket_name, account)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    bucket_config_actions.delete_bucket_lifecycle_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{bucket_name}/cors")
@@ -3380,11 +3388,11 @@ def get_cors(
 ):
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        cors = service.get_bucket_cors(bucket_name, account)
-        return {"rules": cors or []}
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_cors_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/cors")
@@ -3395,12 +3403,14 @@ def put_cors(
 ):
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.set_cors(bucket_name, account, rules=payload.rules)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return {"rules": payload.rules}
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_cors_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.delete("/{bucket_name}/cors", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -3410,12 +3420,13 @@ def delete_cors(
 ) -> Response:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.delete_cors(bucket_name, account)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    bucket_config_actions.delete_bucket_cors_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{bucket_name}/policy", response_model=BucketPolicyOut)
@@ -3425,11 +3436,11 @@ def get_policy(
 ) -> BucketPolicyOut:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        policy = service.get_policy(bucket_name, account)
-        return BucketPolicyOut(policy=policy)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_policy_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/policy", response_model=BucketPolicyOut)
@@ -3440,12 +3451,14 @@ def put_policy(
 ) -> BucketPolicyOut:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.put_policy(bucket_name, account, payload.policy)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return BucketPolicyOut(policy=payload.policy)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_policy_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.delete("/{bucket_name}/policy", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -3455,12 +3468,13 @@ def delete_policy(
 ) -> Response:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.delete_policy(bucket_name, account)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    bucket_config_actions.delete_bucket_policy_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{bucket_name}/notifications", response_model=BucketNotificationConfiguration)
@@ -3470,10 +3484,11 @@ def get_notifications(
 ) -> BucketNotificationConfiguration:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        return service.get_bucket_notifications(bucket_name, account)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_notifications_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/notifications", response_model=BucketNotificationConfiguration)
@@ -3484,13 +3499,14 @@ def put_notifications(
 ) -> BucketNotificationConfiguration:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        configuration = payload.configuration or {}
-        response = service.set_bucket_notifications(bucket_name, account, configuration)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return response
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_notifications_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.delete("/{bucket_name}/notifications", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -3500,12 +3516,13 @@ def delete_notifications(
 ) -> Response:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.delete_bucket_notifications(bucket_name, account)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    bucket_config_actions.delete_bucket_notifications_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
@@ -3516,10 +3533,11 @@ def get_replication(
     _require_replication_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        return service.get_bucket_replication(bucket_name, account)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_replication_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
@@ -3531,14 +3549,14 @@ def put_replication(
     _require_replication_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        response = service.set_bucket_replication(bucket_name, account, payload)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return response
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_replication_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.delete("/{bucket_name}/replication", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -3549,12 +3567,13 @@ def delete_replication(
     _require_replication_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.delete_bucket_replication(bucket_name, account)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    bucket_config_actions.delete_bucket_replication_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
@@ -3564,10 +3583,11 @@ def get_logging(
 ) -> BucketLoggingConfiguration:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        return service.get_bucket_logging(bucket_name, account)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_logging_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
@@ -3578,14 +3598,14 @@ def put_logging(
 ) -> BucketLoggingConfiguration:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        response = service.set_bucket_logging(bucket_name, account, payload)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return response
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_logging_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.delete("/{bucket_name}/logging", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -3595,12 +3615,13 @@ def delete_logging(
 ) -> Response:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.delete_bucket_logging(bucket_name, account)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    bucket_config_actions.delete_bucket_logging_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
@@ -3610,10 +3631,11 @@ def get_website(
 ) -> BucketWebsiteConfiguration:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        return service.get_bucket_website(bucket_name, account)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_website_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
@@ -3624,14 +3646,14 @@ def put_website(
 ) -> BucketWebsiteConfiguration:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        response = service.set_bucket_website(bucket_name, account, payload)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return response
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_website_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.delete("/{bucket_name}/website", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -3641,12 +3663,13 @@ def delete_website(
 ) -> Response:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.delete_bucket_website(bucket_name, account)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    bucket_config_actions.delete_bucket_website_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{bucket_name}/tags")
@@ -3656,11 +3679,11 @@ def get_tags(
 ):
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        tags = service.get_bucket_tags(bucket_name, account)
-        return {"tags": [tag.model_dump() for tag in tags]}
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_tags_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/tags")
@@ -3671,12 +3694,14 @@ def put_tags(
 ):
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.set_bucket_tags(bucket_name, account, [t.model_dump() for t in payload.tags])
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return {"tags": [t.model_dump() for t in payload.tags]}
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_tags_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.delete("/{bucket_name}/tags", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -3686,12 +3711,13 @@ def delete_tags(
 ) -> Response:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.delete_bucket_tags(bucket_name, account)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    bucket_config_actions.delete_bucket_tags_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{bucket_name}/acl", response_model=BucketAcl)
@@ -3701,10 +3727,11 @@ def get_acl(
 ) -> BucketAcl:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        return service.get_bucket_acl(bucket_name, account)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_acl_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/acl", response_model=BucketAcl)
@@ -3715,12 +3742,14 @@ def put_acl(
 ) -> BucketAcl:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        response = service.set_bucket_acl(bucket_name, account, payload)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return response
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_acl_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.get("/{bucket_name}/public-access-block", response_model=BucketPublicAccessBlock)
@@ -3730,10 +3759,11 @@ def get_public_access_block(
 ) -> BucketPublicAccessBlock:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        return service.get_public_access_block(bucket_name, account)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_public_access_block_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/public-access-block", response_model=BucketPublicAccessBlock)
@@ -3744,12 +3774,14 @@ def put_public_access_block(
 ) -> BucketPublicAccessBlock:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        response = service.set_public_access_block(bucket_name, account, payload)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return response
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_public_access_block_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.get("/{bucket_name}/object-lock", response_model=BucketObjectLock)
@@ -3759,10 +3791,11 @@ def get_object_lock(
 ) -> BucketObjectLock:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        return service.get_object_lock(bucket_name, account)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_object_lock_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/object-lock", response_model=BucketObjectLock)
@@ -3773,14 +3806,14 @@ def put_object_lock(
 ) -> BucketObjectLock:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        response = service.set_object_lock(bucket_name, account, payload)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return response
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_object_lock_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.get("/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
@@ -3791,10 +3824,11 @@ def get_bucket_encryption(
     _require_sse_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        return service.get_bucket_encryption(bucket_name, account)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    return bucket_config_actions.get_bucket_encryption_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
@@ -3806,12 +3840,14 @@ def put_bucket_encryption(
     _require_sse_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        response = service.set_bucket_encryption(bucket_name, account, payload.rules)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return response
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    response, _audit_metadata = bucket_config_actions.put_bucket_encryption_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return response
 
 
 @router.delete("/{bucket_name}/encryption", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -3822,9 +3858,10 @@ def delete_bucket_encryption(
     _require_sse_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    try:
-        service.delete_bucket_encryption(bucket_name, account)
-        _invalidate_bucket_listing_cache(ctx.endpoint.id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+    bucket_config_actions.delete_bucket_encryption_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
