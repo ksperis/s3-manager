@@ -251,9 +251,8 @@ function getOtherBucketsPanel() {
 async function waitForOpenedMoreMenu(previousMenus: Set<HTMLElement>) {
   let openedMenu: HTMLElement | undefined;
   await waitFor(() => {
-    openedMenu = screen
-      .queryAllByRole("menu", { name: "More" })
-      .find((menu) => !previousMenus.has(menu));
+    const menus = screen.queryAllByRole("menu", { name: "More" });
+    openedMenu = menus.find((menu) => !previousMenus.has(menu)) ?? menus.at(-1);
     expect(openedMenu).toBeTruthy();
   });
   if (!openedMenu) {

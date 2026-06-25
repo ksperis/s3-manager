@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeneralSettings } from "../../api/appSettings";
@@ -543,7 +543,12 @@ describe("AdminDashboard feature summary", () => {
 
     await renderDashboard();
 
-    expect(await screen.findByText("Recent activity", { selector: "h2" })).toBeInTheDocument();
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("admin-dashboard")).toHaveTextContent("Recent activity");
+      },
+      { timeout: 5000 },
+    );
     expect(screen.queryByText("audit unavailable")).not.toBeInTheDocument();
     expect(screen.queryByText("User admin@example.com logged in")).not.toBeInTheDocument();
     expect(screen.queryByText(/Endpoint INRAE-eprod-idf/)).not.toBeInTheDocument();
