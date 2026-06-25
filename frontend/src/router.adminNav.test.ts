@@ -36,6 +36,13 @@ describe("buildAdminNav", () => {
     expect(apiTokensLink).toBeUndefined();
   });
 
+  it("keeps settings collapsed until the admin settings route asks for expansion", () => {
+    const baseArgs = [true, true, false, false, false, true] as const;
+
+    expect(buildAdminNav(...baseArgs).find((section) => section.label === "Settings")?.collapsed).toBe(true);
+    expect(buildAdminNav(...baseArgs, true).find((section) => section.label === "Settings")?.collapsed).toBe(false);
+  });
+
   it("exposes Usage History only when usage history is enabled", () => {
     const enabledOverview = buildAdminNav(true, true, false, true, false, true).find((section) => section.label === "Overview");
     const disabledOverview = buildAdminNav(true, true, false, false, false, true).find((section) => section.label === "Overview");

@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { CSSProperties, ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_DEFAULT_WIDTH } from "./sidebarSizing";
 
 export const SIDEBAR_CHROME_SLOT_ID = "app-sidebar-chrome-slot";
@@ -61,6 +61,7 @@ export default function Sidebar({
     () => (sections && sections.length > 0 ? sections : [{ label: "Navigation", links }]),
     [links, sections]
   );
+  const location = useLocation();
 
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -70,6 +71,7 @@ export default function Sidebar({
     return initial;
   });
   const [navScrolling, setNavScrolling] = useState(false);
+  const navRef = useRef<HTMLElement | null>(null);
   const navScrollTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -77,11 +79,23 @@ export default function Sidebar({
       const next: Record<string, boolean> = {};
       effectiveSections.forEach((section) => {
         const collapsible = isSectionCollapsible(section);
-        next[section.label] = collapsible ? previous[section.label] ?? section.collapsed ?? false : false;
+        if (!collapsible) {
+          next[section.label] = false;
+        } else if (section.collapsed === false) {
+          next[section.label] = false;
+        } else {
+          next[section.label] = previous[section.label] ?? section.collapsed ?? false;
+        }
       });
       return next;
     });
   }, [effectiveSections]);
+
+  useEffect(() => {
+    if (compact) return;
+    const activeLink = navRef.current?.querySelector<HTMLElement>(".shell-sidebar-item-active");
+    activeLink?.scrollIntoView?.({ block: "nearest" });
+  }, [collapsedSections, compact, location.pathname]);
 
   const toggleSection = (label: string, collapsible: boolean) => {
     if (!collapsible) return;
@@ -143,6 +157,7 @@ export default function Sidebar({
         {!compact && <span className="truncate text-[14px] font-semibold leading-none text-[var(--shell-text)]">S3 Manager</span>}
       </div>
       <nav
+        ref={navRef}
         className={`shell-sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto ${navScrolling ? "shell-sidebar-scroll-active" : ""} ${compact ? "gap-1.5 px-2 py-3" : "gap-2 px-2.5 py-3"}`}
         onScroll={handleNavScroll}
         aria-label={`${title} navigation`}

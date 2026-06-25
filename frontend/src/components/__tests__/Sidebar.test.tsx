@@ -213,4 +213,62 @@ describe("Sidebar", () => {
 
     expect(screen.getByText("Mobile portal account footer")).toBeInTheDocument();
   });
+
+  it("opens a collapsed section when parent navigation marks it expanded", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <Sidebar
+          sections={[
+            {
+              label: "Settings",
+              collapsed: true,
+              links: [{ to: "/admin/general-settings", label: "General" }],
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole("link", { name: "General" })).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <Sidebar
+          sections={[
+            {
+              label: "Settings",
+              collapsed: false,
+              links: [{ to: "/admin/general-settings", label: "General" }],
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: "General" })).toHaveAttribute("href", "/admin/general-settings");
+  });
+
+  it("scrolls the active desktop navigation link into view", () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/admin/general-settings"]}>
+        <Sidebar
+          sections={[
+            {
+              label: "Settings",
+              collapsed: false,
+              links: [{ to: "/admin/general-settings", label: "General" }],
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+  });
 });

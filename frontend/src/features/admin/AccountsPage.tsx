@@ -2187,7 +2187,7 @@ export default function S3AccountsPage() {
                           : idx === 2
                             ? "w-48 min-w-[10rem]"
                             : idx === 3
-                              ? "min-w-[14rem] max-w-[26rem]"
+                              ? "w-[22rem] min-w-[18rem] max-w-[30rem]"
                               : "w-44 min-w-[9rem]"
                     } ${
                       col.field ? "cursor-pointer hover:text-primary-700 dark:hover:text-primary-100" : col.align === "right" ? "text-right" : ""
@@ -2249,25 +2249,27 @@ export default function S3AccountsPage() {
                       {account.storage_endpoint_name || "—"}
                     </span>
                   </td>
-                  <td className="min-w-[14rem] max-w-[26rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                  <td className="w-[22rem] min-w-[18rem] max-w-[30rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                     {accountUserLinks.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex max-w-[30rem] flex-wrap gap-1.5">
                         {accountUserLinks.map((link) => {
                           const isAccountAdmin = Boolean(link.account_admin);
                           const portalRole = normalizePortalRole(link.account_role);
                           return (
                             <span
                               key={`${account.id}-${link.user_id}-${isAccountAdmin ? "admin" : "user"}-${portalRole}`}
-                              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+                              className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
                             >
-                              <span>{link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`}</span>
+                              <span className="min-w-0 max-w-full break-all">
+                                {link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`}
+                              </span>
                               {isAccountAdmin && (
-                                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                                <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                                   Admin
                                 </span>
                               )}
                               {portalEnabled && portalRole !== "portal_none" && (
-                                <span className="rounded-full bg-sky-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
+                                <span className="shrink-0 rounded-full bg-sky-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
                                   {portalRole === "portal_manager" ? "Portal manager" : "Portal user"}
                                 </span>
                               )}

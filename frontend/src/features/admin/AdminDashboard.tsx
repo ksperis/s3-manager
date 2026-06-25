@@ -100,6 +100,22 @@ function formatRelativeTime(value?: string | null, now = Date.now()): string {
   return `${days}d ago`;
 }
 
+function isEndpointCheckStale(value?: string | null, now = Date.now()): boolean {
+  const parsed = parseBackendIsoDate(value);
+  return !parsed || now - parsed.getTime() > ENDPOINT_STATUS_MAX_AGE_MS;
+}
+
+function formatEndpointFreshnessWarning(noChecksCount: number, staleCount: number, totalCount: number): string {
+  const issueCount = noChecksCount + staleCount;
+  const details = [
+    noChecksCount > 0 ? `${noChecksCount} without checks` : null,
+    staleCount > 0 ? `${staleCount} older than ${ENDPOINT_STATUS_MAX_AGE_HOURS}h` : null,
+  ].filter(Boolean);
+  return `Endpoint Status uses stored healthcheck samples; ${issueCount}/${totalCount} endpoint(s) need fresh checks (${details.join(
+    ", "
+  )}). Dashboard statuses may not reflect current availability.`;
+}
+
 function formatLatency(value?: number | null): string {
   if (value == null) return "-";
   return `${Math.round(value)} ms`;
@@ -152,17 +168,17 @@ function OnboardingPanel({
   onDismiss: () => void;
 }) {
   return (
-    <section className={cx(uiCardClass, "px-5 py-5")}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 w-full flex-1 flex-col gap-5 xl:flex-row xl:items-center">
+    <section className={cx(uiCardClass, "p-4 sm:p-5")}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 w-full flex-1 flex-col gap-4 2xl:flex-row 2xl:items-center">
           <img
             src={setupIllustration}
             alt=""
-            className="hidden h-28 w-28 shrink-0 object-contain md:block"
+            className="hidden h-24 w-24 shrink-0 object-contain 2xl:block"
           />
           <div className="min-w-0 flex-1">
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-              <div>
+              <div className="min-w-0">
                 <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">
                   Welcome! Let&apos;s finish your initial setup.
                 </h2>
@@ -172,7 +188,7 @@ function OnboardingPanel({
               </div>
             </div>
             {error && <p className="mt-3 ui-caption font-semibold text-rose-600 dark:text-rose-300">{error}</p>}
-            <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_240px]">
+            <div className="mt-4 grid min-w-0 gap-3 xl:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_220px]">
               <SetupStep
                 index={1}
                 title="Secure the default admin"
@@ -187,7 +203,7 @@ function OnboardingPanel({
                 done={onboarding.endpoint_configured}
                 action={{ label: "Configure endpoints", to: "/admin/storage-endpoints" }}
               />
-              <div className={cx(uiCardMutedClass, "px-4 py-3")}>
+              <div className={cx(uiCardMutedClass, "px-4 py-3 xl:col-span-2 2xl:col-span-1")}>
                 <p className="ui-body font-semibold text-[var(--ui-text)]">Next steps</p>
                 <div className="mt-3 space-y-2">
                   <Link to="/admin/users" className="flex items-center gap-2 ui-caption font-medium text-primary">
@@ -204,14 +220,21 @@ function OnboardingPanel({
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onDismiss}
-          disabled={!onboarding.can_dismiss || dismissBusy}
-          className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "shrink-0 self-start px-2 py-1 sm:self-auto")}
-        >
-          {dismissBusy ? "Dismissing..." : "Dismiss checklist"}
-        </button>
+        <div className="shrink-0 self-start lg:self-auto">
+          <button
+            type="button"
+            onClick={onDismiss}
+            disabled={!onboarding.can_dismiss || dismissBusy}
+            className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "px-2 py-1")}
+          >
+            {dismissBusy ? "Dismissing..." : "Dismiss checklist"}
+          </button>
+          {!onboarding.can_dismiss && (
+            <p className={cx("mt-1 max-w-[13rem] ui-caption lg:text-right", uiMutedTextClass)}>
+              Complete pending steps before dismissing.
+            </p>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -231,7 +254,7 @@ function SetupStep({
   action: { label: string; to: string };
 }) {
   return (
-    <div className={cx(uiCardMutedClass, "flex min-h-[118px] flex-col justify-between gap-3 px-4 py-3")}>
+    <div className={cx(uiCardMutedClass, "flex min-h-[112px] min-w-0 flex-col justify-between gap-3 px-4 py-3")}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 gap-3">
           <span
@@ -245,11 +268,11 @@ function SetupStep({
             {index}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block ui-body font-semibold text-[var(--ui-text)]">{title}</span>
+            <span className="block break-words ui-body font-semibold text-[var(--ui-text)]">{title}</span>
             <span className={cx("mt-1 block ui-caption", uiMutedTextClass)}>{description}</span>
           </span>
         </div>
-        <UiBadge tone={done ? "success" : "warning"}>{done ? "Done" : "Pending"}</UiBadge>
+        <UiBadge tone={done ? "success" : "warning"} className="shrink-0">{done ? "Done" : "Pending"}</UiBadge>
       </div>
       <Link to={action.to} className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "w-fit px-3 py-1.5")}>
         {action.label}
@@ -275,7 +298,7 @@ function EndpointHealthSection({
   mapError?: string | null;
 }) {
   const content = (
-    <div className="grid gap-3 xl:grid-cols-[1.08fr_0.92fr]">
+    <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
       <EndpointHealthCard
         data={data}
         loading={loading}
@@ -326,15 +349,21 @@ function EndpointHealthCard({
   mapError?: string | null;
 }) {
   const endpoints = data?.endpoints.slice(0, MAX_ENDPOINT_ROWS) ?? [];
+  const staleEndpointCount = data?.endpoints.filter((endpoint) => isEndpointCheckStale(endpoint.checked_at)).length ?? 0;
   return (
-    <section className={cx(uiCardClass, "p-4")}>
+    <section className={cx(uiCardClass, "min-w-0 p-4")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h2 className="ui-body font-semibold text-[var(--ui-text)]">Endpoint Health</h2>
-          <p className={cx("ui-caption", uiMutedTextClass)}>Real-time status and latency.</p>
+          <p className={cx("ui-caption", uiMutedTextClass)}>Stored healthcheck samples and latency.</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <span className={cx("ui-caption", uiMutedTextClass)}>Updated {data ? formatTimestamp(data.generated_at) : ""}</span>
+          <span className={cx("ui-caption", uiMutedTextClass)}>Data refreshed {data ? formatTimestamp(data.generated_at) : "-"}</span>
+          {staleEndpointCount > 0 && (
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 ui-caption font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-100">
+              {staleEndpointCount} stale check{staleEndpointCount === 1 ? "" : "s"}
+            </span>
+          )}
           <Link to="/admin/endpoint-status" className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-2.5 py-1.5")}>
             Open Endpoint Status
           </Link>
@@ -351,7 +380,7 @@ function EndpointHealthCard({
             <WorkspaceStatusCounter label="Down" value={unavailableReason ? null : data?.down_count} status="down" />
             <WorkspaceStatusCounter label="Unknown" value={unavailableReason ? null : data?.unknown_count} status="unknown" />
           </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
             <div className="space-y-1.5">
               {endpoints.length === 0 && !unavailableReason ? (
                 <p className={cx("ui-caption", uiMutedTextClass)}>No endpoint linked to this workspace context.</p>
@@ -375,15 +404,25 @@ function EndpointHealthCard({
 }
 
 function EndpointRow({ endpoint }: { endpoint: WorkspaceEndpointHealthEntry }) {
+  const stale = isEndpointCheckStale(endpoint.checked_at);
+  const checkedAtLabel = endpoint.checked_at ? `Checked ${formatRelativeTime(endpoint.checked_at)}` : "No healthcheck yet";
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_54px_52px_112px_auto] items-center gap-2 ui-caption">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-[color:var(--ui-border-soft)] px-2 py-2 ui-caption sm:grid sm:grid-cols-[minmax(0,1fr)_64px_60px_minmax(108px,1fr)_auto] sm:border-0 sm:px-0 sm:py-0">
       <span className="flex min-w-0 items-center gap-2 font-semibold text-[var(--ui-text)]">
         <WorkspaceStatusDot status={endpoint.status} className="shrink-0" />
         <span className="truncate">{endpoint.name}</span>
       </span>
       <span className={uiMutedTextClass}>{formatLatency(endpoint.latency_ms)}</span>
       <span className={uiMutedTextClass}>{formatCheckMode(endpoint.check_mode)}</span>
-      <span className={cx("truncate", uiMutedTextClass)}>{formatTimestamp(endpoint.checked_at)}</span>
+      <span
+        className={cx(
+          "min-w-0 truncate",
+          stale ? "font-semibold text-amber-700 dark:text-amber-100" : uiMutedTextClass
+        )}
+        title={formatTimestamp(endpoint.checked_at)}
+      >
+        {checkedAtLabel}
+      </span>
       <WorkspaceStatusPill status={endpoint.status} />
     </div>
   );
@@ -680,9 +719,7 @@ export default function AdminDashboard() {
           }
         }
         if (noChecksCount > 0 || staleCount > 0) {
-          setEndpointFreshnessWarning(
-            `Endpoint Status data is not recent enough for ${noChecksCount + staleCount}/${endpoints.length} endpoint(s) (no checks or older than ${ENDPOINT_STATUS_MAX_AGE_HOURS}h).`
-          );
+          setEndpointFreshnessWarning(formatEndpointFreshnessWarning(noChecksCount, staleCount, endpoints.length));
           return;
         }
         setEndpointFreshnessWarning(null);
@@ -920,7 +957,7 @@ export default function AdminDashboard() {
     mapEndpointsLoading;
 
   return (
-    <div className="space-y-4" data-testid="admin-dashboard">
+    <div className="min-w-0 space-y-4 overflow-x-hidden" data-testid="admin-dashboard">
       <PageHeader
         title="Admin overview"
         description="Monitor the health and status of your S3 infrastructure."

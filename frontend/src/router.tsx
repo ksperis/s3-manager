@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { Suspense, lazy, useMemo } from "react";
-import { Navigate, Outlet, Route, RouterProvider, createBrowserRouter, createRoutesFromElements } from "react-router-dom";
+import { Navigate, Outlet, Route, RouterProvider, createBrowserRouter, createRoutesFromElements, useLocation } from "react-router-dom";
 import Layout from "./components/Layout";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
 import RouteErrorPage from "./features/shared/RouteErrorPage";
@@ -180,6 +180,17 @@ const ProfilePage = lazy(loadProfilePage);
 const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
+const ADMIN_SETTINGS_PATHS = [
+  "/admin/general-settings",
+  "/admin/manager-settings",
+  "/admin/browser-settings",
+  "/admin/portal-settings",
+  "/admin/key-rotation",
+];
+
+function isAdminSettingsPath(pathname: string): boolean {
+  return ADMIN_SETTINGS_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
 
 export const buildAdminNav = (
   portalEnabled: boolean,
@@ -187,7 +198,8 @@ export const buildAdminNav = (
   billingEnabled: boolean,
   usageHistoryEnabled: boolean,
   endpointStatusEnabled: boolean,
-  isSuperAdmin: boolean
+  isSuperAdmin: boolean,
+  settingsExpanded = false
 ) => {
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
@@ -251,7 +263,7 @@ export const buildAdminNav = (
           {
             label: "Settings",
             links: settingsLinks,
-            collapsed: true,
+            collapsed: !settingsExpanded,
           },
         ]
       : []),
@@ -260,6 +272,7 @@ export const buildAdminNav = (
 
 function AdminLayoutShell() {
   const { generalSettings } = useGeneralSettings();
+  const location = useLocation();
   const currentUser = readStoredUser();
   const canConfigureApp = isSuperAdminRole(currentUser?.role);
   const adminNav = buildAdminNav(
@@ -268,7 +281,8 @@ function AdminLayoutShell() {
     generalSettings.billing_enabled,
     generalSettings.usage_history_enabled,
     generalSettings.endpoint_status_enabled,
-    canConfigureApp
+    canConfigureApp,
+    isAdminSettingsPath(location.pathname)
   );
   return (
     <Layout
