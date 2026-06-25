@@ -8,7 +8,10 @@ import { S3Account } from "../../api/accounts";
 import { useI18n } from "../../i18n";
 import { listPortalAccounts } from "../../api/portal";
 import { extractApiError } from "../../utils/apiError";
+import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
 import { readStoredUser } from "../../utils/workspaces";
+
+const PORTAL_ACCOUNT_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedPortalAccount;
 
 const DEV_FALLBACK_ACCOUNT: S3Account = {
   id: "dev-account",
@@ -58,27 +61,27 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
         setAccounts(data);
         if (data.length === 0) {
           setSelectedAccountId(null);
-          localStorage.removeItem("selectedPortalAccountId");
+          removeClientStorage(PORTAL_ACCOUNT_STORAGE_KEY);
           return;
         }
-        const stored = localStorage.getItem("selectedPortalAccountId");
+        const stored = readClientStorage(PORTAL_ACCOUNT_STORAGE_KEY);
         const preferred = readStoredUser()?.ui_preferences?.selected_portal_account_id ?? null;
         const candidate = [stored, preferred].find((id) => id && data.some((account) => account.id === id));
         if (candidate) {
           setSelectedAccountId(candidate);
-          localStorage.setItem("selectedPortalAccountId", candidate);
+          writeClientStorage(PORTAL_ACCOUNT_STORAGE_KEY, candidate);
           return;
         }
         const defaultId = String(data[0].id);
         setSelectedAccountId(defaultId);
-        localStorage.setItem("selectedPortalAccountId", defaultId);
+        writeClientStorage(PORTAL_ACCOUNT_STORAGE_KEY, defaultId);
       } catch (err) {
         console.error(err);
         if (!cancelled) {
           if (import.meta.env.DEV) {
             setAccounts([DEV_FALLBACK_ACCOUNT]);
             setSelectedAccountId(DEV_FALLBACK_ACCOUNT.id);
-            localStorage.setItem("selectedPortalAccountId", DEV_FALLBACK_ACCOUNT.id);
+            writeClientStorage(PORTAL_ACCOUNT_STORAGE_KEY, DEV_FALLBACK_ACCOUNT.id);
             setError(null);
             return;
           }
@@ -110,9 +113,9 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
   const updateSelected = (id: string | null) => {
     setSelectedAccountId(id);
     if (id === null) {
-      localStorage.removeItem("selectedPortalAccountId");
+      removeClientStorage(PORTAL_ACCOUNT_STORAGE_KEY);
     } else {
-      localStorage.setItem("selectedPortalAccountId", id);
+      writeClientStorage(PORTAL_ACCOUNT_STORAGE_KEY, id);
     }
   };
 

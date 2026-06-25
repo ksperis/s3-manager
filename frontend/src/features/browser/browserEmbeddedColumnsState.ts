@@ -2,11 +2,12 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
 
 export const BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY =
-  "browser:embedded-object-columns:v1";
+  CLIENT_STORAGE_KEYS.browserEmbeddedObjectColumns;
 export const BROWSER_EMBEDDED_COLUMN_WIDTHS_STORAGE_KEY =
-  "browser:embedded-object-column-widths:v1";
+  CLIENT_STORAGE_KEYS.browserEmbeddedObjectColumnWidths;
 
 const normalizeColumns = (value: unknown): string[] => {
   if (!Array.isArray(value)) return [];
@@ -38,27 +39,12 @@ const normalizeColumnWidths = (value: unknown): Record<string, number> => {
 
 export const readBrowserEmbeddedObjectColumns = (): string[] => {
   if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(
-      BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY,
-    );
-    if (!raw) return [];
-    return normalizeColumns(JSON.parse(raw));
-  } catch {
-    return [];
-  }
+  return normalizeColumns(readClientJson<unknown>(BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY));
 };
 
 export const writeBrowserEmbeddedObjectColumns = (columns: string[]) => {
   if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(
-      BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY,
-      JSON.stringify(normalizeColumns(columns)),
-    );
-  } catch {
-    // Ignore storage write failures (private mode / quota).
-  }
+  writeClientJson(BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY, normalizeColumns(columns));
 };
 
 export const readBrowserEmbeddedObjectColumnWidths = (): Record<
@@ -66,27 +52,12 @@ export const readBrowserEmbeddedObjectColumnWidths = (): Record<
   number
 > => {
   if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(
-      BROWSER_EMBEDDED_COLUMN_WIDTHS_STORAGE_KEY,
-    );
-    if (!raw) return {};
-    return normalizeColumnWidths(JSON.parse(raw));
-  } catch {
-    return {};
-  }
+  return normalizeColumnWidths(readClientJson<unknown>(BROWSER_EMBEDDED_COLUMN_WIDTHS_STORAGE_KEY));
 };
 
 export const writeBrowserEmbeddedObjectColumnWidths = (
   widths: Record<string, number>,
 ) => {
   if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(
-      BROWSER_EMBEDDED_COLUMN_WIDTHS_STORAGE_KEY,
-      JSON.stringify(normalizeColumnWidths(widths)),
-    );
-  } catch {
-    // Ignore storage write failures (private mode / quota).
-  }
+  writeClientJson(BROWSER_EMBEDDED_COLUMN_WIDTHS_STORAGE_KEY, normalizeColumnWidths(widths));
 };

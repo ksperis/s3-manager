@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage, removeClientStorage, writeClientStorage } from "../utils/clientStorage";
 
 type Theme = "light" | "dark";
 type ThemeSource = "system" | "user";
@@ -14,24 +15,19 @@ type ThemeContextValue = {
 };
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
-const STORAGE_KEY = "theme";
+const STORAGE_KEY = CLIENT_STORAGE_KEYS.theme;
 
 function getPreferredTheme(): { theme: Theme; source: ThemeSource } {
   if (typeof window === "undefined") return { theme: "light", source: "system" };
-  const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
+  const stored = readClientStorage(STORAGE_KEY) as Theme | null;
   if (stored === "light" || stored === "dark") {
     return { theme: stored, source: "user" };
   }
-  const rawUser = localStorage.getItem("user");
-  if (rawUser) {
-    try {
-      const parsed = JSON.parse(rawUser) as { ui_preferences?: { theme?: string | null } | null };
-      const preferred = parsed.ui_preferences?.theme;
-      if (preferred === "light" || preferred === "dark") {
-        return { theme: preferred, source: "user" };
-      }
-    } catch {
-      // Ignore malformed session storage and fall back to the browser preference.
+  const parsedUser = readClientJson<{ ui_preferences?: { theme?: string | null } | null }>(CLIENT_STORAGE_KEYS.sessionUser);
+  if (parsedUser) {
+    const preferred = parsedUser.ui_preferences?.theme;
+    if (preferred === "light" || preferred === "dark") {
+      return { theme: preferred, source: "user" };
     }
   }
   const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
@@ -52,9 +48,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.classList.remove("dark");
     }
     if (themeSource === "user") {
-      localStorage.setItem(STORAGE_KEY, theme);
+      writeClientStorage(STORAGE_KEY, theme);
     } else {
-      localStorage.removeItem(STORAGE_KEY);
+      removeClientStorage(STORAGE_KEY);
     }
   }, [theme, themeSource]);
 

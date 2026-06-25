@@ -9,6 +9,7 @@ import { fetchGeneralSettings } from "../../api/appSettings";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
+import { CLIENT_STORAGE_KEYS, writeClientJson, writeClientStorage } from "../../utils/clientStorage";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
 
@@ -43,9 +44,9 @@ export default function OidcCallbackPage() {
       try {
         const res = await completeOidcLogin(providerId, code, state);
         if (cancelled) return;
-        localStorage.setItem("token", res.access_token);
+        writeClientStorage(CLIENT_STORAGE_KEYS.authToken, res.access_token);
         const sessionUser: SessionUser = { ...res.user, authType: "oidc" };
-        localStorage.setItem("user", JSON.stringify({ ...sessionUser, authProvider: provider }));
+        writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, { ...sessionUser, authProvider: provider });
         setLanguagePreference(res.user.ui_language ?? "auto");
         if (res.user.ui_preferences?.theme === "light" || res.user.ui_preferences?.theme === "dark") {
           setTheme(res.user.ui_preferences.theme);

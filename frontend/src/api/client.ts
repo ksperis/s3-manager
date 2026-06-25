@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import axios, { AxiosRequestConfig } from "axios";
-import { reportRuntimeWarning } from "../utils/runtimeDiagnostics";
+import { CLIENT_STORAGE_KEYS, clearAuthStorage, readClientJson, readClientStorage, writeClientStorage } from "../utils/clientStorage";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
@@ -26,9 +26,7 @@ type RefreshResponse = {
 
 function handleAuthRedirect() {
   if (typeof window === "undefined") return;
-  localStorage.removeItem("token");
-  localStorage.removeItem("user");
-  localStorage.removeItem("s3SessionEndpoint");
+  clearAuthStorage();
   if (window.location.pathname !== "/login") {
     window.location.replace("/login");
   }
@@ -53,7 +51,7 @@ async function refreshAccessToken(): Promise<string> {
       .post<RefreshResponse>("/auth/refresh")
       .then((response) => {
         const token = response.data.access_token;
-        localStorage.setItem("token", token);
+        writeClientStorage(CLIENT_STORAGE_KEYS.authToken, token);
         return token;
       })
       .finally(() => {
@@ -64,24 +62,17 @@ async function refreshAccessToken(): Promise<string> {
 }
 
 client.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+  const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
   if (token) {
     config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
   }
-  const userRaw = localStorage.getItem("user");
-  if (userRaw) {
-    try {
-      const parsed = JSON.parse(userRaw) as { authType?: string };
-      if (parsed?.authType === "s3_session") {
-        const endpoint = localStorage.getItem("s3SessionEndpoint");
-        if (endpoint) {
-          config.headers = config.headers ?? {};
-          config.headers["X-S3-Endpoint"] = endpoint;
-        }
-      }
-    } catch (err) {
-      reportRuntimeWarning("Unable to parse stored user payload", err);
+  const parsed = readClientJson<{ authType?: string }>(CLIENT_STORAGE_KEYS.sessionUser);
+  if (parsed?.authType === "s3_session") {
+    const endpoint = readClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
+    if (endpoint) {
+      config.headers = config.headers ?? {};
+      config.headers["X-S3-Endpoint"] = endpoint;
     }
   }
   return config;

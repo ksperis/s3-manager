@@ -10,6 +10,7 @@ import Sidebar, { SidebarLink, SidebarSection } from "./Sidebar";
 import { useWorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import Topbar from "./Topbar";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
+import { clearAuthStorage, CLIENT_STORAGE_KEYS, readClientJson } from "../utils/clientStorage";
 
 type LayoutProps = {
   navLinks?: SidebarLink[];
@@ -36,15 +37,7 @@ type LayoutProps = {
 };
 
 function getUserEmail(): string | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as { email?: string | null };
-    return parsed.email ?? null;
-  } catch {
-    return null;
-  }
+  return readClientJson<{ email?: string | null }>(CLIENT_STORAGE_KEYS.sessionUser)?.email ?? null;
 }
 
 export default function Layout({
@@ -80,9 +73,7 @@ export default function Layout({
     void logoutRequest().catch((err) => {
       console.warn("Unable to revoke refresh session", err);
     });
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("s3SessionEndpoint");
+    clearAuthStorage();
     window.location.href = "/login";
   };
   const hasTopbarControls = Boolean(topbarControls) || Boolean(topbarControlDescriptors?.length);

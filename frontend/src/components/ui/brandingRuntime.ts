@@ -3,12 +3,13 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { fetchBrandingSettings } from "../../api/appSettings";
+import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
 
 const PRIMARY_SHADES = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
 const LIGHTNESS_OFFSETS_LIGHT = [42, 36, 26, 16, 8, 0, -8, -16, -24, -32, -38] as const;
 const LIGHTNESS_OFFSETS_DARK = [30, 24, 16, 8, 2, -4, -10, -16, -24, -30, -36] as const;
 const SATURATION_OFFSETS = [-22, -18, -12, -8, -4, 0, 2, 4, 6, 8, 10] as const;
-const BRANDING_STORAGE_KEY = "branding.primary_color";
+const BRANDING_STORAGE_KEY = CLIENT_STORAGE_KEYS.brandingPrimaryColor;
 const DEFAULT_PRIMARY_COLOR = "#0ea5e9";
 
 type ThemeMode = "light" | "dark";
@@ -138,16 +139,14 @@ export function applyBranding(primaryColor: string): boolean {
   applyScaleToRoot(root, "light", lightScale);
   applyScaleToRoot(root, "dark", darkScale);
 
-  if (typeof window !== "undefined") {
-    localStorage.setItem(BRANDING_STORAGE_KEY, normalized);
-  }
+  writeClientStorage(BRANDING_STORAGE_KEY, normalized);
   return true;
 }
 
 export async function bootstrapBranding(): Promise<void> {
-  const storedColor = typeof window !== "undefined" ? localStorage.getItem(BRANDING_STORAGE_KEY) : null;
-  if (storedColor && !applyBranding(storedColor) && typeof window !== "undefined") {
-    localStorage.removeItem(BRANDING_STORAGE_KEY);
+  const storedColor = readClientStorage(BRANDING_STORAGE_KEY);
+  if (storedColor && !applyBranding(storedColor)) {
+    removeClientStorage(BRANDING_STORAGE_KEY);
   }
 
   try {
@@ -161,4 +160,3 @@ export async function bootstrapBranding(): Promise<void> {
     console.warn("Unable to load branding settings, keeping default accent color.", error);
   }
 }
-

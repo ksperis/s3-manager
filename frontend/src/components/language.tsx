@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { CLIENT_STORAGE_KEYS, readClientJson } from "../utils/clientStorage";
 
 export type UiLanguage = "en" | "fr" | "de";
 export type UiLanguagePreference = UiLanguage | "auto";
@@ -24,16 +25,10 @@ const LanguageContext = createContext<LanguageContextValue | undefined>(undefine
 
 function parseStoredUserLanguage(): UiLanguagePreference {
   if (typeof window === "undefined") return "auto";
-  const raw = localStorage.getItem("user");
-  if (!raw) return "auto";
-  try {
-    const parsed = JSON.parse(raw) as StoredUserLanguage;
-    const lang = parsed.ui_language;
-    if (lang === "en" || lang === "fr" || lang === "de") {
-      return lang;
-    }
-  } catch {
-    return "auto";
+  const parsed = readClientJson<StoredUserLanguage>(CLIENT_STORAGE_KEYS.sessionUser);
+  const lang = parsed?.ui_language;
+  if (lang === "en" || lang === "fr" || lang === "de") {
+    return lang;
   }
   return "auto";
 }
@@ -77,7 +72,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== "user") return;
+      if (event.key !== CLIENT_STORAGE_KEYS.sessionUser) return;
       setLanguagePreferenceState(parseStoredUserLanguage());
     };
     window.addEventListener("storage", handleStorage);

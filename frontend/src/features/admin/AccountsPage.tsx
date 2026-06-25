@@ -43,7 +43,7 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
-import { isAdminLikeRole } from "../../utils/workspaces";
+import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 
 type SortField = "name" | "rgw_account_id";
@@ -187,13 +187,7 @@ export default function S3AccountsPage() {
   const [userAdminChoice, setUserAdminChoice] = useState<Record<number, boolean>>({});
   const MAX_LINK_OPTIONS = 10;
   const currentUser = useMemo(() => {
-    const raw = localStorage.getItem("user");
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as { role?: string | null };
-    } catch {
-      return null;
-    }
+    return readStoredUser() as { role?: string | null } | null;
   }, []);
   const isSuperAdmin = isAdminLikeRole(currentUser?.role);
   const canManagePrivilegedTargets = isAdminLikeRole(currentUser?.role);

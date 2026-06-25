@@ -6,8 +6,9 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { useSearchParams } from "react-router-dom";
 import { CephAdminEndpoint, CephAdminEndpointAccess, getCephAdminEndpointAccess, listCephAdminEndpoints } from "../../api/cephAdmin";
 import { extractApiError } from "../../utils/apiError";
+import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
 
-const ENDPOINT_STORAGE_KEY = "selectedCephAdminEndpointId";
+const ENDPOINT_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedCephAdminEndpoint;
 const ENDPOINT_URL_PARAM = "ep";
 
 type CephAdminEndpointContextValue = {
@@ -88,26 +89,26 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
         nextParams.set(ENDPOINT_URL_PARAM, String(selectedEndpointId));
         setSearchParams(nextParams, { replace: true });
       }
-      localStorage.setItem(ENDPOINT_STORAGE_KEY, String(selectedEndpointId));
+      writeClientStorage(ENDPOINT_STORAGE_KEY, String(selectedEndpointId));
       return;
     }
     if (hasEndpoint(urlValue)) {
       setSelectedEndpointIdState(urlValue);
-      localStorage.setItem(ENDPOINT_STORAGE_KEY, String(urlValue));
+      writeClientStorage(ENDPOINT_STORAGE_KEY, String(urlValue));
       return;
     }
-    const storedValue = parseEndpointId(localStorage.getItem(ENDPOINT_STORAGE_KEY));
+    const storedValue = parseEndpointId(readClientStorage(ENDPOINT_STORAGE_KEY));
     if (hasEndpoint(storedValue)) {
       setSelectedEndpointIdState(storedValue);
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set(ENDPOINT_URL_PARAM, String(storedValue));
       setSearchParams(nextParams, { replace: true });
-      localStorage.setItem(ENDPOINT_STORAGE_KEY, String(storedValue));
+      writeClientStorage(ENDPOINT_STORAGE_KEY, String(storedValue));
       return;
     }
     const fallback = endpoints.find((ep) => ep.is_default) ?? endpoints[0];
     setSelectedEndpointIdState(fallback.id);
-    localStorage.setItem(ENDPOINT_STORAGE_KEY, String(fallback.id));
+    writeClientStorage(ENDPOINT_STORAGE_KEY, String(fallback.id));
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set(ENDPOINT_URL_PARAM, String(fallback.id));
     setSearchParams(nextParams, { replace: true });
@@ -117,10 +118,10 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
     setSelectedEndpointIdState(id);
     const nextParams = new URLSearchParams(searchParams);
     if (id === null) {
-      localStorage.removeItem(ENDPOINT_STORAGE_KEY);
+      removeClientStorage(ENDPOINT_STORAGE_KEY);
       nextParams.delete(ENDPOINT_URL_PARAM);
     } else {
-      localStorage.setItem(ENDPOINT_STORAGE_KEY, String(id));
+      writeClientStorage(ENDPOINT_STORAGE_KEY, String(id));
       nextParams.set(ENDPOINT_URL_PARAM, String(id));
     }
     setSearchParams(nextParams, { replace: true });

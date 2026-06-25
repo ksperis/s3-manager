@@ -24,6 +24,7 @@ import {
 import { WORKSPACE_TRAFFIC_TREND_WINDOWS } from "../../components/workspaceDashboardKpis";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
+import { CLIENT_STORAGE_KEYS, readClientJson } from "../../utils/clientStorage";
 import {
   buildPortalWorkspaceModel,
   type PortalWorkspaceActivityItem,
@@ -35,14 +36,7 @@ import { listPortalLocalTransfers, subscribePortalTransferUpdates } from "./port
 
 function readUserEmail(): string | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as { email?: string | null };
-    return parsed.email ?? null;
-  } catch {
-    return null;
-  }
+  return readClientJson<{ email?: string | null }>(CLIENT_STORAGE_KEYS.sessionUser)?.email ?? null;
 }
 
 function shortTimeLabel(value?: string | null): string {

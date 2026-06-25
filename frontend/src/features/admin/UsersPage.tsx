@@ -54,6 +54,7 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { cx, uiCardMutedClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
+import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
 import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
@@ -1690,15 +1691,8 @@ export default function UsersPage() {
       payload.s3_connection_ids = editSelectedS3Connections;
       const updatedUser = await updateUser(editingUser.id, payload);
       if (currentUserId !== null && currentUserId === editingUser.id && typeof window !== "undefined") {
-        const storedRaw = localStorage.getItem("user");
-        if (storedRaw) {
-          try {
-            const stored = JSON.parse(storedRaw) as Record<string, unknown>;
-            localStorage.setItem("user", JSON.stringify({ ...stored, ...updatedUser }));
-          } catch {
-            localStorage.setItem("user", JSON.stringify(updatedUser));
-          }
-        }
+        const stored = readClientJson<Record<string, unknown>>(CLIENT_STORAGE_KEYS.sessionUser);
+        writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, { ...(stored ?? {}), ...updatedUser });
       }
       const existing = editingUser.accounts ? editingUser.accounts.map((id) => Number(id)) : [];
       const existingAdminById = new Map<number, boolean>(

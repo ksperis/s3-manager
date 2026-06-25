@@ -29,6 +29,7 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "./useLiveS3CredentialsValidation";
 import { notifyExecutionContextsRefresh } from "../../utils/executionContextRefresh";
 import { stableSignature } from "../../utils/stableSignature";
+import { CLIENT_STORAGE_KEYS, readClientJson, removeClientStorage, writeClientJson, writeClientStorage } from "../../utils/clientStorage";
 import {
   WORKSPACE_STORAGE_KEY,
   isAdminLikeRole,
@@ -82,21 +83,16 @@ type ConnectionCredentialDraft = {
 
 function persistStoredUser(values: { fullName?: string | null; uiLanguage?: "en" | "fr" | "de" | null }) {
   if (typeof window === "undefined") return;
-  const raw = localStorage.getItem("user");
-  if (!raw) return;
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if ("fullName" in values) {
-      parsed.full_name = values.fullName ?? null;
-      parsed.display_name = values.fullName ?? null;
-    }
-    if ("uiLanguage" in values) {
-      parsed.ui_language = values.uiLanguage ?? null;
-    }
-    localStorage.setItem("user", JSON.stringify(parsed));
-  } catch (error) {
-    console.warn("Unable to update stored user profile", error);
+  const parsed = readClientJson<Record<string, unknown>>(CLIENT_STORAGE_KEYS.sessionUser);
+  if (!parsed) return;
+  if ("fullName" in values) {
+    parsed.full_name = values.fullName ?? null;
+    parsed.display_name = values.fullName ?? null;
   }
+  if ("uiLanguage" in values) {
+    parsed.ui_language = values.uiLanguage ?? null;
+  }
+  writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, parsed);
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -842,9 +838,9 @@ export default function ProfilePage({
       setLanguagePreference(preferencesLanguage);
     }
     if (preferredWorkspace) {
-      localStorage.setItem(WORKSPACE_STORAGE_KEY, preferredWorkspace);
+      writeClientStorage(WORKSPACE_STORAGE_KEY, preferredWorkspace);
     } else {
-      localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+      removeClientStorage(WORKSPACE_STORAGE_KEY);
     }
     writeSelectorTagsPreference(preferencesShowSelectorTags);
     setPreferencesInitialSignature(preferencesCurrentSignature);

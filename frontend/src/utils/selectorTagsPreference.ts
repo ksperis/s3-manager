@@ -3,8 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useState } from "react";
+import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "./clientStorage";
 
-export const SELECTOR_TAGS_PREFERENCE_KEY = "showSelectorTags";
+export const SELECTOR_TAGS_PREFERENCE_KEY = CLIENT_STORAGE_KEYS.selectorTagsPreference;
 const SELECTOR_TAGS_EVENT = "s3-manager:selector-tags-changed";
 
 function resolveWindow(): Window | null {
@@ -14,16 +15,16 @@ function resolveWindow(): Window | null {
 export function readSelectorTagsPreference(): boolean {
   const currentWindow = resolveWindow();
   if (!currentWindow) return false;
-  return currentWindow.localStorage.getItem(SELECTOR_TAGS_PREFERENCE_KEY) === "1";
+  return readClientStorage(SELECTOR_TAGS_PREFERENCE_KEY) === "1";
 }
 
 export function writeSelectorTagsPreference(enabled: boolean): void {
   const currentWindow = resolveWindow();
   if (!currentWindow) return;
   if (enabled) {
-    currentWindow.localStorage.setItem(SELECTOR_TAGS_PREFERENCE_KEY, "1");
+    writeClientStorage(SELECTOR_TAGS_PREFERENCE_KEY, "1");
   } else {
-    currentWindow.localStorage.removeItem(SELECTOR_TAGS_PREFERENCE_KEY);
+    removeClientStorage(SELECTOR_TAGS_PREFERENCE_KEY);
   }
   currentWindow.dispatchEvent(
     new CustomEvent<boolean>(SELECTOR_TAGS_EVENT, {

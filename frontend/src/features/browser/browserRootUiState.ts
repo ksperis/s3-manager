@@ -2,8 +2,9 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
 
-export const BROWSER_ROOT_UI_STATE_STORAGE_KEY = "browser:root-ui-state:v1";
+export const BROWSER_ROOT_UI_STATE_STORAGE_KEY = CLIENT_STORAGE_KEYS.browserRootUiState;
 export const DEFAULT_FOLDERS_PANEL_WIDTH_PX = 280;
 export const DEFAULT_INSPECTOR_PANEL_WIDTH_PX = 320;
 export const MIN_FOLDERS_PANEL_WIDTH_PX = 220;
@@ -124,31 +125,21 @@ export const readStoredBrowserRootUiState = (): BrowserRootUiState | null => {
   if (typeof window === "undefined") {
     return null;
   }
-  try {
-    const raw = window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!isRecord(parsed)) return null;
-    return {
-      layout: normalizeLayoutState(parsed.layout),
-      contextSelections: normalizeContextSelections(parsed.contextSelections),
-      objectColumns: normalizeObjectColumns(parsed.objectColumns),
-      objectColumnWidths: normalizeObjectColumnWidths(parsed.objectColumnWidths),
-    };
-  } catch {
-    return null;
-  }
+  const parsed = readClientJson<unknown>(BROWSER_ROOT_UI_STATE_STORAGE_KEY);
+  if (!isRecord(parsed)) return null;
+  return {
+    layout: normalizeLayoutState(parsed.layout),
+    contextSelections: normalizeContextSelections(parsed.contextSelections),
+    objectColumns: normalizeObjectColumns(parsed.objectColumns),
+    objectColumnWidths: normalizeObjectColumnWidths(parsed.objectColumnWidths),
+  };
 };
 
 export const readBrowserRootUiState = (): BrowserRootUiState => readStoredBrowserRootUiState() ?? createDefaultState();
 
 const writeBrowserRootUiState = (value: BrowserRootUiState) => {
   if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY, JSON.stringify(value));
-  } catch {
-    // Ignore storage write failures (private mode / quota).
-  }
+  writeClientJson(BROWSER_ROOT_UI_STATE_STORAGE_KEY, value);
 };
 
 export const writeBrowserRootUiLayout = (layout: BrowserRootUiLayoutState) => {

@@ -18,6 +18,7 @@ import { fetchGeneralSettings, fetchLoginSettings, type GeneralSettings, type Lo
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
+import { CLIENT_STORAGE_KEYS, removeClientStorage, writeClientJson, writeClientStorage } from "../../utils/clientStorage";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
 
@@ -145,14 +146,14 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await login(email, password);
-      localStorage.setItem("token", res.access_token);
+      writeClientStorage(CLIENT_STORAGE_KEYS.authToken, res.access_token);
       const sessionUser: SessionUser = { ...res.user, authType: "password" };
-      localStorage.setItem("user", JSON.stringify(sessionUser));
+      writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, sessionUser);
       setLanguagePreference(res.user.ui_language ?? "auto");
       if (res.user.ui_preferences?.theme === "light" || res.user.ui_preferences?.theme === "dark") {
         setTheme(res.user.ui_preferences.theme);
       }
-      localStorage.removeItem("s3SessionEndpoint");
+      removeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
       const settings = await loadGeneralSettings();
       const destination = resolvePostLoginPath(sessionUser, settings);
       prefetchWorkspaceBranch(destination);
@@ -177,14 +178,14 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await loginWithLdap(providerId, ldapUsername.trim(), ldapPassword);
-      localStorage.setItem("token", res.access_token);
+      writeClientStorage(CLIENT_STORAGE_KEYS.authToken, res.access_token);
       const sessionUser: SessionUser = { ...res.user, authType: "ldap" };
-      localStorage.setItem("user", JSON.stringify(sessionUser));
+      writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, sessionUser);
       setLanguagePreference(res.user.ui_language ?? "auto");
       if (res.user.ui_preferences?.theme === "light" || res.user.ui_preferences?.theme === "dark") {
         setTheme(res.user.ui_preferences.theme);
       }
-      localStorage.removeItem("s3SessionEndpoint");
+      removeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
       const settings = await loadGeneralSettings();
       const destination = resolvePostLoginPath(sessionUser, settings);
       prefetchWorkspaceBranch(destination);
@@ -211,11 +212,11 @@ export default function LoginPage() {
         ? normalizedCustom || normalizedSelected || normalizedDefault || undefined
         : undefined;
       const res = await loginWithKeys(accessKey.trim(), secretKey.trim(), endpointUrl);
-      localStorage.setItem("token", res.access_token);
+      writeClientStorage(CLIENT_STORAGE_KEYS.authToken, res.access_token);
       if (endpointUrl) {
-        localStorage.setItem("s3SessionEndpoint", endpointUrl);
+        writeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint, endpointUrl);
       } else {
-        localStorage.removeItem("s3SessionEndpoint");
+        removeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
       }
       const userPayload: SessionUser = {
         email: res.session.account_id ? `${res.session.account_id}@s3-session` : "s3-session",
@@ -226,7 +227,7 @@ export default function LoginPage() {
         accountName: res.session.account_name ?? null,
         capabilities: res.session.capabilities,
       };
-      localStorage.setItem("user", JSON.stringify(userPayload));
+      writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, userPayload);
       setLanguagePreference("auto");
       const settings = await loadGeneralSettings();
       const destination = resolvePostLoginPath(userPayload, settings);

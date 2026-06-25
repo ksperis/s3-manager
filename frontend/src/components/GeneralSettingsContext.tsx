@@ -4,6 +4,7 @@
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { fetchGeneralSettings, GeneralSettings } from "../api/appSettings";
+import { CLIENT_STORAGE_KEYS, readClientStorage } from "../utils/clientStorage";
 
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   manager_enabled: true,
@@ -50,7 +51,7 @@ export function GeneralSettingsProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
     if (!token) {
       setGeneralSettings(DEFAULT_GENERAL_SETTINGS);
       setLoading(false);

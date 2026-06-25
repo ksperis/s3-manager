@@ -43,6 +43,7 @@ import {
 } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
+import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage, writeClientJson } from "../../utils/clientStorage";
 import {
   S3_BUCKET_NAME_MAX_LENGTH,
   isValidS3BucketName,
@@ -483,7 +484,7 @@ const PATH_SUGGESTIONS_DEBOUNCE_MS = 200;
 const PATH_SUGGESTIONS_LIMIT = 20;
 const PATH_SUGGESTIONS_API_LIMIT = 50;
 const PATH_HISTORY_LIMIT = 20;
-const PATH_HISTORY_STORAGE_KEY = "browser:path-history:v1";
+const PATH_HISTORY_STORAGE_KEY = CLIENT_STORAGE_KEYS.browserPathHistory;
 const PANELS_DISABLE_MAX_WIDTH_PX = 1023;
 const PANELS_DISABLE_MEDIA_QUERY = `(max-width: ${PANELS_DISABLE_MAX_WIDTH_PX}px)`;
 const PANEL_LAYOUT_GAP_PX = 12;
@@ -1032,15 +1033,9 @@ const mergePathSuggestions = (
 
 const readPathHistoryStore = (): Record<string, string[]> => {
   if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(PATH_HISTORY_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return {};
-    return parsed as Record<string, string[]>;
-  } catch {
-    return {};
-  }
+  const parsed = readClientJson<unknown>(PATH_HISTORY_STORAGE_KEY);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  return parsed as Record<string, string[]>;
 };
 
 const readBucketPathHistory = (bucketName: string): string[] => {
@@ -1075,14 +1070,7 @@ const pushBucketPathHistory = (
     ...current.filter((entry) => entry !== normalized),
   ].slice(0, PATH_HISTORY_LIMIT);
   store[bucketName] = next;
-  try {
-    window.localStorage.setItem(
-      PATH_HISTORY_STORAGE_KEY,
-      JSON.stringify(store),
-    );
-  } catch {
-    // Ignore localStorage write failures (private mode / quota).
-  }
+  writeClientJson(PATH_HISTORY_STORAGE_KEY, store);
   return next;
 };
 
@@ -8138,22 +8126,15 @@ export default function BrowserPage({
   const buildAuthHeaders = useCallback((sseKeyBase64?: string | null) => {
     const headers: Record<string, string> = {};
     if (typeof window === "undefined") return headers;
-    const token = localStorage.getItem("token");
+    const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
-    const userRaw = localStorage.getItem("user");
-    if (userRaw) {
-      try {
-        const parsed = JSON.parse(userRaw) as { authType?: string };
-        if (parsed?.authType === "s3_session") {
-          const endpoint = localStorage.getItem("s3SessionEndpoint");
-          if (endpoint) {
-            headers["X-S3-Endpoint"] = endpoint;
-          }
-        }
-      } catch (err) {
-        console.warn("Unable to parse stored user payload", err);
+    const parsed = readClientJson<{ authType?: string }>(CLIENT_STORAGE_KEYS.sessionUser);
+    if (parsed?.authType === "s3_session") {
+      const endpoint = readClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
+      if (endpoint) {
+        headers["X-S3-Endpoint"] = endpoint;
       }
     }
     if (workspaceSurface === "portal") {

@@ -4,8 +4,9 @@
  */
 import type { GeneralSettings } from "../api/appSettings";
 import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences } from "../api/users";
+import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage } from "./clientStorage";
 
-export const WORKSPACE_STORAGE_KEY = "selectedWorkspace";
+export const WORKSPACE_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedWorkspace;
 
 const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
@@ -80,19 +81,11 @@ export function getManagerToolAccess(user: SessionUser | null): ManagerToolAcces
 }
 
 export function readStoredUser(): SessionUser | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as SessionUser;
-  } catch {
-    return null;
-  }
+  return readClientJson<SessionUser>(CLIENT_STORAGE_KEYS.sessionUser);
 }
 
 export function readStoredWorkspaceId(): WorkspaceId | null {
-  if (typeof window === "undefined") return null;
-  const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+  const stored = readClientStorage(WORKSPACE_STORAGE_KEY);
   if (
     stored === "admin" ||
     stored === "ceph-admin" ||

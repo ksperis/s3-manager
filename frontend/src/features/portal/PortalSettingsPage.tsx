@@ -13,6 +13,7 @@ import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
+import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
 import { formatBytes } from "../../utils/format";
 import { readStoredUser } from "../../utils/workspaces";
 import { usePortalAccountContext } from "./PortalAccountContext";
@@ -25,20 +26,12 @@ const labelClasses = "ui-caption font-semibold uppercase tracking-wide text-[var
 
 function persistStoredUser(user: User) {
   if (typeof window === "undefined") return;
-  const raw = localStorage.getItem("user");
-  let next: Record<string, unknown> = {};
-  if (raw) {
-    try {
-      next = JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      next = {};
-    }
-  }
+  const next = readClientJson<Record<string, unknown>>(CLIENT_STORAGE_KEYS.sessionUser) ?? {};
   next.full_name = user.full_name ?? null;
   next.display_name = user.display_name ?? user.full_name ?? null;
   next.ui_language = user.ui_language ?? null;
   next.ui_preferences = user.ui_preferences ?? {};
-  localStorage.setItem("user", JSON.stringify(next));
+  writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, next);
 }
 
 function resolvePortalRole(user: User | null, selectedAccountId: string | null): string {

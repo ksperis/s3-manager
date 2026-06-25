@@ -8,6 +8,7 @@ import { useGeneralSettings } from "./GeneralSettingsContext";
 import type { TopbarDropdownOption } from "./TopbarDropdownSelect";
 import { listExecutionContexts } from "../api/executionContexts";
 import { fetchCurrentUser } from "../api/users";
+import { CLIENT_STORAGE_KEYS, readClientStorage, writeClientJson, writeClientStorage } from "../utils/clientStorage";
 import {
   WORKSPACE_STORAGE_KEY,
   isAdminLikeRole,
@@ -40,13 +41,13 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
   const { generalSettings } = useGeneralSettings();
 
   useEffect(() => {
-    if (typeof window === "undefined" || !localStorage.getItem("token")) return;
+    if (!readClientStorage(CLIENT_STORAGE_KEYS.authToken)) return;
     let cancelled = false;
     fetchCurrentUser()
       .then((currentUser) => {
         if (cancelled) return;
         const mergedUser = { ...(readStoredUser() ?? {}), ...currentUser } as SessionUser;
-        localStorage.setItem("user", JSON.stringify(mergedUser));
+        writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, mergedUser);
         setUser(mergedUser);
       })
       .catch(() => {
@@ -102,7 +103,7 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
     }
     const stored = readStoredWorkspaceId();
     if (stored !== currentWorkspaceId) {
-      localStorage.setItem(WORKSPACE_STORAGE_KEY, currentWorkspaceId);
+      writeClientStorage(WORKSPACE_STORAGE_KEY, currentWorkspaceId);
     }
   }, [currentWorkspaceId]);
 
@@ -120,7 +121,7 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
     const next = environments.find((env) => env.id === nextWorkspaceId);
     if (!next) return;
     if (location.pathname.startsWith(next.path)) return;
-    localStorage.setItem(WORKSPACE_STORAGE_KEY, next.id);
+    writeClientStorage(WORKSPACE_STORAGE_KEY, next.id);
     navigate(next.path);
   };
 

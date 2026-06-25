@@ -4,6 +4,7 @@
  */
 import client from "./client";
 import { sanitizeErrorMessage } from "../utils/apiError";
+import { CLIENT_STORAGE_KEYS, readClientStorage, writeClientStorage } from "../utils/clientStorage";
 
 export type BucketMigrationMode = "one_shot" | "pre_sync";
 export type BucketMigrationStatus =
@@ -234,7 +235,7 @@ export async function streamManagerMigration(
 
   const buildHeaders = () => {
     const headers = new Headers({ Accept: "text/event-stream" });
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);
     }
@@ -256,7 +257,7 @@ export async function streamManagerMigration(
         { signal: options?.signal }
       );
       if (typeof window !== "undefined") {
-        localStorage.setItem("token", refresh.data.access_token);
+        writeClientStorage(CLIENT_STORAGE_KEYS.authToken, refresh.data.access_token);
       }
       response = await fetch(url, {
         method: "GET",

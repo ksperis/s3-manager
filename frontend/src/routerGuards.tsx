@@ -10,6 +10,7 @@ import { useGeneralSettings } from "./components/GeneralSettingsContext";
 import { cx, uiCardClass } from "./components/ui/styles";
 import { useS3AccountContext } from "./features/manager/S3AccountContext";
 import FeatureDisabledPage from "./features/shared/FeatureDisabledPage";
+import { CLIENT_STORAGE_KEYS, readClientStorage, writeClientJson } from "./utils/clientStorage";
 import {
   getManagerToolAccess,
   hasPortalWorkspaceAccess,
@@ -37,7 +38,7 @@ export function RouteFallback() {
 }
 
 export function RequireAuth() {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
   const user = getStoredUser();
   if (!token || !user) return <Navigate to="/login" replace />;
   return <Outlet />;
@@ -75,7 +76,7 @@ export function RequirePortalAccess() {
     const storedUser = getStoredUser();
     return Boolean(
       typeof window !== "undefined" &&
-        localStorage.getItem("token") &&
+        readClientStorage(CLIENT_STORAGE_KEYS.authToken) &&
         storedUser &&
         !hasPortalWorkspaceAccess(storedUser)
     );
@@ -83,14 +84,14 @@ export function RequirePortalAccess() {
 
   useEffect(() => {
     if (!generalSettings.portal_enabled || hasPortalWorkspaceAccess(sessionUser)) return;
-    if (typeof window === "undefined" || !localStorage.getItem("token")) return;
+    if (typeof window === "undefined" || !readClientStorage(CLIENT_STORAGE_KEYS.authToken)) return;
     let cancelled = false;
     setRefreshingSession(true);
     fetchCurrentUser()
       .then((currentUser) => {
         if (cancelled) return;
         const mergedUser = { ...(getStoredUser() ?? {}), ...currentUser } as SessionUser;
-        localStorage.setItem("user", JSON.stringify(mergedUser));
+        writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, mergedUser);
         setSessionUser(mergedUser);
       })
       .catch(() => {

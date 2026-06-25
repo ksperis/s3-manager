@@ -7,9 +7,10 @@ import { useSearchParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import { ExecutionContext, listExecutionContexts } from "../../api/executionContexts";
 import { fetchManagerContext, type ManagerAccessMode } from "../../api/managerContext";
+import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
 import { EXECUTION_CONTEXTS_REFRESH_EVENT } from "../../utils/executionContextRefresh";
 
-const EXECUTION_CONTEXT_STORAGE_KEY = "selectedExecutionContextId";
+const EXECUTION_CONTEXT_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedExecutionContext;
 const EXECUTION_CONTEXT_URL_PARAM = "ctx";
 
 type S3AccountContextType = {
@@ -77,18 +78,15 @@ function readSessionInfo(): SessionInfo {
   if (typeof window === "undefined") {
     return { isSession: false, accountName: null };
   }
-  const raw = localStorage.getItem("user");
-  if (!raw) {
+  const parsed = readClientJson<{ authType?: string | null; accountName?: string | null; accountId?: string | null }>(
+    CLIENT_STORAGE_KEYS.sessionUser
+  );
+  if (!parsed) {
     return { isSession: false, accountName: null };
   }
-  try {
-    const parsed = JSON.parse(raw) as { authType?: string | null; accountName?: string | null; accountId?: string | null };
-    const isSession = parsed.authType === "s3_session";
-    const accountName = parsed.accountName ?? parsed.accountId ?? null;
-    return { isSession, accountName };
-  } catch {
-    return { isSession: false, accountName: null };
-  }
+  const isSession = parsed.authType === "s3_session";
+  const accountName = parsed.accountName ?? parsed.accountId ?? null;
+  return { isSession, accountName };
 }
 
 export function S3AccountProvider({ children, scope = "manager" }: S3AccountProviderProps) {
@@ -139,7 +137,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
   useEffect(() => {
     if (!requiresS3AccountSelection) {
       setSelectedS3AccountId(null);
-      localStorage.removeItem(EXECUTION_CONTEXT_STORAGE_KEY);
+      removeClientStorage(EXECUTION_CONTEXT_STORAGE_KEY);
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete(EXECUTION_CONTEXT_URL_PARAM);
       setSearchParams(nextParams, { replace: true });
@@ -147,12 +145,12 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
     }
     if (accounts.length === 0) return;
     const urlContext = searchParams.get(EXECUTION_CONTEXT_URL_PARAM);
-    const stored = localStorage.getItem(EXECUTION_CONTEXT_STORAGE_KEY);
+    const stored = readClientStorage(EXECUTION_CONTEXT_STORAGE_KEY);
     if (urlContext && accounts.some((context) => context.id === urlContext)) {
       if (urlContext !== selectedS3AccountId) {
         setSelectedS3AccountId(urlContext);
       }
-      localStorage.setItem(EXECUTION_CONTEXT_STORAGE_KEY, urlContext);
+      writeClientStorage(EXECUTION_CONTEXT_STORAGE_KEY, urlContext);
       return;
     }
     if (stored && accounts.some((context) => context.id === stored)) {
@@ -168,7 +166,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
     if (!selectedS3AccountId || !selectedExists) {
       const nextId = String(accounts[0].id);
       setSelectedS3AccountId(nextId);
-      localStorage.setItem(EXECUTION_CONTEXT_STORAGE_KEY, nextId);
+      writeClientStorage(EXECUTION_CONTEXT_STORAGE_KEY, nextId);
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set(EXECUTION_CONTEXT_URL_PARAM, nextId);
       setSearchParams(nextParams, { replace: true });
@@ -181,12 +179,12 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
       return;
     }
     if (id === null) {
-      localStorage.removeItem(EXECUTION_CONTEXT_STORAGE_KEY);
+      removeClientStorage(EXECUTION_CONTEXT_STORAGE_KEY);
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete(EXECUTION_CONTEXT_URL_PARAM);
       setSearchParams(nextParams, { replace: true });
     } else {
-      localStorage.setItem(EXECUTION_CONTEXT_STORAGE_KEY, id);
+      writeClientStorage(EXECUTION_CONTEXT_STORAGE_KEY, id);
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set(EXECUTION_CONTEXT_URL_PARAM, id);
       setSearchParams(nextParams, { replace: true });

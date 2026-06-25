@@ -3,8 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
+import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
 
-const STORAGE_KEY = "portal:v3:transfers";
+const STORAGE_KEY = CLIENT_STORAGE_KEYS.portalTransfers;
 const UPDATE_EVENT = "portal-transfers-updated";
 
 export type PortalLocalTransfer = PortalWorkspaceTransfer & {
@@ -29,19 +30,13 @@ function canUseStorage(): boolean {
 
 function readAll(): PortalLocalTransfer[] {
   if (!canUseStorage()) return [];
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed as PortalLocalTransfer[] : [];
-  } catch {
-    return [];
-  }
+  const parsed = readClientJson<unknown>(STORAGE_KEY);
+  return Array.isArray(parsed) ? parsed as PortalLocalTransfer[] : [];
 }
 
 function writeAll(transfers: PortalLocalTransfer[]): void {
   if (!canUseStorage()) return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(transfers.slice(0, 40)));
+  writeClientJson(STORAGE_KEY, transfers.slice(0, 40));
   window.dispatchEvent(new Event(UPDATE_EVENT));
 }
 

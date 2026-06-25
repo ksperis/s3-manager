@@ -1,5 +1,6 @@
 import client from "./client";
 import { sanitizeErrorMessage } from "../utils/apiError";
+import { CLIENT_STORAGE_KEYS, readClientStorage, writeClientStorage } from "../utils/clientStorage";
 
 type StreamBucketsOptions<TProgress> = {
   signal?: AbortSignal;
@@ -30,7 +31,7 @@ function isCancelledError(err: unknown): boolean {
 function buildHeaders(extraHeaders?: HeadersInit): Headers {
   const headers = new Headers(extraHeaders);
   headers.set("Accept", "text/event-stream");
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
@@ -50,7 +51,7 @@ async function fetchStream(url: string, signal?: AbortSignal, requestInit?: Requ
     try {
       const refresh = await client.post<{ access_token: string; token_type: string }>("/auth/refresh", undefined, { signal });
       if (typeof window !== "undefined") {
-        localStorage.setItem("token", refresh.data.access_token);
+        writeClientStorage(CLIENT_STORAGE_KEYS.authToken, refresh.data.access_token);
       }
       response = await fetch(url, {
         ...requestInit,
