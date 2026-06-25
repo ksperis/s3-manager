@@ -64,6 +64,7 @@ type TopbarContextAccountSelectorProps = {
   searchThreshold?: number;
   openInPortal?: boolean;
   triggerMode?: "icon" | "icon_label";
+  showTriggerTags?: boolean;
 };
 
 export default function TopbarContextAccountSelector({
@@ -78,6 +79,7 @@ export default function TopbarContextAccountSelector({
   searchThreshold = 6,
   openInPortal = true,
   triggerMode = "icon_label",
+  showTriggerTags = true,
 }: TopbarContextAccountSelectorProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -354,7 +356,7 @@ export default function TopbarContextAccountSelector({
         ariaLabel="Select context account"
         title={identityLabel ?? undefined}
         rightAddon={
-          showSelectorTags && triggerMode !== "icon" && selectedItem && selectedItem.tagItems.length > 0 ? (
+          showTriggerTags && showSelectorTags && triggerMode !== "icon" && selectedItem && selectedItem.tagItems.length > 0 ? (
             <UiTagBadgeList
               items={selectedItem.tagItems}
               layout="inline-compact"

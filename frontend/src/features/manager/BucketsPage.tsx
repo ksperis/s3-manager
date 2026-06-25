@@ -10,7 +10,7 @@ import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListToolbar from "../../components/ListToolbar";
 import PageEmptyState from "../../components/PageEmptyState";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
-import { uiCheckboxClass } from "../../components/ui/styles";
+import { cx, uiButtonBaseClass, uiButtonVariants, uiCheckboxClass } from "../../components/ui/styles";
 import {
   Bucket,
   BucketFeatureStatus,
@@ -895,7 +895,7 @@ export default function BucketsPage() {
         const deleteButton = (
           <button
             onClick={() => requestDelete(bucket.name)}
-            className={tableDeleteActionClasses}
+            className={`${tableDeleteActionClasses} whitespace-nowrap`}
             disabled={deletingBucket === bucket.name || Boolean(deleteDisabledReason)}
           >
             {deletingBucket === bucket.name ? "Deleting..." : deleteLabel}
@@ -903,8 +903,11 @@ export default function BucketsPage() {
         );
         return (
           <div className="flex flex-col items-end gap-1">
-            <div className="flex flex-wrap justify-end gap-2">
-              <Link to={`/manager/buckets/${encodeURIComponent(bucket.name)}`} className={tableActionButtonClasses}>
+            <div className="flex flex-nowrap justify-end gap-2">
+              <Link
+                to={`/manager/buckets/${encodeURIComponent(bucket.name)}`}
+                className={`${tableActionButtonClasses} whitespace-nowrap`}
+              >
                 Configure
               </Link>
               {deleteDisabledReason ? <span title={deleteDisabledReason}>{deleteButton}</span> : deleteButton}
@@ -1066,7 +1069,7 @@ export default function BucketsPage() {
             }
           />
           <div className="overflow-x-auto">
-            <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <table className="manager-table w-full min-w-[760px] divide-y divide-slate-200 dark:divide-slate-800">
               <thead className="bg-slate-50 dark:bg-slate-900/50">
                 <tr>
                   {bucketTableColumns.map((col) => (
@@ -1092,7 +1095,12 @@ export default function BucketsPage() {
                     <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                       {bucketTableColumns.map((col) => {
                         const align = col.align ?? (col.id === "actions" ? "right" : "left");
-                        const cellBase = align === "right" ? "px-6 py-4 text-right" : "px-6 py-4";
+                        const cellBase =
+                          col.id === "actions"
+                            ? "min-w-[13rem] px-6 py-4 text-right align-top"
+                            : align === "right"
+                              ? "px-6 py-4 text-right"
+                              : "px-6 py-4";
                         const textClass =
                           col.id === "name"
                             ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
@@ -1269,7 +1277,7 @@ export default function BucketsPage() {
                       setWizardStep((prev) => Math.min(prev + 1, stepTitles.length - 1));
                     }}
                     disabled={!bucketForm.name.trim() || !isBucketNameValid}
-                    className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600"
+                    className={cx(uiButtonBaseClass, uiButtonVariants.primary, "rounded-md px-4 py-2 ui-body")}
                   >
                     Continue
                   </button>
@@ -1277,7 +1285,7 @@ export default function BucketsPage() {
                   <button
                     type="submit"
                     disabled={creating}
-                    className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                    className={cx(uiButtonBaseClass, uiButtonVariants.primary, "rounded-md px-4 py-2 ui-body")}
                   >
                     {creating ? "Creating..." : "Create bucket"}
                   </button>

@@ -13,6 +13,7 @@ import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import ManagerTable, { managerTableCheckboxCellClass, managerTablePrimaryCellClass } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { cx, uiButtonBaseClass, uiButtonVariants } from "../../components/ui/styles";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { extractApiError } from "../../utils/apiError";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
@@ -212,7 +213,7 @@ export default function ManagerBucketComparePage() {
                 type="button"
                 onClick={openCompareModal}
                 disabled={selectedBuckets.size === 0 || bucketsLoading || contextsLoading}
-                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                className={cx(uiButtonBaseClass, uiButtonVariants.primary, "rounded-md px-3 py-1.5 ui-caption")}
               >
                 Compare selected ({selectedBuckets.size})
               </button>

@@ -46,11 +46,12 @@ function ManagerShell() {
   const showSelector = requiresS3AccountSelection && accounts.length > 1;
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const storedUser = readStoredUser();
-  const fallbackCapabilities = (storedUser?.capabilities as SessionCapabilities | undefined) ?? null;
-  const capabilities = fallbackCapabilities ?? {
-    can_manage_iam: true,
-    can_manage_buckets: true,
-    can_view_traffic: true,
+  const userCapabilities = (storedUser?.capabilities as SessionCapabilities | undefined) ?? null;
+  const contextCapabilities = (selected?.capabilities as Partial<SessionCapabilities> | undefined) ?? null;
+  const capabilities: SessionCapabilities = {
+    can_manage_iam: contextCapabilities?.can_manage_iam ?? userCapabilities?.can_manage_iam ?? true,
+    can_manage_buckets: contextCapabilities?.can_manage_buckets ?? userCapabilities?.can_manage_buckets ?? true,
+    can_view_traffic: contextCapabilities?.can_view_traffic ?? userCapabilities?.can_view_traffic ?? true,
   };
   const isS3User = selectedS3AccountType === "s3_user";
   const canManageBuckets = capabilities.can_manage_buckets !== false;
@@ -120,6 +121,8 @@ function ManagerShell() {
     navigate({ pathname: "/manager", search: nextParams.toString() ? `?${nextParams.toString()}` : "" });
   };
 
+  const compactAccountControlWidthClass = "w-[96px] max-w-[26vw] min-w-[4.75rem]";
+
   const renderStaticAccountPill = (mode: "icon" | "icon_label") => {
     if (mode === "icon") {
       return (
@@ -127,9 +130,14 @@ function ManagerShell() {
           type="button"
           aria-label={`Account context ${selectedLabel}`}
           title={identityLabel ?? selectedLabel}
-          className="shell-control inline-flex h-9 w-9 items-center justify-center rounded-lg border"
+          className={`shell-control inline-flex h-10 ${compactAccountControlWidthClass} items-center rounded-lg border px-2 text-left`}
         >
-          <AccountControlIcon className="h-4 w-4" />
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className="shell-muted-text block truncate text-[10px] font-medium">Account</span>
+            <span className="mt-0.5 block truncate text-[12px] font-semibold leading-4 text-[var(--shell-text)]">
+              {selectedLabel}
+            </span>
+          </span>
         </button>
       );
     }
@@ -156,7 +164,7 @@ function ManagerShell() {
       icon: <AccountControlIcon className="h-4 w-4" />,
       selectedLabel,
       priority: 10,
-      estimatedIconWidth: 36,
+      estimatedIconWidth: 96,
       estimatedLabelWidth: 212,
       renderControl: (mode) =>
         requiresS3AccountSelection && showSelector ? (
@@ -168,8 +176,9 @@ function ManagerShell() {
             identityLabel={identityLabel}
             defaultEndpointId={defaultEndpointId}
             defaultEndpointName={defaultEndpointName}
-            widthClassName={mode === "icon" ? "w-9" : "w-[300px] max-w-[42vw] min-w-[17rem]"}
-            triggerMode={mode}
+            widthClassName={mode === "icon" ? compactAccountControlWidthClass : "w-[300px] max-w-[42vw] min-w-[17rem]"}
+            triggerMode={mode === "icon" ? "icon_label" : mode}
+            showTriggerTags={mode !== "icon"}
           />
         ) : (
           renderStaticAccountPill(mode)

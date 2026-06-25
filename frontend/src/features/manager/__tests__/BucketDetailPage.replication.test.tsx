@@ -210,6 +210,25 @@ describe("BucketDetailPage replication state", () => {
     });
   });
 
+  it("renders the Manager bucket detail header with a working buckets return action", () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [],
+      selectedS3AccountId: null,
+      accountIdForApi: null,
+      requiresS3AccountSelection: true,
+      accessMode: "admin",
+      managerBucketQuotaEnabled: false,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/manager/buckets/demo-bucket"]}>
+        <BucketDetailPage bucketNameOverride="demo-bucket" />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: /Back to buckets/i })).toHaveAttribute("href", "/manager/buckets");
+  });
+
   it("renders the bucket overview without a redundant eyebrow or nested card shell", async () => {
     render(
       <MemoryRouter>

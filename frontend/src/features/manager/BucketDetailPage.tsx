@@ -151,6 +151,7 @@ import {
 } from "./bucketDetail";
 import {
   buildBucketDetailBreadcrumbs,
+  resolveBucketDetailSurface,
   resolveBucketDetailTabs,
   type BucketDetailMode,
 } from "./bucketDetail/bucketDetailSurface";
@@ -2036,6 +2037,7 @@ export default function BucketDetailPage({
     websiteLoading,
   ]);
 
+  const basePath = useMemo(() => resolveBucketDetailSurface(mode).bucketListPath, [mode]);
   const breadcrumbs = useMemo(() => buildBucketDetailBreadcrumbs(mode, bucketName), [bucketName, mode]);
 
   const handleTogglePublicAccessField = (key: keyof BucketPublicAccessBlock, value: boolean) => {

@@ -10,8 +10,18 @@ const useS3AccountContextMock = vi.fn();
 const useGeneralSettingsMock = vi.fn();
 
 let capturedNavSections: SidebarSection[] = [];
-let capturedTopbarControlDescriptors: Array<{ id: string; renderControl: (mode: "icon" | "icon_label") => ReactNode }> = [];
-let capturedAccountSelectorProps: { selectedContextId?: string | null; selectedLabel?: string } | null = null;
+let capturedTopbarControlDescriptors: Array<{
+  id: string;
+  estimatedIconWidth?: number;
+  renderControl: (mode: "icon" | "icon_label") => ReactNode;
+}> = [];
+let capturedAccountSelectorProps: {
+  selectedContextId?: string | null;
+  selectedLabel?: string;
+  triggerMode?: string;
+  widthClassName?: string;
+  showTriggerTags?: boolean;
+} | null = null;
 
 vi.mock("./S3AccountContext", () => ({
   S3AccountProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -29,7 +39,11 @@ vi.mock("../../components/Layout", () => ({
     children,
   }: {
     navSections?: SidebarSection[];
-    topbarControlDescriptors?: Array<{ id: string; renderControl: (mode: "icon" | "icon_label") => ReactNode }>;
+    topbarControlDescriptors?: Array<{
+      id: string;
+      estimatedIconWidth?: number;
+      renderControl: (mode: "icon" | "icon_label") => ReactNode;
+    }>;
     children: ReactNode;
   }) => {
     capturedNavSections = navSections ?? [];
@@ -47,7 +61,13 @@ vi.mock("../../components/Layout", () => ({
 
 vi.mock("../../components/TopbarContextAccountSelector", () => ({
   __esModule: true,
-  default: (props: { selectedContextId?: string | null; selectedLabel?: string }) => {
+  default: (props: {
+    selectedContextId?: string | null;
+    selectedLabel?: string;
+    triggerMode?: string;
+    widthClassName?: string;
+    showTriggerTags?: boolean;
+  }) => {
     capturedAccountSelectorProps = props;
     return <button type="button">Manager account selector</button>;
   },
@@ -446,6 +466,42 @@ describe("ManagerLayout", () => {
     expect(iamSection?.links.map((link) => link.label)).toEqual(["Users", "Groups", "Roles", "Policies"]);
   });
 
+  it("uses the selected context IAM capability before stored user capabilities", () => {
+    setStoredManagerUser({
+      capabilities: {
+        can_manage_iam: false,
+        can_manage_buckets: true,
+        can_view_traffic: true,
+      },
+    });
+    useS3AccountContextMock.mockReturnValue(
+      buildContext({
+        accounts: [
+          {
+            id: "conn-1",
+            display_name: "AWS/tests3",
+            storage_endpoint_capabilities: { iam: true, usage: false, metrics: false, sns: false },
+            capabilities: { can_manage_iam: true, sts_capable: false, admin_api_capable: false },
+          },
+        ],
+        selectedS3AccountId: "conn-1",
+        selectedS3AccountType: "connection",
+        accessMode: "connection",
+        managerStatsEnabled: false,
+      })
+    );
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const iamSection = capturedNavSections.find((section) => section.label === "IAM");
+    expect(iamSection?.links.map((link) => link.label)).toEqual(["Users", "Groups", "Roles", "Policies"]);
+  });
+
   it("keeps the manager account context selector in the topbar controls", () => {
     useS3AccountContextMock.mockReturnValue(
       buildContext({
@@ -469,5 +525,18 @@ describe("ManagerLayout", () => {
 
     expect(capturedTopbarControlDescriptors.map((descriptor) => descriptor.id)).toEqual(["account"]);
     expect(capturedAccountSelectorProps).toEqual(expect.objectContaining({ selectedContextId: "ctx-1", selectedLabel: "Context" }));
+    expect(capturedTopbarControlDescriptors[0]?.estimatedIconWidth).toBe(96);
+
+    render(<>{capturedTopbarControlDescriptors[0]?.renderControl("icon")}</>);
+
+    expect(capturedAccountSelectorProps).toEqual(
+      expect.objectContaining({
+        selectedContextId: "ctx-1",
+        selectedLabel: "Context",
+        triggerMode: "icon_label",
+        showTriggerTags: false,
+      })
+    );
+    expect(capturedAccountSelectorProps?.widthClassName).toContain("w-[96px]");
   });
 });
