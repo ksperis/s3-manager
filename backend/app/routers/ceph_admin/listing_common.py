@@ -21,6 +21,7 @@ from app.services.bucket_listing_shared import (
     _format_sse_event,
     parse_includes as parse_bucket_listing_includes,
 )
+from app.routers.http_errors import sanitize_error_detail
 from app.routers.sse_worker import wait_for_cancellable_worker
 
 _K = TypeVar("_K")
@@ -124,11 +125,7 @@ def interpolate_progress_percent(start: int, end: int, *, processed: int, total:
 
 
 def normalize_http_error_detail(detail: object) -> object:
-    if isinstance(detail, (str, int, float, bool)) or detail is None:
-        return detail
-    if isinstance(detail, (list, dict)):
-        return detail
-    return str(detail)
+    return sanitize_error_detail(detail)
 
 
 def stream_listing_response(

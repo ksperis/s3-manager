@@ -154,6 +154,35 @@ def test_manager_migration_stream_stops_when_client_disconnects(
     assert "event: done" not in body
 
 
+def test_manager_migration_stream_hides_unexpected_error_details(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind())
+    monkeypatch.setattr(migrations_router, "SessionLocal", test_session_factory)
+    migration_id = _seed_migration(test_session_factory, status="running")
+
+    def fail_signature(*_args, **_kwargs):
+        raise RuntimeError("secret stream failure token=leaked")
+
+    monkeypatch.setattr(migrations_router, "_compute_migration_stream_signature", fail_signature)
+
+    async def _run() -> str:
+        request = _request_with_disconnect_after(calls_before_disconnect=100)
+        response = await migrations_router.stream_migration(
+            migration_id=migration_id,
+            request=request,
+            events_limit=200,
+            scope=_scope("source-ctx", "target-ctx"),
+        )
+        return await _read_stream_body(response)
+
+    body = asyncio.run(_run())
+    assert "event: error" in body
+    assert "Bucket migration stream failed" in body
+    assert "token=leaked" not in body
+
+
 def test_manager_migration_stream_emits_multiple_snapshots_when_item_timestamp_changes(
     db_session,
     monkeypatch: pytest.MonkeyPatch,

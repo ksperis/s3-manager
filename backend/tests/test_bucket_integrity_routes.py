@@ -197,6 +197,30 @@ def test_integrity_stream_waits_for_worker_cleanup_after_disconnect():
     assert cleanup_finished.is_set()
 
 
+def test_integrity_stream_sanitizes_http_exception_details():
+    def run_check(_progress_callback, _cancel_check):
+        raise HTTPException(status_code=502, detail="upstream token=leaked at https://rgw.internal/object")
+
+    async def _run() -> str:
+        response = stream_bucket_integrity_check(
+            SimpleNamespace(is_disconnected=lambda: asyncio.sleep(0, result=False)),
+            run_check=run_check,
+            logger=logging.getLogger("test-integrity-stream"),
+            failure_message="Integrity stream failed",
+        )
+        chunks: list[str] = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk.decode() if isinstance(chunk, bytes) else chunk)
+        return "".join(chunks)
+
+    body = asyncio.run(_run())
+    assert "event: error" in body
+    assert "token=<redacted>" in body
+    assert "<redacted-url>" in body
+    assert "token=leaked" not in body
+    assert "rgw.internal" not in body
+
+
 def test_ceph_admin_integrity_route_uses_dedicated_endpoint_credentials(monkeypatch):
     captured: dict[str, object] = {}
 

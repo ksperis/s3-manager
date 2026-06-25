@@ -293,7 +293,7 @@ async def stream_migration(
                 stream_event_id += 1
                 yield _format_sse_event(
                     "error",
-                    {"detail": str(exc) or "Bucket migration stream failed"},
+                    {"detail": "Bucket migration stream failed"},
                     event_id=stream_event_id,
                 )
                 break

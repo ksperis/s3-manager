@@ -13,6 +13,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.models.bucket_integrity import BucketIntegrityCheckProgress, BucketIntegrityCheckResult
+from app.routers.http_errors import sanitize_error_detail
 from app.routers.sse_worker import wait_for_cancellable_worker
 from app.services.bucket_integrity_service import BucketIntegrityCheckCancelled
 
@@ -29,11 +30,7 @@ def format_sse_event(event: str, payload: dict[str, object]) -> str:
 
 
 def _normalize_http_error_detail(detail: object) -> object:
-    if isinstance(detail, (str, int, float, bool)) or detail is None:
-        return detail
-    if isinstance(detail, (list, dict)):
-        return detail
-    return str(detail)
+    return sanitize_error_detail(detail)
 
 
 def stream_bucket_integrity_check(
