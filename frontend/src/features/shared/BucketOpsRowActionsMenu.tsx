@@ -5,9 +5,9 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
 
 import type { CephAdminBucket } from "../../api/cephAdmin";
-import { tableActionMenuItemClasses } from "../../components/tableActionClasses";
+import { tableActionMenuItemClasses, tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
-import { cx, uiIconButtonClass, uiMenuClass } from "../../components/ui/styles";
+import { cx, uiMenuClass } from "../../components/ui/styles";
 
 type BucketOpsRowActionsMenuProps = {
   actionMenuKey: string;
@@ -49,7 +49,7 @@ export default function BucketOpsRowActionsMenu({
           actionMenuAnchorRefs.current[actionMenuKey] = node;
         }}
         type="button"
-        className={cx(uiIconButtonClass, "h-6 w-6 px-0 py-0 text-sm font-semibold")}
+        className={tableCompactIconActionButtonClasses}
         aria-label="More actions"
         title="More actions"
         aria-haspopup="menu"

@@ -17,7 +17,7 @@ import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import { CephAdminRgwUser, CephAdminRgwUserDetail, listCephAdminUsers, streamCephAdminUsers } from "../../api/cephAdmin";
-import { tableActionMenuItemClasses } from "../../components/tableActionClasses";
+import { tableActionMenuItemClasses, tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
 import CephAdminUserEditModal from "./CephAdminUserEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
@@ -1066,11 +1066,11 @@ export default function CephAdminUsersPage() {
       cellClassName: "!py-1.5",
       render: (user) => (
         <div className="inline-flex items-center">
-          <details className="relative">
-            <summary
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 list-none [&::-webkit-details-marker]:hidden"
-              aria-label="More actions"
-              title="More actions"
+            <details className="relative">
+              <summary
+                className={`${tableCompactIconActionButtonClasses} list-none [&::-webkit-details-marker]:hidden`}
+                aria-label="More actions"
+                title="More actions"
             >
               ⋮
             </summary>

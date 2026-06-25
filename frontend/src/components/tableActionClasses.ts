@@ -8,6 +8,9 @@ export const tableActionButtonClasses =
 export const tableIconActionButtonClasses =
   "inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100";
 
+export const tableCompactIconActionButtonClasses =
+  "inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-300 bg-white px-0 py-0 text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
+
 export const tableActionMenuItemClasses =
   "block w-full rounded-md px-2.5 py-1.5 text-left ui-caption font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-50";
 
