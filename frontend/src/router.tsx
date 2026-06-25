@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useMemo } from "react";
 import { Navigate, Outlet, Route, RouterProvider, createBrowserRouter, createRoutesFromElements } from "react-router-dom";
 import Layout from "./components/Layout";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
