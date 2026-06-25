@@ -543,8 +543,7 @@ describe("AdminDashboard feature summary", () => {
 
     await renderDashboard();
 
-    expect(screen.getByText("Recent activity")).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Recent activity" })).toBeInTheDocument();
+    expect(await screen.findByText("Recent activity", { selector: "h2" })).toBeInTheDocument();
     expect(screen.queryByText("audit unavailable")).not.toBeInTheDocument();
     expect(screen.queryByText("User admin@example.com logged in")).not.toBeInTheDocument();
     expect(screen.queryByText(/Endpoint INRAE-eprod-idf/)).not.toBeInTheDocument();
