@@ -413,12 +413,14 @@ export function WorkspaceDashboardStorageEvolutionChart({
   points,
   gradientId,
   emptyLabel = "No storage history yet.",
+  chartLabel = "Storage evolution chart",
   yLabelFormatter = formatBytes,
   xLabelFormatter = formatStorageEvolutionShortDate,
 }: {
   points: WorkspaceDashboardStorageEvolutionPoint[];
   gradientId?: string;
   emptyLabel?: string;
+  chartLabel?: string;
   yLabelFormatter?: (value: number) => string;
   xLabelFormatter?: (value: number) => string;
 }) {
@@ -465,7 +467,7 @@ export function WorkspaceDashboardStorageEvolutionChart({
   }
 
   return (
-    <div className="mt-4" aria-label="Storage evolution chart">
+    <div className="mt-4" aria-label={chartLabel}>
       <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] gap-x-3">
         <div className="flex h-[92px] flex-col items-end justify-between py-1 pr-1 text-right text-[10px] font-medium leading-3 text-[var(--ui-text-muted)]">
           {chart.yLabels.map((label, index) => (

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
+import { LanguageProvider } from "../../components/language";
 import { TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS } from "../../components/topbarControlWidths";
 import PortalLayout from "./PortalLayout";
 
@@ -131,5 +132,40 @@ describe("PortalLayout", () => {
     await user.click(accountSelector);
     await user.click(await screen.findByRole("option", { name: "Northwind Ops" }));
     expect(mocks.setSelectedAccountId).toHaveBeenCalledWith("102");
+  });
+
+  it("renders portal navigation in French when the session language is French", () => {
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        id: 1,
+        email: "laurent@example.com",
+        display_name: "Laurent",
+        role: "ui_admin",
+        authType: "password",
+        ui_language: "fr",
+        account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
+      })
+    );
+
+    render(
+      <LanguageProvider>
+        <MemoryRouter initialEntries={["/portal"]}>
+          <PortalLayout />
+        </MemoryRouter>
+      </LanguageProvider>
+    );
+
+    const nav = screen.getByRole("navigation", { name: "PORTAL navigation" });
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Tableau de bord",
+      "Espaces de stockage",
+      "Partages",
+      "Clés d'accès",
+      "Activité",
+      "Transferts",
+      "Utilisation et analyses",
+      "Paramètres",
+    ]);
   });
 });

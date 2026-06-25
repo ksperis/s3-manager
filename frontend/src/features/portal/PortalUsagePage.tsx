@@ -18,10 +18,12 @@ import PageTabs from "../../components/PageTabs";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
 import { cx, uiCardMutedClass, uiDividerClass, uiInputClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
+import { formatPortalCurrency } from "./portalI18n";
 import { PortalPageState } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
@@ -39,20 +41,8 @@ function percent(used?: number | null, quota?: number | null): number | null {
   return Math.min(100, Math.max(0, (used / quota) * 100));
 }
 
-function formatCurrency(value?: number | null, currency?: string | null): string {
-  if (value == null) return "-";
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency || "EUR",
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    return `${value.toFixed(2)} ${currency || "EUR"}`;
-  }
-}
-
 export default function PortalUsagePage() {
+  const { locale, t } = useI18n();
   const { generalSettings } = useGeneralSettings();
   const [month, setMonth] = useState(currentMonth());
   const [activeTab, setActiveTab] = useState<PortalUsageTab>("storage");
@@ -88,14 +78,14 @@ export default function PortalUsagePage() {
   const tabs = useMemo(
     () =>
       [
-        { id: "storage" as const, label: "Storage" },
-        { id: "storage-spaces" as const, label: "Storage Spaces" },
-        ...(generalSettings.bucket_usage_stats_enabled ? [{ id: "usage-composition" as const, label: "Usage composition" }] : []),
-        ...(generalSettings.usage_history_enabled ? [{ id: "usage-history" as const, label: "Usage history" }] : []),
-        { id: "traffic" as const, label: "Traffic" },
-        { id: "billing" as const, label: "Billing" },
+        { id: "storage" as const, label: t({ en: "Storage", fr: "Stockage", de: "Speicher" }) },
+        { id: "storage-spaces" as const, label: t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }) },
+        ...(generalSettings.bucket_usage_stats_enabled ? [{ id: "usage-composition" as const, label: t({ en: "Usage composition", fr: "Composition de l'utilisation", de: "Nutzungszusammensetzung" }) }] : []),
+        ...(generalSettings.usage_history_enabled ? [{ id: "usage-history" as const, label: t({ en: "Usage history", fr: "Historique d'utilisation", de: "Nutzungsverlauf" }) }] : []),
+        { id: "traffic" as const, label: t({ en: "Traffic", fr: "Trafic", de: "Traffic" }) },
+        { id: "billing" as const, label: t({ en: "Billing", fr: "Facturation", de: "Abrechnung" }) },
       ],
-    [generalSettings.bucket_usage_stats_enabled, generalSettings.usage_history_enabled]
+    [generalSettings.bucket_usage_stats_enabled, generalSettings.usage_history_enabled, t]
   );
 
   useEffect(() => {
@@ -123,7 +113,7 @@ export default function PortalUsagePage() {
       .catch((err) => {
         if (!cancelled) {
           setUsageStatsAggregate(null);
-          setUsageStatsError(extractApiError(err, "Unable to load usage composition."));
+          setUsageStatsError(extractApiError(err, t({ en: "Unable to load usage composition.", fr: "Impossible de charger la composition d'utilisation.", de: "Nutzungszusammensetzung kann nicht geladen werden." })));
         }
       })
       .finally(() => {
@@ -132,7 +122,7 @@ export default function PortalUsagePage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, generalSettings.bucket_usage_stats_enabled, hasAccountContext]);
+  }, [accountIdForApi, generalSettings.bucket_usage_stats_enabled, hasAccountContext, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,7 +143,7 @@ export default function PortalUsagePage() {
       .catch((err) => {
         if (!cancelled) {
           setUsageHistoryTrends(null);
-          setUsageHistoryError(extractApiError(err, "Unable to load usage history trends."));
+          setUsageHistoryError(extractApiError(err, t({ en: "Unable to load usage history trends.", fr: "Impossible de charger les tendances d'historique d'utilisation.", de: "Nutzungsverlaufstrends können nicht geladen werden." })));
         }
       })
       .finally(() => {
@@ -162,7 +152,7 @@ export default function PortalUsagePage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, generalSettings.usage_history_enabled, hasAccountContext, usageHistoryWindow]);
+  }, [accountIdForApi, generalSettings.usage_history_enabled, hasAccountContext, t, usageHistoryWindow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -255,7 +245,7 @@ export default function PortalUsagePage() {
 
   const billingMonthControl = (
     <label className={cx(uiCardMutedClass, "flex h-9 items-center gap-2 px-3 ui-caption font-semibold", uiMutedTextClass)}>
-      <span>Month</span>
+      <span>{t({ en: "Month", fr: "Mois", de: "Monat" })}</span>
       <input
         type="month"
         value={month}
@@ -266,7 +256,7 @@ export default function PortalUsagePage() {
   );
 
   if (accountLoading || loading) {
-    return <PortalPageState>Loading analytics...</PortalPageState>;
+    return <PortalPageState>{t({ en: "Loading analytics...", fr: "Chargement des analyses...", de: "Analysen werden geladen..." })}</PortalPageState>;
   }
 
   if (accountError || error) {
@@ -277,8 +267,8 @@ export default function PortalUsagePage() {
     return (
       <div className="space-y-4">
         <PageEmptyState
-          title="Select an account to view analytics"
-          description="Usage, traffic and billing analytics are attached to your selected portal account."
+          title={t({ en: "Select an account to view analytics", fr: "Sélectionnez un compte pour voir les analyses", de: "Wählen Sie ein Konto aus, um Analysen anzuzeigen" })}
+          description={t({ en: "Usage, traffic and billing analytics are attached to your selected portal account.", fr: "Les analyses d'utilisation, de trafic et de facturation sont liées au compte Portal sélectionné.", de: "Nutzungs-, Traffic- und Abrechnungsanalysen sind mit Ihrem ausgewählten Portal-Konto verknüpft." })}
           tone="warning"
         />
       </div>
@@ -288,9 +278,9 @@ export default function PortalUsagePage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Usage & Analytics"
-        description="Track storage, traffic, requests and billing for this portal workspace."
-        breadcrumbs={portalBreadcrumbs({ label: "Usage & Analytics" })}
+        title={t({ en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" })}
+        description={t({ en: "Track storage, traffic, requests and billing for this portal workspace.", fr: "Suivez le stockage, le trafic, les requêtes et la facturation de ce workspace Portal.", de: "Verfolgen Sie Speicher, Traffic, Anfragen und Abrechnung für diesen Portal-Arbeitsbereich." })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" }) })}
       />
 
       <div className={cx("border-b pb-3", uiDividerClass)}>
@@ -304,35 +294,35 @@ export default function PortalUsagePage() {
 
       {activeTab === "storage" ? (
         <MetricsSummaryCard
-          title="Storage snapshot"
-          description="Current storage, object and quota usage for this portal account."
+          title={t({ en: "Storage snapshot", fr: "Instantané du stockage", de: "Speichermomentaufnahme" })}
+          description={t({ en: "Current storage, object and quota usage for this portal account.", fr: "Utilisation actuelle du stockage, des objets et des quotas pour ce compte Portal.", de: "Aktuelle Speicher-, Objekt- und Quotennutzung für dieses Portal-Konto." })}
         >
           {usageError ? (
-            <PageBanner tone="warning">Usage data is unavailable from storage metrics. Available workspace data is still shown.</PageBanner>
+            <PageBanner tone="warning">{t({ en: "Usage data is unavailable from storage metrics. Available workspace data is still shown.", fr: "Les données d'utilisation sont indisponibles depuis les métriques de stockage. Les données disponibles du workspace restent affichées.", de: "Nutzungsdaten sind aus Speichermetriken nicht verfügbar. Verfügbare Arbeitsbereichsdaten werden weiterhin angezeigt." })}</PageBanner>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MetricsSnapshotCard
-              label="Stored volume"
+              label={t({ en: "Stored volume", fr: "Volume stocké", de: "Gespeichertes Volumen" })}
               value={formatBytes(totalUsedBytes)}
-              hint={quotaPercent == null ? "Quota unavailable" : `${formatPercentage(quotaPercent)} of quota`}
+              hint={quotaPercent == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `${formatPercentage(quotaPercent)} of quota`, fr: `${formatPercentage(quotaPercent)} du quota`, de: `${formatPercentage(quotaPercent)} der Quote` })}
               loading={usageLoading}
             />
             <MetricsSnapshotCard
-              label="Objects"
+              label={t({ en: "Objects", fr: "Objets", de: "Objekte" })}
               value={formatCompactNumber(totalObjects)}
-              hint={objectQuotaPercent == null ? (totalObjects == null ? "Unavailable" : "Tracked") : `${formatPercentage(objectQuotaPercent)} of object quota`}
+              hint={objectQuotaPercent == null ? (totalObjects == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: "Tracked", fr: "Suivis", de: "Erfasst" })) : t({ en: `${formatPercentage(objectQuotaPercent)} of object quota`, fr: `${formatPercentage(objectQuotaPercent)} du quota d'objets`, de: `${formatPercentage(objectQuotaPercent)} der Objektquote` })}
               loading={usageLoading}
             />
             <MetricsSnapshotCard
-              label="Storage Spaces"
+              label={t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}
               value={formatCompactNumber(storageSpaceCount)}
-              hint="Visible in this workspace"
+              hint={t({ en: "Visible in this workspace", fr: "Visibles dans ce workspace", de: "In diesem Arbeitsbereich sichtbar" })}
               loading={usageLoading}
             />
             <MetricsSnapshotCard
-              label="Storage quota"
+              label={t({ en: "Storage quota", fr: "Quota de stockage", de: "Speicherquote" })}
               value={formatBytes(quotaBytes)}
-              hint={quotaBytes == null ? "Unavailable" : `${formatBytes(totalUsedBytes)} used`}
+              hint={quotaBytes == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: `${formatBytes(totalUsedBytes)} used`, fr: `${formatBytes(totalUsedBytes)} utilisés`, de: `${formatBytes(totalUsedBytes)} genutzt` })}
               loading={usageLoading}
             />
           </div>
@@ -341,26 +331,26 @@ export default function PortalUsagePage() {
 
       {activeTab === "storage-spaces" ? (
         <MetricsCard
-          title="Storage Spaces"
-          description="Storage and object composition across the Storage Spaces you can access."
+          title={t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}
+          description={t({ en: "Storage and object composition across the Storage Spaces you can access.", fr: "Composition du stockage et des objets pour les espaces de stockage auxquels vous avez accès.", de: "Speicher- und Objektzusammensetzung der Speicherbereiche, auf die Sie zugreifen können." })}
         >
           {usageError ? (
-            <PageBanner tone="warning">Per-space usage metrics are unavailable. Stored Storage Space metadata is still shown when present.</PageBanner>
+            <PageBanner tone="warning">{t({ en: "Per-space usage metrics are unavailable. Stored Storage Space metadata is still shown when present.", fr: "Les métriques par espace sont indisponibles. Les métadonnées d'espace stockées restent affichées si elles existent.", de: "Nutzungsmetriken pro Bereich sind nicht verfügbar. Gespeicherte Metadaten werden weiterhin angezeigt, wenn vorhanden." })}</PageBanner>
           ) : null}
           <div className="grid gap-6 xl:grid-cols-2">
             <UsageBreakdown
-              title="Storage Spaces (volume)"
+              title={t({ en: "Storage Spaces (volume)", fr: "Espaces de stockage (volume)", de: "Speicherbereiche (Volumen)" })}
               loading={usageLoading}
               metric="bytes"
               items={storageSpaceItems}
-              emptyMessage="No Storage Space volume metrics available."
+              emptyMessage={t({ en: "No Storage Space volume metrics available.", fr: "Aucune métrique de volume disponible par espace de stockage.", de: "Keine Volumenmetriken für Speicherbereiche verfügbar." })}
             />
             <UsageBreakdown
-              title="Storage Spaces (objects)"
+              title={t({ en: "Storage Spaces (objects)", fr: "Espaces de stockage (objets)", de: "Speicherbereiche (Objekte)" })}
               loading={usageLoading}
               metric="objects"
               items={storageSpaceItems}
-              emptyMessage="No Storage Space object metrics available."
+              emptyMessage={t({ en: "No Storage Space object metrics available.", fr: "Aucune métrique d'objets disponible par espace de stockage.", de: "Keine Objektmetriken für Speicherbereiche verfügbar." })}
             />
           </div>
         </MetricsCard>
@@ -368,15 +358,15 @@ export default function PortalUsagePage() {
 
       {activeTab === "usage-composition" ? (
         <BucketUsageStatsAggregateCard
-          title="Usage composition"
-          description="Latest calculated usage composition for the Storage Spaces visible in this portal account."
+          title={t({ en: "Usage composition", fr: "Composition de l'utilisation", de: "Nutzungszusammensetzung" })}
+          description={t({ en: "Latest calculated usage composition for the Storage Spaces visible in this portal account.", fr: "Dernière composition d'utilisation calculée pour les espaces de stockage visibles dans ce compte Portal.", de: "Zuletzt berechnete Nutzungszusammensetzung für die in diesem Portal-Konto sichtbaren Speicherbereiche." })}
           aggregate={usageStatsAggregate}
           loading={usageStatsLoading}
           error={usageStatsError}
-          recalculateLabel="Recalculate"
-          coverageItemLabel="Storage Spaces"
-          emptyTitle="No usage composition snapshots yet."
-          emptyDescription="Snapshots are produced by the platform usage collection; no portal action is required."
+          recalculateLabel={t({ en: "Recalculate", fr: "Recalculer", de: "Neu berechnen" })}
+          coverageItemLabel={t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}
+          emptyTitle={t({ en: "No usage composition snapshots yet.", fr: "Aucun instantané de composition d'utilisation pour le moment.", de: "Noch keine Momentaufnahmen der Nutzungszusammensetzung." })}
+          emptyDescription={t({ en: "Snapshots are produced by the platform usage collection; no portal action is required.", fr: "Les instantanés sont produits par la collecte d'utilisation de la plateforme; aucune action Portal n'est requise.", de: "Momentaufnahmen werden von der Plattformnutzungserfassung erzeugt; keine Portal-Aktion ist erforderlich." })}
         />
       ) : null}
 
@@ -387,76 +377,78 @@ export default function PortalUsagePage() {
           onWindowChange={setUsageHistoryWindow}
           loading={usageHistoryLoading}
           error={usageHistoryError}
-          description="Stored usage snapshots for the selected portal account."
+          description={t({ en: "Stored usage snapshots for the selected portal account.", fr: "Instantanés d'utilisation stockés pour le compte Portal sélectionné.", de: "Gespeicherte Nutzungsmomentaufnahmen für das ausgewählte Portal-Konto." })}
         />
       ) : null}
 
       {activeTab === "traffic" ? (
         <MetricsTrafficOverview
-          title="Traffic"
+          title={t({ en: "Traffic", fr: "Trafic", de: "Traffic" })}
           traffic={traffic}
           window={trafficWindow}
           onWindowChange={setTrafficWindow}
           loading={trafficLoading}
           error={trafficError}
           showEmpty={trafficMissing}
-          description="Uploads, downloads and requests for this portal account."
-          bucketRankingTitle="Most active Storage Spaces"
-          userRankingTitle="Most active users"
+          description={t({ en: "Uploads, downloads and requests for this portal account.", fr: "Envois, téléchargements et requêtes de ce compte Portal.", de: "Uploads, Downloads und Anfragen für dieses Portal-Konto." })}
+          bucketRankingTitle={t({ en: "Most active Storage Spaces", fr: "Espaces de stockage les plus actifs", de: "Aktivste Speicherbereiche" })}
+          userRankingTitle={t({ en: "Most active users", fr: "Utilisateurs les plus actifs", de: "Aktivste Benutzer" })}
         />
       ) : null}
 
       {activeTab === "billing" ? (
         <MetricsCard
-          title="Billing"
-          description="Estimated monthly usage and cost for this portal account."
+          title={t({ en: "Billing", fr: "Facturation", de: "Abrechnung" })}
+          description={t({ en: "Estimated monthly usage and cost for this portal account.", fr: "Utilisation et coût mensuels estimés pour ce compte Portal.", de: "Geschätzte monatliche Nutzung und Kosten für dieses Portal-Konto." })}
           actions={billingMonthControl}
         >
           {billingLoading && !billing ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricsSnapshotCard label="Estimated cost" value="-" loading />
-              <MetricsSnapshotCard label="Average storage" value="-" loading />
-              <MetricsSnapshotCard label="Requests" value="-" loading />
-              <MetricsSnapshotCard label="Coverage" value="-" loading />
+              <MetricsSnapshotCard label={t({ en: "Estimated cost", fr: "Coût estimé", de: "Geschätzte Kosten" })} value="-" loading />
+              <MetricsSnapshotCard label={t({ en: "Average storage", fr: "Stockage moyen", de: "Durchschnittlicher Speicher" })} value="-" loading />
+              <MetricsSnapshotCard label={t({ en: "Requests", fr: "Requêtes", de: "Anfragen" })} value="-" loading />
+              <MetricsSnapshotCard label={t({ en: "Coverage", fr: "Couverture", de: "Abdeckung" })} value="-" loading />
             </div>
           ) : billing ? (
             <>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <MetricsSnapshotCard
-                  label="Estimated cost"
-                  value={formatCurrency(cost?.total_cost, cost?.currency)}
-                  hint={cost?.currency ?? "Billing currency"}
+                  label={t({ en: "Estimated cost", fr: "Coût estimé", de: "Geschätzte Kosten" })}
+                  value={formatPortalCurrency(cost?.total_cost, cost?.currency, locale)}
+                  hint={cost?.currency ?? t({ en: "Billing currency", fr: "Devise de facturation", de: "Abrechnungswährung" })}
                   loading={billingLoading}
                 />
                 <MetricsSnapshotCard
-                  label="Average storage"
+                  label={t({ en: "Average storage", fr: "Stockage moyen", de: "Durchschnittlicher Speicher" })}
                   value={formatBytes(billing.storage.avg_bytes)}
-                  hint={`${formatCompactNumber(billing.storage.total_objects)} objects`}
+                  hint={t({ en: `${formatCompactNumber(billing.storage.total_objects)} objects`, fr: `${formatCompactNumber(billing.storage.total_objects)} objets`, de: `${formatCompactNumber(billing.storage.total_objects)} Objekte` })}
                   loading={billingLoading}
                 />
                 <MetricsSnapshotCard
-                  label="Requests"
+                  label={t({ en: "Requests", fr: "Requêtes", de: "Anfragen" })}
                   value={formatCompactNumber(billingUsage?.ops_total)}
-                  hint={`${formatBytes(billingUsage?.bytes_out)} out, ${formatBytes(billingUsage?.bytes_in)} in`}
+                  hint={t({ en: `${formatBytes(billingUsage?.bytes_out)} out, ${formatBytes(billingUsage?.bytes_in)} in`, fr: `${formatBytes(billingUsage?.bytes_out)} sortants, ${formatBytes(billingUsage?.bytes_in)} entrants`, de: `${formatBytes(billingUsage?.bytes_out)} ausgehend, ${formatBytes(billingUsage?.bytes_in)} eingehend` })}
                   loading={billingLoading}
                 />
                 <MetricsSnapshotCard
-                  label="Coverage"
-                  value={billingCoverage ? `${billingCoverage.days_collected}/${billingCoverage.days_in_month} days` : "-"}
-                  hint={billingCoverage ? formatPercentage(billingCoverage.coverage_ratio * 100) : "Unavailable"}
+                  label={t({ en: "Coverage", fr: "Couverture", de: "Abdeckung" })}
+                  value={billingCoverage ? t({ en: `${billingCoverage.days_collected}/${billingCoverage.days_in_month} days`, fr: `${billingCoverage.days_collected}/${billingCoverage.days_in_month} jours`, de: `${billingCoverage.days_collected}/${billingCoverage.days_in_month} Tage` }) : "-"}
+                  hint={billingCoverage ? formatPercentage(billingCoverage.coverage_ratio * 100) : t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" })}
                   loading={billingLoading}
                 />
               </div>
               <div className={cx(uiCardMutedClass, "px-4 py-3")}>
-                <p className={cx("ui-caption font-semibold", uiMutedTextClass)}>Rate card</p>
+                <p className={cx("ui-caption font-semibold", uiMutedTextClass)}>{t({ en: "Rate card", fr: "Grille tarifaire", de: "Tarifkarte" })}</p>
                 <p className={cx("ui-body font-semibold", uiTitleTextClass)}>
-                  {cost?.rate_card_name ? cost.rate_card_name : "No rate card attached."}
+                  {cost?.rate_card_name ? cost.rate_card_name : t({ en: "No rate card attached.", fr: "Aucune grille tarifaire associée.", de: "Keine Tarifkarte zugeordnet." })}
                 </p>
               </div>
             </>
           ) : (
             <MetricsEmptyState>
-              {billingUnavailable ? "Billing source is disabled or unavailable." : "No billing source data available."}
+              {billingUnavailable
+                ? t({ en: "Billing source is disabled or unavailable.", fr: "La source de facturation est désactivée ou indisponible.", de: "Abrechnungsquelle ist deaktiviert oder nicht verfügbar." })
+                : t({ en: "No billing source data available.", fr: "Aucune donnée de source de facturation disponible.", de: "Keine Daten aus der Abrechnungsquelle verfügbar." })}
             </MetricsEmptyState>
           )}
         </MetricsCard>

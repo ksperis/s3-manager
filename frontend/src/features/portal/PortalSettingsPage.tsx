@@ -12,6 +12,7 @@ import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
 import { readStoredUser } from "../../utils/workspaces";
@@ -38,14 +39,16 @@ function persistStoredUser(user: User) {
   );
 }
 
-function resolveWorkspaceAccess(user: User | null, selectedAccountId: string | null): string {
-  if (!user || !selectedAccountId) return "Limited access";
+type WorkspaceAccessLabel = "limited" | "manager" | "user";
+
+function resolveWorkspaceAccess(user: User | null, selectedAccountId: string | null): WorkspaceAccessLabel {
+  if (!user || !selectedAccountId) return "limited";
   const numericId = Number(selectedAccountId);
   const link = user.account_links?.find((item) => Number(item.account_id) === numericId);
-  if (!link?.account_role || link.account_role === "portal_none") return "Limited access";
-  if (link.account_role === "portal_manager") return "Manager";
-  if (link.account_role === "portal_user") return "User";
-  return "Limited access";
+  if (!link?.account_role || link.account_role === "portal_none") return "limited";
+  if (link.account_role === "portal_manager") return "manager";
+  if (link.account_role === "portal_user") return "user";
+  return "limited";
 }
 
 function normalizeUiPreferences(value?: UiPreferences | null): UiPreferences {
@@ -56,6 +59,7 @@ function normalizeUiPreferences(value?: UiPreferences | null): UiPreferences {
 }
 
 export default function PortalSettingsPage() {
+  const { t } = useI18n();
   const { accounts, selectedAccount, selectedAccountId, setSelectedAccountId, loading: accountsLoading } = usePortalAccountContext();
   const { workspace, loading: workspaceLoading } = usePortalWorkspaceData();
   const { theme, setTheme } = useTheme();
@@ -101,7 +105,7 @@ export default function PortalSettingsPage() {
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setError(extractApiError(err, "Unable to load your profile."));
+        if (!cancelled) setError(extractApiError(err, t({ en: "Unable to load your profile.", fr: "Impossible de charger votre profil.", de: "Ihr Profil kann nicht geladen werden." })));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -109,7 +113,7 @@ export default function PortalSettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedAccountId, theme]);
+  }, [selectedAccountId, t, theme]);
 
   useEffect(() => {
     if (accounts.length === 0) {
@@ -135,10 +139,10 @@ export default function PortalSettingsPage() {
       setUser(updated);
       setFullName(updated.full_name ?? "");
       persistStoredUser(updated);
-      setMessage("Profile updated.");
+      setMessage(t({ en: "Profile updated.", fr: "Profil mis à jour.", de: "Profil aktualisiert." }));
     } catch (err) {
       console.error(err);
-      setError(extractApiError(err, "Unable to save your profile."));
+      setError(extractApiError(err, t({ en: "Unable to save your profile.", fr: "Impossible d'enregistrer votre profil.", de: "Ihr Profil kann nicht gespeichert werden." })));
     } finally {
       setSaving(null);
     }
@@ -169,10 +173,10 @@ export default function PortalSettingsPage() {
         localStorage.setItem("selectedPortalAccountId", updated.ui_preferences.selected_portal_account_id);
         setSelectedAccountId(updated.ui_preferences.selected_portal_account_id);
       }
-      setMessage("Preferences updated.");
+      setMessage(t({ en: "Preferences updated.", fr: "Préférences mises à jour.", de: "Einstellungen aktualisiert." }));
     } catch (err) {
       console.error(err);
-      setError(extractApiError(err, "Unable to save your preferences."));
+      setError(extractApiError(err, t({ en: "Unable to save your preferences.", fr: "Impossible d'enregistrer vos préférences.", de: "Ihre Einstellungen können nicht gespeichert werden." })));
     } finally {
       setSaving(null);
     }
@@ -185,12 +189,12 @@ export default function PortalSettingsPage() {
     setError(null);
     setMessage(null);
     if (!currentPassword || !newPassword) {
-      setError("Enter your current password and a new password.");
+      setError(t({ en: "Enter your current password and a new password.", fr: "Saisissez votre mot de passe actuel et un nouveau mot de passe.", de: "Geben Sie Ihr aktuelles Passwort und ein neues Passwort ein." }));
       setSaving(null);
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Password confirmation does not match.");
+      setError(t({ en: "Password confirmation does not match.", fr: "La confirmation du mot de passe ne correspond pas.", de: "Die Passwortbestätigung stimmt nicht überein." }));
       setSaving(null);
       return;
     }
@@ -199,10 +203,10 @@ export default function PortalSettingsPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setMessage("Password updated.");
+      setMessage(t({ en: "Password updated.", fr: "Mot de passe mis à jour.", de: "Passwort aktualisiert." }));
     } catch (err) {
       console.error(err);
-      setError(extractApiError(err, "Unable to update your password."));
+      setError(extractApiError(err, t({ en: "Unable to update your password.", fr: "Impossible de mettre à jour votre mot de passe.", de: "Ihr Passwort kann nicht aktualisiert werden." })));
     } finally {
       setSaving(null);
     }
@@ -211,22 +215,22 @@ export default function PortalSettingsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Settings"
-        description="Manage your portal profile, security and personal defaults."
-        breadcrumbs={portalBreadcrumbs({ label: "Settings" })}
+        title={t({ en: "Settings", fr: "Paramètres", de: "Einstellungen" })}
+        description={t({ en: "Manage your portal profile, security and personal defaults.", fr: "Gérez votre profil Portal, votre sécurité et vos préférences personnelles.", de: "Verwalten Sie Ihr Portal-Profil, Ihre Sicherheit und persönliche Vorgaben." })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Settings", fr: "Paramètres", de: "Einstellungen" }) })}
       />
 
-      {loading || accountsLoading ? <PageBanner tone="info">Loading settings...</PageBanner> : null}
+      {loading || accountsLoading ? <PageBanner tone="info">{t({ en: "Loading settings...", fr: "Chargement des paramètres...", de: "Einstellungen werden geladen..." })}</PageBanner> : null}
       {message ? <PageBanner tone="success">{message}</PageBanner> : null}
       {error ? <PageBanner tone="warning">{error}</PageBanner> : null}
 
       <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <div className="space-y-4">
           <form onSubmit={saveProfile}>
-            <UiCard title="Profile">
+            <UiCard title={t({ en: "Profile", fr: "Profil", de: "Profil" })}>
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block">
-                  <span className={labelClasses}>Display name</span>
+                  <span className={labelClasses}>{t({ en: "Display name", fr: "Nom affiché", de: "Anzeigename" })}</span>
                   <input
                     className={inputClasses}
                     value={fullName}
@@ -236,54 +240,54 @@ export default function PortalSettingsPage() {
                   />
                 </label>
                 <label className="block">
-                  <span className={labelClasses}>Email</span>
+                  <span className={labelClasses}>{t({ en: "Email", fr: "Email", de: "E-Mail" })}</span>
                   <input className={inputClasses} value={user?.email ?? storedUser?.email ?? ""} readOnly />
                 </label>
               </div>
               <div className="mt-4">
                 <UiButton type="submit" disabled={saving === "profile" || loading} className="h-9 px-3 py-1.5">
-                  {saving === "profile" ? "Saving..." : "Save profile"}
+                  {saving === "profile" ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." }) : t({ en: "Save profile", fr: "Enregistrer le profil", de: "Profil speichern" })}
                 </UiButton>
               </div>
             </UiCard>
           </form>
 
           <form onSubmit={savePreferences}>
-            <UiCard title="Preferences">
+            <UiCard title={t({ en: "Preferences", fr: "Préférences", de: "Einstellungen" })}>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <label className="block">
-                  <span className={labelClasses}>Language</span>
+                  <span className={labelClasses}>{t({ en: "Language", fr: "Langue", de: "Sprache" })}</span>
                   <select
                     className={inputClasses}
                     value={languageDraft}
                     onChange={(event) => setLanguageDraft(event.target.value as UiLanguagePreference)}
                   >
                     <option value="en">English</option>
-                    <option value="fr">French</option>
+                    <option value="fr">Français</option>
                     <option value="de">Deutsch</option>
-                    <option value="auto">Auto</option>
+                    <option value="auto">{t({ en: "Auto", fr: "Auto", de: "Automatisch" })}</option>
                   </select>
                 </label>
                 <label className="block">
-                  <span className={labelClasses}>Theme</span>
+                  <span className={labelClasses}>{t({ en: "Theme", fr: "Thème", de: "Design" })}</span>
                   <select
                     className={inputClasses}
                     value={themeDraft}
                     onChange={(event) => setThemeDraft(event.target.value as "light" | "dark")}
                   >
-                    <option value="light">Light</option>
-                    <option value="dark">Dark</option>
+                    <option value="light">{t({ en: "Light", fr: "Clair", de: "Hell" })}</option>
+                    <option value="dark">{t({ en: "Dark", fr: "Sombre", de: "Dunkel" })}</option>
                   </select>
                 </label>
                 <label className="block md:col-span-2">
-                  <span className={labelClasses}>Default portal account</span>
+                  <span className={labelClasses}>{t({ en: "Default portal account", fr: "Compte Portal par défaut", de: "Standard-Portal-Konto" })}</span>
                   <select
                     className={inputClasses}
                     value={defaultPortalAccountId}
                     onChange={(event) => setDefaultPortalAccountId(event.target.value)}
                     disabled={accounts.length === 0}
                   >
-                    {accounts.length === 0 ? <option value="">No portal account</option> : null}
+                    {accounts.length === 0 ? <option value="">{t({ en: "No portal account", fr: "Aucun compte Portal", de: "Kein Portal-Konto" })}</option> : null}
                     {accounts.map((account) => (
                       <option key={account.id} value={account.id}>
                         {account.name}
@@ -298,26 +302,26 @@ export default function PortalSettingsPage() {
                   checked={quotaAlertsEnabled}
                   onChange={(event) => setQuotaAlertsEnabled(event.target.checked)}
                 />
-                <span className="ui-body text-[var(--ui-text)]">Receive quota alert emails</span>
+                <span className="ui-body text-[var(--ui-text)]">{t({ en: "Receive quota alert emails", fr: "Recevoir les emails d'alerte de quota", de: "E-Mails zu Quotenwarnungen erhalten" })}</span>
               </label>
               <div className="mt-4">
                 <UiButton type="submit" disabled={saving === "preferences" || loading} className="h-9 px-3 py-1.5">
-                  {saving === "preferences" ? "Saving..." : "Save preferences"}
+                  {saving === "preferences" ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." }) : t({ en: "Save preferences", fr: "Enregistrer les préférences", de: "Einstellungen speichern" })}
                 </UiButton>
               </div>
             </UiCard>
           </form>
 
           <form onSubmit={savePassword}>
-            <UiCard title="Security">
+            <UiCard title={t({ en: "Security", fr: "Sécurité", de: "Sicherheit" })}>
               {!canChangePassword ? (
                 <div className={cx(uiCardMutedClass, "p-3 text-xs font-semibold", uiMutedTextClass)}>
-                  Password changes are managed by your sign-in provider.
+                  {t({ en: "Password changes are managed by your sign-in provider.", fr: "Les changements de mot de passe sont gérés par votre fournisseur de connexion.", de: "Passwortänderungen werden von Ihrem Anmeldeanbieter verwaltet." })}
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-3">
                   <label className="block">
-                    <span className={labelClasses}>Current password</span>
+                    <span className={labelClasses}>{t({ en: "Current password", fr: "Mot de passe actuel", de: "Aktuelles Passwort" })}</span>
                     <input
                       className={inputClasses}
                       type="password"
@@ -327,7 +331,7 @@ export default function PortalSettingsPage() {
                     />
                   </label>
                   <label className="block">
-                    <span className={labelClasses}>New password</span>
+                    <span className={labelClasses}>{t({ en: "New password", fr: "Nouveau mot de passe", de: "Neues Passwort" })}</span>
                     <input
                       className={inputClasses}
                       type="password"
@@ -337,7 +341,7 @@ export default function PortalSettingsPage() {
                     />
                   </label>
                   <label className="block">
-                    <span className={labelClasses}>Confirm password</span>
+                    <span className={labelClasses}>{t({ en: "Confirm password", fr: "Confirmer le mot de passe", de: "Passwort bestätigen" })}</span>
                     <input
                       className={inputClasses}
                       type="password"
@@ -354,7 +358,7 @@ export default function PortalSettingsPage() {
                   disabled={!canChangePassword || saving === "password" || loading}
                   className="h-9 px-3 py-1.5"
                 >
-                  {saving === "password" ? "Updating..." : "Change password"}
+                  {saving === "password" ? t({ en: "Updating...", fr: "Mise à jour...", de: "Wird aktualisiert..." }) : t({ en: "Change password", fr: "Changer le mot de passe", de: "Passwort ändern" })}
                 </UiButton>
               </div>
             </UiCard>
@@ -362,30 +366,40 @@ export default function PortalSettingsPage() {
         </div>
 
         <aside className="space-y-4">
-          <UiCard title="Portal account">
+          <UiCard title={t({ en: "Portal account", fr: "Compte Portal", de: "Portal-Konto" })}>
             <dl className="space-y-3 text-xs">
               <div>
-                <dt className={labelClasses}>Selected account</dt>
+                <dt className={labelClasses}>{t({ en: "Selected account", fr: "Compte sélectionné", de: "Ausgewähltes Konto" })}</dt>
                 <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{selectedAccount?.name ?? "-"}</dd>
               </div>
               <div>
-                <dt className={labelClasses}>Workspace access</dt>
-                <dd className="mt-1"><UiBadge tone="primary">{selectedWorkspaceAccess}</UiBadge></dd>
+                <dt className={labelClasses}>{t({ en: "Workspace access", fr: "Accès au workspace", de: "Arbeitsbereichszugriff" })}</dt>
+                <dd className="mt-1">
+                  <UiBadge tone="primary">
+                    {selectedWorkspaceAccess === "manager"
+                      ? t({ en: "Manager", fr: "Gestionnaire", de: "Manager" })
+                      : selectedWorkspaceAccess === "user"
+                        ? t({ en: "User", fr: "Utilisateur", de: "Benutzer" })
+                        : t({ en: "Limited access", fr: "Accès limité", de: "Eingeschränkter Zugriff" })}
+                  </UiBadge>
+                </dd>
               </div>
               <div>
-                <dt className={labelClasses}>Storage service</dt>
+                <dt className={labelClasses}>{t({ en: "Storage service", fr: "Service de stockage", de: "Speicherdienst" })}</dt>
                 <dd className={cx("mt-1 break-words font-semibold", uiTitleTextClass)}>
                   {selectedAccount?.storage_endpoint_name ?? selectedAccount?.storage_endpoint_url ?? "-"}
                 </dd>
               </div>
               <div>
-                <dt className={labelClasses}>Storage Spaces</dt>
+                <dt className={labelClasses}>{t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}</dt>
                 <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>
-                  {workspaceLoading ? "Loading..." : `${activeSpaces.length} active / ${workspace.spaces.length} total`}
+                  {workspaceLoading
+                    ? t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })
+                    : t({ en: `${activeSpaces.length} active / ${workspace.spaces.length} total`, fr: `${activeSpaces.length} actifs / ${workspace.spaces.length} au total`, de: `${activeSpaces.length} aktiv / ${workspace.spaces.length} gesamt` })}
                 </dd>
               </div>
               <div>
-                <dt className={labelClasses}>Storage used</dt>
+                <dt className={labelClasses}>{t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" })}</dt>
                 <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{formatBytes(workspace.usedBytes)}</dd>
               </div>
             </dl>

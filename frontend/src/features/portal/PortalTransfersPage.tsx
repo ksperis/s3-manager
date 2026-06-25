@@ -9,22 +9,25 @@ import UiBadge from "../../components/ui/UiBadge";
 import UiCard from "../../components/ui/UiCard";
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import { cx, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { useI18n } from "../../i18n";
 import { formatBytes } from "../../utils/format";
 import {
   portalTransferStatusTone,
   resolvePortalWorkspacePageState,
 } from "./portalUi";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
+import { portalTransferDirectionLabel, portalTransferStatusLabel } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
-const tabs = ["All", "Uploads", "Downloads"];
+type TransferTab = "all" | "uploads" | "downloads";
 
 export default function PortalTransfersPage() {
-  const [activeTab, setActiveTab] = useState("All");
+  const { t } = useI18n();
+  const [activeTab, setActiveTab] = useState<TransferTab>("all");
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading } = usePortalWorkspaceData();
   const transfers = useMemo(() => {
-    if (activeTab === "Uploads") return workspace.transfers.filter((transfer) => transfer.direction === "Upload");
-    if (activeTab === "Downloads") return workspace.transfers.filter((transfer) => transfer.direction === "Download");
+    if (activeTab === "uploads") return workspace.transfers.filter((transfer) => transfer.direction === "Upload");
+    if (activeTab === "downloads") return workspace.transfers.filter((transfer) => transfer.direction === "Download");
     return workspace.transfers;
   }, [activeTab, workspace.transfers]);
 
@@ -34,24 +37,28 @@ export default function PortalTransfersPage() {
     accountError,
     error,
     hasAccountContext,
-    loadingMessage: "Loading transfers...",
-    noAccountMessage: "Select an account to view transfers.",
+    loadingMessage: t({ en: "Loading transfers...", fr: "Chargement des transferts...", de: "Transfers werden geladen..." }),
+    noAccountMessage: t({ en: "Select an account to view transfers.", fr: "Sélectionnez un compte pour voir les transferts.", de: "Wählen Sie ein Konto aus, um Transfers anzuzeigen." }),
   });
   if (pageState) return pageState;
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Transfers"
-        description="Monitor ongoing and completed transfers."
-        breadcrumbs={portalBreadcrumbs({ label: "Transfers" })}
+        title={t({ en: "Transfers", fr: "Transferts", de: "Transfers" })}
+        description={t({ en: "Monitor ongoing and completed transfers.", fr: "Suivez les transferts en cours et terminés.", de: "Überwachen Sie laufende und abgeschlossene Transfers." })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Transfers", fr: "Transferts", de: "Transfers" }) })}
       />
       <UiCard>
         <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
           <PageTabs
-            tabs={tabs.map((tab) => ({ id: tab, label: tab }))}
+            tabs={[
+              { id: "all", label: t({ en: "All", fr: "Tous", de: "Alle" }) },
+              { id: "uploads", label: t({ en: "Uploads", fr: "Envois", de: "Uploads" }) },
+              { id: "downloads", label: t({ en: "Downloads", fr: "Téléchargements", de: "Downloads" }) },
+            ]}
             activeTab={activeTab}
-            onChange={setActiveTab}
+            onChange={(tab) => setActiveTab(tab as TransferTab)}
             variant="bar"
           />
         </div>
@@ -59,22 +66,22 @@ export default function PortalTransfersPage() {
           <table className="ui-data-table min-w-[850px]">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Progress</th>
-                <th>Speed</th>
-                <th>Started</th>
-                <th>ETA</th>
-                <th>Details</th>
+                <th>{t({ en: "Name", fr: "Nom", de: "Name" })}</th>
+                <th>{t({ en: "Type", fr: "Type", de: "Typ" })}</th>
+                <th>{t({ en: "Status", fr: "Statut", de: "Status" })}</th>
+                <th>{t({ en: "Progress", fr: "Progression", de: "Fortschritt" })}</th>
+                <th>{t({ en: "Speed", fr: "Débit", de: "Geschwindigkeit" })}</th>
+                <th>{t({ en: "Started", fr: "Démarré", de: "Gestartet" })}</th>
+                <th>{t({ en: "ETA", fr: "ETA", de: "ETA" })}</th>
+                <th>{t({ en: "Details", fr: "Détails", de: "Details" })}</th>
               </tr>
             </thead>
             <tbody>
               {transfers.map((transfer) => (
                 <tr key={transfer.id}>
                   <td className={cx("font-bold", uiTitleTextClass)}>{transfer.name}</td>
-                  <td>{transfer.direction}</td>
-                  <td><UiBadge tone={portalTransferStatusTone(transfer.status)}>{transfer.status}</UiBadge></td>
+                  <td>{portalTransferDirectionLabel(transfer.direction, t)}</td>
+                  <td><UiBadge tone={portalTransferStatusTone(transfer.status)}>{portalTransferStatusLabel(transfer.status, t)}</UiBadge></td>
                   <td>
                     <div className="flex items-center gap-2">
                       <div className="w-28"><UiProgressBar value={transfer.progress} /></div>
@@ -85,21 +92,23 @@ export default function PortalTransfersPage() {
                   <td>{transfer.startedLabel}</td>
                   <td>{transfer.etaLabel}</td>
                   <td className={cx("max-w-[240px] truncate text-xs", uiMutedTextClass)}>
-                    {transfer.errorMessage ?? (transfer.status === "Failed" ? "Failure details unavailable." : "-")}
+                    {transfer.errorMessage ?? (transfer.status === "Failed" ? t({ en: "Failure details unavailable.", fr: "Détails de l'échec indisponibles.", de: "Fehlerdetails nicht verfügbar." }) : "-")}
                   </td>
                 </tr>
               ))}
               {transfers.length === 0 ? (
                 <tr>
                   <td colSpan={8} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
-                    No transfers to display.
+                    {t({ en: "No transfers to display.", fr: "Aucun transfert à afficher.", de: "Keine Transfers zum Anzeigen." })}
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
-        <div className={cx("mt-3 text-[11px]", uiMutedTextClass)}>Total visible size: {formatBytes(transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0))}</div>
+        <div className={cx("mt-3 text-[11px]", uiMutedTextClass)}>
+          {t({ en: `Total visible size: ${formatBytes(transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0))}`, fr: `Taille visible totale : ${formatBytes(transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0))}`, de: `Gesamte sichtbare Größe: ${formatBytes(transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0))}` })}
+        </div>
       </UiCard>
     </div>
   );

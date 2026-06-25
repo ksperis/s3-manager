@@ -61,6 +61,7 @@ vi.mock("../../components/theme", () => ({
 
 vi.mock("../../components/language", () => ({
   useLanguage: () => ({ languagePreference: "auto", setLanguagePreference: mocks.setLanguagePreferenceMock }),
+  useOptionalLanguage: () => undefined,
 }));
 
 describe("PortalSettingsPage", () => {

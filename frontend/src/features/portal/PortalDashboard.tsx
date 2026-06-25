@@ -5,6 +5,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { HealthCheckStatus } from "../../api/healthchecks";
+import type { ManagerUsageTrendBaseline } from "../../api/stats";
 import PageHeader from "../../components/PageHeader";
 import {
   buildWorkspaceStorageEvolutionPoints,
@@ -26,6 +27,7 @@ import {
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import UiBadge from "../../components/ui/UiBadge";
 import { cx, uiCardClass, uiMutedTextClass } from "../../components/ui/styles";
+import { useI18n, type I18nMessage } from "../../i18n";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import {
   BucketCollectionIcon,
@@ -37,7 +39,7 @@ import {
   TransferIcon,
   UploadIcon,
 } from "../browser/browserIcons";
-import { storageSpacePath, type PortalWorkspaceSpace } from "./portalWorkspaceModel";
+import { storageSpacePath, type PortalWorkspaceSpace, type PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 import {
   portalRoleTone,
   portalStorageSpaceStatusTone,
@@ -45,6 +47,13 @@ import {
   resolvePortalWorkspacePageState,
 } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
+import {
+  portalRoleLabel,
+  portalStatusLabel,
+  portalTrendPeriodLabel,
+  portalTransferDirectionLabel,
+  portalTransferStatusLabel,
+} from "./portalI18n";
 
 type StorageSpaceRow = {
   space: PortalWorkspaceSpace;
@@ -64,7 +73,8 @@ type TransferRow = {
   id: string;
   name: string;
   detail: string;
-  status: string;
+  status: PortalWorkspaceTransfer["status"];
+  statusLabel: string;
   progress: number;
   tone: "neutral" | "primary" | "danger" | "success";
 };
@@ -109,11 +119,21 @@ function workspaceHealthStatus(
   return "unknown";
 }
 
-function workspaceHealthLabel(status: HealthCheckStatus): string {
-  if (status === "up") return "Storage services operational";
-  if (status === "degraded") return "Storage services degraded";
-  if (status === "down") return "Storage service availability issue";
-  return "Storage service status unavailable";
+type TFunction = (message: I18nMessage) => string;
+
+function workspaceHealthLabel(status: HealthCheckStatus, t: TFunction): string {
+  if (status === "up") return t({ en: "Storage services operational", fr: "Services de stockage opérationnels", de: "Speicherdienste betriebsbereit" });
+  if (status === "degraded") return t({ en: "Storage services degraded", fr: "Services de stockage dégradés", de: "Speicherdienste beeinträchtigt" });
+  if (status === "down") return t({ en: "Storage service availability issue", fr: "Problème de disponibilité du service de stockage", de: "Verfügbarkeitsproblem des Speicherdienstes" });
+  return t({ en: "Storage service status unavailable", fr: "Statut du service de stockage indisponible", de: "Status des Speicherdienstes nicht verfügbar" });
+}
+
+function localizeTrendBaseline<T extends ManagerUsageTrendBaseline | null | undefined>(baseline: T, t: TFunction): T {
+  if (!baseline) return baseline;
+  return {
+    ...baseline,
+    label: portalTrendPeriodLabel(baseline.label, t),
+  } as T;
 }
 
 function buildStorageRows(spaces: PortalWorkspaceSpace[]): StorageSpaceRow[] {
@@ -128,14 +148,20 @@ function buildStorageRows(spaces: PortalWorkspaceSpace[]): StorageSpaceRow[] {
   });
 }
 
-function buildActivityRows(workspaceActivity: ReturnType<typeof usePortalWorkspaceData>["workspace"]["activity"]): ActivityRow[] {
+function buildActivityRows(workspaceActivity: ReturnType<typeof usePortalWorkspaceData>["workspace"]["activity"], t: TFunction): ActivityRow[] {
   return workspaceActivity.slice(0, 5).map((item) => {
     const action = item.action.toLowerCase();
-    const isShare = action.includes("share");
-    const isTransfer = action.includes("upload") || action.includes("download");
+    const isShare = action.includes("share") || action.includes("partage") || action.includes("freigabe") || action.includes("link");
+    const isTransfer =
+      action.includes("upload") ||
+      action.includes("download") ||
+      action.includes("envoy") ||
+      action.includes("télécharg") ||
+      action.includes("hochgeladen") ||
+      action.includes("heruntergeladen");
     return {
       id: item.id,
-      label: `${item.actor} ${action} ${item.target}`,
+      label: t({ en: `${item.actor} ${action} ${item.target}`, fr: `${item.actor} ${action} ${item.target}`, de: `${item.actor} ${action} ${item.target}` }),
       detail: item.spaceName ?? item.ipAddress,
       time: item.timeLabel,
       tone: isShare ? "violet" : isTransfer ? "emerald" : "blue",
@@ -144,12 +170,13 @@ function buildActivityRows(workspaceActivity: ReturnType<typeof usePortalWorkspa
   });
 }
 
-function buildTransferRows(workspaceTransfers: ReturnType<typeof usePortalWorkspaceData>["workspace"]["transfers"]): TransferRow[] {
+function buildTransferRows(workspaceTransfers: ReturnType<typeof usePortalWorkspaceData>["workspace"]["transfers"], t: TFunction): TransferRow[] {
   return workspaceTransfers.slice(0, 5).map((transfer) => ({
     id: transfer.id,
     name: transfer.name,
-    detail: `${transfer.direction} - ${transfer.spaceName} - ${transfer.startedLabel}`,
+    detail: `${portalTransferDirectionLabel(transfer.direction, t)} - ${transfer.spaceName} - ${transfer.startedLabel}`,
     status: transfer.status,
+    statusLabel: portalTransferStatusLabel(transfer.status, t),
     progress: transfer.progress,
     tone: portalTransferStatusTone(transfer.status),
   }));
@@ -170,19 +197,20 @@ function StorageOverviewCard({
   dataOutBytes: number | null | undefined;
   storageTrendPoints: WorkspaceDashboardStorageEvolutionPoint[];
 }) {
+  const { t } = useI18n();
   const usagePercent = percent(usedBytes, quotaBytes);
   return (
     <section className={cx(uiCardClass, "h-full p-4")}>
       <div className="flex items-center justify-between gap-3">
-        <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">Storage overview</h2>
+        <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">{t({ en: "Storage overview", fr: "Vue du stockage", de: "Speicherübersicht" })}</h2>
         <Link to="/portal/usage" className="inline-flex items-center gap-2 ui-caption font-semibold text-primary">
-          Usage analytics
+          {t({ en: "Usage analytics", fr: "Analyse d'utilisation", de: "Nutzungsanalyse" })}
           <OpenIcon className="h-3.5 w-3.5" />
         </Link>
       </div>
       <div className="mt-3 flex items-end justify-between gap-4">
         <div>
-          <p className={cx("ui-body", uiMutedTextClass)}>Storage Used</p>
+          <p className={cx("ui-body", uiMutedTextClass)}>{t({ en: "Storage Used", fr: "Stockage utilisé", de: "Genutzter Speicher" })}</p>
           <p className="mt-1 text-[24px] font-semibold leading-7 text-[var(--ui-text)]">
             {formatBytes(usedBytes)}
             {quotaBytes != null && <span className="font-medium text-[var(--ui-text)]/75"> / {formatBytes(quotaBytes)}</span>}
@@ -191,22 +219,26 @@ function StorageOverviewCard({
         <p className="text-[20px] font-semibold leading-6 text-primary">{usagePercent == null ? "" : formatPercentage(usagePercent)}</p>
       </div>
       {usagePercent != null ? (
-        <ProgressBar value={usagePercent} className="mt-3 h-2.5" ariaLabel="Portal storage quota usage" />
+        <ProgressBar value={usagePercent} className="mt-3 h-2.5" ariaLabel={t({ en: "Portal storage quota usage", fr: "Utilisation du quota de stockage Portal", de: "Portal-Speicherquotennutzung" })} />
       ) : (
-        <p className={cx("mt-3 ui-caption font-semibold", uiMutedTextClass)}>Quota unavailable</p>
+        <p className={cx("mt-3 ui-caption font-semibold", uiMutedTextClass)}>{t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" })}</p>
       )}
-      <WorkspaceDashboardStorageEvolutionChart points={storageTrendPoints} emptyLabel="Storage usage unavailable." />
+      <WorkspaceDashboardStorageEvolutionChart
+        points={storageTrendPoints}
+        emptyLabel={t({ en: "Storage usage unavailable.", fr: "Utilisation du stockage indisponible.", de: "Speichernutzung nicht verfügbar." })}
+        chartLabel={t({ en: "Storage evolution chart", fr: "Graphique d'évolution du stockage", de: "Diagramm zur Speicherentwicklung" })}
+      />
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
-          <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">Objects</p>
+          <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</p>
           <p className="mt-1 text-base font-semibold leading-5 text-[var(--ui-text)]">{formatDashboardNumber(objectCount)}</p>
         </div>
         <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
-          <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">Data in</p>
+          <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">{t({ en: "Data in", fr: "Données entrantes", de: "Eingehende Daten" })}</p>
           <p className="mt-1 text-base font-semibold leading-5 text-[var(--ui-text)]">{formatBytes(dataInBytes)}</p>
         </div>
         <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
-          <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">Data out</p>
+          <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">{t({ en: "Data out", fr: "Données sortantes", de: "Ausgehende Daten" })}</p>
           <p className="mt-1 text-base font-semibold leading-5 text-[var(--ui-text)]">{formatBytes(dataOutBytes)}</p>
         </div>
       </div>
@@ -215,24 +247,25 @@ function StorageOverviewCard({
 }
 
 function TopStorageSpacesCard({ rows }: { rows: StorageSpaceRow[] }) {
+  const { t } = useI18n();
   return (
     <WorkspaceDashboardCard
-      title="Top storage spaces"
+      title={t({ en: "Top storage spaces", fr: "Principaux espaces de stockage", de: "Größte Speicherbereiche" })}
       action={
         <Link to="/portal/storage-spaces" className="inline-flex items-center gap-2 ui-caption font-semibold text-primary">
-          View all spaces
+          {t({ en: "View all spaces", fr: "Voir tous les espaces", de: "Alle Bereiche anzeigen" })}
           <OpenIcon className="h-3.5 w-3.5" />
         </Link>
       }
     >
       {rows.length === 0 ? (
-        <WorkspaceDashboardEmptyState>No Storage Spaces to display.</WorkspaceDashboardEmptyState>
+        <WorkspaceDashboardEmptyState>{t({ en: "No Storage Spaces to display.", fr: "Aucun espace de stockage à afficher.", de: "Keine Speicherbereiche zum Anzeigen." })}</WorkspaceDashboardEmptyState>
       ) : (
         <div className="space-y-2">
           <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(92px,0.8fr)_minmax(72px,0.5fr)] gap-3 text-[11px] font-semibold leading-4 text-[var(--ui-text-muted)]">
-            <span>Storage space</span>
-            <span>Storage</span>
-            <span className="text-right">Objects</span>
+            <span>{t({ en: "Storage space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
+            <span>{t({ en: "Storage", fr: "Stockage", de: "Speicher" })}</span>
+            <span className="text-right">{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</span>
           </div>
           {rows.map(({ space, percent: rowPercent }) => (
             <div
@@ -250,10 +283,10 @@ function TopStorageSpacesCard({ rows }: { rows: StorageSpaceRow[] }) {
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1.5 pl-9">
                   <UiBadge tone={portalRoleTone(space.role)} className="rounded-md px-2 py-0 text-[11px] leading-5">
-                    {space.role}
+                    {portalRoleLabel(space.role, t)}
                   </UiBadge>
                   <UiBadge tone={portalStorageSpaceStatusTone(space)} className="rounded-md px-2 py-0 text-[11px] leading-5">
-                    {space.status}
+                    {portalStatusLabel(space.status, t)}
                   </UiBadge>
                 </div>
               </div>
@@ -271,13 +304,14 @@ function TopStorageSpacesCard({ rows }: { rows: StorageSpaceRow[] }) {
 }
 
 function RecentTransfersCard({ rows }: { rows: TransferRow[] }) {
+  const { t } = useI18n();
   return (
     <WorkspaceDashboardCard
-      title="Recent transfers"
-      action={<Link to="/portal/transfers" className="ui-caption font-semibold text-primary">View all</Link>}
+      title={t({ en: "Recent transfers", fr: "Transferts récents", de: "Letzte Transfers" })}
+      action={<Link to="/portal/transfers" className="ui-caption font-semibold text-primary">{t({ en: "View all", fr: "Tout voir", de: "Alle anzeigen" })}</Link>}
     >
       {rows.length === 0 ? (
-        <WorkspaceDashboardEmptyState>No recent transfers.</WorkspaceDashboardEmptyState>
+        <WorkspaceDashboardEmptyState>{t({ en: "No recent transfers.", fr: "Aucun transfert récent.", de: "Keine letzten Transfers." })}</WorkspaceDashboardEmptyState>
       ) : (
         <div className="space-y-2">
           {rows.map((transfer) => (
@@ -288,7 +322,7 @@ function RecentTransfersCard({ rows }: { rows: TransferRow[] }) {
                   <p className={cx("mt-0.5 truncate ui-caption", uiMutedTextClass)}>{transfer.detail}</p>
                 </div>
                 <UiBadge tone={transfer.tone} className="rounded-md px-2 py-0 text-[11px] leading-5">
-                  {transfer.status}
+                  {transfer.statusLabel}
                 </UiBadge>
               </div>
               {transfer.status === "Uploading" || transfer.status === "Queued" ? (
@@ -303,13 +337,14 @@ function RecentTransfersCard({ rows }: { rows: TransferRow[] }) {
 }
 
 function RecentActivityCard({ rows }: { rows: ActivityRow[] }) {
+  const { t } = useI18n();
   return (
     <WorkspaceDashboardCard
-      title="Recent activity"
-      action={<Link to="/portal/activity" className="ui-caption font-semibold text-primary">View all</Link>}
+      title={t({ en: "Recent activity", fr: "Activité récente", de: "Letzte Aktivität" })}
+      action={<Link to="/portal/activity" className="ui-caption font-semibold text-primary">{t({ en: "View all", fr: "Tout voir", de: "Alle anzeigen" })}</Link>}
     >
       {rows.length === 0 ? (
-        <WorkspaceDashboardEmptyState>No recent activity.</WorkspaceDashboardEmptyState>
+        <WorkspaceDashboardEmptyState>{t({ en: "No recent activity.", fr: "Aucune activité récente.", de: "Keine letzte Aktivität." })}</WorkspaceDashboardEmptyState>
       ) : (
         <div className="space-y-2">
           {rows.map((activity) => (
@@ -339,25 +374,32 @@ function AlertsCard({
   alerts: ReturnType<typeof usePortalWorkspaceData>["workspace"]["alerts"];
   healthStatus: HealthCheckStatus;
 }) {
+  const { t } = useI18n();
   return (
-    <WorkspaceDashboardCard title="Alerts & service status">
+    <WorkspaceDashboardCard title={t({ en: "Alerts & service status", fr: "Alertes et statut du service", de: "Warnungen und Dienststatus" })}>
       <div className="rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <p className="flex min-w-0 items-center gap-2 ui-caption font-semibold text-[var(--ui-text)]">
             <WorkspaceStatusDot status={healthStatus} />
-            <span className="truncate">{workspaceHealthLabel(healthStatus)}</span>
+            <span className="truncate">{workspaceHealthLabel(healthStatus, t)}</span>
           </p>
           <UiBadge
             tone={healthStatus === "up" ? "success" : healthStatus === "down" ? "danger" : healthStatus === "degraded" ? "warning" : "neutral"}
             className="rounded-md px-2 py-0 text-[11px] leading-5"
           >
-            {healthStatus === "up" ? "Operational" : healthStatus === "degraded" ? "Degraded" : healthStatus === "down" ? "Issue" : "Unknown"}
+            {healthStatus === "up"
+              ? t({ en: "Operational", fr: "Opérationnel", de: "Betriebsbereit" })
+              : healthStatus === "degraded"
+                ? t({ en: "Degraded", fr: "Dégradé", de: "Beeinträchtigt" })
+                : healthStatus === "down"
+                  ? t({ en: "Issue", fr: "Incident", de: "Problem" })
+                  : t({ en: "Unknown", fr: "Inconnu", de: "Unbekannt" })}
           </UiBadge>
         </div>
       </div>
       <div className="mt-3 space-y-2">
         {alerts.length === 0 ? (
-          <WorkspaceDashboardEmptyState>No alerts to display.</WorkspaceDashboardEmptyState>
+          <WorkspaceDashboardEmptyState>{t({ en: "No alerts to display.", fr: "Aucune alerte à afficher.", de: "Keine Warnungen zum Anzeigen." })}</WorkspaceDashboardEmptyState>
         ) : (
           alerts.slice(0, 4).map((alert) => (
             <div key={alert.id} className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--ui-border-soft)] px-3 py-2">
@@ -366,7 +408,7 @@ function AlertsCard({
                 <p className={cx("mt-0.5 truncate ui-caption", uiMutedTextClass)}>{alert.description}</p>
               </div>
               <UiBadge tone={alertTone(alert.tone)} className="rounded-md px-2 py-0 text-[11px] leading-5">
-                {alert.severityLabel ?? "Info"}
+                {alert.severityLabel ?? t({ en: "Info", fr: "Info", de: "Info" })}
               </UiBadge>
             </div>
           ))
@@ -377,8 +419,9 @@ function AlertsCard({
 }
 
 function QuickLinksCard({ links }: { links: QuickLink[] }) {
+  const { t } = useI18n();
   return (
-    <WorkspaceDashboardCard title="Quick links">
+    <WorkspaceDashboardCard title={t({ en: "Quick links", fr: "Raccourcis", de: "Schnellzugriffe" })}>
       <div className="grid gap-2">
         {links.map((link) => (
           <Link
@@ -404,6 +447,7 @@ function QuickLinksCard({ links }: { links: QuickLink[] }) {
 }
 
 export default function PortalDashboard() {
+  const { t } = useI18n();
   const {
     workspace,
     health,
@@ -426,8 +470,8 @@ export default function PortalDashboard() {
   });
 
   const storageRows = useMemo(() => buildStorageRows(workspace.spaces), [workspace.spaces]);
-  const activityRows = useMemo(() => buildActivityRows(workspace.activity), [workspace.activity]);
-  const transferRows = useMemo(() => buildTransferRows(workspace.transfers), [workspace.transfers]);
+  const activityRows = useMemo(() => buildActivityRows(workspace.activity, t), [t, workspace.activity]);
+  const transferRows = useMemo(() => buildTransferRows(workspace.transfers, t), [t, workspace.transfers]);
   const currentTraffic = trafficByWindow.day ?? traffic;
   const dataInBytes = currentTraffic?.totals.bytes_in ?? null;
   const dataOutBytes = currentTraffic?.totals.bytes_out ?? null;
@@ -435,52 +479,70 @@ export default function PortalDashboard() {
     () => buildWorkspaceStorageEvolutionPoints(workspace.usedBytes, usageTrends?.storage, currentTraffic?.end),
     [currentTraffic?.end, usageTrends?.storage, workspace.usedBytes]
   );
-  const trafficTrend = useMemo(() => selectWorkspaceTrafficTrend(trafficByWindow), [trafficByWindow]);
+  const trafficTrend = useMemo(() => {
+    const selection = selectWorkspaceTrafficTrend(trafficByWindow);
+    return selection ? { ...selection, label: portalTrendPeriodLabel(selection.label, t) } : null;
+  }, [t, trafficByWindow]);
+  const storageTrendBaseline = useMemo(() => localizeTrendBaseline(usageTrends?.storage ?? null, t), [t, usageTrends?.storage]);
+  const bucketsTrendBaseline = useMemo(() => localizeTrendBaseline(usageTrends?.buckets ?? null, t), [t, usageTrends?.buckets]);
+  const objectsTrendBaseline = useMemo(() => localizeTrendBaseline(usageTrends?.objects ?? null, t), [t, usageTrends?.objects]);
   const healthStatus = workspaceHealthStatus(health);
   const alerts = (workspace.alerts.length > 0 ? workspace.alerts : healthAlerts).slice(0, 4);
   const activeSpaces = workspace.spaces.filter((space) => space.status !== "Archived").length;
   const transferBytes = currentTraffic ? workspaceTrafficTotalBytes(currentTraffic) : null;
+  const quotaOfLabel = t({ en: "of", fr: "sur", de: "von" });
+  const trendComparisonLabel = t({ en: "vs", fr: "par rapport à", de: "gegenüber" });
   const metrics = buildWorkspaceDashboardKpis({
     storage: {
+      label: t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" }),
       usedBytes: workspace.usedBytes,
       quotaBytes: workspace.quotaBytes,
-      quotaUnavailableDetail: "Quota unavailable",
-      progressLabel: "Portal storage quota usage",
-      trendBaseline: usageTrends?.storage,
+      quotaUnavailableDetail: t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }),
+      progressLabel: t({ en: "Portal storage quota usage", fr: "Utilisation du quota de stockage Portal", de: "Portal-Speicherquotennutzung" }),
+      trendBaseline: storageTrendBaseline,
+      quotaOfLabel,
+      trendComparisonLabel,
       icon: <BucketIcon className="h-7 w-7" />,
       to: "/portal/usage",
     },
     spaces: {
-      label: "Storage spaces",
+      label: t({ en: "Storage spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }),
       value: workspace.spaces.length,
       quota: workspace.maxBuckets,
-      unitLabel: "spaces",
+      unitLabel: t({ en: "spaces", fr: "espaces", de: "Bereiche" }),
       activeValue: activeSpaces,
-      activeLabel: "active",
-      progressLabel: "Storage spaces quota usage",
-      trendBaseline: usageTrends?.buckets,
-      trendBaselineValue: usageTrends?.buckets?.bucket_count,
+      activeLabel: t({ en: "active", fr: "actifs", de: "aktiv" }),
+      progressLabel: t({ en: "Storage spaces quota usage", fr: "Utilisation du quota d'espaces de stockage", de: "Speicherbereich-Quotennutzung" }),
+      trendBaseline: bucketsTrendBaseline,
+      trendBaselineValue: bucketsTrendBaseline?.bucket_count,
+      quotaOfLabel,
+      trendComparisonLabel,
       tone: "emerald",
       icon: <BucketCollectionIcon className="h-7 w-7" />,
       to: "/portal/storage-spaces",
     },
     objects: {
-      label: "Objects",
+      label: t({ en: "Objects", fr: "Objets", de: "Objekte" }),
       value: workspace.usedObjects,
       quota: workspace.quotaObjects,
-      unitLabel: "objects",
-      knownDetail: "Tracked objects",
-      progressLabel: "Portal object quota usage",
-      trendBaseline: usageTrends?.objects,
-      trendBaselineValue: usageTrends?.objects?.used_objects,
+      unitLabel: t({ en: "objects", fr: "objets", de: "Objekte" }),
+      knownDetail: t({ en: "Tracked objects", fr: "Objets suivis", de: "Erfasste Objekte" }),
+      progressLabel: t({ en: "Portal object quota usage", fr: "Utilisation du quota d'objets Portal", de: "Portal-Objektquotennutzung" }),
+      trendBaseline: objectsTrendBaseline,
+      trendBaselineValue: objectsTrendBaseline?.used_objects,
+      quotaOfLabel,
+      trendComparisonLabel,
       tone: "violet",
       icon: <FileIcon className="h-7 w-7" />,
       to: "/portal/usage",
     },
     transfer: {
+      label: t({ en: "Transfer", fr: "Transfert", de: "Transfer" }),
       bytes: transferBytes,
       loading: trafficLoading,
       trendSelection: trafficError ? null : trafficTrend,
+      detailLabel: t({ en: "Last 24h", fr: "Dernières 24 h", de: "Letzte 24 Std." }),
+      trendComparisonLabel,
       icon: <TransferIcon className="h-7 w-7" />,
       to: "/portal/usage",
       unavailableReason: trafficError,
@@ -488,29 +550,29 @@ export default function PortalDashboard() {
   });
   const quickLinks: QuickLink[] = [
     {
-      label: "Storage spaces",
-      detail: "Open workspace storage",
+      label: t({ en: "Storage spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }),
+      detail: t({ en: "Open workspace storage", fr: "Ouvrir le stockage du workspace", de: "Arbeitsbereichspeicher öffnen" }),
       to: "/portal/storage-spaces",
       tone: "emerald",
       icon: <BucketCollectionIcon className="h-4 w-4" />,
     },
     {
-      label: "Shares",
-      detail: "Review shared access",
+      label: t({ en: "Shares", fr: "Partages", de: "Freigaben" }),
+      detail: t({ en: "Review shared access", fr: "Voir les accès partagés", de: "Freigegebene Zugriffe prüfen" }),
       to: "/portal/shares",
       tone: "violet",
       icon: <LinkIcon className="h-4 w-4" />,
     },
     {
-      label: "Transfers",
-      detail: "Track uploads and downloads",
+      label: t({ en: "Transfers", fr: "Transferts", de: "Transfers" }),
+      detail: t({ en: "Track uploads and downloads", fr: "Suivre les envois et téléchargements", de: "Uploads und Downloads verfolgen" }),
       to: "/portal/transfers",
       tone: "amber",
       icon: <TransferIcon className="h-4 w-4" />,
     },
     {
-      label: "Usage analytics",
-      detail: "Inspect usage and traffic",
+      label: t({ en: "Usage analytics", fr: "Analyse d'utilisation", de: "Nutzungsanalyse" }),
+      detail: t({ en: "Inspect usage and traffic", fr: "Consulter l'utilisation et le trafic", de: "Nutzung und Traffic prüfen" }),
       to: "/portal/usage",
       tone: "blue",
       icon: <HistoryIcon className="h-4 w-4" />,
@@ -523,20 +585,20 @@ export default function PortalDashboard() {
     accountError,
     error,
     hasAccountContext,
-    loadingMessage: "Loading dashboard...",
-    noAccountMessage: "Select an account to open the dashboard.",
+    loadingMessage: t({ en: "Loading dashboard...", fr: "Chargement du tableau de bord...", de: "Dashboard wird geladen..." }),
+    noAccountMessage: t({ en: "Select an account to open the dashboard.", fr: "Sélectionnez un compte pour ouvrir le tableau de bord.", de: "Wählen Sie ein Konto aus, um das Dashboard zu öffnen." }),
   });
   if (pageState) return pageState;
 
   return (
     <div className="space-y-3" data-testid="portal-dashboard">
       <PageHeader
-        title="Portal dashboard"
-        description={`Workspace overview for ${workspace.accountName}.`}
-        breadcrumbs={portalBreadcrumbs({ label: "Dashboard" })}
+        title={t({ en: "Portal dashboard", fr: "Tableau de bord Portal", de: "Portal-Dashboard" })}
+        description={t({ en: `Workspace overview for ${workspace.accountName}.`, fr: `Vue du workspace ${workspace.accountName}.`, de: `Arbeitsbereichsübersicht für ${workspace.accountName}.` })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Dashboard", fr: "Tableau de bord", de: "Dashboard" }) })}
         rightContent={
           <div className="flex h-8 items-center gap-2 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 text-xs font-semibold text-[var(--ui-text-muted)]">
-            <span>Current period</span>
+            <span>{t({ en: "Current period", fr: "Période en cours", de: "Aktueller Zeitraum" })}</span>
           </div>
         }
       />

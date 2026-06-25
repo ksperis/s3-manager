@@ -26,10 +26,13 @@ type WorkspaceKpiEndpoint = {
 };
 
 type WorkspaceKpiStorageConfig = WorkspaceKpiEndpoint & {
+  label?: string;
   usedBytes?: number | null;
   quotaBytes?: number | null;
   quotaUnavailableDetail?: string;
   trendBaseline?: ManagerUsageTrendBaseline | null;
+  quotaOfLabel?: string;
+  trendComparisonLabel?: string;
   progressLabel: string;
   icon: ReactNode;
 };
@@ -44,16 +47,20 @@ type WorkspaceKpiCountConfig = WorkspaceKpiEndpoint & {
   activeLabel?: string;
   trendBaseline?: ManagerUsageTrendBaseline | null;
   trendBaselineValue?: number | null;
+  quotaOfLabel?: string;
+  trendComparisonLabel?: string;
   progressLabel?: string;
   tone: WorkspaceDashboardTone;
   icon: ReactNode;
 };
 
 type WorkspaceKpiTransferConfig = WorkspaceKpiEndpoint & {
+  label?: string;
   bytes?: number | null;
   loading?: boolean;
   trendSelection?: WorkspaceTrafficTrendSelection | null;
   detailLabel?: string;
+  trendComparisonLabel?: string;
   icon: ReactNode;
 };
 
@@ -85,17 +92,18 @@ export function formatWorkspaceOptionalDashboardNumber(value?: number | null): s
   return value == null ? "" : formatWorkspaceDashboardNumber(value);
 }
 
-export function formatWorkspaceQuotaDetail(quota: string, usagePercent?: number | null): string {
-  return usagePercent == null ? `of ${quota}` : `of ${quota} (${formatPercentage(usagePercent)})`;
+export function formatWorkspaceQuotaDetail(quota: string, usagePercent?: number | null, ofLabel = "of"): string {
+  return usagePercent == null ? `${ofLabel} ${quota}` : `${ofLabel} ${quota} (${formatPercentage(usagePercent)})`;
 }
 
 export function formatWorkspaceCountQuotaDetail(
   value: number | null | undefined,
   quota: number,
   unitLabel: string,
-  usagePercent?: number | null
+  usagePercent?: number | null,
+  ofLabel = "of"
 ): string {
-  if (value == null) return formatWorkspaceQuotaDetail(`${formatWorkspaceDashboardNumber(quota)} ${unitLabel}`, usagePercent);
+  if (value == null) return formatWorkspaceQuotaDetail(`${formatWorkspaceDashboardNumber(quota)} ${unitLabel}`, usagePercent, ofLabel);
   const detail = `${formatWorkspaceDashboardNumber(value)} / ${formatWorkspaceDashboardNumber(quota)} ${unitLabel}`;
   return usagePercent == null ? detail : `${detail} (${formatPercentage(usagePercent)})`;
 }
@@ -131,37 +139,41 @@ export function selectWorkspaceTrafficTrend(
 }
 
 export function formatWorkspaceTrafficTrend(
-  selection: WorkspaceTrafficTrendSelection | null
+  selection: WorkspaceTrafficTrendSelection | null,
+  comparisonLabel = "vs"
 ): WorkspaceDashboardMetricTrend | undefined {
   if (!selection) return undefined;
-  return { label: `${formatBytes(selection.totalBytes)} vs ${selection.label}`, tone: "positive" };
+  return { label: `${formatBytes(selection.totalBytes)} ${comparisonLabel} ${selection.label}`, tone: "positive" };
 }
 
 export function formatWorkspaceSignedTrend(
   currentValue: number | null | undefined,
   baselineValue: number | null | undefined,
   label: string,
-  formatter: (value: number) => string
+  formatter: (value: number) => string,
+  comparisonLabel = "vs"
 ): WorkspaceDashboardMetricTrend | undefined {
   if (currentValue == null || baselineValue == null || !label) return undefined;
   const delta = currentValue - baselineValue;
   const tone: WorkspaceDashboardMetricTrend["tone"] = delta > 0 ? "positive" : delta < 0 ? "negative" : "neutral";
-  return { label: `${formatter(Math.abs(delta))} vs ${label}`, tone };
+  return { label: `${formatter(Math.abs(delta))} ${comparisonLabel} ${label}`, tone };
 }
 
 export function formatWorkspaceStorageTrend(
   currentValue: number | null | undefined,
-  baseline?: ManagerUsageTrendBaseline | null
+  baseline?: ManagerUsageTrendBaseline | null,
+  comparisonLabel = "vs"
 ): WorkspaceDashboardMetricTrend | undefined {
-  return formatWorkspaceSignedTrend(currentValue, baseline?.used_bytes, baseline?.label ?? "", formatBytes);
+  return formatWorkspaceSignedTrend(currentValue, baseline?.used_bytes, baseline?.label ?? "", formatBytes, comparisonLabel);
 }
 
 export function formatWorkspaceCountTrend(
   currentValue: number | null | undefined,
   baselineValue: number | null | undefined,
-  baseline?: ManagerUsageTrendBaseline | null
+  baseline?: ManagerUsageTrendBaseline | null,
+  comparisonLabel = "vs"
 ): WorkspaceDashboardMetricTrend | undefined {
-  return formatWorkspaceSignedTrend(currentValue, baselineValue, baseline?.label ?? "", formatWorkspaceDashboardNumber);
+  return formatWorkspaceSignedTrend(currentValue, baselineValue, baseline?.label ?? "", formatWorkspaceDashboardNumber, comparisonLabel);
 }
 
 function formatCountValue(value: number | null | undefined): string {
@@ -172,7 +184,7 @@ function buildCountMetric(config: WorkspaceKpiCountConfig): WorkspaceDashboardMe
   const progress = workspaceDashboardPercent(config.value, config.quota);
   const detail =
     config.quota != null
-      ? formatWorkspaceCountQuotaDetail(config.value, config.quota, config.unitLabel, progress)
+      ? formatWorkspaceCountQuotaDetail(config.value, config.quota, config.unitLabel, progress, config.quotaOfLabel)
       : config.activeValue != null && config.activeLabel
         ? `${config.activeValue.toLocaleString()} ${config.activeLabel}`
         : config.value == null
@@ -185,7 +197,7 @@ function buildCountMetric(config: WorkspaceKpiCountConfig): WorkspaceDashboardMe
     detail,
     progress,
     progressLabel: config.progressLabel,
-    trend: formatWorkspaceCountTrend(config.value, config.trendBaselineValue, config.trendBaseline),
+    trend: formatWorkspaceCountTrend(config.value, config.trendBaselineValue, config.trendBaseline, config.trendComparisonLabel),
     tone: config.tone,
     icon: config.icon,
     to: config.to,
@@ -196,15 +208,15 @@ function buildCountMetric(config: WorkspaceKpiCountConfig): WorkspaceDashboardMe
 export function buildWorkspaceDashboardKpis(config: BuildWorkspaceDashboardKpisConfig): WorkspaceDashboardMetric[] {
   const storagePercent = workspaceDashboardPercent(config.storage.usedBytes, config.storage.quotaBytes);
   const storageMetric: WorkspaceDashboardMetric = {
-    label: "Storage used",
+    label: config.storage.label ?? "Storage used",
     value: formatWorkspaceOptionalBytes(config.storage.usedBytes),
     detail:
       config.storage.quotaBytes == null
         ? config.storage.quotaUnavailableDetail ?? ""
-        : formatWorkspaceQuotaDetail(formatBytes(config.storage.quotaBytes), storagePercent),
+        : formatWorkspaceQuotaDetail(formatBytes(config.storage.quotaBytes), storagePercent, config.storage.quotaOfLabel),
     progress: storagePercent,
     progressLabel: config.storage.progressLabel,
-    trend: formatWorkspaceStorageTrend(config.storage.usedBytes, config.storage.trendBaseline),
+    trend: formatWorkspaceStorageTrend(config.storage.usedBytes, config.storage.trendBaseline, config.storage.trendComparisonLabel),
     tone: "blue",
     icon: config.storage.icon,
     to: config.storage.to,
@@ -213,10 +225,12 @@ export function buildWorkspaceDashboardKpis(config: BuildWorkspaceDashboardKpisC
 
   const transferValue = config.transfer.loading ? "..." : formatWorkspaceOptionalBytes(config.transfer.bytes);
   const transferMetric: WorkspaceDashboardMetric = {
-    label: "Transfer",
+    label: config.transfer.label ?? "Transfer",
     value: transferValue,
     detail: config.transfer.bytes == null ? "" : config.transfer.detailLabel ?? "Last 24h",
-    trend: config.transfer.loading || config.transfer.bytes == null ? undefined : formatWorkspaceTrafficTrend(config.transfer.trendSelection ?? null),
+    trend: config.transfer.loading || config.transfer.bytes == null
+      ? undefined
+      : formatWorkspaceTrafficTrend(config.transfer.trendSelection ?? null, config.transfer.trendComparisonLabel),
     tone: "amber",
     icon: config.transfer.icon,
     to: config.transfer.to,

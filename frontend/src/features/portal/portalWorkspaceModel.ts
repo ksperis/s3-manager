@@ -4,6 +4,11 @@
  */
 import type { S3Account } from "../../api/accounts";
 import type { PortalState, PortalStorageSpaceSummary, PortalStorageSpaceVisibility, PortalUsage } from "../../api/portal";
+import type { UiLanguage } from "../../components/language";
+import { translate, type I18nMessage } from "../../i18n";
+import { portalDateLabel } from "./portalI18n";
+
+type TFunction = (message: I18nMessage) => string;
 
 export type PortalWorkspaceRole = "Viewer" | "Editor" | "Owner";
 export type PortalWorkspaceStatus = "Active" | "Attention" | "Private" | "Shared";
@@ -132,11 +137,8 @@ function statusFromStorageSpace(space: PortalStorageSpaceSummary, role: PortalWo
   return role === "Owner" ? "Active" : "Shared";
 }
 
-function createdLabel(raw?: string | null): string {
-  if (!raw) return "-";
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+function createdLabel(raw?: string | null, locale: UiLanguage = "en"): string {
+  return portalDateLabel(raw, locale);
 }
 
 function knownSum(values: Array<number | null | undefined>): number | null {
@@ -164,12 +166,16 @@ export function buildPortalWorkspaceModel({
   storageSpaces,
   usage,
   userEmail,
+  locale = "en",
+  t = translate,
 }: {
   account: S3Account | null;
   state: PortalState | null;
   storageSpaces?: PortalStorageSpaceSummary[] | null;
   usage: PortalUsage | null;
   userEmail: string | null;
+  locale?: UiLanguage;
+  t?: TFunction;
 }): PortalWorkspaceModel {
   const accountName = account?.name ?? userEmail?.split("@")[0] ?? "Portal";
   const usageBySpace = new Map((usage?.storage_spaces ?? []).map((space) => [space.id, space]));
@@ -184,7 +190,7 @@ export function buildPortalWorkspaceModel({
       internalName: storageSpace.internal_bucket_name ?? null,
       origin: storageSpace.origin ?? "legacy",
       nameEditable: Boolean(storageSpace.name_editable),
-      description: storageSpace.description ?? `${name} storage space`,
+      description: storageSpace.description ?? t({ en: `${name} storage space`, fr: `Espace de stockage ${name}`, de: `Speicherbereich ${name}` }),
       ownerLabel: storageSpace.owner_label ?? null,
       ownerUserId: storageSpace.owner_user_id ?? null,
       visibility,
@@ -194,7 +200,7 @@ export function buildPortalWorkspaceModel({
       status: storageSpace.archived_at ? "Archived" : statusFromStorageSpace(storageSpace, role),
       access: visibility === "shared" ? "Shared" : "Private",
       region: storageSpace.region ?? null,
-      createdLabel: createdLabel(storageSpace.created_at),
+      createdLabel: createdLabel(storageSpace.created_at, locale),
       usedBytes: usageSpace?.used_bytes ?? storageSpace.used_bytes ?? null,
       quotaBytes: usageSpace?.quota_max_size_bytes ?? storageSpace.quota_max_size_bytes ?? null,
       objectCount: usageSpace?.object_count ?? storageSpace.object_count ?? null,

@@ -20,9 +20,11 @@ import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { usePortalAccountContext } from "./PortalAccountContext";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
+import { portalAccessKeyStatusLabel, portalDateTimeLabel } from "./portalI18n";
 
 type PendingAccessKeyAction =
   | { type: "disable"; key: PortalAccessKey }
@@ -36,12 +38,6 @@ function isKeyActive(key: PortalAccessKey): boolean {
   if (["inactive", "disabled", "suspended"].includes(normalized)) return false;
   if (["active", "enabled"].includes(normalized)) return true;
   return true;
-}
-
-function formatDate(value?: string | null): string {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 }
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -61,6 +57,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 export default function PortalAccessKeysPage() {
+  const { locale, t } = useI18n();
   const { accountIdForApi, hasAccountContext, loading: accountLoading, error: accountError } = usePortalAccountContext();
   const [state, setState] = useState<PortalAccessKeysState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -85,7 +82,7 @@ export default function PortalAccessKeysPage() {
     } catch (err) {
       console.error(err);
       setState(null);
-      setError(extractApiError(err, "Unable to load access keys."));
+      setError(extractApiError(err, t({ en: "Unable to load access keys.", fr: "Impossible de charger les clés d'accès.", de: "Zugriffsschlüssel können nicht geladen werden." })));
     } finally {
       setLoading(false);
     }
@@ -111,11 +108,11 @@ export default function PortalAccessKeysPage() {
     try {
       const key = await createPortalAccessKey(accountIdForApi);
       setCreatedKey(key);
-      setActionMessage("Access key created");
+      setActionMessage(t({ en: "Access key created", fr: "Clé d'accès créée", de: "Zugriffsschlüssel erstellt" }));
       await loadKeys();
     } catch (err) {
       console.error(err);
-      setError(extractApiError(err, "Unable to create access key."));
+      setError(extractApiError(err, t({ en: "Unable to create access key.", fr: "Impossible de créer la clé d'accès.", de: "Zugriffsschlüssel kann nicht erstellt werden." })));
     } finally {
       setBusy(null);
     }
@@ -128,12 +125,12 @@ export default function PortalAccessKeysPage() {
     setActionMessage(null);
     try {
       await updatePortalAccessKeyStatus(accountIdForApi, key.access_key_id, active);
-      setActionMessage(active ? "Access key enabled" : "Access key disabled");
+      setActionMessage(active ? t({ en: "Access key enabled", fr: "Clé d'accès activée", de: "Zugriffsschlüssel aktiviert" }) : t({ en: "Access key disabled", fr: "Clé d'accès désactivée", de: "Zugriffsschlüssel deaktiviert" }));
       setPendingAction(null);
       await loadKeys();
     } catch (err) {
       console.error(err);
-      setError(extractApiError(err, "Unable to update access key."));
+      setError(extractApiError(err, t({ en: "Unable to update access key.", fr: "Impossible de mettre à jour la clé d'accès.", de: "Zugriffsschlüssel kann nicht aktualisiert werden." })));
       setPendingAction(null);
     } finally {
       setBusy(null);
@@ -162,12 +159,12 @@ export default function PortalAccessKeysPage() {
     setActionMessage(null);
     try {
       await deletePortalAccessKey(accountIdForApi, key.access_key_id);
-      setActionMessage("Access key deleted");
+      setActionMessage(t({ en: "Access key deleted", fr: "Clé d'accès supprimée", de: "Zugriffsschlüssel gelöscht" }));
       setPendingAction(null);
       await loadKeys();
     } catch (err) {
       console.error(err);
-      setError(extractApiError(err, "Unable to delete access key."));
+      setError(extractApiError(err, t({ en: "Unable to delete access key.", fr: "Impossible de supprimer la clé d'accès.", de: "Zugriffsschlüssel kann nicht gelöscht werden." })));
       setPendingAction(null);
     } finally {
       setBusy(null);
@@ -179,12 +176,12 @@ export default function PortalAccessKeysPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Access keys"
-        description="Create S3 access keys for external tools. Use the endpoint shown here; each secret is shown only once."
-        breadcrumbs={portalBreadcrumbs({ label: "Access keys" })}
+        title={t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" })}
+        description={t({ en: "Create S3 access keys for external tools. Use the endpoint shown here; each secret is shown only once.", fr: "Créez des clés d'accès S3 pour les outils externes. Utilisez l'endpoint indiqué ici; chaque secret n'est affiché qu'une seule fois.", de: "Erstellen Sie S3-Zugriffsschlüssel für externe Werkzeuge. Verwenden Sie den hier angezeigten Endpoint; jedes Secret wird nur einmal angezeigt." })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" }) })}
         actions={[
           {
-            label: busy === "create" ? "Creating..." : "New key",
+            label: busy === "create" ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." }) : t({ en: "New key", fr: "Nouvelle clé", de: "Neuer Schlüssel" }),
             onClick: handleCreateKey,
             variant: "primary",
             disabled: createDisabled,
@@ -196,45 +193,45 @@ export default function PortalAccessKeysPage() {
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       {state && !canManageAccessKeys && (
-        <PageBanner tone="warning">Access-key management is disabled for this portal account.</PageBanner>
+        <PageBanner tone="warning">{t({ en: "Access-key management is disabled for this portal account.", fr: "La gestion des clés d'accès est désactivée pour ce compte Portal.", de: "Die Verwaltung von Zugriffsschlüsseln ist für dieses Portal-Konto deaktiviert." })}</PageBanner>
       )}
       {state && canManageAccessKeys && (
         <PageBanner tone="info">
-          Use endpoint {state.s3_endpoint || "the configured storage service"} with these keys. Disabling pauses a key for external tools; deleting removes it permanently.
+          {t({ en: `Use endpoint ${state.s3_endpoint || "the configured storage service"} with these keys. Disabling pauses a key for external tools; deleting removes it permanently.`, fr: `Utilisez l'endpoint ${state.s3_endpoint || "du service de stockage configuré"} avec ces clés. La désactivation suspend une clé pour les outils externes; la suppression la retire définitivement.`, de: `Verwenden Sie den Endpoint ${state.s3_endpoint || "des konfigurierten Speicherdienstes"} mit diesen Schlüsseln. Deaktivieren pausiert einen Schlüssel für externe Werkzeuge; Löschen entfernt ihn dauerhaft.` })}
         </PageBanner>
       )}
       {state && canManageAccessKeys && maxReached && (
-        <PageBanner tone="info">The maximum number of portal user access keys has been reached.</PageBanner>
+        <PageBanner tone="info">{t({ en: "The maximum number of portal user access keys has been reached.", fr: "Le nombre maximal de clés d'accès utilisateur Portal est atteint.", de: "Die maximale Anzahl von Portal-Benutzerzugriffsschlüsseln wurde erreicht." })}</PageBanner>
       )}
 
       {createdKey?.secret_access_key && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-semibold">Access key created</p>
-              <p className="ui-caption text-amber-700 dark:text-amber-200">The secret is shown only once.</p>
+              <p className="font-semibold">{t({ en: "Access key created", fr: "Clé d'accès créée", de: "Zugriffsschlüssel erstellt" })}</p>
+              <p className="ui-caption text-amber-700 dark:text-amber-200">{t({ en: "The secret is shown only once.", fr: "Le secret n'est affiché qu'une seule fois.", de: "Das Secret wird nur einmal angezeigt." })}</p>
             </div>
             <span className="rounded-full bg-amber-100 px-3 py-1 ui-caption font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
-              Copy these values now
+              {t({ en: "Copy these values now", fr: "Copiez ces valeurs maintenant", de: "Diese Werte jetzt kopieren" })}
             </span>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
-              <div className="ui-caption uppercase tracking-wide text-amber-600">Access key</div>
+              <div className="ui-caption uppercase tracking-wide text-amber-600">{t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" })}</div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="max-w-full break-all rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
                   {createdKey.access_key_id}
                 </div>
-                <CopyButton value={createdKey.access_key_id} label="Copy" />
+                <CopyButton value={createdKey.access_key_id} label={t({ en: "Copy", fr: "Copier", de: "Kopieren" })} />
               </div>
             </div>
             <div>
-              <div className="ui-caption uppercase tracking-wide text-amber-600">Secret key</div>
+              <div className="ui-caption uppercase tracking-wide text-amber-600">{t({ en: "Secret key", fr: "Clé secrète", de: "Geheimer Schlüssel" })}</div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="max-w-full break-all rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
                   {createdKey.secret_access_key}
                 </div>
-                <CopyButton value={createdKey.secret_access_key} label="Copy" />
+                <CopyButton value={createdKey.secret_access_key} label={t({ en: "Copy", fr: "Copier", de: "Kopieren" })} />
               </div>
             </div>
           </div>
@@ -242,46 +239,46 @@ export default function PortalAccessKeysPage() {
       )}
 
       {accountLoading ? (
-        <PageBanner tone="info">Loading portal account...</PageBanner>
+        <PageBanner tone="info">{t({ en: "Loading portal account...", fr: "Chargement du compte Portal...", de: "Portal-Konto wird geladen..." })}</PageBanner>
       ) : !hasAccountContext ? (
         <PageEmptyState
-          title="Select a portal account before managing access keys"
-          description="Access keys are scoped to the selected portal account."
+          title={t({ en: "Select a portal account before managing access keys", fr: "Sélectionnez un compte Portal avant de gérer les clés d'accès", de: "Wählen Sie ein Portal-Konto aus, bevor Sie Zugriffsschlüssel verwalten" })}
+          description={t({ en: "Access keys are scoped to the selected portal account.", fr: "Les clés d'accès sont limitées au compte Portal sélectionné.", de: "Zugriffsschlüssel sind auf das ausgewählte Portal-Konto beschränkt." })}
           tone="warning"
         />
       ) : (
         <div className="ui-surface-card">
           <ListToolbar
-            title="Keys"
+            title={t({ en: "Keys", fr: "Clés", de: "Schlüssel" })}
             description={
               state?.s3_endpoint
-                ? `Use these keys with endpoint ${state.s3_endpoint}. Store secrets when they are created; they cannot be shown again. The portal key is hidden from this list.`
-                : "Store secrets when they are created; they cannot be shown again. The portal key is hidden from this list."
+                ? t({ en: `Use these keys with endpoint ${state.s3_endpoint}. Store secrets when they are created; they cannot be shown again. The portal key is hidden from this list.`, fr: `Utilisez ces clés avec l'endpoint ${state.s3_endpoint}. Enregistrez les secrets à la création; ils ne pourront plus être affichés. La clé Portal est masquée dans cette liste.`, de: `Verwenden Sie diese Schlüssel mit dem Endpoint ${state.s3_endpoint}. Speichern Sie Secrets beim Erstellen; sie können nicht erneut angezeigt werden. Der Portal-Schlüssel ist in dieser Liste ausgeblendet.` })
+                : t({ en: "Store secrets when they are created; they cannot be shown again. The portal key is hidden from this list.", fr: "Enregistrez les secrets à la création; ils ne pourront plus être affichés. La clé Portal est masquée dans cette liste.", de: "Speichern Sie Secrets beim Erstellen; sie können nicht erneut angezeigt werden. Der Portal-Schlüssel ist in dieser Liste ausgeblendet." })
             }
             showHeading={false}
-            countLabel={`${visibleKeys.length}/${maxAccessKeys || "-"} key(s)`}
+            countLabel={t({ en: `${visibleKeys.length}/${maxAccessKeys || "-"} key(s)`, fr: `${visibleKeys.length}/${maxAccessKeys || "-"} clé(s)`, de: `${visibleKeys.length}/${maxAccessKeys || "-"} Schlüssel` })}
           />
           <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
                 <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Access key
+                  {t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" })}
                 </th>
                 <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Status
+                  {t({ en: "Status", fr: "Statut", de: "Status" })}
                 </th>
                 <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Created on
+                  {t({ en: "Created on", fr: "Créée le", de: "Erstellt am" })}
                 </th>
                 <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Actions
+                  {t({ en: "Actions", fr: "Actions", de: "Aktionen" })}
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading keys..." />}
-              {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load keys." tone="error" />}
-              {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No external access keys." />}
+              {tableStatus === "loading" && <TableEmptyState colSpan={4} message={t({ en: "Loading keys...", fr: "Chargement des clés...", de: "Schlüssel werden geladen..." })} />}
+              {tableStatus === "error" && <TableEmptyState colSpan={4} message={t({ en: "Unable to load keys.", fr: "Impossible de charger les clés.", de: "Schlüssel können nicht geladen werden." })} tone="error" />}
+              {tableStatus === "empty" && <TableEmptyState colSpan={4} message={t({ en: "No external access keys.", fr: "Aucune clé d'accès externe.", de: "Keine externen Zugriffsschlüssel." })} />}
               {visibleKeys.map((key) => {
                 const active = isKeyActive(key);
                 const disabled = Boolean(busy) || !canManageAccessKeys;
@@ -294,10 +291,10 @@ export default function PortalAccessKeysPage() {
                       {key.access_key_id}
                     </td>
                     <td className="manager-table-cell px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
-                      {key.status ?? (active ? "Active" : "Inactive")}
+                      {portalAccessKeyStatusLabel(key.status, active, t)}
                     </td>
                     <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {formatDate(key.created_at)}
+                      {portalDateTimeLabel(key.created_at, locale)}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex flex-wrap justify-end gap-2">
@@ -307,7 +304,11 @@ export default function PortalAccessKeysPage() {
                           className={tableActionButtonClasses}
                           disabled={disabled}
                         >
-                          {busy === `toggle:${key.access_key_id}` ? "Saving..." : active ? "Disable" : "Enable"}
+                          {busy === `toggle:${key.access_key_id}`
+                            ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." })
+                            : active
+                              ? t({ en: "Disable", fr: "Désactiver", de: "Deaktivieren" })
+                              : t({ en: "Enable", fr: "Activer", de: "Aktivieren" })}
                         </button>
                         <button
                           type="button"
@@ -315,7 +316,7 @@ export default function PortalAccessKeysPage() {
                           className={tableDeleteActionClasses}
                           disabled={disabled}
                         >
-                          {busy === `delete:${key.access_key_id}` ? "Deleting..." : "Delete"}
+                          {busy === `delete:${key.access_key_id}` ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird gelöscht..." }) : t({ en: "Delete", fr: "Supprimer", de: "Löschen" })}
                         </button>
                       </div>
                     </td>
@@ -329,18 +330,18 @@ export default function PortalAccessKeysPage() {
 
       {pendingAction?.type === "disable" ? (
         <ConfirmActionDialog
-          title="Disable access key"
-          description="Confirm that you want to disable this access key."
-          confirmLabel="Disable key"
+          title={t({ en: "Disable access key", fr: "Désactiver la clé d'accès", de: "Zugriffsschlüssel deaktivieren" })}
+          description={t({ en: "Confirm that you want to disable this access key.", fr: "Confirmez que vous voulez désactiver cette clé d'accès.", de: "Bestätigen Sie, dass Sie diesen Zugriffsschlüssel deaktivieren möchten." })}
+          confirmLabel={t({ en: "Disable key", fr: "Désactiver la clé", de: "Schlüssel deaktivieren" })}
           loading={busy === `toggle:${pendingAction.key.access_key_id}`}
           details={[
-            { label: "Access key", value: pendingAction.key.access_key_id, mono: true },
-            { label: "Endpoint", value: state?.s3_endpoint ?? "Configured storage service" },
+            { label: t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" }), value: pendingAction.key.access_key_id, mono: true },
+            { label: t({ en: "Endpoint", fr: "Endpoint", de: "Endpoint" }), value: state?.s3_endpoint ?? t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" }) },
           ]}
           impacts={[
-            "External tools using this key stop authenticating until it is re-enabled.",
-            "The secret value cannot be displayed again from the Portal.",
-            "The active Portal runtime key is not affected.",
+            t({ en: "External tools using this key stop authenticating until it is re-enabled.", fr: "Les outils externes utilisant cette clé ne pourront plus s'authentifier jusqu'à sa réactivation.", de: "Externe Werkzeuge mit diesem Schlüssel können sich nicht authentifizieren, bis er wieder aktiviert wird." }),
+            t({ en: "The secret value cannot be displayed again from the Portal.", fr: "Le secret ne peut plus être affiché depuis le Portal.", de: "Das Secret kann im Portal nicht erneut angezeigt werden." }),
+            t({ en: "The active Portal runtime key is not affected.", fr: "La clé active utilisée par Portal n'est pas affectée.", de: "Der aktive Portal-Laufzeitschlüssel ist nicht betroffen." }),
           ]}
           onCancel={() => setPendingAction(null)}
           onConfirm={() => updateKeyStatus(pendingAction.key, false)}
@@ -349,18 +350,18 @@ export default function PortalAccessKeysPage() {
 
       {pendingAction?.type === "delete" ? (
         <ConfirmActionDialog
-          title="Delete access key"
-          description="Confirm that you want to permanently delete this access key."
-          confirmLabel="Delete key"
+          title={t({ en: "Delete access key", fr: "Supprimer la clé d'accès", de: "Zugriffsschlüssel löschen" })}
+          description={t({ en: "Confirm that you want to permanently delete this access key.", fr: "Confirmez que vous voulez supprimer définitivement cette clé d'accès.", de: "Bestätigen Sie, dass Sie diesen Zugriffsschlüssel dauerhaft löschen möchten." })}
+          confirmLabel={t({ en: "Delete key", fr: "Supprimer la clé", de: "Schlüssel löschen" })}
           loading={busy === `delete:${pendingAction.key.access_key_id}`}
           details={[
-            { label: "Access key", value: pendingAction.key.access_key_id, mono: true },
-            { label: "Endpoint", value: state?.s3_endpoint ?? "Configured storage service" },
+            { label: t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" }), value: pendingAction.key.access_key_id, mono: true },
+            { label: t({ en: "Endpoint", fr: "Endpoint", de: "Endpoint" }), value: state?.s3_endpoint ?? t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" }) },
           ]}
           impacts={[
-            "External tools using this key stop working immediately.",
-            "The secret value cannot be recovered or shown again.",
-            "This deletion cannot be undone from the Portal.",
+            t({ en: "External tools using this key stop working immediately.", fr: "Les outils externes utilisant cette clé cessent immédiatement de fonctionner.", de: "Externe Werkzeuge mit diesem Schlüssel funktionieren sofort nicht mehr." }),
+            t({ en: "The secret value cannot be recovered or shown again.", fr: "Le secret ne peut pas être récupéré ni affiché à nouveau.", de: "Das Secret kann nicht wiederhergestellt oder erneut angezeigt werden." }),
+            t({ en: "This deletion cannot be undone from the Portal.", fr: "Cette suppression ne peut pas être annulée depuis le Portal.", de: "Diese Löschung kann im Portal nicht rückgängig gemacht werden." }),
           ]}
           onCancel={() => setPendingAction(null)}
           onConfirm={() => confirmDeleteKey(pendingAction.key)}

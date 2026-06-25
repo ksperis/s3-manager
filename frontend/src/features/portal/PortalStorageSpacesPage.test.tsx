@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
+import { LanguageProvider } from "../../components/language";
 import PortalStorageSpacesPage from "./PortalStorageSpacesPage";
 
 const mocks = vi.hoisted(() => ({
@@ -109,6 +110,35 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.getByRole("button", { name: "Create storage space" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add existing storage" })).toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
+  });
+
+  it("renders the storage spaces page in French when requested", () => {
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        id: 1,
+        email: "laurent@example.com",
+        display_name: "Laurent",
+        role: "ui_user",
+        authType: "password",
+        ui_language: "fr",
+      })
+    );
+
+    render(
+      <LanguageProvider>
+        <MemoryRouter>
+          <PortalStorageSpacesPage />
+        </MemoryRouter>
+      </LanguageProvider>
+    );
+
+    expect(screen.getByRole("heading", { name: "Espaces de stockage" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Créer un espace de stockage" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ouvrir" })).toHaveAttribute(
+      "href",
+      "/portal/storage-spaces/research-data"
+    );
   });
 
   it("shows distinct states inside the visibility column", () => {

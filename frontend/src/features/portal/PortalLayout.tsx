@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import Layout from "../../components/Layout";
 import type { SidebarSection } from "../../components/Sidebar";
 import { TopbarStaticControl } from "../../components/TopbarControlTrigger";
@@ -13,33 +13,41 @@ import {
   TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS,
   TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
 } from "../../components/topbarControlWidths";
+import { useI18n } from "../../i18n";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 
-const portalNavSections: SidebarSection[] = [
-  {
-    label: "Workspace",
-    links: [
-      { to: "/portal", label: "Dashboard", end: true, icon: <HomeIcon /> },
-      { to: "/portal/storage-spaces", label: "Storage Spaces", icon: <StorageIcon /> },
-      { to: "/portal/shares", label: "Shares", icon: <ShareIcon /> },
-      { to: "/portal/access-keys", label: "Access keys", icon: <KeyIcon /> },
-      { to: "/portal/activity", label: "Activity", icon: <ActivityIcon /> },
-      { to: "/portal/transfers", label: "Transfers", icon: <TransferIcon /> },
-      { to: "/portal/usage", label: "Usage & Analytics", icon: <ChartIcon /> },
-      { to: "/portal/settings", label: "Settings", icon: <SettingsIcon /> },
+function usePortalNavSections(): SidebarSection[] {
+  const { t } = useI18n();
+  return useMemo(
+    () => [
+      {
+        label: t({ en: "Workspace", fr: "Espace de travail", de: "Arbeitsbereich" }),
+        links: [
+          { to: "/portal", label: t({ en: "Dashboard", fr: "Tableau de bord", de: "Dashboard" }), end: true, icon: <HomeIcon /> },
+          { to: "/portal/storage-spaces", label: t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }), icon: <StorageIcon /> },
+          { to: "/portal/shares", label: t({ en: "Shares", fr: "Partages", de: "Freigaben" }), icon: <ShareIcon /> },
+          { to: "/portal/access-keys", label: t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" }), icon: <KeyIcon /> },
+          { to: "/portal/activity", label: t({ en: "Activity", fr: "Activité", de: "Aktivität" }), icon: <ActivityIcon /> },
+          { to: "/portal/transfers", label: t({ en: "Transfers", fr: "Transferts", de: "Transfers" }), icon: <TransferIcon /> },
+          { to: "/portal/usage", label: t({ en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" }), icon: <ChartIcon /> },
+          { to: "/portal/settings", label: t({ en: "Settings", fr: "Paramètres", de: "Einstellungen" }), icon: <SettingsIcon /> },
+        ],
+      },
     ],
-  },
-];
+    [t]
+  );
+}
 
 function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }) {
+  const { t } = useI18n();
   const { accounts, selectedAccount, selectedAccountId, setSelectedAccountId, loading } = usePortalAccountContext();
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const selectedLabel = selectedAccount
     ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
     : loading
-      ? "Loading..."
-      : "No account selected";
+      ? t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })
+      : t({ en: "No account selected", fr: "Aucun compte sélectionné", de: "Kein Konto ausgewählt" });
   const options: TopbarDropdownOption[] = accounts.map((account) => ({
     value: String(account.id),
     label: formatAccountLabel(account, defaultEndpointId, defaultEndpointName, false),
@@ -52,8 +60,8 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
         value={selectedAccountId ?? ""}
         options={options}
         onChange={(value) => setSelectedAccountId(value || null)}
-        ariaLabel="Select portal account"
-        triggerLabel="Account"
+        ariaLabel={t({ en: "Select portal account", fr: "Sélectionner un compte Portal", de: "Portal-Konto auswählen" })}
+        triggerLabel={t({ en: "Account", fr: "Compte", de: "Konto" })}
         placeholder={selectedLabel}
         widthClassName={mode === "icon" ? TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
         menuMinWidthClassName="min-w-[18rem]"
@@ -68,10 +76,10 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
     return (
       <TopbarStaticControl
         mode="icon"
-        label="Account"
+        label={t({ en: "Account", fr: "Compte", de: "Konto" })}
         value={selectedLabel}
         icon={<AccountControlIcon className="h-4 w-4" />}
-        ariaLabel={`Portal account ${selectedLabel}`}
+        ariaLabel={t({ en: `Portal account ${selectedLabel}`, fr: `Compte Portal ${selectedLabel}`, de: `Portal-Konto ${selectedLabel}` })}
         title={selectedLabel}
       />
     );
@@ -79,10 +87,10 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
   return (
     <TopbarStaticControl
       mode="icon_label"
-      label="Account"
+      label={t({ en: "Account", fr: "Compte", de: "Konto" })}
       value={selectedLabel}
       icon={<AccountControlIcon className="h-4 w-4" />}
-      ariaLabel={`Portal account ${selectedLabel}`}
+      ariaLabel={t({ en: `Portal account ${selectedLabel}`, fr: `Compte Portal ${selectedLabel}`, de: `Portal-Konto ${selectedLabel}` })}
       title={selectedLabel}
       className={TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
     />
@@ -90,13 +98,15 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
 }
 
 function PortalShell() {
+  const { t } = useI18n();
+  const portalNavSections = usePortalNavSections();
   const { selectedAccount, loading } = usePortalAccountContext();
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const selectedLabel = selectedAccount
     ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
     : loading
-      ? "Loading..."
-      : "No account selected";
+      ? t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })
+      : t({ en: "No account selected", fr: "Aucun compte sélectionné", de: "Kein Konto ausgewählt" });
   const topbarControlDescriptors: TopbarControlDescriptor[] = [
     {
       id: "account",

@@ -5,12 +5,15 @@
 import type { ReactNode } from "react";
 import type { PortalStorageSpaceVisibility } from "../../api/portal";
 import PageBanner from "../../components/PageBanner";
+import { translate, type I18nMessage } from "../../i18n";
 import type { UiTone } from "../../components/ui/styles";
 import type {
   PortalWorkspaceRole,
   PortalWorkspaceSpace,
   PortalWorkspaceTransfer,
 } from "./portalWorkspaceModel";
+
+type TFunction = (message: I18nMessage) => string;
 
 export function PortalPageState({
   tone = "info",
@@ -73,8 +76,10 @@ export function portalVisibilityTone(visibility: PortalStorageSpaceVisibility): 
   return visibility === "shared" ? "primary" : "neutral";
 }
 
-export function portalVisibilityLabel(visibility: PortalStorageSpaceVisibility): string {
-  return visibility === "shared" ? "Shared" : "Private";
+export function portalVisibilityLabel(visibility: PortalStorageSpaceVisibility, t: TFunction = translate): string {
+  return visibility === "shared"
+    ? t({ en: "Shared", fr: "Partagé", de: "Geteilt" })
+    : t({ en: "Private", fr: "Privé", de: "Privat" });
 }
 
 export type PortalTransferStatusTone = "neutral" | "primary" | "danger" | "success";

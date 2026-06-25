@@ -14,6 +14,7 @@ import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import BrowserEmbed from "../browser/BrowserEmbed";
@@ -26,6 +27,7 @@ import {
   portalStorageSpaceStatusTone,
   resolvePortalWorkspacePageState,
 } from "./portalUi";
+import { portalStatusLabel, portalVisibilityLabel } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 function decodeRouteValue(value?: string): string {
@@ -70,6 +72,7 @@ function ObjectMetricCard({
 }
 
 export default function PortalStorageSpaceDetailPage() {
+  const { t } = useI18n();
   const { spaceId } = useParams();
   const navigate = useNavigate();
   const { generalSettings } = useGeneralSettings();
@@ -109,10 +112,10 @@ export default function PortalStorageSpaceDetailPage() {
         description: metadataDescription.trim() || null,
         visibility: metadataVisibility,
       });
-      setMessage("Storage Space updated.");
+      setMessage(t({ en: "Storage Space updated.", fr: "Espace de stockage mis à jour.", de: "Speicherbereich aktualisiert." }));
     } catch (err) {
       console.error(err);
-      setMessage(extractApiError(err, "Unable to update this Storage Space."));
+      setMessage(extractApiError(err, t({ en: "Unable to update this Storage Space.", fr: "Impossible de mettre à jour cet espace de stockage.", de: "Dieser Speicherbereich kann nicht aktualisiert werden." })));
     } finally {
       setMetadataBusy(false);
     }
@@ -133,7 +136,7 @@ export default function PortalStorageSpaceDetailPage() {
       navigate("/portal/storage-spaces");
     } catch (err) {
       console.error(err);
-      setMessage(extractApiError(err, "Unable to archive this Storage Space."));
+      setMessage(extractApiError(err, t({ en: "Unable to archive this Storage Space.", fr: "Impossible d'archiver cet espace de stockage.", de: "Dieser Speicherbereich kann nicht archiviert werden." })));
       setMetadataBusy(false);
     }
   };
@@ -144,10 +147,10 @@ export default function PortalStorageSpaceDetailPage() {
     setMessage(null);
     try {
       await updatePortalStorageSpace(accountIdForApi, space.id, { archived: false });
-      setMessage("Storage Space restored.");
+      setMessage(t({ en: "Storage Space restored.", fr: "Espace de stockage restauré.", de: "Speicherbereich wiederhergestellt." }));
     } catch (err) {
       console.error(err);
-      setMessage(extractApiError(err, "Unable to restore this Storage Space."));
+      setMessage(extractApiError(err, t({ en: "Unable to restore this Storage Space.", fr: "Impossible de restaurer cet espace de stockage.", de: "Dieser Speicherbereich kann nicht wiederhergestellt werden." })));
     } finally {
       setMetadataBusy(false);
     }
@@ -159,13 +162,13 @@ export default function PortalStorageSpaceDetailPage() {
     accountError,
     error,
     hasAccountContext,
-    loadingMessage: "Loading storage space...",
-    noAccountMessage: "Select an account to view this Storage Space.",
+    loadingMessage: t({ en: "Loading storage space...", fr: "Chargement de l'espace de stockage...", de: "Speicherbereich wird geladen..." }),
+    noAccountMessage: t({ en: "Select an account to view this Storage Space.", fr: "Sélectionnez un compte pour voir cet espace de stockage.", de: "Wählen Sie ein Konto aus, um diesen Speicherbereich anzuzeigen." }),
   });
   if (pageState) return pageState;
 
   if (!space || !accountIdForApi) {
-    return <PortalPageState>Storage Space not available.</PortalPageState>;
+    return <PortalPageState>{t({ en: "Storage Space not available.", fr: "Espace de stockage indisponible.", de: "Speicherbereich nicht verfügbar." })}</PortalPageState>;
   }
 
   const browserAvailable =
@@ -188,29 +191,29 @@ export default function PortalStorageSpaceDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={space.name}
-        description={`${space.description} Created ${space.createdLabel}. Region: ${space.region ?? "-"}.`}
-        breadcrumbs={portalBreadcrumbs({ label: "Storage Spaces", to: "/portal/storage-spaces" }, { label: space.name })}
-        inlineContent={<UiBadge tone={portalStorageSpaceStatusTone(space)}>{space.status}</UiBadge>}
-        actions={!isArchived && space.visibility === "shared" ? [{ label: "Share", to: "/portal/shares", variant: "secondary" }] : []}
+        description={t({ en: `${space.description} Created ${space.createdLabel}. Region: ${space.region ?? "-"}.`, fr: `${space.description} Créé le ${space.createdLabel}. Région : ${space.region ?? "-"}.`, de: `${space.description} Erstellt am ${space.createdLabel}. Region: ${space.region ?? "-"}.` })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }), to: "/portal/storage-spaces" }, { label: space.name })}
+        inlineContent={<UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(space.status, t)}</UiBadge>}
+        actions={!isArchived && space.visibility === "shared" ? [{ label: t({ en: "Share", fr: "Partager", de: "Freigeben" }), to: "/portal/shares", variant: "secondary" }] : []}
       />
 
       {message ? <PageBanner tone="info">{message}</PageBanner> : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <ObjectMetricCard
-          label="Storage used"
+          label={t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" })}
           value={formatBytes(space.usedBytes)}
-          detail={quotaPercent == null ? "Quota unavailable" : `of ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)}%)`}
+          detail={quotaPercent == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `of ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)}%)`, fr: `sur ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)} %)`, de: `von ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)} %)` })}
           progress={quotaPercent ?? undefined}
         />
-        <ObjectMetricCard label="Objects" value={formatCompactNumber(space.objectCount)} detail={space.objectCount == null ? "Unavailable" : "Tracked"} />
-        <ObjectMetricCard label="Average size" value={formatBytes(averageFileSize)} detail="per object" />
-        <ObjectMetricCard label="Last activity" value={lastActivity === "-" ? "-" : "Recent"} detail={lastActivity === "-" ? "No activity available" : `By ${lastActivity}`} />
+        <ObjectMetricCard label={t({ en: "Objects", fr: "Objets", de: "Objekte" })} value={formatCompactNumber(space.objectCount)} detail={space.objectCount == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: "Tracked", fr: "Suivis", de: "Erfasst" })} />
+        <ObjectMetricCard label={t({ en: "Average size", fr: "Taille moyenne", de: "Durchschnittsgröße" })} value={formatBytes(averageFileSize)} detail={t({ en: "per object", fr: "par objet", de: "pro Objekt" })} />
+        <ObjectMetricCard label={t({ en: "Last activity", fr: "Dernière activité", de: "Letzte Aktivität" })} value={lastActivity === "-" ? "-" : t({ en: "Recent", fr: "Récente", de: "Kürzlich" })} detail={lastActivity === "-" ? t({ en: "No activity available", fr: "Aucune activité disponible", de: "Keine Aktivität verfügbar" }) : t({ en: `By ${lastActivity}`, fr: `Par ${lastActivity}`, de: `Von ${lastActivity}` })} />
       </section>
 
       {isArchived ? (
         <PageBanner tone="warning">
-          This Storage Space is archived. Files and public links are suspended until it is restored.
+          {t({ en: "This Storage Space is archived. Files and public links are suspended until it is restored.", fr: "Cet espace de stockage est archivé. Les fichiers et liens publics sont suspendus jusqu'à sa restauration.", de: "Dieser Speicherbereich ist archiviert. Dateien und öffentliche Links sind bis zur Wiederherstellung ausgesetzt." })}
         </PageBanner>
       ) : browserAvailable ? (
         <div className="min-h-[520px] h-[min(72vh,760px)]">
@@ -248,42 +251,42 @@ export default function PortalStorageSpaceDetailPage() {
         </div>
       ) : (
         <PageBanner tone="warning">
-          File browsing is unavailable. Ask an administrator to enable file browsing for this workspace.
+          {t({ en: "File browsing is unavailable. Ask an administrator to enable file browsing for this workspace.", fr: "La navigation dans les fichiers est indisponible. Demandez à un administrateur de l'activer pour ce workspace.", de: "Dateibrowsing ist nicht verfügbar. Bitten Sie einen Administrator, es für diesen Arbeitsbereich zu aktivieren." })}
         </PageBanner>
       )}
 
       {space.role === "Owner" ? (
-        <UiCard title="Storage Space settings">
+        <UiCard title={t({ en: "Storage Space settings", fr: "Paramètres de l'espace de stockage", de: "Speicherbereichseinstellungen" })}>
           <div className="grid gap-3 lg:grid-cols-[220px_1fr_160px_auto_auto]">
             <input
               className="ui-control h-9 text-xs disabled:opacity-70"
               value={metadataName}
               onChange={(event) => setMetadataName(event.target.value)}
-              aria-label="Storage Space name"
+              aria-label={t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
               disabled={!canRename || metadataBusy}
-              title={canRename ? "Storage Space name" : "Name locked for this Storage Space"}
+              title={canRename ? t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" }) : t({ en: "Name locked for this Storage Space", fr: "Nom verrouillé pour cet espace de stockage", de: "Name für diesen Speicherbereich gesperrt" })}
             />
-            <input className="ui-control h-9 text-xs" value={metadataDescription} onChange={(event) => setMetadataDescription(event.target.value)} aria-label="Storage Space description" />
+            <input className="ui-control h-9 text-xs" value={metadataDescription} onChange={(event) => setMetadataDescription(event.target.value)} aria-label={t({ en: "Storage Space description", fr: "Description de l'espace de stockage", de: "Beschreibung des Speicherbereichs" })} />
             <select
               className="ui-control h-9 py-1.5 text-xs"
               value={metadataVisibility}
               onChange={(event) => setMetadataVisibility(event.target.value as PortalStorageSpaceVisibility)}
-              aria-label="Storage Space visibility"
+              aria-label={t({ en: "Storage Space visibility", fr: "Visibilité de l'espace de stockage", de: "Sichtbarkeit des Speicherbereichs" })}
               disabled={metadataBusy || isArchived}
             >
-              <option value="private">Private</option>
-              <option value="shared">Shared</option>
+              <option value="private">{portalVisibilityLabel("private", t)}</option>
+              <option value="shared">{portalVisibilityLabel("shared", t)}</option>
             </select>
             <UiButton disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 px-3 py-1.5">
-              Save
+              {t({ en: "Save", fr: "Enregistrer", de: "Speichern" })}
             </UiButton>
             {isArchived ? (
               <UiButton variant="secondary" disabled={metadataBusy} onClick={handleRestore} className="h-9 px-3 py-1.5">
-                Restore
+                {t({ en: "Restore", fr: "Restaurer", de: "Wiederherstellen" })}
               </UiButton>
             ) : (
               <UiButton variant="warning" disabled={metadataBusy} onClick={handleArchive} className="h-9 px-3 py-1.5">
-                Archive
+                {t({ en: "Archive", fr: "Archiver", de: "Archivieren" })}
               </UiButton>
             )}
           </div>
@@ -292,20 +295,20 @@ export default function PortalStorageSpaceDetailPage() {
 
       {archiveDialogOpen ? (
         <ConfirmActionDialog
-          title="Archive Storage Space"
-          description="Confirm that you want to archive this Storage Space."
-          confirmLabel="Archive Storage Space"
+          title={t({ en: "Archive Storage Space", fr: "Archiver l'espace de stockage", de: "Speicherbereich archivieren" })}
+          description={t({ en: "Confirm that you want to archive this Storage Space.", fr: "Confirmez que vous voulez archiver cet espace de stockage.", de: "Bestätigen Sie, dass Sie diesen Speicherbereich archivieren möchten." })}
+          confirmLabel={t({ en: "Archive Storage Space", fr: "Archiver l'espace de stockage", de: "Speicherbereich archivieren" })}
           loading={metadataBusy}
           details={[
-            { label: "Storage Space", value: space.name },
-            { label: "Status", value: "Can be restored later" },
+            { label: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }), value: space.name },
+            { label: t({ en: "Status", fr: "Statut", de: "Status" }), value: t({ en: "Can be restored later", fr: "Restaurable plus tard", de: "Kann später wiederhergestellt werden" }) },
           ]}
           impacts={[
-            "The Storage Space is removed from active file work until it is restored.",
-            "Existing objects are kept and are not deleted.",
-            "Public links and file access are suspended while archived.",
+            t({ en: "The Storage Space is removed from active file work until it is restored.", fr: "L'espace de stockage est retiré des fichiers actifs jusqu'à sa restauration.", de: "Der Speicherbereich wird bis zur Wiederherstellung aus der aktiven Dateiarbeit entfernt." }),
+            t({ en: "Existing objects are kept and are not deleted.", fr: "Les objets existants sont conservés et ne sont pas supprimés.", de: "Bestehende Objekte bleiben erhalten und werden nicht gelöscht." }),
+            t({ en: "Public links and file access are suspended while archived.", fr: "Les liens publics et l'accès aux fichiers sont suspendus pendant l'archivage.", de: "Öffentliche Links und Dateizugriff sind während der Archivierung ausgesetzt." }),
           ]}
-          warning="Archiving is reversible from this settings section."
+          warning={t({ en: "Archiving is reversible from this settings section.", fr: "L'archivage est réversible depuis cette section de paramètres.", de: "Die Archivierung kann in diesem Einstellungsbereich rückgängig gemacht werden." })}
           onCancel={() => setArchiveDialogOpen(false)}
           onConfirm={confirmArchive}
         />
