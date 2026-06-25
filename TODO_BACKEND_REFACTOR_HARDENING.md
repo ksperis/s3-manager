@@ -50,6 +50,29 @@ rtk python3 backend/scripts/backend_refactor_inventory.py --largest-limit 15
 - Error hardening may reduce client-visible internals, but must preserve useful
   server-side logs and stable status codes.
 
+## Post-Refactor Snapshot
+
+Generated on 2026-06-25 with:
+
+```bash
+cd /Users/laurent/ksperis/s3-manager
+rtk python3 backend/scripts/backend_refactor_inventory.py --largest-limit 15
+```
+
+- Python files under `backend/app`: 263
+- Lines under `backend/app`: 73242
+- Largest top-level areas:
+  - `services`: 85 files, 38823 lines
+  - `routers`: 87 files, 24334 lines
+  - `models`: 40 files, 4724 lines
+- Largest remaining files:
+  - `app/services/bucket_migration/execution.py`: 4003 lines
+  - `app/routers/ceph_admin/buckets.py`: 3867 lines
+  - `app/routers/browser.py`: 2078 lines
+  - `app/services/buckets_service.py`: 1926 lines
+  - `app/services/s3_client.py`: 1754 lines
+- `python scripts/check_vulture.py` reports no confirmed dead code to remove.
+
 ## Incremental Work Items
 
 | ID | Status | Risk | Area | Target | Validation |
@@ -65,7 +88,7 @@ rtk python3 backend/scripts/backend_refactor_inventory.py --largest-limit 15
 | BE-SVC-002 | Done | Medium | Portal service | Split `portal_service.py` into a public facade plus settings, IAM/policy, storage spaces, object access, sharing/public-link, activity/audit, state/usage, access-key, and bucket/user modules. | `backend/tests/test_portal_service.py` and full backend pytest passed. |
 | BE-SVC-003 | Done | Medium | Browser service | Split `browser_service.py` into a public facade plus shared cache/types, context/STS/CORS, transfer, bucket, listing/search, version cleanup, object detail, and object operation modules. | Browser service and route smoke tests passed; full backend pytest passed. |
 | BE-MODEL-001 | Done | Medium | DB/API mapping | Add targeted Portal access-key mapper helpers for repeated IAM/DB-to-API conversions; keep DB and API models separate. | Mapper tests and Portal service tests passed; full backend pytest passed. |
-| BE-CLEAN-001 | Todo | Low | Dead code | Remove only code confirmed by `backend/scripts/check_vulture.py`, updating allowlist only when a dynamic entry is intentionally retained. | `python scripts/check_vulture.py`. |
+| BE-CLEAN-001 | Done | Low | Dead code | `backend/scripts/check_vulture.py` confirms no dead code to remove; final inventory snapshot recorded. No speculative deletion performed. | `python scripts/check_vulture.py`, full backend pytest, `git diff --check`. |
 
 ## Route Audit Hotspots
 
@@ -157,3 +180,6 @@ python scripts/check_vulture.py
 - 2026-06-25: BE-SVC-003 full validation `PYTHONPATH=. .venv/bin/pytest tests -q` -> 1129 passed; `python scripts/check_vulture.py` -> passed; `git diff --check` -> passed.
 - 2026-06-25: BE-MODEL-001 targeted tests `PYTHONPATH=. .venv/bin/pytest tests/test_portal_mappers.py tests/test_portal_service.py -q` -> 67 passed.
 - 2026-06-25: BE-MODEL-001 full validation `PYTHONPATH=. .venv/bin/pytest tests -q` -> 1132 passed; `python scripts/check_vulture.py` -> passed; `git diff --check` -> passed.
+- 2026-06-25: BE-CLEAN-001 inventory `python3 backend/scripts/backend_refactor_inventory.py --largest-limit 15` -> 263 Python files, 73242 app lines, largest file now `app/services/bucket_migration/execution.py` at 4003 lines.
+- 2026-06-25: BE-CLEAN-001 cleanup check `python scripts/check_vulture.py` -> passed; no confirmed dead code to remove.
+- 2026-06-25: BE-CLEAN-001 full validation `PYTHONPATH=. .venv/bin/pytest tests -q` -> 1132 passed; `python scripts/check_vulture.py` -> passed; `git diff --check` -> passed.
