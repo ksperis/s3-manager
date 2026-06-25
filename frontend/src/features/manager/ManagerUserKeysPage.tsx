@@ -4,7 +4,6 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import axios from "axios";
 import { S3AccountSelector } from "../../api/accountParams";
 import {
   AccessKey,
@@ -20,6 +19,7 @@ import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
 
@@ -83,14 +83,7 @@ export default function ManagerUserKeysPage() {
   };
 
   const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
+    return extractApiError(err, "Unexpected error");
   };
 
   const load = async (accountId: S3AccountSelector, targetUser: string) => {

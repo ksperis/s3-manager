@@ -2,9 +2,9 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { useId, useState, type ReactNode } from "react";
 import { cx, type UiTone } from "../../components/ui/styles";
+import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
 
 export type ParsedRawMappingResult = {
@@ -51,10 +51,7 @@ export const BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS = [
 ] as const;
 
 export const extractCompareError = (err: unknown): string => {
-  if (axios.isAxiosError(err)) {
-    return ((err.response?.data as { detail?: string } | undefined)?.detail || err.message || "Unexpected error");
-  }
-  return err instanceof Error ? err.message : "Unexpected error";
+  return extractApiError(err, "Unexpected error");
 };
 
 export const runWithConcurrencySettled = async <T, R>(

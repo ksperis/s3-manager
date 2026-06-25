@@ -2,8 +2,8 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { useEffect, useRef, useState } from "react";
+import { extractApiError } from "../../utils/apiError";
 
 export type S3CredentialsValidationPayload = {
   storage_endpoint_id?: number | null;
@@ -40,13 +40,7 @@ const IDLE_STATE: LiveS3CredentialsValidationState = {
 };
 
 function extractValidationError(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    const detail = (err.response?.data as { detail?: string } | undefined)?.detail;
-    if (typeof detail === "string" && detail.trim()) return detail;
-    if (err.message) return err.message;
-  }
-  if (err instanceof Error && err.message.trim()) return err.message;
-  return "Unable to validate credentials.";
+  return extractApiError(err, "Unable to validate credentials.");
 }
 
 export function useLiveS3CredentialsValidation({

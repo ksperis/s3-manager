@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import axios, { AxiosRequestConfig } from "axios";
+import { reportRuntimeWarning } from "../utils/runtimeDiagnostics";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
@@ -80,7 +81,7 @@ client.interceptors.request.use((config) => {
         }
       }
     } catch (err) {
-      console.warn("Unable to parse stored user payload", err);
+      reportRuntimeWarning("Unable to parse stored user payload", err);
     }
   }
   return config;

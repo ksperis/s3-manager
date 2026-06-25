@@ -99,6 +99,26 @@ describe("streamManagerMigration", () => {
     await expect(streamManagerMigration(11)).rejects.toThrow("stream backend failure");
   });
 
+  it("redacts sensitive migration stream error details", async () => {
+    const responseBody = buildStream([
+      "event: snapshot\n",
+      `data: ${JSON.stringify(SAMPLE_DETAIL)}\n\n`,
+      "event: error\n",
+      'data: {"detail":"copy failed from https://source.internal/bucket/key?X-Amz-Signature=abcdef using secret_key=top-secret"}\n\n',
+    ]);
+    const fetchMock = vi.fn(async () => {
+      return new Response(responseBody, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(streamManagerMigration(11)).rejects.toThrow(
+      "copy failed from [redacted-url] using secret_key=[redacted]"
+    );
+  });
+
   it("throws when stream ends without snapshot payload", async () => {
     const responseBody = buildStream([
       "event: done\n",

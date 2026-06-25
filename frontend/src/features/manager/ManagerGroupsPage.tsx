@@ -4,7 +4,6 @@
  */
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
 import { useS3AccountContext } from "./S3AccountContext";
 import { S3AccountSelector } from "../../api/accountParams";
 import { IAMGroup, attachGroupPolicy, createIamGroup, deleteIamGroup, listIamGroups } from "../../api/managerIamGroups";
@@ -18,6 +17,7 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { extractApiError } from "../../utils/apiError";
 import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
@@ -57,14 +57,7 @@ export default function ManagerGroupsPage() {
   );
 
   const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
+    return extractApiError(err, "Unexpected error");
   };
 
   const load = async (accountId: S3AccountSelector) => {

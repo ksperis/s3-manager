@@ -1,4 +1,5 @@
 import client from "./client";
+import { sanitizeErrorMessage } from "../utils/apiError";
 
 type StreamBucketsOptions<TProgress> = {
   signal?: AbortSignal;
@@ -77,12 +78,12 @@ export async function streamBucketsWithSse<TProgress, TResult>({
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `${streamFailedLabel} with status ${response.status}`);
+    throw new Error(sanitizeErrorMessage(text || `${streamFailedLabel} with status ${response.status}`, streamFailedLabel));
   }
 
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("text/event-stream")) {
-    throw new Error(`Unexpected stream response content type: ${contentType}`);
+    throw new Error("Unexpected stream response format");
   }
   if (!response.body) {
     throw new Error("Streaming response body is unavailable");
@@ -109,7 +110,7 @@ export async function streamBucketsWithSse<TProgress, TResult>({
       resultPayload = payload as unknown as TResult;
     } else if (currentEvent === "error") {
       const detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail ?? payload);
-      throw new Error(detail || streamFailedLabel);
+      throw new Error(sanitizeErrorMessage(detail || streamFailedLabel, streamFailedLabel));
     }
     currentEvent = "message";
   };

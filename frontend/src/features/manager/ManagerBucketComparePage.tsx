@@ -2,7 +2,6 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 
 import { type Bucket, listBuckets } from "../../api/buckets";
@@ -15,14 +14,12 @@ import TableEmptyState from "../../components/TableEmptyState";
 import ManagerTable, { managerTableCheckboxCellClass, managerTablePrimaryCellClass } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { extractApiError } from "../../utils/apiError";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
 import { useS3AccountContext } from "./S3AccountContext";
 
 function extractError(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    return (error.response?.data as { detail?: string } | undefined)?.detail || error.message || "Request failed";
-  }
-  return error instanceof Error ? error.message : "Request failed";
+  return extractApiError(error, "Request failed");
 }
 
 export default function ManagerBucketComparePage() {

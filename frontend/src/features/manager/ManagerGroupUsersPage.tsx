@@ -4,7 +4,6 @@
  */
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import axios from "axios";
 import { S3AccountSelector } from "../../api/accountParams";
 import { IAMUser, listIamUsers } from "../../api/managerIamUsers";
 import { addIamGroupUser, listIamGroupUsers, removeIamGroupUser } from "../../api/managerIamGroups";
@@ -13,6 +12,7 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 
 export default function ManagerGroupUsersPage() {
@@ -50,14 +50,7 @@ export default function ManagerGroupUsersPage() {
   }, [groupName]);
 
   const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
+    return extractApiError(err, "Unexpected error");
   };
 
   const load = async (accountId: S3AccountSelector, targetGroup: string) => {

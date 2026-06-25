@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
+import { sanitizeErrorMessage } from "../utils/apiError";
 
 export type BucketMigrationMode = "one_shot" | "pre_sync";
 export type BucketMigrationStatus =
@@ -270,12 +271,12 @@ export async function streamManagerMigration(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Migration stream failed with status ${response.status}`);
+    throw new Error(sanitizeErrorMessage(text || `Migration stream failed with status ${response.status}`, "Migration stream failed"));
   }
 
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("text/event-stream")) {
-    throw new Error(`Unexpected stream response content type: ${contentType}`);
+    throw new Error("Unexpected stream response format");
   }
   if (!response.body) {
     throw new Error("Streaming response body is unavailable");
@@ -304,7 +305,7 @@ export async function streamManagerMigration(
       options?.onDone?.(payload as unknown as ManagerMigrationStreamDone);
     } else if (currentEvent === "error") {
       const detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail ?? payload);
-      throw new Error(detail || "Migration stream failed");
+      throw new Error(sanitizeErrorMessage(detail || "Migration stream failed", "Migration stream failed"));
     }
     currentEvent = "message";
   };

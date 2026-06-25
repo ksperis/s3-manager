@@ -2,7 +2,6 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
@@ -15,6 +14,7 @@ import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKey
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
 
@@ -39,12 +39,7 @@ const UNIT_FACTORS: Record<QuotaUnit, number> = {
   TiB: 1024 ** 4,
 };
 
-const extractError = (err: unknown): string => {
-  if (axios.isAxiosError(err)) {
-    return ((err.response?.data as { detail?: string } | undefined)?.detail || err.message || "Unexpected error");
-  }
-  return err instanceof Error ? err.message : "Unexpected error";
-};
+const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
 const parseOptionalInt = (value: string): number | null => {
   const trimmed = value.trim();

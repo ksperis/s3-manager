@@ -950,9 +950,7 @@ export default function BucketDetailPage({
         restrict_public_buckets: Boolean(data.restrict_public_buckets),
       });
     } catch (err) {
-      const message =
-        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
-        "Unable to load public access block settings.";
+      const message = extractApiError(err, "Unable to load public access block settings.");
       setPublicAccessError(message);
       setPublicAccessBlock({ ...defaultPublicAccessBlock });
       setPublicAccessSnapshot({ ...defaultPublicAccessBlock });
@@ -1081,9 +1079,7 @@ export default function BucketDetailPage({
       setReplicationRole("");
       setReplicationRules([createEmptyGraphicalReplicationRule()]);
       setReplicationWarning(null);
-      const message =
-        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
-        "Unable to load bucket replication configuration.";
+      const message = extractApiError(err, "Unable to load bucket replication configuration.");
       setReplicationError(message);
     } finally {
       setReplicationLoading(false);
@@ -1142,9 +1138,7 @@ export default function BucketDetailPage({
       setBucketTags(normalized);
       setBucketTagsSnapshot(normalized);
     } catch (err) {
-      const message =
-        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
-        "Unable to load bucket tags.";
+      const message = extractApiError(err, "Unable to load bucket tags.");
       setBucketTagsError(message);
       setBucketTags([]);
       setBucketTagsSnapshot([]);
@@ -1481,11 +1475,7 @@ export default function BucketDetailPage({
           setLifecycleStatus("Lifecycle updated");
         }
       } catch (err) {
-        const message = axios.isAxiosError(err)
-          ? ((err.response?.data as { detail?: string })?.detail || err.message || "Invalid or unsaved lifecycle.")
-          : err instanceof Error
-            ? err.message
-            : "Invalid or unsaved lifecycle.";
+        const message = extractApiError(err, "Invalid or unsaved lifecycle.");
         setLifecycleError(message);
       } finally {
         setSavingLifecycle(false);
@@ -2124,9 +2114,7 @@ export default function BucketDetailPage({
       });
       setPublicAccessStatus("Public access block updated.");
     } catch (err) {
-      const message =
-        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
-        "Unable to update public access block.";
+      const message = extractApiError(err, "Unable to update public access block.");
       setPublicAccessError(message);
     } finally {
       setSavingPublicAccess(false);
@@ -2309,11 +2297,7 @@ export default function BucketDetailPage({
         setBucketTagsStatus("Bucket tags updated.");
       }
     } catch (err) {
-      const message = axios.isAxiosError(err)
-        ? ((err.response?.data as { detail?: string })?.detail || err.message || "Unable to update bucket tags.")
-        : err instanceof Error
-          ? err.message
-          : "Unable to update bucket tags.";
+      const message = extractApiError(err, "Unable to update bucket tags.");
       setBucketTagsError(message);
     } finally {
       setSavingBucketTags(false);
@@ -2338,11 +2322,7 @@ export default function BucketDetailPage({
       setBucketTagsSnapshot([]);
       setBucketTagsStatus("Bucket tags cleared.");
     } catch (err) {
-      const message = axios.isAxiosError(err)
-        ? ((err.response?.data as { detail?: string })?.detail || err.message || "Unable to clear bucket tags.")
-        : err instanceof Error
-          ? err.message
-          : "Unable to clear bucket tags.";
+      const message = extractApiError(err, "Unable to clear bucket tags.");
       setBucketTagsError(message);
     } finally {
       setDeletingBucketTags(false);
@@ -2525,9 +2505,7 @@ export default function BucketDetailPage({
       );
       setReplicationStatus("Replication configuration updated.");
     } catch (err) {
-      const message =
-        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
-        "Unable to update bucket replication configuration.";
+      const message = extractApiError(err, "Unable to update bucket replication configuration.");
       setReplicationError(message);
     } finally {
       setSavingReplication(false);
@@ -2555,9 +2533,7 @@ export default function BucketDetailPage({
       setReplicationWarning(null);
       setReplicationStatus("Replication configuration cleared.");
     } catch (err) {
-      const message =
-        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
-        "Unable to clear bucket replication configuration.";
+      const message = extractApiError(err, "Unable to clear bucket replication configuration.");
       setReplicationError(message);
     } finally {
       setClearingReplication(false);
@@ -2588,9 +2564,7 @@ export default function BucketDetailPage({
         setBucketAclCustom("");
       }
     } catch (err) {
-      const message =
-        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
-        "Unable to update bucket ACL.";
+      const message = extractApiError(err, "Unable to update bucket ACL.");
       setBucketAclError(message);
     } finally {
       setSavingBucketAcl(false);
@@ -2656,11 +2630,7 @@ export default function BucketDetailPage({
       applyWebsiteState(saved);
       setWebsiteStatus("Website configuration updated.");
     } catch (err) {
-      const message = axios.isAxiosError(err)
-        ? ((err.response?.data as { detail?: string })?.detail || err.message || "Unable to update website configuration.")
-        : err instanceof Error
-          ? err.message
-          : "Unable to update website configuration.";
+      const message = extractApiError(err, "Unable to update website configuration.");
       setWebsiteError(message);
     } finally {
       setSavingWebsite(false);

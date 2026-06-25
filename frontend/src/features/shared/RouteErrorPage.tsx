@@ -7,6 +7,7 @@ import { useRouteError } from "react-router-dom";
 import FullPageStatus from "../../components/FullPageStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { classifyRouteError, resolveRouteErrorHomePath } from "../../utils/routeError";
+import { reportRuntimeError } from "../../utils/runtimeDiagnostics";
 
 export default function RouteErrorPage() {
   const error = useRouteError();
@@ -16,7 +17,7 @@ export default function RouteErrorPage() {
   const isBackendUnavailable = errorKind === "backend_unavailable";
 
   useEffect(() => {
-    console.error("Unhandled route error", error);
+    reportRuntimeError("Unhandled route error", error);
   }, [error]);
 
   return (

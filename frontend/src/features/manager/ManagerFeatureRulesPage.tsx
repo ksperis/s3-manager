@@ -2,7 +2,6 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import ListToolbar from "../../components/ListToolbar";
@@ -31,6 +30,7 @@ import {
   listFeatureRuleInventory,
 } from "../../api/buckets";
 import { S3AccountSelector } from "../../api/accountParams";
+import { extractApiError } from "../../utils/apiError";
 import { useS3AccountContext } from "./S3AccountContext";
 
 type StatusFilter = "all" | FeatureRuleInventoryStatus;
@@ -68,10 +68,7 @@ const statusLabel: Record<FeatureRuleInventoryStatus, string> = {
 };
 
 function extractError(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    return (err.response?.data as { detail?: string })?.detail || err.message || "Unexpected error";
-  }
-  return err instanceof Error ? err.message : "Unexpected error";
+  return extractApiError(err, "Unexpected error");
 }
 
 function ruleSearchText(row: FeatureRuleInventoryBucket): string {

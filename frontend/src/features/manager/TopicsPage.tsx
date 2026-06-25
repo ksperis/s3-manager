@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
@@ -25,6 +24,7 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { extractApiError } from "../../utils/apiError";
 import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { useS3AccountContext } from "./S3AccountContext";
@@ -172,14 +172,7 @@ export default function TopicsPage() {
   const [attributesStatus, setAttributesStatus] = useState<string | null>(null);
 
   const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
+    return extractApiError(err, "Unexpected error");
   };
 
   const applyAttributesConfiguration = (configuration: Record<string, unknown> | null | undefined) => {

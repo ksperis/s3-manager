@@ -6503,13 +6503,7 @@ export default function BrowserPage({
       await refreshBucketList({ preferredBucket: bucketNameInput });
       void loadBucketInspectorData(true);
     } catch (err) {
-      const message = axios.isAxiosError(err)
-        ? (err.response?.data as { detail?: string })?.detail ||
-          err.message ||
-          "Unable to create bucket."
-        : err instanceof Error
-          ? err.message
-          : "Unable to create bucket.";
+      const message = extractApiError(err, "Unable to create bucket.");
       setCreateBucketError(message);
     } finally {
       setCreateBucketLoading(false);

@@ -80,4 +80,22 @@ describe("streamStorageOpsBuckets", () => {
       streamStorageOpsBuckets(1, { page: 1, page_size: 25, advanced_filter: '{"match":"all","rules":[]}' })
     ).rejects.toThrow("backend timeout");
   });
+
+  it("redacts sensitive stream error details", async () => {
+    const responseBody = buildStream([
+      "event: error\n",
+      'data: {"detail":"failed against https://rgw.internal.local:7480 with token=secret-token and access_key=AKIAIOSFODNN7EXAMPLE"}\n\n',
+    ]);
+    const fetchMock = vi.fn(async () => {
+      return new Response(responseBody, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      streamStorageOpsBuckets(1, { page: 1, page_size: 25, advanced_filter: '{"match":"all","rules":[]}' })
+    ).rejects.toThrow("failed against [redacted-url] with token=[redacted] and access_key=[redacted]");
+  });
 });

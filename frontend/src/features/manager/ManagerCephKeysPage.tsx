@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useState } from "react";
-import axios from "axios";
 
 import {
   createManagerCephAccessKey,
@@ -20,6 +19,7 @@ import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { useS3AccountContext } from "./S3AccountContext";
 
@@ -42,10 +42,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 function parseError(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    return (err.response?.data as { detail?: string })?.detail || err.message || "Unexpected error";
-  }
-  return err instanceof Error ? err.message : "Unexpected error";
+  return extractApiError(err, "Unexpected error");
 }
 
 function isKeyActive(key: ManagerCephAccessKey): boolean {

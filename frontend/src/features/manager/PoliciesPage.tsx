@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import { useS3AccountContext } from "./S3AccountContext";
 import { S3AccountSelector } from "../../api/accountParams";
 import { IamPolicy, createIamPolicy, listIamPolicies } from "../../api/managerIamPolicies";
@@ -15,6 +14,7 @@ import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
+import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 
 const DEFAULT_POLICY_DOCUMENT = JSON.stringify(
@@ -44,14 +44,7 @@ export default function PoliciesPage() {
   );
 
   const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
+    return extractApiError(err, "Unexpected error");
   };
 
   const load = async (accountId: S3AccountSelector) => {

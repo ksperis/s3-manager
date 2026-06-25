@@ -3,9 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import { InlinePolicy } from "../../api/managerIamPolicies";
 import { confirmAction } from "../../utils/confirm";
+import { extractApiError } from "../../utils/apiError";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { summarizeInlinePolicyDocument } from "./inlinePolicySummary";
@@ -62,14 +62,7 @@ export default function InlinePolicyEditor({
   }, [activePolicyName, replacementTarget, trimmedName]);
 
   const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
+    return extractApiError(err, "Unexpected error");
   };
 
   const formatPolicyText = (policy?: InlinePolicy) => {

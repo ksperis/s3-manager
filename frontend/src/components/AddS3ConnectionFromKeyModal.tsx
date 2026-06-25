@@ -2,11 +2,11 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createConnection } from "../api/connections";
 import { listStorageEndpoints, StorageEndpoint } from "../api/storageEndpoints";
 import { notifyExecutionContextsRefresh } from "../utils/executionContextRefresh";
+import { extractApiError } from "../utils/apiError";
 import { stableSignature } from "../utils/stableSignature";
 import Modal from "./Modal";
 import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
@@ -52,12 +52,7 @@ const normalizeProviderHint = (value?: string | null): string => {
 
 const normalizeEndpointUrl = (value?: string | null): string => (value || "").trim().replace(/\/+$/, "");
 
-const extractError = (err: unknown): string => {
-  if (axios.isAxiosError(err)) {
-    return ((err.response?.data as { detail?: string } | undefined)?.detail || err.message || "Unexpected error");
-  }
-  return err instanceof Error ? err.message : "Unexpected error";
-};
+const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
 export default function AddS3ConnectionFromKeyModal({
   isOpen,

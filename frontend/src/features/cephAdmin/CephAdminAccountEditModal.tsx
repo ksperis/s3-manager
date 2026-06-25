@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
@@ -18,6 +17,7 @@ import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import UsageTile from "../../components/UsageTile";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { buildCephAdminQuotaPatch } from "./quotaPatch";
 
@@ -33,12 +33,7 @@ type QuotaUnit = "MiB" | "GiB" | "TiB";
 
 type TabId = "overview" | "config" | "metrics";
 
-const extractError = (err: unknown): string => {
-  if (axios.isAxiosError(err)) {
-    return ((err.response?.data as { detail?: string } | undefined)?.detail || err.message || "Unexpected error");
-  }
-  return err instanceof Error ? err.message : "Unexpected error";
-};
+const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
 const formatBytes = (value?: number | null) => {
   if (value === undefined || value === null) return "-";

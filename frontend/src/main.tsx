@@ -10,8 +10,10 @@ import { ThemeProvider } from "./components/theme";
 import { GeneralSettingsProvider } from "./components/GeneralSettingsContext";
 import { LanguageProvider } from "./components/language";
 import { bootstrapBranding } from "./components/ui/brandingRuntime";
+import { installConsoleRedaction } from "./utils/runtimeDiagnostics";
 
 const root = document.getElementById("root");
+installConsoleRedaction();
 void bootstrapBranding();
 
 ReactDOM.createRoot(root as HTMLElement).render(

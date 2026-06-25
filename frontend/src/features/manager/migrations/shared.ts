@@ -2,14 +2,13 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
-
 import type {
   BucketMigrationDetail,
   BucketMigrationPrecheckReport,
   BucketMigrationPrecheckStatus,
   BucketMigrationStatus,
 } from "../../../api/managerMigrations";
+import { extractApiError } from "../../../utils/apiError";
 
 export type ReviewItemMessage = {
   code?: string;
@@ -48,10 +47,7 @@ export type NextAction = {
 };
 
 export function extractError(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    return (error.response?.data as { detail?: string } | undefined)?.detail || error.message || "Request failed";
-  }
-  return error instanceof Error ? error.message : "Request failed";
+  return extractApiError(error, "Request failed");
 }
 
 export function statusChipClasses(status: BucketMigrationStatus): string {

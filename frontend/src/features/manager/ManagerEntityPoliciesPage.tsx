@@ -4,13 +4,13 @@
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import axios from "axios";
 import type { S3AccountSelector } from "../../api/accountParams";
 import { IamPolicy, listIamPolicies } from "../../api/managerIamPolicies";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import InlinePolicyEditor from "./InlinePolicyEditor";
 import { useS3AccountContext } from "./S3AccountContext";
@@ -70,10 +70,7 @@ const ENTITY_CONFIG: Record<ManagerPolicyEntityType, EntityPageConfig> = {
 };
 
 function extractError(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    return (err.response?.data as { detail?: string })?.detail || err.message || "Unexpected error";
-  }
-  return err instanceof Error ? err.message : "Unexpected error";
+  return extractApiError(err, "Unexpected error");
 }
 
 export default function ManagerEntityPoliciesPage({
