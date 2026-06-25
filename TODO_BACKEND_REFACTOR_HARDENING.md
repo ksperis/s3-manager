@@ -15,10 +15,10 @@ rtk python3 backend/scripts/backend_refactor_inventory.py --largest-limit 15
 ```
 
 - Python files under `backend/app`: 221
-- Lines under `backend/app`: 72546
+- Lines under `backend/app`: 72561
 - Largest top-level areas:
-  - `services`: 54 files, 38411 lines
-  - `routers`: 76 files, 24050 lines
+  - `services`: 54 files, 38421 lines
+  - `routers`: 76 files, 24055 lines
   - `models`: 40 files, 4724 lines
   - `db`: 21 files, 1687 lines
 - Largest files:
@@ -31,10 +31,10 @@ rtk python3 backend/scripts/backend_refactor_inventory.py --largest-limit 15
   - `app/services/s3_client.py`: 1754 lines
   - `app/routers/dependencies.py`: 1370 lines
 - Hardening/refactor signals:
-  - `detail=str(exc)`: 147 occurrences in 35 files
+  - `detail=str(exc)`: 63 occurrences in 28 files
   - `message=str(exc)`: 16 occurrences in 4 files
   - `except Exception as exc`: 95 occurrences in 29 files
-  - `raise HTTPException`: 537 occurrences in 57 files
+  - `raise HTTPException`: 451 occurrences in 55 files
   - `record_action`: 174 occurrences in 29 files
 - DB/API model filename overlaps: 15 names
   - `api_token`, `audit`, `billing`, `bucket_migration`, `bucket_usage_stats`,
@@ -56,7 +56,7 @@ rtk python3 backend/scripts/backend_refactor_inventory.py --largest-limit 15
 | --- | --- | --- | --- | --- | --- |
 | BE-HARD-001 | Done | Low | Inventory | Add reproducible backend refactor inventory script and this tracking file. | Run `backend/scripts/backend_refactor_inventory.py`. |
 | BE-HARD-002 | Done | Low | Error handling | Consolidate `RuntimeError`/`ValueError` to HTTPException mapping through `app/routers/http_errors.py`; first slice applied to `manager/topics.py` and the shared bucket config action seam. | `backend/tests/test_http_errors.py`; full backend pytest. |
-| BE-HARD-003 | Todo | Medium | Error handling | Continue replacing risky `detail=str(exc)` and `message=str(exc)` exposures in routers, prioritizing Ceph Admin users/accounts, Manager IAM, auth, and migrations. | Per-router tests plus full backend pytest. |
+| BE-HARD-003 | Done | Medium | Error handling | Continue replacing risky `detail=str(exc)` and `message=str(exc)` exposures in routers, prioritizing Ceph Admin users/accounts, Manager IAM, auth, and migrations. | Per-router tests plus full backend pytest. |
 | BE-HARD-004 | Todo | Medium | SSE errors | Re-audit stream handlers and long-running tools so unexpected failures send generic client errors while logs retain sanitized context. | Stream tests for Browser, Ceph Admin, Storage Ops, migration, purge, integrity. |
 | BE-AUDIT-001 | Todo | Medium | Audit | Build and review a mutating-route audit matrix; confirm actor, scope, action, entity, account context, and executor/workflow identifiers where relevant. | Static matrix plus targeted route tests. |
 | BE-BUCKET-001 | Todo | Medium | Bucket config | Extend the shared bucket config action seam so Manager, Browser, Storage Ops, and Ceph Admin reuse the same error/audit mapping where contracts are identical. | Bucket config tests and route snapshot before/after. |
@@ -113,3 +113,5 @@ python scripts/check_vulture.py
 - 2026-06-25: `PYTHONPATH=. .venv/bin/pytest tests -q` -> 1117 passed.
 - 2026-06-25: `python scripts/check_vulture.py` -> passed.
 - 2026-06-25: `git diff --check` -> passed.
+- 2026-06-25: BE-HARD-003 targeted tests `PYTHONPATH=. .venv/bin/pytest tests/test_http_errors.py tests/test_auth_ldap.py tests/test_api_tokens.py tests/test_manager_ceph_keys_router.py tests/test_ceph_admin_accounts_listing.py tests/test_ceph_admin_users_listing.py tests/test_bucket_migration_service.py -q` -> 144 passed.
+- 2026-06-25: BE-HARD-003 full validation `PYTHONPATH=. .venv/bin/pytest tests -q` -> 1123 passed; `python scripts/check_vulture.py` -> passed; `git diff --check` -> passed.

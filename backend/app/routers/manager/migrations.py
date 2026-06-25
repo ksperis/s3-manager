@@ -29,6 +29,7 @@ from app.routers.dependencies import (
     get_audit_logger,
     get_current_bucket_migration_scope,
 )
+from app.routers.http_errors import raise_http_exception_from_exception
 from app.services.audit_service import AuditService
 from app.services.bucket_migration_service import BucketMigrationService, get_bucket_migration_worker
 
@@ -214,7 +215,7 @@ def get_migration(
     try:
         migration = service.get_migration(migration_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
     items = service.list_migration_items(migration.id)
     recent_events = service.list_recent_migration_events(migration.id, limit=events_limit)
     return _migration_to_detail(migration, items=items, recent_events=recent_events)
@@ -232,7 +233,7 @@ async def stream_migration(
         try:
             service.get_migration(migration_id)
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
 
     async def event_generator():
         stream_event_id = 0
@@ -353,9 +354,9 @@ def create_migration(
     try:
         migration = service.create_migration(payload, current_user)
     except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_403_FORBIDDEN, exc)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
 
     audit.record_action(
         user=current_user,
@@ -393,7 +394,7 @@ def update_migration(
     try:
         migration = service.update_draft_migration(migration_id, payload)
     except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_403_FORBIDDEN, exc)
     except ValueError as exc:
         message = str(exc)
         error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
@@ -434,7 +435,7 @@ def run_migration_precheck(
     try:
         migration = service.run_precheck(migration_id)
     except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_403_FORBIDDEN, exc)
     except ValueError as exc:
         message = str(exc)
         error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
@@ -464,7 +465,7 @@ def start_migration(
     try:
         migration = service.start_migration(migration_id)
     except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_403_FORBIDDEN, exc)
     except ValueError as exc:
         message = str(exc)
         error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST

@@ -12,6 +12,7 @@ from app.routers.dependencies import (
     get_audit_logger,
     require_iam_capable_manager,
 )
+from app.routers.http_errors import raise_http_exception_from_exception
 from app.routers.manager.iam_common import (
     ensure_inline_policy_name,
     get_account_and_service,
@@ -34,7 +35,7 @@ def list_users(
     try:
         return service.list_users()
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.post("", response_model=IAMUserWithKey, status_code=status.HTTP_201_CREATED)
@@ -75,7 +76,7 @@ def create_user(
         )
         return IAMUserWithKey(**created_user.model_dump(), access_key=created_key)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.delete("/{user_name}", status_code=status.HTTP_204_NO_CONTENT)
@@ -97,7 +98,7 @@ def delete_user(
             account=account,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.get("/{user_name}/keys", response_model=list[AccessKey])
@@ -110,7 +111,7 @@ def list_access_keys(
     try:
         return service.list_access_keys(user_name)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.post("/{user_name}/keys", response_model=AccessKey, status_code=status.HTTP_201_CREATED)
@@ -134,7 +135,7 @@ def create_access_key(
         )
         return key
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.put("/{user_name}/keys/{access_key_id}/status", response_model=AccessKey)
@@ -167,7 +168,7 @@ def update_access_key_status(
             return updated
         return AccessKey(access_key_id=access_key_id, status=status_value)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.delete("/{user_name}/keys/{access_key_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -191,7 +192,7 @@ def delete_access_key(
             metadata={"access_key_id": access_key_id},
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.get("/{user_name}/inline-policies", response_model=list[InlinePolicy])
@@ -208,7 +209,7 @@ def list_user_inline_policies(
             get_policy_fn=service.get_user_inline_policy,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.put("/{user_name}/inline-policies/{policy_name}", response_model=InlinePolicy)
@@ -241,7 +242,7 @@ def put_user_inline_policy(
         )
         return saved
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.delete("/{user_name}/inline-policies/{policy_name}", status_code=status.HTTP_204_NO_CONTENT)
@@ -265,7 +266,7 @@ def delete_user_inline_policy(
             metadata={"policy_name": policy_name},
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.get("/{user_name}/policies", response_model=list[Policy])
@@ -278,7 +279,7 @@ def list_user_policies(
     try:
         return service.list_user_policies(user_name)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.post("/{user_name}/policies", response_model=Policy, status_code=status.HTTP_201_CREATED)
@@ -303,7 +304,7 @@ def attach_user_policy(
         )
         return resolve_attached_policy(payload, get_policy_fn=service.get_policy)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.delete("/{user_name}/policies/{policy_arn:path}", status_code=status.HTTP_204_NO_CONTENT)
@@ -327,4 +328,4 @@ def detach_user_policy(
             metadata={"policy_arn": policy_arn},
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)

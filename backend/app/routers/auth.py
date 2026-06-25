@@ -23,6 +23,7 @@ from app.models.oidc import (
 from app.models.ldap import LDAPLoginRequest, LDAPProviderInfo
 from app.models.user import UserCreate, UserOut
 from app.routers.dependencies import get_audit_logger, get_current_super_admin, get_current_ui_superadmin
+from app.routers.http_errors import raise_http_exception_from_exception
 from app.services.audit_service import AuditService
 from app.services.api_token_service import ApiTokenError, ApiTokenNotFoundError, ApiTokenService
 from app.services.oidc_service import (
@@ -153,7 +154,7 @@ def create_api_token(
             expires_in_days=payload.expires_in_days,
         )
     except ApiTokenError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
     audit_service.record_action(
         user=current_user,
         scope="auth",
@@ -179,7 +180,7 @@ def revoke_api_token(
     try:
         row = service.revoke_for_user(user_id=current_user.id, token_id=token_id)
     except ApiTokenNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
     audit_service.record_action(
         user=current_user,
         scope="auth",
@@ -200,7 +201,7 @@ def register_admin(
         user = users_service.create_super_admin(payload)
         return users_service.user_to_out(user)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -330,7 +331,7 @@ def login_with_ldap(
     try:
         user, created = ldap_service.authenticate(provider_key, username, payload.password)
     except LDAPProviderNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
     except LDAPConfigurationError as exc:
         audit_service.record_action(
             user=existing_user,
@@ -369,7 +370,7 @@ def login_with_ldap(
             user_agent=user_agent,
             request_id=request_id,
         )
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_403_FORBIDDEN, exc)
     except LDAPAuthenticationError as exc:
         audit_service.record_action(
             user=existing_user,
@@ -439,7 +440,7 @@ def login_with_s3_keys(
             try:
                 endpoint_url = validate_custom_login_s3_endpoint(endpoint_url)
             except ValueError as exc:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
             custom_endpoint_used = True
         elif general.allow_login_endpoint_list:
             service = get_storage_endpoints_service(db)
@@ -457,7 +458,7 @@ def login_with_s3_keys(
             endpoint_url,
         )
     except SessionIntrospectionError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_401_UNAUTHORIZED, exc)
 
     principal = session_service.create_session(
         access_key=payload.access_key,
@@ -536,9 +537,9 @@ def start_oidc_login(
     try:
         return oidc_service.start_login(provider_id, redirect_path)
     except OIDCProviderNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
     except OIDCConfigurationError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
 
 
 @router.post("/oidc/{provider_id}/callback", response_model=OidcCallbackResponse)
@@ -553,11 +554,11 @@ def complete_oidc_login(
     try:
         user, redirect_path, created = oidc_service.complete_login(provider_id, payload.code, payload.state)
     except OIDCProviderNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
     except OIDCStateError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
     except (OIDCConfigurationError, OIDCAuthenticationError) as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_401_UNAUTHORIZED, exc)
 
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     token = create_access_token(

@@ -50,6 +50,7 @@ from app.routers.ceph_admin.listing_common import (
     stream_listing_response as _common_stream_listing_response,
 )
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
+from app.routers.http_errors import raise_http_exception_from_exception
 from app.services.rgw_admin import RGWAdminError
 from app.services.bucket_listing_shared import _is_advanced_filter_stream_payload as _shared_is_advanced_filter_stream_payload
 from app.utils.quota_stats import extract_quota_limits
@@ -350,7 +351,7 @@ def _enrich_accounts(
         try:
             payload = ctx.rgw_admin.get_account(account.account_id, allow_not_found=True)
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         if payload and not payload.get("not_found"):
             if "profile" in requested:
                 if not account.account_name:
@@ -373,7 +374,7 @@ def _enrich_accounts(
                 try:
                     buckets_payload = ctx.rgw_admin.get_all_buckets(account_id=account.account_id, with_stats=True)
                 except RGWAdminError as exc:
-                    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+                    raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
                 _bucket_usage, total_bytes, total_objects, _bucket_count = summarize_bucket_usage(
                     extract_bucket_list(buckets_payload)
                 )
@@ -407,7 +408,7 @@ def _get_cached_rgw_accounts_payload(ctx: CephAdminContext) -> list[Any]:
             except TypeError:
                 payload = ctx.rgw_admin.list_accounts()
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         return payload or []
 
     return _common_get_or_set_cache(
@@ -765,7 +766,7 @@ def _load_account_payload(account_id: str, ctx: CephAdminContext) -> dict[str, A
     try:
         payload = ctx.rgw_admin.get_account(normalized_account_id, allow_not_found=True)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     if not payload or (isinstance(payload, dict) and payload.get("not_found")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="RGW account not found")
     if not isinstance(payload, dict):
@@ -796,7 +797,7 @@ def create_rgw_account(
             extra_params=payload.extra_params or None,
         )
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     if isinstance(create_result, dict):
         if create_result.get("conflict"):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="RGW account already exists")
@@ -835,7 +836,7 @@ def create_rgw_account(
                 enabled=bool(payload.quota_enabled) if payload.quota_enabled is not None else True,
             )
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         if isinstance(quota_result, dict) and (quota_result.get("not_found") or quota_result.get("not_implemented")):
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -856,7 +857,7 @@ def create_rgw_account(
                 enabled=bool(payload.bucket_quota_enabled) if payload.bucket_quota_enabled is not None else True,
             )
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         if isinstance(quota_result, dict) and (quota_result.get("not_found") or quota_result.get("not_implemented")):
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -939,7 +940,7 @@ def update_rgw_account_config(
                     detail="RGW account update is not supported on this cluster",
                 )
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
     should_update_quota = bool(
         {"quota_enabled", "quota_max_size_bytes", "quota_max_objects"} & field_set
@@ -969,7 +970,7 @@ def update_rgw_account_config(
                     detail="RGW account quota update is not supported on this cluster",
                 )
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
     should_update_bucket_quota = bool(
         {"bucket_quota_enabled", "bucket_quota_max_size_bytes", "bucket_quota_max_objects"} & field_set
@@ -1000,7 +1001,7 @@ def update_rgw_account_config(
                     detail="RGW bucket quota update is not supported on this cluster",
                 )
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
     _invalidate_accounts_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     payload = _load_account_payload(normalized_account_id, ctx)
@@ -1020,7 +1021,7 @@ def get_rgw_account_metrics(
     try:
         payload = ctx.rgw_admin.get_all_buckets(account_id=normalized_account_id, with_stats=True)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
     bucket_usage, total_bytes, total_objects, bucket_count = summarize_bucket_usage(extract_bucket_list(payload))
     bucket_usage.sort(key=lambda item: item.get("used_bytes") or 0, reverse=True)

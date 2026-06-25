@@ -13,6 +13,7 @@ from app.routers.dependencies import (
     get_audit_logger,
     require_iam_capable_manager,
 )
+from app.routers.http_errors import raise_http_exception_from_exception
 from app.routers.manager.iam_common import (
     ensure_inline_policy_name,
     get_account_and_service,
@@ -48,7 +49,7 @@ def list_roles(
     try:
         return service.list_roles()
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.post("", response_model=IAMRole, status_code=status.HTTP_201_CREATED)
@@ -81,7 +82,7 @@ def create_role(
         )
         return result
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.get("/{role_name}", response_model=IAMRole)
@@ -94,7 +95,7 @@ def get_role(
     try:
         role = service.get_role(role_name)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
     return role
@@ -119,7 +120,7 @@ def delete_role(
             account=account,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.put("/{role_name}", response_model=IAMRole)
@@ -134,7 +135,7 @@ def update_role(
     try:
         existing = service.get_role(role_name)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
@@ -166,7 +167,7 @@ def update_role(
                 metadata={"assume_role_policy_updated": True},
             )
         except RuntimeError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
     return updated
 
@@ -185,7 +186,7 @@ def list_role_inline_policies(
             get_policy_fn=service.get_role_inline_policy,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.put("/{role_name}/inline-policies/{policy_name}", response_model=InlinePolicy)
@@ -218,7 +219,7 @@ def put_role_inline_policy(
         )
         return saved
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.delete("/{role_name}/inline-policies/{policy_name}", status_code=status.HTTP_204_NO_CONTENT)
@@ -242,7 +243,7 @@ def delete_role_inline_policy(
             metadata={"policy_name": policy_name},
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.get("/{role_name}/policies", response_model=list[Policy])
@@ -255,7 +256,7 @@ def list_role_policies(
     try:
         return service.list_role_policies(role_name)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.post("/{role_name}/policies", response_model=Policy, status_code=status.HTTP_201_CREATED)
@@ -280,7 +281,7 @@ def attach_role_policy(
         )
         return resolve_attached_policy(payload, get_policy_fn=service.get_policy)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 @router.delete("/{role_name}/policies/{policy_arn:path}", status_code=status.HTTP_204_NO_CONTENT)
@@ -304,4 +305,4 @@ def detach_role_policy(
             metadata={"policy_arn": policy_arn},
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)

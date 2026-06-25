@@ -52,6 +52,7 @@ from app.routers.ceph_admin.listing_common import (
     stream_listing_response as _common_stream_listing_response,
 )
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
+from app.routers.http_errors import raise_http_exception_from_exception
 from app.services.rgw_admin import RGWAdminError
 from app.services.bucket_listing_shared import _is_advanced_filter_stream_payload as _shared_is_advanced_filter_stream_payload
 from app.utils.quota_stats import extract_quota_limits
@@ -342,7 +343,7 @@ def _enrich_users(
         try:
             payload = ctx.rgw_admin.get_user(user.uid, tenant=user.tenant, allow_not_found=True)
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         if payload and not payload.get("not_found"):
             user_payload = _extract_user_payload(payload)
             account_id = _normalize_optional_str(payload.get("account_id") or user_payload.get("account_id"))
@@ -362,7 +363,7 @@ def _enrich_users(
                                     allow_not_implemented=True,
                                 )
                             except RGWAdminError as exc:
-                                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+                                raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
                         account_name_by_id[account_id] = _normalize_optional_str(
                             account_payload.get("name") if isinstance(account_payload, dict) else None
                         )
@@ -385,7 +386,7 @@ def _enrich_users(
                 try:
                     buckets_payload = ctx.rgw_admin.get_all_buckets(uid=lookup_uid, with_stats=True)
                 except RGWAdminError as exc:
-                    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+                    raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
                 _bucket_usage, total_bytes, total_objects, _bucket_count = summarize_bucket_usage(
                     extract_bucket_list(buckets_payload)
                 )
@@ -415,7 +416,7 @@ def _get_cached_rgw_users_payload(ctx: CephAdminContext) -> list[Any]:
         try:
             payload = ctx.rgw_admin.list_users()
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         return payload or []
 
     return _common_get_or_set_cache(
@@ -611,7 +612,7 @@ def _load_user_payload(uid: str, tenant: Optional[str], ctx: CephAdminContext) -
     try:
         payload = ctx.rgw_admin.get_user(normalized_uid, tenant=tenant, allow_not_found=True)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     if not payload or (isinstance(payload, dict) and payload.get("not_found")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="RGW user not found")
     if not isinstance(payload, dict):
@@ -636,7 +637,7 @@ def _resolve_account_name(
             allow_not_implemented=True,
         )
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     if not isinstance(account_payload, dict) or account_payload.get("not_found"):
         return payload_account_name
     return _normalize_optional_str(
@@ -690,7 +691,7 @@ def _apply_caps_update(
             if caps_values:
                 ctx.rgw_admin.set_user_caps(uid, caps_values, tenant=tenant, op="rm")
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 def _compute_users_listing(
@@ -983,7 +984,7 @@ def create_rgw_user(
             )
             lookup_tenant = tenant
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
     if isinstance(create_result, dict):
         if create_result.get("conflict"):
@@ -1013,7 +1014,7 @@ def create_rgw_user(
                 account_root=payload.account_root if "account_root" in field_set else None,
             )
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         if isinstance(update_result, dict) and (update_result.get("not_found") or update_result.get("not_implemented")):
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -1033,7 +1034,7 @@ def create_rgw_user(
                 enabled=bool(payload.quota_enabled) if payload.quota_enabled is not None else True,
             )
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
         if isinstance(quota_result, dict) and (quota_result.get("not_found") or quota_result.get("not_implemented")):
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -1149,7 +1150,7 @@ def update_rgw_user_config(
                     detail="RGW user update is not supported on this cluster",
                 )
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
     if "caps" in field_set and update.caps is not None:
         _apply_caps_update(uid, tenant, update.caps.mode, update.caps.values, ctx)
@@ -1183,7 +1184,7 @@ def update_rgw_user_config(
                     detail="RGW user quota update is not supported on this cluster",
                 )
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
     _invalidate_users_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     payload = _load_user_payload(uid, tenant, ctx)
@@ -1220,7 +1221,7 @@ def get_rgw_user_metrics(
     try:
         payload = ctx.rgw_admin.get_all_buckets(uid=lookup_uid, with_stats=True)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     return _build_metrics_from_buckets(payload)
 
 
@@ -1235,7 +1236,7 @@ def list_rgw_user_keys(
     try:
         keys = ctx.rgw_admin.list_user_keys(uid, tenant=tenant)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     return _serialize_access_keys(keys)
 
 
@@ -1250,7 +1251,7 @@ def create_rgw_user_key(
     try:
         response = ctx.rgw_admin.create_access_key(uid, tenant=tenant)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     access_key = secret_key = None
     for entry in ctx.rgw_admin._extract_keys(response):
         if not isinstance(entry, dict):
@@ -1283,7 +1284,7 @@ def update_rgw_user_key_status(
         ctx.rgw_admin.set_access_key_status(uid, normalized_key, update.active, tenant=tenant)
         keys = ctx.rgw_admin.list_user_keys(uid, tenant=tenant)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     for key in _serialize_access_keys(keys):
         if key.access_key == normalized_key:
             return key
@@ -1310,5 +1311,5 @@ def delete_rgw_user_key(
     try:
         ctx.rgw_admin.delete_access_key(uid, normalized_key, tenant=tenant)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

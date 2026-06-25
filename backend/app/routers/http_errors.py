@@ -116,21 +116,19 @@ def sanitized_error_log_detail(value: object) -> str:
 
 
 def raise_bad_gateway_from_runtime(exc: RuntimeError) -> NoReturn:
-    raise HTTPException(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        detail=sanitize_error_detail(str(exc)),
-    ) from exc
+    raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 def raise_bad_gateway_from_exception(exc: Exception) -> NoReturn:
-    raise HTTPException(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        detail=sanitize_error_detail(str(exc)),
-    ) from exc
+    raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
 
 def raise_bad_request_from_value_error(exc: ValueError) -> NoReturn:
+    raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
+
+
+def raise_http_exception_from_exception(status_code: int, exc: Exception) -> NoReturn:
     raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
+        status_code=status_code,
         detail=sanitize_error_detail(str(exc)),
     ) from exc

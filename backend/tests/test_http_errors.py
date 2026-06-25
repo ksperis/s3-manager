@@ -13,6 +13,7 @@ from app.routers.http_errors import (
     raise_bad_gateway_from_exception,
     raise_bad_gateway_from_runtime,
     raise_bad_request_from_value_error,
+    raise_http_exception_from_exception,
     sanitize_error_detail,
 )
 
@@ -60,6 +61,16 @@ def test_raise_bad_request_from_value_error_redacts_sensitive_user_input():
     except HTTPException as exc:
         assert exc.status_code == 400
         assert exc.detail == "invalid callback secret_access_key=<redacted>"
+    else:
+        raise AssertionError("Expected HTTPException")
+
+
+def test_raise_http_exception_from_exception_preserves_status_and_redacts_detail():
+    try:
+        raise_http_exception_from_exception(404, RuntimeError("missing token=leaked"))
+    except HTTPException as exc:
+        assert exc.status_code == 404
+        assert exc.detail == "missing token=<redacted>"
     else:
         raise AssertionError("Expected HTTPException")
 
