@@ -325,7 +325,7 @@ export default function AdminMetricsPage() {
       <PageHeader
         title="Usage & Metrics"
         description="Managed account usage composition, platform storage, and traffic analytics."
-        breadcrumbs={adminBreadcrumbs({ label: "Overview", to: "/admin" }, { label: "Usage & Metrics" })}
+        breadcrumbs={adminBreadcrumbs({ label: "Usage & Reporting" }, { label: "Usage & Metrics" })}
       />
       <PageControlStrip
         label="Metrics scope"

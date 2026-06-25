@@ -350,7 +350,7 @@ export default function BillingPage() {
       <PageHeader
         title="Billing"
         description="Monthly usage and cost overview."
-        breadcrumbs={adminBreadcrumbs({ label: "Overview", to: "/admin" }, { label: "Billing" })}
+        breadcrumbs={adminBreadcrumbs({ label: "Usage & Reporting" }, { label: "Billing" })}
       />
       <PageControlStrip
         label="Billing scope"

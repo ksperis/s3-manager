@@ -7,6 +7,11 @@ function getSettingsLink(label: string, options: Parameters<typeof buildAdminNav
   return settingsSection?.links.find((link) => link.label === label);
 }
 
+function getUsageReportingLink(label: string, options: Parameters<typeof buildAdminNav>) {
+  const usageReportingSection = buildAdminNav(...options).find((section) => section.label === "Usage & Reporting");
+  return usageReportingSection?.links.find((link) => link.label === label);
+}
+
 describe("buildAdminNav", () => {
   it("sets explicit hint for disabled Browser settings link", () => {
     const browserLink = getSettingsLink("Browser", [true, false, false, false, false, true]);
@@ -44,10 +49,23 @@ describe("buildAdminNav", () => {
   });
 
   it("exposes Usage History only when usage history is enabled", () => {
-    const enabledOverview = buildAdminNav(true, true, false, true, false, true).find((section) => section.label === "Overview");
-    const disabledOverview = buildAdminNav(true, true, false, false, false, true).find((section) => section.label === "Overview");
+    const enabledLink = getUsageReportingLink("Usage History", [true, true, false, true, false, true]);
+    const disabledLink = getUsageReportingLink("Usage History", [true, true, false, false, false, true]);
 
-    expect(enabledOverview?.links.find((link) => link.label === "Usage History")?.to).toBe("/admin/usage-history");
-    expect(disabledOverview?.links.find((link) => link.label === "Usage History")).toBeUndefined();
+    expect(enabledLink?.to).toBe("/admin/usage-history");
+    expect(disabledLink).toBeUndefined();
+  });
+
+  it("groups usage metrics and billing under Usage & Reporting", () => {
+    const adminNav = buildAdminNav(true, true, true, true, false, true);
+    const overview = adminNav.find((section) => section.label === "Overview");
+    const usageReporting = adminNav.find((section) => section.label === "Usage & Reporting");
+
+    expect(overview?.links.map((link) => link.label)).toEqual(["Dashboard"]);
+    expect(usageReporting?.links.map((link) => link.label)).toEqual([
+      "Usage & Metrics",
+      "Billing",
+      "Usage History",
+    ]);
   });
 });

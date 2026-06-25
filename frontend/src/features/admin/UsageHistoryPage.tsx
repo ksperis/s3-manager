@@ -284,7 +284,7 @@ export default function UsageHistoryPage() {
       <PageHeader
         title="Usage history"
         description="Stored quota usage snapshots collected for RGW accounts and users."
-        breadcrumbs={adminBreadcrumbs({ label: "Overview", to: "/admin" }, { label: "Usage history" })}
+        breadcrumbs={adminBreadcrumbs({ label: "Usage & Reporting" }, { label: "Usage history" })}
         rightContent={
           <button
             type="button"
