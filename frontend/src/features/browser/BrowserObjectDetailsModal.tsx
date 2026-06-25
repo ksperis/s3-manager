@@ -39,11 +39,22 @@ import {
 } from "./browserConstants";
 import {
   buildVersionRows,
-  formatDateTime,
   formatLocalDateTime,
   previewKindForItem,
   toIsoString,
 } from "./browserUtils";
+import {
+  ARCHIVE_STORAGE_CLASSES,
+  OBJECT_LOCK_DISABLED_MESSAGE,
+  aclOptions,
+  buildInlinePreviewDisposition,
+  formatRestoreStatus,
+  isObjectLockUnavailableMessage,
+  nextTabAfterDeleted,
+  normalizeObjectDetailPairs,
+  readBlobAsText,
+  storageClassOptions,
+} from "./browserObjectDetailsModel";
 import type {
   BrowserItem,
   ObjectDetailsTabId,
@@ -89,12 +100,6 @@ type TabButton = {
   label: string;
 };
 
-const ARCHIVE_STORAGE_CLASSES = new Set([
-  "GLACIER",
-  "GLACIER_IR",
-  "DEEP_ARCHIVE",
-]);
-
 const inputClasses =
   "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
 const buttonPrimaryClasses =
@@ -103,84 +108,6 @@ const buttonGhostClasses =
   "inline-flex items-center justify-center rounded-md px-2 py-1 ui-caption font-semibold text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200";
 const panelCardClasses =
   "rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-3 ui-caption dark:border-slate-700 dark:bg-slate-900/40";
-
-const storageClassOptions = [
-  { value: "STANDARD", label: "STANDARD" },
-  { value: "STANDARD_IA", label: "STANDARD_IA" },
-  { value: "ONEZONE_IA", label: "ONEZONE_IA" },
-  { value: "INTELLIGENT_TIERING", label: "INTELLIGENT_TIERING" },
-  { value: "GLACIER", label: "GLACIER" },
-  { value: "GLACIER_IR", label: "GLACIER_IR" },
-  { value: "DEEP_ARCHIVE", label: "DEEP_ARCHIVE" },
-];
-
-const aclOptions = [
-  { value: "private", label: "private" },
-  { value: "public-read", label: "public-read" },
-  { value: "public-read-write", label: "public-read-write" },
-  { value: "authenticated-read", label: "authenticated-read" },
-  { value: "bucket-owner-read", label: "bucket-owner-read" },
-  { value: "bucket-owner-full-control", label: "bucket-owner-full-control" },
-  { value: "aws-exec-read", label: "aws-exec-read" },
-];
-
-const normalizePairs = (items: ObjectTag[]) =>
-  items.reduce<Record<string, string>>((acc, item) => {
-    const key = item.key.trim();
-    if (!key) return acc;
-    acc[key] = item.value ?? "";
-    return acc;
-  }, {});
-
-const formatRestoreStatus = (value?: string | null) => {
-  if (!value) return null;
-  const normalized = value.toLowerCase();
-  if (normalized.includes('ongoing-request="true"')) {
-    return "Restore in progress.";
-  }
-  if (normalized.includes('ongoing-request="false"')) {
-    const expiryMatch = value.match(/expiry-date="([^"]+)"/i);
-    if (!expiryMatch?.[1]) {
-      return "Temporary restore is available.";
-    }
-    return `Temporary restore available until ${formatDateTime(
-      expiryMatch[1],
-    )}.`;
-  }
-  return value;
-};
-
-const OBJECT_LOCK_DISABLED_MESSAGE =
-  "Object Lock is not enabled on this bucket. Legal hold and retention settings are unavailable.";
-
-const isObjectLockUnavailableMessage = (message: string) => {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("object lock") &&
-    (normalized.includes("not configured") ||
-      normalized.includes("not enabled") ||
-      normalized.includes("not found") ||
-      normalized.includes("invalidrequest"))
-  );
-};
-
-const nextTabAfterDeleted = (versioningEnabled: boolean) =>
-  versioningEnabled ? "versions" : "preview";
-
-const buildInlinePreviewDisposition = (filename: string) => {
-  const fallback = filename.replace(/[^\x20-\x7E]+/g, "_").replace(/"/g, '\\"');
-  const encoded = encodeURIComponent(filename);
-  return `inline; filename="${fallback || "preview"}"; filename*=UTF-8''${encoded}`;
-};
-
-const readBlobAsText = async (blob: Blob) => {
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(reader.error ?? new Error("Unable to read blob."));
-    reader.readAsText(blob);
-  });
-};
 
 export default function BrowserObjectDetailsModal({
   accountId,
@@ -786,7 +713,7 @@ export default function BrowserObjectDetailsModal({
         content_encoding: metadataDraft.contentEncoding,
         content_language: metadataDraft.contentLanguage,
         expires: toIsoString(metadataDraft.expires),
-        metadata: normalizePairs(metadataItems),
+        metadata: normalizeObjectDetailPairs(metadataItems),
       };
       await updateObjectMetadata(accountId, bucketName, payload);
       await loadProperties(true);

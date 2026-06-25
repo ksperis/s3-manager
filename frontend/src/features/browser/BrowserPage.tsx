@@ -43,7 +43,7 @@ import {
 } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
-import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage, writeClientJson } from "../../utils/clientStorage";
+import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage } from "../../utils/clientStorage";
 import {
   S3_BUCKET_NAME_MAX_LENGTH,
   isValidS3BucketName,
@@ -145,10 +145,6 @@ import {
 import {
   DEFAULT_FOLDERS_PANEL_WIDTH_PX,
   DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
-  MAX_FOLDERS_PANEL_WIDTH_PX,
-  MAX_INSPECTOR_PANEL_WIDTH_PX,
-  MIN_FOLDERS_PANEL_WIDTH_PX,
-  MIN_INSPECTOR_PANEL_WIDTH_PX,
   readBrowserRootObjectColumns,
   readBrowserRootObjectColumnWidths,
   readBrowserRootContextSelection,
@@ -272,6 +268,22 @@ import {
   mergeBucketSearchItems,
   prepareLatestRequest,
 } from "./browserSearchHelpers";
+import {
+  PANEL_LAYOUT_GAP_PX,
+  PANEL_RESIZER_HITBOX_WIDTH_PX,
+  PANELS_DISABLE_MEDIA_QUERY,
+  clampBrowserPanelWidth,
+  resolveBrowserPanelWidths,
+} from "./browserPanelLayout";
+import {
+  buildPathSuggestionEntries,
+  mergePathSuggestions,
+  normalizePathDraftValue,
+  pushBucketPathHistory,
+  readBucketPathHistory,
+  resolvePathDraftContext,
+  type PathSuggestion,
+} from "./browserPathSuggestions";
 import {
   normalizeBrowserListingIssue,
   resolveBucketAccessEntry,
@@ -405,16 +417,6 @@ type BucketInspectorData = {
   quota_max_objects?: number | null;
   features: Record<string, BucketInspectorFeature>;
 };
-type PathSuggestionSource = "local" | "remote" | "history";
-type PathSuggestion = {
-  value: string;
-  label: string;
-  source: PathSuggestionSource;
-};
-type PathDraftContext = {
-  parentPrefix: string;
-  fragment: string;
-};
 type SearchScope = "prefix" | "bucket";
 type BrowserConfirmDialogState = {
   title: string;
@@ -481,96 +483,15 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
 const BYTES_PER_GIB = 1024 * 1024 * 1024;
 const PATH_SUGGESTIONS_DEBOUNCE_MS = 200;
-const PATH_SUGGESTIONS_LIMIT = 20;
 const PATH_SUGGESTIONS_API_LIMIT = 50;
-const PATH_HISTORY_LIMIT = 20;
-const PATH_HISTORY_STORAGE_KEY = CLIENT_STORAGE_KEYS.browserPathHistory;
-const PANELS_DISABLE_MAX_WIDTH_PX = 1023;
-const PANELS_DISABLE_MEDIA_QUERY = `(max-width: ${PANELS_DISABLE_MAX_WIDTH_PX}px)`;
-const PANEL_LAYOUT_GAP_PX = 12;
-const PANEL_RESIZER_HITBOX_WIDTH_PX = 12;
-const MIN_BROWSER_CENTER_WIDTH_PX = 320;
 const CONTEXT_MENU_PADDING_PX = 8;
 const CONTEXT_MENU_FALLBACK_WIDTH_PX = 240;
 const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 320;
 const CORS_DIRECT_TRANSFER_WARNING =
   "Direct download/upload is not allowed on this bucket.";
 const TREE_PREFIXES_PAGE_BUDGET = 50;
-const PATH_SUGGESTION_SOURCE_WEIGHT: Record<PathSuggestionSource, number> = {
-  history: 300,
-  local: 200,
-  remote: 100,
-};
 const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
-
-const clampBrowserPanelWidth = (
-  value: number,
-  min: number,
-  max: number,
-) => Math.min(max, Math.max(min, Math.round(value)));
-
-const resolveBrowserPanelWidths = ({
-  containerWidth,
-  foldersPanelWidthPx,
-  inspectorPanelWidthPx,
-  isFoldersPanelVisible,
-  isInspectorPanelVisible,
-}: {
-  containerWidth: number;
-  foldersPanelWidthPx: number;
-  inspectorPanelWidthPx: number;
-  isFoldersPanelVisible: boolean;
-  isInspectorPanelVisible: boolean;
-}) => {
-  let resolvedFoldersWidth = clampBrowserPanelWidth(
-    foldersPanelWidthPx,
-    MIN_FOLDERS_PANEL_WIDTH_PX,
-    MAX_FOLDERS_PANEL_WIDTH_PX,
-  );
-  let resolvedInspectorWidth = clampBrowserPanelWidth(
-    inspectorPanelWidthPx,
-    MIN_INSPECTOR_PANEL_WIDTH_PX,
-    MAX_INSPECTOR_PANEL_WIDTH_PX,
-  );
-  if (containerWidth <= 0) {
-    return { resolvedFoldersWidth, resolvedInspectorWidth };
-  }
-
-  const gapCount =
-    (isFoldersPanelVisible ? 1 : 0) + (isInspectorPanelVisible ? 1 : 0);
-  const occupiedGapWidth = gapCount * PANEL_LAYOUT_GAP_PX;
-
-  if (isInspectorPanelVisible) {
-    const maxInspectorWidth = isFoldersPanelVisible
-      ? containerWidth -
-        resolvedFoldersWidth -
-        occupiedGapWidth -
-        MIN_BROWSER_CENTER_WIDTH_PX
-      : containerWidth - occupiedGapWidth - MIN_BROWSER_CENTER_WIDTH_PX;
-    resolvedInspectorWidth = clampBrowserPanelWidth(
-      resolvedInspectorWidth,
-      MIN_INSPECTOR_PANEL_WIDTH_PX,
-      Math.max(MIN_INSPECTOR_PANEL_WIDTH_PX, maxInspectorWidth),
-    );
-  }
-
-  if (isFoldersPanelVisible) {
-    const maxFoldersWidth = isInspectorPanelVisible
-      ? containerWidth -
-        resolvedInspectorWidth -
-        occupiedGapWidth -
-        MIN_BROWSER_CENTER_WIDTH_PX
-      : containerWidth - occupiedGapWidth - MIN_BROWSER_CENTER_WIDTH_PX;
-    resolvedFoldersWidth = clampBrowserPanelWidth(
-      resolvedFoldersWidth,
-      MIN_FOLDERS_PANEL_WIDTH_PX,
-      Math.max(MIN_FOLDERS_PANEL_WIDTH_PX, maxFoldersWidth),
-    );
-  }
-
-  return { resolvedFoldersWidth, resolvedInspectorWidth };
-};
 const LAZY_COLUMN_CONCURRENCY = 4;
 const LAZY_COLUMN_BATCH_SIZE = 24;
 const LAZY_COLUMN_ROOT_MARGIN = "200px";
@@ -930,150 +851,6 @@ const inspectorInlineActionClasses =
 const getMultipartUploadEntryId = (
   upload: Pick<MultipartUploadItem, "key" | "upload_id">,
 ) => `${upload.key}::${upload.upload_id}`;
-const normalizePathDraftValue = (value: string) =>
-  value.trim().replace(/^\/+/, "");
-
-const resolvePathDraftContext = (value: string): PathDraftContext => {
-  const cleaned = normalizePathDraftValue(value);
-  const hasTrailingSlash = cleaned.endsWith("/");
-  const slashIndex = cleaned.lastIndexOf("/");
-  const parentRaw = slashIndex >= 0 ? cleaned.slice(0, slashIndex + 1) : "";
-  const fragment = hasTrailingSlash
-    ? ""
-    : slashIndex >= 0
-      ? cleaned.slice(slashIndex + 1)
-      : cleaned;
-  return {
-    parentPrefix: parentRaw ? normalizePrefix(parentRaw) : "",
-    fragment,
-  };
-};
-
-const buildPathSuggestionEntries = (
-  prefixes: string[],
-  parentPrefix: string,
-  fragment: string,
-  source: PathSuggestionSource,
-): PathSuggestion[] => {
-  const normalizedFragment = fragment.trim().toLowerCase();
-  const seen = new Set<string>();
-  const entries: PathSuggestion[] = [];
-  prefixes.forEach((entry) => {
-    const normalized = normalizePrefix(normalizePathDraftValue(entry || ""));
-    if (!normalized) return;
-    if (parentPrefix && !normalized.startsWith(parentPrefix)) return;
-    const relative = shortName(normalized, parentPrefix || "");
-    const label = relative.endsWith("/") ? relative.slice(0, -1) : relative;
-    if (!label) return;
-    if (normalizedFragment && !label.toLowerCase().includes(normalizedFragment))
-      return;
-    if (seen.has(normalized)) return;
-    seen.add(normalized);
-    entries.push({ value: normalized, label, source });
-  });
-  return entries;
-};
-
-const scorePathSuggestion = (
-  entry: PathSuggestion,
-  fragment: string,
-): number => {
-  const query = fragment.trim().toLowerCase();
-  const label = entry.label.toLowerCase();
-  let score = PATH_SUGGESTION_SOURCE_WEIGHT[entry.source] ?? 0;
-  if (!query) {
-    return score + Math.max(0, 80 - Math.min(label.length, 80));
-  }
-  if (label === query) {
-    score += 1200;
-  } else if (label.startsWith(query)) {
-    score += 1000;
-  } else if (label.split("/").some((segment) => segment.startsWith(query))) {
-    score += 800;
-  } else if (label.includes(query)) {
-    score += 600;
-  }
-  const index = label.indexOf(query);
-  if (index >= 0) {
-    score += Math.max(0, 120 - index * 4);
-  }
-  score += Math.max(0, 60 - Math.min(label.length, 60));
-  return score;
-};
-
-const mergePathSuggestions = (
-  fragment: string,
-  ...groups: PathSuggestion[][]
-): PathSuggestion[] => {
-  const byValue = new Map<string, PathSuggestion>();
-  groups.forEach((group) => {
-    group.forEach((entry) => {
-      const existing = byValue.get(entry.value);
-      if (!existing) {
-        byValue.set(entry.value, entry);
-        return;
-      }
-      if (
-        (PATH_SUGGESTION_SOURCE_WEIGHT[entry.source] ?? 0) >
-        (PATH_SUGGESTION_SOURCE_WEIGHT[existing.source] ?? 0)
-      ) {
-        byValue.set(entry.value, entry);
-      }
-    });
-  });
-  return Array.from(byValue.values())
-    .sort((a, b) => {
-      const scoreDiff =
-        scorePathSuggestion(b, fragment) - scorePathSuggestion(a, fragment);
-      if (scoreDiff !== 0) return scoreDiff;
-      return a.label.localeCompare(b.label);
-    })
-    .slice(0, PATH_SUGGESTIONS_LIMIT);
-};
-
-const readPathHistoryStore = (): Record<string, string[]> => {
-  if (typeof window === "undefined") return {};
-  const parsed = readClientJson<unknown>(PATH_HISTORY_STORAGE_KEY);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-  return parsed as Record<string, string[]>;
-};
-
-const readBucketPathHistory = (bucketName: string): string[] => {
-  if (!bucketName) return [];
-  const store = readPathHistoryStore();
-  const rawEntries = Array.isArray(store[bucketName]) ? store[bucketName] : [];
-  const seen = new Set<string>();
-  const entries: string[] = [];
-  rawEntries.forEach((value) => {
-    const normalized = normalizePrefix(normalizePathDraftValue(value || ""));
-    if (!normalized) return;
-    if (seen.has(normalized)) return;
-    seen.add(normalized);
-    entries.push(normalized);
-  });
-  return entries.slice(0, PATH_HISTORY_LIMIT);
-};
-
-const pushBucketPathHistory = (
-  bucketName: string,
-  prefixValue: string,
-): string[] => {
-  if (!bucketName || typeof window === "undefined") return [];
-  const normalized = normalizePrefix(
-    normalizePathDraftValue(prefixValue || ""),
-  );
-  if (!normalized) return readBucketPathHistory(bucketName);
-  const store = readPathHistoryStore();
-  const current = readBucketPathHistory(bucketName);
-  const next = [
-    normalized,
-    ...current.filter((entry) => entry !== normalized),
-  ].slice(0, PATH_HISTORY_LIMIT);
-  store[bucketName] = next;
-  writeClientJson(PATH_HISTORY_STORAGE_KEY, store);
-  return next;
-};
-
 export default function BrowserPage({
   accountIdForApi: accountIdOverride,
   hasContext: hasContextOverride,

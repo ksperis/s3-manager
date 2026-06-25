@@ -1,0 +1,91 @@
+/*
+ * Copyright (c) 2026 Laurent Barbe
+ * Licensed under the Apache License, Version 2.0
+ */
+import type { ObjectTag } from "../../api/browser";
+import type { ObjectDetailsTabId } from "./browserTypes";
+import { formatDateTime } from "./browserUtils";
+
+export const ARCHIVE_STORAGE_CLASSES = new Set([
+  "GLACIER",
+  "GLACIER_IR",
+  "DEEP_ARCHIVE",
+]);
+
+export const storageClassOptions = [
+  { value: "STANDARD", label: "STANDARD" },
+  { value: "STANDARD_IA", label: "STANDARD_IA" },
+  { value: "ONEZONE_IA", label: "ONEZONE_IA" },
+  { value: "INTELLIGENT_TIERING", label: "INTELLIGENT_TIERING" },
+  { value: "GLACIER", label: "GLACIER" },
+  { value: "GLACIER_IR", label: "GLACIER_IR" },
+  { value: "DEEP_ARCHIVE", label: "DEEP_ARCHIVE" },
+];
+
+export const aclOptions = [
+  { value: "private", label: "private" },
+  { value: "public-read", label: "public-read" },
+  { value: "public-read-write", label: "public-read-write" },
+  { value: "authenticated-read", label: "authenticated-read" },
+  { value: "bucket-owner-read", label: "bucket-owner-read" },
+  { value: "bucket-owner-full-control", label: "bucket-owner-full-control" },
+  { value: "aws-exec-read", label: "aws-exec-read" },
+];
+
+export const normalizeObjectDetailPairs = (items: ObjectTag[]) =>
+  items.reduce<Record<string, string>>((acc, item) => {
+    const key = item.key.trim();
+    if (!key) return acc;
+    acc[key] = item.value ?? "";
+    return acc;
+  }, {});
+
+export const formatRestoreStatus = (value?: string | null) => {
+  if (!value) return null;
+  const normalized = value.toLowerCase();
+  if (normalized.includes('ongoing-request="true"')) {
+    return "Restore in progress.";
+  }
+  if (normalized.includes('ongoing-request="false"')) {
+    const expiryMatch = value.match(/expiry-date="([^"]+)"/i);
+    if (!expiryMatch?.[1]) {
+      return "Temporary restore is available.";
+    }
+    return `Temporary restore available until ${formatDateTime(
+      expiryMatch[1],
+    )}.`;
+  }
+  return value;
+};
+
+export const OBJECT_LOCK_DISABLED_MESSAGE =
+  "Object Lock is not enabled on this bucket. Legal hold and retention settings are unavailable.";
+
+export const isObjectLockUnavailableMessage = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("object lock") &&
+    (normalized.includes("not configured") ||
+      normalized.includes("not enabled") ||
+      normalized.includes("not found") ||
+      normalized.includes("invalidrequest"))
+  );
+};
+
+export const nextTabAfterDeleted = (versioningEnabled: boolean): ObjectDetailsTabId =>
+  versioningEnabled ? "versions" : "preview";
+
+export const buildInlinePreviewDisposition = (filename: string) => {
+  const fallback = filename.replace(/[^\x20-\x7E]+/g, "_").replace(/"/g, '\\"');
+  const encoded = encodeURIComponent(filename);
+  return `inline; filename="${fallback || "preview"}"; filename*=UTF-8''${encoded}`;
+};
+
+export const readBlobAsText = async (blob: Blob) => {
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(reader.error ?? new Error("Unable to read blob."));
+    reader.readAsText(blob);
+  });
+};
