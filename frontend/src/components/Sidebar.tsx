@@ -298,21 +298,76 @@ function CollapseIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function resolveSidebarLinkIcon(link: SidebarLink) {
+export type SidebarLinkIconName =
+  | "home"
+  | "chart"
+  | "history"
+  | "bucket"
+  | "folder"
+  | "connection"
+  | "status"
+  | "endpoint"
+  | "portal"
+  | "key"
+  | "audit"
+  | "user"
+  | "group"
+  | "shield"
+  | "document"
+  | "cog"
+  | "bell"
+  | "wallet"
+  | "tools"
+  | "stack"
+  | "dot";
+
+export function resolveSidebarLinkIconName(link: Pick<SidebarLink, "label" | "to">): SidebarLinkIconName {
   const key = `${link.label} ${link.to}`.toLowerCase();
-  if (key.includes("dashboard") || key.includes("home")) return <NavHomeIcon />;
-  if (key.includes("metric")) return <NavChartIcon />;
-  if (key.includes("bucket")) return <NavBucketIcon />;
-  if (key.includes("browser")) return <NavFolderIcon />;
-  if (key.includes("user")) return <NavUserIcon />;
-  if (key.includes("group")) return <NavGroupIcon />;
-  if (key.includes("role")) return <NavShieldIcon />;
-  if (key.includes("polic")) return <NavDocumentIcon />;
-  if (key.includes("setting")) return <NavCogIcon />;
-  if (key.includes("topic") || key.includes("event")) return <NavBellIcon />;
-  if (key.includes("billing")) return <NavWalletIcon />;
-  if (key.includes("manage")) return <NavToolsIcon />;
-  if (key.includes("account")) return <NavStackIcon />;
+  if (key.includes("dashboard") || key.includes("home")) return "home";
+  if (key.includes("metric")) return "chart";
+  if (key.includes("history")) return "history";
+  if (key.includes("bucket")) return "bucket";
+  if (key.includes("browser")) return "folder";
+  if (key.includes("connection")) return "connection";
+  if (key.includes("status") || key.includes("health")) return "status";
+  if (key.includes("endpoint")) return "endpoint";
+  if (key.includes("portal")) return "portal";
+  if (key.includes("key") || key.includes("rotation")) return "key";
+  if (key.includes("audit")) return "audit";
+  if (key.includes("user")) return "user";
+  if (key.includes("group")) return "group";
+  if (key.includes("role")) return "shield";
+  if (key.includes("polic")) return "document";
+  if (key.includes("setting") || key.includes("general")) return "cog";
+  if (key.includes("topic") || key.includes("event")) return "bell";
+  if (key.includes("billing")) return "wallet";
+  if (key.includes("manage")) return "tools";
+  if (key.includes("account")) return "stack";
+  return "dot";
+}
+
+function resolveSidebarLinkIcon(link: SidebarLink) {
+  const iconName = resolveSidebarLinkIconName(link);
+  if (iconName === "home") return <NavHomeIcon />;
+  if (iconName === "chart") return <NavChartIcon />;
+  if (iconName === "history") return <NavHistoryIcon />;
+  if (iconName === "bucket") return <NavBucketIcon />;
+  if (iconName === "folder") return <NavFolderIcon />;
+  if (iconName === "connection") return <NavConnectionIcon />;
+  if (iconName === "status") return <NavStatusIcon />;
+  if (iconName === "endpoint") return <NavEndpointIcon />;
+  if (iconName === "portal") return <NavPortalIcon />;
+  if (iconName === "key") return <NavKeyIcon />;
+  if (iconName === "audit") return <NavAuditIcon />;
+  if (iconName === "user") return <NavUserIcon />;
+  if (iconName === "group") return <NavGroupIcon />;
+  if (iconName === "shield") return <NavShieldIcon />;
+  if (iconName === "document") return <NavDocumentIcon />;
+  if (iconName === "cog") return <NavCogIcon />;
+  if (iconName === "bell") return <NavBellIcon />;
+  if (iconName === "wallet") return <NavWalletIcon />;
+  if (iconName === "tools") return <NavToolsIcon />;
+  if (iconName === "stack") return <NavStackIcon />;
   return <NavDotIcon />;
 }
 
@@ -332,6 +387,15 @@ function NavChartIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+function NavHistoryIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M5.2 6.5A5.5 5.5 0 1 1 4.5 13" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M5.2 6.5H2.8V4.1M10 7.2v3.4l2.2 1.4" />
+    </svg>
+  );
+}
+
 function NavBucketIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
@@ -344,6 +408,59 @@ function NavFolderIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M2.5 6.5h5l1.5 1.8H17v7.2H2.5V6.5Z" />
+    </svg>
+  );
+}
+
+function NavConnectionIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M7.5 6.5h-1A3.5 3.5 0 0 0 3 10a3.5 3.5 0 0 0 3.5 3.5h1m5-7h1A3.5 3.5 0 0 1 17 10a3.5 3.5 0 0 1-3.5 3.5h-1M7.2 10h5.6" />
+    </svg>
+  );
+}
+
+function NavStatusIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M3 10h3l1.5-4 3 8 1.8-4H17" />
+    </svg>
+  );
+}
+
+function NavEndpointIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <rect x="4" y="4" width="12" height="4.5" rx="1.4" strokeWidth={1.7} />
+      <rect x="4" y="11.5" width="12" height="4.5" rx="1.4" strokeWidth={1.7} />
+      <path strokeLinecap="round" strokeWidth={1.7} d="M7 6.3h.1M7 13.8h.1M10 8.5v3" />
+    </svg>
+  );
+}
+
+function NavPortalIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M4 5.5h12v9H4v-9Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M8.2 14.5 7.5 17h5l-.7-2.5M7.5 9.8h5" />
+    </svg>
+  );
+}
+
+function NavKeyIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <circle cx="7" cy="10" r="3" strokeWidth={1.7} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M10 10h6m-2 0v2m-2-2v1.5" />
+    </svg>
+  );
+}
+
+function NavAuditIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M6 3.5h6l3 3V16.5H6V3.5Zm6 0v3h3" />
+      <path strokeLinecap="round" strokeWidth={1.7} d="M8.5 10h3.8M8.5 13h3" />
     </svg>
   );
 }

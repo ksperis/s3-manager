@@ -2,10 +2,28 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
-import Sidebar from "../Sidebar";
+import Sidebar, { resolveSidebarLinkIconName } from "../Sidebar";
 import { SIDEBAR_DEFAULT_WIDTH } from "../sidebarSizing";
 
 describe("Sidebar", () => {
+  it("uses specific icons for admin navigation labels instead of the generic dot", () => {
+    const adminLinks = [
+      { to: "/admin/billing", label: "Billing", iconName: "wallet" },
+      { to: "/admin/usage-history", label: "Usage History", iconName: "history" },
+      { to: "/admin/audit", label: "Audit trail", iconName: "audit" },
+      { to: "/admin/s3-connections", label: "Shared S3 Connections", iconName: "connection" },
+      { to: "/admin/storage-endpoints", label: "S3 Endpoints", iconName: "endpoint" },
+      { to: "/admin/endpoint-status", label: "Endpoint Status", iconName: "status" },
+      { to: "/admin/portal-settings", label: "Portal", iconName: "portal" },
+      { to: "/admin/key-rotation", label: "Key Rotation", iconName: "key" },
+    ] as const;
+
+    adminLinks.forEach((link) => {
+      expect(resolveSidebarLinkIconName(link)).toBe(link.iconName);
+      expect(resolveSidebarLinkIconName(link)).not.toBe("dot");
+    });
+  });
+
   it("uses disabledHint as title for disabled links", () => {
     render(
       <MemoryRouter>
