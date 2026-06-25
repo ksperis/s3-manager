@@ -13,9 +13,9 @@ import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
-import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
 import { formatBytes } from "../../utils/format";
 import { readStoredUser } from "../../utils/workspaces";
+import { updateStoredUserProfile } from "../shared/profileStoredUser";
 import { usePortalAccountContext } from "./PortalAccountContext";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
@@ -27,12 +27,15 @@ const labelClasses = "ui-caption font-semibold uppercase tracking-wide text-[var
 
 function persistStoredUser(user: User) {
   if (typeof window === "undefined") return;
-  const next = readClientJson<Record<string, unknown>>(CLIENT_STORAGE_KEYS.sessionUser) ?? {};
-  next.full_name = user.full_name ?? null;
-  next.display_name = user.display_name ?? user.full_name ?? null;
-  next.ui_language = user.ui_language ?? null;
-  next.ui_preferences = user.ui_preferences ?? {};
-  writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, next);
+  updateStoredUserProfile(
+    {
+      fullName: user.full_name ?? null,
+      displayName: user.display_name ?? user.full_name ?? null,
+      uiLanguage: user.ui_language ?? null,
+      uiPreferences: user.ui_preferences ?? {},
+    },
+    { createIfMissing: true }
+  );
 }
 
 function resolvePortalRole(user: User | null, selectedAccountId: string | null): string {

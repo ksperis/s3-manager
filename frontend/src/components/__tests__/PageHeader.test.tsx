@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { axe } from "jest-axe";
 import { MemoryRouter } from "react-router-dom";
 import PageHeader from "../PageHeader";
 
@@ -37,5 +38,20 @@ describe("PageHeader", () => {
     expect(screen.getByText("Current period")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export" })).toHaveClass("ui-button-secondary");
     expect(screen.getByRole("button", { name: "Export" }).parentElement).not.toHaveClass("sm:pt-6");
+  });
+
+  it("passes a11y checks with breadcrumb links and actions [a11y]", async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <PageHeader
+          title="Storage Spaces"
+          description="Manage end-user storage spaces."
+          breadcrumbs={[{ label: "Portal" }, { label: "Storage Spaces", to: "/portal/storage-spaces" }]}
+          actions={[{ label: "Create", onClick: () => undefined, variant: "primary" }]}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await axe(container)).toHaveNoViolations();
   });
 });

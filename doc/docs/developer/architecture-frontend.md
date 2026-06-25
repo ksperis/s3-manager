@@ -16,6 +16,27 @@
 - API root typically `/api`.
 - Workspace visibility depends on role, entitlements, and backend settings.
 
+## Internal contracts
+
+- Keep route declarations in `frontend/src/router.tsx` and guard internals in
+  `frontend/src/routerGuards.tsx`. Public paths are covered by
+  `frontend/src/router.routeSnapshot.test.ts`; update the snapshot only for
+  intentional route-contract changes.
+- Keep UI gates documented in `frontend/src/routerAccessMatrix.ts`. UI gates
+  describe surface access and affordances only; S3/IAM/backend enforcement
+  remains the storage permission authority.
+- Keep persistent browser keys in `frontend/src/utils/clientStorage.ts`.
+  Feature code should use the helpers there instead of ad hoc JSON parsing.
+- Keep API and mutation boundaries documented in
+  `frontend/src/api/apiClientContracts.ts` and
+  `frontend/src/frontendMutationMatrix.ts` when adding client modules or
+  mutating workflows.
+- Keep surface vocabulary and route ownership in focused contracts such as
+  `frontend/src/features/shared/bucketOpsSurface.ts`,
+  `frontend/src/features/manager/bucketDetail/bucketDetailSurface.ts`,
+  `frontend/src/features/admin/adminBreadcrumbs.ts`, and
+  `frontend/src/features/portal/portalBreadcrumbs.ts`.
+
 ## Overlay close guard
 
 Editable modals, drawers, and overlay panels must protect unapplied saveable

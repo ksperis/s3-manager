@@ -29,7 +29,8 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "./useLiveS3CredentialsValidation";
 import { notifyExecutionContextsRefresh } from "../../utils/executionContextRefresh";
 import { stableSignature } from "../../utils/stableSignature";
-import { CLIENT_STORAGE_KEYS, readClientJson, removeClientStorage, writeClientJson, writeClientStorage } from "../../utils/clientStorage";
+import { removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
+import { updateStoredUserProfile } from "./profileStoredUser";
 import {
   WORKSPACE_STORAGE_KEY,
   isAdminLikeRole,
@@ -83,16 +84,7 @@ type ConnectionCredentialDraft = {
 
 function persistStoredUser(values: { fullName?: string | null; uiLanguage?: "en" | "fr" | "de" | null }) {
   if (typeof window === "undefined") return;
-  const parsed = readClientJson<Record<string, unknown>>(CLIENT_STORAGE_KEYS.sessionUser);
-  if (!parsed) return;
-  if ("fullName" in values) {
-    parsed.full_name = values.fullName ?? null;
-    parsed.display_name = values.fullName ?? null;
-  }
-  if ("uiLanguage" in values) {
-    parsed.ui_language = values.uiLanguage ?? null;
-  }
-  writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, parsed);
+  updateStoredUserProfile(values);
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
