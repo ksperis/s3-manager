@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ._shared import *
+from app.services.mappers.portal import portal_access_key_from_iam_metadata
 
 
 class PortalAccessKeysMixin:
@@ -59,11 +60,8 @@ class PortalAccessKeysMixin:
                 f"Maximum IAM user keys reached ({portal_settings.max_portal_user_access_keys}). Delete a key before creating a new one."
             )
         new_key = iam_service.create_access_key(link.iam_username)
-        return PortalAccessKey(
-            access_key_id=new_key.access_key_id,
-            status=new_key.status,
-            created_at=new_key.created_at,
-            is_active=self._is_active_status(new_key.status, default=True),
+        return portal_access_key_from_iam_metadata(
+            new_key,
             is_portal=False,
             deletable=True,
             secret_access_key=new_key.secret_access_key,
@@ -82,14 +80,11 @@ class PortalAccessKeysMixin:
         meta = next((item for item in metas if item.access_key_id == link.active_access_key), None)
         if meta is None:
             raise RuntimeError("Portal access key is missing in IAM. Re-run portal bootstrap.")
-        return PortalAccessKey(
-            access_key_id=meta.access_key_id,
-            status=meta.status,
-            created_at=meta.created_at,
-            is_active=self._is_active_status(meta.status, default=True),
-            secret_access_key=link.active_secret_key,
+        return portal_access_key_from_iam_metadata(
+            meta,
             is_portal=True,
             deletable=False,
+            secret_access_key=link.active_secret_key,
         )
 
     def bootstrap_portal_identity(self, user: User, access: "AccountAccess") -> PortalState:
@@ -136,13 +131,12 @@ class PortalAccessKeysMixin:
         meta = next((m for m in metas if m.access_key_id == access_key_id), None)
         if meta is None:
             raise RuntimeError("Clé introuvable après mise à jour")
-        return PortalAccessKey(
-            access_key_id=meta.access_key_id,
-            status=meta.status or status_value,
-            created_at=meta.created_at,
-            is_active=self._is_active_status(meta.status, default=active),
+        return portal_access_key_from_iam_metadata(
+            meta,
             is_portal=False,
             deletable=True,
+            active_default=active,
+            status=meta.status or status_value,
         )
 
     def delete_access_key(self, user: User, access: "AccountAccess", access_key_id: str) -> None:

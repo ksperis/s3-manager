@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ._shared import *
+from app.services.mappers.portal import portal_access_key_from_active_link, portal_access_key_from_iam_metadata
 
 
 class PortalIamMixin:
@@ -603,14 +604,12 @@ class PortalIamMixin:
         self.db.add(link)
         self.db.commit()
         self.db.refresh(link)
-        return PortalAccessKey(
-            access_key_id=key.access_key_id,
-            status=key.status,
-            created_at=key.created_at,
-            is_active=True,
+        return portal_access_key_from_iam_metadata(
+            key,
             is_portal=True,
             deletable=False,
             secret_access_key=key.secret_access_key,
+            is_active=True,
         )
 
     def _ensure_portal_user(
@@ -877,14 +876,12 @@ class PortalIamMixin:
                 except Exception as exc:  # pragma: no cover - defensive
                     logger.warning("Unable to delete incomplete access key %s: %s", active.access_key_id, exc)
                 return self._persist_portal_key(link, new_key)
-            return PortalAccessKey(
-                access_key_id=active.access_key_id,
-                status=active.status,
-                created_at=active.created_at,
-                is_active=True,
-                secret_access_key=link.active_secret_key,
+            return portal_access_key_from_iam_metadata(
+                active,
                 is_portal=True,
                 deletable=False,
+                secret_access_key=link.active_secret_key,
+                is_active=True,
             )
         new_key = iam_service.create_access_key(link.iam_username)
         # Clean up any stale keys; we only persist the active one.
@@ -911,28 +908,18 @@ class PortalIamMixin:
                 continue
             is_active = is_portal or self._is_active_status(meta.status, default=True)
             keys.append(
-                PortalAccessKey(
-                    access_key_id=meta.access_key_id,
-                    status=meta.status,
-                    created_at=meta.created_at,
-                    is_active=is_active,
-                    secret_access_key=None,
+                portal_access_key_from_iam_metadata(
+                    meta,
                     is_portal=is_portal,
                     deletable=not is_portal,
+                    is_active=is_active,
                 )
             )
         # Ensure the active key is reflected even if IAM did not return metadata
         if include_portal and link.active_access_key and not any(k.access_key_id == link.active_access_key for k in keys):
             keys.insert(
                 0,
-                PortalAccessKey(
-                    access_key_id=link.active_access_key,
-                    status="Active",
-                    is_active=True,
-                    secret_access_key=link.active_secret_key,
-                    is_portal=True,
-                    deletable=False,
-                ),
+                portal_access_key_from_active_link(link, include_secret=True),
             )
         return keys
 
