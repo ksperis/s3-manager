@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SidebarSection } from "../../components/Sidebar";
 import type { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
+import { TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS } from "../../components/topbarControlWidths";
 import { SELECTOR_TAGS_PREFERENCE_KEY } from "../../utils/selectorTagsPreference";
 import CephAdminLayout from "./CephAdminLayout";
 
@@ -12,7 +13,7 @@ const useCephAdminEndpointMock = vi.fn();
 const useGeneralSettingsMock = vi.fn();
 
 let capturedNavSections: SidebarSection[] = [];
-let capturedEndpointSelectProps: { options?: TopbarDropdownOption[] } | null = null;
+let capturedEndpointSelectProps: { options?: TopbarDropdownOption[]; widthClassName?: string; menuMinWidthClassName?: string } | null = null;
 
 vi.mock("./CephAdminEndpointContext", () => ({
   CephAdminEndpointProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -365,7 +366,7 @@ describe("CephAdminLayout", () => {
     expect(queryByText("ops-note")).not.toBeInTheDocument();
     expect(capturedEndpointSelectProps).toEqual(
       expect.objectContaining({
-        widthClassName: expect.stringContaining("w-[19rem]"),
+        widthClassName: TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
         menuMinWidthClassName: "min-w-[24rem]",
       })
     );

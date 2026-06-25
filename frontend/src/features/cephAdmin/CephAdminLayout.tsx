@@ -12,6 +12,11 @@ import PageBanner from "../../components/PageBanner";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { CephAdminEndpointProvider, useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
+import {
+  TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS,
+  TOPBAR_CONTEXT_SELECTOR_VALUE_WIDTH_CLASS,
+  TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
+} from "../../components/topbarControlWidths";
 import { useSelectorTagsPreference } from "../../utils/selectorTagsPreference";
 import { buildUiTagItems, filterSelectorVisibleUiTags } from "../../utils/uiTags";
 
@@ -201,7 +206,8 @@ function CephAdminShell() {
         icon={<EndpointIcon className="h-4 w-4" />}
         ariaLabel={`Endpoint ${selectedEndpointLabel}`}
         title={selectedEndpoint?.endpoint_url ?? selectedEndpointLabel}
-        valueClassName="max-w-[20rem]"
+        className={TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
+        valueClassName={TOPBAR_CONTEXT_SELECTOR_VALUE_WIDTH_CLASS}
       />
     );
   };
@@ -223,7 +229,7 @@ function CephAdminShell() {
             ariaLabel="Select Ceph endpoint"
             triggerLabel="Endpoint"
             title={selectedEndpoint?.endpoint_url ?? undefined}
-            widthClassName={mode === "icon" ? "w-9" : "w-[19rem] lg:w-[26rem] xl:w-[32rem] max-w-[72vw]"}
+            widthClassName={mode === "icon" ? TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
             menuMinWidthClassName="min-w-[24rem]"
             icon={<EndpointIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
             disabled={!selectorEnabled || loading}

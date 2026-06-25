@@ -4,6 +4,10 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SidebarSection } from "../../components/Sidebar";
+import {
+  TOPBAR_CONTEXT_SELECTOR_COMPACT_WIDTH_CLASS,
+  TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
+} from "../../components/topbarControlWidths";
 import ManagerLayout from "./ManagerLayout";
 
 const useS3AccountContextMock = vi.fn();
@@ -525,6 +529,7 @@ describe("ManagerLayout", () => {
 
     expect(capturedTopbarControlDescriptors.map((descriptor) => descriptor.id)).toEqual(["account"]);
     expect(capturedAccountSelectorProps).toEqual(expect.objectContaining({ selectedContextId: "ctx-1", selectedLabel: "Context" }));
+    expect(capturedAccountSelectorProps?.widthClassName).toBe(TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS);
     expect(capturedTopbarControlDescriptors[0]?.estimatedIconWidth).toBe(96);
 
     render(<>{capturedTopbarControlDescriptors[0]?.renderControl("icon")}</>);
@@ -537,6 +542,6 @@ describe("ManagerLayout", () => {
         showTriggerTags: false,
       })
     );
-    expect(capturedAccountSelectorProps?.widthClassName).toContain("w-[96px]");
+    expect(capturedAccountSelectorProps?.widthClassName).toBe(TOPBAR_CONTEXT_SELECTOR_COMPACT_WIDTH_CLASS);
   });
 });

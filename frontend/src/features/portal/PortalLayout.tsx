@@ -8,6 +8,10 @@ import type { SidebarSection } from "../../components/Sidebar";
 import { TopbarStaticControl } from "../../components/TopbarControlTrigger";
 import TopbarDropdownSelect, { type TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
 import type { TopbarControlDescriptor, TopbarControlRenderMode } from "../../components/topbarControlsLayout";
+import {
+  TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS,
+  TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
+} from "../../components/topbarControlWidths";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 
@@ -50,7 +54,7 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
         ariaLabel="Select portal account"
         triggerLabel="Account"
         placeholder={selectedLabel}
-        widthClassName={mode === "icon" ? "w-9" : "w-48 lg:w-[20rem] xl:w-[26rem] min-w-[12rem] max-w-[40vw]"}
+        widthClassName={mode === "icon" ? TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
         menuMinWidthClassName="min-w-[18rem]"
         icon={<AccountControlIcon className="h-4 w-4" />}
         disabled={loading}
@@ -79,6 +83,7 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
       icon={<AccountControlIcon className="h-4 w-4" />}
       ariaLabel={`Portal account ${selectedLabel}`}
       title={selectedLabel}
+      className={TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
     />
   );
 }

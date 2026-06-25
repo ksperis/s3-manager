@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS } from "../../components/topbarControlWidths";
 import BrowserLayout from "./BrowserLayout";
 
 const useBrowserContextMock = vi.fn();
@@ -15,6 +16,7 @@ let capturedSelectorProps: {
   selectedContextId?: string | null;
   selectedLabel?: string;
   triggerMode?: "icon" | "icon_label";
+  widthClassName?: string;
 } | null = null;
 
 vi.mock("./BrowserContext", () => ({
@@ -97,6 +99,12 @@ describe("BrowserLayout", () => {
     expect(capturedLayoutProps.hideSidebar).toBe(true);
     expect(capturedLayoutProps.topbarControlDescriptors?.map((descriptor) => descriptor.id)).toEqual(["account"]);
     expect(screen.getByRole("button", { name: "Browser account selector" })).toBeInTheDocument();
-    expect(capturedSelectorProps).toEqual(expect.objectContaining({ selectedContextId: "ctx-1", selectedLabel: "Main account" }));
+    expect(capturedSelectorProps).toEqual(
+      expect.objectContaining({
+        selectedContextId: "ctx-1",
+        selectedLabel: "Main account",
+        widthClassName: TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
+      })
+    );
   });
 });

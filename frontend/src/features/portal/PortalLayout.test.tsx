@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
+import { TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS } from "../../components/topbarControlWidths";
 import PortalLayout from "./PortalLayout";
 
 const mocks = vi.hoisted(() => ({
@@ -126,6 +127,7 @@ describe("PortalLayout", () => {
     const accountSelector = within(topbar).getByRole("button", { name: "Select portal account" });
     expect(accountSelector).toHaveTextContent("Account");
     expect(accountSelector).toHaveTextContent("Helios Retail");
+    expect(accountSelector.parentElement).toHaveClass(...TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS.split(" "));
     await user.click(accountSelector);
     await user.click(await screen.findByRole("option", { name: "Northwind Ops" }));
     expect(mocks.setSelectedAccountId).toHaveBeenCalledWith("102");

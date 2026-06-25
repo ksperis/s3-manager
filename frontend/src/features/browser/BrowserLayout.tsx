@@ -12,6 +12,11 @@ import { BrowserContextProvider, useBrowserContext } from "./BrowserContext";
 import { fetchManagerContext } from "../../api/managerContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
+import {
+  TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS,
+  TOPBAR_CONTEXT_SELECTOR_VALUE_WIDTH_CLASS,
+  TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
+} from "../../components/topbarControlWidths";
 
 function BrowserShell() {
   const {
@@ -87,7 +92,7 @@ function BrowserShell() {
     }
     return (
       <div
-        className={`shell-control inline-flex h-10 w-[300px] max-w-[42vw] min-w-[17rem] items-center gap-2.5 rounded-lg border px-3 text-left ${
+        className={`shell-control inline-flex h-10 ${TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS} items-center gap-2.5 rounded-lg border px-3 text-left ${
           selected ? "" : "shell-muted-text"
         }`}
         title={identityLabel ?? undefined}
@@ -96,7 +101,7 @@ function BrowserShell() {
           <span className="shell-muted-text block truncate text-[10px] font-medium">
             Account
           </span>
-          <span className="mt-0.5 block max-w-[18rem] truncate text-[12px] font-semibold leading-4 text-[var(--shell-text)]">{selectedLabel}</span>
+          <span className={`mt-0.5 block ${TOPBAR_CONTEXT_SELECTOR_VALUE_WIDTH_CLASS} truncate text-[12px] font-semibold leading-4 text-[var(--shell-text)]`}>{selectedLabel}</span>
         </span>
       </div>
     );
@@ -120,7 +125,7 @@ function BrowserShell() {
             identityLabel={identityLabel}
             defaultEndpointId={defaultEndpointId}
             defaultEndpointName={defaultEndpointName}
-            widthClassName={mode === "icon" ? "w-9" : "w-[300px] max-w-[42vw] min-w-[17rem]"}
+            widthClassName={mode === "icon" ? TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
             triggerMode={mode}
           />
         ) : (

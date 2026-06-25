@@ -8,6 +8,7 @@ import { formatAccountLabel } from "../features/shared/storageEndpointLabel";
 import UiTagBadgeList from "./UiTagBadgeList";
 import TopbarControlTrigger from "./TopbarControlTrigger";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
+import { TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS } from "./topbarControlWidths";
 import { useSelectorTagsPreference } from "../utils/selectorTagsPreference";
 import { buildUiTagItems, extractUiTagLabels, filterSelectorVisibleUiTags } from "../utils/uiTags";
 
@@ -75,7 +76,7 @@ export default function TopbarContextAccountSelector({
   identityLabel,
   defaultEndpointId,
   defaultEndpointName,
-  widthClassName = "w-[300px] max-w-[42vw] min-w-[17rem]",
+  widthClassName = TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
   searchThreshold = 6,
   openInPortal = true,
   triggerMode = "icon_label",

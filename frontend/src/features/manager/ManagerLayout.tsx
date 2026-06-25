@@ -13,6 +13,11 @@ import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storage
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 import {
+  TOPBAR_CONTEXT_SELECTOR_COMPACT_WIDTH_CLASS,
+  TOPBAR_CONTEXT_SELECTOR_VALUE_WIDTH_CLASS,
+  TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
+} from "../../components/topbarControlWidths";
+import {
   getManagerToolAccess,
   readStoredUser,
 } from "../../utils/workspaces";
@@ -121,7 +126,7 @@ function ManagerShell() {
     navigate({ pathname: "/manager", search: nextParams.toString() ? `?${nextParams.toString()}` : "" });
   };
 
-  const compactAccountControlWidthClass = "w-[96px] max-w-[26vw] min-w-[4.75rem]";
+  const compactAccountControlWidthClass = TOPBAR_CONTEXT_SELECTOR_COMPACT_WIDTH_CLASS;
 
   const renderStaticAccountPill = (mode: "icon" | "icon_label") => {
     if (mode === "icon") {
@@ -142,12 +147,12 @@ function ManagerShell() {
       );
     }
     return (
-      <div className="shell-control inline-flex h-10 w-[300px] max-w-[42vw] min-w-[17rem] items-center gap-2.5 rounded-lg border px-3 text-left">
+      <div className={`shell-control inline-flex h-10 ${TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS} items-center gap-2.5 rounded-lg border px-3 text-left`}>
         <span className="min-w-0 flex-1 leading-tight">
           <span className="shell-muted-text block truncate text-[10px] font-medium">
             Account
           </span>
-          <span className="mt-0.5 block max-w-[18rem] truncate text-[12px] font-semibold leading-4 text-[var(--shell-text)]">
+          <span className={`mt-0.5 block ${TOPBAR_CONTEXT_SELECTOR_VALUE_WIDTH_CLASS} truncate text-[12px] font-semibold leading-4 text-[var(--shell-text)]`}>
             {selectedLabel}
           </span>
         </span>
@@ -176,7 +181,7 @@ function ManagerShell() {
             identityLabel={identityLabel}
             defaultEndpointId={defaultEndpointId}
             defaultEndpointName={defaultEndpointName}
-            widthClassName={mode === "icon" ? compactAccountControlWidthClass : "w-[300px] max-w-[42vw] min-w-[17rem]"}
+            widthClassName={mode === "icon" ? compactAccountControlWidthClass : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
             triggerMode={mode === "icon" ? "icon_label" : mode}
             showTriggerTags={mode !== "icon"}
           />
