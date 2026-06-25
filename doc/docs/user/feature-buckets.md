@@ -32,7 +32,12 @@ Use this guide when creating, updating, or inspecting bucket configuration.
 7. When the purge tool is enabled, use **Manager > Tools > Purge** or
    **Purge selected** from Ceph Admin and Storage Ops bucket workbenches to empty
    selected buckets without deleting bucket configuration.
-8. Use the **Usage stats** tab in bucket detail pages to review the latest
+8. From **Manager > Buckets**, deleting a non-empty bucket requires the guarded
+   delete flow: review the impact, type the exact confirmation, monitor
+   progress, and stay within the 10,000-entry limit. This flow deletes current
+   objects, historical versions, delete markers, the bucket, and bucket
+   configuration.
+9. Use the **Usage stats** tab in bucket detail pages to review the latest
    calculated snapshot, including logical bytes by current and noncurrent object
    versions when version listing is supported.
 
@@ -52,6 +57,12 @@ the latest successful calculation quickly.
     column and bucket detail pages show whether notification configuration is
     configured or not set. Bulk notification updates still depend on the
     target context supporting bucket notifications.
+
+!!! warning
+    Manager bucket deletion with purge stops before deleting anything when more
+    than 10,000 deletable entries are found. Empty larger buckets with
+    **Manager > Tools > Purge** or an external S3 tool before deleting the
+    bucket.
 
 ## Related pages
 

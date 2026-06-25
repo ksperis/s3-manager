@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListToolbar from "../../components/ListToolbar";
 import PageEmptyState from "../../components/PageEmptyState";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   Bucket,
@@ -46,7 +47,9 @@ import {
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { compareByNullableField, type SortableField } from "../../utils/sortValues";
+import { getManagerToolAccess, readStoredUser } from "../../utils/workspaces";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import BucketPurgeRunModal from "../shared/BucketPurgeRunModal";
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "../shared/BucketFeatureSummaryTooltip";
 import type { BucketFeatureTooltipState } from "../shared/BucketFeatureSummaryTooltip";
 import {
@@ -187,6 +190,7 @@ const MANAGER_FEATURE_LABELS: Record<ManagerFeatureKey, string> = {
 const LEGACY_COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.v1";
 const COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.session.v1";
 const defaultVisibleColumns: ColumnId[] = ["used_bytes", "object_count"];
+const BUCKET_DELETE_WITH_PURGE_OBJECT_LIMIT = 10000;
 
 const loadVisibleColumns = (): ColumnId[] => {
   if (typeof window === "undefined") return defaultVisibleColumns;
@@ -248,6 +252,9 @@ export default function BucketsPage() {
     sessionS3AccountName,
     accountIdForApi,
   } = useS3AccountContext();
+  const { generalSettings } = useGeneralSettings();
+  const storedUser = readStoredUser();
+  const managerToolAccess = getManagerToolAccess(storedUser);
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const [buckets, setBuckets] = useState<BucketListRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -255,6 +262,7 @@ export default function BucketsPage() {
   const [creating, setCreating] = useState(false);
   const [deletingBucket, setDeletingBucket] = useState<string | null>(null);
   const [pendingDeleteBucketName, setPendingDeleteBucketName] = useState<string | null>(null);
+  const [pendingDeleteWithPurgeBucketName, setPendingDeleteWithPurgeBucketName] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
@@ -332,6 +340,8 @@ export default function BucketsPage() {
       ? "Not selected"
       : sessionS3AccountName || "S3 session";
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
+  const canDeleteBucketWithPurge =
+    Boolean(generalSettings.bucket_purge_enabled) && Boolean(managerToolAccess?.bucket_purge);
 
   const includeParams = useMemo(() => {
     const include: string[] = [];
@@ -708,9 +718,32 @@ export default function BucketsPage() {
   const requestDelete = (name: string) => {
     if (needsS3AccountSelection) return;
     const targetBucket = buckets.find((b) => b.name === name);
-    if ((targetBucket?.object_count ?? 0) > 0) {
+    const objectCount = targetBucket?.object_count;
+    if (typeof objectCount === "number" && objectCount > BUCKET_DELETE_WITH_PURGE_OBJECT_LIMIT) {
       setActionMessage(null);
-      setActionError(`Bucket '${name}' is not empty (${formatObjectCountLabel(targetBucket?.object_count ?? 0)}). Empty it before deleting.`);
+      setActionError(
+        `Bucket '${name}' contains more than ${BUCKET_DELETE_WITH_PURGE_OBJECT_LIMIT.toLocaleString()} objects. Use Manager > Tools > Purge when available, or an external S3 tool, then delete the empty bucket.`
+      );
+      return;
+    }
+    if ((objectCount ?? 0) > 0 || objectCount === undefined || objectCount === null) {
+      if (canDeleteBucketWithPurge) {
+        setActionError(null);
+        setActionMessage(null);
+        setPendingDeleteWithPurgeBucketName(name);
+        return;
+      }
+      if ((objectCount ?? 0) > 0) {
+        setActionMessage(null);
+        setActionError(
+          `Bucket '${name}' is not empty (${formatObjectCountLabel(objectCount ?? 0)}). Bucket purge access is required to delete it from Manager.`
+        );
+        return;
+      }
+    }
+    if ((objectCount ?? 0) > 0) {
+      setActionMessage(null);
+      setActionError(`Bucket '${name}' is not empty (${formatObjectCountLabel(objectCount ?? 0)}). Empty it before deleting.`);
       return;
     }
     setPendingDeleteBucketName(name);
@@ -740,6 +773,15 @@ export default function BucketsPage() {
       setDeletingBucket(null);
       setPendingDeleteBucketName(null);
     }
+  };
+
+  const handleDeleteWithPurgeFinished = async (result: { bucket_deleted?: boolean; deleted_objects?: number; deleted_versions?: number }) => {
+    if (!result.bucket_deleted) return;
+    const deletedEntries = (result.deleted_objects ?? 0) + (result.deleted_versions ?? 0);
+    const entryLabel = deletedEntries === 1 ? "entry" : "entries";
+    setActionError(null);
+    setActionMessage(`Bucket deleted after removing ${deletedEntries.toLocaleString()} ${entryLabel}.`);
+    await fetchBuckets(accountIdForApi ?? null);
   };
 
   const bucketTableColumns: ColumnDef[] = (() => {
@@ -838,26 +880,38 @@ export default function BucketsPage() {
       field: null,
       align: "right",
       render: (bucket) => {
-        const objectCount = bucket.object_count ?? 0;
-        const containsObjects = objectCount > 0;
-        const deleteDisabledReason = containsObjects
-          ? `Bucket not empty: ${formatObjectCountLabel(objectCount)}. Empty it before deleting.`
-          : null;
+        const objectCount = bucket.object_count;
+        const containsObjects = (objectCount ?? 0) > 0;
+        const objectCountUnknown = objectCount === undefined || objectCount === null;
+        const exceedsDeleteWithPurgeLimit =
+          typeof objectCount === "number" && objectCount > BUCKET_DELETE_WITH_PURGE_OBJECT_LIMIT;
+        const requiresPurgeAccess = containsObjects || objectCountUnknown;
+        const deleteDisabledReason = exceedsDeleteWithPurgeLimit
+          ? `Bucket has more than ${BUCKET_DELETE_WITH_PURGE_OBJECT_LIMIT.toLocaleString()} objects. Use Manager > Tools > Purge or an external S3 tool first.`
+          : requiresPurgeAccess && !canDeleteBucketWithPurge
+            ? "Bucket purge access is required to delete a non-empty bucket from Manager."
+            : null;
+        const deleteLabel = requiresPurgeAccess && canDeleteBucketWithPurge ? "Delete..." : "Delete";
         const deleteButton = (
           <button
             onClick={() => requestDelete(bucket.name)}
             className={tableDeleteActionClasses}
-            disabled={deletingBucket === bucket.name || containsObjects}
+            disabled={deletingBucket === bucket.name || Boolean(deleteDisabledReason)}
           >
-            {deletingBucket === bucket.name ? "Deleting..." : "Delete"}
+            {deletingBucket === bucket.name ? "Deleting..." : deleteLabel}
           </button>
         );
         return (
-          <div className="flex flex-wrap justify-end gap-2">
-            <Link to={`/manager/buckets/${encodeURIComponent(bucket.name)}`} className={tableActionButtonClasses}>
-              Configure
-            </Link>
-            {deleteDisabledReason ? <span title={deleteDisabledReason}>{deleteButton}</span> : deleteButton}
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex flex-wrap justify-end gap-2">
+              <Link to={`/manager/buckets/${encodeURIComponent(bucket.name)}`} className={tableActionButtonClasses}>
+                Configure
+              </Link>
+              {deleteDisabledReason ? <span title={deleteDisabledReason}>{deleteButton}</span> : deleteButton}
+            </div>
+            {deleteDisabledReason && (
+              <span className="max-w-72 text-right ui-caption text-slate-500 dark:text-slate-400">{deleteDisabledReason}</span>
+            )}
           </div>
         );
       },
@@ -1073,6 +1127,17 @@ export default function BucketsPage() {
           loading={deletingBucket === pendingDeleteBucketName}
           onCancel={() => setPendingDeleteBucketName(null)}
           onConfirm={() => void handleConfirmDelete()}
+        />
+      )}
+
+      {pendingDeleteWithPurgeBucketName && accountIdForApi && (
+        <BucketPurgeRunModal
+          mode="manager-delete"
+          contextId={String(accountIdForApi)}
+          contextName={accountLabel}
+          targets={[{ bucketName: pendingDeleteWithPurgeBucketName }]}
+          onFinished={(result) => void handleDeleteWithPurgeFinished(result)}
+          onClose={() => setPendingDeleteWithPurgeBucketName(null)}
         />
       )}
 

@@ -311,3 +311,45 @@ def test_purge_bucket_contents_deletes_current_objects_versions_and_delete_marke
     assert result.failed_count == 0
     assert sorted(len(call) for call in client.delete_calls) == [1, 2, 1000, 1000]
     assert {event.stage for event in progress_events} >= {"list", "delete", "versions", "completed"}
+
+
+def test_count_bucket_purge_entries_stops_after_limit_without_deleting():
+    class CountClient:
+        def __init__(self):
+            self.list_calls = 0
+            self.version_calls = 0
+
+        def list_objects_v2(self, **kwargs):
+            self.list_calls += 1
+            token = kwargs.get("ContinuationToken")
+            expected_token = None if self.list_calls == 1 else f"page-{self.list_calls}"
+            assert token == expected_token
+            page = {"Contents": [{"Key": f"object-{self.list_calls}-{idx}"} for idx in range(1000)]}
+            if self.list_calls < 11:
+                page["NextContinuationToken"] = f"page-{self.list_calls + 1}"
+            return page
+
+        def list_object_versions(self, **kwargs):
+            self.version_calls += 1
+            return {"Versions": [{"Key": "versioned", "VersionId": "v1"}]}
+
+        def delete_objects(self, **kwargs):  # pragma: no cover - must not be called
+            raise AssertionError("counting must not delete objects")
+
+    client = CountClient()
+    progress_events = []
+
+    result = s3_client.count_bucket_purge_entries(
+        client,
+        "bucket-purge",
+        limit=10000,
+        include_versions=True,
+        progress_callback=progress_events.append,
+    )
+
+    assert result.exceeded_limit is True
+    assert result.listed_objects == 10001
+    assert result.listed_versions == 0
+    assert client.list_calls == 11
+    assert client.version_calls == 0
+    assert {event.stage for event in progress_events} == {"list"}

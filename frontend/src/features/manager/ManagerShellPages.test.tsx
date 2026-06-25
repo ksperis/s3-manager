@@ -17,6 +17,7 @@ const fetchManagerTrafficMock = vi.fn();
 const fetchManagerUsageTrendsMock = vi.fn();
 const getManagerUsageStatsAggregateMock = vi.fn();
 let bucketUsageStatsEnabled = false;
+let bucketPurgeEnabled = false;
 const LEGACY_MANAGER_BUCKET_COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.v1";
 const MANAGER_BUCKET_COLUMNS_SESSION_STORAGE_KEY = "manager.bucket_list.columns.session.v1";
 
@@ -45,6 +46,7 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
     generalSettings: {
       endpoint_status_enabled: false,
       bucket_usage_stats_enabled: bucketUsageStatsEnabled,
+      bucket_purge_enabled: bucketPurgeEnabled,
     },
   }),
 }));
@@ -256,6 +258,7 @@ describe("manager shell pages", () => {
     fetchManagerUsageTrendsMock.mockResolvedValue({});
     getManagerUsageStatsAggregateMock.mockResolvedValue({ aggregate: usageStatsAggregate() });
     bucketUsageStatsEnabled = false;
+    bucketPurgeEnabled = false;
     window.localStorage.clear();
     window.sessionStorage.clear();
   });
@@ -1120,6 +1123,110 @@ describe("manager shell pages", () => {
         })
       )
     );
+  });
+
+  it("opens the delete-with-purge modal for a non-empty bucket when purge access is enabled", async () => {
+    bucketPurgeEnabled = true;
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_user",
+        manager_tool_access: { bucket_purge: true },
+      })
+    );
+    listBucketsMock.mockResolvedValue([
+      {
+        name: "bucket-a",
+        used_bytes: 1024,
+        object_count: 12,
+      },
+    ]);
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          endpoint_provider: "ceph",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true, sns: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete..." }));
+
+    expect(await screen.findByRole("dialog", { name: "Delete bucket" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Type DELETE BUCKET bucket-a")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This deletes current objects, historical versions, and delete markers, then removes the bucket and its S3 configuration. The operation stops before deleting anything if more than 10,000 entries are found."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("blocks manager delete-with-purge when the visible object count exceeds 10000", async () => {
+    bucketPurgeEnabled = true;
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_user",
+        manager_tool_access: { bucket_purge: true },
+      })
+    );
+    listBucketsMock.mockResolvedValue([
+      {
+        name: "bucket-huge",
+        used_bytes: 1024,
+        object_count: 10001,
+      },
+    ]);
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          endpoint_provider: "ceph",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true, sns: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: true,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-huge")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete..." })).toBeDisabled();
   });
 
   it("ignores legacy manager bucket column preferences from localStorage", async () => {

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 BucketPurgeStatus = Literal["completed", "completed_with_errors", "failed", "canceled"]
-BucketPurgeStage = Literal["prepare", "list", "delete", "versions", "completed"]
+BucketPurgeStage = Literal["prepare", "list", "delete", "versions", "delete_bucket", "completed"]
 
 
 class BucketPurgeTarget(BaseModel):
@@ -53,6 +53,15 @@ def bucket_purge_confirmation_phrase(target_count: int) -> str:
     return f"PURGE {target_count} BUCKETS"
 
 
+class BucketDeleteWithPurgeRequest(BaseModel):
+    parallelism: int = Field(default=10, ge=1, le=64)
+    confirmation: str = ""
+
+
+def bucket_delete_with_purge_confirmation_phrase(bucket_name: str) -> str:
+    return f"DELETE BUCKET {bucket_name}"
+
+
 class BucketPurgeFailure(BaseModel):
     bucket_name: str
     stage: str
@@ -72,6 +81,7 @@ class BucketPurgeBucketResult(BaseModel):
     deleted_objects: int = 0
     deleted_versions: int = 0
     failed_count: int = 0
+    bucket_deleted: bool = False
     duration_seconds: float = 0
     failures_sample: list[BucketPurgeFailure] = Field(default_factory=list)
 
@@ -89,6 +99,7 @@ class BucketPurgeProgress(BaseModel):
     deleted_objects: int = 0
     deleted_versions: int = 0
     failed_count: int = 0
+    bucket_deleted: bool = False
     message: Optional[str] = None
 
 
@@ -101,6 +112,7 @@ class BucketPurgeResult(BaseModel):
     deleted_objects: int = 0
     deleted_versions: int = 0
     failed_count: int = 0
+    bucket_deleted: bool = False
     started_at: datetime
     finished_at: datetime
     buckets: list[BucketPurgeBucketResult] = Field(default_factory=list)

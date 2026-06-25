@@ -33,11 +33,24 @@ markers are deleted in parallel S3 `DeleteObjects` batches. Bucket metadata and
 configuration, including policies, lifecycle rules, CORS, notifications, and
 versioning settings, are kept.
 
+Deleting a bucket is a separate Manager bucket action. From **Manager >
+Buckets**, deleting a non-empty bucket first runs a guarded purge and then
+removes the bucket itself only when no more than 10,000 deletable entries are
+found. That delete flow removes the bucket and its S3 configuration; this purge
+tool does not.
+
 ## Limits / feature flags
 
 !!! warning
     Bucket purge is destructive. It does not delete buckets, but deleted objects,
     versions, and delete markers cannot be restored by s3-manager.
+
+!!! warning
+    The Manager bucket delete flow is limited to 10,000 deletable entries,
+    counting current objects, historical versions, and delete markers. For
+    larger buckets, use **Manager > Tools > Purge** to empty the bucket first or
+    use an external S3 tool suited to large destructive operations, then delete
+    the empty bucket.
 
 !!! note
     Tool visibility depends on the global `bucket_purge_enabled` flag. Manager

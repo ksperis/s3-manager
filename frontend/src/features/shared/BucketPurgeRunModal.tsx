@@ -5,9 +5,11 @@
 import { useMemo, useRef, useState } from "react";
 
 import {
+  streamManagerBucketDeleteWithPurge,
   streamCephAdminBucketPurge,
   streamManagerBucketPurge,
   streamStorageOpsBucketPurge,
+  type BucketDeleteWithPurgePayload,
   type BucketPurgeBucketResult,
   type BucketPurgeFailure,
   type BucketPurgePayload,
@@ -29,11 +31,17 @@ export type BucketPurgeUiTarget = {
 type CommonProps = {
   targets: BucketPurgeUiTarget[];
   onClose: () => void;
+  onFinished?: (result: BucketPurgeResult) => void;
 };
 
 type BucketPurgeRunModalProps =
   | (CommonProps & {
       mode: "manager";
+      contextId: string;
+      contextName?: string | null;
+    })
+  | (CommonProps & {
+      mode: "manager-delete";
       contextId: string;
       contextName?: string | null;
     })
@@ -69,19 +77,20 @@ function bucketStatusClasses(status: BucketPurgeBucketResult["status"]): string 
 }
 
 function surfaceLabel(props: BucketPurgeRunModalProps): string {
-  if (props.mode === "manager") return "Manager";
+  if (props.mode === "manager" || props.mode === "manager-delete") return "Manager";
   if (props.mode === "ceph-admin") return "Ceph Admin";
   return "Storage Ops";
 }
 
 function contextLabel(props: BucketPurgeRunModalProps): string {
-  if (props.mode === "manager") return props.contextName || props.contextId;
+  if (props.mode === "manager" || props.mode === "manager-delete") return props.contextName || props.contextId;
   if (props.mode === "ceph-admin") return props.endpointName || `Endpoint ${props.endpointId}`;
   return "All selected contexts";
 }
 
 function failureTarget(failure: BucketPurgeFailure): string {
   if (failure.key) return failure.key;
+  if (failure.stage === "delete_bucket") return "Bucket deletion";
   return failure.stage === "list" ? "Bucket listing" : "DeleteObjects batch";
 }
 
@@ -100,9 +109,12 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
   const abortRef = useRef<AbortController | null>(null);
 
   const targetCount = props.targets.length;
-  const expectedConfirmation = `PURGE ${targetCount} BUCKETS`;
+  const isDeleteMode = props.mode === "manager-delete";
+  const deleteTarget = isDeleteMode ? props.targets[0]?.bucketName ?? "" : "";
+  const expectedConfirmation = isDeleteMode ? `DELETE BUCKET ${deleteTarget}` : `PURGE ${targetCount} BUCKETS`;
   const confirmationValid = confirmation === expectedConfirmation;
-  const targetLabel = `${targetCount} bucket${targetCount > 1 ? "s" : ""}`;
+  const targetLabel = isDeleteMode ? "Delete bucket" : `${targetCount} bucket${targetCount > 1 ? "s" : ""}`;
+  const operationLabel = isDeleteMode ? "Bucket deletion" : "Purge";
   const progressPercent = useMemo(() => {
     if (!progress) return null;
     const listedTotal = progress.listed_objects + progress.listed_versions;
@@ -116,11 +128,20 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
     return null;
   }, [progress]);
 
-  const buildPayload = (): BucketPurgePayload => {
-    const basePayload: BucketPurgePayload = {
+  const buildPayload = (): BucketPurgePayload | BucketDeleteWithPurgePayload => {
+    const basePayload = {
       parallelism: Math.max(1, Math.min(64, Math.trunc(parallelism || 10))),
-      include_versions: true,
       confirmation,
+    };
+    if (isDeleteMode) {
+      if (!deleteTarget) {
+        throw new Error("Missing bucket to delete.");
+      }
+      return basePayload;
+    }
+    const purgePayload: BucketPurgePayload = {
+      ...basePayload,
+      include_versions: true,
     };
     if (props.mode === "storage-ops") {
       const targets = props.targets.map((target) => {
@@ -133,10 +154,10 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
           bucket_name: target.bucketName,
         };
       });
-      return { ...basePayload, targets };
+      return { ...purgePayload, targets };
     }
     return {
-      ...basePayload,
+      ...purgePayload,
       buckets: props.targets.map((target) => target.bucketName),
     };
   };
@@ -147,7 +168,7 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
     setMessage(null);
     setResult(null);
     setProgress(null);
-    let payload: BucketPurgePayload;
+    let payload: BucketPurgePayload | BucketDeleteWithPurgePayload;
     try {
       payload = buildPayload();
     } catch (err) {
@@ -164,18 +185,21 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
         onProgress: (event: BucketPurgeProgress) => setProgress(event),
       };
       const nextResult =
-        props.mode === "manager"
-          ? await streamManagerBucketPurge(props.contextId, payload, streamOptions)
+        props.mode === "manager-delete"
+          ? await streamManagerBucketDeleteWithPurge(props.contextId, deleteTarget, payload as BucketDeleteWithPurgePayload, streamOptions)
+          : props.mode === "manager"
+          ? await streamManagerBucketPurge(props.contextId, payload as BucketPurgePayload, streamOptions)
           : props.mode === "ceph-admin"
-            ? await streamCephAdminBucketPurge(props.endpointId, payload, streamOptions)
-            : await streamStorageOpsBucketPurge(payload, streamOptions);
+            ? await streamCephAdminBucketPurge(props.endpointId, payload as BucketPurgePayload, streamOptions)
+            : await streamStorageOpsBucketPurge(payload as BucketPurgePayload, streamOptions);
       setResult(nextResult);
-      setMessage(`Purge ${statusLabel(nextResult.status).toLowerCase()}.`);
+      props.onFinished?.(nextResult);
+      setMessage(`${operationLabel} ${statusLabel(nextResult.status).toLowerCase()}.`);
     } catch (err) {
       if (isAbortError(err)) {
-        setMessage("Purge canceled.");
+        setMessage(isDeleteMode ? "Bucket deletion canceled." : "Purge canceled.");
       } else {
-        setError(extractApiError(err, "Bucket purge failed."));
+        setError(extractApiError(err, isDeleteMode ? "Bucket deletion failed." : "Bucket purge failed."));
       }
     } finally {
       setRunning(false);
@@ -193,7 +217,7 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
   };
 
   return (
-    <Modal title="Purge buckets" onClose={closeModal} maxWidthClass="max-w-7xl" maxBodyHeightClass="max-h-[85vh]">
+    <Modal title={isDeleteMode ? "Delete bucket" : "Purge buckets"} onClose={closeModal} maxWidthClass="max-w-7xl" maxBodyHeightClass="max-h-[85vh]">
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {message && (
@@ -226,15 +250,21 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
                   disabled={targetCount === 0 || !confirmationValid}
                   className="rounded-md bg-rose-600 px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Start purge
+                  {isDeleteMode ? "Delete bucket" : "Start purge"}
                 </button>
               )}
             </div>
           </div>
 
-          <PageBanner tone="warning">
-            This empties the selected buckets by deleting current objects, historical versions, and delete markers. Buckets and bucket configuration are kept.
-          </PageBanner>
+          {isDeleteMode ? (
+            <PageBanner tone="warning">
+              This deletes current objects, historical versions, and delete markers, then removes the bucket and its S3 configuration. The operation stops before deleting anything if more than 10,000 entries are found.
+            </PageBanner>
+          ) : (
+            <PageBanner tone="warning">
+              This empties the selected buckets by deleting current objects, historical versions, and delete markers. Buckets and bucket configuration are kept.
+            </PageBanner>
+          )}
         </div>
 
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_minmax(260px,360px)]">
@@ -310,7 +340,7 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
 
         {result && (
           <div className="space-y-3">
-            <div className="grid gap-2 sm:grid-cols-4">
+            <div className={`grid gap-2 ${isDeleteMode ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
               <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
                 <p className="ui-caption text-slate-500 dark:text-slate-400">Objects deleted</p>
                 <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatNumber(result.deleted_objects)}</p>
@@ -329,6 +359,14 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
                 <p className="ui-caption text-slate-500 dark:text-slate-400">Errors</p>
                 <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatNumber(result.failed_count)}</p>
               </div>
+              {isDeleteMode && (
+                <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">Bucket</p>
+                  <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
+                    {result.bucket_deleted ? "Deleted" : "Not deleted"}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

@@ -18,11 +18,16 @@ export type BucketPurgePayload = {
   confirmation: string;
 };
 
+export type BucketDeleteWithPurgePayload = {
+  parallelism?: number;
+  confirmation: string;
+};
+
 export type BucketPurgeFailure = {
   bucket_name: string;
   key?: string | null;
   version_id?: string | null;
-  stage: "list" | "delete" | "versions";
+  stage: "list" | "delete" | "versions" | "delete_bucket";
   message: string;
   count: number;
 };
@@ -37,13 +42,14 @@ export type BucketPurgeBucketResult = {
   deleted_objects: number;
   deleted_versions: number;
   failed_count: number;
+  bucket_deleted: boolean;
   duration_seconds: number;
   failures_sample: BucketPurgeFailure[];
 };
 
 export type BucketPurgeProgress = {
   request_id?: string | null;
-  stage: "prepare" | "list" | "delete" | "versions" | "completed";
+  stage: "prepare" | "list" | "delete" | "versions" | "delete_bucket" | "completed";
   bucket_name?: string | null;
   context_id?: string | null;
   context_name?: string | null;
@@ -54,6 +60,7 @@ export type BucketPurgeProgress = {
   deleted_objects: number;
   deleted_versions: number;
   failed_count: number;
+  bucket_deleted: boolean;
   message?: string | null;
 };
 
@@ -66,6 +73,7 @@ export type BucketPurgeResult = {
   deleted_objects: number;
   deleted_versions: number;
   failed_count: number;
+  bucket_deleted: boolean;
   started_at: string;
   finished_at: string;
   buckets: BucketPurgeBucketResult[];
@@ -99,6 +107,23 @@ export function streamManagerBucketPurge(
     requestInit: buildJsonPostInit(payload),
     streamFailedLabel: "Bucket purge stream failed",
     missingResultMessage: "Bucket purge stream ended without a result payload",
+  });
+}
+
+export function streamManagerBucketDeleteWithPurge(
+  contextId: S3AccountSelector,
+  bucketName: string,
+  payload: BucketDeleteWithPurgePayload,
+  options?: BucketPurgeStreamOptions
+): Promise<BucketPurgeResult> {
+  const baseUrl = resolveApiBaseUrl();
+  const query = new URLSearchParams({ account_id: String(contextId) });
+  return streamBucketsWithSse<BucketPurgeProgress, BucketPurgeResult>({
+    url: `${baseUrl}/manager/buckets/${encodeURIComponent(bucketName)}/delete/stream?${query.toString()}`,
+    options,
+    requestInit: buildJsonPostInit(payload),
+    streamFailedLabel: "Bucket deletion stream failed",
+    missingResultMessage: "Bucket deletion stream ended without a result payload",
   });
 }
 

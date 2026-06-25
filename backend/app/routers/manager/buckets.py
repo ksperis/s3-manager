@@ -1,9 +1,12 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.db import S3Account, User
 from app.models.bucket import (
     Bucket,
@@ -34,9 +37,21 @@ from app.models.manager_bucket_compare import (
     ManagerBucketCompareRequest,
     ManagerBucketCompareResult,
 )
+from app.models.bucket_purge import (
+    BucketDeleteWithPurgeRequest,
+    BucketPurgeResult,
+    bucket_delete_with_purge_confirmation_phrase,
+)
+from app.routers.bucket_purge_stream import stream_bucket_purge
 from app.services.audit_service import AuditService
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services import bucket_config_actions
+from app.services.bucket_purge_service import (
+    BUCKET_DELETE_WITH_PURGE_ENTRY_LIMIT,
+    BucketPurgeOptions,
+    BucketPurgeResolvedTarget,
+    BucketPurgeService,
+)
 from app.services.bucket_listing_cache import (
     get_cached_bucket_listing_for_account,
     invalidate_bucket_listing_cache_for_account,
@@ -50,10 +65,12 @@ from app.routers.dependencies import (
     get_current_account_admin,
     get_current_user,
     require_bucket_compare_enabled,
+    require_bucket_purge_enabled,
     require_manager_bucket_quota,
 )
 
 router = APIRouter(prefix="/manager/buckets", tags=["manager-buckets"])
+logger = logging.getLogger(__name__)
 
 
 def _require_sse_feature(account: S3Account) -> None:
@@ -98,6 +115,47 @@ def _context_id_from_account(account: S3Account) -> str:
 
 def _invalidate_bucket_listing_for_account(account: S3Account) -> None:
     invalidate_bucket_listing_cache_for_account(account)
+
+
+def _require_bucket_management_context(account: S3Account) -> None:
+    caps = getattr(account, "_manager_capabilities", None)
+    if caps is not None and not bool(getattr(caps, "can_manage_buckets", False)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management is not allowed for this context")
+
+
+def _record_bucket_delete_with_purge_audit(
+    *,
+    user_id: int,
+    user_email: str,
+    user_role: str,
+    request_id: str,
+    account: S3Account,
+    bucket_name: str,
+    action: str,
+    status_value: str = "success",
+    message: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    db = SessionLocal()
+    try:
+        user = db.get(User, user_id)
+        AuditService(db).record_action(
+            user=user,
+            user_email=user_email,
+            user_role=user_role,
+            scope="manager",
+            action=action,
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account_id=getattr(account, "id", None) if isinstance(getattr(account, "id", None), int) and account.id > 0 else None,
+            account_name=getattr(account, "name", None),
+            status=status_value,
+            message=message,
+            metadata=metadata,
+            request_id=request_id,
+        )
+    finally:
+        db.close()
 
 
 @router.get("", response_model=list[Bucket])
@@ -1156,3 +1214,115 @@ def delete_bucket(
         account=account,
     )
     return response
+
+
+@router.post("/{bucket_name}/delete/stream")
+def stream_delete_bucket_with_purge(
+    bucket_name: str,
+    payload: BucketDeleteWithPurgeRequest,
+    request: Request,
+    tool_user: User = Depends(require_bucket_purge_enabled),
+    account: S3Account = Depends(get_account_context),
+    _: User = Depends(get_current_account_admin),
+) -> StreamingResponse:
+    expected = bucket_delete_with_purge_confirmation_phrase(bucket_name)
+    if (payload.confirmation or "").strip() != expected:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Confirmation must be exactly '{expected}'.")
+    _require_bucket_management_context(account)
+    options = BucketPurgeOptions(parallelism=payload.parallelism, include_versions=True)
+    context_id = request.query_params.get("account_id") or _context_id_from_account(account)
+    context_name = getattr(account, "name", None)
+    target = BucketPurgeResolvedTarget(
+        account=account,
+        bucket_name=bucket_name,
+        context_id=context_id,
+        context_name=context_name,
+    )
+    service = BucketPurgeService()
+    base_metadata = {
+        "bucket_name": bucket_name,
+        "context_id": context_id,
+        "parallelism": options.parallelism,
+        "include_versions": True,
+        "entry_limit": BUCKET_DELETE_WITH_PURGE_ENTRY_LIMIT,
+        "confirmation": "matched",
+    }
+    actor = {
+        "user_id": int(tool_user.id),
+        "user_email": str(tool_user.email),
+        "user_role": str(tool_user.role),
+    }
+
+    def on_start(request_id: str) -> None:
+        _record_bucket_delete_with_purge_audit(
+            **actor,
+            request_id=request_id,
+            account=account,
+            bucket_name=bucket_name,
+            action="start_bucket_delete_with_purge",
+            metadata=base_metadata,
+        )
+
+    def on_result(request_id: str, result: BucketPurgeResult) -> None:
+        if result.bucket_deleted:
+            _invalidate_bucket_listing_for_account(account)
+        success = result.status == "completed" and result.bucket_deleted
+        _record_bucket_delete_with_purge_audit(
+            **actor,
+            request_id=request_id,
+            account=account,
+            bucket_name=bucket_name,
+            action="finish_bucket_delete_with_purge" if success else "fail_bucket_delete_with_purge",
+            status_value="success" if success else "failure",
+            metadata={
+                **base_metadata,
+                "result_status": result.status,
+                "listed_objects": result.listed_objects,
+                "listed_versions": result.listed_versions,
+                "deleted_objects": result.deleted_objects,
+                "deleted_versions": result.deleted_versions,
+                "failed_count": result.failed_count,
+                "bucket_deleted": result.bucket_deleted,
+            },
+        )
+
+    def on_cancel(request_id: str) -> None:
+        _record_bucket_delete_with_purge_audit(
+            **actor,
+            request_id=request_id,
+            account=account,
+            bucket_name=bucket_name,
+            action="cancel_bucket_delete_with_purge",
+            status_value="failure",
+            message="Bucket deletion canceled",
+            metadata=base_metadata,
+        )
+
+    def on_error(request_id: str, detail: str) -> None:
+        _record_bucket_delete_with_purge_audit(
+            **actor,
+            request_id=request_id,
+            account=account,
+            bucket_name=bucket_name,
+            action="fail_bucket_delete_with_purge",
+            status_value="failure",
+            message=detail,
+            metadata=base_metadata,
+        )
+
+    return stream_bucket_purge(
+        request,
+        run_purge=lambda progress_callback, cancel_check: service.run_delete_bucket_with_purge(
+            target,
+            options,
+            entry_limit=BUCKET_DELETE_WITH_PURGE_ENTRY_LIMIT,
+            progress_callback=progress_callback,
+            cancel_check=cancel_check,
+        ),
+        logger=logger,
+        failure_message="Manager bucket deletion failed.",
+        on_start=on_start,
+        on_result=on_result,
+        on_cancel=on_cancel,
+        on_error=on_error,
+    )

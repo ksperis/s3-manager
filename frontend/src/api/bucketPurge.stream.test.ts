@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   streamCephAdminBucketPurge,
+  streamManagerBucketDeleteWithPurge,
   streamManagerBucketPurge,
   streamStorageOpsBucketPurge,
 } from "./bucketPurge";
@@ -92,6 +93,35 @@ describe("bucket purge streams", () => {
           targets: [{ context_id: "s3u-1", bucket_name: "bucket-a" }],
           confirmation: "PURGE 1 BUCKETS",
         }),
+      })
+    );
+  });
+
+  it("posts manager bucket delete with purge payload and parses bucket deletion result", async () => {
+    const payload = {
+      parallelism: 6,
+      confirmation: "DELETE BUCKET bucket-a",
+    };
+    const responseBody = buildStream([
+      'event: progress\ndata: {"stage":"delete_bucket","total_buckets":1,"completed_buckets":0,"listed_objects":2,"listed_versions":1,"deleted_objects":2,"deleted_versions":1,"failed_count":0,"bucket_deleted":false}\n\n',
+      'event: result\ndata: {"status":"completed","total_buckets":1,"completed_buckets":1,"listed_objects":2,"listed_versions":1,"deleted_objects":2,"deleted_versions":1,"failed_count":0,"bucket_deleted":true,"started_at":"2026-01-01T00:00:00Z","finished_at":"2026-01-01T00:00:01Z","buckets":[]}\n\n',
+    ]);
+    const fetchMock = vi.fn(async () => {
+      return new Response(responseBody, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await streamManagerBucketDeleteWithPurge("s3u-1", "bucket-a", payload);
+
+    expect(result.bucket_deleted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/manager/buckets/bucket-a/delete/stream?account_id=s3u-1",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(payload),
       })
     );
   });

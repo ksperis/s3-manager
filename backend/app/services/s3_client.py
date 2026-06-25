@@ -55,6 +55,16 @@ class BucketContentPurgeResult:
     failures_sample: list[BucketContentPurgeFailure] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class BucketContentCountResult:
+    bucket_name: str
+    listed_objects: int = 0
+    listed_versions: int = 0
+    limit: int = 0
+    exceeded_limit: bool = False
+    missing_bucket: bool = False
+
+
 class BucketContentPurgeCancelled(RuntimeError):
     pass
 
@@ -1385,6 +1395,110 @@ def _format_delete_failure(exc: Exception) -> str:
         parts = [part for part in (code, message) if part and part.lower() != "none"]
         return ": ".join(parts) if parts else str(exc)
     return str(exc)
+
+
+def count_bucket_purge_entries(
+    client: Any,
+    bucket_name: str,
+    *,
+    include_versions: bool = True,
+    limit: int = 10000,
+    progress_callback: Callable[[BucketContentPurgeProgress], None] | None = None,
+    cancel_check: Callable[[], None] | None = None,
+    tolerate_missing_bucket: bool = False,
+) -> BucketContentCountResult:
+    """Count deletable bucket entries up to limit + 1 without deleting them."""
+    effective_limit = max(0, int(limit))
+    stop_after = effective_limit + 1
+    listed_objects = 0
+    listed_versions = 0
+
+    def check_cancel() -> None:
+        if cancel_check:
+            cancel_check()
+
+    def emit(stage: str, message: str | None = None) -> None:
+        if progress_callback:
+            progress_callback(
+                BucketContentPurgeProgress(
+                    bucket_name=bucket_name,
+                    stage=stage,
+                    listed_objects=listed_objects,
+                    listed_versions=listed_versions,
+                    message=message,
+                )
+            )
+
+    def build_result(*, exceeded_limit: bool = False, missing_bucket: bool = False) -> BucketContentCountResult:
+        return BucketContentCountResult(
+            bucket_name=bucket_name,
+            listed_objects=listed_objects,
+            listed_versions=listed_versions,
+            limit=effective_limit,
+            exceeded_limit=exceeded_limit,
+            missing_bucket=missing_bucket,
+        )
+
+    def add_limited_count(current_count: int, page_count: int) -> int:
+        remaining = max(0, stop_after - current_count)
+        return min(page_count, remaining)
+
+    emit("list", f"Counting objects in {bucket_name}...")
+    continuation_token = None
+    while True:
+        check_cancel()
+        list_kwargs = {"Bucket": bucket_name, "MaxKeys": 1000}
+        if continuation_token:
+            list_kwargs["ContinuationToken"] = continuation_token
+        try:
+            page = client.list_objects_v2(**list_kwargs)
+        except ClientError as exc:
+            if tolerate_missing_bucket and _bucket_missing_error(exc):
+                return build_result(missing_bucket=True)
+            raise
+        object_count = len([obj for obj in (page.get("Contents", []) or []) if obj.get("Key")])
+        listed_objects += add_limited_count(listed_objects + listed_versions, object_count)
+        emit("list")
+        if listed_objects + listed_versions > effective_limit:
+            return build_result(exceeded_limit=True)
+        continuation_token = page.get("NextContinuationToken")
+        if not continuation_token:
+            break
+
+    if include_versions:
+        emit("versions", f"Counting object versions in {bucket_name}...")
+        key_marker = None
+        version_marker = None
+        while True:
+            check_cancel()
+            list_kwargs = {"Bucket": bucket_name}
+            if key_marker:
+                list_kwargs["KeyMarker"] = key_marker
+            if version_marker:
+                list_kwargs["VersionIdMarker"] = version_marker
+            try:
+                page = client.list_object_versions(**list_kwargs)
+            except ClientError as exc:
+                if _version_listing_absent_error(exc):
+                    break
+                raise
+            version_count = 0
+            for entry in page.get("Versions", []) or []:
+                if entry.get("Key") and entry.get("VersionId"):
+                    version_count += 1
+            for entry in page.get("DeleteMarkers", []) or []:
+                if entry.get("Key") and entry.get("VersionId"):
+                    version_count += 1
+            listed_versions += add_limited_count(listed_objects + listed_versions, version_count)
+            emit("versions")
+            if listed_objects + listed_versions > effective_limit:
+                return build_result(exceeded_limit=True)
+            key_marker = page.get("NextKeyMarker")
+            version_marker = page.get("NextVersionIdMarker")
+            if not key_marker and not version_marker:
+                break
+
+    return build_result()
 
 
 def purge_bucket_contents(
