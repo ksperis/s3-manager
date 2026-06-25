@@ -13,6 +13,7 @@ import { fetchManagerContext } from "../../api/managerContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 import {
+  TOPBAR_CONTEXT_SELECTOR_ESTIMATED_LABEL_WIDTH,
   TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS,
   TOPBAR_CONTEXT_SELECTOR_VALUE_WIDTH_CLASS,
   TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
@@ -114,7 +115,7 @@ function BrowserShell() {
       selectedLabel,
       priority: 10,
       estimatedIconWidth: 36,
-      estimatedLabelWidth: 212,
+      estimatedLabelWidth: TOPBAR_CONTEXT_SELECTOR_ESTIMATED_LABEL_WIDTH,
       renderControl: (mode) =>
         showSelector ? (
           <TopbarContextAccountSelector

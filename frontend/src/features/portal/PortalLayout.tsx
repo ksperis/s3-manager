@@ -9,6 +9,7 @@ import { TopbarStaticControl } from "../../components/TopbarControlTrigger";
 import TopbarDropdownSelect, { type TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
 import type { TopbarControlDescriptor, TopbarControlRenderMode } from "../../components/topbarControlsLayout";
 import {
+  TOPBAR_CONTEXT_SELECTOR_ESTIMATED_LABEL_WIDTH,
   TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS,
   TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
 } from "../../components/topbarControlWidths";
@@ -103,7 +104,7 @@ function PortalShell() {
       selectedLabel,
       priority: 10,
       estimatedIconWidth: 40,
-      estimatedLabelWidth: 240,
+      estimatedLabelWidth: TOPBAR_CONTEXT_SELECTOR_ESTIMATED_LABEL_WIDTH,
       renderControl: (mode) => <PortalAccountTopbarSelector mode={mode} />,
     },
   ];

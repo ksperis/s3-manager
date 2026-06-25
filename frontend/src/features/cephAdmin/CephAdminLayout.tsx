@@ -13,6 +13,7 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { CephAdminEndpointProvider, useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 import {
+  TOPBAR_CONTEXT_SELECTOR_ESTIMATED_LABEL_WIDTH,
   TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS,
   TOPBAR_CONTEXT_SELECTOR_VALUE_WIDTH_CLASS,
   TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
@@ -219,7 +220,7 @@ function CephAdminShell() {
       selectedLabel: selectedEndpointLabel,
       priority: 20,
       estimatedIconWidth: 36,
-      estimatedLabelWidth: 216,
+      estimatedLabelWidth: TOPBAR_CONTEXT_SELECTOR_ESTIMATED_LABEL_WIDTH,
       renderControl: (mode) =>
         showSelector ? (
           <TopbarDropdownSelect
