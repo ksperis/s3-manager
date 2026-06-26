@@ -227,6 +227,55 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.queryByText("No accounts yet.")).not.toBeInTheDocument();
   });
 
+  it("renders direct UI users and UI groups in the combined listing column", async () => {
+    portalEnabled = true;
+    listS3AccountsMock.mockResolvedValueOnce({
+      items: [
+        {
+          id: "RGW000000000000001",
+          db_id: 1,
+          name: "acc-1",
+          tags: [],
+          rgw_account_id: "RGW000000000000001",
+          storage_endpoint_id: 10,
+          storage_endpoint_name: "ceph-main",
+          storage_endpoint_url: "https://ceph.example.test",
+          user_ids: [7],
+          user_links: [
+            {
+              user_id: 7,
+              user_email: "ui7@example.com",
+              account_admin: false,
+              account_role: "portal_user",
+            },
+          ],
+          group_ids: [31],
+          group_links: [
+            {
+              group_id: 31,
+              group_name: "Research Group",
+              account_admin: true,
+              account_role: "portal_manager",
+            },
+          ],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<AccountsPage />);
+
+    expect(await screen.findByRole("columnheader", { name: "UI Users / Groups" })).toBeInTheDocument();
+    expect(screen.getByText("ui7@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Research Group")).toBeInTheDocument();
+    expect(screen.getByText("Portal user")).toBeInTheDocument();
+    expect(screen.getByText("Portal manager")).toBeInTheDocument();
+    expect(screen.getAllByText("Admin").length).toBeGreaterThan(0);
+  });
+
   it("shows General/Linked UI users tabs and submits updated user_links", async () => {
     render(<AccountsPage />);
 
@@ -616,7 +665,7 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("acc-2");
 
     fireEvent.click(screen.getByLabelText("Toggle filter match mode"));
-    fireEvent.change(screen.getByPlaceholderText("Search by name, RGW ID, or tag"), {
+    fireEvent.change(screen.getByPlaceholderText("Search by name, RGW ID, group, or tag"), {
       target: { value: "gold" },
     });
 

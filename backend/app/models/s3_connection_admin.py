@@ -13,6 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 
 
+class S3ConnectionGroupDetail(BaseModel):
+    id: int
+    name: str
+
+
 class S3ConnectionAdminItem(BaseModel):
     id: int
     name: str
@@ -33,6 +38,8 @@ class S3ConnectionAdminItem(BaseModel):
     created_by_email: Optional[str] = None
     user_count: int = 0
     user_ids: list[int] = Field(default_factory=list)
+    group_ids: list[int] = Field(default_factory=list)
+    group_details: list[S3ConnectionGroupDetail] = Field(default_factory=list)
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
     last_used_at: Optional[datetime] = None
     created_at: Optional[datetime] = None

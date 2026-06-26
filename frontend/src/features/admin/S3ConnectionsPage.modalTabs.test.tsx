@@ -110,6 +110,28 @@ describe("S3ConnectionsPage modal tabs", () => {
     removeS3ConnectionUserMock.mockResolvedValue(undefined);
   });
 
+  it("renders direct UI users and UI groups in the combined listing column", async () => {
+    listAdminS3ConnectionsMock.mockResolvedValueOnce({
+      items: [
+        makeConnection(1, {
+          user_ids: [11],
+          group_ids: [31],
+          group_details: [{ id: 31, name: "Storage Operators" }],
+        }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<S3ConnectionsPage />);
+
+    expect(await screen.findByRole("columnheader", { name: "UI Users / Groups" })).toBeInTheDocument();
+    expect(await screen.findByText("u11@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Storage Operators")).toBeInTheDocument();
+  });
+
   it("keeps linked UI user selections across tabs and syncs add/remove on save", async () => {
     render(<S3ConnectionsPage />);
 

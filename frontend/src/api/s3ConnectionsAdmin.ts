@@ -27,6 +27,8 @@ export type S3ConnectionAdminItem = {
   created_by_email?: string | null;
   user_count: number;
   user_ids?: number[];
+  group_ids?: number[];
+  group_details?: { id: number; name: string }[];
   last_used_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;

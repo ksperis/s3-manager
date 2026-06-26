@@ -14,6 +14,8 @@ export type S3User = {
   email?: string | null;
   created_at?: string | null;
   user_ids: number[];
+  group_ids?: number[];
+  group_details?: { id: number; name: string }[];
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
   storage_endpoint_id?: number | null;

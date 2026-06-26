@@ -17,6 +17,7 @@ import UiButton from "../../components/ui/UiButton";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
+import AssociationSummary, { AssociationChips, type AssociationChipItem } from "./AssociationSummary";
 import {
   S3ConnectionAdminItem,
   createAdminS3Connection,
@@ -309,6 +310,26 @@ export default function S3ConnectionsPage() {
     portalUsers.forEach((user) => map.set(user.id, user.email));
     return map;
   }, [portalUsers]);
+  const renderConnectionAssociations = (connection: S3ConnectionAdminItem) => {
+    const userItems: AssociationChipItem[] = (connection.user_ids ?? []).map((id) => ({
+      id,
+      label: portalUserLabelById.get(id) ?? `User #${id}`,
+    }));
+    const groupItems: AssociationChipItem[] = (connection.group_details && connection.group_details.length > 0
+      ? connection.group_details.map((group) => ({ id: group.id, label: group.name }))
+      : (connection.group_ids ?? []).map((id) => ({ id, label: `Group #${id}` })));
+    if (userItems.length === 0 && groupItems.length === 0) {
+      return <span className="ui-caption text-slate-400">None</span>;
+    }
+    return (
+      <AssociationSummary
+        sections={[
+          { label: "Users", value: <AssociationChips items={userItems} />, visible: userItems.length > 0 },
+          { label: "Groups", value: <AssociationChips items={groupItems} />, visible: groupItems.length > 0 },
+        ]}
+      />
+    );
+  };
   const linkedEditUsers = useMemo(
     () =>
       editLinkedUserIds.map((id) => ({
@@ -818,7 +839,7 @@ export default function S3ConnectionsPage() {
                 type="text"
                 value={filter}
                 onChange={(e) => handleFilterChange(e.target.value)}
-                placeholder="Search name, endpoint, created by, or tag..."
+                placeholder="Search name, endpoint, created by, group, or tag..."
                 className={`${toolbarCompactInputClasses} w-full sm:w-64`}
               />
             </div>
@@ -875,7 +896,7 @@ export default function S3ConnectionsPage() {
                     className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                   />
                 </th>
-                {["Name", "Endpoint", "Status", "Created by", "UI Users", "Actions"].map((label) => (
+                {["Name", "Endpoint", "Status", "Created by", "UI Users / Groups", "Actions"].map((label) => (
                   <th key={label} className="px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     {label}
                   </th>
@@ -939,20 +960,7 @@ export default function S3ConnectionsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {c.user_ids && c.user_ids.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {c.user_ids.map((id) => (
-                            <span
-                              key={id}
-                              className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                            >
-                              {portalUserLabelById.get(id) ?? `User #${id}`}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="ui-caption text-slate-400">None</span>
-                      )}
+                      {renderConnectionAssociations(c)}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">

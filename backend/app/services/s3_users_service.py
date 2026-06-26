@@ -14,6 +14,7 @@ from app.db import (
     StorageEndpoint,
     StorageProvider,
     TagDefinition,
+    UiGroup,
     UiGroupS3User,
     User,
     UserS3User as UserS3UserModel,
@@ -28,6 +29,7 @@ from app.models.s3_user import (
     S3UserAccessKey,
     S3UserCreate,
     S3UserGeneratedKey,
+    S3UserGroupDetail,
     S3UserImport,
     S3UserSummary,
     S3UserUpdate,
@@ -400,6 +402,8 @@ class S3UsersService:
         self,
         row: S3UserModel,
         link_map: dict[int, list[int]],
+        group_ids_map: dict[int, list[int]],
+        group_details_map: dict[int, list[S3UserGroupDetail]],
         *,
         include_quota: bool = True,
     ) -> S3UserSchema:
@@ -419,6 +423,8 @@ class S3UsersService:
             email=row.email,
             created_at=row.created_at,
             user_ids=link_map.get(row.id, []),
+            group_ids=group_ids_map.get(row.id, []),
+            group_details=group_details_map.get(row.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id if endpoint else None,
@@ -429,13 +435,42 @@ class S3UsersService:
             tags=self.tags.get_s3_user_tags(row),
         )
 
+    def _load_group_links(
+        self,
+        s3_user_ids: list[int],
+    ) -> tuple[dict[int, list[int]], dict[int, list[S3UserGroupDetail]]]:
+        if not s3_user_ids:
+            return {}, {}
+        rows = (
+            self.db.query(UiGroupS3User.s3_user_id, UiGroupS3User.group_id, UiGroup.name)
+            .join(UiGroup, UiGroup.id == UiGroupS3User.group_id)
+            .filter(UiGroupS3User.s3_user_id.in_(s3_user_ids))
+            .order_by(UiGroupS3User.s3_user_id.asc(), UiGroup.name.asc(), UiGroup.id.asc())
+            .all()
+        )
+        group_ids_by_user: dict[int, list[int]] = {}
+        group_details_by_user: dict[int, list[S3UserGroupDetail]] = {}
+        for s3_user_id, group_id, group_name in rows:
+            normalized_user_id = int(s3_user_id)
+            normalized_group_id = int(group_id)
+            group_ids_by_user.setdefault(normalized_user_id, []).append(normalized_group_id)
+            group_details_by_user.setdefault(normalized_user_id, []).append(
+                S3UserGroupDetail(id=normalized_group_id, name=group_name)
+            )
+        return group_ids_by_user, group_details_by_user
+
     def list_users(self, include_quota: bool = False) -> list[S3UserSchema]:
         rows = self.db.query(S3UserModel).order_by(*s3_user_name_order_by(S3UserModel)).all()
+        user_ids = [row.id for row in rows]
         link_rows = self.db.query(UserS3UserModel).all()
         link_map: dict[int, list[int]] = {}
         for link in link_rows:
             link_map.setdefault(link.s3_user_id, []).append(link.user_id)
-        return [self._serialize_s3_user(row, link_map, include_quota=include_quota) for row in rows]
+        group_ids_map, group_details_map = self._load_group_links(user_ids)
+        return [
+            self._serialize_s3_user(row, link_map, group_ids_map, group_details_map, include_quota=include_quota)
+            for row in rows
+        ]
 
     def list_users_minimal(self) -> list[S3UserSummary]:
         rows = self.db.query(S3UserModel).order_by(*s3_user_name_order_by(S3UserModel)).all()
@@ -483,6 +518,8 @@ class S3UsersService:
             query = (
                 query.outerjoin(UserS3UserModel, S3UserModel.id == UserS3UserModel.s3_user_id)
                 .outerjoin(User, UserS3UserModel.user_id == User.id)
+                .outerjoin(UiGroupS3User, S3UserModel.id == UiGroupS3User.s3_user_id)
+                .outerjoin(UiGroup, UiGroupS3User.group_id == UiGroup.id)
             )
             query = query.filter(
                 or_(
@@ -490,6 +527,7 @@ class S3UsersService:
                     S3UserModel.rgw_user_uid.ilike(pattern),
                     func.coalesce(S3UserModel.email, "").ilike(pattern),
                     func.coalesce(User.email, "").ilike(pattern),
+                    func.coalesce(UiGroup.name, "").ilike(pattern),
                     tag_match,
                 )
             )
@@ -530,7 +568,11 @@ class S3UsersService:
         link_map: dict[int, list[int]] = {}
         for link in link_rows:
             link_map.setdefault(link.s3_user_id, []).append(link.user_id)
-        return [self._serialize_s3_user(row, link_map, include_quota=include_quota) for row in rows], total
+        group_ids_map, group_details_map = self._load_group_links(user_ids)
+        return [
+            self._serialize_s3_user(row, link_map, group_ids_map, group_details_map, include_quota=include_quota)
+            for row in rows
+        ], total
 
     def get_user(
         self,
@@ -543,6 +585,7 @@ class S3UsersService:
             row.user_id
             for row in self.db.query(UserS3UserModel).filter(UserS3UserModel.s3_user_id == s3_user.id).all()
         ]
+        group_ids_map, group_details_map = self._load_group_links([s3_user.id])
         endpoint = s3_user.storage_endpoint or (
             self.db.query(StorageEndpoint).filter(StorageEndpoint.id == s3_user.storage_endpoint_id).first()
             if s3_user.storage_endpoint_id
@@ -560,6 +603,8 @@ class S3UsersService:
             email=s3_user.email,
             created_at=s3_user.created_at,
             user_ids=user_ids,
+            group_ids=group_ids_map.get(s3_user.id, []),
+            group_details=group_details_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id if endpoint else None,
@@ -630,6 +675,8 @@ class S3UsersService:
             email=s3_user.email,
             created_at=s3_user.created_at,
             user_ids=[],
+            group_ids=[],
+            group_details=[],
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id,
@@ -690,6 +737,8 @@ class S3UsersService:
                     email=s3_user.email,
                     created_at=s3_user.created_at,
                     user_ids=[],
+                    group_ids=[],
+                    group_details=[],
                     quota_max_size_gb=quota_max_size_gb,
                     quota_max_objects=quota_max_objects,
                     storage_endpoint_id=endpoint.id,
@@ -741,6 +790,7 @@ class S3UsersService:
             row.user_id
             for row in self.db.query(UserS3UserModel).filter(UserS3UserModel.s3_user_id == s3_user.id).all()
         ]
+        group_ids_map, group_details_map = self._load_group_links([s3_user.id])
         endpoint = s3_user.storage_endpoint or (
             self.db.query(StorageEndpoint).filter(StorageEndpoint.id == s3_user.storage_endpoint_id).first()
             if s3_user.storage_endpoint_id
@@ -754,6 +804,8 @@ class S3UsersService:
             email=s3_user.email,
             created_at=s3_user.created_at,
             user_ids=user_ids,
+            group_ids=group_ids_map.get(s3_user.id, []),
+            group_details=group_details_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id if endpoint else None,
@@ -811,6 +863,7 @@ class S3UsersService:
             row.user_id
             for row in self.db.query(UserS3UserModel).filter(UserS3UserModel.s3_user_id == s3_user.id).all()
         ]
+        group_ids_map, group_details_map = self._load_group_links([s3_user.id])
         quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
         return S3UserSchema(
             id=s3_user.id,
@@ -819,6 +872,8 @@ class S3UsersService:
             email=s3_user.email,
             created_at=s3_user.created_at,
             user_ids=user_ids,
+            group_ids=group_ids_map.get(s3_user.id, []),
+            group_details=group_details_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id if endpoint else s3_user.storage_endpoint_id,

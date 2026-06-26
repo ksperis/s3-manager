@@ -11,12 +11,14 @@ from app.db import (
     S3Account,
     StorageEndpoint,
     StorageProvider,
+    UiGroup,
     UiGroupS3Account,
     User,
     UserS3Account,
     is_admin_ui_role,
 )
 from app.models.s3_account import (
+    AccountGroupLink,
     AccountUserLink,
     S3Account as S3AccountSchema,
     S3AccountCreate,
@@ -546,6 +548,41 @@ class S3AccountsService:
             )
         return user_ids_by_account, user_links_by_account
 
+    def _load_group_links(
+        self,
+        account_ids: list[int],
+    ) -> tuple[dict[int, list[int]], dict[int, list[AccountGroupLink]]]:
+        if not account_ids:
+            return {}, {}
+        rows = (
+            self.db.query(
+                UiGroupS3Account.account_id,
+                UiGroupS3Account.group_id,
+                UiGroup.name,
+                UiGroupS3Account.account_admin,
+                UiGroupS3Account.account_role,
+            )
+            .join(UiGroup, UiGroup.id == UiGroupS3Account.group_id)
+            .filter(UiGroupS3Account.account_id.in_(account_ids))
+            .order_by(UiGroupS3Account.account_id.asc(), UiGroup.name.asc(), UiGroup.id.asc())
+            .all()
+        )
+        group_ids_by_account: dict[int, list[int]] = {}
+        group_links_by_account: dict[int, list[AccountGroupLink]] = {}
+        for account_id, group_id, group_name, account_admin, account_role in rows:
+            normalized_account_id = int(account_id)
+            normalized_group_id = int(group_id)
+            group_ids_by_account.setdefault(normalized_account_id, []).append(normalized_group_id)
+            group_links_by_account.setdefault(normalized_account_id, []).append(
+                AccountGroupLink(
+                    group_id=normalized_group_id,
+                    group_name=group_name,
+                    account_admin=account_admin,
+                    account_role=account_role,
+                )
+            )
+        return group_ids_by_account, group_links_by_account
+
     def list_accounts(
         self,
         include_usage_stats: bool = True,
@@ -555,6 +592,7 @@ class S3AccountsService:
         db_accounts = self.db.query(S3Account).order_by(*s3_account_name_order_by(S3Account)).all()
         account_ids = [account.id for account in db_accounts]
         user_ids_by_account, user_links_by_account = self._load_non_root_user_links(account_ids)
+        group_ids_by_account, group_links_by_account = self._load_group_links(account_ids)
 
         roots_by_account: dict[str, tuple[str, int]] = {}
         for acc in db_accounts:
@@ -619,6 +657,8 @@ class S3AccountsService:
                     bucket_count=bucket_count,
                     user_ids=user_ids_by_account.get(acc.id),
                     user_links=user_links_by_account.get(acc.id),
+                    group_ids=group_ids_by_account.get(acc.id),
+                    group_links=group_links_by_account.get(acc.id),
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
@@ -633,6 +673,7 @@ class S3AccountsService:
         db_accounts = self.db.query(S3Account).order_by(*s3_account_name_order_by(S3Account)).all()
         account_ids = [account.id for account in db_accounts]
         user_ids_by_account, user_links_by_account = self._load_non_root_user_links(account_ids)
+        group_ids_by_account, group_links_by_account = self._load_group_links(account_ids)
         summaries: list[S3AccountSummary] = []
         for acc in db_accounts:
             endpoint = self._get_linked_storage_endpoint(acc.storage_endpoint_id)
@@ -644,6 +685,8 @@ class S3AccountsService:
                     rgw_account_id=acc.rgw_account_id,
                     user_ids=user_ids_by_account.get(acc.id),
                     user_links=user_links_by_account.get(acc.id),
+                    group_ids=group_ids_by_account.get(acc.id),
+                    group_links=group_links_by_account.get(acc.id),
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
@@ -668,6 +711,9 @@ class S3AccountsService:
         user_ids_by_account, user_links_by_account = self._load_non_root_user_links([account.id])
         user_ids = user_ids_by_account.get(account.id)
         user_links = user_links_by_account.get(account.id)
+        group_ids_by_account, group_links_by_account = self._load_group_links([account.id])
+        group_ids = group_ids_by_account.get(account.id)
+        group_links = group_links_by_account.get(account.id)
         used_bytes = used_objects = bucket_count = None
         if include_usage:
             used_bytes, used_objects, bucket_count = self._account_usage(account)
@@ -705,6 +751,8 @@ class S3AccountsService:
             rgw_topics=rgw_topics,
             user_ids=user_ids,
             user_links=user_links,
+            group_ids=group_ids,
+            group_links=group_links,
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
@@ -804,6 +852,8 @@ class S3AccountsService:
                     email=account.email,
                     user_ids=[],
                     user_links=[],
+                    group_ids=[],
+                    group_links=[],
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
@@ -891,6 +941,8 @@ class S3AccountsService:
             email=account.email,
             user_ids=[],
             user_links=[],
+            group_ids=[],
+            group_links=[],
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
@@ -1004,6 +1056,9 @@ class S3AccountsService:
         user_ids_by_account, user_links_by_account = self._load_non_root_user_links([account.id])
         user_ids = user_ids_by_account.get(account.id) or []
         user_links = user_links_by_account.get(account.id) or []
+        group_ids_by_account, group_links_by_account = self._load_group_links([account.id])
+        group_ids = group_ids_by_account.get(account.id) or []
+        group_links = group_links_by_account.get(account.id) or []
         endpoint = self._get_linked_storage_endpoint(account.storage_endpoint_id)
         quota_max_size_gb, quota_max_objects = self._account_quota(account)
 
@@ -1020,6 +1075,8 @@ class S3AccountsService:
             email=account.email,
             user_ids=user_ids,
             user_links=user_links,
+            group_ids=group_ids,
+            group_links=group_links,
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),

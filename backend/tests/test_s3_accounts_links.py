@@ -1,6 +1,16 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db import S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.db import (
+    AccountRole,
+    S3Account,
+    StorageEndpoint,
+    StorageProvider,
+    UiGroup,
+    UiGroupS3Account,
+    User,
+    UserRole,
+    UserS3Account,
+)
 from app.services.s3_accounts_service import S3AccountsService
 
 
@@ -54,3 +64,39 @@ def test_list_accounts_exposes_user_email_in_user_links(db_session):
     assert target.user_links is not None and len(target.user_links) == 1
     assert target.user_links[0].user_id == user.id
     assert target.user_links[0].user_email == "alice@example.test"
+
+
+def test_accounts_expose_direct_group_links(db_session):
+    account = S3Account(
+        name="Account With Group",
+        rgw_account_id="RGW00000000000000022",
+    )
+    group = UiGroup(name="Platform Operators")
+    db_session.add_all([account, group])
+    db_session.flush()
+    db_session.add(
+        UiGroupS3Account(
+            account_id=account.id,
+            group_id=group.id,
+            account_admin=True,
+            account_role=AccountRole.PORTAL_MANAGER.value,
+        )
+    )
+    db_session.commit()
+
+    service = S3AccountsService(db_session, allow_missing_admin=True)
+    accounts = service.list_accounts(
+        include_usage_stats=False,
+        include_quota=False,
+        include_rgw_details=False,
+    )
+    listed = next(item for item in accounts if item.db_id == account.id)
+    detailed = service.get_account_detail(account.id)
+
+    for item in (listed, detailed):
+        assert item.group_ids == [group.id]
+        assert item.group_links is not None and len(item.group_links) == 1
+        assert item.group_links[0].group_id == group.id
+        assert item.group_links[0].group_name == "Platform Operators"
+        assert item.group_links[0].account_admin is True
+        assert item.group_links[0].account_role == AccountRole.PORTAL_MANAGER.value

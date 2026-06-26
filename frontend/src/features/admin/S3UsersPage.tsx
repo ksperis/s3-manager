@@ -36,6 +36,7 @@ import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
+import AssociationSummary, { AssociationChips, type AssociationChipItem } from "./AssociationSummary";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
 type TextMatchMode = "contains" | "exact";
@@ -304,6 +305,26 @@ export default function S3UsersPage() {
     portalUsers.forEach((u) => map.set(u.id, u.email));
     return map;
   }, [portalUsers]);
+  const renderUserAssociations = (user: S3User) => {
+    const userItems: AssociationChipItem[] = (user.user_ids ?? []).map((id) => ({
+      id,
+      label: portalUserLabelById.get(id) ?? `User #${id}`,
+    }));
+    const groupItems: AssociationChipItem[] = (user.group_details && user.group_details.length > 0
+      ? user.group_details.map((group) => ({ id: group.id, label: group.name }))
+      : (user.group_ids ?? []).map((id) => ({ id, label: `Group #${id}` })));
+    if (userItems.length === 0 && groupItems.length === 0) {
+      return <span className="ui-caption text-slate-400">None</span>;
+    }
+    return (
+      <AssociationSummary
+        sections={[
+          { label: "Users", value: <AssociationChips items={userItems} />, visible: userItems.length > 0 },
+          { label: "Groups", value: <AssociationChips items={groupItems} />, visible: groupItems.length > 0 },
+        ]}
+      />
+    );
+  };
   const availablePortalUsers = useMemo(() => {
     const query = portalUserSearch.trim().toLowerCase();
     return portalUserOptions.filter(
@@ -625,7 +646,7 @@ export default function S3UsersPage() {
     { label: "Name", field: "name" },
     { label: "UID", field: "uid" },
     { label: "Endpoint", field: null },
-    { label: "UI Users", field: null },
+    { label: "UI Users / Groups", field: null },
     { label: "Actions", field: null, align: "right" },
   ];
   const tableStatus = resolveListTableStatus({
@@ -698,7 +719,7 @@ export default function S3UsersPage() {
                   type="text"
                   value={filter}
                   onChange={(e) => handleFilterChange(e.target.value)}
-                  placeholder="Search by name, UID, email, or tag"
+                  placeholder="Search by name, UID, email, group, or tag"
                   className={`${toolbarCompactInputClasses} w-full pr-9 ${quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""}`}
                 />
                 <button
@@ -805,17 +826,7 @@ export default function S3UsersPage() {
                       </span>
                     </td>
                     <td className="min-w-[14rem] max-w-[26rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {user.user_ids && user.user_ids.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {user.user_ids.map((id) => (
-                            <span key={id} className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                              {portalUsers.find((u) => u.id === id)?.email ?? `User #${id}`}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="ui-caption text-slate-400">None</span>
-                      )}
+                      {renderUserAssociations(user)}
                     </td>
                     <td className="w-44 min-w-[9rem] px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">

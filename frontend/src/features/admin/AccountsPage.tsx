@@ -5,6 +5,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
+  AccountGroupLink,
   AccountUserLink,
   ImportS3AccountPayload,
   S3Account,
@@ -39,6 +40,10 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { useAdminAccountStats } from "./useAdminAccountStats";
+import AssociationSummary, {
+  AccountAssociationChips,
+  type AssociationAccountItem,
+} from "./AssociationSummary";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
@@ -683,7 +688,7 @@ export default function S3AccountsPage() {
     { label: "Name", field: "name" },
     { label: "RGW ID", field: "rgw_account_id" },
     { label: "Endpoint", field: null },
-    { label: "UI Users", field: null },
+    { label: "UI Users / Groups", field: null },
     { label: "Actions", field: null, align: "right" },
   ];
   const tableStatus = resolveListTableStatus({
@@ -757,6 +762,45 @@ export default function S3AccountsPage() {
       return account.user_links;
     }
     return (account.user_ids ?? []).map((id) => ({ user_id: id, account_admin: false, account_role: "portal_none" }));
+  };
+  const resolveAccountGroupLinks = (account: S3Account | S3AccountSummary): AccountGroupLink[] => {
+    if (account.group_links && account.group_links.length > 0) {
+      return account.group_links;
+    }
+    return (account.group_ids ?? []).map((id) => ({ group_id: id, account_admin: false, account_role: "portal_none" }));
+  };
+  const renderAccountAssociations = (account: S3Account | S3AccountSummary) => {
+    const userItems: AssociationAccountItem[] = resolveAccountUserLinks(account).map((link) => ({
+      id: link.user_id,
+      label: link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`,
+      account_admin: link.account_admin,
+      account_role: link.account_role,
+    }));
+    const groupItems: AssociationAccountItem[] = resolveAccountGroupLinks(account).map((link) => ({
+      id: link.group_id,
+      label: link.group_name ?? `Group #${link.group_id}`,
+      account_admin: link.account_admin,
+      account_role: link.account_role,
+    }));
+    if (userItems.length === 0 && groupItems.length === 0) {
+      return <span className="ui-caption text-slate-500 dark:text-slate-400">None</span>;
+    }
+    return (
+      <AssociationSummary
+        sections={[
+          {
+            label: "Users",
+            value: <AccountAssociationChips accounts={userItems} showPortalRole={portalEnabled} />,
+            visible: userItems.length > 0,
+          },
+          {
+            label: "Groups",
+            value: <AccountAssociationChips accounts={groupItems} showPortalRole={portalEnabled} />,
+            visible: groupItems.length > 0,
+          },
+        ]}
+      />
+    );
   };
 
   const deleteModalUnknownResources =
@@ -2132,7 +2176,7 @@ export default function S3AccountsPage() {
                   type="text"
                   value={filter}
                   onChange={(e) => handleFilterChange(e.target.value)}
-                  placeholder="Search by name, RGW ID, or tag"
+                  placeholder="Search by name, RGW ID, group, or tag"
                   className={`${toolbarCompactInputClasses} w-full pr-9 ${quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""}`}
                 />
                 <button
@@ -2210,7 +2254,6 @@ export default function S3AccountsPage() {
               {accounts.map((account) => {
                   const summaryDbId = accountDbId(account);
                   const deleteBusy = summaryDbId != null && deletingS3AccountId === summaryDbId;
-                  const accountUserLinks = resolveAccountUserLinks(account);
                   const tagItems = buildUiTagItems(account.tags);
                   return (
                     <tr key={account.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -2250,36 +2293,7 @@ export default function S3AccountsPage() {
                     </span>
                   </td>
                   <td className="w-[22rem] min-w-[18rem] max-w-[30rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                    {accountUserLinks.length > 0 ? (
-                      <div className="flex max-w-[30rem] flex-wrap gap-1.5">
-                        {accountUserLinks.map((link) => {
-                          const isAccountAdmin = Boolean(link.account_admin);
-                          const portalRole = normalizePortalRole(link.account_role);
-                          return (
-                            <span
-                              key={`${account.id}-${link.user_id}-${isAccountAdmin ? "admin" : "user"}-${portalRole}`}
-                              className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                            >
-                              <span className="min-w-0 max-w-full break-all">
-                                {link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`}
-                              </span>
-                              {isAccountAdmin && (
-                                <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                                  Admin
-                                </span>
-                              )}
-                              {portalEnabled && portalRole !== "portal_none" && (
-                                <span className="shrink-0 rounded-full bg-sky-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
-                                  {portalRole === "portal_manager" ? "Portal manager" : "Portal user"}
-                                </span>
-                              )}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">None</span>
-                    )}
+                    {renderAccountAssociations(account)}
                   </td>
                   <td className="w-44 min-w-[9rem] px-6 py-4 text-right">
                     {isSuperAdmin ? (

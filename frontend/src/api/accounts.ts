@@ -15,6 +15,13 @@ export type AccountUserLink = {
   user_email?: string | null;
 };
 
+export type AccountGroupLink = {
+  group_id: number;
+  group_name?: string | null;
+  account_admin?: boolean | null;
+  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
+};
+
 export type S3Account = {
   id: string;
   db_id?: number | null;
@@ -31,6 +38,8 @@ export type S3Account = {
   used_bytes?: number | null;
   user_ids?: number[] | null;
   user_links?: AccountUserLink[] | null;
+  group_ids?: number[] | null;
+  group_links?: AccountGroupLink[] | null;
   bucket_count?: number | null;
   rgw_user_count?: number | null;
   rgw_user_uids?: string[] | null;
@@ -52,6 +61,8 @@ export type S3AccountSummary = {
   is_s3_user?: boolean | null;
   user_ids?: number[] | null;
   user_links?: AccountUserLink[] | null;
+  group_ids?: number[] | null;
+  group_links?: AccountGroupLink[] | null;
   storage_endpoint_id?: number | null;
   storage_endpoint_name?: string | null;
   storage_endpoint_url?: string | null;

@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.db import S3Account
+from app.db import AccountRole, S3Account, UiGroup, UiGroupS3Account
 from app.services.tags_service import TagsService
 
 
@@ -87,3 +87,35 @@ def test_admin_accounts_search_matches_tag_labels(client, db_session):
     payload = response.json()
 
     assert [item["name"] for item in payload["items"]] == ["finance-account"]
+
+
+def test_admin_accounts_search_matches_direct_group_links(client, db_session):
+    linked = _seed_account(db_session, name="group-linked-account", rgw_account_id="RGW-GROUP-LINKED")
+    _seed_account(db_session, name="plain-account", rgw_account_id="RGW-GROUP-PLAIN")
+    group = UiGroup(name="Analytics Team")
+    db_session.add(group)
+    db_session.flush()
+    db_session.add(
+        UiGroupS3Account(
+            account_id=linked.id,
+            group_id=group.id,
+            account_admin=True,
+            account_role=AccountRole.PORTAL_USER.value,
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/api/admin/accounts", params={"search": "analytics"})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert [item["name"] for item in payload["items"]] == ["group-linked-account"]
+    assert payload["items"][0]["group_ids"] == [group.id]
+    assert payload["items"][0]["group_links"] == [
+        {
+            "group_id": group.id,
+            "group_name": "Analytics Team",
+            "account_admin": True,
+            "account_role": AccountRole.PORTAL_USER.value,
+        }
+    ]

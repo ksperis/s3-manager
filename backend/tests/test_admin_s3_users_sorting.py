@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.db import S3User
+from app.db import S3User, UiGroup, UiGroupS3User
 from app.services.tags_service import TagsService
 
 
@@ -97,3 +97,27 @@ def test_admin_s3_users_search_matches_tag_labels(client, db_session):
     payload = response.json()
 
     assert [item["name"] for item in payload["items"]] == ["tagged-user"]
+
+
+def test_admin_s3_users_search_and_detail_include_direct_group_links(client, db_session):
+    linked = _seed_s3_user(db_session, name="group-linked-user", uid="uid-group-linked")
+    _seed_s3_user(db_session, name="plain-user", uid="uid-group-plain")
+    group = UiGroup(name="Ops Readers")
+    db_session.add(group)
+    db_session.flush()
+    db_session.add(UiGroupS3User(group_id=group.id, s3_user_id=linked.id))
+    db_session.commit()
+
+    response = client.get("/api/admin/s3-users", params={"search": "ops readers"})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert [item["name"] for item in payload["items"]] == ["group-linked-user"]
+    assert payload["items"][0]["group_ids"] == [group.id]
+    assert payload["items"][0]["group_details"] == [{"id": group.id, "name": "Ops Readers"}]
+
+    detail = client.get(f"/api/admin/s3-users/{linked.id}")
+    assert detail.status_code == 200, detail.text
+    detail_payload = detail.json()
+    assert detail_payload["group_ids"] == [group.id]
+    assert detail_payload["group_details"] == [{"id": group.id, "name": "Ops Readers"}]

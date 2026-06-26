@@ -145,6 +145,43 @@ describe("S3UsersPage modal tabs", () => {
     expect(screen.queryByText("Import or create standalone RGW users to expose them to managers.")).not.toBeInTheDocument();
   });
 
+  it("renders direct UI users and UI groups in the combined listing column", async () => {
+    listS3UsersMock.mockResolvedValueOnce({
+      items: [
+        {
+          id: 5,
+          name: "rgw-user-1",
+          rgw_user_uid: "rgw-uid-1",
+          tags: [],
+          email: "rgw-user-1@example.com",
+          storage_endpoint_id: 10,
+          storage_endpoint_name: "ceph-main",
+          storage_endpoint_url: "https://ceph.example.test",
+          user_ids: [33],
+          group_ids: [31],
+          group_details: [{ id: 31, name: "Storage Group" }],
+          quota_max_size_gb: 1,
+          quota_max_objects: 100,
+          bucket_count: 0,
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <S3UsersPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("columnheader", { name: "UI Users / Groups" })).toBeInTheDocument();
+    expect(await screen.findByText("ui33@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Storage Group")).toBeInTheDocument();
+  });
+
   it("requests default sorting and toggles RGW user table headers", async () => {
     listS3UsersMock.mockResolvedValue({
       items: [
@@ -415,7 +452,7 @@ describe("S3UsersPage modal tabs", () => {
     await screen.findByText("rgw-user-2");
 
     fireEvent.click(screen.getByLabelText("Toggle filter match mode"));
-    fireEvent.change(screen.getByPlaceholderText("Search by name, UID, email, or tag"), {
+    fireEvent.change(screen.getByPlaceholderText("Search by name, UID, email, group, or tag"), {
       target: { value: "legacy" },
     });
 

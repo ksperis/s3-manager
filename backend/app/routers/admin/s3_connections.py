@@ -11,7 +11,16 @@ from sqlalchemy import exists, func
 from sqlalchemy.orm import Session, aliased
 
 from app.core.database import get_db
-from app.db import S3Connection, S3ConnectionTag, StorageEndpoint, TagDefinition, User, UserS3Connection
+from app.db import (
+    S3Connection,
+    S3ConnectionTag,
+    StorageEndpoint,
+    TagDefinition,
+    UiGroup,
+    UiGroupS3Connection,
+    User,
+    UserS3Connection,
+)
 from app.models.s3_connection import (
     S3ConnectionCredentialsUpdate,
     S3ConnectionCredentialsValidationRequest,
@@ -22,6 +31,7 @@ from app.models.s3_connection_admin import (
     S3ConnectionAdminCreate,
     S3ConnectionAdminItem,
     S3ConnectionAdminUpdate,
+    S3ConnectionGroupDetail,
     S3ConnectionUserLink,
     S3ConnectionUserLinkUpsert,
     S3ConnectionSummary,
@@ -69,6 +79,36 @@ def _linked_user_ids(db: Session, connection_id: int) -> list[int]:
     return sorted([row[0] for row in rows])
 
 
+def _linked_group_details_by_connection(
+    db: Session,
+    connection_ids: list[int],
+) -> tuple[dict[int, list[int]], dict[int, list[S3ConnectionGroupDetail]]]:
+    if not connection_ids:
+        return {}, {}
+    rows = (
+        db.query(UiGroupS3Connection.s3_connection_id, UiGroupS3Connection.group_id, UiGroup.name)
+        .join(UiGroup, UiGroup.id == UiGroupS3Connection.group_id)
+        .filter(UiGroupS3Connection.s3_connection_id.in_(connection_ids))
+        .order_by(UiGroupS3Connection.s3_connection_id.asc(), UiGroup.name.asc(), UiGroup.id.asc())
+        .all()
+    )
+    group_ids_by_connection: dict[int, list[int]] = {}
+    group_details_by_connection: dict[int, list[S3ConnectionGroupDetail]] = {}
+    for connection_id, group_id, group_name in rows:
+        normalized_connection_id = int(connection_id)
+        normalized_group_id = int(group_id)
+        group_ids_by_connection.setdefault(normalized_connection_id, []).append(normalized_group_id)
+        group_details_by_connection.setdefault(normalized_connection_id, []).append(
+            S3ConnectionGroupDetail(id=normalized_group_id, name=group_name)
+        )
+    return group_ids_by_connection, group_details_by_connection
+
+
+def _linked_group_details(db: Session, connection_id: int) -> tuple[list[int], list[S3ConnectionGroupDetail]]:
+    group_ids_by_connection, group_details_by_connection = _linked_group_details_by_connection(db, [connection_id])
+    return group_ids_by_connection.get(connection_id, []), group_details_by_connection.get(connection_id, [])
+
+
 def _parse_capabilities(value: Optional[str]) -> dict:
     return parse_s3_connection_capabilities(value)
 
@@ -98,6 +138,8 @@ def _to_admin_item(
     created_by_email: Optional[str],
     user_count: int,
     user_ids: list[int],
+    group_ids: list[int],
+    group_details: list[S3ConnectionGroupDetail],
     tags_service: TagsService,
 ) -> S3ConnectionAdminItem:
     details = resolve_connection_details(conn)
@@ -122,6 +164,8 @@ def _to_admin_item(
         created_by_email=created_by_email,
         user_count=int(user_count),
         user_ids=sorted(user_ids),
+        group_ids=sorted(group_ids),
+        group_details=group_details,
         tags=tags_service.get_connection_tags(conn),
         last_used_at=conn.last_used_at,
         created_at=conn.created_at,
@@ -167,6 +211,12 @@ def list_s3_connections(
             .where(TagDefinition.id == S3ConnectionTag.tag_definition_id)
             .where(TagDefinition.label.ilike(term))
         )
+        group_match = (
+            exists()
+            .where(UiGroupS3Connection.s3_connection_id == S3Connection.id)
+            .where(UiGroup.id == UiGroupS3Connection.group_id)
+            .where(UiGroup.name.ilike(term))
+        )
         q = q.filter(
             (S3Connection.name.ilike(term))
             | (StorageEndpoint.endpoint_url.ilike(term))
@@ -174,6 +224,7 @@ def list_s3_connections(
             | (User.email.ilike(term))
             | (linked_user.email.ilike(term))
             | (linked_user.full_name.ilike(term))
+            | group_match
             | tag_match
         )
 
@@ -214,6 +265,7 @@ def list_s3_connections(
         )
         for conn_id, user_id in link_rows:
             user_ids_by_connection.setdefault(conn_id, []).append(user_id)
+    group_ids_by_connection, group_details_by_connection = _linked_group_details_by_connection(db, connection_ids)
     items: list[S3ConnectionAdminItem] = []
     for conn, user_count, created_by_email in rows:
         items.append(
@@ -222,6 +274,8 @@ def list_s3_connections(
                 created_by_email=created_by_email,
                 user_count=int(user_count or 0),
                 user_ids=user_ids_by_connection.get(conn.id, []),
+                group_ids=group_ids_by_connection.get(conn.id, []),
+                group_details=group_details_by_connection.get(conn.id, []),
                 tags_service=tags_service,
             )
         )
@@ -364,6 +418,8 @@ def create_s3_connection(
         created_by_email=current_user.email,
         user_count=0,
         user_ids=[],
+        group_ids=[],
+        group_details=[],
         tags_service=tags_service,
     )
 
@@ -455,11 +511,14 @@ def update_s3_connection(
     created_by_email = db.query(User.email).filter(User.id == conn.created_by_user_id).scalar()
     user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
     user_ids = _linked_user_ids(db, conn.id)
+    group_ids, group_details = _linked_group_details(db, conn.id)
     return _to_admin_item(
         conn,
         created_by_email=created_by_email,
         user_count=int(user_count),
         user_ids=user_ids,
+        group_ids=group_ids,
+        group_details=group_details,
         tags_service=tags_service,
     )
 
@@ -494,11 +553,14 @@ def rotate_s3_connection_credentials(
     created_by_email = db.query(User.email).filter(User.id == conn.created_by_user_id).scalar()
     user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
     user_ids = _linked_user_ids(db, conn.id)
+    group_ids, group_details = _linked_group_details(db, conn.id)
     return _to_admin_item(
         conn,
         created_by_email=created_by_email,
         user_count=int(user_count),
         user_ids=user_ids,
+        group_ids=group_ids,
+        group_details=group_details,
         tags_service=tags_service,
     )
 

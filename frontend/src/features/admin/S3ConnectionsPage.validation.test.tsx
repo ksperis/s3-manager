@@ -284,7 +284,7 @@ describe("S3ConnectionsPage live validation", () => {
     await screen.findByText("connection-tagged");
     await screen.findByText("connection-plain");
 
-    fireEvent.change(screen.getByPlaceholderText("Search name, endpoint, created by, or tag..."), {
+    fireEvent.change(screen.getByPlaceholderText("Search name, endpoint, created by, group, or tag..."), {
       target: { value: "shared" },
     });
 

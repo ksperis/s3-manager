@@ -9,6 +9,11 @@ from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 
 
+class S3UserGroupDetail(BaseModel):
+    id: int
+    name: str
+
+
 class S3User(BaseModel):
     id: int
     name: str
@@ -16,6 +21,8 @@ class S3User(BaseModel):
     email: Optional[str] = None
     created_at: Optional[datetime] = None
     user_ids: list[int] = []
+    group_ids: list[int] = Field(default_factory=list)
+    group_details: list[S3UserGroupDetail] = Field(default_factory=list)
     quota_max_size_gb: Optional[float] = None
     quota_max_objects: Optional[int] = None
     storage_endpoint_id: Optional[int] = None

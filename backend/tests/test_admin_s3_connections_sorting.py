@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.db import S3Connection, User, UserRole
+from app.db import S3Connection, UiGroup, UiGroupS3Connection, User, UserRole
 from app.services.tags_service import TagsService
 
 
@@ -123,3 +123,21 @@ def test_admin_s3_connections_search_matches_tag_labels(client, db_session):
     payload = response.json()
 
     assert [item["name"] for item in payload["items"]] == ["tagged-connection"]
+
+
+def test_admin_s3_connections_search_matches_direct_group_links(client, db_session):
+    linked = _seed_connection(db_session, name="group-linked-connection", is_shared=True)
+    _seed_connection(db_session, name="plain-connection", is_shared=True)
+    group = UiGroup(name="Connection Operators")
+    db_session.add(group)
+    db_session.flush()
+    db_session.add(UiGroupS3Connection(group_id=group.id, s3_connection_id=linked.id))
+    db_session.commit()
+
+    response = client.get("/api/admin/s3-connections", params={"search": "operators"})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert [item["name"] for item in payload["items"]] == ["group-linked-connection"]
+    assert payload["items"][0]["group_ids"] == [group.id]
+    assert payload["items"][0]["group_details"] == [{"id": group.id, "name": "Connection Operators"}]
