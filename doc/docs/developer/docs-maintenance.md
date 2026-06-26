@@ -6,6 +6,10 @@ This page defines coverage expectations for audience-oriented documentation.
 
 | Route / Feature | Target doc page | Status |
 |---|---|---|
+| First-run user orientation and workspace selection | `user/start-here.md` | Covered |
+| User/admin task journeys | `user/common-tasks-storage-user.md` + `user/common-tasks-storage-admin.md` | Covered |
+| Feature visibility and missing actions | `user/feature-availability.md` + `user/troubleshooting.md` | Covered |
+| Product vocabulary and search terms | `user/glossary.md` | Covered |
 | `/admin` dashboard and admin nav | `user/workspace-admin.md` | Covered |
 | `/admin/s3-accounts` | `user/workspace-admin.md` | Covered |
 | `/admin/s3-users` + keys page | `user/workspace-admin.md` | Covered |
@@ -32,10 +36,15 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/manager/bucket-purge`, `/ceph-admin/buckets` purge action, `/storage-ops/buckets` purge action | `user/feature-bucket-purge.md` | Covered |
 | `/manager/metrics`, `/ceph-admin/metrics`, and bucket usage stats tabs/actions | `user/feature-bucket-usage-stats.md` | Covered |
 | `/manager/migrations*` | `user/feature-bucket-migration.md` | Covered |
-| `/portal` and children | `user/workspace-portal.md` | Covered |
+| `/portal` and children | `user/workspace-portal.md` + Portal task pages | Covered |
+| `/portal/storage-spaces*` | `user/portal-storage-spaces.md` + `user/portal-files.md` | Covered |
+| `/portal/shares*` and public-link/collaboration concepts | `user/portal-sharing.md` | Covered |
+| `/portal/access-keys` | `user/portal-access-keys.md` | Covered |
+| `/portal/usage` and Portal alerts | `user/portal-usage-alerts.md` | Covered |
 | `/browser` | `user/workspace-browser.md` + `user/feature-objects-browser.md` | Covered |
 | `/browser` object versions modal | `user/feature-object-versions-browser.md` | Covered |
 | Feature flags in app settings | `ops/configuration.md` + user pages limits blocks | Covered |
+| Destructive and bulk operation safety | `user/safe-destructive-operations.md` + tool pages | Covered |
 
 ## Maintenance rule
 
@@ -88,6 +97,9 @@ If you add a new standard user page:
 2. Generate screenshots.
 3. Add one themed screenshot block to the new markdown page.
 4. Run the screenshot check script.
+
+If a new task page reuses an existing validated screenshot, document why that
+screenshot is the best visual anchor and still run the screenshot check script.
 
 If you update the gallery page:
 

@@ -69,6 +69,7 @@ nav:
       - Use cases (storage admin): user/use-cases-storage-admin.md
       - Use cases (storage user): user/use-cases-storage-user.md
       - Feature availability: user/feature-availability.md
+      - Glossary and search tips: user/glossary.md
       - "Workspace: Admin": user/workspace-admin.md
       - "Feature: Endpoint Status in Admin": user/feature-endpoint-status-admin.md
       - "Feature: Billing in Admin": user/feature-billing-admin.md

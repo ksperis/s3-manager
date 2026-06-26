@@ -34,5 +34,6 @@
 - Start quickly as a user: [User Guide / Start Here](user/start-here.md)
 - Choose a daily workflow: [Common tasks for storage users](user/common-tasks-storage-user.md)
 - Choose an admin workflow: [Common tasks for storage administrators](user/common-tasks-storage-admin.md)
+- Understand terms and search better: [Glossary and Search Tips](user/glossary.md)
 - Deploy quickly with containers: [Ops / Deploy with Docker Compose](ops/deploy-docker-compose.md)
 - Understand architecture: [Developer / Architecture Overview](developer/architecture-overview.md)

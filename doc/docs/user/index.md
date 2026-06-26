@@ -12,8 +12,9 @@ Use this section for task-oriented instructions. Each page focuses on actionable
 1. [Start here](start-here.md)
 2. [Common tasks for storage users](common-tasks-storage-user.md) or [common tasks for storage administrators](common-tasks-storage-admin.md)
 3. [User profile](profile.md)
-4. Workspace pages (`Admin`, `Manager`, `Portal`, `Browser`, then optional `Ceph Admin` and `Storage Ops`)
-5. Feature pages for the exact action you need.
+4. [Glossary and search tips](glossary.md) when a term is unclear.
+5. Workspace pages (`Admin`, `Manager`, `Portal`, `Browser`, then optional `Ceph Admin` and `Storage Ops`)
+6. Feature pages for the exact action you need.
 
 ## Choose your path
 
@@ -23,6 +24,10 @@ Use this section for task-oriented instructions. Each page focuses on actionable
 | A storage administrator | [Common tasks for storage administrators](common-tasks-storage-admin.md) | You can map endpoint, account, bucket, IAM, and usage tasks to the right workspace. |
 | A Portal user | [Workspace: Portal](workspace-portal.md) | You understand Storage Spaces, files, sharing, usage, and access keys. |
 | A Browser user | [Workspace: Browser](workspace-browser.md) | You can select the right context and act on objects safely. |
+
+## Search help
+
+Use [Glossary and search tips](glossary.md) when you are not sure whether the product calls something a file, object, bucket, Storage Space, context, endpoint, access key, or connection.
 
 ## Visual example
 

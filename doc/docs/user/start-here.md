@@ -81,6 +81,7 @@ You know which workspace to use and can start from the correct context.
 - For self-service storage, continue with [Workspace: Portal](workspace-portal.md).
 - For bucket and IAM administration, continue with [Workspace: Manager](workspace-manager.md).
 - For platform setup, continue with [Workspace: Admin](workspace-admin.md).
+- If a term is unclear, use [Glossary and search tips](glossary.md).
 
 ## Visual example
 
