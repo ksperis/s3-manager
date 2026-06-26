@@ -407,7 +407,7 @@ function EndpointRow({ endpoint }: { endpoint: WorkspaceEndpointHealthEntry }) {
   const stale = isEndpointCheckStale(endpoint.checked_at);
   const checkedAtLabel = endpoint.checked_at ? `Checked ${formatRelativeTime(endpoint.checked_at)}` : "No healthcheck yet";
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-[color:var(--ui-border-soft)] px-2 py-2 ui-caption sm:grid sm:grid-cols-[minmax(0,1fr)_64px_60px_minmax(108px,1fr)_auto] sm:border-0 sm:px-0 sm:py-0">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-[color:var(--ui-border-soft)] px-2 py-2 ui-caption sm:grid sm:grid-cols-[minmax(0,1fr)_64px_60px_minmax(108px,1fr)_72px] sm:border-0 sm:px-0 sm:py-0">
       <span className="flex min-w-0 items-center gap-2 font-semibold text-[var(--ui-text)]">
         <WorkspaceStatusDot status={endpoint.status} className="shrink-0" />
         <span className="truncate">{endpoint.name}</span>
@@ -423,7 +423,7 @@ function EndpointRow({ endpoint }: { endpoint: WorkspaceEndpointHealthEntry }) {
       >
         {checkedAtLabel}
       </span>
-      <WorkspaceStatusPill status={endpoint.status} />
+      <WorkspaceStatusPill status={endpoint.status} className="justify-self-end text-center sm:min-w-[64px]" />
     </div>
   );
 }
