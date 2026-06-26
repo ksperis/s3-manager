@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.9 - 2026-06-26
+
+### Added
+
+- Added UI group editing on storage targets and surfaced UI group access in storage listings.
+- Added bucket purge workflows for Manager, Storage Ops, and Ceph Admin with streamed progress and audit-aware backend services.
+- Added Browser workspace sidebar, folder navigation helpers, route/access matrices, and profile/runtime diagnostics coverage.
+
+### Changed
+
+- Refactored Browser, Portal, bucket migration, router dependencies, and shared frontend primitives into smaller service and UI modules.
+- Refined Portal and Manager workspace UX, dashboards, KPI wrapping, breadcrumb behavior, and localized Portal copy.
+- Updated user and operations documentation, screenshot assets, feature availability pages, and safe destructive operation guidance.
+
+### Fixed/Security
+
+- Restored core workspace kill switches after the settings refactor and hardened sensitive runtime error redaction.
+- Improved Manager bucket deletion and purge-delete labeling while keeping empty-bucket deletion on the standard confirmation path.
+- Softened Browser listing access errors and kept folder tools available behind the intended advanced-mode gates.
+
+### Tests
+
+- Added backend and frontend coverage for purge routes/services, dependency facades, Portal mappers, workspace routing, shared UI controls, and CI stability.
+- Stabilized Ceph Admin quota persistence, frontend interaction tests, and login page theme-provider coverage.
+
 ## 0.1.8 - 2026-06-16
 
 ### Added
