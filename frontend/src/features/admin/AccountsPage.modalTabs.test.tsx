@@ -16,6 +16,7 @@ const getStorageEndpointMock = vi.fn();
 
 const listMinimalUsersMock = vi.fn();
 const listAdminTagDefinitionsMock = vi.fn();
+let portalEnabled = false;
 
 const makeTag = (id: number, label: string, color_key = "neutral", scope = "standard") => ({
   id,
@@ -96,6 +97,15 @@ vi.mock("../../api/accounts", () => ({
     updateAccountPortalSettingsMock(accountId, payload),
 }));
 
+vi.mock("../../components/GeneralSettingsContext", () => ({
+  useGeneralSettings: () => ({
+    generalSettings: { portal_enabled: portalEnabled },
+    loading: false,
+    refresh: vi.fn(),
+    setGeneralSettings: vi.fn(),
+  }),
+}));
+
 vi.mock("../../api/storageEndpoints", () => ({
   listStorageEndpoints: () => listStorageEndpointsMock(),
   getStorageEndpoint: (endpointId: number, options?: unknown) => getStorageEndpointMock(endpointId, options),
@@ -114,6 +124,7 @@ describe("AccountsPage modal tabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    portalEnabled = false;
     localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
@@ -228,19 +239,18 @@ describe("AccountsPage modal tabs", () => {
     const tabLabels = Array.from(generalTab.parentElement?.querySelectorAll("button") ?? []).map((button) =>
       button.textContent?.trim()
     );
-    expect(tabLabels).toEqual(expect.arrayContaining(["General", "Linked UI users", "Portal overrides"]));
+    expect(tabLabels.slice(0, 2)).toEqual(["General", "Linked UI users"]);
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Add a tag for this account" })).toBeInTheDocument();
 
     fireEvent.click(usersTab);
 
-    expect(screen.getByText("Portal role")).toBeInTheDocument();
-    expect(screen.getByText("No linked users yet.")).toBeInTheDocument();
+    expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
+    expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "ui7@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
-    expect(screen.getAllByText("No portal access").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -307,13 +317,13 @@ describe("AccountsPage modal tabs", () => {
     render(<AccountsPage />);
 
     expect(await screen.findByText("ui7@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Portal manager")).toBeInTheDocument();
+    expect(screen.queryByText("Portal manager")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Linked UI users" }));
 
-    expect(screen.getByText("Portal role")).toBeInTheDocument();
-    expect(screen.getAllByText("No portal access").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
+    expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -386,7 +396,8 @@ describe("AccountsPage modal tabs", () => {
     );
   });
 
-  it("shows portal overrides tab for account portal settings", async () => {
+  it("shows portal overrides tab when the portal feature is enabled", async () => {
+    portalEnabled = true;
     fetchAccountPortalSettingsMock.mockResolvedValueOnce(
       makePortalAccountSettings({
         portal_manager_override: {
@@ -408,7 +419,18 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.queryByText("Bucket management")).not.toBeInTheDocument();
   });
 
+  it("hides portal overrides tab when the portal feature is disabled", async () => {
+    render(<AccountsPage />);
+
+    await screen.findByText("acc-1");
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+
+    expect(screen.queryByRole("button", { name: "Portal overrides" })).not.toBeInTheDocument();
+    expect(fetchAccountPortalSettingsMock).not.toHaveBeenCalled();
+  });
+
   it("saves account portal overrides from the portal tab", async () => {
+    portalEnabled = true;
     updateAccountPortalSettingsMock.mockResolvedValueOnce(
       makePortalAccountSettings({
         admin_override: { allow_portal_user_bucket_create: false },
@@ -443,6 +465,8 @@ describe("AccountsPage modal tabs", () => {
   });
 
   it("resets account portal overrides from the portal tab", async () => {
+    portalEnabled = true;
+
     render(<AccountsPage />);
 
     await screen.findByText("acc-1");

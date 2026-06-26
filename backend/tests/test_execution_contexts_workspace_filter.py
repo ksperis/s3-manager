@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 from app.db import (
     AccountRole,
@@ -264,7 +265,7 @@ def test_browser_workspace_returns_connections_and_s3_users(db_session):
     assert {context.kind for context in contexts} == {"legacy_user", "connection"}
 
 
-def test_browser_workspace_returns_portal_account_context_for_portal_role(db_session, monkeypatch):
+def test_browser_workspace_returns_portal_account_context_when_portal_browser_enabled(db_session, monkeypatch):
     user = _create_user(db_session)
     endpoint = _create_endpoint(db_session, name="portal-browser-endpoint")
     account = _create_account(
@@ -294,6 +295,18 @@ def test_browser_workspace_returns_portal_account_context_for_portal_role(db_ses
         "get_s3_accounts_service",
         lambda db, allow_missing_admin=False: _FakeAccountLimitsService(),
     )
+    monkeypatch.setattr(
+        execution_contexts,
+        "load_app_settings",
+        lambda: SimpleNamespace(
+            general=SimpleNamespace(
+                browser_enabled=True,
+                portal_enabled=True,
+                browser_portal_enabled=True,
+            )
+        ),
+    )
+
     contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
 
     assert len(contexts) == 1
@@ -340,6 +353,18 @@ def test_browser_workspace_marks_portal_context_when_account_is_available_in_man
         "get_s3_accounts_service",
         lambda db, allow_missing_admin=False: _FakeAccountLimitsService(),
     )
+    monkeypatch.setattr(
+        execution_contexts,
+        "load_app_settings",
+        lambda: SimpleNamespace(
+            general=SimpleNamespace(
+                browser_enabled=True,
+                portal_enabled=True,
+                browser_portal_enabled=True,
+            )
+        ),
+    )
+
     contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
 
     assert len(contexts) == 1

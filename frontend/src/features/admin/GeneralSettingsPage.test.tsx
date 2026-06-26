@@ -45,6 +45,15 @@ vi.mock("../../utils/confirm", () => ({
 function buildSettings(): AppSettings {
   return {
     general: {
+      manager_enabled: true,
+      ceph_admin_enabled: false,
+      storage_ops_enabled: false,
+      browser_enabled: true,
+      browser_root_enabled: true,
+      browser_manager_enabled: false,
+      browser_portal_enabled: true,
+      browser_ceph_admin_enabled: true,
+      portal_enabled: true,
       billing_enabled: false,
       endpoint_status_enabled: false,
       quota_alerts_enabled: false,
@@ -98,6 +107,11 @@ function buildSettings(): AppSettings {
 
 function unlockedFeatureLocks(): GeneralFeatureLocks {
   return {
+    manager_enabled: { forced: false, value: null, source: null },
+    ceph_admin_enabled: { forced: false, value: null, source: null },
+    storage_ops_enabled: { forced: false, value: null, source: null },
+    browser_enabled: { forced: false, value: null, source: null },
+    portal_enabled: { forced: false, value: null, source: null },
     billing_enabled: { forced: false, value: null, source: null },
     endpoint_status_enabled: { forced: false, value: null, source: null },
   };
@@ -159,16 +173,11 @@ describe("GeneralSettingsPage branding", () => {
     expect(screen.queryByLabelText("Bucket compare tool")).not.toBeInTheDocument();
   });
 
-  it("does not render workspace availability toggles", async () => {
+  it("shows Experimental badge on portal feature toggle", async () => {
     render(<GeneralSettingsPage />);
 
-    await screen.findByLabelText("Primary color picker");
-    expect(screen.queryByLabelText("Manager feature")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Browser feature")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Portal feature")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Ceph Admin feature")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Storage Ops feature")).not.toBeInTheDocument();
-    expect(screen.queryByText("Experimental")).not.toBeInTheDocument();
+    await screen.findByLabelText("Portal feature");
+    expect(screen.getByText("Experimental")).toBeInTheDocument();
   });
 
   it("sends a quota SMTP test email with current quota notification settings", async () => {

@@ -7,6 +7,10 @@ import BrowserEmbed from "../browser/BrowserEmbed";
 
 const mocks = vi.hoisted(() => ({
   updateStorageSpaceMock: vi.fn(),
+  generalSettings: {
+    browser_enabled: true,
+    browser_portal_enabled: true,
+  },
   hookResult: {
     accountIdForApi: "101",
     selectedAccount: {
@@ -74,6 +78,12 @@ vi.mock("./usePortalWorkspaceData", () => ({
   usePortalWorkspaceData: () => mocks.hookResult,
 }));
 
+vi.mock("../../components/GeneralSettingsContext", () => ({
+  useGeneralSettings: () => ({
+    generalSettings: mocks.generalSettings,
+  }),
+}));
+
 vi.mock("../../api/portal", () => ({
   updatePortalStorageSpace: (...args: unknown[]) => mocks.updateStorageSpaceMock(...args),
 }));
@@ -96,6 +106,8 @@ function renderPage() {
 describe("PortalStorageSpaceDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.generalSettings.browser_enabled = true;
+    mocks.generalSettings.browser_portal_enabled = true;
     mocks.hookResult.workspace.spaces[0].role = "Owner";
     mocks.hookResult.workspace.spaces[0].nameEditable = true;
     mocks.hookResult.workspace.spaces[0].origin = "portal_generic";
@@ -150,6 +162,15 @@ describe("PortalStorageSpaceDetailPage", () => {
       "newFolder",
       "delete",
     ]);
+  });
+
+  it("shows a disabled state when the Portal Browser kill switch is off", () => {
+    mocks.generalSettings.browser_portal_enabled = false;
+
+    renderPage();
+
+    expect(screen.getByText(/File browsing is unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
   });
 
   it("locks name editing and only saves description for non-renameable spaces", async () => {

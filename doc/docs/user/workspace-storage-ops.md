@@ -7,6 +7,7 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
 ## Prerequisites
 
 - UI role `ui_user`, `ui_admin`, or `ui_superadmin` with `can_access_storage_ops` entitlement.
+- `storage_ops_enabled` feature enabled.
 - At least one authorized manager context (`account`, legacy S3 user, or connection).
 
 ## Steps
@@ -53,7 +54,7 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
 
 You can search and operate on large bucket sets across authorized accounts, S3 users, and connections from one operational surface.
 
-## Limits / access
+## Limits / feature flags
 
 !!! note
     UI tags are local browser metadata (localStorage), namespaced separately from Ceph Admin.

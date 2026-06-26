@@ -22,6 +22,6 @@ This section covers deployment and day-2 operations.
 - Deploy with Docker Compose or Helm.
 - Configure required secrets and trusted origins.
 - Configure the first endpoint and verify healthchecks.
-- Decide which workspaces, entitlements, account links, and operational feature flags are ready for users.
+- Decide which workspaces and feature flags are ready for users.
 - Confirm scheduler/CronJob behavior for healthchecks, usage history, billing, and quota monitoring.
 - Keep the user-facing [Troubleshooting](../user/troubleshooting.md) page and this Ops guide aligned.

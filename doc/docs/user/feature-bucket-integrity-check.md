@@ -35,12 +35,12 @@ Each selected bucket has a final status, and any object-level failures include e
 
 ## If you do not see this action
 
-Check the workspace, Manager tool toggle, Manager tool access, and whether the selected context has bucket-management capability.
+Check the workspace, global feature flag, Manager tool access, and whether the selected context has bucket-management capability.
 
 ## Limits / feature flags
 
 !!! note
-    Manager visibility is controlled by `bucket_integrity_check_enabled` and the per-user Manager tool right `bucket_integrity_check`. Ceph Admin and Storage Ops access stays controlled by their own workspace permissions, entitlements, and context availability.
+    Manager visibility is controlled by `bucket_integrity_check_enabled` and the per-user Manager tool right `bucket_integrity_check`. Ceph Admin and Storage Ops access stays controlled by their own workspace permissions and feature flags.
 
 !!! warning
     **HEAD only** is the default mode. It checks object metadata access through `HeadObject` and does not read object bodies.

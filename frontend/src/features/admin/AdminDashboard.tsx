@@ -830,6 +830,23 @@ export default function AdminDashboard() {
     }
   };
 
+  const coreFeatures = useMemo<WorkspaceDashboardFeature[]>(
+    () => [
+      { id: "manager", label: "Manager", enabled: generalSettings.manager_enabled },
+      { id: "browser", label: "Browser", enabled: generalSettings.browser_enabled },
+      { id: "portal", label: "Portal", enabled: generalSettings.portal_enabled },
+      { id: "ceph_admin", label: "Ceph Admin", enabled: generalSettings.ceph_admin_enabled, massManagement: true },
+      { id: "storage_ops", label: "Storage Ops", enabled: generalSettings.storage_ops_enabled, massManagement: true },
+    ],
+    [
+      generalSettings.browser_enabled,
+      generalSettings.ceph_admin_enabled,
+      generalSettings.manager_enabled,
+      generalSettings.portal_enabled,
+      generalSettings.storage_ops_enabled,
+    ]
+  );
+
   const extraFeatures = useMemo<WorkspaceDashboardFeature[]>(
     () => [
       { id: "billing", label: "Billing", enabled: generalSettings.billing_enabled },
@@ -846,8 +863,11 @@ export default function AdminDashboard() {
   );
 
   const featureGroups = useMemo<WorkspaceDashboardFeatureGroup[]>(
-    () => [{ title: "Operational features", features: extraFeatures }],
-    [extraFeatures]
+    () => [
+      { title: "Core features", features: coreFeatures },
+      { title: "Extra features", features: extraFeatures },
+    ],
+    [coreFeatures, extraFeatures]
   );
 
   const statCards = useMemo<WorkspaceDashboardStatCardItem[]>(() => {

@@ -48,7 +48,7 @@ Check `bucket_usage_stats_enabled`, workspace access, and whether the selected e
 ## Limits / feature flags
 
 !!! note
-    Manager visibility and recalculation are controlled by `bucket_usage_stats_enabled`; every Manager user with bucket management context can view and refresh usage stats. Ceph Admin and Storage Ops access stays controlled by their own workspace permissions, entitlements, and context availability.
+    Manager visibility and recalculation are controlled by `bucket_usage_stats_enabled`; every Manager user with bucket management context can view and refresh usage stats. Ceph Admin and Storage Ops access stays controlled by their own workspace permissions and feature flags.
 
 !!! note
     When version listing is available, all object versions are counted for logical storage. `IsLatest=true` versions feed current bytes, `IsLatest=false` versions feed noncurrent bytes, and delete markers are counted separately without adding bytes.

@@ -115,7 +115,7 @@ export default function GroupsPage() {
   type SortField = "name" | "created_at" | "updated_at";
 
   const { generalSettings } = useGeneralSettings();
-  const showPortalRole = true;
+  const showPortalRole = Boolean(generalSettings.portal_enabled);
   const [groups, setGroups] = useState<UiGroup[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [accounts, setAccounts] = useState<S3AccountSummary[]>([]);

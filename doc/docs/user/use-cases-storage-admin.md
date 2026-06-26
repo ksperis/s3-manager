@@ -14,16 +14,16 @@ Use this page when you are responsible for platform setup, tenant operations, or
 1. For platform-level setup, go to **Admin**:
    - Configure endpoints.
    - Manage UI users, S3 accounts, S3 users, S3 connections.
-   - Configure operational feature settings.
+   - Configure global feature flags and settings.
 2. For tenant-level operations, go to **Manager**:
    - Manage buckets, IAM users/groups/roles/policies.
    - Use tools such as Bucket Compare and Bucket Migration when enabled.
 3. For delegated tenant self-service, configure **Portal**:
    - Assign explicit `portal_user` or `portal_manager` account roles.
    - Keep `/manager` access separate with `account_admin` or `is_root`.
-4. For Ceph cluster-level actions, use **Ceph Admin** when your user has the entitlement:
+4. For Ceph cluster-level actions, use **Ceph Admin** (if enabled):
    - RGW accounts, RGW users, buckets, endpoint metrics.
-5. For cross-account and cross-connection bucket campaigns, use **Storage Ops** when your user has the entitlement:
+5. For cross-account and cross-connection bucket campaigns, use **Storage Ops** (if enabled):
    - Unified bucket listing and advanced filters.
    - Bulk configuration actions with preview/apply.
    - UI tags for operational grouping.
@@ -33,12 +33,10 @@ Use this page when you are responsible for platform setup, tenant operations, or
 
 You can map each operational task to the right workspace and avoid cross-scope mistakes.
 
-## Limits / access
+## Limits / feature flags
 
 !!! note
-    Some areas are optional or restricted by access and endpoint capabilities:
-    IAM support, Portal account links, migration tool, bucket compare, and
-    endpoint status.
+    Some areas are optional or restricted by endpoint capabilities: IAM support, Portal, migration tool, bucket compare, and endpoint status.
 
 ## Related pages
 

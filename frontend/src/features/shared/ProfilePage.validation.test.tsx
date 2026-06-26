@@ -71,7 +71,7 @@ vi.mock("../../utils/workspaces", () => ({
     authType: "password",
   }),
   readStoredWorkspaceId: () => null,
-  resolveAvailableWorkspaces: () => [],
+  resolveAvailableWorkspacesWithFlags: () => [],
 }));
 
 describe("ProfilePage live validation", () => {

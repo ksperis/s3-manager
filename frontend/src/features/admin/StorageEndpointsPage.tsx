@@ -27,6 +27,7 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
@@ -540,6 +541,7 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
 }
 
 export default function StorageEndpointsPage() {
+  const { generalSettings } = useGeneralSettings();
   const currentUser = useMemo(() => readStoredUser(), []);
   const canEditEndpoints = isSuperAdminRole(currentUser?.role);
   const [endpoints, setEndpoints] = useState<StorageEndpoint[]>([]);
@@ -601,7 +603,7 @@ export default function StorageEndpointsPage() {
   }, [loadEndpoints]);
 
   const cephMode = useMemo(() => form.provider === "ceph", [form.provider]);
-  const cephAdminConfigEnabled = true;
+  const cephAdminConfigEnabled = Boolean(generalSettings.ceph_admin_enabled);
   const defaultEndpoint = useMemo(() => endpoints.find((ep) => ep.is_default), [endpoints]);
   useEffect(() => {
     if (!showForm || !cephMode || !canEditEndpoints) {

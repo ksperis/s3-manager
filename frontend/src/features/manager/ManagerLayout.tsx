@@ -212,7 +212,9 @@ function ManagerShell() {
       label: "Storage",
       links: [
         { to: "/manager/buckets", label: "Buckets" },
-        ...(managerBrowserAvailable ? [{ to: "/manager/browser", label: "Browser" }] : []),
+        ...(generalSettings.browser_enabled && generalSettings.browser_manager_enabled && managerBrowserAvailable
+          ? [{ to: "/manager/browser", label: "Browser" }]
+          : []),
       ],
     });
     if (snsFeatureEnabled) {

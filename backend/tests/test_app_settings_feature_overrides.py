@@ -15,6 +15,11 @@ from app.services import app_settings_service
 def _runtime_settings(**overrides):
     defaults = {
         "app_settings_path": None,
+        "feature_manager_enabled": None,
+        "feature_browser_enabled": None,
+        "feature_portal_enabled": None,
+        "feature_ceph_admin_enabled": None,
+        "feature_storage_ops_enabled": None,
         "feature_billing_enabled": None,
         "feature_endpoint_status_enabled": None,
         "billing_enabled": True,
@@ -27,8 +32,10 @@ def _runtime_settings(**overrides):
 def test_load_app_settings_applies_feature_env_overrides(monkeypatch, tmp_path):
     settings_path = tmp_path / "app_settings.json"
     persisted = AppSettings()
-    persisted.general.billing_enabled = False
-    persisted.general.endpoint_status_enabled = True
+    persisted.general.manager_enabled = False
+    persisted.general.browser_enabled = True
+    persisted.general.portal_enabled = False
+    persisted.general.ceph_admin_enabled = True
     settings_path.write_text(persisted.model_dump_json(indent=2), encoding="utf-8")
 
     monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
@@ -36,42 +43,46 @@ def test_load_app_settings_applies_feature_env_overrides(monkeypatch, tmp_path):
         app_settings_service,
         "get_settings",
         lambda: _runtime_settings(
-            feature_billing_enabled=True,
-            feature_endpoint_status_enabled=False,
+            feature_manager_enabled=True,
+            feature_browser_enabled=False,
+            feature_portal_enabled=True,
         ),
     )
 
     effective = app_settings_service.load_app_settings()
-    assert effective.general.billing_enabled is True
-    assert effective.general.endpoint_status_enabled is False
+    assert effective.general.manager_enabled is True
+    assert effective.general.browser_enabled is False
+    assert effective.general.portal_enabled is True
+    # Not forced: persisted value is preserved.
+    assert effective.general.ceph_admin_enabled is True
 
 
 def test_save_app_settings_keeps_persisted_value_for_locked_features(monkeypatch, tmp_path):
     settings_path = tmp_path / "app_settings.json"
     persisted = AppSettings()
+    persisted.general.manager_enabled = False
     persisted.general.billing_enabled = True
-    persisted.general.endpoint_status_enabled = True
     settings_path.write_text(persisted.model_dump_json(indent=2), encoding="utf-8")
 
     monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
     monkeypatch.setattr(
         app_settings_service,
         "get_settings",
-        lambda: _runtime_settings(feature_billing_enabled=False, feature_endpoint_status_enabled=False),
+        lambda: _runtime_settings(feature_manager_enabled=True, feature_billing_enabled=False),
     )
 
     payload = AppSettings()
+    payload.general.manager_enabled = True
     payload.general.billing_enabled = False
-    payload.general.endpoint_status_enabled = False
     saved_effective = app_settings_service.save_app_settings(payload)
 
     raw = json.loads(settings_path.read_text(encoding="utf-8"))
     # Locked fields keep persisted values in storage.
+    assert raw["general"]["manager_enabled"] is False
     assert raw["general"]["billing_enabled"] is True
-    assert raw["general"]["endpoint_status_enabled"] is True
     # Returned settings expose effective forced values.
+    assert saved_effective.general.manager_enabled is True
     assert saved_effective.general.billing_enabled is False
-    assert saved_effective.general.endpoint_status_enabled is False
 
 
 def test_general_feature_locks_only_use_dedicated_feature_sources(monkeypatch):
@@ -79,21 +90,31 @@ def test_general_feature_locks_only_use_dedicated_feature_sources(monkeypatch):
         app_settings_service,
         "get_settings",
         lambda: _runtime_settings(
-            feature_billing_enabled=False,
-            feature_endpoint_status_enabled=True,
+            feature_manager_enabled=False,
+            feature_portal_enabled=True,
+            feature_billing_enabled=None,
+            feature_endpoint_status_enabled=None,
             billing_enabled=False,
             healthcheck_enabled=False,
         ),
     )
 
     locks = app_settings_service.get_general_feature_locks()
-    assert locks.billing_enabled.forced is True
-    assert locks.billing_enabled.value is False
-    assert locks.billing_enabled.source == "FEATURE_BILLING_ENABLED"
+    assert locks.manager_enabled.forced is True
+    assert locks.manager_enabled.value is False
+    assert locks.manager_enabled.source == "FEATURE_MANAGER_ENABLED"
 
-    assert locks.endpoint_status_enabled.forced is True
-    assert locks.endpoint_status_enabled.value is True
-    assert locks.endpoint_status_enabled.source == "FEATURE_ENDPOINT_STATUS_ENABLED"
+    assert locks.portal_enabled.forced is True
+    assert locks.portal_enabled.value is True
+    assert locks.portal_enabled.source == "FEATURE_PORTAL_ENABLED"
+
+    assert locks.billing_enabled.forced is False
+    assert locks.billing_enabled.value is None
+    assert locks.billing_enabled.source is None
+
+    assert locks.endpoint_status_enabled.forced is False
+    assert locks.endpoint_status_enabled.value is None
+    assert locks.endpoint_status_enabled.source is None
 
 
 def test_branding_settings_defaults_and_normalizes_hex():
@@ -118,6 +139,11 @@ def test_branding_settings_reject_invalid_logo_url():
 def test_manager_ceph_s3_user_keys_flag_default_enabled():
     settings = AppSettings()
     assert settings.general.manager_ceph_s3_user_keys_enabled is True
+
+
+def test_portal_feature_flag_default_disabled():
+    settings = AppSettings()
+    assert settings.general.portal_enabled is False
 
 
 def test_bucket_integrity_check_flag_default_enabled():
@@ -152,6 +178,11 @@ def test_portal_manager_legacy_bucket_create_policy_normalizes_to_session_action
     )
 
     assert settings.portal.iam_group_manager_policy.actions == ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
+
+
+def test_portal_browser_flag_default_enabled():
+    settings = AppSettings()
+    assert settings.general.browser_portal_enabled is True
 
 
 def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path):

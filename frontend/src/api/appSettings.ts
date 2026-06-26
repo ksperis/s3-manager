@@ -76,6 +76,15 @@ export type PortalSettingsOverride = {
 };
 
 export type GeneralSettings = {
+  manager_enabled: boolean;
+  ceph_admin_enabled: boolean;
+  storage_ops_enabled: boolean;
+  browser_enabled: boolean;
+  browser_root_enabled: boolean;
+  browser_manager_enabled: boolean;
+  browser_portal_enabled: boolean;
+  browser_ceph_admin_enabled: boolean;
+  portal_enabled: boolean;
   billing_enabled: boolean;
   endpoint_status_enabled: boolean;
   quota_alerts_enabled: boolean;
@@ -99,6 +108,11 @@ export type GeneralFeatureLock = {
 };
 
 export type GeneralFeatureLocks = {
+  manager_enabled: GeneralFeatureLock;
+  ceph_admin_enabled: GeneralFeatureLock;
+  storage_ops_enabled: GeneralFeatureLock;
+  browser_enabled: GeneralFeatureLock;
+  portal_enabled: GeneralFeatureLock;
   billing_enabled: GeneralFeatureLock;
   endpoint_status_enabled: GeneralFeatureLock;
 };

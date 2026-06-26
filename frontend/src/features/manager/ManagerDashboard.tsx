@@ -1191,7 +1191,9 @@ export default function ManagerDashboard() {
       icon: <UploadIcon className="h-4 w-4" />,
       unavailableReason:
         noContextReason ||
-        (managerBrowserEnabled === false ? "Browser access is disabled for this context." : null),
+        (!generalSettings.browser_enabled || !generalSettings.browser_manager_enabled || managerBrowserEnabled === false
+          ? "Browser access is disabled for this context."
+          : null),
     },
     {
       label: "Manage lifecycle",

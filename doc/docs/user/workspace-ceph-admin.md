@@ -8,7 +8,7 @@ Use **Ceph Admin** for Ceph RGW cluster-level operations.
 
 - Admin-like UI role.
 - `can_access_ceph_admin` entitlement.
-- At least one compatible endpoint with Ceph Admin credentials and capability.
+- `ceph_admin_enabled` feature and at least one compatible endpoint.
 
 ## Steps
 
@@ -33,13 +33,10 @@ Use **Ceph Admin** for Ceph RGW cluster-level operations.
 
 You can run Ceph cluster-wide tasks without switching to account-scoped Manager workflows.
 
-## Limits / access
+## Limits / feature flags
 
 !!! note
-    Workspace visibility requires the admin UI role, the Ceph Admin entitlement,
-    and a compatible endpoint. Embedded Browser uses the selected Ceph Admin
-    endpoint context and still depends on endpoint capability and IAM/S3
-    authorization.
+    Workspace visibility requires both user entitlement and `ceph_admin_enabled`. Browser integration also depends on `browser_ceph_admin_enabled`.
 
 ## Related pages
 

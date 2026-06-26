@@ -9,7 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
-from app.models.app_settings import AppSettings
+from app.models.app_settings import AppSettings, GeneralSettings
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.routers import dependencies
 from app.routers.manager import context as manager_context_router
@@ -195,6 +195,17 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
     )
     db_session.commit()
     monkeypatch.setattr(
+        dependencies,
+        "load_app_settings",
+        lambda: AppSettings(
+            general=GeneralSettings(
+                portal_enabled=True,
+                browser_enabled=True,
+                browser_portal_enabled=True,
+            )
+        ),
+    )
+    monkeypatch.setattr(
         "app.services.portal_service.PortalService.get_portal_credentials",
         lambda self, user_arg, account_arg, account_role: ("AK-PORTAL", "SK-PORTAL"),
     )
@@ -248,6 +259,17 @@ def test_portal_browser_context_rejects_unavailable_storage_space_bucket(db_sess
         )
     )
     db_session.commit()
+    monkeypatch.setattr(
+        dependencies,
+        "load_app_settings",
+        lambda: AppSettings(
+            general=GeneralSettings(
+                portal_enabled=True,
+                browser_enabled=True,
+                browser_portal_enabled=True,
+            )
+        ),
+    )
     monkeypatch.setattr(
         "app.services.portal_service.PortalService.get_portal_credentials",
         lambda self, user_arg, account_arg, account_role: ("AK-PORTAL", "SK-PORTAL"),
@@ -373,7 +395,7 @@ def test_manager_context_ignores_legacy_access_mode_header(db_session):
     assert "can_switch_access" not in payload.model_dump()
 
 
-def test_manager_workspace_accepts_non_iam_connection_with_manager_access(db_session):
+def test_manager_workspace_accepts_non_iam_connection_when_access_manager_enabled(db_session):
     user = User(
         email="manager-connection-check@example.com",
         hashed_password="x",
@@ -880,6 +902,11 @@ def test_workspace_rejects_unlinked_s3_user_context(db_session):
 
 
 def test_browser_workspace_accepts_ceph_admin_selector_for_authorized_user(db_session, monkeypatch):
+    settings = AppSettings()
+    settings.general.ceph_admin_enabled = True
+    settings.general.browser_ceph_admin_enabled = True
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+
     user = User(
         email="ceph-admin-browser-ok@example.com",
         hashed_password="x",
@@ -914,6 +941,11 @@ def test_browser_workspace_accepts_ceph_admin_selector_for_authorized_user(db_se
 
 
 def test_browser_workspace_rejects_ceph_admin_selector_for_invalid_ceph_admin_identity(db_session, monkeypatch):
+    settings = AppSettings()
+    settings.general.ceph_admin_enabled = True
+    settings.general.browser_ceph_admin_enabled = True
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+
     user = User(
         email="ceph-admin-browser-invalid@example.com",
         hashed_password="x",
@@ -953,6 +985,11 @@ def test_browser_workspace_rejects_ceph_admin_selector_for_invalid_ceph_admin_id
 
 
 def test_browser_workspace_rejects_ceph_admin_selector_for_non_admin_user(db_session, monkeypatch):
+    settings = AppSettings()
+    settings.general.ceph_admin_enabled = True
+    settings.general.browser_ceph_admin_enabled = True
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+
     user = User(
         email="ceph-admin-browser-ko@example.com",
         hashed_password="x",

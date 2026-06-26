@@ -7,7 +7,7 @@ Use **UI tags** in **Storage Ops > Buckets** to build reusable operational selec
 ## Prerequisites
 
 - Access to `/storage-ops/buckets`.
-- Storage Ops entitlement and at least one authorized context.
+- `storage_ops_enabled` feature enabled.
 
 ## Before you start
 
@@ -33,9 +33,9 @@ The selected rows show the intended UI tags and the same tag filter can be reuse
 
 ## If you do not see this action
 
-Check Storage Ops access, authorized contexts, and whether rows are selected in the bucket workbench.
+Check Storage Ops access, the global feature flag, and whether rows are selected in the bucket workbench.
 
-## Limits / access
+## Limits / feature flags
 
 !!! note
     UI tags are stored in browser localStorage and do not modify backend S3 tags. Storage Ops and Ceph Admin share the same root storage key with isolated namespaces.

@@ -233,6 +233,13 @@ def _build_endpoint_payload(source: dict[str, str] | None = None) -> str:
 def _build_app_settings_payload() -> str:
     payload = {
         "general": {
+            "manager_enabled": True,
+            "ceph_admin_enabled": True,
+            "storage_ops_enabled": True,
+            "browser_enabled": True,
+            "browser_root_enabled": True,
+            "browser_manager_enabled": True,
+            "browser_ceph_admin_enabled": True,
             "billing_enabled": False,
             "endpoint_status_enabled": True,
             "quota_alerts_enabled": False,
@@ -330,6 +337,10 @@ def _prepare_environment(backend_root: Path, backend_base_url: str) -> dict[str,
     app_settings_path.write_text(_build_app_settings_payload(), encoding="utf-8")
     env["APP_SETTINGS_PATH"] = app_settings_path.resolve().as_posix()
 
+    env["FEATURE_MANAGER_ENABLED"] = "true"
+    env["FEATURE_BROWSER_ENABLED"] = "true"
+    env["FEATURE_CEPH_ADMIN_ENABLED"] = "true"
+    env["FEATURE_STORAGE_OPS_ENABLED"] = "true"
     env["FEATURE_ENDPOINT_STATUS_ENABLED"] = "true"
     env["BUCKET_MIGRATION_WORKER_ENABLED"] = "true"
 

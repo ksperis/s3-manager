@@ -97,6 +97,8 @@ vi.mock("../cephAdmin/CephAdminEndpointContext", () => ({
 vi.mock("../../components/GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({
     generalSettings: {
+      browser_enabled: false,
+      browser_ceph_admin_enabled: false,
     },
   }),
 }));

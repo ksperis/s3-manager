@@ -25,6 +25,9 @@ import { applyBranding } from "../../components/ui/brandingRuntime";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 
+const CEPH_ADMIN_WARNING_MESSAGE =
+  "Ceph Admin is an advanced Ceph cluster mass-management feature (accounts, users, buckets). " +
+  "It is not recommended to enable it on the same s3-manager instance exposed to end users.";
 const BILLING_CRON_REMINDER_MESSAGE =
   "Billing feature enabled. Think about enabling the billing collection cron job.";
 const CUSTOM_LOGIN_ENDPOINT_WARNING_MESSAGE =
@@ -40,6 +43,11 @@ const BRANDING_PRESET_COLORS = [
   "#7c3aed",
 ] as const;
 const FEATURE_FIELDS = [
+  "manager_enabled",
+  "ceph_admin_enabled",
+  "storage_ops_enabled",
+  "browser_enabled",
+  "portal_enabled",
   "billing_enabled",
   "endpoint_status_enabled",
 ] as const;
@@ -279,6 +287,109 @@ export default function GeneralSettingsPage() {
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
           <div className="grid gap-4">
+            <div className="ui-surface-card p-5">
+              <PortalSettingsSection
+                title="CORE FEATURES"
+                description="Main application feature set available to your users."
+                layout="grid"
+                columns={1}
+              >
+                <PortalSettingsItem
+                  title="Manager feature"
+                  description="Tenant administration workspace."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={Boolean(settings.general.manager_enabled)}
+                      disabled={isFeatureLocked("manager_enabled")}
+                      onChange={(value) => handleToggle("manager_enabled", value)}
+                      ariaLabel="Manager feature"
+                    />
+                  }
+                >
+                  {getFeatureLockHint("manager_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("manager_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="Browser feature"
+                  description="Object and bucket navigation workspace."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={Boolean(settings.general.browser_enabled)}
+                      disabled={isFeatureLocked("browser_enabled")}
+                      onChange={(value) => handleToggle("browser_enabled", value)}
+                      ariaLabel="Browser feature"
+                    />
+                  }
+                >
+                  {getFeatureLockHint("browser_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("browser_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="Portal feature"
+                  description="Self-service workspace governed by explicit per-account portal roles."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={Boolean(settings.general.portal_enabled)}
+                      disabled={isFeatureLocked("portal_enabled")}
+                      onChange={(value) => handleToggle("portal_enabled", value)}
+                      ariaLabel="Portal feature"
+                      badge={{ visible: true, label: "Experimental", tone: "warning" }}
+                    />
+                  }
+                >
+                  {getFeatureLockHint("portal_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("portal_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="Ceph Admin feature"
+                  description="Cluster-wide advanced operations."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={Boolean(settings.general.ceph_admin_enabled)}
+                      disabled={isFeatureLocked("ceph_admin_enabled")}
+                      onChange={(value) => handleToggle("ceph_admin_enabled", value)}
+                      ariaLabel="Ceph Admin feature"
+                    />
+                  }
+                >
+                  {settings.general.ceph_admin_enabled && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{CEPH_ADMIN_WARNING_MESSAGE}</p>
+                  )}
+                  {getFeatureLockHint("ceph_admin_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("ceph_admin_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="Storage Ops feature"
+                  description="Cross-account and cross-connection bucket operations workspace."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={Boolean(settings.general.storage_ops_enabled)}
+                      disabled={isFeatureLocked("storage_ops_enabled")}
+                      onChange={(value) => handleToggle("storage_ops_enabled", value)}
+                      ariaLabel="Storage Ops feature"
+                    />
+                  }
+                >
+                  {getFeatureLockHint("storage_ops_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("storage_ops_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
+              </PortalSettingsSection>
+            </div>
             <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="EXTRA FEATURES"

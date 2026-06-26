@@ -11,6 +11,7 @@ from app.db import AccountRole, S3Account, S3Connection, S3User, User, UserS3Acc
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.routers.dependencies import get_current_account_user
 from app.routers.dependencies_internal.portal_access import _validate_portal_account_surface
+from app.routers.dependencies_internal.settings_loader import load_app_settings
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_users_service import S3UsersService
 from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
@@ -310,35 +311,41 @@ def list_execution_contexts(
                 )
             )
     elif workspace == "browser":
-        for link in links:
-            if not _portal_account_allowed(link):
-                continue
-            account = account_by_id.get(link.account_id)
-            if account is None:
-                continue
-            try:
-                _validate_portal_account_surface(account)
-            except (HTTPException, ValueError):
-                continue
-            (
-                quota_max_size_gb,
-                quota_max_objects,
-                max_buckets,
-                _max_users,
-                _max_roles,
-                _max_groups,
-            ) = s3_accounts_service.get_account_limits(account)
-            results.append(
-                _build_portal_account_context(
-                    account,
+        app_settings = load_app_settings()
+        if (
+            app_settings.general.browser_enabled
+            and app_settings.general.portal_enabled
+            and app_settings.general.browser_portal_enabled
+        ):
+            for link in links:
+                if not _portal_account_allowed(link):
+                    continue
+                account = account_by_id.get(link.account_id)
+                if account is None:
+                    continue
+                try:
+                    _validate_portal_account_surface(account)
+                except (HTTPException, ValueError):
+                    continue
+                (
                     quota_max_size_gb,
                     quota_max_objects,
                     max_buckets,
-                    tags_service=tags_service,
-                    account_role=link.account_role or AccountRole.PORTAL_USER.value,
-                    manager_account_is_admin=bool(link.account_admin or link.is_root),
+                    _max_users,
+                    _max_roles,
+                    _max_groups,
+                ) = s3_accounts_service.get_account_limits(account)
+                results.append(
+                    _build_portal_account_context(
+                        account,
+                        quota_max_size_gb,
+                        quota_max_objects,
+                        max_buckets,
+                        tags_service=tags_service,
+                        account_role=link.account_role or AccountRole.PORTAL_USER.value,
+                        manager_account_is_admin=bool(link.account_admin or link.is_root),
+                    )
                 )
-            )
 
     if workspace in {None, "manager", "browser"}:
         for s3_user in s3_users:

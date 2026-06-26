@@ -71,6 +71,14 @@ from app.routers.manager import integrity as manager_integrity
 from app.routers.manager import purge as manager_purge
 from app.routers.manager import usage_stats as manager_usage_stats
 from app.services.bucket_migration_service import get_bucket_migration_worker
+from app.routers.dependencies import (
+    require_browser_enabled,
+    require_ceph_admin_enabled,
+    require_manager_context_enabled,
+    require_manager_enabled,
+    require_portal_enabled,
+    require_storage_ops_enabled,
+)
 
 settings = get_settings()
 
@@ -158,44 +166,124 @@ app.include_router(admin_key_rotation.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_onboarding.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_automation.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_healthchecks.router, prefix=settings.api_v1_prefix)
-app.include_router(ceph_admin_endpoints.router, prefix=settings.api_v1_prefix)
-app.include_router(ceph_admin_accounts.router, prefix=settings.api_v1_prefix)
-app.include_router(ceph_admin_users.router, prefix=settings.api_v1_prefix)
-app.include_router(ceph_admin_buckets.router, prefix=settings.api_v1_prefix)
-app.include_router(ceph_admin_integrity.router, prefix=settings.api_v1_prefix)
-app.include_router(ceph_admin_purge.router, prefix=settings.api_v1_prefix)
-app.include_router(ceph_admin_usage_stats.router, prefix=settings.api_v1_prefix)
-app.include_router(ceph_admin_metrics.router, prefix=settings.api_v1_prefix)
-app.include_router(storage_ops_summary.router, prefix=settings.api_v1_prefix)
-app.include_router(storage_ops_buckets.router, prefix=settings.api_v1_prefix)
-app.include_router(storage_ops_integrity.router, prefix=settings.api_v1_prefix)
-app.include_router(storage_ops_purge.router, prefix=settings.api_v1_prefix)
-app.include_router(storage_ops_usage_stats.router, prefix=settings.api_v1_prefix)
+app.include_router(ceph_admin_endpoints.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_accounts.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_users.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_integrity.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_purge.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_usage_stats.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_metrics.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(storage_ops_summary.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
+app.include_router(storage_ops_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
+app.include_router(storage_ops_integrity.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
+app.include_router(storage_ops_purge.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
+app.include_router(storage_ops_usage_stats.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
 app.include_router(internal_billing.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_healthchecks.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_quota_monitor.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_usage_history.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_s3_connections.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_accounts.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_context.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_activity.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_ceph_keys.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_buckets.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_feature_rules.router, prefix=settings.api_v1_prefix)
-app.include_router(user_browser.router, prefix=settings.api_v1_prefix)
-app.include_router(portal.router, prefix=settings.api_v1_prefix)
-app.include_router(iam_users.router, prefix=settings.api_v1_prefix)
-app.include_router(iam_groups.router, prefix=settings.api_v1_prefix)
-app.include_router(iam_roles.router, prefix=settings.api_v1_prefix)
-app.include_router(iam_overview.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_objects.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_iam_policies.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_topics.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_stats.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_migrations.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_integrity.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_purge.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_usage_stats.router, prefix=settings.api_v1_prefix)
+app.include_router(
+    manager_accounts.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_context_enabled)],
+)
+app.include_router(
+    manager_context.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_context_enabled)],
+)
+app.include_router(
+    manager_activity.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_ceph_keys.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_buckets.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_feature_rules.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    user_browser.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_browser_enabled)],
+)
+app.include_router(
+    portal.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_portal_enabled)],
+)
+app.include_router(
+    iam_users.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    iam_groups.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    iam_roles.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    iam_overview.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_objects.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_iam_policies.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_topics.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_stats.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_migrations.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_integrity.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_purge.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_usage_stats.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
 
 
 @app.exception_handler(StarletteHTTPException)

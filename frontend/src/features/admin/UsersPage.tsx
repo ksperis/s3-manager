@@ -754,8 +754,8 @@ export default function UsersPage() {
   const currentUserId = currentUser?.id != null ? Number(currentUser.id) : null;
   const currentIsAdminLike = isAdminLikeRole(currentUser?.role);
   const currentIsSuperAdmin = isSuperAdminRole(currentUser?.role);
-  const cephAdminFeatureEnabled = true;
-  const showPortalRole = true;
+  const cephAdminFeatureEnabled = generalSettings.ceph_admin_enabled;
+  const showPortalRole = Boolean(generalSettings.portal_enabled);
   const [users, setUsers] = useState<User[]>([]);
   const [accounts, setS3Accounts] = useState<S3AccountSummary[]>([]);
   const [s3AccountsLoaded, setS3AccountsLoaded] = useState(false);

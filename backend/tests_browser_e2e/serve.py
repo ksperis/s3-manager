@@ -30,6 +30,13 @@ def _generate_secret() -> str:
 def _build_app_settings_payload() -> str:
     payload = {
         "general": {
+            "manager_enabled": False,
+            "ceph_admin_enabled": False,
+            "storage_ops_enabled": False,
+            "browser_enabled": True,
+            "browser_root_enabled": True,
+            "browser_manager_enabled": False,
+            "browser_ceph_admin_enabled": False,
             "billing_enabled": False,
             "endpoint_status_enabled": False,
             "quota_alerts_enabled": False,

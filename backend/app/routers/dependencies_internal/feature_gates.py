@@ -392,6 +392,7 @@ def require_manager_bucket_quota(
         )
     return account
 
+
 def require_storage_ops_bucket_quota(
     user: User = Depends(get_current_storage_ops_admin),
     db: Session = Depends(get_db),
@@ -432,3 +433,39 @@ def require_manager_ceph_s3_user_keys(
             detail="Ceph key management is not available for this context",
         )
     return account
+
+
+def require_manager_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.manager_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager feature is disabled")
+
+
+def require_ceph_admin_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.ceph_admin_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ceph admin feature is disabled")
+
+
+def require_storage_ops_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.storage_ops_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage Ops feature is disabled")
+
+
+def require_browser_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.browser_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser feature is disabled")
+
+
+def require_portal_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.portal_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal feature is disabled")
+
+
+def require_manager_context_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.manager_enabled and not settings.general.browser_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access is disabled")

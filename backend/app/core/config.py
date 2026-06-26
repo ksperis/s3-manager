@@ -300,6 +300,26 @@ class Settings(BaseSettings):
     ldap_providers: dict[str, LDAPProviderSettings] = Field(default_factory=dict)
 
     billing_enabled: bool = Field(True, description="Enable billing endpoints and collection")
+    feature_manager_enabled: Optional[bool] = Field(
+        None,
+        description="Force Manager feature on/off (FEATURE_MANAGER_ENABLED)",
+    )
+    feature_browser_enabled: Optional[bool] = Field(
+        None,
+        description="Force Browser feature on/off (FEATURE_BROWSER_ENABLED)",
+    )
+    feature_portal_enabled: Optional[bool] = Field(
+        None,
+        description="Force Portal feature on/off (FEATURE_PORTAL_ENABLED)",
+    )
+    feature_ceph_admin_enabled: Optional[bool] = Field(
+        None,
+        description="Force Ceph Admin feature on/off (FEATURE_CEPH_ADMIN_ENABLED)",
+    )
+    feature_storage_ops_enabled: Optional[bool] = Field(
+        None,
+        description="Force Storage Ops feature on/off (FEATURE_STORAGE_OPS_ENABLED)",
+    )
     feature_billing_enabled: Optional[bool] = Field(
         None,
         description="Force Billing feature on/off (FEATURE_BILLING_ENABLED)",

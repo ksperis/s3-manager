@@ -2425,7 +2425,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         : cephSelectedEndpoint,
     [isStorageOps, cephSelectedEndpoint]
   );
-  const cephAdminBrowserEnabled = !isStorageOps;
+  const cephAdminBrowserEnabled = !isStorageOps && generalSettings.browser_enabled && generalSettings.browser_ceph_admin_enabled;
   const [cephBucketStatsAvailable, setCephBucketStatsAvailable] = useState<boolean | null>(null);
   const [cephBucketStatsEndpointId, setCephBucketStatsEndpointId] = useState<number | null>(null);
   const usageFeatureEnabled =

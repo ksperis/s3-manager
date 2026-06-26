@@ -122,11 +122,13 @@ def test_ceph_admin_usage_stats_latest_aggregates_endpoint_scope(client: TestCli
     ctx = type("Ctx", (), {"endpoint": type("Endpoint", (), {"id": 7, "name": "Ceph Lab"})()})()
 
     monkeypatch.setattr(ceph_usage_stats_router, "_list_ceph_bucket_names", lambda ctx: ["bucket-a", "bucket-b"])
+    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     app.dependency_overrides[ceph_usage_stats_router.get_ceph_admin_context] = lambda: ctx
 
     try:
         response = client.get("/api/ceph-admin/endpoints/7/usage-stats/latest")
     finally:
+        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
         app.dependency_overrides.pop(ceph_usage_stats_router.get_ceph_admin_context, None)
 
     assert response.status_code == 200, response.text
@@ -170,12 +172,14 @@ def test_ceph_admin_usage_stats_stream_builds_endpoint_targets(client: TestClien
     monkeypatch.setattr(ceph_usage_stats_router, "_list_ceph_bucket_names", lambda ctx: ["bucket-a", "bucket-b"])
     monkeypatch.setattr(ceph_usage_stats_router, "BucketUsageStatsService", FakeService)
     monkeypatch.setattr(ceph_usage_stats_router, "stream_bucket_usage_stats", fake_stream)
+    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     app.dependency_overrides[ceph_usage_stats_router.get_ceph_admin_context] = lambda: ctx
     app.dependency_overrides[ceph_usage_stats_router.get_current_ceph_admin] = lambda: user
 
     try:
         response = client.post("/api/ceph-admin/endpoints/7/usage-stats/stream", json={"parallelism": 4})
     finally:
+        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
         app.dependency_overrides.pop(ceph_usage_stats_router.get_ceph_admin_context, None)
         app.dependency_overrides.pop(ceph_usage_stats_router.get_current_ceph_admin, None)
 

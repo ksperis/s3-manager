@@ -6,7 +6,9 @@ Use **Browser** for direct bucket/object operations.
 
 ## Prerequisites
 
+- Browser feature enabled.
 - At least one allowed context or Portal account context.
+- Portal account contexts require Portal Browser access to be enabled.
 
 ## Steps
 
@@ -40,18 +42,15 @@ Use **Browser** for direct bucket/object operations.
 
 You can perform day-to-day object operations directly from the UI.
 
-## Limits / access
+## Limits / feature flags
 
 !!! note
-    Browser availability depends on the contexts your user can effectively use:
-    account links, S3 connections with Browser access, legacy S3 user bindings,
-    session context, Portal account roles, or authorized Ceph Admin endpoint
-    context.
+    Browser availability depends on `browser_enabled` and workspace-specific flags like `browser_root_enabled`.
 
 !!! note
-    Portal account contexts on `/browser` keep the locked Portal action profile
-    and do not add account-management features. Storage Space visibility,
-    endpoint capability, and IAM/S3 policy remain authoritative.
+    Portal account contexts on `/browser` also require `portal_enabled` and
+    `browser_portal_enabled`; they keep the locked Portal action profile and do
+    not add account-management features.
 
 ## Related pages
 

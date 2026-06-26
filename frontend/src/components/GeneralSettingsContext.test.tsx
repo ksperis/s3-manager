@@ -20,6 +20,7 @@ function Probe() {
       <span data-testid="compare">{String(generalSettings.bucket_compare_enabled)}</span>
       <span data-testid="endpoint-status">{String(generalSettings.endpoint_status_enabled)}</span>
       <span data-testid="usage-history">{String(generalSettings.usage_history_enabled)}</span>
+      <span data-testid="portal-browser">{String(generalSettings.browser_portal_enabled)}</span>
       <span data-testid="loading">{String(loading)}</span>
     </div>
   );
@@ -38,6 +39,15 @@ describe("GeneralSettingsProvider fallbacks", () => {
   it("uses local defaults when no token is available", async () => {
     const fetchGeneralSettings = vi.mocked(appSettingsApi.fetchGeneralSettings);
     fetchGeneralSettings.mockResolvedValueOnce({
+      manager_enabled: true,
+      ceph_admin_enabled: true,
+      storage_ops_enabled: true,
+      browser_enabled: true,
+      browser_root_enabled: true,
+      browser_manager_enabled: true,
+      browser_portal_enabled: true,
+      browser_ceph_admin_enabled: true,
+      portal_enabled: true,
       billing_enabled: true,
       endpoint_status_enabled: true,
       quota_alerts_enabled: true,
@@ -67,6 +77,7 @@ describe("GeneralSettingsProvider fallbacks", () => {
     expect(screen.getByTestId("compare").textContent).toBe("true");
     expect(screen.getByTestId("endpoint-status").textContent).toBe("true");
     expect(screen.getByTestId("usage-history").textContent).toBe("true");
+    expect(screen.getByTestId("portal-browser").textContent).toBe("true");
     expect(fetchGeneralSettings).not.toHaveBeenCalled();
   });
 

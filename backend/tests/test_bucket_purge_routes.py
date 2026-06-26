@@ -87,6 +87,7 @@ def test_require_bucket_purge_enabled_blocks_without_user_tool_access(monkeypatc
 
 def test_manager_purge_route_rejects_wrong_confirmation_with_400():
     previous_overrides = app.dependency_overrides.copy()
+    app.dependency_overrides[dependencies_router.require_manager_enabled] = lambda: None
     app.dependency_overrides[manager_purge.require_bucket_purge_enabled] = lambda: _manager_tool_user()
     app.dependency_overrides[manager_purge.get_account_context] = lambda: SimpleNamespace(
         name="Tenant A",
@@ -108,6 +109,7 @@ def test_manager_purge_route_rejects_wrong_confirmation_with_400():
 
 def test_manager_delete_with_purge_route_rejects_wrong_confirmation_with_400():
     previous_overrides = app.dependency_overrides.copy()
+    app.dependency_overrides[dependencies_router.require_manager_enabled] = lambda: None
     app.dependency_overrides[manager_buckets.require_bucket_purge_enabled] = lambda: _manager_tool_user()
     app.dependency_overrides[manager_buckets.get_account_context] = lambda: SimpleNamespace(
         id=1,
@@ -150,6 +152,7 @@ def test_manager_purge_route_streams_progress_and_result(monkeypatch):
             return _result()
 
     previous_overrides = app.dependency_overrides.copy()
+    app.dependency_overrides[dependencies_router.require_manager_enabled] = lambda: None
     app.dependency_overrides[manager_purge.require_bucket_purge_enabled] = lambda: _manager_tool_user()
     app.dependency_overrides[manager_purge.get_account_context] = lambda: SimpleNamespace(
         name="Tenant A",
@@ -205,6 +208,7 @@ def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch
             return _result().model_copy(update={"status": "completed", "bucket_deleted": True})
 
     previous_overrides = app.dependency_overrides.copy()
+    app.dependency_overrides[dependencies_router.require_manager_enabled] = lambda: None
     app.dependency_overrides[manager_buckets.require_bucket_purge_enabled] = lambda: _manager_tool_user()
     app.dependency_overrides[manager_buckets.get_account_context] = lambda: SimpleNamespace(
         id=1,

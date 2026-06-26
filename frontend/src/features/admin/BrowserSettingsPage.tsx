@@ -19,6 +19,12 @@ const PARALLELISM_MIN = 1;
 const PARALLELISM_MAX = 20;
 const ZIP_STREAM_THRESHOLD_MIN = 0;
 const ZIP_STREAM_THRESHOLD_MAX = 10240;
+const BROWSER_MANAGER_WARNING_MESSAGE =
+  "Not recommended: /manager is intended for storage administration, not day-to-day bucket usage. " +
+  "Using admin/root identities for bucket operations should be avoided.";
+const BROWSER_CEPH_ADMIN_WARNING_MESSAGE =
+  "Ceph Admin browser uses endpoint-wide ceph-admin credentials. This can cause owner mismatches on bucket/object operations. " +
+  "Prefer using an S3 Connection with the expected owner for day-to-day actions.";
 
 const normalizeParallelism = (value: number) => {
   if (!Number.isFinite(value)) return PARALLELISM_MIN;
@@ -73,6 +79,17 @@ export default function BrowserSettingsPage() {
     );
   };
 
+  const handleWorkspaceToggle = (
+    field:
+      | "browser_root_enabled"
+      | "browser_manager_enabled"
+      | "browser_portal_enabled"
+      | "browser_ceph_admin_enabled",
+    checked: boolean
+  ) => {
+    setSettings((prev) => (prev ? { ...prev, general: { ...prev.general, [field]: checked } } : prev));
+  };
+
   const handleSave = async (event?: React.FormEvent | React.MouseEvent) => {
     event?.preventDefault();
     if (!settings) return;
@@ -116,7 +133,14 @@ export default function BrowserSettingsPage() {
           ? {
               ...prev,
               browser: defaults.browser,
-            }
+              general: {
+              ...prev.general,
+              browser_root_enabled: defaults.general.browser_root_enabled,
+              browser_manager_enabled: defaults.general.browser_manager_enabled,
+              browser_portal_enabled: defaults.general.browser_portal_enabled,
+              browser_ceph_admin_enabled: defaults.general.browser_ceph_admin_enabled,
+            },
+          }
           : defaults
       );
     } catch (err) {
@@ -153,6 +177,66 @@ export default function BrowserSettingsPage() {
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
           <div className="grid gap-4">
+            <div className="ui-surface-card p-5">
+              <PortalSettingsSection
+                title="BROWSER WORKSPACES"
+                description="Enable the browser in specific workspaces."
+                layout="stack"
+              >
+                <PortalSettingsItem
+                  title="/browser"
+                  description="Standalone browser workspace."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={settings.general.browser_root_enabled}
+                      onChange={(value) => handleWorkspaceToggle("browser_root_enabled", value)}
+                      ariaLabel="Enable /browser workspace"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="/manager/browser"
+                  description="Browser tab inside the manager workspace."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={settings.general.browser_manager_enabled}
+                      onChange={(value) => handleWorkspaceToggle("browser_manager_enabled", value)}
+                      ariaLabel="Enable /manager/browser workspace"
+                    />
+                  }
+                >
+                  {settings.general.browser_manager_enabled && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{BROWSER_MANAGER_WARNING_MESSAGE}</p>
+                  )}
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="/portal/storage-spaces/:spaceId"
+                  description="Minimal locked Browser inside Portal Storage Spaces."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={settings.general.browser_portal_enabled}
+                      onChange={(value) => handleWorkspaceToggle("browser_portal_enabled", value)}
+                      ariaLabel="Enable Browser in Portal Storage Spaces"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="/ceph-admin/browser"
+                  description="Browser tab inside the Ceph Admin workspace."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={settings.general.browser_ceph_admin_enabled}
+                      onChange={(value) => handleWorkspaceToggle("browser_ceph_admin_enabled", value)}
+                      ariaLabel="Enable /ceph-admin/browser workspace"
+                    />
+                  }
+                >
+                  {settings.general.browser_ceph_admin_enabled && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{BROWSER_CEPH_ADMIN_WARNING_MESSAGE}</p>
+                  )}
+                </PortalSettingsItem>
+              </PortalSettingsSection>
+            </div>
             <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="ZIP DOWNLOADS"

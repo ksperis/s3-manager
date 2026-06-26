@@ -9,17 +9,19 @@ import { useGeneralSettings } from "./components/GeneralSettingsContext";
 import RouteErrorPage from "./features/shared/RouteErrorPage";
 import {
   RequireAuth,
-  RequireCephAdminAccess,
+  RequireBrowserSurface,
+  RequireCephAdminFeature,
   RequireManagerBucketCompareFeature,
   RequireManagerBucketIntegrityFeature,
   RequireManagerBucketPurgeFeature,
+  RequireManagerFeature,
   RequireManagerFeatureRulesTool,
   RequireManagerIamFeature,
   RequireManagerMigrationFeature,
   RequirePortalAccess,
   RequireRole,
   RouteFallback,
-  RequireStorageOpsAccess,
+  RequireStorageOpsFeature,
   RoleRedirect,
 } from "./routerGuards";
 import {
@@ -191,6 +193,8 @@ function isAdminSettingsPath(pathname: string): boolean {
 }
 
 export const buildAdminNav = (
+  portalEnabled: boolean,
+  browserEnabled: boolean,
   billingEnabled: boolean,
   usageHistoryEnabled: boolean,
   endpointStatusEnabled: boolean,
@@ -200,8 +204,18 @@ export const buildAdminNav = (
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
     { to: "/admin/manager-settings", label: "Manager" },
-    { to: "/admin/browser-settings", label: "Browser" },
-    { to: "/admin/portal-settings", label: "Portal" },
+    {
+      to: "/admin/browser-settings",
+      label: "Browser",
+      disabled: !browserEnabled,
+      disabledHint: !browserEnabled ? "Browser feature is disabled in General settings." : undefined,
+    },
+    {
+      to: "/admin/portal-settings",
+      label: "Portal",
+      disabled: !portalEnabled,
+      disabledHint: !portalEnabled ? "Portal feature is disabled in General settings." : undefined,
+    },
     { to: "/admin/key-rotation", label: "Key Rotation" },
   ];
 
@@ -264,6 +278,8 @@ function AdminLayoutShell() {
   const currentUser = readStoredUser();
   const canConfigureApp = isSuperAdminRole(currentUser?.role);
   const adminNav = buildAdminNav(
+    generalSettings.portal_enabled,
+    generalSettings.browser_enabled,
     generalSettings.billing_enabled,
     generalSettings.usage_history_enabled,
     generalSettings.endpoint_status_enabled,
@@ -288,6 +304,11 @@ function AdminBillingRoute() {
 function AdminUsageHistoryRoute() {
   const { generalSettings } = useGeneralSettings();
   return generalSettings.usage_history_enabled ? <UsageHistoryPage /> : <FeatureDisabledPage feature="Usage history" />;
+}
+
+function AdminPortalSettingsRoute() {
+  const { generalSettings } = useGeneralSettings();
+  return generalSettings.portal_enabled ? <AdminPortalSettingsPage /> : <FeatureDisabledPage feature="Portal" />;
 }
 
 function AdminEndpointStatusRoute() {
@@ -333,7 +354,7 @@ export function createAppRoutes() {
             <Route element={<RequireRole roles={[SUPERADMIN_ROLE]} />}>
               <Route path="general-settings" element={<GeneralSettingsPage />} />
               <Route path="manager-settings" element={<ManagerSettingsPage />} />
-              <Route path="portal-settings" element={<AdminPortalSettingsPage />} />
+              <Route path="portal-settings" element={<AdminPortalSettingsRoute />} />
               <Route path="browser-settings" element={<BrowserSettingsPage />} />
               <Route path="key-rotation" element={<KeyRotationPage />} />
             </Route>
@@ -341,7 +362,7 @@ export function createAppRoutes() {
         </Route>
 
         <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE]} />}>
-          <Route element={<RequireCephAdminAccess />}>
+          <Route element={<RequireCephAdminFeature />}>
             <Route path="/ceph-admin" element={<CephAdminLayout />}>
               <Route index element={<CephAdminDashboard />} />
               <Route path="metrics" element={<CephAdminMetricsPage />} />
@@ -349,13 +370,15 @@ export function createAppRoutes() {
               <Route path="users" element={<CephAdminUsersPage />} />
               <Route path="buckets" element={<CephAdminBucketsPage />} />
               <Route path="buckets/:bucketName" element={<CephAdminBucketDetailPage />} />
-              <Route path="browser" element={<CephAdminBrowserPage />} />
+              <Route element={<RequireBrowserSurface surface="ceph_admin" />}>
+                <Route path="browser" element={<CephAdminBrowserPage />} />
+              </Route>
             </Route>
           </Route>
         </Route>
 
         <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
-          <Route element={<RequireStorageOpsAccess />}>
+          <Route element={<RequireStorageOpsFeature />}>
             <Route path="/storage-ops" element={<StorageOpsLayout />}>
               <Route index element={<StorageOpsDashboard />} />
               <Route path="buckets" element={<StorageOpsBucketsPage />} />
@@ -364,46 +387,52 @@ export function createAppRoutes() {
         </Route>
 
         <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
-          <Route path="/manager" element={<ManagerLayout />}>
-            <Route index element={<ManagerDashboard />} />
-            <Route path="buckets" element={<BucketsPage />} />
-            <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
-            <Route path="browser" element={<ManagerBrowserPage />} />
-            <Route path="metrics" element={<ManagerMetricsPage />} />
-            <Route element={<RequireManagerIamFeature />}>
-              <Route path="users" element={<ManagerUsersPage />} />
-              <Route path="users/:userName/keys" element={<ManagerUserKeysPage />} />
-              <Route path="users/:userName/policies" element={<ManagerUserPoliciesPage />} />
-              <Route path="groups" element={<ManagerGroupsPage />} />
-              <Route path="groups/:groupName/policies" element={<ManagerGroupPoliciesPage />} />
-              <Route path="groups/:groupName/users" element={<ManagerGroupUsersPage />} />
-              <Route path="roles" element={<ManagerRolesPage />} />
-              <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
-              <Route path="iam/policies" element={<PoliciesPage />} />
-            </Route>
-            <Route path="topics" element={<TopicsPage />} />
-            <Route path="ceph/keys" element={<ManagerCephKeysPage />} />
-            <Route element={<RequireManagerBucketCompareFeature />}>
-              <Route path="bucket-compare" element={<ManagerBucketComparePage />} />
-            </Route>
-            <Route element={<RequireManagerBucketIntegrityFeature />}>
-              <Route path="bucket-integrity" element={<ManagerBucketIntegrityPage />} />
-            </Route>
-            <Route element={<RequireManagerBucketPurgeFeature />}>
-              <Route path="bucket-purge" element={<ManagerBucketPurgePage />} />
-            </Route>
-            <Route element={<RequireManagerFeatureRulesTool />}>
-              <Route path="feature-rules" element={<ManagerFeatureRulesPage />} />
-            </Route>
-            <Route element={<RequireManagerMigrationFeature />}>
-              <Route path="migrations" element={<ManagerMigrationsPage />} />
-              <Route path="migrations/new" element={<ManagerMigrationWizardPage />} />
-              <Route path="migrations/:migrationId" element={<ManagerMigrationDetailPage />} />
+          <Route element={<RequireManagerFeature />}>
+            <Route path="/manager" element={<ManagerLayout />}>
+              <Route index element={<ManagerDashboard />} />
+              <Route path="buckets" element={<BucketsPage />} />
+              <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
+              <Route element={<RequireBrowserSurface surface="manager" />}>
+                <Route path="browser" element={<ManagerBrowserPage />} />
+              </Route>
+              <Route path="metrics" element={<ManagerMetricsPage />} />
+              <Route element={<RequireManagerIamFeature />}>
+                <Route path="users" element={<ManagerUsersPage />} />
+                <Route path="users/:userName/keys" element={<ManagerUserKeysPage />} />
+                <Route path="users/:userName/policies" element={<ManagerUserPoliciesPage />} />
+                <Route path="groups" element={<ManagerGroupsPage />} />
+                <Route path="groups/:groupName/policies" element={<ManagerGroupPoliciesPage />} />
+                <Route path="groups/:groupName/users" element={<ManagerGroupUsersPage />} />
+                <Route path="roles" element={<ManagerRolesPage />} />
+                <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
+                <Route path="iam/policies" element={<PoliciesPage />} />
+              </Route>
+              <Route path="topics" element={<TopicsPage />} />
+              <Route path="ceph/keys" element={<ManagerCephKeysPage />} />
+              <Route element={<RequireManagerBucketCompareFeature />}>
+                <Route path="bucket-compare" element={<ManagerBucketComparePage />} />
+              </Route>
+              <Route element={<RequireManagerBucketIntegrityFeature />}>
+                <Route path="bucket-integrity" element={<ManagerBucketIntegrityPage />} />
+              </Route>
+              <Route element={<RequireManagerBucketPurgeFeature />}>
+                <Route path="bucket-purge" element={<ManagerBucketPurgePage />} />
+              </Route>
+              <Route element={<RequireManagerFeatureRulesTool />}>
+                <Route path="feature-rules" element={<ManagerFeatureRulesPage />} />
+              </Route>
+              <Route element={<RequireManagerMigrationFeature />}>
+                <Route path="migrations" element={<ManagerMigrationsPage />} />
+                <Route path="migrations/new" element={<ManagerMigrationWizardPage />} />
+                <Route path="migrations/:migrationId" element={<ManagerMigrationDetailPage />} />
+              </Route>
             </Route>
           </Route>
 
-          <Route path="/browser" element={<BrowserLayout />}>
-            <Route index element={<BrowserPage />} />
+          <Route element={<RequireBrowserSurface surface="root" />}>
+            <Route path="/browser" element={<BrowserLayout />}>
+              <Route index element={<BrowserPage />} />
+            </Route>
           </Route>
         </Route>
 
