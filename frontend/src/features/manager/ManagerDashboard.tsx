@@ -272,9 +272,15 @@ function StorageOverviewCard({
   const projectedFull = formatWorkspaceProjectedFull(usedBytes, quotaBytes, trendBaseline);
   const content = (
     <section className={cx(uiCardClass, "h-full p-4")}>
-      <div className="flex items-center gap-1.5">
-        <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">Storage overview</h2>
-        <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5">
+          <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">Storage overview</h2>
+          <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />
+        </div>
+        <Link to="/manager/metrics" className="inline-flex items-center gap-2 ui-caption font-semibold text-primary">
+          Usage analytics
+          <OpenIcon className="h-3.5 w-3.5" />
+        </Link>
       </div>
       <div className="mt-3 flex items-end justify-between gap-4">
         <div>

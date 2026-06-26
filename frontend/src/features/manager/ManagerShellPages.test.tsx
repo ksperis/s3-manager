@@ -483,6 +483,7 @@ describe("manager shell pages", () => {
     });
     expect(within(dataTypesCard).getByTestId("mock-pie")).toHaveAttribute("data-keys", "documents,images");
     expect(within(overviewGrid).getByText("Storage overview")).toBeInTheDocument();
+    expect(within(overviewGrid).getByRole("link", { name: /Usage analytics/ })).toHaveAttribute("href", "/manager/metrics");
     expect(within(overviewGrid).getByText("Top buckets by storage")).toBeInTheDocument();
     expect(within(overviewGrid).queryByText("Recent activity")).not.toBeInTheDocument();
     expect(within(activityIncidentsRow).getByText("Recent activity")).toBeInTheDocument();
