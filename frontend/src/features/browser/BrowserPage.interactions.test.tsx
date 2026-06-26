@@ -2390,6 +2390,24 @@ describe("BrowserPage interactions", () => {
     });
   });
 
+  it("shows a friendly message when bucket listing is denied", async () => {
+    searchBrowserBucketsMock.mockRejectedValue(
+      new Error(
+        "Unable to list buckets: An error occurred (AccessDenied) when calling the ListBuckets operation: None",
+      ),
+    );
+
+    renderPage({ accountIdForApi: "acc-1" });
+
+    const sidebar = await screen.findByTestId("browser-workspace-sidebar");
+    expect(
+      await within(sidebar).findByText(
+        "The current account is not allowed to list buckets. You can still open a bucket you have access to directly, or ask an administrator to update your permissions.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(sidebar).queryByText(/AccessDenied|ListBuckets|An error occurred/i)).not.toBeInTheDocument();
+  });
+
   it("renders account usage as a compact workspace sidebar gauge", async () => {
     fetchBrowserUsageSummaryMock.mockResolvedValue({
       available: true,

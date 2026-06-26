@@ -497,12 +497,38 @@ const CONTEXT_MENU_FALLBACK_WIDTH_PX = 240;
 const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 320;
 const CORS_DIRECT_TRANSFER_WARNING =
   "Direct download/upload is not allowed on this bucket.";
+const BUCKET_LIST_ACCESS_DENIED_MESSAGE =
+  "The current account is not allowed to list buckets. You can still open a bucket you have access to directly, or ask an administrator to update your permissions.";
+const STORAGE_SPACE_LIST_ACCESS_DENIED_MESSAGE =
+  "The current account is not allowed to list Storage Spaces. Ask an administrator to update your access.";
 const TREE_PREFIXES_PAGE_BUDGET = 50;
 const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
 const LAZY_COLUMN_CONCURRENCY = 4;
 const LAZY_COLUMN_BATCH_SIZE = 24;
 const LAZY_COLUMN_ROOT_MARGIN = "200px";
+
+function isBucketListAccessDeniedMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  const compact = normalized.replace(/\s+/g, "");
+  const hasAccessDenied = compact.includes("accessdenied");
+  const hasListBucketsContext =
+    compact.includes("listbuckets") ||
+    normalized.includes("list buckets") ||
+    normalized.includes("unable to list buckets");
+  return hasAccessDenied && hasListBucketsContext;
+}
+
+function extractBucketListError(error: unknown, isPortalContext: boolean): string {
+  const message = extractApiError(error, "Unable to list buckets for this account.");
+  if (isBucketListAccessDeniedMessage(message)) {
+    return isPortalContext
+      ? STORAGE_SPACE_LIST_ACCESS_DENIED_MESSAGE
+      : BUCKET_LIST_ACCESS_DENIED_MESSAGE;
+  }
+  return message;
+}
+
 const NAME_COLUMN_DEFINITION: ResizableColumnDefinition = {
   id: "name",
   label: "Name",
@@ -2872,9 +2898,7 @@ export default function BrowserPage({
         }
       } catch (err) {
         bucketSearchValueRef.current = "";
-        setBucketError(
-          extractApiError(err, "Unable to list buckets for this account."),
-        );
+        setBucketError(extractBucketListError(err, isPortalBrowserSurface));
         setBucketMenuItems([]);
         setBucketMenuPage(1);
         setBucketMenuHasNext(false);
@@ -2903,6 +2927,7 @@ export default function BrowserPage({
       hasS3AccountContext,
       isCephAdminContext,
       isMainBrowserPath,
+      isPortalBrowserSurface,
       requestedBucket,
       requestedPrefix,
       resolvedLockedBucketName,
@@ -2971,9 +2996,7 @@ export default function BrowserPage({
         if (requestId !== bucketSearchRequestIdRef.current) {
           return;
         }
-        setBucketError(
-          extractApiError(err, "Unable to list buckets for this account."),
-        );
+        setBucketError(extractBucketListError(err, isPortalBrowserSurface));
         if (!append) {
           setBucketMenuItems([]);
           setBucketMenuPage(1);
@@ -2995,6 +3018,7 @@ export default function BrowserPage({
       accountIdForApi,
       browserRequestOptions,
       hasS3AccountContext,
+      isPortalBrowserSurface,
       resolvedLockedBucketName,
       resetBucketAccessQueue,
     ],
