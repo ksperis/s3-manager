@@ -101,9 +101,9 @@ placeholder.
   statements.
 - The default `portal-manager` IAM group policy must stay limited to global
   Portal bootstrap actions such as `s3:ListAllMyBuckets` and
-  `s3:CreateBucket`. Do not reintroduce `iam:*`, `s3:*`, `sts:*`, or
-  bucket-configuration actions there to compensate for missing service
-  orchestration.
+  `sts:GetSessionToken`. Do not reintroduce `iam:*`, `s3:*`,
+  `s3:CreateBucket`, or bucket-configuration actions there to compensate for
+  missing service orchestration.
 - Keep storage permissions backed by the existing storage-side permissions. UI
   roles such as `Viewer`, `Editor`, and `Owner` are presentation and workflow
   terms, not a parallel permission model.

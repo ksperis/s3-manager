@@ -211,7 +211,7 @@ def test_portal_bucket_creation_updates_user_policy(monkeypatch, db_session):
     )
 
     assert bucket.name == "user-bucket"
-    assert created_buckets == [("user-bucket", "AK-PORTAL", "SK-PORTAL")]
+    assert created_buckets == [("user-bucket", "ROOT-AK", "ROOT-SK")]
     assert versioning_calls == [("user-bucket", True, "ROOT-AK", "ROOT-SK")]
     assert len(lifecycle_calls) == 1
     assert lifecycle_calls[0][1]["access_key"] == "ROOT-AK"
@@ -333,7 +333,7 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
     )
 
     assert bucket.name == "user-bucket"
-    assert created_buckets == [("user-bucket", "AK-PORTAL", "SK-PORTAL")]
+    assert created_buckets == [("user-bucket", "ROOT-AK", "ROOT-SK")]
     assert len(versioning_calls) == 1
     assert versioning_calls[0][1]["access_key"] == "ROOT-AK"
     assert versioning_calls[0][1]["secret_key"] == "ROOT-SK"
@@ -348,7 +348,7 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
     assert cors_calls[0][1]["secret_key"] == "ROOT-SK"
 
 
-def test_portal_user_group_policy_adds_create_bucket_without_delete_bucket(db_session):
+def test_portal_user_group_policy_does_not_grant_direct_bucket_creation(db_session):
     service = PortalService(db_session)
     portal_settings = PortalSettings()
     portal_settings.allow_portal_user_bucket_create = True
@@ -361,7 +361,8 @@ def test_portal_user_group_policy_adds_create_bucket_without_delete_bucket(db_se
     statements = policy.get("Statement") or []
     assert isinstance(statements, list) and statements
     actions = statements[0].get("Action") or []
-    assert "s3:CreateBucket" in actions
+    assert actions == ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
+    assert "s3:CreateBucket" not in actions
     assert "s3:DeleteBucket" not in actions
 
 
@@ -374,11 +375,67 @@ def test_portal_manager_group_policy_defaults_to_minimal_global_actions(db_sessi
     assert isinstance(statements, list) and statements
     actions = statements[0].get("Action") or []
 
-    assert actions == ["s3:ListAllMyBuckets", "s3:CreateBucket"]
+    assert actions == ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
+    assert "s3:CreateBucket" not in actions
     assert "iam:*" not in actions
     assert "s3:*" not in actions
     assert "sts:*" not in actions
-    assert not any(action.startswith("iam:") or action.startswith("sts:") for action in actions)
+    assert not any(action.startswith("iam:") for action in actions)
+
+
+def test_portal_manager_group_policy_filters_create_bucket_from_advanced_policy(db_session):
+    service = PortalService(db_session)
+    portal_settings = PortalSettings()
+    portal_settings.iam_group_manager_policy.advanced_policy = {
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListAllMyBuckets", "s3:CreateBucket"],
+                "Resource": "*",
+            }
+        ]
+    }
+
+    policy = service._resolve_group_policy(portal_settings, "manager")
+
+    assert isinstance(policy, dict)
+    statements = policy.get("Statement") or []
+    assert isinstance(statements, list) and statements
+    actions = statements[0].get("Action") or []
+    assert actions == ["s3:ListAllMyBuckets"]
+
+
+def test_portal_bucket_creation_rejects_unauthorized_role_before_s3_calls(monkeypatch, db_session):
+    account = S3Account(name="portal-account-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-denied@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: pytest.fail("IAM should not be used"))
+    monkeypatch.setattr(s3_client, "create_bucket", lambda *args, **kwargs: pytest.fail("S3 should not be used"))
+
+    with pytest.raises(RuntimeError, match="Bucket creation not allowed"):
+        service.create_bucket(
+            user,
+            access,
+            "denied-bucket",
+            portal_settings=PortalSettings(allow_portal_user_bucket_create=False),
+        )
 
 
 def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):

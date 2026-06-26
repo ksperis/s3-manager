@@ -43,7 +43,7 @@ function buildSettings(): AppSettings {
       allow_portal_user_access_key_create: true,
       max_portal_user_access_keys: 2,
       iam_group_manager_policy: {
-        actions: ["s3:ListAllMyBuckets", "s3:CreateBucket"],
+        actions: ["s3:ListAllMyBuckets", "sts:GetSessionToken"],
         advanced_policy: null,
       },
       iam_group_user_policy: {

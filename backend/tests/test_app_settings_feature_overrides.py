@@ -141,6 +141,19 @@ def test_endpoint_status_and_usage_history_default_enabled():
     assert settings.general.usage_history_enabled is True
 
 
+def test_portal_manager_legacy_bucket_create_policy_normalizes_to_session_actions():
+    settings = AppSettings(
+        portal={
+            "iam_group_manager_policy": {
+                "actions": ["s3:ListAllMyBuckets", "s3:CreateBucket"],
+                "advanced_policy": None,
+            },
+        }
+    )
+
+    assert settings.portal.iam_group_manager_policy.actions == ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
+
+
 def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path):
     settings_path = tmp_path / "app_settings.json"
     monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)

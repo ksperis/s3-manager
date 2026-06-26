@@ -53,6 +53,38 @@ class PortalIamMixin:
             return {item for item in value if isinstance(item, str)}
         return set()
 
+    def _without_allowed_policy_actions(self, policy: dict, blocked_actions: set[str]) -> dict:
+        statements = policy.get("Statement") or []
+        original_was_list = isinstance(statements, list)
+        if not original_was_list:
+            statements = [statements]
+        filtered_statements: list[dict] = []
+        for statement in statements:
+            if not isinstance(statement, dict):
+                continue
+            current = copy.deepcopy(statement)
+            if str(current.get("Effect") or "").lower() == "allow" and "Action" in current:
+                action = current.get("Action")
+                if isinstance(action, str):
+                    if action.lower() in blocked_actions:
+                        continue
+                elif isinstance(action, list):
+                    allowed_actions = [
+                        item
+                        for item in action
+                        if not isinstance(item, str) or item.lower() not in blocked_actions
+                    ]
+                    if not allowed_actions:
+                        continue
+                    current["Action"] = allowed_actions
+            filtered_statements.append(current)
+        policy["Statement"] = (
+            filtered_statements
+            if original_was_list or len(filtered_statements) != 1
+            else filtered_statements[0]
+        )
+        return policy
+
     def _expected_bucket_action_set(self, portal_settings: PortalSettings) -> set[str]:
         advanced = portal_settings.bucket_access_policy.advanced_policy
         if isinstance(advanced, dict):
@@ -73,11 +105,18 @@ class PortalIamMixin:
             group_policy = portal_settings.iam_group_user_policy
         if group_policy.advanced_policy:
             policy = copy.deepcopy(group_policy.advanced_policy)
+            if group_key == "manager":
+                policy = self._without_allowed_policy_actions(policy, {"s3:createbucket"})
+                if not self._policy_statements(policy):
+                    return None
         else:
             actions = self._normalize_actions(group_policy.actions)
-            # Delegate bucket creation through IAM user credentials when enabled.
-            if group_key == "user" and portal_settings.allow_portal_user_bucket_create and "s3:CreateBucket" not in actions:
-                actions.append("s3:CreateBucket")
+            if group_key == "manager":
+                action_keys = {action.lower() for action in actions}
+                if action_keys == {"s3:listallmybuckets", "s3:createbucket"}:
+                    actions = ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
+                else:
+                    actions = [action for action in actions if action.lower() != "s3:createbucket"]
             if not actions:
                 return None
             policy = {
@@ -699,12 +738,11 @@ class PortalIamMixin:
                 {
                     "Effect": "Allow",
                     "Action": [
-                        "s3:CreateBucket",
                         "s3:ListAllMyBuckets",
-                        "s3:GetBucketLocation"
+                        "sts:GetSessionToken",
                     ],
                     "Resource": [
-                        "arn:aws:s3:::*"
+                        "*"
                     ],
                 }
             ],

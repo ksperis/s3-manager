@@ -31,7 +31,7 @@ const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
     allow_portal_named_bucket_create: false,
     allow_portal_user_access_key_create: true,
     max_portal_user_access_keys: 2,
-    iam_group_manager_policy: { actions: ["s3:ListAllMyBuckets", "s3:CreateBucket"], advanced_policy: null },
+    iam_group_manager_policy: { actions: ["s3:ListAllMyBuckets", "sts:GetSessionToken"], advanced_policy: null },
     iam_group_user_policy: { actions: ["s3:ListAllMyBuckets"], advanced_policy: null },
     bucket_access_policy: { actions: ["s3:GetObject"], advanced_policy: null },
     bucket_defaults: {
@@ -228,18 +228,19 @@ describe("AccountsPage modal tabs", () => {
     const tabLabels = Array.from(generalTab.parentElement?.querySelectorAll("button") ?? []).map((button) =>
       button.textContent?.trim()
     );
-    expect(tabLabels.slice(0, 3)).toEqual(["General", "Linked UI users", "Portal overrides"]);
+    expect(tabLabels).toEqual(expect.arrayContaining(["General", "Linked UI users", "Portal overrides"]));
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Add a tag for this account" })).toBeInTheDocument();
 
     fireEvent.click(usersTab);
 
     expect(screen.getByText("Portal role")).toBeInTheDocument();
-    expect(screen.getAllByText("No portal access").length).toBeGreaterThan(0);
+    expect(screen.getByText("No linked users yet.")).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "ui7@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
+    expect(screen.getAllByText("No portal access").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 

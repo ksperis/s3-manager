@@ -20,45 +20,49 @@ class PortalBucketsUsersMixin:
         account = access.account
         portal_defaults = portal_settings or self._effective_portal_settings(account)
         versioning_flag = portal_defaults.bucket_defaults.versioning if versioning is None else versioning
-        iam_service = self._get_iam_service(account)
-        link, _, _ = self._ensure_portal_user(user, account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_defaults)
-        active_key_id, active_secret = self._active_credentials(link, iam_service)
-        s3_client.create_bucket(
-            bucket_name, access_key=active_key_id, secret_key=active_secret, **self._s3_client_kwargs(account)
-        )
         is_portal_user_creation = bool(
             access.role == AccountRole.PORTAL_USER.value and portal_defaults.allow_portal_user_bucket_create
         )
-        apply_bucket_defaults = bool(access.capabilities.can_manage_buckets or is_portal_user_creation)
-        defaults_access_key = active_key_id
-        defaults_secret = active_secret
-        if apply_bucket_defaults:
-            defaults_access_key, defaults_secret = self._account_credentials(account)
-        if versioning_flag and apply_bucket_defaults:
+        can_create_bucket = bool(access.capabilities.can_manage_buckets or is_portal_user_creation)
+        if not can_create_bucket:
+            raise RuntimeError("Bucket creation not allowed for this role.")
+        iam_service = self._get_iam_service(account)
+        link, _, _ = self._ensure_portal_user(user, account, iam_service)
+        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_defaults)
+        # Keep the Portal identity ready for subsequent object access; bucket
+        # creation itself is a controlled backend workflow.
+        self._active_credentials(link, iam_service)
+        bucket_access_key, bucket_secret = self._account_credentials(account)
+        s3_client.create_bucket(
+            bucket_name,
+            access_key=bucket_access_key,
+            secret_key=bucket_secret,
+            **self._s3_client_kwargs(account),
+        )
+        if versioning_flag:
             s3_client.set_bucket_versioning(
                 bucket_name,
                 enabled=True,
-                access_key=defaults_access_key,
-                secret_key=defaults_secret,
+                access_key=bucket_access_key,
+                secret_key=bucket_secret,
                 **self._s3_client_kwargs(account),
             )
-        if portal_defaults.bucket_defaults.enable_lifecycle and apply_bucket_defaults:
+        if portal_defaults.bucket_defaults.enable_lifecycle:
             s3_client.put_bucket_lifecycle(
                 bucket_name,
                 rules=self._portal_bucket_lifecycle_rules(),
-                access_key=defaults_access_key,
-                secret_key=defaults_secret,
+                access_key=bucket_access_key,
+                secret_key=bucket_secret,
                 **self._s3_client_kwargs(account),
             )
-        if portal_defaults.bucket_defaults.enable_cors and apply_bucket_defaults:
+        if portal_defaults.bucket_defaults.enable_cors:
             origins = self._normalize_origins(portal_defaults.bucket_defaults.cors_allowed_origins)
             if origins:
                 s3_client.put_bucket_cors(
                     bucket_name,
                     rules=self._portal_bucket_cors_rules(origins),
-                    access_key=defaults_access_key,
-                    secret_key=defaults_secret,
+                    access_key=bucket_access_key,
+                    secret_key=bucket_secret,
                     **self._s3_client_kwargs(account),
                 )
         self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name, portal_settings=portal_defaults)

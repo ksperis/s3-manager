@@ -68,9 +68,10 @@ entitlements, and endpoint capabilities. IAM/S3 remains the authority for the
 actual storage action.
 
 The default `portal-manager` IAM group policy grants only
-`s3:ListAllMyBuckets` and `s3:CreateBucket`. Storage Space object access is
-kept in per-user Storage Space policies, and Portal bucket defaults are applied
-by backend orchestration with account credentials.
+`s3:ListAllMyBuckets` and `sts:GetSessionToken`. Storage Space creation, object
+access, and bucket defaults stay behind the Portal workflow: bucket creation and
+defaults are applied by backend orchestration with account credentials, and
+object access is kept in per-user Storage Space policies.
 
 ## Frontend runtime settings
 

@@ -16,15 +16,24 @@ def _default_portal_cors_origins() -> list[str]:
     return list(_settings.cors_origins or [])
 
 
+def _default_portal_global_actions() -> list[str]:
+    return ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
+
+
 def _default_portal_manager_actions() -> list[str]:
-    return [
-        "s3:ListAllMyBuckets",
-        "s3:CreateBucket",
-    ]
+    return _default_portal_global_actions()
 
 
 def _default_portal_user_actions() -> list[str]:
-    return ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
+    return _default_portal_global_actions()
+
+
+def _normalize_portal_manager_actions(actions: list[str]) -> list[str]:
+    legacy_default = {"s3:listallmybuckets", "s3:createbucket"}
+    action_keys = {action.lower() for action in actions}
+    if action_keys == legacy_default:
+        return _default_portal_manager_actions()
+    return [action for action in actions if action.lower() != "s3:createbucket"]
 
 
 def _default_portal_bucket_access_actions() -> list[str]:
@@ -220,6 +229,13 @@ class PortalSettings(BaseModel):
     )
     bucket_defaults: PortalBucketDefaults = Field(default_factory=PortalBucketDefaults)
     override_policy: PortalSettingsOverridePolicy = Field(default_factory=PortalSettingsOverridePolicy)
+
+    @model_validator(mode="after")
+    def normalize_manager_policy_actions(self):
+        self.iam_group_manager_policy.actions = _normalize_portal_manager_actions(
+            self.iam_group_manager_policy.actions
+        )
+        return self
 
 
 class ManagerSettings(BaseModel):
