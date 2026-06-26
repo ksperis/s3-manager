@@ -283,7 +283,7 @@ async function expectPortalBrowserSidebar(page: Page, viewportName: string) {
   await expect(page.getByText("rgw-portal-genomics-2026", { exact: false })).toHaveCount(0);
   await expect(page.getByText("rgw-portal-photos", { exact: false })).toHaveCount(0);
   await expect(page.getByText("rgw-portal-datasets", { exact: false })).toHaveCount(0);
-  await expect(sidebar.getByText("Usage & Metrics", { exact: true }).first()).toBeVisible();
+  await expect(sidebar.getByText("Open in Portal", { exact: true }).first()).toBeVisible();
   await expect(sidebar.getByText(/8\.3\s*TB/).first()).toBeVisible();
   if (openedMobileDrawer) {
     await page.keyboard.press("Escape");

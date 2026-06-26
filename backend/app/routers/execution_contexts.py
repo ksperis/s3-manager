@@ -89,6 +89,7 @@ def _build_portal_account_context(
     *,
     tags_service: TagsService,
     account_role: str,
+    manager_account_is_admin: Optional[bool] = None,
 ) -> ExecutionContext:
     endpoint = account.storage_endpoint
     endpoint_caps = (
@@ -101,6 +102,7 @@ def _build_portal_account_context(
         id=str(account.id),
         display_name=account.name,
         account_role=account_role,
+        manager_account_is_admin=manager_account_is_admin,
         rgw_account_id=account.rgw_account_id,
         max_buckets=max_buckets,
         quota_max_size_gb=quota_max_size_gb,
@@ -341,6 +343,7 @@ def list_execution_contexts(
                         max_buckets,
                         tags_service=tags_service,
                         account_role=link.account_role or AccountRole.PORTAL_USER.value,
+                        manager_account_is_admin=bool(link.account_admin or link.is_root),
                     )
                 )
 

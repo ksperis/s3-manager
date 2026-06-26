@@ -13,9 +13,9 @@ import { formatBytes } from "../../utils/format";
 import {
   BucketCollectionIcon,
   BucketIcon,
+  OpenIcon,
   RefreshIcon,
   SearchIcon,
-  SlidersIcon,
 } from "./browserIcons";
 import type { BucketAccessEntry, BucketAccessStatus } from "./browserBucketsPanelHelpers";
 
@@ -49,7 +49,11 @@ type BrowserWorkspaceSidebarProps = {
   onCreateBucket: () => void;
   onSelectBucket: (bucketName: string) => void;
   onLoadMore: () => void;
-  onOpenUsageMetrics?: () => void;
+  workspaceAccountAction?: {
+    label: string;
+    title: string;
+    onClick: () => void;
+  };
 };
 
 const accessIndicatorClasses: Record<BucketAccessStatus, string> = {
@@ -111,7 +115,7 @@ export default function BrowserWorkspaceSidebar({
   onCreateBucket,
   onSelectBucket,
   onLoadMore,
-  onOpenUsageMetrics,
+  workspaceAccountAction,
 }: BrowserWorkspaceSidebarProps) {
   const title = isPortalContext ? "Storage Spaces" : "Buckets";
   const searchPlaceholder = isPortalContext ? "Search storage spaces" : "Search buckets";
@@ -129,6 +133,13 @@ export default function BrowserWorkspaceSidebar({
     bucketFilter.trim().length > 0 && bucketMenuTotal !== bucketTotalCount
       ? `${bucketMenuTotal} result${bucketMenuTotal === 1 ? "" : "s"}`
       : totalLabel;
+  const emptyListLabel = bucketError
+    ? isPortalContext
+      ? "Storage Spaces list unavailable."
+      : "Bucket list unavailable."
+    : bucketFilter.trim()
+      ? "No matching item."
+      : `No ${title.toLowerCase()} available.`;
 
   return (
     <div
@@ -145,6 +156,16 @@ export default function BrowserWorkspaceSidebar({
             <p className="truncate text-[13px] font-semibold text-[var(--shell-text)]">{title}</p>
             <p className="truncate text-[11px] font-medium text-[var(--shell-muted-text)]">{filteredLabel}</p>
           </div>
+          <button
+            type="button"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--shell-muted-text)] transition hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={onRetryBuckets}
+            disabled={loadingBuckets}
+            aria-label={`Refresh ${title.toLowerCase()}`}
+            title={loadingBuckets ? "Refreshing" : "Refresh"}
+          >
+            <RefreshIcon className={cx("h-3.5 w-3.5", loadingBuckets ? "animate-spin" : "")} />
+          </button>
         </div>
       )}
 
@@ -164,26 +185,12 @@ export default function BrowserWorkspaceSidebar({
               />
             </div>
           </label>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              className={cx(toolbarCompactButtonClasses, "inline-flex items-center gap-1.5")}
-              onClick={onRetryBuckets}
-              disabled={loadingBuckets}
-              aria-label={`Refresh ${title.toLowerCase()}`}
-              title="Refresh"
-            >
-              <RefreshIcon className="h-3.5 w-3.5" />
-              {loadingBuckets ? "Refreshing" : "Refresh"}
-            </button>
-            {bucketManagementEnabled && (
+          {bucketManagementEnabled && (
+            <div className="flex items-center gap-1.5">
               <button type="button" className={toolbarCompactButtonClasses} onClick={onCreateBucket}>
                 + Bucket
               </button>
-            )}
-          </div>
-          {bucketError && (
-            <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bucketError}</p>
+            </div>
           )}
         </div>
       )}
@@ -258,7 +265,7 @@ export default function BrowserWorkspaceSidebar({
           )}
           {!loadingBuckets && rows.length === 0 && !compact && (
             <p className="px-2 py-2 ui-caption text-[var(--shell-muted-text)]">
-              {bucketFilter.trim() ? "No matching item." : `No ${title.toLowerCase()} available.`}
+              {emptyListLabel}
             </p>
           )}
           {canLoadMore && !compact && (
@@ -276,7 +283,7 @@ export default function BrowserWorkspaceSidebar({
       </div>
 
       <div className={`sticky bottom-0 shrink-0 border-t border-[color:var(--shell-border-soft)] bg-[var(--shell-bg)] ${compact ? "px-2 py-2" : "space-y-2 px-3 py-3"}`}>
-        {onOpenUsageMetrics && (
+        {workspaceAccountAction && (
           <button
             type="button"
             className={
@@ -284,12 +291,12 @@ export default function BrowserWorkspaceSidebar({
                 ? "flex h-9 w-full items-center justify-center rounded-md shell-sidebar-item"
                 : cx(toolbarCompactButtonClasses, "inline-flex w-full items-center justify-center gap-2")
             }
-            onClick={onOpenUsageMetrics}
-            aria-label="Usage & Metrics"
-            title="Usage & Metrics"
+            onClick={workspaceAccountAction.onClick}
+            aria-label={workspaceAccountAction.label}
+            title={workspaceAccountAction.title}
           >
-            <SlidersIcon className="h-3.5 w-3.5" />
-            {!compact && <span>Usage & Metrics</span>}
+            <OpenIcon className="h-3.5 w-3.5" />
+            {!compact && <span>{workspaceAccountAction.label}</span>}
           </button>
         )}
         {!compact && usageLoading && (

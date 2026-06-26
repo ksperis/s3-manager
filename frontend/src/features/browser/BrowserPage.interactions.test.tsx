@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useEffect,
@@ -18,6 +18,7 @@ import {
 } from "react";
 import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
+import type { ExecutionContext } from "../../api/executionContexts";
 import { BROWSER_ROOT_UI_STATE_STORAGE_KEY } from "./browserRootUiState";
 import {
   BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY,
@@ -76,6 +77,31 @@ const browserLayoutSlotMock = vi.hoisted(() => ({
     | null,
   closeMobile: vi.fn(),
 }));
+const browserContextMock = vi.hoisted(() => ({
+  value: {
+    contexts: [],
+    selectedContextId: null,
+    selectedContext: null,
+    setSelectedContextId: vi.fn(),
+    requiresContextSelection: false,
+    hasContext: true,
+    selectorForApi: "acc-1",
+    selectedKind: null,
+    sessionAccountName: null,
+    accessError: null,
+  } as {
+    contexts: ExecutionContext[];
+    selectedContextId: string | null;
+    selectedContext: ExecutionContext | null;
+    setSelectedContextId: (id: string | null) => void;
+    requiresContextSelection: boolean;
+    hasContext: boolean;
+    selectorForApi: string | null;
+    selectedKind: ExecutionContext["kind"] | null;
+    sessionAccountName: string | null;
+    accessError: string | null;
+  },
+}));
 
 vi.mock("react-router-dom", async () => {
   const actual =
@@ -97,17 +123,7 @@ vi.mock("./BrowserLayout", () => ({
 }));
 
 vi.mock("./BrowserContext", () => ({
-  useBrowserContext: () => ({
-    contexts: [],
-    selectedContextId: null,
-    setSelectedContextId: () => {},
-    requiresContextSelection: false,
-    hasContext: true,
-    selectorForApi: "acc-1",
-    selectedKind: null,
-    sessionAccountName: null,
-    accessError: null,
-  }),
+  useBrowserContext: () => browserContextMock.value,
 }));
 
 vi.mock("../../api/browser", async () => {
@@ -208,6 +224,43 @@ function BrowserSidebarTestHost({ children }: { children: ReactNode }) {
   );
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <output aria-label="Current location">{`${location.pathname}${location.search}`}</output>;
+}
+
+function makeExecutionContext(overrides: Partial<ExecutionContext>): ExecutionContext {
+  return {
+    kind: "portal_account",
+    id: "101",
+    display_name: "Research account",
+    tags: [],
+    endpoint_tags: [],
+    capabilities: {
+      can_manage_iam: false,
+      sts_capable: false,
+      admin_api_capable: false,
+    },
+    ...overrides,
+  };
+}
+
+function setBrowserContext(overrides: Partial<typeof browserContextMock.value> = {}) {
+  browserContextMock.value = {
+    contexts: [],
+    selectedContextId: null,
+    selectedContext: null,
+    setSelectedContextId: vi.fn(),
+    requiresContextSelection: false,
+    hasContext: true,
+    selectorForApi: "acc-1",
+    selectedKind: null,
+    sessionAccountName: null,
+    accessError: null,
+    ...overrides,
+  };
+}
+
 type RenderPageOptions = {
   defaultShowInspector?: boolean;
   defaultShowFolders?: boolean;
@@ -250,6 +303,7 @@ function renderPageElement({
           lockedBucketLabel={lockedBucketLabel}
           onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
         />
+        <LocationProbe />
       </MemoryRouter>
     </BrowserSidebarTestHost>
   );
@@ -498,6 +552,7 @@ describe("BrowserPage interactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    setBrowserContext();
     browserLayoutSlotMock.setSidebarRendererForTest = null;
     createObjectUrlMock.mockReturnValue("blob:preview-url");
     Object.defineProperty(URL, "createObjectURL", {
@@ -2378,6 +2433,13 @@ describe("BrowserPage interactions", () => {
       expect(getCurrentBucketPanel().getByText("bucket-2")).toBeInTheDocument();
     });
 
+    const sidebar = screen.getByTestId("browser-workspace-sidebar");
+    const sidebarRefreshButton = within(sidebar).getByRole("button", {
+      name: "Refresh buckets",
+    });
+    expect(sidebarRefreshButton.textContent).toBe("");
+    expect(sidebarRefreshButton).toHaveAttribute("title", "Refresh");
+
     await user.type(screen.getByPlaceholderText("Search buckets"), "zzz");
     expect(await screen.findByText("No matching item.")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
@@ -2391,6 +2453,8 @@ describe("BrowserPage interactions", () => {
   });
 
   it("shows a friendly message when bucket listing is denied", async () => {
+    const friendlyMessage =
+      "The current account is not allowed to list buckets. You can still open a bucket you have access to directly, or ask an administrator to update your permissions.";
     searchBrowserBucketsMock.mockRejectedValue(
       new Error(
         "Unable to list buckets: An error occurred (AccessDenied) when calling the ListBuckets operation: None",
@@ -2400,11 +2464,10 @@ describe("BrowserPage interactions", () => {
     renderPage({ accountIdForApi: "acc-1" });
 
     const sidebar = await screen.findByTestId("browser-workspace-sidebar");
-    expect(
-      await within(sidebar).findByText(
-        "The current account is not allowed to list buckets. You can still open a bucket you have access to directly, or ask an administrator to update your permissions.",
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(friendlyMessage)).toBeInTheDocument();
+    expect(screen.getAllByText(friendlyMessage)).toHaveLength(1);
+    expect(within(sidebar).queryByText(friendlyMessage)).not.toBeInTheDocument();
+    expect(within(sidebar).getByText("Bucket list unavailable.")).toBeInTheDocument();
     expect(within(sidebar).queryByText(/AccessDenied|ListBuckets|An error occurred/i)).not.toBeInTheDocument();
   });
 
@@ -2429,6 +2492,59 @@ describe("BrowserPage interactions", () => {
     expect(within(sidebar).getByText("512 MB")).toBeInTheDocument();
     expect(within(sidebar).getByText("2.0 GB")).toBeInTheDocument();
     expect(within(sidebar).queryByText(/objects/i)).not.toBeInTheDocument();
+  });
+
+  it("opens a Portal Browser account in the Portal workspace from the sidebar", async () => {
+    const user = userEvent.setup();
+    const portalContext = makeExecutionContext({
+      id: "101",
+      kind: "portal_account",
+      manager_account_is_admin: false,
+    });
+    setBrowserContext({
+      contexts: [portalContext],
+      selectedContextId: "101",
+      selectedContext: portalContext,
+      requiresContextSelection: true,
+      selectorForApi: "101",
+      selectedKind: "portal_account",
+    });
+
+    renderPage();
+
+    const sidebar = await screen.findByTestId("browser-workspace-sidebar");
+    expect(within(sidebar).queryByRole("button", { name: "Usage & Metrics" })).not.toBeInTheDocument();
+    await user.click(await within(sidebar).findByRole("button", { name: "Open in Portal" }));
+
+    expect(window.localStorage.getItem("selectedPortalAccountId")).toBe("101");
+    expect(window.localStorage.getItem("selectedWorkspace")).toBe("portal");
+    expect(screen.getByLabelText("Current location")).toHaveTextContent("/portal");
+  });
+
+  it("opens a manager-available Portal Browser account in Manager from the sidebar", async () => {
+    const user = userEvent.setup();
+    const portalContext = makeExecutionContext({
+      id: "101",
+      kind: "portal_account",
+      manager_account_is_admin: true,
+    });
+    setBrowserContext({
+      contexts: [portalContext],
+      selectedContextId: "101",
+      selectedContext: portalContext,
+      requiresContextSelection: true,
+      selectorForApi: "101",
+      selectedKind: "portal_account",
+    });
+
+    renderPage();
+
+    const sidebar = await screen.findByTestId("browser-workspace-sidebar");
+    await user.click(await within(sidebar).findByRole("button", { name: "Open in Manager" }));
+
+    expect(window.localStorage.getItem("selectedExecutionContextId")).toBe("101");
+    expect(window.localStorage.getItem("selectedWorkspace")).toBe("manager");
+    expect(screen.getByLabelText("Current location")).toHaveTextContent("/manager?ctx=101");
   });
 
   it("marks inaccessible buckets from the visible panel list and keeps them selectable", async () => {

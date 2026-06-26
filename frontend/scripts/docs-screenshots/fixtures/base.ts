@@ -298,6 +298,7 @@ const PORTAL_BROWSER_EXECUTION_CONTEXT = {
   id: "101",
   display_name: "Helios Retail",
   account_role: "portal_user",
+  manager_account_is_admin: false,
   rgw_account_id: "RGW-HELIOS",
   quota_max_size_gb: 20 * 1024,
   quota_max_objects: 45_000_000,

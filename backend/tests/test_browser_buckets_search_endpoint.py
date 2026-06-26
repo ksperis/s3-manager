@@ -243,6 +243,57 @@ def test_browser_usage_summary_aggregates_complete_account_snapshots(client, db_
     }
 
 
+def test_browser_usage_summary_uses_account_snapshots_when_bucket_listing_is_denied(client, db_session):
+    BucketUsageStatsService().upsert_snapshot(db_session, _usage_snapshot("alpha", bytes_value=20))
+    BucketUsageStatsService().upsert_snapshot(db_session, _usage_snapshot("beta", bytes_value=30))
+
+    class FakeService:
+        def list_buckets(self, account):  # noqa: ANN001
+            raise RuntimeError("Unable to list buckets: AccessDenied")
+
+    app.dependency_overrides[dependencies.get_account_context] = _account
+    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
+
+    response = client.get("/api/browser/usage-summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "available": True,
+        "source": "account",
+        "label": "Account",
+        "used_bytes": 50,
+        "object_count": 2,
+    }
+
+
+def test_browser_usage_summary_uses_s3_user_snapshots_when_bucket_listing_is_denied(client, db_session):
+    account = S3Account(name="browser-s3-user-summary")
+    account.id = 77
+    account.s3_user_id = 12
+    BucketUsageStatsService().upsert_snapshot(
+        db_session,
+        _usage_snapshot("s3-user-bucket", scope_id="s3u-12", bytes_value=40),
+    )
+
+    class FakeService:
+        def list_buckets(self, account):  # noqa: ANN001
+            raise RuntimeError("Unable to list buckets: AccessDenied")
+
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
+    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
+
+    response = client.get("/api/browser/usage-summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "available": True,
+        "source": "s3_user",
+        "label": "S3 User",
+        "used_bytes": 40,
+        "object_count": 1,
+    }
+
+
 def test_browser_usage_summary_hides_partial_account_snapshots(client, db_session):
     BucketUsageStatsService().upsert_snapshot(db_session, _usage_snapshot("alpha", bytes_value=20))
 

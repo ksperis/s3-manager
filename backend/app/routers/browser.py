@@ -261,15 +261,15 @@ def _build_usage_summary_from_stats(
     account: S3Account,
     source: str,
     label: str,
-    buckets: list[BrowserBucket],
+    buckets: Optional[list[BrowserBucket]],
 ) -> Optional[BrowserUsageSummary]:
     if source not in {"account", "s3_user"}:
         return None
     if not bool(load_app_settings().general.bucket_usage_stats_enabled):
         return None
     scope_id = _usage_summary_stats_scope_id(account)
-    bucket_names = [bucket.name for bucket in buckets if bucket.name]
-    if not scope_id or not bucket_names:
+    bucket_names = None if buckets is None else [bucket.name for bucket in buckets if bucket.name]
+    if not scope_id or bucket_names == []:
         return None
     aggregate = BucketUsageStatsService().get_aggregate(
         db,
@@ -278,7 +278,9 @@ def _build_usage_summary_from_stats(
         scope_name=getattr(account, "name", None),
         bucket_names=bucket_names,
     )
-    if aggregate.bucket_count <= 0 or aggregate.buckets_with_snapshot != aggregate.bucket_count:
+    if aggregate.bucket_count <= 0:
+        return None
+    if bucket_names is not None and aggregate.buckets_with_snapshot != aggregate.bucket_count:
         return None
     return BrowserUsageSummary(
         available=True,
@@ -296,7 +298,16 @@ def _build_browser_usage_summary(account: S3Account, service: BrowserService, db
     try:
         buckets = service.list_buckets(account)
     except RuntimeError as exc:
-        raise_bad_gateway_from_runtime(exc)
+        stats_summary = _build_usage_summary_from_stats(
+            db=db,
+            account=account,
+            source=source,
+            label=label,
+            buckets=None,
+        )
+        if stats_summary is not None:
+            return stats_summary
+        return BrowserUsageSummary(available=False, source=source, label=label)
     stats_summary = _build_usage_summary_from_stats(
         db=db,
         account=account,

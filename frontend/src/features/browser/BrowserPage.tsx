@@ -44,7 +44,12 @@ import {
 } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
-import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage } from "../../utils/clientStorage";
+import {
+  CLIENT_STORAGE_KEYS,
+  readClientJson,
+  readClientStorage,
+  writeClientStorage,
+} from "../../utils/clientStorage";
 import {
   S3_BUCKET_NAME_MAX_LENGTH,
   isValidS3BucketName,
@@ -4551,11 +4556,47 @@ export default function BrowserPage({
     },
     [bucketName, resolvedLockedBucketName],
   );
-  const handleOpenUsageMetrics = useCallback(() => {
-    if (isPortalBrowserSurface) {
-      navigate("/portal/usage");
+  const workspaceAccountActionTarget = useMemo<"manager" | "portal" | null>(() => {
+    if (selectedContext?.manager_account_is_admin === true) {
+      return "manager";
     }
-  }, [isPortalBrowserSurface, navigate]);
+    if (selectedContext?.kind === "portal_account" || isPortalBrowserSurface) {
+      return accountIdForApi != null ? "portal" : null;
+    }
+    return null;
+  }, [accountIdForApi, isPortalBrowserSurface, selectedContext]);
+  const handleOpenWorkspaceAccount = useCallback(() => {
+    if (!workspaceAccountActionTarget) return;
+    if (workspaceAccountActionTarget === "manager") {
+      const contextId = selectedContext?.id ?? (typeof accountIdForApi === "string" ? accountIdForApi : null);
+      if (!contextId) return;
+      writeClientStorage(CLIENT_STORAGE_KEYS.selectedExecutionContext, contextId);
+      writeClientStorage(CLIENT_STORAGE_KEYS.selectedWorkspace, "manager");
+      navigate(`/manager?ctx=${encodeURIComponent(contextId)}`);
+      return;
+    }
+    if (accountIdForApi == null) return;
+    writeClientStorage(CLIENT_STORAGE_KEYS.selectedPortalAccount, String(accountIdForApi));
+    writeClientStorage(CLIENT_STORAGE_KEYS.selectedWorkspace, "portal");
+    navigate("/portal");
+  }, [accountIdForApi, navigate, selectedContext, workspaceAccountActionTarget]);
+  const workspaceAccountAction = useMemo(() => {
+    if (workspaceAccountActionTarget === "manager") {
+      return {
+        label: "Open in Manager",
+        title: "Open this account in Manager",
+        onClick: handleOpenWorkspaceAccount,
+      };
+    }
+    if (workspaceAccountActionTarget === "portal") {
+      return {
+        label: "Open in Portal",
+        title: "Open this account in Portal",
+        onClick: handleOpenWorkspaceAccount,
+      };
+    }
+    return undefined;
+  }, [handleOpenWorkspaceAccount, workspaceAccountActionTarget]);
 
   useEffect(() => {
     if (sortKey === "size" && !visibleColumnSet.has("size")) {
@@ -6335,9 +6376,7 @@ export default function BrowserPage({
         onCreateBucket={openCreateBucketDialog}
         onSelectBucket={handleBucketChange}
         onLoadMore={handleBucketMenuLoadMore}
-        onOpenUsageMetrics={
-          isPortalBrowserSurface ? handleOpenUsageMetrics : undefined
-        }
+        workspaceAccountAction={workspaceAccountAction}
       />
     ),
     [
@@ -6353,7 +6392,6 @@ export default function BrowserPage({
       canLoadMoreBucketResults,
       handleBucketChange,
       handleBucketMenuLoadMore,
-      handleOpenUsageMetrics,
       isPortalBrowserSurface,
       loadingBuckets,
       openCreateBucketDialog,
@@ -6361,6 +6399,7 @@ export default function BrowserPage({
       usageSummary,
       usageSummaryError,
       usageSummaryLoading,
+      workspaceAccountAction,
       workspaceSidebarRows,
     ],
   );

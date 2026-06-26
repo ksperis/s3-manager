@@ -315,11 +315,63 @@ def test_browser_workspace_returns_portal_account_context_when_portal_browser_en
     assert context.id == str(account.id)
     assert context.display_name == account.name
     assert context.account_role == AccountRole.PORTAL_USER.value
+    assert context.manager_account_is_admin is False
     assert context.quota_max_size_gb == 12
     assert context.quota_max_objects == 1_500
     assert context.max_buckets == 7
     assert context.capabilities.can_manage_iam is False
     assert context.capabilities.admin_api_capable is False
+
+
+def test_browser_workspace_marks_portal_context_when_account_is_available_in_manager(db_session, monkeypatch):
+    user = _create_user(db_session)
+    endpoint = _create_endpoint(db_session, name="portal-manager-endpoint")
+    account = _create_account(
+        db_session,
+        name="portal-manager-account",
+        rgw_account_id="RGWPORTALMANAGER0001",
+        storage_endpoint=endpoint,
+    )
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            account_admin=True,
+            is_root=False,
+            account_role=AccountRole.PORTAL_MANAGER.value,
+        )
+    )
+    db_session.commit()
+
+    class _FakeAccountLimitsService:
+        def get_account_limits(self, target_account):
+            assert target_account.id == account.id
+            return None, None, None, None, None, None
+
+    monkeypatch.setattr(
+        execution_contexts,
+        "get_s3_accounts_service",
+        lambda db, allow_missing_admin=False: _FakeAccountLimitsService(),
+    )
+    monkeypatch.setattr(
+        execution_contexts,
+        "load_app_settings",
+        lambda: SimpleNamespace(
+            general=SimpleNamespace(
+                browser_enabled=True,
+                portal_enabled=True,
+                browser_portal_enabled=True,
+            )
+        ),
+    )
+
+    contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
+
+    assert len(contexts) == 1
+    context = contexts[0]
+    assert context.kind == "portal_account"
+    assert context.id == str(account.id)
+    assert context.manager_account_is_admin is True
 
 
 def test_connection_context_includes_endpoint_capabilities_when_bound_to_endpoint(db_session):
