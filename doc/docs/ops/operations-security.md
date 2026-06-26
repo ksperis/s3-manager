@@ -84,7 +84,7 @@ Secret detection is managed by the GitLab analyzer template in CI. To validate i
 ## False positives and temporary exceptions
 
 - Prefer upgrading the vulnerable dependency or rebuilding from a remediated base image.
-- If a Trivy finding is a temporary exception, add the vulnerability ID to [`.trivyignore`](../../../.trivyignore) and document the reason, owner, and expiry in the merge request.
+- If a Trivy finding is a temporary exception, add the vulnerability ID to `.trivyignore` at the repository root and document the reason, owner, and expiry in the merge request.
 - Keep exceptions short-lived and remove them once the remediation is available.
 - Treat secret-detection findings as real leaks by default; only suppress recurring false positives after verifying the value is non-sensitive and the exclusion is narrowly scoped in GitLab.
 

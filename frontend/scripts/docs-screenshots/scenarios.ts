@@ -356,6 +356,32 @@ const billingEnabledGeneralSettingsRule: MockRule = {
   },
 };
 
+const bucketPurgeEnabledGeneralSettingsRule: MockRule = {
+  id: "settings-general-bucket-purge-enabled",
+  path: /^\/settings\/general$/,
+  body: {
+    manager_enabled: true,
+    ceph_admin_enabled: true,
+    browser_enabled: true,
+    browser_root_enabled: true,
+    browser_manager_enabled: true,
+    browser_portal_enabled: true,
+    browser_ceph_admin_enabled: true,
+    portal_enabled: true,
+    billing_enabled: false,
+    endpoint_status_enabled: true,
+    bucket_migration_enabled: true,
+    bucket_compare_enabled: true,
+    bucket_integrity_check_enabled: true,
+    bucket_purge_enabled: true,
+    manager_ceph_s3_user_keys_enabled: true,
+    allow_login_access_keys: false,
+    allow_login_endpoint_list: true,
+    allow_login_custom_endpoint: false,
+    allow_user_private_connections: true,
+  },
+};
+
 const endpointStatusLatencyOverviewRule: MockRule = {
   id: "admin-endpoint-status-latency-overview",
   path: /^\/admin\/health\/latency-overview$/,
@@ -1170,6 +1196,30 @@ export const scenarios: DocScreenshotScenario[] = [
       { type: "wait", selector: "text=helios-retail-logs" },
     ],
     mockRules: withBaseRules(),
+  },
+  {
+    id: "feature-bucket-purge",
+    docPage: "user/feature-bucket-purge.md",
+    route: "/manager/bucket-purge",
+    outputBasename: "feature-bucket-purge",
+    waitFor: "h1:has-text('Bucket purge')",
+    storage: {
+      ...baseStorage({
+        ...adminUser,
+        manager_tool_access: {
+          ...adminUser.manager_tool_access,
+          bucket_purge: true,
+        },
+      }),
+      selectedWorkspace: "manager",
+    },
+    actions: [
+      { type: "wait", selector: "text=helios-retail-logs" },
+      { type: "click", selector: "table tbody tr:first-child input[type='checkbox']" },
+      { type: "click", selector: "button:has-text('Purge selected')" },
+      { type: "wait", selector: "text=Type PURGE 1 BUCKETS" },
+    ],
+    mockRules: withBaseRules(bucketPurgeEnabledGeneralSettingsRule),
   },
   {
     id: "feature-bucket-migration",

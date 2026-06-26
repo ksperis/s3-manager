@@ -63,3 +63,10 @@ configuration; this purge tool does not.
 - [Workspace: Storage Ops](workspace-storage-ops.md)
 - [Feature: Buckets](feature-buckets.md)
 - [Feature: Bucket integrity check](feature-bucket-integrity-check.md)
+
+## Visual example
+
+<div class="docs-themed-shot" data-docs-themed-shot>
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/feature-bucket-purge.light.png" alt="Bucket purge confirmation modal showing selected targets, parallelism, and the required confirmation phrase" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/feature-bucket-purge.dark.png" alt="Bucket purge confirmation modal showing selected targets, parallelism, and the required confirmation phrase" loading="lazy">
+</div>
