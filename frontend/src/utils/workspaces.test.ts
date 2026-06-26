@@ -220,6 +220,31 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     });
   });
 
+  it("exposes Browser to Portal users when Portal Browser is enabled without classic Browser access", () => {
+    const user: SessionUser = {
+      id: 15,
+      email: "portal-browser@example.com",
+      role: "ui_user",
+      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
+      s3_connections: [],
+      s3_connection_details: [],
+      s3_users: [],
+      s3_user_details: [],
+    };
+
+    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+      ...baseSettings,
+      browser_root_enabled: false,
+      portal_enabled: true,
+      browser_portal_enabled: true,
+    });
+
+    expect(workspaces.find((workspace) => workspace.id === "browser")).toMatchObject({
+      label: "Browser (objects)",
+      path: "/browser",
+    });
+  });
+
   it("exposes Portal for admin users with an explicit portal account role", () => {
     const workspaces = resolveAvailableWorkspacesWithFlags(
       {

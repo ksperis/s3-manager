@@ -21,6 +21,8 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
    activity, shared spaces, transfers, and simple alerts.
 4. Use **Storage Spaces** to open an assigned space, browse files, upload,
    download, and share with collaborators when the space is shared.
+   You can also open `/browser` with the selected Portal account context for a
+   Dropbox-like Storage Spaces sidebar; internal bucket names stay hidden.
 5. Use **Access keys** to generate S3 credentials for external tools. The
    Portal runtime key is not shown in this list.
 6. Use **Shares** to review items shared with you, items shared by you, and
@@ -45,6 +47,7 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 - **Private** spaces are visible to their owner and Portal managers. **Shared** spaces use Viewer, Editor, and Owner grants.
 - **Archived** spaces stay registered but suspend file browsing, sharing, and public links until restored.
 - File browsing inside a Storage Space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
+- `/browser` can also run with a Portal account context when Portal Browser is enabled. It still uses Portal wording and permissions instead of account-management controls.
 - Portal roles are translated into storage-side permissions; they do not replace IAM or S3 authorization.
 
 ## Expected result

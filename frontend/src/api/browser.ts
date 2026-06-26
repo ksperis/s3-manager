@@ -14,6 +14,15 @@ export type BrowserRequestOptions = {
 export type BrowserBucket = {
   name: string;
   creation_date?: string | null;
+  display_name?: string | null;
+  workspace_label?: string | null;
+  used_bytes?: number | null;
+  object_count?: number | null;
+  quota_max_size_bytes?: number | null;
+  quota_max_objects?: number | null;
+  status?: string | null;
+  role?: string | null;
+  internal_bucket_name?: string | null;
 };
 
 export type PaginatedBrowserBucketsResponse = {
@@ -22,6 +31,16 @@ export type PaginatedBrowserBucketsResponse = {
   page: number;
   page_size: number;
   has_next: boolean;
+};
+
+export type BrowserUsageSummary = {
+  available: boolean;
+  source?: "account" | "s3_user" | "portal" | "connection" | null;
+  label?: string | null;
+  used_bytes?: number | null;
+  object_count?: number | null;
+  quota_max_size_bytes?: number | null;
+  quota_max_objects?: number | null;
 };
 
 export type BucketVersioningStatus = {
@@ -430,6 +449,17 @@ export async function searchBrowserBuckets(
   );
   const { data } = await client.get<PaginatedBrowserBucketsResponse>("/browser/buckets/search", {
     params,
+    headers: buildBrowserWorkspaceHeaders(options),
+  });
+  return data;
+}
+
+export async function fetchBrowserUsageSummary(
+  accountId: S3AccountSelector,
+  options?: BrowserRequestOptions
+): Promise<BrowserUsageSummary> {
+  const { data } = await client.get<BrowserUsageSummary>("/browser/usage-summary", {
+    params: withS3AccountParam(undefined, accountId),
     headers: buildBrowserWorkspaceHeaders(options),
   });
   return data;

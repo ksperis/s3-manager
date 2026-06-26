@@ -15,6 +15,7 @@ const EXECUTION_CONTEXT_URL_PARAM = "ctx";
 type BrowserContextState = {
   contexts: ExecutionContext[];
   selectedContextId: string | null;
+  selectedContext: ExecutionContext | null;
   setSelectedContextId: (id: string | null) => void;
   requiresContextSelection: boolean;
   hasContext: boolean;
@@ -27,6 +28,7 @@ type BrowserContextState = {
 const Ctx = createContext<BrowserContextState>({
   contexts: [],
   selectedContextId: null,
+  selectedContext: null,
   setSelectedContextId: () => {},
   requiresContextSelection: true,
   hasContext: false,
@@ -157,6 +159,7 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
       value={{
         contexts,
         selectedContextId,
+        selectedContext: selected ?? null,
         setSelectedContextId,
         requiresContextSelection,
         hasContext,

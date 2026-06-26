@@ -75,6 +75,8 @@ def _is_portal_browser_basic_route_allowed(request: Request) -> bool:
         return True
     if method == "GET" and segments == ["buckets", "search"]:
         return True
+    if method == "GET" and segments == ["usage-summary"]:
+        return True
     if len(segments) < 3 or segments[0] != "buckets":
         return False
 
@@ -171,6 +173,7 @@ def _resolve_portal_browser_context(
     )
     account._portal_browser_role = role  # type: ignore[attr-defined]
     account._portal_allowed_buckets = allowed_buckets  # type: ignore[attr-defined]
+    account._portal_storage_spaces = visible_spaces  # type: ignore[attr-defined]
     return account
 
 

@@ -4,10 +4,33 @@ import { registerApiMocks } from "./mockApi";
 import { scenarios } from "./scenarios";
 import type { DocScreenshotScenario, ScenarioAction, ScreenshotThemeVariant } from "./types";
 
-const ROUTE_CASES: Array<{ scenarioId: string; workspace: string; route?: string; waitFor?: string }> = [
+const ROUTE_CASES: Array<{
+  scenarioId: string;
+  workspace: string;
+  route?: string;
+  waitFor?: string;
+  selectedExecutionContextId?: string;
+  expectNormalBrowserUsageHidden?: boolean;
+  expectPortalBrowser?: boolean;
+  runScenarioWaitActions?: boolean;
+}> = [
   { scenarioId: "workspace-admin", workspace: "admin", route: "/admin" },
   { scenarioId: "workspace-manager", workspace: "manager", route: "/manager" },
-  { scenarioId: "feature-objects-browser", workspace: "browser", route: "/browser" },
+  {
+    scenarioId: "feature-objects-browser",
+    workspace: "browser",
+    route: "/browser",
+    expectNormalBrowserUsageHidden: true,
+  },
+  {
+    scenarioId: "workspace-browser",
+    workspace: "browser-portal",
+    route: "/browser?bucket=rgw-portal-genomics-2026",
+    waitFor: "text=Storage Spaces",
+    selectedExecutionContextId: "101",
+    expectPortalBrowser: true,
+    runScenarioWaitActions: false,
+  },
   { scenarioId: "workspace-ceph-admin", workspace: "ceph-admin", route: "/ceph-admin", waitFor: "h1:has-text('Ceph Admin')" },
   { scenarioId: "gallery-storage-ops-dashboard", workspace: "storage-ops", route: "/storage-ops" },
   { scenarioId: "workspace-portal", workspace: "portal", route: "/portal" },
@@ -26,7 +49,12 @@ function scenarioById(id: string): DocScreenshotScenario {
   return scenario;
 }
 
-async function seedLocalStorage(page: Page, scenario: DocScreenshotScenario, theme: ScreenshotThemeVariant) {
+async function seedLocalStorage(
+  page: Page,
+  scenario: DocScreenshotScenario,
+  theme: ScreenshotThemeVariant,
+  overrides: Partial<DocScreenshotScenario["storage"]> = {}
+) {
   await page.addInitScript((storage) => {
     localStorage.clear();
     localStorage.setItem("token", storage.token);
@@ -41,7 +69,7 @@ async function seedLocalStorage(page: Page, scenario: DocScreenshotScenario, the
     }
     localStorage.setItem("theme", storage.theme);
     Object.entries(storage.extraEntries ?? {}).forEach(([key, value]) => localStorage.setItem(key, value));
-  }, { ...scenario.storage, theme });
+  }, { ...scenario.storage, ...overrides, theme });
 }
 
 async function runAction(page: Page, action: ScenarioAction) {
@@ -70,7 +98,9 @@ async function openWorkspaceCase(
   route: string,
   waitFor: string,
   theme: ScreenshotThemeVariant,
-  scenarioId: string
+  scenarioId: string,
+  storageOverrides: Partial<DocScreenshotScenario["storage"]> = {},
+  runScenarioWaitActions = true
 ) {
   const mockRegistry = await registerApiMocks(
     page,
@@ -86,12 +116,14 @@ async function openWorkspaceCase(
   );
 
   await page.emulateMedia({ colorScheme: theme });
-  await seedLocalStorage(page, scenario, theme);
+  await seedLocalStorage(page, scenario, theme, storageOverrides);
   await page.goto(route, { waitUntil: "domcontentloaded" });
   await page.locator(waitFor).first().waitFor({ state: "visible", timeout: 30_000 });
-  for (const action of scenario.actions ?? []) {
-    if (action.type !== "wait") break;
-    await runAction(page, action);
+  if (runScenarioWaitActions) {
+    for (const action of scenario.actions ?? []) {
+      if (action.type !== "wait") break;
+      await runAction(page, action);
+    }
   }
   await page.waitForTimeout(100);
   return mockRegistry;
@@ -206,6 +238,21 @@ async function expectPrimarySurfacesUsePlainTheme(page: Page) {
   expect(offenders).toEqual([]);
 }
 
+async function expectBrowserNormalUsageHidden(page: Page) {
+  await expect(page.getByText("Usage & Metrics", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Loading usage...", { exact: true })).toHaveCount(0);
+}
+
+async function expectPortalBrowserSidebar(page: Page) {
+  await expect(page.getByText("Storage Spaces", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("genomics-2026", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("rgw-portal-genomics-2026", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("rgw-portal-photos", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("rgw-portal-datasets", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("Usage & Metrics", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/8\.3\s*TB/).first()).toBeVisible();
+}
+
 async function expectManagerKpiQuotaMeters(page: Page) {
   const meters = await page.evaluate(() =>
     Array.from(document.querySelectorAll("main [role='meter']")).map((element) => ({
@@ -282,7 +329,11 @@ test.describe("Workspace visual QA", () => {
             route,
             routeCase.waitFor ?? scenario.waitFor,
             theme,
-            `${routeCase.workspace}-${theme}-${viewport.name}`
+            `${routeCase.workspace}-${theme}-${viewport.name}`,
+            routeCase.selectedExecutionContextId
+              ? { selectedExecutionContextId: routeCase.selectedExecutionContextId }
+              : {},
+            routeCase.runScenarioWaitActions ?? true
           );
 
           await expectShellVisibleAndSeparated(page, viewport.name);
@@ -294,6 +345,12 @@ test.describe("Workspace visual QA", () => {
             await expectManagerKpiQuotaMeters(page);
             await expectManagerKpiValuesAligned(page);
             await expectManagerQuotaStatusRows(page);
+          }
+          if (routeCase.expectNormalBrowserUsageHidden) {
+            await expectBrowserNormalUsageHidden(page);
+          }
+          if (routeCase.expectPortalBrowser) {
+            await expectPortalBrowserSidebar(page);
           }
 
           mockRegistry.assertNoUnmatched();

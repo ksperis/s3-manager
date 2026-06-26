@@ -9,6 +9,15 @@ from pydantic import BaseModel, Field
 class BrowserBucket(BaseModel):
     name: str
     creation_date: Optional[datetime] = None
+    display_name: Optional[str] = None
+    workspace_label: Optional[str] = None
+    used_bytes: Optional[int] = None
+    object_count: Optional[int] = None
+    quota_max_size_bytes: Optional[int] = None
+    quota_max_objects: Optional[int] = None
+    status: Optional[str] = None
+    role: Optional[str] = None
+    internal_bucket_name: Optional[str] = None
 
 
 class BrowserObject(BaseModel):
@@ -66,6 +75,16 @@ class PaginatedBrowserBucketsResponse(BaseModel):
     page: int = 1
     page_size: int = 50
     has_next: bool = False
+
+
+class BrowserUsageSummary(BaseModel):
+    available: bool = False
+    source: Optional[Literal["account", "s3_user", "portal", "connection"]] = None
+    label: Optional[str] = None
+    used_bytes: Optional[int] = None
+    object_count: Optional[int] = None
+    quota_max_size_bytes: Optional[int] = None
+    quota_max_objects: Optional[int] = None
 
 
 class BrowserObjectVersion(BaseModel):

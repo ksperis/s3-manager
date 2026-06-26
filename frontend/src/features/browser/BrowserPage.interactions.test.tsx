@@ -20,6 +20,7 @@ import {
 } from "./browserEmbeddedColumnsState";
 
 const searchBrowserBucketsMock = vi.fn();
+const fetchBrowserUsageSummaryMock = vi.fn();
 const fetchBrowserSettingsMock = vi.fn();
 const listBrowserObjectsMock = vi.fn();
 const fetchBrowserObjectColumnsMock = vi.fn();
@@ -92,6 +93,8 @@ vi.mock("../../api/browser", async () => {
     ...actual,
     searchBrowserBuckets: (...args: unknown[]) =>
       searchBrowserBucketsMock(...args),
+    fetchBrowserUsageSummary: (...args: unknown[]) =>
+      fetchBrowserUsageSummaryMock(...args),
     fetchBrowserSettings: (...args: unknown[]) =>
       fetchBrowserSettingsMock(...args),
     listBrowserObjects: (...args: unknown[]) => listBrowserObjectsMock(...args),
@@ -244,7 +247,7 @@ function getCurrentBucketPanel() {
 }
 
 function getOtherBucketsPanel() {
-  const section = screen.getByRole("region", { name: "Other buckets" });
+  const section = screen.getByTestId("browser-workspace-sidebar");
   return within(section);
 }
 
@@ -469,6 +472,7 @@ describe("BrowserPage interactions", () => {
       other_operations_parallelism: 2,
       streaming_zip_threshold_mb: 200,
     });
+    fetchBrowserUsageSummaryMock.mockResolvedValue({ available: false });
 
     searchBrowserBucketsMock.mockResolvedValue({
       items: [{ name: "bucket-1" }],
@@ -2280,7 +2284,7 @@ describe("BrowserPage interactions", () => {
     ).toHaveTextContent("bucket-2");
   });
 
-  it("hides the current bucket card when the bucket filter no longer matches it", async () => {
+  it("filters the workspace sidebar without hiding the current folders panel", async () => {
     const user = userEvent.setup();
     searchBrowserBucketsMock.mockImplementation(
       (_accountId: string, options?: { search?: string; exact?: boolean }) => {
@@ -2313,18 +2317,14 @@ describe("BrowserPage interactions", () => {
       expect(getCurrentBucketPanel().getByText("bucket-2")).toBeInTheDocument();
     });
 
-    await user.type(screen.getByPlaceholderText("Filter buckets"), "zzz");
-    expect(
-      await screen.findByText("No other buckets match this filter."),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("region", { name: "Current bucket" }),
-    ).not.toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("Search buckets"), "zzz");
+    expect(await screen.findByText("No matching item.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Current bucket" })).toBeInTheDocument();
 
-    await user.clear(screen.getByPlaceholderText("Filter buckets"));
+    await user.clear(screen.getByPlaceholderText("Search buckets"));
     await waitFor(() => {
       expect(
-        screen.getByRole("region", { name: "Current bucket" }),
+        getOtherBucketsPanel().getByRole("button", { name: /bucket-1/i }),
       ).toBeInTheDocument();
     });
   });

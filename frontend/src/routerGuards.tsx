@@ -156,7 +156,14 @@ export function isBrowserSurfaceEnabled(generalSettings: GeneralSettings, surfac
 
 export function RequireBrowserSurface({ surface }: { surface: BrowserSurface }) {
   const { generalSettings } = useGeneralSettings();
-  if (!isBrowserSurfaceEnabled(generalSettings, surface)) {
+  const user = getStoredUser();
+  const portalBrowserRootEnabled =
+    surface === "root" &&
+    generalSettings.browser_enabled &&
+    generalSettings.portal_enabled &&
+    generalSettings.browser_portal_enabled &&
+    hasPortalWorkspaceAccess(user);
+  if (!isBrowserSurfaceEnabled(generalSettings, surface) && !portalBrowserRootEnabled) {
     return <FeatureDisabledPage feature="Browser" />;
   }
   return <Outlet />;

@@ -13,10 +13,11 @@ class ExecutionContextCapabilities(BaseModel):
 
 
 class ExecutionContext(BaseModel):
-    kind: Literal["account", "connection", "legacy_user"]
+    kind: Literal["account", "connection", "legacy_user", "portal_account"]
     id: str
     display_name: str
     hidden: bool = False
+    account_role: Optional[str] = None
     manager_account_is_admin: Optional[bool] = None
     rgw_account_id: Optional[str] = None
     max_buckets: Optional[int] = None

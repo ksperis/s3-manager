@@ -181,7 +181,7 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
       ? connectionDetails.some((connection) => canUseManagerConnection(connection))
       : connectionIds.length > 0;
   const hasManagerAccess = hasAccountAdmin || hasManagerConnectionAccess || hasS3UserAccess;
-  const hasBrowserAccess = hasBrowserConnectionAccess || hasS3UserAccess;
+  const hasBrowserAccess = hasBrowserConnectionAccess || hasS3UserAccess || hasPortalAccess;
 
   return ALL_WORKSPACES.filter((workspace) => {
     if (workspace.id === "storage-ops") return canAccessStorageOps(user);
@@ -214,7 +214,13 @@ export function resolveAvailableWorkspacesWithFlags(
       if (getS3UserDetails(user).length || getS3UserIds(user).length) return true;
       return false;
     }
-    if (workspace.id === "browser") return generalSettings.browser_enabled && generalSettings.browser_root_enabled;
+    if (workspace.id === "browser") {
+      const portalBrowserEnabled =
+        generalSettings.portal_enabled &&
+        generalSettings.browser_portal_enabled &&
+        hasPortalWorkspaceAccess(user);
+      return generalSettings.browser_enabled && (generalSettings.browser_root_enabled || portalBrowserEnabled);
+    }
     return true;
   });
   return filtered;
@@ -268,7 +274,15 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
   if (generalSettings.manager_enabled && hasManagerAccess) return "/manager";
   if (generalSettings.storage_ops_enabled && canAccessStorageOps(user)) return "/storage-ops";
   if (generalSettings.portal_enabled && hasPortalAccess) return "/portal";
-  if (generalSettings.browser_enabled && generalSettings.browser_root_enabled && hasBrowserAccess) return "/browser";
+  if (
+    generalSettings.browser_enabled &&
+    (
+      (generalSettings.browser_root_enabled && hasBrowserAccess) ||
+      (generalSettings.portal_enabled && generalSettings.browser_portal_enabled && hasPortalAccess)
+    )
+  ) {
+    return "/browser";
+  }
   return "/unauthorized";
 }
 

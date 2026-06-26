@@ -5,8 +5,49 @@ from __future__ import annotations
 from ._shared import *
 
 
+def _bucket_search_values(bucket: BrowserBucket) -> list[str]:
+    values = [
+        bucket.name,
+        bucket.display_name,
+        bucket.workspace_label,
+        bucket.internal_bucket_name,
+        bucket.status,
+        bucket.role,
+    ]
+    return [str(value).strip() for value in values if str(value or "").strip()]
+
+
 class BrowserBucketsMixin:
+    def _list_portal_storage_space_buckets(self, account: S3Account) -> Optional[list[BrowserBucket]]:
+        spaces = getattr(account, "_portal_storage_spaces", None)
+        if spaces is None:
+            return None
+        buckets: list[BrowserBucket] = []
+        for space in spaces:
+            name = getattr(space, "internal_bucket_name", None) or getattr(space, "id", None)
+            if not name:
+                continue
+            buckets.append(
+                BrowserBucket(
+                    name=name,
+                    display_name=getattr(space, "name", None) or name,
+                    workspace_label="Storage Space",
+                    used_bytes=getattr(space, "used_bytes", None),
+                    object_count=getattr(space, "object_count", None),
+                    quota_max_size_bytes=getattr(space, "quota_max_size_bytes", None),
+                    quota_max_objects=getattr(space, "quota_max_objects", None),
+                    status=getattr(space, "status", None),
+                    role=getattr(space, "role", None),
+                    internal_bucket_name=name,
+                )
+            )
+        buckets.sort(key=lambda bucket: (bucket.display_name or bucket.name).lower())
+        return buckets
+
     def list_buckets(self, account: S3Account) -> list[BrowserBucket]:
+        portal_buckets = self._list_portal_storage_space_buckets(account)
+        if portal_buckets is not None:
+            return portal_buckets
         allowed_portal_buckets = getattr(account, "_portal_allowed_buckets", None)
         account_key = self._account_cache_key(account)
         cached = _BUCKET_LIST_CACHE.get(account_key)
@@ -49,9 +90,17 @@ class BrowserBucketsMixin:
         if query:
             query_normalized = query.lower()
             if exact:
-                filtered = [bucket for bucket in buckets if bucket.name.lower() == query_normalized]
+                filtered = [
+                    bucket
+                    for bucket in buckets
+                    if any(value.lower() == query_normalized for value in _bucket_search_values(bucket))
+                ]
             else:
-                filtered = [bucket for bucket in buckets if query_normalized in bucket.name.lower()]
+                filtered = [
+                    bucket
+                    for bucket in buckets
+                    if any(query_normalized in value.lower() for value in _bucket_search_values(bucket))
+                ]
         else:
             filtered = buckets
         total = len(filtered)

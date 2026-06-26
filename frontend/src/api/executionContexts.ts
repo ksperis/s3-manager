@@ -5,7 +5,7 @@
 import client from "./client";
 import type { TagDefinitionSummary } from "./tags";
 
-export type ExecutionContextKind = "account" | "connection" | "legacy_user";
+export type ExecutionContextKind = "account" | "connection" | "legacy_user" | "portal_account";
 
 export type ExecutionContextCapabilities = {
   can_manage_iam: boolean;
@@ -20,6 +20,7 @@ export type ExecutionContext = {
   tags: TagDefinitionSummary[];
   endpoint_tags: TagDefinitionSummary[];
   hidden?: boolean;
+  account_role?: "portal_user" | "portal_manager" | "portal_none" | string | null;
   manager_account_is_admin?: boolean | null;
   rgw_account_id?: string | null;
   max_buckets?: number | null;

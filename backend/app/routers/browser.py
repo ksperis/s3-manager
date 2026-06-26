@@ -21,7 +21,9 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
 from app.db import S3Account, User
 from app.models.app_settings import BrowserSettings
 from app.models.bucket import (
@@ -51,6 +53,7 @@ from app.models.browser import (
     BrowserBucket,
     BrowserObjectSortBy,
     BrowserStsCredentials,
+    BrowserUsageSummary,
     BrowserObjectSortDir,
     BucketCorsStatus,
     CleanupObjectVersionsPayload,
@@ -102,6 +105,7 @@ from app.routers.dependencies import (
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
 from app.services import bucket_config_actions
+from app.services.bucket_usage_stats_service import BucketUsageStatsService
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.buckets_service import BucketsService, get_buckets_service
 router = APIRouter(
@@ -196,7 +200,116 @@ def get_browser_settings(_: BrowserActor = Depends(get_current_account_admin)) -
     return load_app_settings().browser
 
 
-@router.get("/buckets", response_model=list[BrowserBucket])
+def _usage_summary_source(account: S3Account) -> tuple[str, str]:
+    if getattr(account, "_portal_browser_role", None):
+        return "portal", "Storage Spaces"
+    if getattr(account, "s3_connection_id", None) is not None:
+        return "connection", "Connection"
+    if getattr(account, "s3_user_id", None) is not None:
+        return "s3_user", "S3 User"
+    return "account", "Account"
+
+
+def _usage_summary_stats_scope_id(account: S3Account) -> Optional[str]:
+    if getattr(account, "s3_connection_id", None) is not None:
+        return None
+    if getattr(account, "ceph_admin_endpoint_id", None) is not None:
+        return None
+    s3_user_id = getattr(account, "s3_user_id", None)
+    if isinstance(s3_user_id, int) and s3_user_id > 0:
+        return f"s3u-{s3_user_id}"
+    account_id = getattr(account, "id", None)
+    if isinstance(account_id, int) and account_id > 0:
+        return str(account_id)
+    return None
+
+
+def _build_usage_summary_from_bucket_fields(
+    *,
+    source: str,
+    label: str,
+    buckets: list[BrowserBucket],
+) -> BrowserUsageSummary:
+    usage_buckets = [bucket for bucket in buckets if bucket.name]
+    if not usage_buckets or any(bucket.used_bytes is None for bucket in usage_buckets):
+        return BrowserUsageSummary(available=False, source=source, label=label)
+    object_values = [bucket.object_count for bucket in usage_buckets if bucket.object_count is not None]
+    size_quota_values = [
+        bucket.quota_max_size_bytes
+        for bucket in usage_buckets
+        if bucket.quota_max_size_bytes is not None and bucket.quota_max_size_bytes > 0
+    ]
+    object_quota_values = [
+        bucket.quota_max_objects
+        for bucket in usage_buckets
+        if bucket.quota_max_objects is not None and bucket.quota_max_objects > 0
+    ]
+    return BrowserUsageSummary(
+        available=True,
+        source=source,
+        label=label,
+        used_bytes=sum(bucket.used_bytes or 0 for bucket in usage_buckets),
+        object_count=sum(object_values) if object_values else None,
+        quota_max_size_bytes=sum(size_quota_values) if len(size_quota_values) == len(usage_buckets) else None,
+        quota_max_objects=sum(object_quota_values) if len(object_quota_values) == len(usage_buckets) else None,
+    )
+
+
+def _build_usage_summary_from_stats(
+    *,
+    db: Session,
+    account: S3Account,
+    source: str,
+    label: str,
+    buckets: list[BrowserBucket],
+) -> Optional[BrowserUsageSummary]:
+    if source not in {"account", "s3_user"}:
+        return None
+    if not bool(load_app_settings().general.bucket_usage_stats_enabled):
+        return None
+    scope_id = _usage_summary_stats_scope_id(account)
+    bucket_names = [bucket.name for bucket in buckets if bucket.name]
+    if not scope_id or not bucket_names:
+        return None
+    aggregate = BucketUsageStatsService().get_aggregate(
+        db,
+        scope_kind="manager",
+        scope_id=scope_id,
+        scope_name=getattr(account, "name", None),
+        bucket_names=bucket_names,
+    )
+    if aggregate.bucket_count <= 0 or aggregate.buckets_with_snapshot != aggregate.bucket_count:
+        return None
+    return BrowserUsageSummary(
+        available=True,
+        source=source,
+        label=label,
+        used_bytes=aggregate.total_bytes,
+        object_count=aggregate.current_version_count,
+    )
+
+
+def _build_browser_usage_summary(account: S3Account, service: BrowserService, db: Session) -> BrowserUsageSummary:
+    source, label = _usage_summary_source(account)
+    if source == "connection":
+        return BrowserUsageSummary(available=False, source=source, label=label)
+    try:
+        buckets = service.list_buckets(account)
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
+    stats_summary = _build_usage_summary_from_stats(
+        db=db,
+        account=account,
+        source=source,
+        label=label,
+        buckets=buckets,
+    )
+    if stats_summary is not None:
+        return stats_summary
+    return _build_usage_summary_from_bucket_fields(source=source, label=label, buckets=buckets)
+
+
+@router.get("/buckets", response_model=list[BrowserBucket], response_model_exclude_none=True)
 def list_buckets(
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
@@ -208,7 +321,11 @@ def list_buckets(
         raise_bad_gateway_from_runtime(exc)
 
 
-@router.get("/buckets/search", response_model=PaginatedBrowserBucketsResponse)
+@router.get(
+    "/buckets/search",
+    response_model=PaginatedBrowserBucketsResponse,
+    response_model_exclude_none=True,
+)
 def search_buckets(
     search: Optional[str] = None,
     exact: bool = Query(default=False),
@@ -228,6 +345,20 @@ def search_buckets(
         )
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
+
+
+@router.get(
+    "/usage-summary",
+    response_model=BrowserUsageSummary,
+    response_model_exclude_none=True,
+)
+def get_usage_summary(
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    db: Session = Depends(get_db),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BrowserUsageSummary:
+    return _build_browser_usage_summary(account, service, db)
 
 
 @router.post("/buckets", status_code=status.HTTP_201_CREATED)

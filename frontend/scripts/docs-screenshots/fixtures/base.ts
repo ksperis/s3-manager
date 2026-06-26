@@ -293,6 +293,34 @@ const EXECUTION_CONTEXTS = [
   },
 ];
 
+const PORTAL_BROWSER_EXECUTION_CONTEXT = {
+  kind: "portal_account",
+  id: "101",
+  display_name: "Helios Retail",
+  account_role: "portal_user",
+  rgw_account_id: "RGW-HELIOS",
+  quota_max_size_gb: 20 * 1024,
+  quota_max_objects: 45_000_000,
+  endpoint_id: 11,
+  endpoint_name: "Default",
+  endpoint_provider: "ceph",
+  endpoint_url: "https://s3-default.docs.example.com",
+  storage_endpoint_capabilities: {
+    iam: true,
+    sns: true,
+    usage: true,
+    metrics: true,
+    static_website: true,
+    sts: false,
+    replication: true,
+  },
+  capabilities: {
+    can_manage_iam: false,
+    sts_capable: false,
+    admin_api_capable: false,
+  },
+};
+
 const MANAGER_BUCKETS = [
   {
     name: "helios-retail-logs",
@@ -691,47 +719,6 @@ const PORTAL_ACCESS_KEYS_STATE = {
   access_keys: PORTAL_STATE.access_keys,
 };
 
-const PORTAL_SETTINGS = {
-  allow_portal_key: true,
-  allow_portal_user_bucket_create: true,
-  allow_portal_named_bucket_create: false,
-  allow_portal_user_access_key_create: true,
-  max_portal_user_access_keys: 2,
-  iam_group_manager_policy: {
-    actions: ["s3:ListAllMyBuckets", "s3:CreateBucket"],
-    advanced_policy: null,
-  },
-  iam_group_user_policy: {
-    actions: ["s3:GetObject", "s3:ListBucket"],
-    advanced_policy: null,
-  },
-  bucket_access_policy: {
-    actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-    advanced_policy: null,
-  },
-  bucket_defaults: {
-    versioning: true,
-    enable_cors: true,
-    enable_lifecycle: true,
-    cors_allowed_origins: ["https://app.example.com"],
-  },
-  override_policy: {
-    allow_portal_key: true,
-    allow_portal_user_bucket_create: true,
-    allow_portal_named_bucket_create: true,
-    allow_portal_user_access_key_create: true,
-    iam_group_manager_policy: { actions: true, advanced_policy: true },
-    iam_group_user_policy: { actions: true, advanced_policy: true },
-    bucket_access_policy: { actions: true, advanced_policy: true },
-    bucket_defaults: {
-      versioning: true,
-      enable_cors: true,
-      enable_lifecycle: true,
-      cors_allowed_origins: true,
-    },
-  },
-};
-
 const PORTAL_TRAFFIC = {
   window: "day",
   start: "2026-03-08T00:00:00Z",
@@ -770,7 +757,7 @@ const PORTAL_STORAGE_SPACES = [
     object_count: 12_800_000,
     quota_max_size_bytes: 10 * TB,
     quota_max_objects: 30_000_000,
-    internal_bucket_name: "genomics-2026",
+    internal_bucket_name: "rgw-portal-genomics-2026",
     description: "Genomics sequencing workspace",
   },
   {
@@ -784,7 +771,7 @@ const PORTAL_STORAGE_SPACES = [
     object_count: 2_800_000,
     quota_max_size_bytes: 8 * TB,
     quota_max_objects: 10_000_000,
-    internal_bucket_name: "photos",
+    internal_bucket_name: "rgw-portal-photos",
     description: "Shared media storage",
   },
   {
@@ -798,10 +785,34 @@ const PORTAL_STORAGE_SPACES = [
     object_count: 1_500_000,
     quota_max_size_bytes: 5 * TB,
     quota_max_objects: 5_000_000,
-    internal_bucket_name: "datasets",
+    internal_bucket_name: "rgw-portal-datasets",
     description: "Curated analytics datasets",
   },
 ];
+
+const PORTAL_BROWSER_BUCKETS = PORTAL_STORAGE_SPACES.map((space) => ({
+  name: space.internal_bucket_name,
+  creation_date: space.created_at,
+  display_name: space.name,
+  workspace_label: "Storage Space",
+  used_bytes: space.used_bytes,
+  object_count: space.object_count,
+  quota_max_size_bytes: space.quota_max_size_bytes,
+  quota_max_objects: space.quota_max_objects,
+  status: space.status,
+  role: space.role,
+  internal_bucket_name: space.internal_bucket_name,
+}));
+
+const PORTAL_BROWSER_USAGE_SUMMARY = {
+  available: true,
+  source: "portal",
+  label: "Storage Spaces",
+  used_bytes: PORTAL_STORAGE_SPACES.reduce((acc, space) => acc + space.used_bytes, 0),
+  object_count: PORTAL_STORAGE_SPACES.reduce((acc, space) => acc + space.object_count, 0),
+  quota_max_size_bytes: PORTAL_STORAGE_SPACES.reduce((acc, space) => acc + space.quota_max_size_bytes, 0),
+  quota_max_objects: PORTAL_STORAGE_SPACES.reduce((acc, space) => acc + space.quota_max_objects, 0),
+};
 
 const PORTAL_USAGE_STATS_AGGREGATE = {
   ...MANAGER_USAGE_STATS_AGGREGATE,
@@ -1150,6 +1161,18 @@ const BROWSER_BUCKETS = [
   { name: "blueharbor-curated", creation_date: "2026-02-20T09:30:00Z" },
 ];
 
+function isPortalBrowserRequest(url: URL): boolean {
+  return url.searchParams.get("account_id") === "101";
+}
+
+function browserBucketsForRequest(url: URL) {
+  return isPortalBrowserRequest(url) ? PORTAL_BROWSER_BUCKETS : BROWSER_BUCKETS;
+}
+
+function browserFixtureBucketName(bucketName: string): string {
+  return PORTAL_STORAGE_SPACES.find((space) => space.internal_bucket_name === bucketName)?.id ?? bucketName;
+}
+
 const BROWSER_OBJECTS_BY_BUCKET: Record<string, { prefixes: string[]; objects: Array<Record<string, unknown>> }> = {
   "genomics-2026": {
     prefixes: [
@@ -1441,7 +1464,7 @@ export function buildBaseRules(): MockRule[] {
       body: ({ url }) => {
         const workspace = url.searchParams.get("workspace") ?? "manager";
         if (workspace === "browser") {
-          return EXECUTION_CONTEXTS;
+          return [...EXECUTION_CONTEXTS, PORTAL_BROWSER_EXECUTION_CONTEXT];
         }
         return EXECUTION_CONTEXTS;
       },
@@ -1964,24 +1987,39 @@ export function buildBaseRules(): MockRule[] {
     {
       id: "browser-buckets-list",
       path: /^\/browser\/buckets$/,
-      body: BROWSER_BUCKETS,
+      body: ({ url }) => browserBucketsForRequest(url),
     },
     {
       id: "browser-buckets-search",
       path: /^\/browser\/buckets\/search$/,
-      body: {
-        items: BROWSER_BUCKETS,
-        total: BROWSER_BUCKETS.length,
-        page: 1,
-        page_size: 50,
-        has_next: false,
+      body: ({ url }) => {
+        const buckets = browserBucketsForRequest(url);
+        return {
+          items: buckets,
+          total: buckets.length,
+          page: 1,
+          page_size: 50,
+          has_next: false,
+        };
+      },
+    },
+    {
+      id: "browser-usage-summary",
+      path: /^\/browser\/usage-summary$/,
+      body: ({ url }) => {
+        if (isPortalBrowserRequest(url)) return PORTAL_BROWSER_USAGE_SUMMARY;
+        return {
+          available: false,
+          source: "account",
+          label: "Account",
+        };
       },
     },
     {
       id: "browser-list-objects",
       path: /^\/browser\/buckets\/[^/]+\/objects$/,
       body: ({ url }) => {
-        const bucketName = parseBucketName(url.pathname);
+        const bucketName = browserFixtureBucketName(parseBucketName(url.pathname));
         const value = BROWSER_OBJECTS_BY_BUCKET[bucketName] ?? BROWSER_OBJECTS_BY_BUCKET["helios-retail-logs"];
         const filtered = listBrowserObjectsForPrefix(
           value,

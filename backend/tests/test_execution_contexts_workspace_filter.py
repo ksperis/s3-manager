@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 from app.db import (
+    AccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -30,12 +32,20 @@ def _create_user(db_session) -> User:
     return user
 
 
-def _create_account(db_session, *, name: str, rgw_account_id: str) -> S3Account:
+def _create_account(
+    db_session,
+    *,
+    name: str,
+    rgw_account_id: str,
+    storage_endpoint: StorageEndpoint | None = None,
+) -> S3Account:
     account = S3Account(
         name=name,
         rgw_account_id=rgw_account_id,
         rgw_access_key=f"AK-{name}",
         rgw_secret_key=f"SK-{name}",
+        storage_endpoint=storage_endpoint,
+        storage_endpoint_id=storage_endpoint.id if storage_endpoint else None,
     )
     db_session.add(account)
     db_session.commit()
@@ -92,6 +102,8 @@ def _create_endpoint(db_session, *, name: str) -> StorageEndpoint:
         provider="ceph",
         features_config=(
             "features:\n"
+            "  iam:\n"
+            "    enabled: true\n"
             "  admin:\n"
             "    enabled: true\n"
             "  metrics:\n"
@@ -251,6 +263,63 @@ def test_browser_workspace_returns_connections_and_s3_users(db_session):
 
     assert context_ids == {f"s3u-{legacy_user.id}", f"conn-{connection_a.id}", f"conn-{connection_b.id}"}
     assert {context.kind for context in contexts} == {"legacy_user", "connection"}
+
+
+def test_browser_workspace_returns_portal_account_context_when_portal_browser_enabled(db_session, monkeypatch):
+    user = _create_user(db_session)
+    endpoint = _create_endpoint(db_session, name="portal-browser-endpoint")
+    account = _create_account(
+        db_session,
+        name="portal-browser-account",
+        rgw_account_id="RGWPORTALBROWSER0001",
+        storage_endpoint=endpoint,
+    )
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            account_admin=False,
+            is_root=False,
+            account_role=AccountRole.PORTAL_USER.value,
+        )
+    )
+    db_session.commit()
+
+    class _FakeAccountLimitsService:
+        def get_account_limits(self, target_account):
+            assert target_account.id == account.id
+            return 12, 1_500, 7, 0, 0, 0
+
+    monkeypatch.setattr(
+        execution_contexts,
+        "get_s3_accounts_service",
+        lambda db, allow_missing_admin=False: _FakeAccountLimitsService(),
+    )
+    monkeypatch.setattr(
+        execution_contexts,
+        "load_app_settings",
+        lambda: SimpleNamespace(
+            general=SimpleNamespace(
+                browser_enabled=True,
+                portal_enabled=True,
+                browser_portal_enabled=True,
+            )
+        ),
+    )
+
+    contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
+
+    assert len(contexts) == 1
+    context = contexts[0]
+    assert context.kind == "portal_account"
+    assert context.id == str(account.id)
+    assert context.display_name == account.name
+    assert context.account_role == AccountRole.PORTAL_USER.value
+    assert context.quota_max_size_gb == 12
+    assert context.quota_max_objects == 1_500
+    assert context.max_buckets == 7
+    assert context.capabilities.can_manage_iam is False
+    assert context.capabilities.admin_api_capable is False
 
 
 def test_connection_context_includes_endpoint_capabilities_when_bound_to_endpoint(db_session):
